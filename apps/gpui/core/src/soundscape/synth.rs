@@ -17,7 +17,7 @@ use super::music::hz;
 
 /// Enough for a four-note pad with its detune pairs, a sub, three plucks and a drum at once,
 /// twice over. A note that finds no free slot takes the oldest one, which is what a hardware
-/// synth does and is inaudible at this density.
+/// synth does; the taken voice's last value fades out under the new one (`Voice::tail`).
 pub const MAX_VOICES: usize = 96;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,13 +104,13 @@ impl Env {
                 } else if age < attack {
                     (age / attack.max(1e-5)).clamp(0., 1.)
                 } else {
-                    // exp(-k t) with k chosen so the tail is -60 dB at `total`.
-                    let remaining = (total - age).max(0.);
+                    // 0.001^(elapsed / span): the browser's `exponentialRampToValueAtTime(0.001)`,
+                    // exactly. A fifth-power stand-in used to save the `exp`, and it was not the
+                    // same shape: four fifths of the way through it read 0.0003 against the
+                    // browser's 0.004, so every pluck's tail died about 20 dB early.
                     let span = (total - attack).max(1e-5);
-                    // Cheap approximation of 0.001^(v/span): a fifth-power fall over the same
-                    // span has the same shape and no transcendental per sample.
-                    let v = remaining / span;
-                    v * v * v * v * v
+                    let elapsed = ((age - attack) / span).clamp(0., 1.);
+                    (-6.907_755 * elapsed).exp()
                 }
             }
         }
@@ -189,6 +189,9 @@ pub struct VoiceSpec {
     pub filter: FilterSpec,
     /// A per-voice seed, so two noise hits are not the same noise.
     pub noise_seed: u32,
+    /// A slow pan movement, (depth, hertz): the voice drifts around `pan` instead of sitting on
+    /// it. Zero depth is a fixed pan.
+    pub wander: (f32, f32),
 }
 
 impl VoiceSpec {
@@ -208,6 +211,7 @@ impl VoiceSpec {
             send_del: 0.,
             filter: FilterSpec::OFF,
             noise_seed: 0x2545_f491,
+            wander: (0., 0.),
         }
     }
 
@@ -249,6 +253,11 @@ impl VoiceSpec {
     pub fn glide(mut self, to: f32, seconds: f32) -> Self {
         self.glide_to = Some(to);
         self.glide_seconds = seconds.max(0.);
+        self
+    }
+
+    pub fn wander(mut self, depth: f32, hz: f32) -> Self {
+        self.wander = (depth.clamp(0., 1.), hz.max(0.));
         self
     }
 
@@ -309,6 +318,12 @@ struct Voice {
     gain_l: f32,
     gain_r: f32,
     noise_state: u32,
+    /// The band-limited triangle's integrator: a leaky sum of a polyBLEP square.
+    triangle: f32,
+    /// The last sample this voice produced, so a voice that takes its slot can fade it out.
+    last: f32,
+    /// What is left of a stolen voice, falling to zero over a few milliseconds.
+    tail: f32,
     active: bool,
 }
 
@@ -337,6 +352,9 @@ impl Default for Voice {
             gain_l: 0.707,
             gain_r: 0.707,
             noise_state: 1,
+            triangle: -1.,
+            last: 0.,
+            tail: 0.,
             active: false,
         }
     }
@@ -359,10 +377,14 @@ fn poly_blep(t: f32, dt: f32) -> f32 {
 
 impl Voice {
     #[inline]
-    fn sample(&mut self, sample_rate: f32, noise_bed: u32) -> f32 {
+    fn sample(&mut self, sample_rate: f32, noise_bed: u32, tail_decay: f32) -> f32 {
+        // A stolen voice's last value, decaying under whatever replaced it: overwriting a
+        // sounding slot outright was a step of its whole level in one sample.
+        let tail = self.tail;
+        self.tail *= tail_decay;
         if self.age_samples < self.delay_samples {
             self.age_samples += 1;
-            return 0.;
+            return tail;
         }
         let age = (self.age_samples - self.delay_samples) as f32 / sample_rate;
         let level = self.spec.env.level(age);
@@ -370,7 +392,13 @@ impl Voice {
         // only the end of the note retires it.
         if age >= self.spec.env.total() {
             self.active = false;
-            return 0.;
+            return tail;
+        }
+        if self.spec.wander.0 > 0. && self.age_samples.is_multiple_of(WANDER_EVERY) {
+            let (depth, rate) = self.spec.wander;
+            let pan =
+                (self.spec.pan + depth * (std::f32::consts::TAU * rate * age).sin()).clamp(-1., 1.);
+            (self.gain_l, self.gain_r) = pan_gains(pan);
         }
 
         // The cutoff sweeps across the whole note -- a bass note's filter closing over half a
@@ -399,7 +427,17 @@ impl Voice {
                 let square = if self.phase < 0.5 { 1. } else { -1. };
                 square + poly_blep(self.phase, inc) - poly_blep((self.phase + 0.5) % 1., inc)
             }
-            Wave::Triangle => 4. * (self.phase - 0.5).abs() - 1.,
+            Wave::Triangle => {
+                // The integral of a band-limited square, so the corners are rounded the way a
+                // band-limited triangle's are; the naive fold aliased on a high pluck. The leak
+                // keeps a glide or a rounding error from walking it off centre.
+                let square = if self.phase < 0.5 { 1. } else { -1. };
+                let square =
+                    square + poly_blep(self.phase, inc) - poly_blep((self.phase + 0.5) % 1., inc);
+                // The leak is relative to the pitch, so every note loses the same 1 % per cycle.
+                self.triangle = self.triangle * (1. - 0.02 * inc) + 4. * inc * square;
+                self.triangle
+            }
             Wave::Noise => {
                 // xorshift32: one multiply-free step, and a fresh stream per voice.
                 let mut x = self.noise_state ^ noise_bed;
@@ -417,6 +455,8 @@ impl Voice {
             _ => self.svf.process(raw, g, self.k, self.spec.filter.mode),
         };
         let out = filtered * level * self.spec.amp;
+        self.last = out;
+        let out = out + tail;
         self.age_samples += 1;
         if self.age_samples >= self.delay_samples + self.length_samples {
             self.active = false;
@@ -432,6 +472,22 @@ pub struct Voices {
     next: usize,
     sample_rate: f32,
     noise_bed: u32,
+    /// Per-sample fall of a stolen voice's tail: 3 ms to a third.
+    tail_decay: f32,
+}
+
+/// How often a wandering voice recomputes its pan, in samples: a pan that moves at a tenth of a
+/// hertz does not need a `sin` and a `cos` per sample.
+const WANDER_EVERY: u32 = 256;
+
+/// Constant-power pan, because a centred pad should not be 3 dB louder than a panned one.
+fn pan_gains(pan: f32) -> (f32, f32) {
+    let angle = (pan.clamp(-1., 1.) + 1.) * std::f32::consts::FRAC_PI_4;
+    (angle.cos(), angle.sin())
+}
+
+fn tail_decay(sample_rate: f32) -> f32 {
+    (-1. / (0.003 * sample_rate)).exp()
 }
 
 impl Voices {
@@ -441,12 +497,14 @@ impl Voices {
             next: 0,
             sample_rate,
             noise_bed: 0x9e37_79b9,
+            tail_decay: tail_decay(sample_rate),
         }
     }
 
     /// The device changed its rate; every live voice is rescaled rather than cut.
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
+        self.tail_decay = tail_decay(sample_rate);
     }
 
     pub fn active_count(&self) -> usize {
@@ -460,6 +518,7 @@ impl Voices {
     pub fn silence(&mut self) {
         for slot in &mut self.slots {
             slot.active = false;
+            slot.tail = 0.;
         }
     }
 
@@ -493,11 +552,15 @@ impl Voices {
         let g_to = to_g(spec.filter.to_hz);
         let k = 1. / spec.filter.q.max(0.05);
 
-        let pan = spec.pan.clamp(-1., 1.);
-        // Constant-power pan, because a centred pad should not be 3 dB louder than a panned one.
-        let angle = (pan + 1.) * std::f32::consts::FRAC_PI_4;
-        let gain_l = angle.cos();
-        let gain_r = angle.sin();
+        let (gain_l, gain_r) = pan_gains(spec.pan);
+        // A slot taken from a sounding voice keeps that voice's last value as a short tail. The
+        // tail is mono at the new voice's pan, which is inaudible over three milliseconds.
+        let stolen = &self.slots[index];
+        let tail = if stolen.active {
+            stolen.last + stolen.tail
+        } else {
+            stolen.tail
+        };
 
         let inc_from = (spec.hz / sample_rate).clamp(0., 0.45);
         let inc_to = spec
@@ -522,6 +585,9 @@ impl Voices {
             gain_l,
             gain_r,
             noise_state: spec.noise_seed | 1,
+            triangle: -1.,
+            last: 0.,
+            tail,
             active: true,
         };
         true
@@ -537,11 +603,12 @@ impl Voices {
         delay: &mut f32,
     ) {
         let noise_bed = self.noise_bed;
+        let tail_decay = self.tail_decay;
         for slot in &mut self.slots {
             if !slot.active {
                 continue;
             }
-            let value = slot.sample(self.sample_rate, noise_bed);
+            let value = slot.sample(self.sample_rate, noise_bed, tail_decay);
             let left = value * slot.gain_l;
             let right = value * slot.gain_r;
             let bus = match slot.spec.bus {

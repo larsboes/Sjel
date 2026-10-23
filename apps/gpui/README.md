@@ -3,9 +3,14 @@
 A native desktop surface for Sjel. It is intentionally outside the production Cargo workspace: it
 does not change Sjel's shipping UI, capability processes, or production dependency lockfiles.
 
-The app has twenty-four pages, and ⌘1–⌘9 open the first nine in sidebar order. **Home** shows what needs you now: agent writes that wait for approval,
-kept-running capabilities that do not answer, calendar entries still ahead today and tomorrow, and
-the recent agent writes. **Capabilities** lists every capability with start and stop. **Projects**
+The app has twenty-four pages in nine areas. The sidebar lists the areas and ⌘1–⌘9 open them, each
+at the tab it showed last, so ⌘9 returns to Packs if Packs was the last Sjel page; the header
+carries the open area's tabs and switches between them without a read. **Today** (⌘1) is Home and
+Today as one page: what needs you now (agent writes that wait for approval, kept-running
+capabilities that do not answer — and nothing at all when nothing does), the urgent and overdue
+tasks, then the day's timeline of events, tasks and spending, which steps a day with ← and →.
+Everything about Sjel itself sits under **Sjel** (⌘9), **Capabilities** first: every capability
+with start and stop, then the agent's recent writes. **Projects**
 lists projects, tasks and notes, draws tasks as a table with due and priority edited in place, and
 edits a note as blocks (`ui/src/projects.rs`, `ui/src/editor.rs`, `core/src/blocks.rs`). The
 iPhone uses the same page. **Ask** streams the model's answer and
@@ -53,7 +58,7 @@ links. A stop's Show on map action opens Map at that location. Selecting a numbe
 shows its name, address and coordinates. Trips returns to the library, and each subpage opens at
 the top of its scroll area.
 
-The Mac sidebar, ⌘5 and `sjel://travel` open Travel; `sjel://map` opens its map subpage. Trip links
+The Mac sidebar, ⌘7 and `sjel://travel` open Travel; `sjel://map` opens its map subpage. Trip links
 use `sjel://travel/<id>/overview`, `/itinerary`, `/map` or `/items`, and Copy link keeps the trip
 and subpage. The iPhone's Travel tab uses the same views. `ui/src/travel.rs` owns the state, with
 rendering and reads under `ui/src/travel/`; `core/src/travel/` holds detail contracts and routes.
@@ -310,7 +315,7 @@ App Store Connect key can and cannot do, and the one-time steps in the web UI, a
 
 ## Soundscape: a slideover with its own synth
 
-`⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
+`⌘0`, `⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
 edge of the window: a drawn field, the transport, the six presets, volume and energy as full-width
 bars, the twelve-value mixer behind one `mix` disclosure, and the timed scenarios. The same
 keystroke, `esc`, the `×`, or the same row in the sidebar slides it away again, and the music keeps
@@ -356,12 +361,25 @@ intent and says so in the header -- it writes nothing, and it never becomes a se
 |---|---|
 | `space` | Play or pause |
 | `⇧⌘N` | Next preset |
-| `⌘⇧M` | Slide the panel in, or away |
+| `m` | Open or fold the mixer |
+| `⌘0` or `⌘⇧M` | Slide the panel in, or away |
 | `esc` | Slide it away; the music keeps playing |
 
 A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged
 value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
 the hand and a sweep is one write rather than dozens.
+
+The sidebar's ♪ row, the palette and the global keys (`⌥⌘Space`, `⌥⌘P`) write play and preset
+through the panel, so the panel is the one writer of both and its guard against a stale poll covers
+every surface.
+
+Each preset carries its own level, echo and air (`Preset::trim`, `Preset::echo`, `Preset::air` in
+`core/src/soundscape/music.rs`), so a preset change is not a volume change and Ambient's repeat is
+longer and quieter than EDM's. `cargo test -p sjel-gpui-core --lib mix_report -- --ignored
+--nocapture` prints each preset's RMS, peak and band profile; it is the measurement any change to the
+mix starts from. A stolen voice fades over 3 ms instead of stopping, pads drift slowly in the field,
+and melodic notes land up to 6 ms late and ±8 % in level on their own random stream, so a seed still
+picks the dashboard's notes.
 
 `SJEL_GPUI_AUDIO_PROBE=<seconds>` is the check for "there is no sound": it starts the synth on the
 real device, prints the measured level, spectrum and event counts for that many seconds, and quits
@@ -375,11 +393,13 @@ opens the panel without taking the speakers.
 | Key | Action |
 |---|---|
 | ⌘K | Search pages and dashboard destinations |
-| ⌘1 … ⌘9 | Home, Today, Capabilities, Systems, Projects, Ask, Travel, Feed, Inbox |
-| `g` + a letter | The rest by chord: `g x` Systems, `g u` Import, `g ,` Settings |
+| ⌘1 … ⌘9 | Today, Ask, Inbox, Calendar, Projects, Documents, Travel, Life, Sjel — each at its last tab |
+| ⌘⌥↑ / ⌘⌥↓ | The area above or below in the sidebar |
+| ⌘⇧[ / ⌘⇧] (also ⌃⇥, ⌘⌥←/→) | The tab before or after the open area's |
+| `g` + a letter | A page by chord: `g x` Systems, `g k` Packs, `g y` CV, `g ,` Settings |
 | ⌘R | Refresh |
 | ⌘D | Open the current page in the dashboard |
-| ⌘⇧M | Slide the Soundscape panel in or away |
+| ⌘0 or ⌘⇧M | Slide the Soundscape panel in or away |
 | J / K, ↓ / ↑ | Select the next or previous row |
 | ↩ | Run the selected row's main action: Allow, Start, or open the calendar in the dashboard |
 | ⌘⌫ | Run the selected row's costly action: Deny or Stop |

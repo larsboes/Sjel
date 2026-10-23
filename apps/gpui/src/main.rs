@@ -180,17 +180,6 @@ fn main() {
                     soundscape::play_through_conductor(cx);
                 }
             }
-            // The two window modes this used to have are one panel now: `mini` still opens the
-            // player, which is the only way to see what a preset change did.
-            Ok("mini") | Ok("mini-play") => {
-                if let Some((window, workspace)) = main_window(cx) {
-                    let _ = window.update(cx, |_, window, cx| {
-                        let _ = workspace.update(cx, |view, cx| {
-                            view.open_soundscape(window, cx);
-                        });
-                    });
-                }
-            }
             _ => {}
         }
         if let Some(seconds) = audio_probe_seconds() {

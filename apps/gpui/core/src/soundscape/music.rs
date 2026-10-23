@@ -82,6 +82,42 @@ impl Preset {
         }
     }
 
+    /// The gain before the master, so a preset change is not a volume change. Measured with
+    /// `engine::quality::mix_report` on 2026-10-23: at one trim Lo-fi sat at 0.044 RMS against
+    /// 0.087–0.105 for the other five, about 6.5 dB under them.
+    pub fn trim(self) -> f32 {
+        match self {
+            Self::Lofi => 2.1,
+            _ => 1.,
+        }
+    }
+
+    /// The echo as (delay in beats, feedback, wet). Three sixteenths, 0.32 and 0.5 is the
+    /// browser's one setting for all six; Ambient wants a longer and quieter repeat, the scapes
+    /// a softer one, so the echo is part of the preset's room rather than a fixed effect.
+    pub fn echo(self) -> (f32, f32, f32) {
+        match self {
+            Self::Edm => (0.75, 0.32, 0.5),
+            Self::Ambient => (1.5, 0.42, 0.34),
+            Self::Lofi => (0.75, 0.24, 0.4),
+            Self::Focus => (0.75, 0.28, 0.4),
+            Self::Relax => (1., 0.34, 0.4),
+            Self::Sleep => (1.5, 0.38, 0.32),
+        }
+    }
+
+    /// How much air the noise bed adds: the scapes get their wash, scaled so Focus stays dry
+    /// and Sleep sits in a room. Lo-fi's vinyl is its own bed; the two written performances
+    /// have none.
+    pub fn air(self) -> f32 {
+        match self {
+            Self::Focus => 0.8,
+            Self::Relax => 1.,
+            Self::Sleep => 1.3,
+            _ => 1.,
+        }
+    }
+
     /// Where the preset sits on the arrangement: a scape breathes over an hour, a written
     /// performance carries its own arrangement in its step function.
     pub fn scape(self) -> Option<Scale> {

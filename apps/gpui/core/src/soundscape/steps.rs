@@ -56,10 +56,15 @@ impl Events {
     }
 }
 
+const FEEL_SALT: u32 = 0x5bd1_e995;
+
 /// The musical memory a running sequence carries: which degree the scape stands on, and the
 /// stream every stochastic choice draws from.
 pub struct Sequence {
     pub rng: Mulberry32,
+    /// The player's hand: small timing and level drift on melodic notes. Its own stream, so the
+    /// notes a seed chooses stay the dashboard's and only how they are played moves.
+    pub feel: Mulberry32,
     /// The degree the scape is on.
     pub degree: i32,
     /// The chord currently sounding, so a preset change can hand over on shared notes.
@@ -72,6 +77,7 @@ impl Sequence {
     pub fn new(seed: u32) -> Self {
         Self {
             rng: Mulberry32::new(seed),
+            feel: Mulberry32::new(seed ^ FEEL_SALT),
             degree: 0,
             chord: None,
             hold_degree: false,
@@ -80,6 +86,16 @@ impl Sequence {
 
     pub fn set_seed(&mut self, seed: u32) {
         self.rng = Mulberry32::new(seed);
+        self.feel = Mulberry32::new(seed ^ FEEL_SALT);
+    }
+
+    /// A melodic note's drift: up to 6 ms late and ±8 % in level. Late only, because the step is
+    /// the grid and a note cannot start before the callback reaches it. The kick, the bass and the
+    /// hats stay exact: the groove is theirs.
+    pub fn humanise(&mut self) -> (f32, f32) {
+        let late = self.feel.next_f32() * 0.006;
+        let level = 0.92 + self.feel.next_f32() * 0.16;
+        (late, level)
     }
 
     /// Start a fresh preset's grid: the chord and the degree belong to the preset that made
@@ -170,6 +186,7 @@ fn step_scape(
         };
         pluck(
             voices,
+            sequence,
             midi,
             (0.028 + 0.05 * density) * layers.melody,
             0.7 + 1.6 * (1. - pace),
@@ -183,6 +200,7 @@ fn step_scape(
         let midi = chord[0] + 36;
         pluck(
             voices,
+            sequence,
             midi,
             0.018 * layers.melody,
             2.2,
@@ -330,6 +348,7 @@ fn step_edm(
         if let Some((_, midi, length)) = EDM_MOTIF.iter().find(|(at, _, _)| *at == phrase) {
             lead(
                 voices,
+                sequence,
                 *midi,
                 sixteenth * *length as f32 * 0.95,
                 0.16 * layers.melody,
@@ -338,6 +357,7 @@ fn step_edm(
             if energy >= 0.85 {
                 lead(
                     voices,
+                    sequence,
                     *midi + 12,
                     sixteenth * *length as f32 * 0.95,
                     0.07 * layers.melody,
@@ -352,6 +372,7 @@ fn step_edm(
         let midi = tones[(step % 4) as usize];
         pluck(
             voices,
+            sequence,
             midi,
             0.07 * layers.melody,
             0.14,
@@ -416,6 +437,7 @@ fn step_ambient(
         };
         pluck(
             voices,
+            sequence,
             midi,
             (0.05 + 0.05 * energy) * layers.melody,
             0.9,
@@ -429,6 +451,7 @@ fn step_ambient(
         let midi = chord[0] + 36;
         pluck(
             voices,
+            sequence,
             midi,
             0.025 * layers.melody,
             1.6,
@@ -460,12 +483,14 @@ fn step_lofi(
         for (index, midi) in chord.iter().enumerate() {
             // The browser staggers the chord by 12 ms per tone, which is what makes it read as
             // a Rhodes rather than a block chord.
+            let detune = sequence.rng.signed() * 4.;
             rhodes(
                 voices,
+                sequence,
                 *midi,
                 0.075 * layers.pads,
                 1.6,
-                sequence.rng.signed() * 4.,
+                detune,
                 swing + index as f32 * 0.012,
             );
         }
@@ -516,12 +541,14 @@ fn step_lofi(
     if layers.melody > 0. && step.is_multiple_of(4) && sequence.rng.chance(0.22 + 0.3 * energy) {
         let index = sequence.rng.below(5);
         let midi = LOFI_PENTA[index];
+        let detune = sequence.rng.signed() * 4.;
         rhodes(
             voices,
+            sequence,
             midi,
             0.05 * layers.melody,
             1.1,
-            sequence.rng.signed() * 4.,
+            detune,
             swing + 0.02,
         );
         events.chords += 1;
@@ -644,6 +671,9 @@ fn pad(
                 VoiceSpec::new(Wave::Saw, *midi, env, amplitude)
                     .on(Bus::Duck)
                     .pan(pan + lean)
+                    // Each tone drifts on its own slow pan, so a held chord moves across the field
+                    // instead of standing still for its eight bars.
+                    .wander(0.18, 0.05 + 0.025 * index as f32)
                     .detune(detune)
                     .reverb(1.)
                     .filter(FilterSpec::lowpass(cutoff, cutoff, 0.7)),
@@ -653,7 +683,15 @@ fn pad(
 }
 
 /// A single bright line, on the dry bus and into the echo.
-fn lead(voices: &mut Voices, midi: i32, duration: f32, amplitude: f32, events: &mut Events) {
+fn lead(
+    voices: &mut Voices,
+    sequence: &mut Sequence,
+    midi: i32,
+    duration: f32,
+    amplitude: f32,
+    events: &mut Events,
+) {
+    let (late, level) = sequence.humanise();
     for pan in [-0.42, 0.42] {
         voices.start(
             VoiceSpec::new(
@@ -663,9 +701,10 @@ fn lead(voices: &mut Voices, midi: i32, duration: f32, amplitude: f32, events: &
                     attack: 0.012,
                     total: duration,
                 },
-                amplitude,
+                amplitude * level,
             )
             .pan(pan)
+            .delayed(late)
             .delay(1.)
             .filter(FilterSpec::lowpass(2800., 2800., 0.7)),
         );
@@ -678,6 +717,7 @@ fn lead(voices: &mut Voices, midi: i32, duration: f32, amplitude: f32, events: &
 #[allow(clippy::too_many_arguments)]
 fn pluck(
     voices: &mut Voices,
+    sequence: &mut Sequence,
     midi: i32,
     amplitude: f32,
     duration: f32,
@@ -686,6 +726,7 @@ fn pluck(
     offset: f32,
     events: &mut Events,
 ) {
+    let (late, level) = sequence.humanise();
     voices.start(
         VoiceSpec::new(
             wave,
@@ -694,10 +735,10 @@ fn pluck(
                 attack: 0.01,
                 total: duration,
             },
-            amplitude,
+            amplitude * level,
         )
         .pan(pan)
-        .delayed(offset)
+        .delayed(offset + late)
         .reverb(1.),
     );
     events.notes += 1;
@@ -706,7 +747,17 @@ fn pluck(
 }
 
 /// The lo-fi keys: a sine plus its octave, through a lowpass, into the room.
-fn rhodes(voices: &mut Voices, midi: i32, amplitude: f32, duration: f32, detune: f32, offset: f32) {
+fn rhodes(
+    voices: &mut Voices,
+    sequence: &mut Sequence,
+    midi: i32,
+    amplitude: f32,
+    duration: f32,
+    detune: f32,
+    offset: f32,
+) {
+    let (late, level) = sequence.humanise();
+    let (amplitude, offset) = (amplitude * level, offset + late);
     let pan = pitch_class_offset(midi) * 0.55;
     voices.start(
         VoiceSpec::new(

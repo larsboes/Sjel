@@ -81,6 +81,14 @@ impl Bed {
     }
 }
 
+/// The low shelf's corner and depth: 0.3 of the signal under 160 Hz is about -3 dB there.
+const LOW_SHELF_HZ: f32 = 160.;
+const LOW_SHELF_CUT: f32 = 0.3;
+
+fn low_shelf_coefficient(sample_rate: f32) -> f32 {
+    1. - (-std::f32::consts::TAU * LOW_SHELF_HZ / sample_rate).exp()
+}
+
 pub struct Engine {
     sample_rate: f32,
     voices: Voices,
@@ -130,6 +138,12 @@ pub struct Engine {
     /// which is a click in the reverb rather than a change of room.
     reverb_gain: f32,
     reverb_gain_step: f32,
+    /// A low shelf on the sidechained bus, which carries the pads and the bass. After the
+    /// analyser's headroom fix the loudest bands were 100-200 Hz on every preset, and the pads'
+    /// detuned saws are most of that: the shelf takes `LOW_SHELF_CUT` of everything under the
+    /// corner out of that bus and leaves the kick and the sub, on the dry bus, alone.
+    duck_low: [f32; 2],
+    duck_low_coefficient: f32,
     echo_delay: f32,
     /// A new preset's echo time is reached quickly; a tempo that drifts glides.
     echo_snap: bool,
@@ -170,6 +184,8 @@ impl Engine {
             room_brightness: -1.,
             reverb_gain: 0.4,
             reverb_gain_step: 1. - (-1. / (0.08 * sample_rate)).exp(),
+            duck_low: [0.; 2],
+            duck_low_coefficient: low_shelf_coefficient(sample_rate),
             echo_delay: -1.,
             echo_snap: true,
             seed: 0,
@@ -209,6 +225,7 @@ impl Engine {
         self.gate_step_down = 1. / (0.04 * sample_rate);
         self.report_every = Analyser::frames_per_update(sample_rate) as u32;
         self.reverb_highpass_coefficient = 1. - (-std::f32::consts::TAU * 180. / sample_rate).exp();
+        self.duck_low_coefficient = low_shelf_coefficient(sample_rate);
         self.beds_dirty = true;
     }
 
@@ -277,6 +294,9 @@ impl Engine {
         self.beds_dirty = true;
         self.room_space = -1.;
         self.echo_snap = true;
+        self.master.set_trim(preset.trim());
+        let (_, feedback, wet) = preset.echo();
+        self.echo.set_character(feedback, wet);
     }
 
     /// The tempo, in samples per sixteenth.
@@ -329,6 +349,10 @@ impl Engine {
                 reverb_send += beds * 0.3;
             }
 
+            for (channel, low) in self.duck_low.iter_mut().enumerate() {
+                *low += self.duck_low_coefficient * (duck[channel] - *low);
+                duck[channel] -= LOW_SHELF_CUT * *low;
+            }
             let ducked = self.duck.apply(duck);
             // One-pole highpass on the send: the room hears the mid and top, not the sub.
             self.reverb_highpass +=
@@ -419,7 +443,7 @@ impl Engine {
             self.room_space = space;
             self.room_brightness = brightness;
         }
-        let delay = self.arrangement.spb() * 0.75;
+        let delay = self.arrangement.spb() * self.arrangement.preset.echo().0;
         if self.echo_snap {
             self.echo.retune_delay_seconds(delay);
             self.echo_delay = delay;
@@ -438,8 +462,9 @@ impl Engine {
         } else {
             0.
         };
-        self.texture.gain =
-            (0.012 + 0.022 * self.arrangement.eff(ParamName::Texture)) * texture_level;
+        self.texture.gain = (0.012 + 0.022 * self.arrangement.eff(ParamName::Texture))
+            * texture_level
+            * self.arrangement.preset.air();
         self.texture
             .set_filters(250. + 2800. * brightness, 0., self.sample_rate);
         self.vinyl.gain = if self.arrangement.preset == Preset::Lofi {
@@ -898,6 +923,46 @@ mod quality {
                     preset.label()
                 );
             }
+        }
+    }
+
+    /// Twenty seconds of each preset at volume 0.8, after a four-second settle: rms, peak, and the
+    /// median of each eighth of the band profile. The mix pass is measured with this, not by ear:
+    /// `cargo test -p sjel-gpui-core --lib mix_report -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn mix_report() {
+        for preset in PRESETS {
+            let control = Control::new();
+            let visual = Visual::new();
+            let mut engine = Engine::new(RATE);
+            control.set_preset(preset);
+            control.set_volume(0.8);
+            control.set_playing(true);
+            render(&mut engine, &control, &visual, (RATE * 4.) as usize);
+            let mut buffer = Vec::new();
+            let mut profile: Vec<Vec<f32>> = vec![Vec::new(); 8];
+            for _ in 0..400 {
+                buffer.extend(render(&mut engine, &control, &visual, 2_400));
+                for (band, value) in engine.bands().iter().enumerate() {
+                    profile[band * 8 / BANDS].push(*value);
+                }
+            }
+            let reading = read(&buffer);
+            let medians: Vec<String> = profile
+                .iter_mut()
+                .map(|values| {
+                    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    format!("{:.2}", values[values.len() / 2])
+                })
+                .collect();
+            println!(
+                "{:8} rms {:.3} peak {:.3}  bands/8 {}",
+                preset.key(),
+                reading.rms,
+                reading.peak,
+                medians.join(" ")
+            );
         }
     }
 

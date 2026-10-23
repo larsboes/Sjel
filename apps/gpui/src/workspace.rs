@@ -30,13 +30,13 @@ use crate::inventory_view::InventoryPage;
 use crate::people_view::PeoplePage;
 use crate::projects::Projects;
 use crate::route::{self, Destination, Page, Target};
-use sjel_gpui_core::area::{self, Area, Tabs};
 use crate::selection::{Item, Selection};
 use crate::shell::{
     self, AgentView, Backups, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{AppearanceSettings, GlassStyle, Palette};
 use crate::{capabilities, header, home, sidebar};
+use sjel_gpui_core::area::{self, Area, Tabs};
 
 actions!(
     sjel,
@@ -122,7 +122,9 @@ fn page_icon(page: Page) -> IconName {
         Page::Context => IconName::Sun,
         Page::Capabilities => IconName::Cpu,
         Page::Systems => IconName::MemoryStick,
-        Page::Projects | Page::Documents | Page::Import | Page::Cv | Page::Media => IconName::Folder,
+        Page::Projects | Page::Documents | Page::Import | Page::Cv | Page::Media => {
+            IconName::Folder
+        }
         Page::Ask => IconName::Bot,
         Page::Travel => IconName::Globe,
         Page::Feed => IconName::BookOpen,
@@ -170,6 +172,8 @@ pub fn bind_keys(cx: &mut App) {
         // The player slides in over this window, so its keystroke belongs to the workspace and not
         // to the app: there is no window to open, only a panel to move.
         KeyBinding::new("shift-cmd-m", ToggleSoundscapePanel, None),
+        // The slot after the nine areas: the player is the one thing every area shares.
+        KeyBinding::new("cmd-0", ToggleSoundscapePanel, None),
         // Workspace scoped navigation & selection
         KeyBinding::new("/", FocusSearch, Some("Workspace")),
         KeyBinding::new("j", SelectNext, Some("Workspace")),
@@ -222,7 +226,6 @@ pub fn bind_keys(cx: &mut App) {
             .map(|(area, n)| KeyBinding::new(&format!("cmd-{n}"), OpenArea(area), None)),
     );
     cx.bind_keys([
-        KeyBinding::new("cmd-0", GoTo(Page::Documents), None),
         KeyBinding::new("shift-cmd-d", GoTo(Page::Documents), None),
         KeyBinding::new("shift-cmd-b", GoTo(Page::Backup), None),
         KeyBinding::new("shift-cmd-f", GoTo(Page::Finance), None),
@@ -663,64 +666,38 @@ impl Workspace {
         panel.update(cx, |panel, cx| panel.set_open(true, cx));
     }
 
+    /// The transport, written through the panel: it is the one writer of play and preset, so its
+    /// guard against a stale poll covers the sidebar and the global keys as well.
     pub fn toggle_soundscape(
         &mut self,
         playing: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let repo = self.repo.clone();
-        data::write(
-            cx,
-            window,
-            self,
-            &repo,
-            data::Press::quiet(if playing {
-                "Soundscape started."
-            } else {
-                "Soundscape paused."
-            }),
-            move |s| async move { s.set_soundscape_playing(playing).await },
-            |this, updated, cx| {
-                if let Some(state) = updated {
-                    this.soundscape.value = Some(state);
-                    cx.notify();
-                }
-            },
-        );
+        if let Some(state) = self.soundscape.value.as_mut() {
+            state.playing = playing;
+        }
+        let panel = self.soundscape_panel(window, cx);
+        panel.update(cx, |panel, cx| panel.set_playing(playing, window, cx));
+        cx.notify();
     }
 
     pub fn cycle_soundscape_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        use sjel_gpui_core::soundscape::{music::PRESETS, Preset};
         let current = self
             .soundscape
             .value
             .as_ref()
-            .map(|s| s.preset.as_str())
-            .unwrap_or("edm");
-        const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];
-        let next_idx = match PRESETS.iter().position(|&p| p == current) {
-            Some(i) => (i + 1) % PRESETS.len(),
-            None => 0,
-        };
-        let next = PRESETS[next_idx].to_string();
-        let repo = self.repo.clone();
-        data::write(
-            cx,
-            window,
-            self,
-            &repo,
-            data::Press::quiet("Preset updated."),
-            move |s| {
-                let n = next.clone();
-                async move { s.set_soundscape_preset(&n).await }
-            },
-            |this, updated, cx| {
-                if let Some(state) = updated {
-                    this.soundscape.value = Some(state);
-                    cx.notify();
-                }
-            },
-        );
+            .and_then(|state| Preset::from_key(&state.preset))
+            .unwrap_or(Preset::Edm);
+        let next =
+            Preset::from_key(PRESETS[(current.index() + 1) % PRESETS.len()]).unwrap_or(Preset::Edm);
+        if let Some(state) = self.soundscape.value.as_mut() {
+            state.preset = next.key().to_owned();
+        }
+        let panel = self.soundscape_panel(window, cx);
+        panel.update(cx, |panel, cx| panel.choose_preset(next, window, cx));
+        cx.notify();
     }
 
     pub fn toggle_task(
@@ -1111,7 +1088,8 @@ impl Workspace {
             self.check_updates(cx);
         }
         if section == Some(crate::settings::Section::Accounts) {
-            self.accounts.update(cx, |accounts, cx| accounts.refresh(cx));
+            self.accounts
+                .update(cx, |accounts, cx| accounts.refresh(cx));
         }
         self.go(Page::Settings, cx);
     }
@@ -1710,6 +1688,10 @@ mod tests {
         );
         let closed = cx.update(|_, cx| again.read(cx).is_open());
         assert!(!closed, "the second press did not close it");
+
+        // ⌘0 is the same toggle, one key from the nine areas.
+        cx.simulate_keystrokes("cmd-0");
+        assert!(cx.update(|_, cx| again.read(cx).is_open()), "⌘0 did not open it");
     }
 
     #[gpui::test]
@@ -1808,7 +1790,7 @@ mod tests {
     #[gpui::test]
     fn every_sidebar_page_has_a_shortcut(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
-        cx.simulate_keystrokes("cmd-0");
+        cx.simulate_keystrokes("shift-cmd-d");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Documents));
         cx.simulate_keystrokes("shift-cmd-b");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Backup));

@@ -42,7 +42,10 @@ use crate::data;
 use crate::theme::Palette;
 use crate::viz::{self, Field};
 
-actions!(soundscape, [ToggleTransport, NextPreset, CloseDrawer]);
+actions!(
+    soundscape,
+    [ToggleTransport, NextPreset, CloseDrawer, ToggleMix]
+);
 
 /// How wide the panel is. Narrow enough that the page behind it still reads as work in progress,
 /// wide enough for two columns of labelled bars.
@@ -56,6 +59,8 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(180);
 /// How long the panel takes to arrive. One time constant, not a frame count: the motion is the same
 /// at 60 Hz and 120 Hz, and short enough that the slide does not become something to wait for.
 const SLIDE_TAU: f32 = 0.06;
+/// The least height the drawn field keeps, enough for the preset label and the playback line.
+const FIELD_MIN: f32 = 140.;
 
 /// The six presets the conductor knows, in its own order.
 const PRESETS: [Preset; 6] = [
@@ -278,7 +283,13 @@ impl Soundscape {
 
     fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let playing = self.current().map(|state| state.playing).unwrap_or(false);
-        let next = !playing;
+        self.set_playing(!playing, window, cx);
+    }
+
+    /// The one write path for the transport. The sidebar, the palette and the global keys come here
+    /// through the workspace too: two writers each with their own `last_write` guard could not see
+    /// each other's write, so a poll could undo the one the other had just made.
+    pub fn set_playing(&mut self, next: bool, window: &mut Window, cx: &mut Context<Self>) {
         // The transport answers on the keystroke: the conductor confirms afterwards.
         self.audio.control.set_playing(next);
         if let Some(state) = self.state.value.as_mut() {
@@ -291,8 +302,7 @@ impl Soundscape {
             window,
             self,
             &repo,
-            // A toast for a transport the operator just watched change would be noise, and the
-            // mini window has no room for one.
+            // A toast for a transport the operator just watched change would be noise.
             data::Press::quiet(""),
             move |shell| async move { shell.set_soundscape_playing(next).await },
             |view, updated, cx| {
@@ -304,7 +314,8 @@ impl Soundscape {
         );
     }
 
-    fn choose_preset(&mut self, preset: Preset, window: &mut Window, cx: &mut Context<Self>) {
+    /// The one write path for a preset, for the same reason as [`Self::set_playing`].
+    pub fn choose_preset(&mut self, preset: Preset, window: &mut Window, cx: &mut Context<Self>) {
         self.audio.control.set_preset(preset);
         // A scape carries its own defaults, exactly as the dashboard's preset button does.
         let defaults = preset.scape().map(|scape| scape.defaults);
@@ -574,7 +585,12 @@ impl Render for Soundscape {
         let preset = state
             .map(|state| state.preset())
             .unwrap_or_else(|| self.audio.visual.preset());
-        let playback = soundscape::Playback::read(&self.audio.visual, playing);
+        // The line names the preset the operator chose. The synth's own report lags it by a bar
+        // while playing, and never moves at all when no device is rendering.
+        let playback = soundscape::Playback {
+            preset,
+            ..soundscape::Playback::read(&self.audio.visual, playing)
+        };
 
         // Fully away and not wanted: draw nothing at all. The view stays alive because the audio
         // does, and the next `set_open` brings it back on the next frame.
@@ -582,14 +598,23 @@ impl Render for Soundscape {
             return div().into_any_element();
         }
 
+        // A floor under the field: with the mixer open the controls took all but 60 points of it,
+        // and the preset label hung over the field's top edge. Past the floor the controls scroll.
         let field = div()
             .flex_1()
-            .min_h_0()
+            .min_h(px(FIELD_MIN))
             .relative()
-            .child(viz::frame(viz::canvas(
-                self.field.clone(),
-                self.audio.visual.clone(),
-            )))
+            // Paused, the field is a still wash of the preset's colours; dimmed, it reads as
+            // "nothing is sounding" instead of as a picture that stopped.
+            .child(
+                div()
+                    .size_full()
+                    .when(!playing, |field| field.opacity(0.45))
+                    .child(viz::frame(viz::canvas(
+                        self.field.clone(),
+                        self.audio.visual.clone(),
+                    ))),
+            )
             .child(
                 div()
                     .absolute()
@@ -643,9 +668,20 @@ impl Render for Soundscape {
             .on_action(cx.listener(|view, _: &CloseDrawer, _, cx| {
                 view.set_open(false, cx);
             }))
+            .on_action(cx.listener(|view, _: &ToggleMix, _, cx| {
+                view.mix_open = !view.mix_open;
+                cx.notify();
+            }))
             .child(self.header(palette, cx))
             .child(field)
-            .child(self.controls(window, cx, palette, playing, preset))
+            .child(
+                div()
+                    .id("soundscape-controls")
+                    .flex_shrink(1.)
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(self.controls(window, cx, palette, playing, preset)),
+            )
             .into_any_element()
     }
 }
@@ -685,7 +721,7 @@ impl Soundscape {
                                 palette.muted
                             }))
                             .child(match (&self.device, &self.device_error, conductor_down) {
-                                (_, Some(error), _) => error.clone(),
+                                (_, Some(error), _) => device_line(error),
                                 (Some(device), _, false) => device.clone(),
                                 (Some(device), _, true) => {
                                     format!("{device} · conductor unreachable")
@@ -719,7 +755,9 @@ impl Soundscape {
         let layers = state.map(|state| state.layers).unwrap_or_default();
         let params = state.map(|state| state.params).unwrap_or_default();
         let conductor_down = self.state.error.is_some();
-        let pending = self.audio.visual.preset() != preset;
+        // Only a playing synth waits for the bar: a paused one takes the preset at once, and one
+        // with no device never reports it at all.
+        let pending = playing && self.audio.visual.preset() != preset;
 
         let mut strip = div()
             .flex_none()
@@ -883,9 +921,8 @@ impl Soundscape {
         let session = state.and_then(|state| state.session.clone());
         strip = strip.child(
             div()
-                .flex()
-                .items_center()
-                .flex_wrap()
+                .grid()
+                .grid_cols(2)
                 .gap_1()
                 .text_xs()
                 .text_color(rgb(palette.muted))
@@ -988,6 +1025,7 @@ impl Soundscape {
                 .text_color(rgb(palette.muted))
                 .child("space play/pause")
                 .child("⇧⌘N next preset")
+                .child("m mix")
                 .child("esc close"),
         )
     }
@@ -1281,13 +1319,23 @@ where
 impl Soundscape {
     /// Bindings the panel carries. Registered once at launch, because a key binding belongs to the
     /// app and the context it names ("Soundscape") is only carried by the panel's root.
-    pub fn keys() -> [gpui_kit::KeyBinding; 3] {
+    pub fn keys() -> [gpui_kit::KeyBinding; 4] {
         [
             gpui_kit::KeyBinding::new("space", ToggleTransport, Some("Soundscape")),
             gpui_kit::KeyBinding::new("shift-cmd-n", NextPreset, Some("Soundscape")),
             gpui_kit::KeyBinding::new("escape", CloseDrawer, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("m", ToggleMix, Some("Soundscape")),
         ]
     }
+}
+
+/// The header's line for a device that did not open. The audio module's error names the cause for
+/// a log; the panel says what it means and keeps the cause in brackets.
+fn device_line(error: &str) -> String {
+    if error.starts_with("SJEL_GPUI_NO_AUDIO") {
+        return "Sound is off for this launch (SJEL_GPUI_NO_AUDIO)".to_owned();
+    }
+    format!("No sound output ({error})")
 }
 
 /// Start playing through the conductor, for `SJEL_GPUI_SOUNDSCAPE=play`.
@@ -1319,6 +1367,15 @@ pub fn play_through_conductor(cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_disabled_device_reads_as_a_sentence() {
+        assert_eq!(
+            device_line("SJEL_GPUI_NO_AUDIO is set: no output device"),
+            "Sound is off for this launch (SJEL_GPUI_NO_AUDIO)"
+        );
+        assert!(device_line("device busy").starts_with("No sound output"));
+    }
 
     #[test]
     fn a_bar_turns_a_position_into_a_fraction() {
@@ -1375,7 +1432,7 @@ mod tests {
     /// write in while it is open.
     #[test]
     fn the_panel_leaves_the_page_most_of_the_window() {
-        assert!(WIDTH < 760., "the window's own minimum width");
-        assert_eq!(Soundscape::keys().len(), 3);
+        const { assert!(WIDTH < 760., "the window's own minimum width") };
+        assert_eq!(Soundscape::keys().len(), 4);
     }
 }

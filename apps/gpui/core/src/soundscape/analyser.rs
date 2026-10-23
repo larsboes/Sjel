@@ -6,9 +6,9 @@
 //! thousand operations per update, which at 96 kHz is under half a percent of one core.
 //!
 //! The decimation is deliberate and its cost is known: a one-pole lowpass at 8 kHz first, then
-//! every fourth sample, so the bands above 8 kHz are progressively quieter than they are in the
-//! mix. A spectrum that is honest to within a few decibels at the top is the right trade for
-//! never stalling a buffer.
+//! every fourth sample. The lowpass's own rolloff is divided back out of each band (`corner`),
+//! so the top of the picture reads the mix rather than the anti-aliasing filter: before that the
+//! bands above 8 kHz sat at 7-15 % on every preset and the field's top ridges barely moved.
 
 use super::control::BANDS;
 
@@ -33,6 +33,8 @@ pub struct Analyser {
     /// One-pole lowpass state, anti-aliasing for the decimator.
     lowpass: f32,
     lowpass_coefficient: f32,
+    /// The lowpass's corner, so each band can undo the filter's known loss at its frequency.
+    corner: f32,
     /// Decimated samples, the transform's input.
     window: [f32; POINTS],
     filled: usize,
@@ -67,6 +69,7 @@ impl Analyser {
             decimation_count: 0,
             lowpass: 0.,
             lowpass_coefficient,
+            corner,
             window: [0.; POINTS],
             filled: 0,
             real: [0.; POINTS],
@@ -196,7 +199,9 @@ impl Analyser {
             // 0.47, a ninetieth percentile of 0.58 to 0.75 and no sample pinned at the top, for
             // four presets from Lo-fi to EDM. `the_spectrum_keeps_headroom_across_the_presets`
             // holds those numbers.
-            let tilt = (low_hz / LOWEST).powf(0.25).min(4.);
+            // The one-pole's loss at the band's centre, |H| = 1 / sqrt(1 + (f / fc)^2), undone.
+            let centre = (low_hz * high_hz).sqrt() / self.corner;
+            let tilt = (low_hz / LOWEST).powf(0.25).min(4.) * (1. + centre * centre).sqrt();
             let scaled = (((magnitude * tilt) / 24.).sqrt()).tanh();
             // Instant rise, slow fall.
             *slot = if scaled > self.bands[band] {

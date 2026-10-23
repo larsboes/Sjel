@@ -5,12 +5,12 @@
 
 ---
 
-## 1. Executive Status Matrix (All 24 Dashboard Routes)
+## 1. Executive Status Matrix (All 25 Dashboard Routes)
 
 | # | Route | Page / Destination | Status | Desktop Client | iOS Mobile Client | Capability / Source |
 |---|---|---|---|---|---|---|
-| 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home`) | In progress | Sjel Shell / Core |
-| 2 | `/context` | Today (Timeline & Focus) | **Ported** | Native GPUI (`ContextPage`) | Planned Tab | `capabilities/context` |
+| 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home` + `ContextPage`) | In progress | Sjel Shell / Core |
+| 2 | `/context` | Today (Timeline & Focus) | **Ported** (`/` and `/context` are one page) | Native GPUI (`Home` + `ContextPage`) | Planned Tab | `capabilities/context` |
 | 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Planned Tab | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
@@ -33,7 +33,7 @@
 | 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `Packs/cv` / `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **Ported** | Native GPUI (`MediaPage`) | N/A | `capabilities/media` |
 | 24 | `/research` | Local Models & Evals | **Ported** | Native GPUI (`ResearchPage`)| N/A | `research/`, `upstreams.toml`, `systems.toml` |
-| 25 | `/setup` | Node Setup & QR Pairing | **To Do** | Web Fallback (`/setup`) | Needs Scanner | `capabilities/devices` |
+| 25 | `/setup` | Node Setup & QR Pairing | **Ported** | Native GPUI (`SetupPage`) | Native Scanner | `capabilities/devices`, `capabilities/sjel-status` |
 
 ---
 
@@ -47,7 +47,7 @@
   a 3 s clock with a Start button while it is stopped, the runtime profile (selection and On-the-go
   exceptions), the agent's reach (per-capability mode, pending approvals, latest calls), storage
   with the disk's hourly history, updates with one apply button per class, and the hourly host
-  watch. `⌘4` or `g x`.
+  watch. `⌘9 › Systems` or `g x`.
 - **Not here**: `/api/top-processes` is a Vite dev-server middleware and has no owner on this side,
   so the largest-RAM-users popover stays on the web page until something serves it.
 
@@ -71,8 +71,21 @@
 - **Status**: Ported (2026-10-23).
 - **Shipped**: `apps/gpui/core/src/research.rs` (data models for `UpstreamRow`, `SystemRow`, `ProjectGroup`, `BenchmarkCase`, `BenchmarkResult`, `BenchmarkRun`, `BenchmarkSuite`, `ResearchArticle`, `ResearchView`, pure single-line TOML parser, upstream and suite grouping, and embedded fallback research view) and `apps/gpui/src/research_view.rs` (`ResearchPage` with 3 core tabs: Articles reader with full markdown document rendering, Projects register with search filter, "Runs alongside" systems table, upstreams grouped by verdict, "Add project to watch" live form backed by `watch_upstream()`, and Benchmarks suites evaluation tables with model latency/accuracy and per-case pass/fail breakdown matrix). Wired into `route.rs` as `Page::Research` (`/research`, `g z`).
 
-### 📋 Work Package 6: Node Setup & Device Pairing (`/setup`)
-- **Objective**: Local network node discovery, QR pairing code display and camera scanner, and device keys.
+### ✅ Work Package 6: Node Setup & Device Pairing (`/setup`)
+- **Status**: Ported (2026-10-23). Both ends: the Mac draws the code, the iPhone reads it.
+- **Shipped**: `apps/gpui/core/src/setup.rs` (the setup plans and their probes, the listener, the
+  one-time challenge, the `sjel-pair/1` payload, the QR matrix, and the pure reductions: the
+  verification merge, the step count, the active/revoked partition, the waiting joins, the
+  countdown and the short pin) and `apps/gpui/src/setup_view.rs` (`SetupPage` with two tabs:
+  **Machine Setup** — probes, plan steps, and one apply form whose credential is piped to the
+  tool's stdin and then dropped, never shown again; **Devices** — the Same-Wi-Fi listener, a
+  single-use code drawn as a QR `canvas` plus its copyable payload, join requests with the key code
+  both screens show, the trusted keys with certificate, trust and last-seen dates, and a two-press
+  revoke). Wired into `route.rs` as `Page::Setup` (`/setup`, `g 0`).
+- **Phone**: `apps/gpui/ios/host/PairScanner.swift` presents `AVCaptureMetadataOutput` and hands
+  the text to `sjel_ios_scanned_pairing`, which makes the same claim the `SJEL_PAIR` launch path
+  makes. `UITests/ScanTap.swift` proves a finger reaches it (`ios/run-sim --tap`).
+- **Not here**: revoking this device from the phone, and the phone's own copy of the device list.
 - **Data Source**: `capabilities/devices`, `capabilities/sjel-status`
 - **Target Files**:
   - `apps/gpui/core/src/setup.rs`
@@ -80,7 +93,28 @@
 
 ---
 
-## 3. High-Priority UI/UX Improvements Roadmap
+## 3. Next, before everything below (operator, 2026-10-23)
+
+These come before the roadmap in section 4. The roadmap resumes when they are done.
+
+1. **Ask and Search are one panel.** One input takes a search or a prompt. A mode switch offers
+   *Auto*, *Ask* and *Search*; Auto decides from the text, and the panel shows which way it went so
+   one keystroke can flip it. The panel opens two ways from the same view: as an overlay (the ⌘K
+   position) and docked as a right sidebar beside the page. ⌘2 (Ask) and ⌘K both reach it. Open:
+   what Search searches. The shell has no cross-capability search today (only transit's and
+   interior's own `/api/search`), and the app holds no local index.
+2. **The right sidebar is where Sjel works in view.** The docked panel is the seat of the later
+   adaptive UI: while Sjel runs a task, the operator sees it search, open a page and change a
+   value, live, instead of receiving only the result. Build the panel so a stream of agent steps
+   (the Ask turn's tool activity today) can drive navigation in the main column.
+3. **Soundscape, what the 2026-10-23 pass left.** The phone has no player:
+   `core/src/soundscape` is platform-free, so the iOS app needs an output device and a panel, not
+   a second engine. The panel's own open state and the mixer disclosure are not kept across
+   launches; nothing in the panel persists locally today.
+
+---
+
+## 4. High-Priority UI/UX Improvements Roadmap
 
 A substantial amount of UI/UX craftsmanship is needed to make the native app feel truly tactile, intuitive, and cohesive.
 
@@ -147,7 +181,7 @@ The current Travel page is functionally capable of reading trips and drawing Ope
 
 ---
 
-## 4. Mobile (iOS Standalone) Convergence Plan
+## 5. Mobile (iOS Standalone) Convergence Plan
 
 The previous iOS client was wrapped via Tauri ([`dashboard/src-tauri`](../../dashboard/src-tauri)). The target is a 100% native GPUI client on iOS ([`apps/gpui/ios`](ios/README.md)):
 
@@ -190,12 +224,13 @@ flowchart TD
 
 3. **Porting Tauri Native iOS Plugins to Swift / UIKit Bridges**:
    - **Apple RoomPlan LiDAR** (`plugins/roomplan`): Bridge `RoomCaptureView` in Swift to stream room dimensions and walls into GPUI interior layouts.
-   - **QR Code Scanner** (`tauri-plugin-barcode-scanner`): Implement `AVCaptureMetadataOutput` modal in `apps/gpui/ios/host/` for instant camera-based Mac pairing.
+   - ~~**QR Code Scanner** (`tauri-plugin-barcode-scanner`)~~: shipped in Work Package 6
+     (`apps/gpui/ios/host/PairScanner.swift`, `AVCaptureMetadataOutput`).
    - **Local Push Notifications** (`tauri-plugin-notification`): Use `UNUserNotificationCenter` for Sparpreis fare drops and calendar alarms without remote push servers.
 
 ---
 
-## 5. Session Collaboration Guidelines
+## 6. Session Collaboration Guidelines
 
 When picking up a work package:
 1. **Never touch or stage files under `capabilities/documents/src/`** (reserved for active document classifier session).

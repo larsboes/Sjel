@@ -221,6 +221,10 @@ pub struct Echo {
     smoothing_retune: f32,
     feedback: f32,
     wet: f32,
+    /// What a preset asks for. Feedback and wet walk to it on the retune coefficient: a wet gain
+    /// that steps under a ringing tail is the same click the delay time used to be.
+    feedback_target: f32,
+    wet_target: f32,
     sample_rate: f32,
 }
 
@@ -237,6 +241,8 @@ impl Echo {
             smoothing_retune: 0.,
             feedback: 0.32,
             wet: 0.5,
+            feedback_target: 0.32,
+            wet_target: 0.5,
             sample_rate,
         };
         echo.set_sample_rate(sample_rate);
@@ -284,6 +290,12 @@ impl Echo {
         self.smoothing = self.smoothing_retune;
     }
 
+    /// The preset's repeat: how much of it comes back, and how loud the return is.
+    pub fn set_character(&mut self, feedback: f32, wet: f32) {
+        self.feedback_target = feedback.clamp(0., 0.9);
+        self.wet_target = wet.clamp(0., 1.);
+    }
+
     fn seconds_to_samples(&self, seconds: f32) -> f32 {
         let max = (self.buffer_l.len().saturating_sub(2)).max(1) as f32;
         (seconds * self.sample_rate).clamp(1., max)
@@ -292,6 +304,8 @@ impl Echo {
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let length = self.buffer_l.len();
         self.delay += self.smoothing * (self.target - self.delay);
+        self.feedback += self.smoothing_retune * (self.feedback_target - self.feedback);
+        self.wet += self.smoothing_retune * (self.wet_target - self.wet);
         // Once it has arrived, the short coefficient has done its job and the tail goes back to
         // tracking a drifting tempo rather than chasing it.
         if self.smoothing == self.smoothing_retune && (self.target - self.delay).abs() < 1. {
@@ -397,6 +411,9 @@ pub struct Master {
     release: f32,
     sample_rate: f32,
     peak: f32,
+    /// The preset's own level (`Preset::trim`), reached through the same 20 ms smoothing as the
+    /// volume so a preset change does not step the mix.
+    trim: f32,
 }
 
 /// Where the mix sits before the compressor. Chosen so the loudest preset at full volume peaks
@@ -414,6 +431,7 @@ impl Master {
             release: 0.,
             sample_rate,
             peak: 1.,
+            trim: 1.,
         };
         master.set_sample_rate(sample_rate);
         master.set_volume(0.65);
@@ -435,6 +453,10 @@ impl Master {
         self.volume = volume.clamp(0., 1.);
     }
 
+    pub fn set_trim(&mut self, trim: f32) {
+        self.trim = trim.clamp(0.25, 4.);
+    }
+
     pub fn volume(&self) -> f32 {
         self.volume
     }
@@ -446,7 +468,7 @@ impl Master {
 
     #[inline]
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
-        let target = self.volume * self.volume * MIX_TRIM;
+        let target = self.volume * self.volume * MIX_TRIM * self.trim;
         self.gain += self.gain_smoothing * (target - self.gain);
         let mut out = [input[0] * self.gain, input[1] * self.gain];
 

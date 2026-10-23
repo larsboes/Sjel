@@ -135,6 +135,9 @@ mod tests {
             ..row
         };
         assert!(connect_google(&google, std::path::Path::new("/nope/client.json")).is_err());
-        assert!(move_to_keychain(&google).is_err(), "no env_fallback, nothing to move");
+        assert!(
+            move_to_keychain(&google).is_err(),
+            "no env_fallback, nothing to move"
+        );
     }
 }

@@ -117,12 +117,7 @@ impl SelfPage {
                         .text_color(rgb(palette.text))
                         .child(value),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(label),
-                )
+                .child(div().text_xs().text_color(rgb(palette.muted)).child(label))
         };
 
         card(
@@ -248,33 +243,29 @@ impl SelfPage {
         let outgoing = outgoing_couplings(&res.model, &unit.name);
         let incoming = incoming_couplings(&res.model, &unit.name);
 
-        let mut header = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_base()
-                            .font_weight(gpui_kit::FontWeight::BOLD)
-                            .text_color(rgb(palette.text))
-                            .child(unit.name.clone()),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py(px(1.5))
-                            .rounded(px(4.))
-                            .bg(rgba(palette.raised))
-                            .text_color(rgb(palette.muted))
-                            .text_xs()
-                            .child(unit.kind.clone()),
-                    ),
-            );
+        let mut header = div().flex().items_center().justify_between().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .text_base()
+                        .font_weight(gpui_kit::FontWeight::BOLD)
+                        .text_color(rgb(palette.text))
+                        .child(unit.name.clone()),
+                )
+                .child(
+                    div()
+                        .px_2()
+                        .py(px(1.5))
+                        .rounded(px(4.))
+                        .bg(rgba(palette.raised))
+                        .text_color(rgb(palette.muted))
+                        .text_xs()
+                        .child(unit.kind.clone()),
+                ),
+        );
 
         if let Some(service) = &unit.service {
             let is_up = liveness == Some(true);

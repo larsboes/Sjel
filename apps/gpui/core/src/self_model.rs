@@ -3,8 +3,8 @@
 //! Visualizes Sjel's architectural units (capabilities, libraries, packs, spines),
 //! compile-time couplings, runtime dependencies, code sizes, and live service status.
 
-use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
 
 /// Code stats for an architectural unit.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

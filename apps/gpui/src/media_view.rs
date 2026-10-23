@@ -4,9 +4,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Remote, Repo};
 use crate::theme::Palette;
@@ -82,7 +80,12 @@ impl MediaPage {
 
     // ── Components ────────────────────────────────────────────────────────────
 
-    fn render_index_summary(&self, status: &MediaStatus, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn render_index_summary(
+        &self,
+        status: &MediaStatus,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let total_bytes = total_volume_bytes(status);
         let volume_count = status.volumes.len();
 
@@ -143,12 +146,7 @@ impl MediaPage {
                                     .child("unique digests"),
                             ),
                     )
-                    .child(
-                        div()
-                            .w(px(1.0))
-                            .h(px(28.0))
-                            .bg(rgb(palette.border)),
-                    )
+                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgb(palette.border)))
                     .child(
                         div()
                             .flex()
@@ -168,12 +166,7 @@ impl MediaPage {
                                     .child("indexed paths"),
                             ),
                     )
-                    .child(
-                        div()
-                            .w(px(1.0))
-                            .h(px(28.0))
-                            .bg(rgb(palette.border)),
-                    )
+                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgb(palette.border)))
                     .child(
                         div()
                             .flex()
@@ -310,18 +303,16 @@ impl MediaPage {
                     let run_id = run.id;
                     let is_selected = selected_id == Some(run_id);
                     let label = run_label(run);
-                    let finished_str = run
-                        .finished
-                        .as_deref()
-                        .unwrap_or("in progress…");
+                    let finished_str = run.finished.as_deref().unwrap_or("in progress…");
 
-                    let inspect_btn = Button::new(SharedString::from(format!("run-inspect-{}", run_id)))
-                        .small()
-                        .when(!is_selected, |b| b.ghost())
-                        .label(if is_selected { "Close" } else { "Inspect" })
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.select_run(run_id, cx);
-                        }));
+                    let inspect_btn =
+                        Button::new(SharedString::from(format!("run-inspect-{}", run_id)))
+                            .small()
+                            .when(!is_selected, |b| b.ghost())
+                            .label(if is_selected { "Close" } else { "Inspect" })
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.select_run(run_id, cx);
+                            }));
 
                     div()
                         .id(SharedString::from(format!("run-row-{}", idx)))
@@ -378,46 +369,38 @@ impl MediaPage {
                                 .text_color(rgb(palette.muted))
                                 .child(format!("{} dup", run.duplicates)),
                         )
-                        .child(
+                        .child(div().w(px(80.0)).child(if run.refused > 0 {
                             div()
-                                .w(px(80.0))
-                                .child(if run.refused > 0 {
-                                    div()
-                                        .px(px(6.0))
-                                        .py(px(2.0))
-                                        .rounded(px(4.0))
-                                        .bg(rgb(palette.amber))
-                                        .text_size(px(10.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(rgb(0xffffff))
-                                        .child(format!("{} refused", run.refused))
-                                } else {
-                                    div()
-                                        .text_size(px(11.0))
-                                        .text_color(rgb(palette.muted))
-                                        .child("0 refused")
-                                }),
-                        )
-                        .child(
+                                .px(px(6.0))
+                                .py(px(2.0))
+                                .rounded(px(4.0))
+                                .bg(rgb(palette.amber))
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(rgb(0xffffff))
+                                .child(format!("{} refused", run.refused))
+                        } else {
                             div()
-                                .w(px(70.0))
-                                .child(if run.failed > 0 {
-                                    div()
-                                        .px(px(6.0))
-                                        .py(px(2.0))
-                                        .rounded(px(4.0))
-                                        .bg(rgb(palette.red))
-                                        .text_size(px(10.0))
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                        .text_color(rgb(0xffffff))
-                                        .child(format!("{} failed", run.failed))
-                                } else {
-                                    div()
-                                        .text_size(px(11.0))
-                                        .text_color(rgb(palette.muted))
-                                        .child("0 failed")
-                                }),
-                        )
+                                .text_size(px(11.0))
+                                .text_color(rgb(palette.muted))
+                                .child("0 refused")
+                        }))
+                        .child(div().w(px(70.0)).child(if run.failed > 0 {
+                            div()
+                                .px(px(6.0))
+                                .py(px(2.0))
+                                .rounded(px(4.0))
+                                .bg(rgb(palette.red))
+                                .text_size(px(10.0))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(rgb(0xffffff))
+                                .child(format!("{} failed", run.failed))
+                        } else {
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(rgb(palette.muted))
+                                .child("0 failed")
+                        }))
                         .child(
                             div()
                                 .w(px(130.0))
@@ -457,201 +440,207 @@ impl MediaPage {
             let run = &detail.run;
             let sorted = sort_run_items(&detail.items);
 
-                let filter = self.filter_disposition.as_str();
-                let filtered_items: Vec<&MediaIngestItem> = match filter {
-                    "attention" => sorted
-                        .iter()
-                        .filter(|i| matches!(i.disposition.as_str(), "failed" | "refused"))
-                        .collect(),
-                    "imported" => sorted
-                        .iter()
-                        .filter(|i| i.disposition == "imported")
-                        .collect(),
-                    "duplicate" => sorted
-                        .iter()
-                        .filter(|i| i.disposition == "duplicate")
-                        .collect(),
-                    _ => sorted.iter().collect(),
-                };
+            let filter = self.filter_disposition.as_str();
+            let filtered_items: Vec<&MediaIngestItem> = match filter {
+                "attention" => sorted
+                    .iter()
+                    .filter(|i| matches!(i.disposition.as_str(), "failed" | "refused"))
+                    .collect(),
+                "imported" => sorted
+                    .iter()
+                    .filter(|i| i.disposition == "imported")
+                    .collect(),
+                "duplicate" => sorted
+                    .iter()
+                    .filter(|i| i.disposition == "duplicate")
+                    .collect(),
+                _ => sorted.iter().collect(),
+            };
 
-                let close_btn = Button::new("close-run-detail")
-                    .small()
-                    .ghost()
-                    .label("Close Inspector")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.selected_run_id = None;
-                        this.selected_run_detail = Remote::default();
-                        cx.notify();
-                    }));
+            let close_btn = Button::new("close-run-detail")
+                .small()
+                .ghost()
+                .label("Close Inspector")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.selected_run_id = None;
+                    this.selected_run_detail = Remote::default();
+                    cx.notify();
+                }));
 
-                let filter_tabs = div()
-                    .flex()
-                    .gap(px(6.0))
-                    .child(
-                        Button::new("disp-all")
-                            .small()
-                            .when(filter != "all", |b| b.ghost())
-                            .label(format!("All ({})", sorted.len()))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.filter_disposition = "all".to_string();
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("disp-attention")
-                            .small()
-                            .when(filter != "attention", |b| b.ghost())
-                            .label(format!("Attention ({})", run.refused + run.failed))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.filter_disposition = "attention".to_string();
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("disp-imported")
-                            .small()
-                            .when(filter != "imported", |b| b.ghost())
-                            .label(format!("Imported ({})", run.imported))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.filter_disposition = "imported".to_string();
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new("disp-duplicate")
-                            .small()
-                            .when(filter != "duplicate", |b| b.ghost())
-                            .label(format!("Duplicate ({})", run.duplicates))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.filter_disposition = "duplicate".to_string();
-                                cx.notify();
-                            })),
-                    );
+            let filter_tabs = div()
+                .flex()
+                .gap(px(6.0))
+                .child(
+                    Button::new("disp-all")
+                        .small()
+                        .when(filter != "all", |b| b.ghost())
+                        .label(format!("All ({})", sorted.len()))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.filter_disposition = "all".to_string();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Button::new("disp-attention")
+                        .small()
+                        .when(filter != "attention", |b| b.ghost())
+                        .label(format!("Attention ({})", run.refused + run.failed))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.filter_disposition = "attention".to_string();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Button::new("disp-imported")
+                        .small()
+                        .when(filter != "imported", |b| b.ghost())
+                        .label(format!("Imported ({})", run.imported))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.filter_disposition = "imported".to_string();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    Button::new("disp-duplicate")
+                        .small()
+                        .when(filter != "duplicate", |b| b.ghost())
+                        .label(format!("Duplicate ({})", run.duplicates))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.filter_disposition = "duplicate".to_string();
+                            cx.notify();
+                        })),
+                );
 
-                let item_list = if filtered_items.is_empty() {
-                    div()
-                        .p(px(8.0))
-                        .text_size(px(11.0))
-                        .text_color(rgb(palette.muted))
-                        .child("No paths matching this filter.")
-                        .into_any_element()
-                } else {
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(3.0))
-                        .children(filtered_items.into_iter().enumerate().map(|(idx, item)| {
-                            let badge_bg = match item.disposition.as_str() {
-                                "failed" => rgb(palette.red),
-                                "refused" => rgb(palette.amber),
-                                "imported" => rgb(palette.green),
-                                "resumed" => rgb(palette.accent),
-                                _ => rgb(palette.muted),
-                            };
-
-                            let imported_text = item
-                                .imported_relpath
-                                .as_deref()
-                                .map(|p| format!(" → {}", p))
-                                .unwrap_or_default();
-
-                            div()
-                                .id(SharedString::from(format!("item-{}", idx)))
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .p(px(6.0))
-                                .rounded(px(4.0))
-                                .bg(rgb(palette.surface))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap(px(2.0))
-                                        .child(
-                                            div()
-                                                .flex()
-                                                .items_center()
-                                                .gap(px(6.0))
-                                                .child(
-                                                    div()
-                                                        .px(px(6.0))
-                                                        .py(px(1.0))
-                                                        .rounded(px(3.0))
-                                                        .bg(badge_bg)
-                                                        .text_size(px(10.0))
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .text_color(rgb(0xffffff))
-                                                        .child(item.disposition.clone()),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .text_size(px(12.0))
-                                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                                        .text_color(rgb(palette.text))
-                                                        .child(item.relpath.clone()),
-                                                )
-                                                .children(item.verified.then(|| {
-                                                    div()
-                                                        .px(px(4.0))
-                                                        .py(px(1.0))
-                                                        .rounded(px(3.0))
-                                                        .bg(rgb(palette.green))
-                                                        .text_size(px(9.0))
-                                                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                        .text_color(rgb(0xffffff))
-                                                        .child("verified")
-                                                })),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_size(px(11.0))
-                                                .text_color(rgb(palette.muted))
-                                                .child(format!("{}{}", item.reason, imported_text)),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(11.0))
-                                        .text_color(rgb(palette.muted))
-                                        .child(item.size.map(format_bytes).unwrap_or_default()),
-                                )
-                        }))
-                        .into_any_element()
-                };
-
+            let item_list = if filtered_items.is_empty() {
+                div()
+                    .p(px(8.0))
+                    .text_size(px(11.0))
+                    .text_color(rgb(palette.muted))
+                    .child("No paths matching this filter.")
+                    .into_any_element()
+            } else {
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(10.0))
-                    .child(
+                    .gap(px(3.0))
+                    .children(filtered_items.into_iter().enumerate().map(|(idx, item)| {
+                        let badge_bg = match item.disposition.as_str() {
+                            "failed" => rgb(palette.red),
+                            "refused" => rgb(palette.amber),
+                            "imported" => rgb(palette.green),
+                            "resumed" => rgb(palette.accent),
+                            _ => rgb(palette.muted),
+                        };
+
+                        let imported_text = item
+                            .imported_relpath
+                            .as_deref()
+                            .map(|p| format!(" → {}", p))
+                            .unwrap_or_default();
+
                         div()
+                            .id(SharedString::from(format!("item-{}", idx)))
                             .flex()
-                            .justify_between()
                             .items_center()
+                            .justify_between()
+                            .p(px(6.0))
+                            .rounded(px(4.0))
+                            .bg(rgb(palette.surface))
                             .child(
                                 div()
                                     .flex()
                                     .flex_col()
+                                    .gap(px(2.0))
                                     .child(
                                         div()
-                                            .text_size(px(13.0))
-                                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                                            .text_color(rgb(palette.text))
-                                            .child(format!("Ingest Run Inspection: {}", run_label(run))),
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.0))
+                                            .child(
+                                                div()
+                                                    .px(px(6.0))
+                                                    .py(px(1.0))
+                                                    .rounded(px(3.0))
+                                                    .bg(badge_bg)
+                                                    .text_size(px(10.0))
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(rgb(0xffffff))
+                                                    .child(item.disposition.clone()),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_size(px(12.0))
+                                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                                    .text_color(rgb(palette.text))
+                                                    .child(item.relpath.clone()),
+                                            )
+                                            .children(item.verified.then(|| {
+                                                div()
+                                                    .px(px(4.0))
+                                                    .py(px(1.0))
+                                                    .rounded(px(3.0))
+                                                    .bg(rgb(palette.green))
+                                                    .text_size(px(9.0))
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(rgb(0xffffff))
+                                                    .child("verified")
+                                            })),
                                     )
                                     .child(
                                         div()
                                             .text_size(px(11.0))
                                             .text_color(rgb(palette.muted))
-                                            .child(format!("Source: {} | Staging: {}", run.source, run.staging)),
+                                            .child(format!("{}{}", item.reason, imported_text)),
                                     ),
                             )
-                            .child(close_btn),
-                    )
-                    .child(filter_tabs)
-                    .child(item_list)
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .text_color(rgb(palette.muted))
+                                    .child(item.size.map(format_bytes).unwrap_or_default()),
+                            )
+                    }))
                     .into_any_element()
+            };
+
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(10.0))
+                .child(
+                    div()
+                        .flex()
+                        .justify_between()
+                        .items_center()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .child(
+                                    div()
+                                        .text_size(px(13.0))
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(rgb(palette.text))
+                                        .child(format!(
+                                            "Ingest Run Inspection: {}",
+                                            run_label(run)
+                                        )),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!(
+                                            "Source: {} | Staging: {}",
+                                            run.source, run.staging
+                                        )),
+                                ),
+                        )
+                        .child(close_btn),
+                )
+                .child(filter_tabs)
+                .child(item_list)
+                .into_any_element()
         } else if let Some(err) = &self.selected_run_detail.error {
             div()
                 .p(px(8.0))

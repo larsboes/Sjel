@@ -350,14 +350,38 @@ pub fn default_research_view() -> ResearchView {
 
     let articles = vec![
         to_article("README.md", include_str!("../../../../research/README.md")),
-        to_article("local-decision-models.md", include_str!("../../../../research/local-decision-models.md")),
-        to_article("offline-on-the-phone.md", include_str!("../../../../research/offline-on-the-phone.md")),
-        to_article("assistant-harness.md", include_str!("../../../../research/assistant-harness.md")),
-        to_article("agent-safety.md", include_str!("../../../../research/agent-safety.md")),
-        to_article("cloud-models-and-privacy.md", include_str!("../../../../research/cloud-models-and-privacy.md")),
-        to_article("on-device-models.md", include_str!("../../../../research/on-device-models.md")),
-        to_article("simplicity-and-adoption.md", include_str!("../../../../research/simplicity-and-adoption.md")),
-        to_article("why-sjel.md", include_str!("../../../../research/why-sjel.md")),
+        to_article(
+            "local-decision-models.md",
+            include_str!("../../../../research/local-decision-models.md"),
+        ),
+        to_article(
+            "offline-on-the-phone.md",
+            include_str!("../../../../research/offline-on-the-phone.md"),
+        ),
+        to_article(
+            "assistant-harness.md",
+            include_str!("../../../../research/assistant-harness.md"),
+        ),
+        to_article(
+            "agent-safety.md",
+            include_str!("../../../../research/agent-safety.md"),
+        ),
+        to_article(
+            "cloud-models-and-privacy.md",
+            include_str!("../../../../research/cloud-models-and-privacy.md"),
+        ),
+        to_article(
+            "on-device-models.md",
+            include_str!("../../../../research/on-device-models.md"),
+        ),
+        to_article(
+            "simplicity-and-adoption.md",
+            include_str!("../../../../research/simplicity-and-adoption.md"),
+        ),
+        to_article(
+            "why-sjel.md",
+            include_str!("../../../../research/why-sjel.md"),
+        ),
     ];
 
     let bench_nimble: BenchmarkResult = serde_json::from_str(include_str!(

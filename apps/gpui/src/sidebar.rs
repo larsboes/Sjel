@@ -100,19 +100,16 @@ fn nav(
                 // Which tab ⌘9 will return to, when it is not the one the area opens on.
                 .when(area.has_tabs() && tab != area.default_page(), |row| {
                     row.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py(px(1.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(palette.accent << 8 | 0x1c))
-                                    .text_color(rgb(palette.accent))
-                                    .text_xs()
-                                    .child(tab.label()),
-                            ),
+                        div().flex().items_center().child(
+                            div()
+                                .px_2()
+                                .py(px(1.))
+                                .rounded(px(4.))
+                                .bg(rgba(palette.accent << 8 | 0x1c))
+                                .text_color(rgb(palette.accent))
+                                .text_xs()
+                                .child(tab.label()),
+                        ),
                     )
                 })
                 .into_any_element()

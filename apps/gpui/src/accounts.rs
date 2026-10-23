@@ -71,10 +71,13 @@ impl Accounts {
 
     fn drop_file(&mut self, id: &str, paths: &ExternalPaths, cx: &mut Context<Self>) {
         let Some(path) = paths.paths().iter().find(|p| {
-            p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json"))
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("json"))
         }) else {
-            self.outcome
-                .insert(id.to_owned(), (false, "Drop the client JSON file (.json).".into()));
+            self.outcome.insert(
+                id.to_owned(),
+                (false, "Drop the client JSON file (.json).".into()),
+            );
             cx.notify();
             return;
         };
@@ -105,7 +108,10 @@ impl Accounts {
             let _ = this.update(cx, |view, cx| {
                 view.busy = None;
                 let line = match &result {
-                    Ok(()) => (true, "Connected. The grant is in the OS keychain.".to_owned()),
+                    Ok(()) => (
+                        true,
+                        "Connected. The grant is in the OS keychain.".to_owned(),
+                    ),
                     Err(error) => (false, error.clone()),
                 };
                 if result.is_ok() {
@@ -123,8 +129,10 @@ impl Accounts {
             return;
         }
         self.busy = Some(row.id.clone());
-        self.outcome
-            .insert(row.id.clone(), (true, "Moving the grant to the keychain…".into()));
+        self.outcome.insert(
+            row.id.clone(),
+            (true, "Moving the grant to the keychain…".into()),
+        );
         cx.notify();
         let id = row.id.clone();
         cx.spawn(async move |this, cx| {
@@ -154,10 +162,7 @@ impl Accounts {
             return div()
                 .px_4()
                 .py_3()
-                .child(note(
-                    format!("{}: {error}", row.capability),
-                    palette.red,
-                ))
+                .child(note(format!("{}: {error}", row.capability), palette.red))
                 .into_any_element();
         }
         let id = row.id.clone();
@@ -267,10 +272,7 @@ impl Accounts {
                     .children(move_button),
             )
             .children(self.outcome.get(&row.id).map(|(ok, line)| {
-                note(
-                    line.clone(),
-                    if *ok { palette.muted } else { palette.red },
-                )
+                note(line.clone(), if *ok { palette.muted } else { palette.red })
             }))
             .into_any_element()
     }
@@ -283,7 +285,10 @@ impl Render for Accounts {
             self.refresh(cx);
         }
         let body: AnyElement = match &self.rows {
-            None => list(vec![note("Reading the declared credentials…", palette.muted)], palette),
+            None => list(
+                vec![note("Reading the declared credentials…", palette.muted)],
+                palette,
+            ),
             Some(Err(error)) => list(vec![note(error.clone(), palette.red)], palette),
             Some(Ok(rows)) if rows.is_empty() => list(
                 vec![note("No capability declares a credential.", palette.muted)],

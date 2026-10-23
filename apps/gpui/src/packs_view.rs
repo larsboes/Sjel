@@ -16,8 +16,8 @@ use crate::data::{self, Busy, Remote, Repo};
 use crate::theme::Palette;
 use crate::ui::{card, dot, list, note, placeholder, section};
 use sjel_gpui_core::packs::{
-    all_packs, deployed_units, held_packs, installed_harnesses, matrix_rows,
-    orphaned_harnesses, row_needs_attention, status_of, MatrixRow, PacksView,
+    all_packs, deployed_units, held_packs, installed_harnesses, matrix_rows, orphaned_harnesses,
+    row_needs_attention, status_of, MatrixRow, PacksView,
 };
 
 pub struct PacksPage {
@@ -165,7 +165,13 @@ impl PacksPage {
             .collect()
     }
 
-    fn harness_cards(&mut self, view: &PacksView, all: &[String], palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn harness_cards(
+        &mut self,
+        view: &PacksView,
+        all: &[String],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let is_busy = !self.busy.is_empty();
         let mut cards = Vec::new();
 
@@ -213,27 +219,25 @@ impl PacksPage {
                         .child(if installed { "installed" } else { "absent" }),
                 );
 
-            let meta = div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(if model == "registry" {
-                    "reads the Pack source in place"
-                } else {
-                    "copies, and can drift"
-                });
-
-            let counts = div()
-                .text_xs()
-                .text_color(rgb(palette.text))
-                .child(format!(
-                    "{} deployed{}",
-                    deployed_count,
-                    if unowned_count > 0 {
-                        format!(" · {unowned_count} unowned")
+            let meta =
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(if model == "registry" {
+                        "reads the Pack source in place"
                     } else {
-                        "".to_string()
-                    }
-                ));
+                        "copies, and can drift"
+                    });
+
+            let counts = div().text_xs().text_color(rgb(palette.text)).child(format!(
+                "{} deployed{}",
+                deployed_count,
+                if unowned_count > 0 {
+                    format!(" · {unowned_count} unowned")
+                } else {
+                    "".to_string()
+                }
+            ));
 
             let path = div()
                 .text_xs()
@@ -352,7 +356,12 @@ impl PacksPage {
             );
         }
 
-        div().flex().flex_wrap().gap_3().children(cards).into_any_element()
+        div()
+            .flex()
+            .flex_wrap()
+            .gap_3()
+            .children(cards)
+            .into_any_element()
     }
 
     fn matrix_table(
@@ -422,14 +431,17 @@ impl PacksPage {
                         let action = if is_missing { "deploy" } else { "sync" };
                         let h_id = h.id.clone();
                         let p_name = r.pack.clone();
-                        Button::new(SharedString::from(format!("cell-{}-{}-{}", h.id, r.pack, r.skill)))
-                            .small()
-                            .label(verb)
-                            .disabled(is_busy)
-                            .on_click(cx.listener(move |page, _, window, cx| {
-                                page.write(action, h_id.clone(), vec![p_name.clone()], window, cx);
-                            }))
-                            .into_any_element()
+                        Button::new(SharedString::from(format!(
+                            "cell-{}-{}-{}",
+                            h.id, r.pack, r.skill
+                        )))
+                        .small()
+                        .label(verb)
+                        .disabled(is_busy)
+                        .on_click(cx.listener(move |page, _, window, cx| {
+                            page.write(action, h_id.clone(), vec![p_name.clone()], window, cx);
+                        }))
+                        .into_any_element()
                     }
                     "drifted" => div()
                         .px_2()
@@ -509,9 +521,12 @@ impl PacksPage {
                                 .text_color(rgb(palette.text))
                                 .child(stray.name.clone()),
                         )
-                        .children(stray.detail.as_ref().map(|d| {
-                            div().text_color(rgb(palette.muted)).child(d.clone())
-                        }))
+                        .children(
+                            stray
+                                .detail
+                                .as_ref()
+                                .map(|d| div().text_color(rgb(palette.muted)).child(d.clone())),
+                        )
                         .into_any_element()
                 })
                 .collect();
@@ -557,28 +572,24 @@ impl gpui::Render for PacksPage {
 
         // Notices or errors
         if let Some(notice) = &self.notice {
-            panels.push(
-                card(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.green))
-                        .child(notice.clone())
-                        .into_any_element(),
-                    palette,
-                )
-            );
+            panels.push(card(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.green))
+                    .child(notice.clone())
+                    .into_any_element(),
+                palette,
+            ));
         }
         if let Some(err) = &self.write_error {
-            panels.push(
-                card(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.red))
-                        .child(err.clone())
-                        .into_any_element(),
-                    palette,
-                )
-            );
+            panels.push(card(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(err.clone())
+                    .into_any_element(),
+                palette,
+            ));
         }
 
         // Orphaned alerts

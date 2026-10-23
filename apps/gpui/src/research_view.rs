@@ -93,9 +93,8 @@ impl ResearchPage {
         if let Some((input, _)) = &self.filter_input {
             return input.clone();
         }
-        let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Filter by name, summary, license…")
-        });
+        let input = cx
+            .new(|cx| InputState::new(window, cx).placeholder("Filter by name, summary, license…"));
         let subscription =
             cx.subscribe_in(&input, window, |this, input, _event: &InputEvent, _, cx| {
                 this.filter_query = input.read(cx).value().to_string();
@@ -113,13 +112,15 @@ impl ResearchPage {
         if let Some((input, _)) = &self.add_url_input {
             return input.clone();
         }
-        let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("https://github.com/owner/repo")
-        });
-        let subscription =
-            cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("https://github.com/owner/repo"));
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
                 cx.notify();
-            });
+            },
+        );
         self.add_url_input = Some((input.clone(), subscription));
         input
     }
@@ -135,10 +136,13 @@ impl ResearchPage {
         let input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("What it is, and why it is worth a look")
         });
-        let subscription =
-            cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
                 cx.notify();
-            });
+            },
+        );
         self.add_summary_input = Some((input.clone(), subscription));
         input
     }
@@ -154,10 +158,13 @@ impl ResearchPage {
         let input = cx.new(|cx| {
             InputState::new(window, cx).placeholder("Optional name (derived from URL if empty)")
         });
-        let subscription =
-            cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
                 cx.notify();
-            });
+            },
+        );
         self.add_name_input = Some((input.clone(), subscription));
         input
     }
@@ -198,15 +205,12 @@ impl ResearchPage {
             move |this, result, cx| {
                 match result {
                     Some(row) => {
-                        this.notice = Some(format!(
-                            "Added '{}' to upstreams.toml as watch.",
-                            row.name
-                        ));
+                        this.notice =
+                            Some(format!("Added '{}' to upstreams.toml as watch.", row.name));
                         this.show_add_drawer = false;
                     }
                     None => {
-                        this.write_error =
-                            Some("Failed to add project to watch list.".to_string());
+                        this.write_error = Some("Failed to add project to watch list.".to_string());
                     }
                 }
                 this.load(cx);
@@ -267,9 +271,7 @@ impl ResearchPage {
                         .border_l_2()
                         .border_color(rgb(palette.accent))
                 })
-                .when(!active, |d| {
-                    d.hover(|h| h.bg(rgb(palette.raised)))
-                })
+                .when(!active, |d| d.hover(|h| h.bg(rgb(palette.raised))))
                 .child(
                     div()
                         .text_size(px(12.0))
@@ -511,18 +513,14 @@ impl ResearchPage {
                         .child(Input::new(&name_field)),
                 )
                 .child(
-                    div()
-                        .flex()
-                        .justify_end()
-                        .pt(px(4.0))
-                        .child(
-                            Button::new("submit-watch-project")
-                                .small()
-                                .label("Add to Watch")
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.add_project(window, cx);
-                                })),
-                        ),
+                    div().flex().justify_end().pt(px(4.0)).child(
+                        Button::new("submit-watch-project")
+                            .small()
+                            .label("Add to Watch")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.add_project(window, cx);
+                            })),
+                    ),
                 );
 
             card(form_body.into_any_element(), palette)
@@ -631,16 +629,12 @@ impl ResearchPage {
                         div()
                             .text_size(px(11.0))
                             .text_color(rgb(palette.muted))
-                            .child("Systems Sjel connects to and leaves in charge of their own job."),
+                            .child(
+                                "Systems Sjel connects to and leaves in charge of their own job.",
+                            ),
                     ),
             )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(6.0))
-                    .children(sys_rows),
-            );
+            .child(div().flex().flex_col().gap(px(6.0)).children(sys_rows));
         panels.push(card(systems_panel.into_any_element(), palette));
 
         // 4. Upstreams grouped by verdict
@@ -762,11 +756,7 @@ impl ResearchPage {
 
     // ── Tab 3: Benchmarks ─────────────────────────────────────────────────────
 
-    fn render_benchmarks_tab(
-        &self,
-        suites: &[BenchmarkSuite],
-        palette: Palette,
-    ) -> AnyElement {
+    fn render_benchmarks_tab(&self, suites: &[BenchmarkSuite], palette: Palette) -> AnyElement {
         if suites.is_empty() {
             return note("No benchmark suites recorded.", palette.muted);
         }

@@ -6,8 +6,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, SharedString,
-    Subscription, Window,
+    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Subscription,
+    Window,
 };
 
 use crate::data::{self, Busy, Remote, Repo};
@@ -83,9 +83,13 @@ impl CvPage {
             return input.clone();
         }
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Company name…"));
-        let subscription = cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
-            cx.notify();
-        });
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
+                cx.notify();
+            },
+        );
         self.company_input = Some((input.clone(), subscription));
         input
     }
@@ -99,9 +103,13 @@ impl CvPage {
             return input.clone();
         }
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Role / Title…"));
-        let subscription = cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
-            cx.notify();
-        });
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
+                cx.notify();
+            },
+        );
         self.role_input = Some((input.clone(), subscription));
         input
     }
@@ -115,19 +123,18 @@ impl CvPage {
             return input.clone();
         }
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("Posting URL (optional)…"));
-        let subscription = cx.subscribe_in(&input, window, |_view, _input, _event: &InputEvent, _, cx| {
-            cx.notify();
-        });
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |_view, _input, _event: &InputEvent, _, cx| {
+                cx.notify();
+            },
+        );
         self.url_input = Some((input.clone(), subscription));
         input
     }
 
-    fn run_action(
-        &mut self,
-        req: CvWriteRequest,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn run_action(&mut self, req: CvWriteRequest, window: &mut Window, cx: &mut Context<Self>) {
         let key = format!("cv:{}:{}", req.action, req.slug);
         let repo = self.repo.clone();
         let req_clone = req.clone();
@@ -174,10 +181,7 @@ impl CvPage {
         };
 
         let stale_count = count_stale_pdfs(view);
-        let linkedin_date = view
-            .linkedin_pulled
-            .as_deref()
-            .unwrap_or("Never");
+        let linkedin_date = view.linkedin_pulled.as_deref().unwrap_or("Never");
 
         let header_content = div()
             .flex()
@@ -452,7 +456,13 @@ impl CvPage {
                                     .text_color(rgb(palette.muted))
                                     .child("Profile:"),
                             )
-                            .child(div().flex().flex_wrap().gap(px(6.0)).children(profile_buttons)),
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap(px(6.0))
+                                    .children(profile_buttons),
+                            ),
                     )
                     .child(
                         div()
@@ -466,13 +476,7 @@ impl CvPage {
                                     .text_color(rgb(palette.muted))
                                     .child("Language:"),
                             )
-                            .child(
-                                div()
-                                    .flex()
-                                    .gap(px(6.0))
-                                    .child(lang_en)
-                                    .child(lang_de),
-                            ),
+                            .child(div().flex().gap(px(6.0)).child(lang_en).child(lang_de)),
                     ),
             )
             .child(
@@ -648,25 +652,26 @@ impl CvPage {
                             }))
                     });
 
-                    let build_app_btn = Button::new(SharedString::from(format!("build-app-{}", slug)))
-                        .small()
-                        .ghost()
-                        .disabled(is_busy)
-                        .label("Build CV")
-                        .on_click(cx.listener({
-                            let slug_clone = slug.clone();
-                            move |this, _, window, cx| {
-                                this.run_action(
-                                    CvWriteRequest {
-                                        action: "app-build".to_string(),
-                                        slug: slug_clone.clone(),
-                                        ..Default::default()
-                                    },
-                                    window,
-                                    cx,
-                                );
-                            }
-                        }));
+                    let build_app_btn =
+                        Button::new(SharedString::from(format!("build-app-{}", slug)))
+                            .small()
+                            .ghost()
+                            .disabled(is_busy)
+                            .label("Build CV")
+                            .on_click(cx.listener({
+                                let slug_clone = slug.clone();
+                                move |this, _, window, cx| {
+                                    this.run_action(
+                                        CvWriteRequest {
+                                            action: "app-build".to_string(),
+                                            slug: slug_clone.clone(),
+                                            ..Default::default()
+                                        },
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }));
 
                     div()
                         .id(SharedString::from(format!("app-row-{}", idx)))
@@ -745,7 +750,10 @@ impl CvPage {
                                     div()
                                         .text_size(px(11.0))
                                         .text_color(rgb(palette.accent))
-                                        .child(format!("🔗 {}", u.chars().take(24).collect::<String>()))
+                                        .child(format!(
+                                            "🔗 {}",
+                                            u.chars().take(24).collect::<String>()
+                                        ))
                                 })),
                         )
                 }))
@@ -1052,4 +1060,3 @@ mod tests {
         assert!(page.notice.is_none());
     }
 }
-

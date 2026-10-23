@@ -9,21 +9,17 @@
 //!   - restore an archive:  POST .../gmail/v1/users/me/threads/{id}/modify
 //!
 //! There is no permanent-delete, send, or arbitrary-label operation.
-//! Credentials come from the overlay's `comms.env`
-//! (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN); token
-//! values are never logged.
+//! Credentials come from the keychain grant `google-comms`, or from the overlay's `comms.env`
+//! until the grant moves there (see [`access_token`]); token values are never logged.
 
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 
 use crate::{CommsError, Result};
 
-const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const THREADS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/threads";
 const LABELS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
 
@@ -39,20 +35,6 @@ fn is_missing_thread_status(status: u16) -> bool {
     matches!(status, 404 | 410)
 }
 
-/// In-process token cache (never persisted). Refreshed when within 60s of expiry.
-struct CachedToken {
-    token: String,
-    expires_at: u64,
-}
-static TOKEN_CACHE: OnceLock<Mutex<Option<CachedToken>>> = OnceLock::new();
-
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 fn client() -> Result<reqwest::blocking::Client> {
     // 30s, matching comms' other outbound fetches (src/sources.rs, src/media.rs).
     // This carried no timeout before.
@@ -65,74 +47,14 @@ fn client() -> Result<reqwest::blocking::Client> {
     .map_err(CommsError::from)
 }
 
-/// Reads a single `KEY=value` from a plain env file. Values are never logged.
-fn read_env_key(env_path: &Path, key: &str) -> Result<String> {
-    let body = std::fs::read_to_string(env_path).map_err(|e| {
-        CommsError::Config(format!("cannot read google env file {env_path:?}: {e}"))
-    })?;
-    body.lines()
-        .find_map(|l| {
-            l.strip_prefix(&format!("{key}="))
-                .map(|v| v.trim().to_string())
-        })
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| CommsError::Config(format!("{key} missing or empty in {env_path:?}")))
-}
+/// The credential ID of comms' Google grant (Gmail and Calendar) in the overlay catalog, as
+/// `capabilities/comms/service.toml` declares it. Calendar reads the same grant.
+pub const GRANT_ID: &str = "google-comms";
 
-#[derive(Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    #[serde(default = "default_expires_in")]
-    expires_in: u64,
-}
-fn default_expires_in() -> u64 {
-    3600
-}
-
-/// Returns a valid access token, refreshing via the OAuth refresh grant when
-/// the cache is empty or near expiry. The token string is cached in-process
-/// only and never printed.
+/// An access token for comms' grant: the keychain first, `env_path` while the grant has not
+/// moved there (`libs/sjel-credentials/src/google.rs`). Token values are never logged.
 pub fn access_token(env_path: &Path) -> Result<String> {
-    let cache = TOKEN_CACHE.get_or_init(|| Mutex::new(None));
-    {
-        let guard = cache.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(c) = guard.as_ref() {
-            if c.expires_at > now_secs() + 60 {
-                return Ok(c.token.clone());
-            }
-        }
-    }
-
-    let client_id = read_env_key(env_path, "GOOGLE_CLIENT_ID")?;
-    let client_secret = read_env_key(env_path, "GOOGLE_CLIENT_SECRET")?;
-    let refresh_token = read_env_key(env_path, "GOOGLE_REFRESH_TOKEN")?;
-
-    let resp = client()?
-        .post(TOKEN_URL)
-        .form(&[
-            ("client_id", client_id.as_str()),
-            ("client_secret", client_secret.as_str()),
-            ("refresh_token", refresh_token.as_str()),
-            ("grant_type", "refresh_token"),
-        ])
-        .send()?;
-
-    if !resp.status().is_success() {
-        // Deliberately does not echo the response body -- it can contain token
-        // material on some error shapes.
-        return Err(CommsError::Auth(format!(
-            "token refresh failed with HTTP {}",
-            resp.status()
-        )));
-    }
-
-    let tok: TokenResponse = resp.json()?;
-    let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
-    *guard = Some(CachedToken {
-        token: tok.access_token.clone(),
-        expires_at: now_secs() + tok.expires_in,
-    });
-    Ok(tok.access_token)
+    sjel_credentials::google::access_token(GRANT_ID, env_path).map_err(CommsError::Auth)
 }
 
 /// A thread id from the list endpoint.
@@ -697,24 +619,6 @@ fn thread_action_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn read_env_key_errors_on_missing() {
-        let dir = std::env::temp_dir().join(format!("comms-env-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let f = dir.join("comms.env");
-        std::fs::write(&f, "GOOGLE_CLIENT_ID=abc\nGOOGLE_CLIENT_SECRET=\n").unwrap();
-        assert_eq!(read_env_key(&f, "GOOGLE_CLIENT_ID").unwrap(), "abc");
-        assert!(
-            read_env_key(&f, "GOOGLE_CLIENT_SECRET").is_err(),
-            "empty value is an error"
-        );
-        assert!(
-            read_env_key(&f, "GOOGLE_REFRESH_TOKEN").is_err(),
-            "missing key is an error"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
 
     #[test]
     fn header_lookup_is_case_insensitive() {

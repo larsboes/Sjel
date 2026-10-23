@@ -2,6 +2,7 @@ use super::*;
 
 mod agent;
 mod backup;
+mod credentials;
 mod cv;
 mod events;
 mod health;
@@ -21,6 +22,7 @@ mod upstreams;
 
 pub(crate) use agent::*;
 pub(crate) use backup::*;
+pub(crate) use credentials::*;
 pub(crate) use cv::*;
 pub(crate) use events::*;
 pub(crate) use health::*;

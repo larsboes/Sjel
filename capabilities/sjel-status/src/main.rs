@@ -148,6 +148,11 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     r(
         "GET",
+        "/api/sjel-status/credentials",
+        "Every credential a capability manifest declares, with keychain and env-file presence. No value is read.",
+    ),
+    r(
+        "GET",
         "/api/sjel-status/packs",
         "Every Pack skill against every agent harness: deployed, drifted, or unowned at the destination.",
     ),
@@ -524,6 +529,7 @@ fn build_router(shell: proxy::Proxy) -> Router {
         .route("/api/sjel-status/setup/verify", get(setup_verify_handler))
         .route("/api/sjel-status/setup/apply", post(setup_apply_handler))
         .route("/api/sjel-status/host-watch", get(host_watch_handler))
+        .route("/api/sjel-status/credentials", get(credentials_handler))
         .route(
             "/api/sjel-status/packs",
             get(packs_handler).post(packs_write_handler),

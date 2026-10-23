@@ -12,13 +12,17 @@ name = "sjel_credentials"
 path = "src/lib.rs"
 
 [dependencies]
+base64.workspace = true
+getrandom.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json", "form"] }
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+sjel-config = { path = "../sjel-config" }
+sjel-http = { path = "../sjel-http" }
 thiserror.workspace = true
 toml.workspace = true
 zeroize.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

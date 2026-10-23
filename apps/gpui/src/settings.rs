@@ -1,4 +1,4 @@
-//! Settings (⌘,): appearance, the connection to the shell, app updates, and shortcuts.
+//! Settings (⌘,): appearance, the connection to the shell, accounts, app updates, and shortcuts.
 //!
 //! A section rail styled like the sidebar's nav, then grouped rows on the same cards Home uses:
 //! the label and one line about it on the left, the control on the right, as in macOS System
@@ -27,14 +27,16 @@ pub enum Section {
     #[default]
     Appearance,
     Connection,
+    Accounts,
     Updates,
     Shortcuts,
 }
 
 impl Section {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::Appearance,
         Self::Connection,
+        Self::Accounts,
         Self::Updates,
         Self::Shortcuts,
     ];
@@ -43,6 +45,7 @@ impl Section {
         match self {
             Self::Appearance => "Appearance",
             Self::Connection => "Connection & Sync",
+            Self::Accounts => "Accounts",
             Self::Updates => "Updates",
             Self::Shortcuts => "Shortcuts",
         }
@@ -53,6 +56,7 @@ impl Section {
         match self {
             Self::Appearance => "Changes apply at once and are kept for the next launch",
             Self::Connection => "The Sjel shell this window reads from",
+            Self::Accounts => "Credentials the capabilities declare, kept in the OS keychain",
             Self::Updates => "Sjel Desktop builds from your checkout of the Sjel repository",
             Self::Shortcuts => "Read from the key bindings this build registers",
         }
@@ -68,6 +72,7 @@ pub fn render(
     let body = match view.settings_section {
         Section::Appearance => appearance(view.appearance_settings, palette, cx),
         Section::Connection => connection(view, palette, cx),
+        Section::Accounts => vec![view.accounts.clone().into_any_element()],
         Section::Updates => updates(view, palette, cx),
         Section::Shortcuts => shortcuts(palette, cx),
     };

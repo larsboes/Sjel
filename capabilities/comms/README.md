@@ -1121,10 +1121,12 @@ config at startup, rejects cross-origin mutations, and adds the bearer header on
 server side. Restart both `comms` and `dashboard` after a token rotation.
 Browser-extension and direct HTTP clients must supply the token themselves.
 
-Google credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-`GOOGLE_REFRESH_TOKEN`) live in the overlay `comms.env`; mint the refresh token
-once with `auth/get-refresh-token.ts` (bun). Token values are never logged, and
-the DB connection string is redacted before any display.
+The Google grant is the keychain credential `google-comms`, declared in `service.toml` and
+connected in the desktop app (Settings › Accounts: drop the client JSON, press Connect).
+Until it is connected, comms reads `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
+`GOOGLE_REFRESH_TOKEN` from the overlay `comms.env`, which `auth/get-refresh-token.ts` (bun)
+writes. Both paths go through `libs/sjel-credentials/src/google.rs`. Token values are never
+logged, and the DB connection string is redacted before any display.
 
 The OAuth consent screen must be **In production**, not **Testing**. Google expires a refresh
 token issued to a Testing app after 7 days

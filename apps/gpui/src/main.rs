@@ -6,6 +6,7 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
+mod accounts;
 mod ask;
 mod audio;
 mod backup;

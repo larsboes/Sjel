@@ -324,6 +324,25 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 # a second source. `tools/service-runner.sh` refuses start/stop/restart/status by name,
 # answers `persistence-status` with `n/a`, and the whole-machine fan-out skips it.
 
+# --- Credentials ----------------------------------------------------------
+# What a capability asks for, never a value. The overlay catalog (`credentials.toml`) says what
+# this machine has; the value lives in the OS keychain. The desktop app's Settings › Accounts
+# page lists every declaration with its keychain presence (`GET /api/sjel-status/credentials`)
+# and connects a grant in-process; no value crosses HTTP. Parsed by
+# libs/sjel-credentials/src/declaration.rs, which refuses an unknown field.
+#
+# [[credentials]]
+# id           = "google-comms"         # the catalog ID: 1-64 letters, digits, '-' or '_'
+# type         = "google-oauth"         # the only type today (libs/sjel-credentials/src/google.rs)
+# label        = "Google: Gmail and Calendar"
+# scopes       = ["gmail.modify", "calendar.events"]   # short names or full scope URLs
+# env_fallback = "comms.env"            # the overlay env file read until the grant moves
+# steps        = ["…", "…"]             # what a person does, shown in order
+#
+# `type`, not `kind`, and no key here may reuse a top-level name the shell reads:
+# tools/lib/toml.sh is a flat line reader, so a `kind` in this table would read as the
+# manifest's own `kind`. Tables go after every top-level key.
+
 # tools/service-runner.sh:
 #   start <name>               -> container: dispatches by machine.toml's container_runtime
 #                                  (docker | podman). process: execs `command`

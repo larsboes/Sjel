@@ -23,6 +23,7 @@ civil-date = { path = "../../libs/civil-date" }
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../../libs/sjel-http" }
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-credentials = { path = "../../libs/sjel-credentials" }
 sjel-server = { path = "../../libs/sjel-server" }
 sjel-store = { path = "../../libs/sjel-store" }
 content-item = { path = "../../libs/content-item" }

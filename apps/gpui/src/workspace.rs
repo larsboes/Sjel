@@ -220,6 +220,7 @@ pub struct Workspace {
     pub backups: Remote<Backups>,
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
+    pub accounts: Entity<crate::accounts::Accounts>,
     pub travel: Entity<sjel_gpui_ui::travel::Travel>,
     pub documents: Entity<Documents>,
     pub feed: Entity<Feed>,
@@ -276,6 +277,7 @@ impl Workspace {
         let repo = Repo::new(shell::Shell::new(endpoint).map(std::sync::Arc::new));
         let projects = cx.new(|_| Projects::new(repo.clone()));
         let ask = cx.new(|_| Ask::new(repo.clone()));
+        let accounts = cx.new(|_| crate::accounts::Accounts::new(repo.clone()));
         let travel = cx.new(|_| {
             sjel_gpui_ui::travel::Travel::new(
                 repo.shell().ok().map(sjel_gpui_core::travel::Source::Shell),
@@ -311,6 +313,7 @@ impl Workspace {
             backups: Remote::default(),
             projects,
             ask,
+            accounts,
             travel,
             documents,
             feed,
@@ -1042,6 +1045,9 @@ impl Workspace {
         }
         if section == Some(crate::settings::Section::Updates) && self.update_info.is_none() {
             self.check_updates(cx);
+        }
+        if section == Some(crate::settings::Section::Accounts) {
+            self.accounts.update(cx, |accounts, cx| accounts.refresh(cx));
         }
         self.go(Page::Settings, cx);
     }

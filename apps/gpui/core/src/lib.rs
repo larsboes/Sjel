@@ -15,6 +15,7 @@
 //! - [`store`]: the local LibSQL replica and the queue of writes waiting for the Mac.
 //! - [`sync`]: replaying that queue at the Mac and taking back what it changed.
 
+pub mod accounts;
 pub mod backup;
 pub mod blocks;
 pub mod calendar;

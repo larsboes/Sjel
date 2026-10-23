@@ -39,3 +39,17 @@ autostart   = "true"
 # verifies looks like from the outside.
 freshness_advise_hours = "12"
 freshness_stale_hours  = "24"
+
+# The Google grant for Gmail and Calendar (schemas/service.toml.example, "Credentials").
+# Calendar reads the same grant. Connected in the desktop app, Settings › Accounts.
+[[credentials]]
+id           = "google-comms"
+type         = "google-oauth"
+label        = "Google: Gmail and Calendar"
+scopes       = ["gmail.modify", "calendar.events"]
+env_fallback = "comms.env"
+steps = [
+  "Google Cloud console → Google Auth Platform → Audience: Publishing status must read In production. A Testing app's tokens expire after 7 days.",
+  "Clients → your Desktop client → Download JSON. Google shows a new client's secret only once; if the download is gone, use Add secret.",
+  "Drop the JSON file here and press Connect. Allow Gmail and Calendar in the browser (Advanced → Go to Sjel).",
+]

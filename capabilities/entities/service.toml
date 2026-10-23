@@ -12,3 +12,17 @@ port        = "8097"
 health_path = "/health"
 ready_path  = "/ready"
 proxy_api_only = "true"
+
+# The Google grant for Contacts, read only and separate from comms' Gmail grant
+# (schemas/service.toml.example, "Credentials"). Connected in Settings › Accounts.
+[[credentials]]
+id           = "google-entities"
+type         = "google-oauth"
+label        = "Google: Contacts (read only)"
+scopes       = ["contacts.readonly"]
+env_fallback = "entities.env"
+steps = [
+  "Google Cloud console → APIs and services → Library: the People API must be enabled.",
+  "Clients → your Desktop client → Download JSON (the same client as Gmail works).",
+  "Drop the JSON file here and press Connect. Allow Contacts in the browser.",
+]

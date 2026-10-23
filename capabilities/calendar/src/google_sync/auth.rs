@@ -151,6 +151,14 @@ pub(super) fn default_expires_in() -> u64 {
 /// The failed-refresh path prints the status and nothing else: Google's error
 /// bodies can echo token material.
 pub fn access_token(env_path: &Path) -> SyncResult<String> {
+    // Pointed at comms' grant: read it where comms does, the keychain first
+    // (`libs/sjel-credentials/src/google.rs`). Any other file is another account's grant
+    // and stays on the env path below, so one account's token never reaches the other.
+    if env_path.file_name().is_some_and(|name| name == "comms.env") {
+        return sjel_credentials::google::access_token("google-comms", env_path).map_err(|e| {
+            format!("{e} — reconnect Google in the desktop app, Settings › Accounts")
+        });
+    }
     let cache = TOKEN_CACHE.get_or_init(|| Mutex::new(None));
     if let Some(cached) = cache.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
         if cached.source == env_path && cached.expires_at > now_secs() + 60 {

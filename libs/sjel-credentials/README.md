@@ -15,9 +15,16 @@ catalog.
   for a launchd service that cannot unlock a Keychain (`src/manager.rs`).
 - **`KeychainProvider`** — the macOS login Keychain, through the `security` command
   (`src/keychain.rs`).
+- **`google`** — the one Google OAuth sign-in (loopback, PKCE, `prompt=consent`) and the one
+  token refresh that comms, calendar and entities call (`src/google.rs`). A grant is one keychain
+  item holding JSON; `access_token` reads the keychain first and the capability's old overlay
+  env file second.
+- **`declaration`** — `[[credentials]]` in a capability's `service.toml`: what it asks for and
+  the steps to obtain it, never a value (`src/declaration.rs`, schemas/service.toml.example).
+  sjel-status lists them at `GET /api/sjel-status/credentials`; the desktop app's
+  Settings › Accounts page connects a grant in-process (`apps/gpui/core/src/accounts.rs`).
 
 ## Not built yet
 
-`ProviderKind::Bitwarden` exists in the types, but no adapter implements it. Nothing in `sjel`
-or the Tauri app calls this crate yet. Callers must not return a `SecretValue` to a webview or
-put one in a diagnostic.
+`ProviderKind::Bitwarden` exists in the types, but no adapter implements it. Callers must not
+return a `SecretValue` to a webview or put one in a diagnostic.

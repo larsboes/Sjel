@@ -18,6 +18,7 @@ path = "src/main.rs"
 # manifest schema refuses one), so the machine's always-on status surface publishes its
 # rows — the same shape /backups already has with tools/backup.sh's receipts.
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-credentials = { path = "../../libs/sjel-credentials" }
 sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }
 sjel-server = { path = "../../libs/sjel-server" }

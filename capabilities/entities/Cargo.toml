@@ -18,6 +18,7 @@ path = "src/server.rs"
 [dependencies]
 civil-date = { path = "../../libs/civil-date" }
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-credentials = { path = "../../libs/sjel-credentials" }
 sjel-http = { path = "../../libs/sjel-http" }
 # The wikilink parser the vault link checker uses, for counting Journal links (journal.rs).
 markdown-root = { path = "../../libs/markdown-root" }

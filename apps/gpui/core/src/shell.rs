@@ -1827,6 +1827,12 @@ impl Shell {
         }
     }
 
+    /// `GET /api/sjel-status/credentials`: every declared credential with its presence. No value.
+    pub async fn credentials(&self) -> ShellResult<Vec<crate::accounts::CredentialRow>> {
+        self.json(Method::GET, "/api/sjel-status/credentials", None, 10)
+            .await
+    }
+
     /// Store a provider key without sending it to the Sjel HTTP service. The input is held in a
     /// zeroizing buffer, and the private catalog receives only the stable credential ID.
     pub async fn store_provider_key(

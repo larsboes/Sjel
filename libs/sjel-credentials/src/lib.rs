@@ -5,6 +5,8 @@
 //! boundary is shared by the operator CLI, agent, and native clients; callers must not return a
 //! [`SecretValue`] to a webview or include one in diagnostics.
 
+pub mod declaration;
+pub mod google;
 mod keychain;
 mod manager;
 

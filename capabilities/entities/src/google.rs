@@ -4,11 +4,10 @@
 //! writes to Google: sending a person's time frames or sleeping option to Google would move
 //! C2 into a cloud service (PRD §6.1), so the sync runs one way.
 //!
-//! **Credentials** come from the overlay's `config/entities.env`: `GOOGLE_CLIENT_ID`,
-//! `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, the same three keys and file shape
-//! `capabilities/comms` uses. A separate token from comms', so Gmail's grant does not widen
-//! and this one cannot read mail. Mint it with
-//! `bun capabilities/comms/auth/get-refresh-token.ts --env entities.env --scope contacts.readonly`.
+//! **Credentials** are the keychain grant `google-entities`, connected in the desktop app
+//! (Settings › Accounts), or the overlay's `config/entities.env` until the grant moves there
+//! (`libs/sjel-credentials/src/google.rs`). A separate grant from comms', so Gmail's grant does
+//! not widen and this one cannot read mail.
 //! No value is ever logged, including in a failed-refresh body.
 
 use std::collections::BTreeMap;
@@ -28,82 +27,22 @@ pub fn env_path() -> PathBuf {
     sjel_config::overlay_config("entities.env").unwrap_or_else(|| PathBuf::from("entities.env"))
 }
 
-/// The three keys, or an error naming the missing one, the file, and the step that writes it.
-pub fn credentials(body: &str, path: &str) -> Result<(String, String, String), String> {
-    let get = |key: &str| {
-        body.lines()
-            .filter_map(|line| line.split_once('='))
-            .find(|(k, _)| k.trim() == key)
-            .map(|(_, v)| v.trim().trim_matches('"').to_string())
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| {
-                format!(
-                    "{key} is missing from {path}. Enable the People API, then run: bun \
-                     capabilities/comms/auth/get-refresh-token.ts --env entities.env \
-                     --scope contacts.readonly"
-                )
-            })
-    };
-    Ok((
-        get("GOOGLE_CLIENT_ID")?,
-        get("GOOGLE_CLIENT_SECRET")?,
-        get("GOOGLE_REFRESH_TOKEN")?,
-    ))
-}
-
-fn access_token(
-    client: &reqwest::blocking::Client,
-    id: &str,
-    secret: &str,
-    refresh: &str,
-) -> Result<String, String> {
-    let response = sjel_http::send(
-        // A token is minted, not mutated: Google answers a second refresh with another
-        // access token and does not withdraw the first, so a repeat costs one call and
-        // nothing else. This is the call the dark wake killed — measured 2026-10-18, the
-        // 00:01 slot ran at 00:06:18 on a two-second wake and the first request went out
-        // as the network stack tore down.
-        || {
-            client.post("https://oauth2.googleapis.com/token").form(&[
-                ("client_id", id),
-                ("client_secret", secret),
-                ("refresh_token", refresh),
-                ("grant_type", "refresh_token"),
-            ])
-        },
-        sjel_http::Idempotent::Yes,
-    )
-    .map_err(|e| format!("token refresh: {e}"))?;
-    let status = response.status();
-    let body: Value = response.json().unwrap_or(Value::Null);
-    if !status.is_success() {
-        // The error code only: Google puts token material in some of these bodies.
-        let code = body["error"].as_str().unwrap_or("unknown");
-        return Err(format!(
-            "token refresh answered {status} ({code}); re-mint the refresh token"
-        ));
-    }
-    body["access_token"]
-        .as_str()
-        .map(str::to_string)
-        .ok_or_else(|| "token refresh returned no access_token".into())
-}
-
 /// Every connection, all pages.
 /// A client and a fresh access token from the overlay's credentials.
 fn authorised() -> Result<(reqwest::blocking::Client, String), String> {
-    let path = env_path();
-    let body = std::fs::read_to_string(&path)
-        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    let (id, secret, refresh) = credentials(&body, &path.display().to_string())?;
     let client = sjel_http::client(
         sjel_http::Purpose::new("entities-google"),
         Duration::from_secs(30),
     )
     .map_err(|e| e.to_string())?;
-    let token = access_token(&client, &id, &secret, &refresh)?;
+    let token = sjel_credentials::google::access_token(GRANT_ID, &env_path()).map_err(|e| {
+        format!("{e}. Reconnect Google Contacts in the desktop app, Settings › Accounts")
+    })?;
     Ok((client, token))
 }
+
+/// The credential ID of this capability's Contacts grant, as `service.toml` declares it.
+pub const GRANT_ID: &str = "google-entities";
 
 /// One contact as Google holds it now, by its resource name (`people/c…`).
 pub fn fetch_one(resource_name: &str) -> Result<Value, String> {
@@ -301,20 +240,5 @@ mod tests {
     #[test]
     fn a_nameless_contact_is_skipped() {
         assert!(record(&json!({ "resourceName": "people/c1", "names": [] })).is_none());
-    }
-
-    #[test]
-    fn a_missing_key_names_itself_and_the_fix() {
-        let error = credentials(
-            "GOOGLE_CLIENT_ID=x\nGOOGLE_CLIENT_SECRET=y\n",
-            "entities.env",
-        )
-        .unwrap_err();
-        assert!(error.contains("GOOGLE_REFRESH_TOKEN") && error.contains("contacts.readonly"));
-        assert!(credentials(
-            "GOOGLE_CLIENT_ID=x\nGOOGLE_CLIENT_SECRET=y\nGOOGLE_REFRESH_TOKEN=z",
-            "f"
-        )
-        .is_ok());
     }
 }

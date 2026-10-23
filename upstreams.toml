@@ -389,6 +389,13 @@ license = "MIT (server); OpenMapTiles/OSM attribution applies to rendered data"
 summary = "Keyless hosted vector basemap that the dashboard's Trips map uses, with attribution kept visible"
 why = "keyless vector basemap for the first Trips vertical slice, using the documented hosted style URL behind one constant. The map keeps provider attribution visible and the seam can later point at a self-hosted OpenFreeMap/PMTiles deployment without changing Trip contracts"
 
+[maplibre-native-rs]
+url = "https://github.com/maplibre/maplibre-native-rs"
+verdict = "evaluate"
+license = "MIT OR Apache-2.0 (Rust bindings); BSD-2-Clause (MapLibre Native core)"
+summary = "Optional Metal vector-map prototype inside the GPUI travel surface, built against 0.10.0"
+why = "Reuse MapLibre's style parser, labels and renderer instead of building a map engine. The first adapter copies a rendered image into GPUI on camera changes, on a bounded, thread-affine worker. It is experimental, macOS-only, and does not establish smooth texture composition, iOS support or downloadable offline regions. The default raster path remains available. OpenFreeMap supplies the style and tiles; no Mapbox account or key is required."
+
 [wikimedia-api]
 url = "https://www.mediawiki.org/wiki/Extension:PageImages"
 verdict = "adopt"
@@ -935,6 +942,13 @@ verdict = "watch"
 license = "Apache-2.0"
 summary = "Contrastive model that scores supplied candidates; Sjel has an opt-in Pi adapter, no measured use"
 why = "noted 2026-09-30. CLM-v0.1-8B puts two projection heads on a frozen Qwen3-8B encoder and ranks candidates rather than generating text (https://contrastive-lm.notion.site/, https://huggingface.co/Contrastive-LM/CLM-v0.1-8B). Repository and model card both name Apache-2.0 via the GitHub and Hugging Face APIs on that date. Watch, not adopt: no CLM code is vendored. Packs/harness/extensions/clm-classifier.ts is a loopback client, off unless SJEL_CLM_ENABLE=1, and its tests use synthetic responses only. Nothing ran the encoder and heads on this Mac and no accuracy on a Sjel task is measured. The evidence and its gaps are in research/local-decision-models.md; the Ollama System One comparison is in research/README.md#ideas"
+
+[clm-mlx-community]
+url = "https://huggingface.co/mlx-community/CLM-v0.1-8B-MLX-4bit"
+verdict = "evaluate"
+license = "Apache-2.0"
+summary = "Unofficial Apple-Silicon MLX port of CLM-v0.1-8B with quantized Qwen3 encoder and contrastive heads"
+why = "Selected for a local experiment on document category scoring. The model card reports 91.4% top-choice agreement with the upstream server for its 4-bit quantization, and 99.3% agreement on inputs where upstream confidence is at least 70%; these are parity measurements, not Sjel classification accuracy. Its custom Python `clm_mlx` code was inspected before execution; it loads local MLX weights and tokenizer, computes CLM scores, and has no network or subprocess path. The unofficial community port is not supported by oMLX, so this experiment uses its MLX engine directly and leaves the oMLX server unchanged. Local smoke test on 2026-10-22 loaded successfully on the M4 Pro. The original 12-item synthetic DE/EN set scored 9/12. On the expanded balanced 48-item development set, the baseline scored 32/48, with Events 1/16. Selecting among three event descriptions on this development set chose `gathering-material` at 39/48 (Events 10/16); a fresh balanced holdout, frozen before prompt tuning and scored once with that description, returned 36/48 (EN 18/24, DE 18/24), with Events 9/16, Finance 12/16 and Reference 15/16. These are synthetic results; confidence is not calibrated and the model is not ready for Documents integration. Current deterministic keyword rules proposed 16/48 development examples (14 correct) and 10/48 holdout examples (9 correct), with zero correct Events proposals on holdout; coverage is low. With the selected event description, CLM scored 40/48 on a separate fresh balanced cross-source set (Events 11/16, Finance 15/16, Reference 14/16). CLM still returns no source evidence and is not connected to Documents. Tuning details, holdouts, and corpus hashes are in capabilities/documents/eval/. Keep verdict `evaluate`; route no documents through this adapter and require the shared `libs/inference` contract before any production model integration."
 
 # --- noted 2026-10-01 from the Sjel project roast (a vault clipping, Google AI Studio) ---
 # Ten projects that roast named and this register did not. Each row below records what Sjel has

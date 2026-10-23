@@ -42,6 +42,10 @@ const STRUCTURAL_KEYS: &[&str] = &[
     "tier",
     "data_class",
     "date",
+    // A task's own schedule (`capabilities/projects`). The text ladder reads `2026-10-23` as a
+    // phone number; free-text dates stay redacted, because there a date can be a birth date.
+    "due",
+    "scheduled",
     "first_seen",
     "last_seen",
     "purge_after",
@@ -256,6 +260,19 @@ mod tests {
             "{value}"
         );
         assert_eq!(value["profile_key"], "p1");
+    }
+
+    #[test]
+    fn a_task_schedule_survives_and_a_date_in_text_does_not() {
+        let mut value = json!({
+            "due": "2026-10-23",
+            "fields": {"scheduled": "2026-10-20"},
+            "summary": "geb. 1990-02-01"
+        });
+        agent_view(&mut value, &mut session(), &registry());
+        assert_eq!(value["due"], "2026-10-23");
+        assert_eq!(value["fields"]["scheduled"], "2026-10-20");
+        assert!(!value["summary"].as_str().unwrap().contains("1990"), "{value}");
     }
 
     #[test]

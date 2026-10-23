@@ -637,20 +637,22 @@ impl<'a> Svc<'a> {
             return Ok(());
         }
         if !force {
+            // The tree the build's sources live in, which is not always the tree the capability
+            // runs from. See `source_root`.
+            let sources = source_root(&self.build, &self.cap_root);
             if !self.build_output.is_empty() {
                 let out = if self.build_output.starts_with('/') {
                     PathBuf::from(&self.build_output)
                 } else {
                     self.cap_root.join(&self.build_output)
                 };
-                if artifact_is_current(&self.build, &out, &self.cap_root) {
+                if artifact_is_current(&self.build, &out, &sources) {
                     return Ok(());
                 }
             } else if !self.command[0].starts_with('/') {
                 // A bare name on PATH with nothing declared to look for.
                 return Ok(());
-            } else if artifact_is_current(&self.build, Path::new(&self.command[0]), &self.cap_root)
-            {
+            } else if artifact_is_current(&self.build, Path::new(&self.command[0]), &sources) {
                 return Ok(());
             }
         }
@@ -1384,6 +1386,61 @@ fn trusted_peers(paths: &Paths) -> String {
 /// The newest modification time among the Rust sources under `root`. Cargo owns the dependency
 /// graph; this only decides whether to ask it, so a coarse "some source is newer" is enough — a
 /// cargo build with nothing to do is cheap. Build output and vendored trees are skipped.
+/// The tree a build's sources live in, which is what decides whether its artifact is current.
+///
+/// `cap_root` answers for a capability whose sources sit under the root it runs from. It is the
+/// wrong tree when the build names another one: an OVERLAY capability may build a repository
+/// binary, and the overlay holds no Rust at all. `capabilities/cargo-trim` does exactly that
+/// (`--manifest-path $SJEL_ROOT/Cargo.toml`), so `newest_rust_source` looked under the overlay,
+/// found nothing, and answered "nothing newer" — which reads as "already built". Every later tick
+/// skipped the rebuild, and the job kept running the binary it first produced: measured
+/// 2026-10-23, a `sjel-storage` from 2026-10-13 while the exit-1 fix for the same job landed on
+/// 2026-10-18, so doctor reported a fixed failure as a producer that still fails.
+fn source_root(build: &[String], cap_root: &Path) -> PathBuf {
+    let manifest = build
+        .windows(2)
+        .find(|pair| pair[0] == "--manifest-path")
+        .map(|pair| pair[1].clone())
+        .or_else(|| {
+            build
+                .iter()
+                .find_map(|arg| arg.strip_prefix("--manifest-path=").map(str::to_owned))
+        });
+    let Some(manifest) = manifest else {
+        return cap_root.to_path_buf();
+    };
+    let path = Path::new(&manifest);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cap_root.join(path)
+    };
+    match path.parent() {
+        Some(dir) => workspace_root(dir),
+        None => cap_root.to_path_buf(),
+    }
+}
+
+/// The workspace a crate manifest belongs to: a workspace member's artifact goes stale when a
+/// sibling crate it depends on changes, which is the case `artifact_is_current` exists for. A
+/// manifest inside a workspace therefore names the workspace root, and a standalone crate names
+/// its own directory.
+fn workspace_root(dir: &Path) -> PathBuf {
+    let mut here = dir;
+    for _ in 0..4 {
+        if let Ok(text) = std::fs::read_to_string(here.join("Cargo.toml")) {
+            if text.contains("[workspace]") {
+                return here.to_path_buf();
+            }
+        }
+        match here.parent() {
+            Some(parent) => here = parent,
+            None => break,
+        }
+    }
+    dir.to_path_buf()
+}
+
 fn newest_rust_source(root: &Path) -> Option<SystemTime> {
     let mut newest: Option<SystemTime> = None;
     let mut stack = vec![root.to_path_buf()];
@@ -1534,5 +1591,84 @@ mod tests {
         let artifact = dir.join("target/release/tool");
         assert!(!artifact_is_current(&cargo_build(), &artifact, &dir));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The measured 2026-10-23 failure: an overlay capability building a repository binary. The
+    /// staleness question belongs to the repository, and asking it of the overlay — which holds no
+    /// Rust — answered "current" every time.
+    #[test]
+    fn an_overlay_build_of_a_repository_binary_is_judged_against_the_repository() {
+        let overlay = scratch("overlay-root");
+        let repo = scratch("overlay-repo");
+        std::fs::create_dir_all(repo.join("tools/storage/src")).unwrap();
+        let source = repo.join("tools/storage/src/main.rs");
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000);
+        std::fs::write(repo.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+        write_at(&repo.join("Cargo.toml"), old);
+        std::fs::write(repo.join("tools/storage/Cargo.toml"), "[package]\nname = \"s\"\n")
+            .unwrap();
+        write_at(&repo.join("tools/storage/Cargo.toml"), old);
+
+        let build = vec![
+            "cargo".to_owned(),
+            "build".to_owned(),
+            "--release".to_owned(),
+            "-p".to_owned(),
+            "sjel-storage".to_owned(),
+            "--manifest-path".to_owned(),
+            repo.join("Cargo.toml").display().to_string(),
+        ];
+        let artifact = overlay.join("target/release/sjel-storage");
+        write_at(&artifact, old);
+        write_at(&source, new);
+
+        // The overlay on its own would call this current: it has no sources to compare.
+        assert!(artifact_is_current(&build, &artifact, &overlay));
+        let sources = source_root(&build, &overlay);
+        assert_eq!(sources, repo, "a manifest in the repository names the repository");
+        assert!(!artifact_is_current(&build, &artifact, &sources));
+
+        write_at(&artifact, new);
+        assert!(artifact_is_current(&build, &artifact, &sources));
+        let _ = std::fs::remove_dir_all(&overlay);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    /// A manifest inside a workspace names the workspace, so a sibling crate the binary depends on
+    /// is not invisible; a standalone crate names its own directory rather than walking to `/`.
+    #[test]
+    fn a_manifest_belongs_to_its_workspace_or_to_itself() {
+        let root = scratch("manifest-root");
+        std::fs::create_dir_all(root.join("crates/member/src")).unwrap();
+        std::fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = [\"crates/member\"]\n")
+            .unwrap();
+        std::fs::write(root.join("crates/member/Cargo.toml"), "[package]\nname = \"m\"\n")
+            .unwrap();
+
+        let member = root.join("crates/member/Cargo.toml").display().to_string();
+        let build = vec![
+            "cargo".to_owned(),
+            "build".to_owned(),
+            format!("--manifest-path={member}"),
+        ];
+        assert_eq!(source_root(&build, Path::new("/nowhere")), root);
+
+        let alone = scratch("manifest-alone");
+        std::fs::create_dir_all(alone.join("src")).unwrap();
+        std::fs::write(alone.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
+        let build = vec![
+            "cargo".to_owned(),
+            "build".to_owned(),
+            "--manifest-path".to_owned(),
+            "Cargo.toml".to_owned(),
+        ];
+        // A relative manifest resolves against the capability root, not the process cwd.
+        assert_eq!(source_root(&build, &alone), alone);
+
+        // A build that names no manifest asks about the tree it runs from, as before.
+        assert_eq!(source_root(&cargo_build(), &alone), alone);
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&alone);
     }
 }

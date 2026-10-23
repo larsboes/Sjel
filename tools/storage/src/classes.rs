@@ -177,7 +177,10 @@ pub fn run(
             match guard.check(Path::new(path), Caller::Policy) {
                 Ok(real) => allowed.push(real.to_string_lossy().into_owned()),
                 Err(why) => {
-                    lines.push(why);
+                    // Prefixed like every other line: a bare refusal reads as one of the plan's
+                    // own lines, which is how four of them behind a 73.9 GB reclaim read as
+                    // unexplained noise rather than as the reason the run exited 1.
+                    lines.push(format!("  held     {why}"));
                     held = true;
                 }
             }

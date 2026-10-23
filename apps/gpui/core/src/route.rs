@@ -40,10 +40,12 @@ pub enum Page {
     SelfModel,
     /// CV builder, profiles, and job applications ledger (`sjel://cv`).
     Cv,
+    /// Media ingest gate and indexed volume integrity ledger (`sjel://media`).
+    Media,
 }
 
 impl Page {
-    pub const ALL: [Page; 21] = [
+    pub const ALL: [Page; 22] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -64,6 +66,7 @@ impl Page {
         Page::Packs,
         Page::SelfModel,
         Page::Cv,
+        Page::Media,
         Page::Settings,
     ];
 
@@ -89,6 +92,7 @@ impl Page {
             Self::Packs => "/packs",
             Self::SelfModel => "/self",
             Self::Cv => "/cv",
+            Self::Media => "/media",
             Self::Settings => "/settings",
         }
     }
@@ -103,6 +107,7 @@ impl Page {
             Self::Packs => "Packs",
             Self::SelfModel => "Self-model",
             Self::Cv => "CV",
+            Self::Media => "Media",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }

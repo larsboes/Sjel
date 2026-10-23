@@ -150,6 +150,7 @@ impl Workspace {
             | Page::Packs
             | Page::SelfModel
             | Page::Cv
+            | Page::Media
             | Page::Settings => Vec::new(),
         }
     }

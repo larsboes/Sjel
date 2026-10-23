@@ -31,7 +31,7 @@
 | 20 | `/packs` | Packs & Harness Sync | **Ported** | Native GPUI (`PacksPage`) | N/A | `tools/harnesses` |
 | 21 | `/self` | Self-Model & Knowledge | **Ported** | Native GPUI (`SelfPage`) | N/A | `self.json` / `graphify` |
 | 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `Packs/cv` / `cv` CLI |
-| 23 | `/media` | Media Ingest Ledger | **To Do** | Web Fallback (`/media`) | N/A | `capabilities/media` |
+| 23 | `/media` | Media Ingest Ledger | **Ported** | Native GPUI (`MediaPage`) | N/A | `capabilities/media` |
 | 24 | `/research` | Local Models & Evals | **To Do** | Web Fallback (`/research`)| N/A | `research/` / MLX / vLLM |
 | 25 | `/setup` | Node Setup & QR Pairing | **To Do** | Web Fallback (`/setup`) | Needs Scanner | `capabilities/devices` |
 
@@ -63,15 +63,9 @@
 - **Status**: Ported (2026-10-23).
 - **Shipped**: `apps/gpui/core/src/cv.rs` (data models for `master_cv.yaml`, applications, logs, built PDFs staleness, slug generation, filtering, and shell RPC methods `cv()` and `write_cv()`) and `apps/gpui/src/cv_view.rs` (`CvPage` with master info header, profile switcher, language toggles, PDF staleness badge, one-click PDF builds, LinkedIn pull/diff/paste-sheet actions, full applications ledger table with quick status transitions, app build triggers, and live capture form). Wired into `route.rs` as `Page::Cv` (`/cv`, `g y`).
 
-### 📋 Work Package 4: Media Ingest Ledger (`/media`)
-- **Objective**: Read-only ledger of indexed video, audio, and photo assets across external volumes.
-- **Data Source**: `capabilities/media` HTTP endpoint.
-- **UI Components to Build**:
-  - Volume breakdown cards (local drive, archive drives, iCloud).
-  - Ingest runs history and recent file audit log.
-- **Target Files**:
-  - `apps/gpui/core/src/media.rs`
-  - `apps/gpui/src/media_view.rs`
+### ✅ Work Package 4: Media Ingest Ledger (`/media`)
+- **Status**: Ported (2026-10-23).
+- **Shipped**: `apps/gpui/core/src/media.rs` (data models for `MediaStatus`, `MediaVolume`, `MediaIngestRun`, `MediaIngestItem`, `MediaIngestDetail`, byte formatting, leaf run labels, attention sorting, and shell RPC methods `media_status()`, `media_ingests()`, `media_ingest()`, `media_view()`) and `apps/gpui/src/media_view.rs` (`MediaPage` with index totals header, mounted volume breakdown table, recent ingest runs list with status tallies, and full run inspector with disposition filter tabs and item status badges). Wired into `route.rs` as `Page::Media` (`/media`, `g w`).
 
 ### 📋 Work Package 5: Research & Local Decision Models (`/research`)
 - **Objective**: Track local MLX and vLLM model weights, eval benchmark leaderboards, and research papers.

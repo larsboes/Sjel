@@ -1268,6 +1268,31 @@ impl Shell {
         self.json(Method::POST, "/api/sjel-status/cv", Some(body), 60).await
     }
 
+    /// Read index status totals and indexed volumes via `GET /media/api/status`.
+    pub async fn media_status(&self) -> ShellResult<crate::media::MediaStatus> {
+        self.json(Method::GET, "/media/api/status", None, 15).await
+    }
+
+    /// Read the recent ingest runs via `GET /media/api/ingests`.
+    pub async fn media_ingests(&self) -> ShellResult<crate::media::MediaIngestRunsResponse> {
+        self.json(Method::GET, "/media/api/ingests", None, 15).await
+    }
+
+    /// Read full details of one ingest run via `GET /media/api/ingests/{id}`.
+    pub async fn media_ingest(&self, id: i64) -> ShellResult<crate::media::MediaIngestDetail> {
+        let path = format!("/media/api/ingests/{id}");
+        self.json(Method::GET, &path, None, 20).await
+    }
+
+    /// Read combined media status and recent runs for the primary media view.
+    pub async fn media_view(&self) -> ShellResult<crate::media::MediaView> {
+        let (status, ingests) = futures::try_join!(self.media_status(), self.media_ingests())?;
+        Ok(crate::media::MediaView {
+            status,
+            runs: ingests.runs,
+        })
+    }
+
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");

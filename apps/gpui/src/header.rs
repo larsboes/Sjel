@@ -133,6 +133,7 @@ fn subtitle(view: &Workspace) -> SharedString {
             "Sjel about Sjel: units, compile-time couplings, and live topology".into()
         }
         Page::Cv => "CV builder, profile variations, applications ledger, and LinkedIn".into(),
+        Page::Media => "Exact-byte ingest gate, volume integrity ledger, and run inspection".into(),
         Page::Settings => view.settings_section.summary().into(),
     }
 }

@@ -33,6 +33,7 @@ mod pdf_kit;
 mod people_view;
 mod projects;
 mod selection;
+mod self_view;
 mod settings;
 mod sidebar;
 mod software;

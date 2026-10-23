@@ -29,6 +29,7 @@ pub mod mail;
 pub mod packs;
 pub mod people;
 pub mod route;
+pub mod self_model;
 pub mod shell;
 pub mod soundscape;
 pub mod store;

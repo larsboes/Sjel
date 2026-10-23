@@ -1252,6 +1252,11 @@ impl Shell {
             .await
     }
 
+    /// Architectural self-model and live state from `GET /api/sjel-status/self`.
+    pub async fn self_model(&self) -> ShellResult<crate::self_model::SelfModelResponse> {
+        self.json(Method::GET, "/api/sjel-status/self", None, 15).await
+    }
+
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");

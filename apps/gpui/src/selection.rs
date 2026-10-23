@@ -148,6 +148,7 @@ impl Workspace {
             | Page::Import
             | Page::Systems
             | Page::Packs
+            | Page::SelfModel
             | Page::Settings => Vec::new(),
         }
     }

@@ -36,10 +36,12 @@ pub enum Page {
     Settings,
     /// Agent skills across installed harnesses (`sjel://packs`).
     Packs,
+    /// Architectural self-model and live topology (`sjel://self`).
+    SelfModel,
 }
 
 impl Page {
-    pub const ALL: [Page; 19] = [
+    pub const ALL: [Page; 20] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -58,6 +60,7 @@ impl Page {
         Page::Software,
         Page::Import,
         Page::Packs,
+        Page::SelfModel,
         Page::Settings,
     ];
 
@@ -81,6 +84,7 @@ impl Page {
             Self::Import => "/import",
             Self::Systems => "/systems",
             Self::Packs => "/packs",
+            Self::SelfModel => "/self",
             Self::Settings => "/settings",
         }
     }
@@ -93,6 +97,7 @@ impl Page {
             Self::Import => "Import",
             Self::Systems => "Systems",
             Self::Packs => "Packs",
+            Self::SelfModel => "Self-model",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }

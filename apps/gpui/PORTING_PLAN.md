@@ -29,7 +29,7 @@
 | 18 | `/settings` | Settings & Shortcuts | **Ported** | Native GPUI (`Settings`) | Native Tab | Local GPUI State |
 | 19 | `/systems` | Systems & Host Telemetry | **Ported** | Native GPUI (`SystemsPage`) | N/A | `capabilities/sjel-status`, `macmon` |
 | 20 | `/packs` | Packs & Harness Sync | **Ported** | Native GPUI (`PacksPage`) | N/A | `tools/harnesses` |
-| 21 | `/self` | Self-Model & Knowledge | **To Do** | Web Fallback (`/self`) | N/A | `self.json` / `graphify` |
+| 21 | `/self` | Self-Model & Knowledge | **Ported** | Native GPUI (`SelfPage`) | N/A | `self.json` / `graphify` |
 | 22 | `/cv` | CV Builder & Applications| **To Do** | Web Fallback (`/cv`) | N/A | `Packs/cv` / `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **To Do** | Web Fallback (`/media`) | N/A | `capabilities/media` |
 | 24 | `/research` | Local Models & Evals | **To Do** | Web Fallback (`/research`)| N/A | `research/` / MLX / vLLM |
@@ -55,16 +55,9 @@
 - **Status**: Ported (2026-10-23).
 - **Shipped**: `apps/gpui/core/src/packs.rs` (data models, wire payloads, matrix rows calculation, attention detection, and RPC helpers) and `apps/gpui/src/packs_view.rs` (`PacksPage` with harness summary cards, orphan status alerts, interactive skill-by-harness matrix grid with deploy/sync cell buttons, stray inspections, and filtering). Wired into `route.rs` as `Page::Packs` (`/packs`, `g p`).
 
-### 📋 Work Package 2: Self-Model & Knowledge Architecture (`/self`)
-- **Objective**: Replace the web Svelte `/self` route with a native GPUI architectural diagram and unit browser.
-- **Data Source**: `self.json` (31 units, 16 couplings) and `/api/knowledge-graph`.
-- **UI Components to Build**:
-  - Interactive Unit Grid / Topology Card view: Capabilities, Libraries, Apps, Packs.
-  - Drill-down inspector: inspect unit responsibilities, dependencies, open claims, and git freshness.
-  - Quick action to run `graphify query "<concept>"` or `tools/self generate`.
-- **Target Files**:
-  - `apps/gpui/core/src/self_model.rs`
-  - `apps/gpui/src/self_view.rs`
+### ✅ Work Package 2: Self-Model & Knowledge Architecture (`/self`)
+- **Status**: Ported (2026-10-23).
+- **Shipped**: `apps/gpui/core/src/self_model.rs` (data models for `self.json` and `/api/sjel-status/self`, coupling degree calculation, isolated unit reductions, and live capability mapping) and `apps/gpui/src/self_view.rs` (`SelfPage` with stats summary, architectural unit cards, liveness dots, interactive inspector for incoming/outgoing compile-time couplings and runtime dependencies, and service start/stop/restart lifecycle controls). Wired into `route.rs` as `Page::SelfModel` (`/self`, `g l`).
 
 ### 📋 Work Package 3: CV & Career Applications Ledger (`/cv`)
 - **Objective**: CV master management, job application tracking, and LinkedIn profile drift audit.

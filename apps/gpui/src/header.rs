@@ -129,6 +129,9 @@ fn subtitle(view: &Workspace) -> SharedString {
             "This Mac now: temperature, power, disk, updates and the agent's reach".into()
         }
         Page::Packs => "Agent skills across installed harnesses, drift status, and sync".into(),
+        Page::SelfModel => {
+            "Sjel about Sjel: units, compile-time couplings, and live topology".into()
+        }
         Page::Settings => view.settings_section.summary().into(),
     }
 }

@@ -132,6 +132,7 @@ fn subtitle(view: &Workspace) -> SharedString {
         Page::SelfModel => {
             "Sjel about Sjel: units, compile-time couplings, and live topology".into()
         }
+        Page::Cv => "CV builder, profile variations, applications ledger, and LinkedIn".into(),
         Page::Settings => view.settings_section.summary().into(),
     }
 }

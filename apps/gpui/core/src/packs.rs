@@ -367,8 +367,8 @@ mod tests {
                     "label": "Claude Code",
                     "installed": true,
                     "model": "materialized",
-                    "marker": "/Users/larsboes/.claude",
-                    "destination": "/Users/larsboes/.claude/skills",
+                    "marker": "/Users/example/.claude",
+                    "destination": "/Users/example/.claude/skills",
                     "cli": "tools/packs-claude",
                     "units": [
                         {

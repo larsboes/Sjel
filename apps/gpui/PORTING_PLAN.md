@@ -30,7 +30,7 @@
 | 19 | `/systems` | Systems & Host Telemetry | **Ported** | Native GPUI (`SystemsPage`) | N/A | `capabilities/sjel-status`, `macmon` |
 | 20 | `/packs` | Packs & Harness Sync | **Ported** | Native GPUI (`PacksPage`) | N/A | `tools/harnesses` |
 | 21 | `/self` | Self-Model & Knowledge | **Ported** | Native GPUI (`SelfPage`) | N/A | `self.json` / `graphify` |
-| 22 | `/cv` | CV Builder & Applications| **To Do** | Web Fallback (`/cv`) | N/A | `Packs/cv` / `cv` CLI |
+| 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `Packs/cv` / `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **To Do** | Web Fallback (`/media`) | N/A | `capabilities/media` |
 | 24 | `/research` | Local Models & Evals | **To Do** | Web Fallback (`/research`)| N/A | `research/` / MLX / vLLM |
 | 25 | `/setup` | Node Setup & QR Pairing | **To Do** | Web Fallback (`/setup`) | Needs Scanner | `capabilities/devices` |
@@ -59,16 +59,9 @@
 - **Status**: Ported (2026-10-23).
 - **Shipped**: `apps/gpui/core/src/self_model.rs` (data models for `self.json` and `/api/sjel-status/self`, coupling degree calculation, isolated unit reductions, and live capability mapping) and `apps/gpui/src/self_view.rs` (`SelfPage` with stats summary, architectural unit cards, liveness dots, interactive inspector for incoming/outgoing compile-time couplings and runtime dependencies, and service start/stop/restart lifecycle controls). Wired into `route.rs` as `Page::SelfModel` (`/self`, `g l`).
 
-### 📋 Work Package 3: CV & Career Applications Ledger (`/cv`)
-- **Objective**: CV master management, job application tracking, and LinkedIn profile drift audit.
-- **Data Source**: Local `cv` CLI (`Packs/cv/skills/cv-builder/scripts/cv`), backed by `Atlas/Profile/Master.md` and `Atlas/Profile/Applications.json`.
-- **UI Components to Build**:
-  - Profile switcher (EN / DE).
-  - Active job applications data table (Company, Role, Status, Applied Date, Follow-up deadline).
-  - One-click build buttons: "Build PDF", "Export LinkedIn Paste Sheet", "Check Profile Drift".
-- **Target Files**:
-  - `apps/gpui/core/src/cv.rs`
-  - `apps/gpui/src/cv_view.rs`
+### ✅ Work Package 3: CV & Career Applications Ledger (`/cv`)
+- **Status**: Ported (2026-10-23).
+- **Shipped**: `apps/gpui/core/src/cv.rs` (data models for `master_cv.yaml`, applications, logs, built PDFs staleness, slug generation, filtering, and shell RPC methods `cv()` and `write_cv()`) and `apps/gpui/src/cv_view.rs` (`CvPage` with master info header, profile switcher, language toggles, PDF staleness badge, one-click PDF builds, LinkedIn pull/diff/paste-sheet actions, full applications ledger table with quick status transitions, app build triggers, and live capture form). Wired into `route.rs` as `Page::Cv` (`/cv`, `g y`).
 
 ### 📋 Work Package 4: Media Ingest Ledger (`/media`)
 - **Objective**: Read-only ledger of indexed video, audio, and photo assets across external volumes.

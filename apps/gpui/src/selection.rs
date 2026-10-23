@@ -149,6 +149,7 @@ impl Workspace {
             | Page::Systems
             | Page::Packs
             | Page::SelfModel
+            | Page::Cv
             | Page::Settings => Vec::new(),
         }
     }

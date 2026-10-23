@@ -13,6 +13,7 @@ mod calendar;
 mod calendar_view;
 mod capabilities;
 mod context_view;
+mod cv_view;
 mod data;
 mod documents;
 mod editor;

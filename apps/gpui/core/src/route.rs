@@ -38,10 +38,12 @@ pub enum Page {
     Packs,
     /// Architectural self-model and live topology (`sjel://self`).
     SelfModel,
+    /// CV builder, profiles, and job applications ledger (`sjel://cv`).
+    Cv,
 }
 
 impl Page {
-    pub const ALL: [Page; 20] = [
+    pub const ALL: [Page; 21] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -61,6 +63,7 @@ impl Page {
         Page::Import,
         Page::Packs,
         Page::SelfModel,
+        Page::Cv,
         Page::Settings,
     ];
 
@@ -85,6 +88,7 @@ impl Page {
             Self::Systems => "/systems",
             Self::Packs => "/packs",
             Self::SelfModel => "/self",
+            Self::Cv => "/cv",
             Self::Settings => "/settings",
         }
     }
@@ -98,6 +102,7 @@ impl Page {
             Self::Systems => "Systems",
             Self::Packs => "Packs",
             Self::SelfModel => "Self-model",
+            Self::Cv => "CV",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }

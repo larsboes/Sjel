@@ -20,6 +20,7 @@ pub mod blocks;
 pub mod calendar;
 pub mod capture;
 pub mod context;
+pub mod cv;
 pub mod data;
 pub mod device;
 pub mod finance;

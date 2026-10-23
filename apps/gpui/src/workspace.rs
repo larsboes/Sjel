@@ -99,7 +99,7 @@ fn page_icon(page: Page) -> IconName {
         Page::Context => IconName::Sun,
         Page::Capabilities => IconName::Cpu,
         Page::Systems => IconName::MemoryStick,
-        Page::Projects | Page::Documents | Page::Import => IconName::Folder,
+        Page::Projects | Page::Documents | Page::Import | Page::Cv => IconName::Folder,
         Page::Ask => IconName::Bot,
         Page::Travel => IconName::Globe,
         Page::Feed => IconName::BookOpen,
@@ -176,6 +176,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g x", GoTo(Page::Systems), Some("Workspace")),
         KeyBinding::new("g k", GoTo(Page::Packs), Some("Workspace")),
         KeyBinding::new("g l", GoTo(Page::SelfModel), Some("Workspace")),
+        KeyBinding::new("g y", GoTo(Page::Cv), Some("Workspace")),
         KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
     ]);
     cx.bind_keys(
@@ -231,6 +232,7 @@ pub struct Workspace {
     pub systems: Entity<crate::systems::SystemsPage>,
     pub packs: Entity<crate::packs_view::PacksPage>,
     pub self_page: Entity<crate::self_view::SelfPage>,
+    pub cv_page: Entity<crate::cv_view::CvPage>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
@@ -289,6 +291,7 @@ impl Workspace {
         let systems = cx.new(|_| crate::systems::SystemsPage::new(repo.clone()));
         let packs = cx.new(|_| crate::packs_view::PacksPage::new(repo.clone()));
         let self_page = cx.new(|_| crate::self_view::SelfPage::new(repo.clone()));
+        let cv_page = cx.new(|_| crate::cv_view::CvPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
@@ -316,6 +319,7 @@ impl Workspace {
             systems,
             packs,
             self_page,
+            cv_page,
             busy: Busy::default(),
             selection: Selection::default(),
             nav_scroll: ScrollHandle::new(),
@@ -404,6 +408,8 @@ impl Workspace {
                 self.packs.update(cx, |packs, cx| packs.load(cx));
             } else if page == Page::SelfModel {
                 self.self_page.update(cx, |s, cx| s.load(cx));
+            } else if page == Page::Cv {
+                self.cv_page.update(cx, |cv, cx| cv.load(cx));
             } else if page == Page::Documents {
                 self.documents
                     .update(cx, |documents, cx| documents.load(cx));
@@ -981,6 +987,8 @@ impl Workspace {
             self.packs.update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::SelfModel {
             self.self_page.update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Cv {
+            self.cv_page.update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -1299,6 +1307,7 @@ impl Render for Workspace {
             Page::Systems => self.systems.clone().into_any_element(),
             Page::Packs => self.packs.clone().into_any_element(),
             Page::SelfModel => self.self_page.clone().into_any_element(),
+            Page::Cv => self.cv_page.clone().into_any_element(),
             Page::Documents => {
                 self.documents
                     .update(cx, |documents, cx| documents.set_palette(palette, cx));
@@ -1670,6 +1679,8 @@ mod tests {
         // Backwards from the first page wraps to the last one the sidebar lists, and Systems
         // sits fourth in that history rather than at the end.
         cx.simulate_keystrokes("shift-cmd-[");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
+        cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::SelfModel));
         cx.simulate_keystrokes("shift-cmd-[");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
@@ -1699,6 +1710,8 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
         cx.simulate_keystrokes("g l");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::SelfModel));
+        cx.simulate_keystrokes("g y");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
     }
 
     #[gpui::test]

@@ -1257,6 +1257,17 @@ impl Shell {
         self.json(Method::GET, "/api/sjel-status/self", None, 15).await
     }
 
+    /// CV status, applications, profiles and built PDFs from `GET /api/sjel-status/cv`.
+    pub async fn cv(&self) -> ShellResult<crate::cv::CvView> {
+        self.json(Method::GET, "/api/sjel-status/cv", None, 20).await
+    }
+
+    /// Run one CV verb (build, app-new, app-status, linkedin-diff, etc.) via `POST /api/sjel-status/cv`.
+    pub async fn write_cv(&self, req: &crate::cv::CvWriteRequest) -> ShellResult<crate::cv::CvWriteResult> {
+        let body = serde_json::to_value(req).map_err(|_| ShellError::Unreadable)?;
+        self.json(Method::POST, "/api/sjel-status/cv", Some(body), 60).await
+    }
+
     /// Entries overlapping `[from, to)`, both `YYYY-MM-DD`: `to` is exclusive.
     pub async fn calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
         let path = format!("/calendar/api/entries?from={from}&to={to}");

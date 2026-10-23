@@ -1,18 +1,19 @@
-//! The sidebar: navigation, the soundscape player, the palette hint, and what the shell answered.
+//! The sidebar: the nine areas, the soundscape player, the palette hint, and what the shell
+//! answered.
 //!
 //! It draws the workspace's state and owns none of it. Every click calls a `Workspace` method, so
 //! the sidebar decides layout and wording only, and its geometry lives here so the glass panel
 //! that AppKit paints under it cannot drift from the column GPUI reserves.
 
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, Action, AnyElement, Context, SharedString, Window};
+use sjel_gpui_core::area::Area;
 
 use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
 use crate::theme::Palette;
-use crate::workspace::{nav_pages, GoTo, OpenPalette, OpenSettings, Workspace};
+use crate::workspace::{OpenArea, OpenPalette, OpenSettings, Workspace};
 
 /// The column the sidebar occupies, and the gap the glass panel leaves to the window edge.
 pub const WIDTH: f32 = 208.;
@@ -40,16 +41,15 @@ pub fn render(
                 .border_r_1()
                 .border_color(rgba(palette.border))
         })
-        // The page list is the only part that scrolls: at eighteen pages it is taller than a
-        // laptop window, and the soundscape player, Settings and the footer must stay reachable.
+        // Nine rows, so the list never scrolls: every area is one keystroke away and none of them
+        // hides below the fold. The player, Search, Settings and the footer sit under it.
         .child(
             div()
                 .id("sidebar-nav")
                 .flex_1()
                 .min_h_0()
-                .overflow_y_scroll()
-                .track_scroll(&view.nav_scroll)
-                .vertical_scrollbar(&view.nav_scroll)
+                .flex()
+                .flex_col()
                 .children(nav(view, palette, window, cx)),
         )
         .child(soundscape(view, palette, cx))
@@ -58,25 +58,27 @@ pub fn render(
         .child(footer(view, palette))
 }
 
-/// One row per native page, each with the shortcut that opens it. Settings sits at the bottom
-/// instead, beside Search.
+/// One row per area, with the ⌘ number that opens it and, when the area is not on the tab it
+/// opens on, the tab it will return to. Settings sits at the bottom instead, beside Search.
 fn nav(
     view: &Workspace,
     palette: Palette,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> Vec<AnyElement> {
-    nav_pages()
-        .map(move |page| {
-            let selected = page == view.page;
-            let shortcut = Kbd::binding_for_action(&GoTo(page), None, window);
+    Area::ALL
+        .into_iter()
+        .map(|area| {
+            let selected = Area::of(view.page) == Some(area);
+            let tab = view.tabs.current(area);
+            let shortcut = Kbd::binding_for_action(&OpenArea(area), None, window);
             div()
-                .id(page.href())
+                .id(area.label())
                 .flex()
-                .items_center()
-                .justify_between()
+                .flex_col()
+                .gap(px(2.))
                 .px_3()
-                .py(px(4.))
+                .py(px(5.))
                 .rounded(px(7.))
                 .when(selected, |row| row.bg(rgba(palette.raised)))
                 .text_color(rgb(if selected {
@@ -86,9 +88,33 @@ fn nav(
                 }))
                 .cursor_pointer()
                 .hover(move |style| style.bg(rgba(palette.raised)).text_color(rgb(palette.text)))
-                .on_click(cx.listener(move |view, _, _, cx| view.go(page, cx)))
-                .child(page.label())
-                .children(shortcut.map(|kbd| kbd.appearance(false)))
+                .on_click(cx.listener(move |view, _, _, cx| view.open_area(area, cx)))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(area.label())
+                        .children(shortcut.map(|kbd| kbd.appearance(false))),
+                )
+                // Which tab ⌘9 will return to, when it is not the one the area opens on.
+                .when(area.has_tabs() && tab != area.default_page(), |row| {
+                    row.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py(px(1.))
+                                    .rounded(px(4.))
+                                    .bg(rgba(palette.accent << 8 | 0x1c))
+                                    .text_color(rgb(palette.accent))
+                                    .text_xs()
+                                    .child(tab.label()),
+                            ),
+                    )
+                })
                 .into_any_element()
         })
         .collect()
@@ -115,6 +141,13 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
 
     let playing = state.map(|s| s.playing).unwrap_or(false);
     let preset = state.map(|s| s.preset.as_str()).unwrap_or("edm");
+    // Whether the panel is on screen is the one thing this row cannot show by itself, and it is
+    // what decides whether a click is "show me the player" or "it is already there".
+    let panel_open = view
+        .soundscape_panel
+        .as_ref()
+        .map(|panel| panel.read(cx).is_open())
+        .unwrap_or(false);
 
     div()
         .id("soundscape-mini-player")
@@ -123,7 +156,11 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .px_2()
         .py(px(5.))
         .rounded(px(7.))
-        .bg(rgba(palette.raised))
+        .bg(rgba(if panel_open {
+            palette.accent << 8 | 0x1c
+        } else {
+            palette.raised
+        }))
         .flex()
         .items_center()
         .justify_between()
@@ -145,8 +182,8 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                         .hover(move |s| s.text_color(rgb(palette.accent)))
                         .on_click(cx.listener(|view, _, window, cx| {
                             // The row is the way into the player: the strip can cycle a preset, but
-                            // only the window shows what is playing.
-                            crate::soundscape::open(cx, crate::soundscape::Mode::Full);
+                            // only the panel shows what is playing.
+                            view.open_soundscape(window, cx);
                             view.cycle_soundscape_preset(window, cx);
                         }))
                         .child(format!("♪ {preset}")),
@@ -172,7 +209,7 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 .cursor_pointer()
                 .hover(move |s| s.text_color(rgb(palette.text)))
                 .on_click(cx.listener(move |view, _, window, cx| {
-                    crate::soundscape::open(cx, crate::soundscape::Mode::Full);
+                    view.open_soundscape(window, cx);
                     view.toggle_soundscape(!playing, window, cx);
                 }))
                 .child(if playing { "Pause" } else { "Play" }),

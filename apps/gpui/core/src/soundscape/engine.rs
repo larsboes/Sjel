@@ -123,8 +123,15 @@ pub struct Engine {
     /// the comb network.
     room_space: f32,
     room_brightness: f32,
+    /// The room's return gain, one-poled towards the preset's own.
+    ///
+    /// `reverb_send()` is a property of the preset and the scene's `space`, so it steps at a preset
+    /// change: 0.16 for EDM to 0.55 for Ambient is a gain of 3.4 on a tail that is still ringing,
+    /// which is a click in the reverb rather than a change of room.
+    reverb_gain: f32,
+    reverb_gain_step: f32,
     echo_delay: f32,
-    /// A new preset's echo time lands at once; a tempo that drifts glides.
+    /// A new preset's echo time is reached quickly; a tempo that drifts glides.
     echo_snap: bool,
     seed: u32,
     reported_preset: Option<Preset>,
@@ -161,6 +168,8 @@ impl Engine {
             reverb_highpass_coefficient: 1. - (-std::f32::consts::TAU * 180. / sample_rate).exp(),
             room_space: -1.,
             room_brightness: -1.,
+            reverb_gain: 0.4,
+            reverb_gain_step: 1. - (-1. / (0.08 * sample_rate)).exp(),
             echo_delay: -1.,
             echo_snap: true,
             seed: 0,
@@ -326,12 +335,16 @@ impl Engine {
                 self.reverb_highpass_coefficient * (reverb_send - self.reverb_highpass);
             let room_input = reverb_send - self.reverb_highpass;
             let room = self.room.process([room_input, room_input]);
-            let reverb_send_gain = self.arrangement.reverb_send();
+            let reverb_target = self.arrangement.reverb_send();
+            self.reverb_gain += self.reverb_gain_step * (reverb_target - self.reverb_gain);
             let echo = self.echo.process([echo_send, echo_send]);
 
+            // The gate is applied once, at the output. Putting it on the dry bus as well made
+            // pause a squared fade on the notes and a linear one on the room, so the reverb rose
+            // relative to the mix on every pause.
             let mix = [
-                (dry[0] + ducked[0]) * self.gate + room[0] * reverb_send_gain + echo[0],
-                (dry[1] + ducked[1]) * self.gate + room[1] * reverb_send_gain + echo[1],
+                dry[0] + ducked[0] + room[0] * self.reverb_gain + echo[0],
+                dry[1] + ducked[1] + room[1] * self.reverb_gain + echo[1],
             ];
             let level = self.master.process(mix);
 
@@ -408,7 +421,7 @@ impl Engine {
         }
         let delay = self.arrangement.spb() * 0.75;
         if self.echo_snap {
-            self.echo.snap_delay_seconds(delay);
+            self.echo.retune_delay_seconds(delay);
             self.echo_delay = delay;
             self.echo_snap = false;
         } else if (delay - self.echo_delay).abs() > 0.005 {
@@ -519,6 +532,101 @@ mod tests {
         let first = buffer[24_000];
         let last = buffer[buffer.len() - 1];
         assert!((first - last).abs() > 1e-6, "the engine output is constant");
+    }
+
+    /// The largest jump between two consecutive samples of one channel, which is what a click is.
+    ///
+    /// Every layer here is a shaped signal: envelopes are continuous, gains are smoothed and the
+    /// room is a filter. A step in any of them shows up as one sample delta far above what the
+    /// material itself asks for, so this is the measurement that says whether a transition is
+    /// clean rather than a matter of taste.
+    fn worst_step(buffer: &[f32]) -> f32 {
+        buffer
+            .chunks(2)
+            .map(|frame| frame[0])
+            .collect::<Vec<f32>>()
+            .windows(2)
+            .map(|pair| (pair[1] - pair[0]).abs())
+            .fold(0f32, f32::max)
+    }
+
+    /// The spectrum has to keep headroom, because the field is drawn from it.
+    ///
+    /// A saturated analyser is not a visual that looks loud, it is a visual that stops moving: every
+    /// ridge sits at its own maximum and the picture no longer answers the music. This is the
+    /// measurement that caught it (a third of every band-sample pinned at 1.00) and the one that
+    /// keeps it from coming back.
+    #[test]
+    fn the_spectrum_keeps_headroom_across_the_presets() {
+        for preset in [Preset::Edm, Preset::Ambient, Preset::Lofi, Preset::Focus] {
+            let control = Control::new();
+            let visual = Visual::new();
+            let mut engine = Engine::new(48_000.);
+            control.set_preset(preset);
+            control.set_volume(0.8);
+            control.set_playing(true);
+            render(&mut engine, &control, &visual, 48_000);
+            let mut all: Vec<f32> = Vec::new();
+            for _ in 0..80 {
+                render(&mut engine, &control, &visual, 480);
+                all.extend(engine.bands().iter().copied());
+            }
+            all.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let at = |p: f32| all[((all.len() - 1) as f32 * p) as usize];
+            let pinned = all.iter().filter(|band| **band > 0.98).count() * 100 / all.len();
+            let name = preset.key();
+            assert!(
+                at(0.90) < 0.85,
+                "{name}: the ninetieth percentile is {} — the spectrum is saturated",
+                at(0.90)
+            );
+            assert_eq!(
+                pinned, 0,
+                "{name}: {pinned}% of band-samples are pinned at the top"
+            );
+            assert!(
+                at(0.50) > 0.05,
+                "{name}: the median is {} — nothing is visible",
+                at(0.50)
+            );
+        }
+    }
+
+    /// A preset change is the moment the operator is listening hardest, and it is where the echo
+    /// used to jump its read position and the room return used to step its gain.
+    ///
+    /// Measured rather than asserted by ear: the largest move between consecutive samples across
+    /// the change, against the peak of the same seconds. The materials themselves are band-limited
+    /// (a saw's own edge is the largest honest step), so the bound is relative, not absolute.
+    #[test]
+    fn a_preset_change_does_not_step_the_mix() {
+        let control = Control::new();
+        let visual = Visual::new();
+        let mut engine = Engine::new(48_000.);
+        control.set_preset(Preset::Ambient);
+        control.set_volume(0.8);
+        control.set_playing(true);
+        // Two seconds of an ambient tail, so there is something ringing to step under.
+        render(&mut engine, &control, &visual, 96_000);
+
+        control.set_preset(Preset::Edm);
+        let mut worst = 0f32;
+        let mut peak = 0f32;
+        let mut changing = 0f32;
+        for block in 0..40 {
+            let buffer = render(&mut engine, &control, &visual, 4_800);
+            if block < 6 {
+                // The bar line is within the first two blocks at 124 bpm; take the change itself.
+                changing = changing.max(worst_step(&buffer));
+            }
+            worst = worst.max(worst_step(&buffer));
+            peak = peak.max(buffer.iter().fold(0f32, |a, b| a.max(b.abs())));
+        }
+        assert!(peak > 0.02, "nothing sounded, peak {peak}");
+        assert!(
+            changing < peak * 0.2,
+            "the preset change stepped the mix by {changing} at peak {peak}"
+        );
     }
 
     /// Pausing fades rather than cutting, then goes properly quiet.
@@ -833,10 +941,12 @@ mod quality {
         // Feed one impulse, then walk the delay time the way a drifting tempo does.
         let mut previous = 0f32;
         let mut biggest = 0f32;
-        let mut output = echo.process([1., 1.]);
+        // The impulse itself is the first thing through, and it is a step by construction: what this
+        // measures is the tail moving, so the walk starts after it.
+        let _ = echo.process([1., 1.]);
         for step in 0..(RATE as usize * 2) {
             echo.set_delay_seconds(0.2 + 0.05 * (step as f32 / RATE).sin());
-            output = echo.process([0., 0.]);
+            let output = echo.process([0., 0.]);
             biggest = biggest.max((output[0] - previous).abs());
             previous = output[0];
         }

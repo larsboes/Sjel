@@ -23,6 +23,18 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// The colour a surface that covers something is painted in: the window tint with its alpha
+    /// forced to opaque.
+    ///
+    /// The tint is translucent on purpose, so the desktop shows through the window. A panel that
+    /// slides *over* the page cannot be: its own labels would be read against whatever it hides,
+    /// which is how the soundscape drawer first shipped -- the page's header row came through the
+    /// drawn field and the preset name sat on top of it. Deriving it from `window_tint` keeps the
+    /// tone and the appearance settings in one place, and only the transparency goes.
+    pub fn panel(&self) -> u32 {
+        (self.window_tint & 0xffff_ff00) | 0xff
+    }
+
     pub fn for_appearance(appearance: WindowAppearance) -> Self {
         match appearance {
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self {

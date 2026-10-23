@@ -1,18 +1,20 @@
-//! The soundscape windows: the full player and the mini one, over a running synth.
+//! The soundscape slideover: the player, sliding in over the page it belongs to.
 //!
-//! Why a window of its own: a soundscape is not a page you read, it is something you leave on.
-//! Inside the main window it would compete with the note you are writing and lose, and its visual
-//! would be clipped to a column. So it gets its own window, keeps its audio in a `Global` (so
-//! closing the window does not cut the music) and writes what it does to the conductor, which stays
-//! the one place that says what should be playing.
+//! Why a drawer and not a window. A soundscape is something you leave on while you write, not a
+//! place you go: a second window takes focus from the note, has to be found in the window list, and
+//! at 980 by 700 it was never the size of the thing it contained. Between that window and nothing
+//! there was no third option -- the sidebar strip can cycle a preset and start the transport, but
+//! it cannot show what is playing. So the player is a panel that slides in from the right edge of
+//! the main window, over the page, and slides away again. It is the same window, so nothing steals
+//! focus; the audio lives in a `Global`, so closing the drawer does not cut the music.
 //!
-//! Two sizes, one view. The mini is the same `Soundscape` with `Mode::Mini`, not a second player: it
-//! shares the polling, the patch writes, the drag handling and the field, so the two windows cannot
-//! drift apart in behaviour. They differ in layout and in what they show, and each can hand over to
-//! the other.
+//! What the panel holds is chosen for a 400-point column rather than a wide window: the drawn
+//! field at the top, the transport and the six presets under it, volume and energy as full-width
+//! bars, and the twelve-value mixer folded behind one disclosure. Everything the old window showed
+//! is still reachable; nothing is shown twice.
 //!
 //! Every control here writes a *patch*, never a whole state: the dashboard, the phone and this
-//! window drive the same session at once, and a whole-state write from a stale copy would silently
+//! panel drive the same session at once, and a whole-state write from a stale copy would silently
 //! undo whatever another surface just changed.
 //!
 //! It also keeps sounding when the conductor is unreachable. That is not a second source of truth --
@@ -40,16 +42,20 @@ use crate::data;
 use crate::theme::Palette;
 use crate::viz::{self, Field};
 
-actions!(soundscape, [ToggleTransport, NextPreset, OpenMini]);
+actions!(soundscape, [ToggleTransport, NextPreset, CloseDrawer]);
+
+/// How wide the panel is. Narrow enough that the page behind it still reads as work in progress,
+/// wide enough for two columns of labelled bars.
+pub const WIDTH: f32 = 400.;
 
 /// How often a poll reads the conductor, so another surface's change shows up here without the
 /// operator doing anything.
 const POLL: Duration = Duration::from_secs(3);
 /// A drag writes at most this often while it moves; the last value always lands.
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(180);
-/// A window that is not focused still animates, but at 30 Hz: enough to look alive behind another
-/// app, cheap enough to leave running all day.
-const INACTIVE_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+/// How long the panel takes to arrive. One time constant, not a frame count: the motion is the same
+/// at 60 Hz and 120 Hz, and short enough that the slide does not become something to wait for.
+const SLIDE_TAU: f32 = 0.06;
 
 /// The six presets the conductor knows, in its own order.
 const PRESETS: [Preset; 6] = [
@@ -60,45 +66,6 @@ const PRESETS: [Preset; 6] = [
     Preset::Relax,
     Preset::Sleep,
 ];
-
-/// Which of the two windows this view is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-    /// The player: field, transport, mixer, parameters, scenarios.
-    Full,
-    /// The glance: a strip of the same field, play/pause, the preset, volume, and a way to expand.
-    Mini,
-}
-
-impl Mode {
-    fn size(self) -> gpui_kit::Size<Pixels> {
-        match self {
-            Self::Full => gpui_kit::size(px(980.), px(700.)),
-            Self::Mini => gpui_kit::size(px(400.), px(190.)),
-        }
-    }
-
-    fn options(self) -> gpui_kit::WindowOptions {
-        gpui_kit::WindowOptions {
-            titlebar: Some(gpui_kit::TitlebarOptions {
-                title: Some(match self {
-                    Self::Full => "Soundscape".into(),
-                    Self::Mini => "Soundscape Mini".into(),
-                }),
-                appears_transparent: true,
-                ..Default::default()
-            }),
-            window_background: gpui_kit::WindowBackgroundAppearance::Opaque,
-            window_min_size: Some(self.size()),
-            // The mini is a fixed size on purpose: a glanceable strip that can be dragged to any
-            // shape is a second full window with less in it.
-            is_resizable: self == Self::Full,
-            is_minimizable: self == Self::Full,
-            inactive_frame_interval: Some(INACTIVE_FRAME_INTERVAL),
-            ..Default::default()
-        }
-    }
-}
 
 /// One sliding value that is being dragged right now, so a poll does not fight the hand.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -141,14 +108,13 @@ enum Write {
 }
 
 /// The two channels the audio thread reads, and nothing else: the device itself lives in the app
-/// global so that closing a window does not stop the music.
+/// global so that closing the drawer does not stop the music.
 struct ControlHandles {
     control: Arc<soundscape::Control>,
     visual: Arc<Visual>,
 }
 
 pub struct Soundscape {
-    mode: Mode,
     repo: Repo,
     /// What the conductor says, which is the intent every surface shares.
     state: Remote<SoundscapeState>,
@@ -168,25 +134,32 @@ pub struct Soundscape {
     device_error: Option<String>,
     focus: FocusHandle,
     last_frame: Instant,
+    /// Somewhere to put the focus on the next render: `set_open` has no window.
+    refocus: bool,
+    /// Whether the panel is asked to be on screen, and how far in it has slid (0..1).
+    open: bool,
+    slide: f32,
+    /// The twelve-value mixer, folded away by default. A 400-point column cannot hold fourteen
+    /// values and a picture without becoming a wall of small type.
+    mix_open: bool,
 }
 
 impl Soundscape {
-    pub fn new(mode: Mode, cx: &mut Context<Self>) -> Self {
+    /// Built with the workspace's repo: the panel talks to the same conductor through the same
+    /// endpoint, and a second resolution of `SJEL_STATUS_URL` here would be a second answer to
+    /// "which shell is this app talking to".
+    pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
         let audio = crate::audio::audio(cx);
         let handles = ControlHandles {
             control: audio.control.clone(),
             visual: audio.visual.clone(),
         };
         let device = audio.device_name().map(|name| match audio.sample_rate() {
-            Some(rate) => format!("{name} · {:.0} kHz", rate / 1000.),
-            None => name.to_string(),
+            Some(rate) => format!("{name} · {rate:.0} Hz"),
+            None => name.to_owned(),
         });
         let device_error = audio.error().map(str::to_owned);
-        let endpoint = std::env::var("SJEL_STATUS_URL")
-            .unwrap_or_else(|_| sjel_gpui_core::shell::DEFAULT_ENDPOINT.to_owned());
-        let repo = Repo::new(sjel_gpui_core::shell::Shell::new(&endpoint).map(std::sync::Arc::new));
         let mut view = Self {
-            mode,
             repo,
             state: Remote::default(),
             audio: Arc::new(handles),
@@ -199,17 +172,40 @@ impl Soundscape {
             device_error,
             focus: cx.focus_handle(),
             last_frame: Instant::now(),
+            refocus: false,
+            open: false,
+            slide: 0.,
+            mix_open: false,
         };
         view.read_state(cx);
         view.start_polling(cx);
         view
     }
 
-    /// Follow the conductor. Another surface -- the dashboard, the phone -- may change the preset or
-    /// the mix at any time, and this window is one of the places that has to show it without the
-    /// operator asking. The read is its own future rather than `data::read_repo`, because the answer
-    /// has to be adopted as well as stored, and a poll that only stored it would draw a state the
-    /// synth is not playing.
+    /// Slide the panel in, or away. The single place `open` changes, so the workspace, the sidebar,
+    /// the menu and the keyboard cannot disagree about whether the player is on screen.
+    pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if self.open == open {
+            return;
+        }
+        self.open = open;
+        if open {
+            // The panel is about to be looked at, so it takes the keys: space is play/pause. The
+            // focus call needs the window, so it happens on the next render.
+            self.refocus = true;
+        }
+        cx.notify();
+    }
+
+    pub fn toggle_open(&mut self, cx: &mut Context<Self>) {
+        let open = self.open;
+        self.set_open(!open, cx);
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     fn start_polling(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         cx.spawn(async move |this, cx| loop {
@@ -511,14 +507,37 @@ impl Soundscape {
         (position / width).clamp(0., 1.)
     }
 
-    /// Advance the field and decide whether the window needs another frame.
+    /// How far the panel has to sit from the window's right edge at a given amount of arrival: 0
+    /// when it is open, its own width when it is fully away.
+    fn offset(slide: f32) -> f32 {
+        -(1. - slide.clamp(0., 1.)) * WIDTH
+    }
+
+    /// Advance the field and the slide, and decide whether another frame is needed.
     ///
     /// `reduce_motion` is the system's own answer to "stop this": the picture then follows the sound
-    /// on the frames the window already draws (a poll, a click) instead of driving a loop of its own.
+    /// on the frames the window already draws (a poll, a click) instead of driving a loop of its own,
+    /// and the panel arrives at once rather than sliding.
     fn animate(&mut self, window: &mut Window, cx: &Context<Self>) -> bool {
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
+        let reduce_motion = cx.reduce_motion();
+
+        // The slide is a time constant and not a frame count, the same rule the field follows: a
+        // 120 Hz window and a 60 Hz one show the same gesture.
+        let target = if self.open { 1. } else { 0. };
+        if reduce_motion {
+            self.slide = target;
+        } else if self.slide != target {
+            self.slide += (target - self.slide) * (1. - (-dt / SLIDE_TAU).exp());
+            // Below a pixel and a half there is nothing left to see: land, so the loop can stop.
+            if (target - self.slide).abs() < 0.004 {
+                self.slide = target;
+            }
+        }
+        let sliding = self.slide != target;
+
         let preset = self
             .current()
             .map(|state| state.preset())
@@ -527,11 +546,11 @@ impl Soundscape {
             .field
             .borrow_mut()
             .advance(&self.audio.visual, preset, dt);
-        if moving && !cx.reduce_motion() {
+        if (moving || sliding) && !reduce_motion {
             window.request_animation_frame();
             return true;
         }
-        moving
+        moving || sliding
     }
 }
 
@@ -546,6 +565,9 @@ impl Render for Soundscape {
         let palette = Palette::for_appearance(window.appearance());
         self.adopt();
         self.animate(window, cx);
+        if std::mem::take(&mut self.refocus) {
+            window.focus(&self.focus, cx);
+        }
 
         let state = self.current();
         let playing = state.map(|state| state.playing).unwrap_or(false);
@@ -554,19 +576,11 @@ impl Render for Soundscape {
             .unwrap_or_else(|| self.audio.visual.preset());
         let playback = soundscape::Playback::read(&self.audio.visual, playing);
 
-        let mut root = div()
-            .key_context("Soundscape")
-            .track_focus(&self.focus)
-            .size_full()
-            .flex()
-            .flex_col()
-            .bg(rgba(palette.window_tint))
-            .on_action(cx.listener(|view, _: &ToggleTransport, window, cx| {
-                view.toggle(window, cx);
-            }))
-            .on_action(cx.listener(|view, _: &NextPreset, window, cx| {
-                view.next_preset(window, cx);
-            }));
+        // Fully away and not wanted: draw nothing at all. The view stays alive because the audio
+        // does, and the next `set_open` brings it back on the next frame.
+        if !self.open && self.slide <= 0. {
+            return div().into_any_element();
+        }
 
         let field = div()
             .flex_1()
@@ -575,37 +589,12 @@ impl Render for Soundscape {
             .child(viz::frame(viz::canvas(
                 self.field.clone(),
                 self.audio.visual.clone(),
-            )));
-
-        root = match self.mode {
-            Mode::Full => root.child(self.full_field(field, palette, preset, &playback, cx)),
-            Mode::Mini => root.child(self.mini_field(field, palette, preset, &playback, cx)),
-        };
-
-        root = root.child(match self.mode {
-            Mode::Full => self.full_controls(window, cx, palette, playing, preset),
-            Mode::Mini => self.mini_controls(cx, palette, playing, preset),
-        });
-        root
-    }
-}
-
-impl Soundscape {
-    /// What sits over the field in the full window: the preset, the arrangement, the device.
-    fn full_field(
-        &self,
-        field: gpui_kit::Div,
-        palette: Palette,
-        preset: Preset,
-        playback: &soundscape::Playback,
-        cx: &mut Context<Self>,
-    ) -> gpui_kit::Div {
-        field
+            )))
             .child(
                 div()
                     .absolute()
-                    .left(px(16.))
-                    .bottom(px(12.))
+                    .left(px(12.))
+                    .bottom(px(10.))
                     .flex()
                     .flex_col()
                     .gap_1()
@@ -621,79 +610,102 @@ impl Soundscape {
                             .text_color(rgb(palette.muted))
                             .child(playback.describe()),
                     ),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .right(px(16.))
-                    .top(px(12.))
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .when_some(self.device.clone(), |element, device| {
-                        element.child(div().text_xs().text_color(rgb(palette.muted)).child(device))
-                    })
-                    .when_some(self.device_error.clone(), |element, error| {
-                        element.child(div().text_xs().text_color(rgb(palette.red)).child(error))
-                    })
-                    .child(icon_button(
-                        "soundscape-to-mini",
-                        "mini",
-                        palette,
-                        cx,
-                        |view, window, cx| view.switch_to(Mode::Mini, window, cx),
-                    )),
-            )
-    }
+            );
 
-    /// What sits over the field in the mini window: the preset, how full it is, and the way out.
-    fn mini_field(
-        &self,
-        field: gpui_kit::Div,
-        palette: Palette,
-        preset: Preset,
-        playback: &soundscape::Playback,
-        cx: &mut Context<Self>,
-    ) -> gpui_kit::Div {
-        field
+        div()
+            .key_context("Soundscape")
+            .track_focus(&self.focus)
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .right(px(Soundscape::offset(self.slide)))
+            .w(px(WIDTH))
+            .flex()
+            .flex_col()
+            .bg(rgb(palette.panel()))
+            .border_l_1()
+            .border_color(rgba(palette.border))
+            // A page on white and a panel on near-white are one rectangle without this: the shadow
+            // is what says the panel is in front of the page rather than beside it.
+            .shadow(vec![gpui_kit::BoxShadow::new(
+                px(-6.),
+                px(0.),
+                gpui_kit::hsla(0., 0., 0., 0.10),
+            )
+            .blur_radius(px(20.))
+            .spread_radius(px(-4.))])
+            .on_action(cx.listener(|view, _: &ToggleTransport, window, cx| {
+                view.toggle(window, cx);
+            }))
+            .on_action(cx.listener(|view, _: &NextPreset, window, cx| {
+                view.next_preset(window, cx);
+            }))
+            .on_action(cx.listener(|view, _: &CloseDrawer, _, cx| {
+                view.set_open(false, cx);
+            }))
+            .child(self.header(palette, cx))
+            .child(field)
+            .child(self.controls(window, cx, palette, playing, preset))
+            .into_any_element()
+    }
+}
+
+impl Soundscape {
+    /// The top of the panel: what this is, what it is playing through, and the way out.
+    fn header(&self, palette: Palette, cx: &mut Context<Self>) -> gpui_kit::Div {
+        let conductor_down = self.state.error.is_some();
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap_2()
+            .px(px(14.))
+            .pt(px(12.))
+            .pb(px(8.))
             .child(
                 div()
-                    .absolute()
-                    .left(px(12.))
-                    .bottom(px(8.))
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap(px(2.))
                     .child(
                         div()
-                            .text_xs()
+                            .text_sm()
                             .text_color(rgb(palette.text))
-                            .child(preset.label()),
+                            .child("Soundscape"),
                     )
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(playback.describe()),
+                            .truncate()
+                            .text_color(rgb(if conductor_down {
+                                palette.amber
+                            } else {
+                                palette.muted
+                            }))
+                            .child(match (&self.device, &self.device_error, conductor_down) {
+                                (_, Some(error), _) => error.clone(),
+                                (Some(device), _, false) => device.clone(),
+                                (Some(device), _, true) => {
+                                    format!("{device} · conductor unreachable")
+                                }
+                                (None, _, _) => "no output device".to_owned(),
+                            }),
                     ),
             )
-            .child(
-                div()
-                    .absolute()
-                    .right(px(10.))
-                    .top(px(8.))
-                    .child(icon_button(
-                        "soundscape-to-full",
-                        "expand",
-                        palette,
-                        cx,
-                        |view, window, cx| view.switch_to(Mode::Full, window, cx),
-                    )),
-            )
+            .child(icon_button(
+                "soundscape-close",
+                "×",
+                palette,
+                cx,
+                |view, _, cx| view.set_open(false, cx),
+            ))
     }
 
-    /// The strip under the field in the full window: transport, presets, then the two rows of values.
-    fn full_controls(
+    /// The strip under the field: transport, presets, the two always-visible values, then the mixer
+    /// folded behind one disclosure, then the session.
+    fn controls(
         &self,
         _window: &mut Window,
         cx: &mut Context<Self>,
@@ -714,109 +726,173 @@ impl Soundscape {
             .flex()
             .flex_col()
             .gap_2()
-            .px(px(16.))
+            .px(px(14.))
             .py(px(12.))
             .bg(rgba(palette.surface))
             .border_t_1()
             .border_color(rgba(palette.border));
 
-        strip =
-            strip.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(transport(playing, palette, cx))
-                    .child(div().flex().flex_wrap().gap_1().children(
-                        PRESETS.map(|candidate| {
-                            preset_chip(candidate, candidate == preset, palette, cx)
-                        }),
-                    ))
-                    .when(pending, |element| {
-                        // The synth changes on the next bar, so the picture saying one thing and the ears
-                        // another for half a second is worth naming.
-                        element.child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.amber))
-                                .child("on the next bar"),
-                        )
-                    })
-                    .when(conductor_down, |element| {
-                        element.child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.amber))
-                                .child("conductor unreachable · playing the last known state"),
-                        )
-                    }),
-            );
+        strip = strip.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(transport(playing, palette, cx))
+                .child(div().flex_1())
+                .child(icon_button(
+                    "soundscape-next",
+                    "next",
+                    palette,
+                    cx,
+                    |view, window, cx| view.next_preset(window, cx),
+                )),
+        );
 
         strip = strip.child(
             div()
                 .flex()
-                .gap_4()
-                .child(self.bar(
-                    "volume",
-                    "volume",
-                    volume,
-                    Knob::Volume,
-                    palette.accent,
-                    palette,
-                    cx,
-                    |view, value, window, cx| view.set_volume(value, window, cx),
-                ))
-                .child(self.bar(
-                    "energy",
-                    "energy",
-                    energy,
-                    Knob::Energy,
-                    palette.amber,
-                    palette,
-                    cx,
-                    |view, value, window, cx| view.set_energy(value, window, cx),
-                )),
+                .flex_wrap()
+                .gap_1()
+                .children(
+                    PRESETS
+                        .map(|candidate| preset_chip(candidate, candidate == preset, palette, cx)),
+                )
+                // Under the chips rather than among them: a label in the row pushed the sixth
+                // preset onto a second line on its own.
+                .when(pending, |element| {
+                    // The synth changes on the next bar, so the panel saying one thing and the ears
+                    // another for half a second is worth naming.
+                    element.child(
+                        div()
+                            .px_1()
+                            .text_xs()
+                            .text_color(rgb(palette.amber))
+                            .child("on the next bar"),
+                    )
+                }),
         );
 
-        strip = strip.child(div().flex().gap_3().children(LayerName::ALL.map(|layer| {
-            self.bar(
-                layer.label(),
-                layer.label(),
-                layers.get(layer),
-                Knob::Layer(layer),
-                palette.green,
-                palette,
-                cx,
-                move |view, value, window, cx| view.set_layer(layer, value, window, cx),
-            )
-        })));
+        strip = strip.child(
+            div()
+                .flex()
+                .gap_3()
+                .child(
+                    self.bar(
+                        "volume",
+                        "volume",
+                        volume,
+                        Knob::Volume,
+                        palette.accent,
+                        palette,
+                        cx,
+                        |view, value, window, cx| view.set_volume(value, window, cx),
+                    )
+                    .flex_1(),
+                )
+                .child(
+                    self.bar(
+                        "energy",
+                        "energy",
+                        energy,
+                        Knob::Energy,
+                        palette.amber,
+                        palette,
+                        cx,
+                        |view, value, window, cx| view.set_energy(value, window, cx),
+                    )
+                    .flex_1(),
+                ),
+        );
 
-        strip = strip.child(div().flex().gap_3().children(ParamName::ALL.map(|name| {
-            self.bar(
-                name.label(),
-                name.label(),
-                params.get(name),
-                Knob::Param(name),
-                palette.muted,
-                palette,
-                cx,
-                move |view, value, window, cx| view.set_param(name, value, window, cx),
-            )
-        })));
+        // The disclosure. Twelve more values do not belong on screen at once in a column this
+        // narrow, and the six presets already cover the common change.
+        strip = strip.child(
+            div()
+                .id("soundscape-mix-toggle")
+                .flex()
+                .items_center()
+                .gap_2()
+                .cursor_pointer()
+                .rounded(px(5.))
+                .when(self.mix_open, |element| element.bg(rgba(palette.raised)))
+                .px(px(6.))
+                .py(px(4.))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.mix_open = !view.mix_open;
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(if self.mix_open {
+                            "mix  ▾"
+                        } else {
+                            "mix  ▸"
+                        }),
+                )
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("6 layers · 6 scene values"),
+                ),
+        );
+
+        if self.mix_open {
+            // Two explicit columns. A grid child sized to its content pushed the sixth bar out of
+            // the panel and made the whole strip taller than the window.
+            let mut layers_bars: Vec<gpui_kit::Stateful<gpui_kit::Div>> = LayerName::ALL
+                .iter()
+                .map(|layer| {
+                    let layer = *layer;
+                    self.bar(
+                        layer.label(),
+                        layer.label(),
+                        layers.get(layer),
+                        Knob::Layer(layer),
+                        palette.green,
+                        palette,
+                        cx,
+                        move |view, value, window, cx| view.set_layer(layer, value, window, cx),
+                    )
+                })
+                .collect();
+            let mut scene_bars: Vec<gpui_kit::Stateful<gpui_kit::Div>> = ParamName::ALL
+                .iter()
+                .map(|name| {
+                    let name = *name;
+                    self.bar(
+                        name.label(),
+                        name.label(),
+                        params.get(name),
+                        Knob::Param(name),
+                        palette.muted,
+                        palette,
+                        cx,
+                        move |view, value, window, cx| view.set_param(name, value, window, cx),
+                    )
+                })
+                .collect();
+            strip = strip
+                .child(section("layers", palette, columns(&mut layers_bars)))
+                .child(section("scene", palette, columns(&mut scene_bars)));
+        }
 
         let session = state.and_then(|state| state.session.clone());
         strip = strip.child(
             div()
                 .flex()
                 .items_center()
-                .gap_2()
+                .flex_wrap()
+                .gap_1()
                 .text_xs()
                 .text_color(rgb(palette.muted))
-                .child(div().w(px(48.)).child("session"))
                 .children(match session {
                     Some(session) => {
                         // The conductor stores elapsed time as a checkpoint plus the moment the
-                        // session started; a window that showed only the checkpoint would always say
+                        // session started; a panel that showed only the checkpoint would always say
                         // "50 min left" and never count down.
                         let running = session
                             .running_since_ms
@@ -829,11 +905,10 @@ impl Soundscape {
                             .duration_ms
                             .saturating_sub(session.elapsed_ms.saturating_add(running))
                             / 60_000;
-                        let label = format!("{} · {remaining} min left", session.scenario);
                         vec![
                             div()
                                 .text_color(rgb(palette.text))
-                                .child(label)
+                                .child(format!("{} · {remaining} min left", session.scenario))
                                 .into_any_element(),
                             icon_button(
                                 "session-clear",
@@ -886,75 +961,40 @@ impl Soundscape {
         );
 
         // The seed, read off the screen rather than typed: it is what makes a session replayable.
-        if let Some(seed) = state.map(|state| state.seed) {
-            strip = strip.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(format!("seed {}", soundscape::format_seed(seed))),
-            );
-        }
-
         strip = strip.child(
             div()
                 .flex()
-                .gap_4()
+                .items_center()
+                .gap_2()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .when_some(state.map(|state| state.seed), |element, seed| {
+                    element.child(format!("seed {}", soundscape::format_seed(seed)))
+                })
+                .when(conductor_down, |element| {
+                    element.child(
+                        div()
+                            .text_color(rgb(palette.amber))
+                            .child("playing the last known state"),
+                    )
+                }),
+        );
+
+        strip.child(
+            div()
+                .flex()
+                .gap_3()
                 .text_xs()
                 .text_color(rgb(palette.muted))
                 .child("space play/pause")
                 .child("⇧⌘N next preset")
-                .child("⌘⇧M mini")
-                .child("⌘W close"),
-        );
-
-        strip
-    }
-
-    /// The row under the field in the mini window: transport, the preset, volume, and no more.
-    fn mini_controls(
-        &self,
-        cx: &mut Context<Self>,
-        palette: Palette,
-        playing: bool,
-        preset: Preset,
-    ) -> gpui_kit::Div {
-        let volume = self.current().map(|state| state.volume).unwrap_or(0.65);
-        let conductor_down = self.state.error.is_some();
-        div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .gap_3()
-            .px(px(12.))
-            .py(px(10.))
-            .bg(rgba(palette.surface))
-            .border_t_1()
-            .border_color(rgba(palette.border))
-            .child(transport(playing, palette, cx))
-            .child(preset_chip(preset, true, palette, cx))
-            .child(self.bar(
-                "mini-volume",
-                "volume",
-                volume,
-                Knob::Volume,
-                palette.accent,
-                palette,
-                cx,
-                |view, value, window, cx| view.set_volume(value, window, cx),
-            ))
-            .when(conductor_down, |element| {
-                element.child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.amber))
-                        .child("offline"),
-                )
-            })
+                .child("esc close"),
+        )
     }
 
     /// One bar: the row is the control, and a press anywhere on the track sets the value from the x
     /// position. A slider track with its own knob would cost another focus target per value and buy
-    /// nothing for eleven values in a strip.
+    /// nothing for fourteen values.
     ///
     /// The drag is GPUI's own (`on_drag` + `on_drag_move`) rather than a mouse-move handler on the
     /// track: a move handler stops firing the moment the pointer leaves a six-point-tall track, which
@@ -970,7 +1010,7 @@ impl Soundscape {
         palette: Palette,
         cx: &mut Context<Self>,
         apply: F,
-    ) -> impl IntoElement
+    ) -> gpui_kit::Stateful<gpui_kit::Div>
     where
         F: Fn(&mut Self, f32, &mut Window, &mut Context<Self>) + Clone + 'static,
     {
@@ -981,8 +1021,7 @@ impl Soundscape {
         let value = value.clamp(0., 1.);
         div()
             .id(SharedString::from(format!("bar-{id}")))
-            .flex_1()
-            .min_w(px(76.))
+            .min_w(px(0.))
             .flex()
             .flex_col()
             .gap(px(3.))
@@ -1023,7 +1062,7 @@ impl Soundscape {
                     .cursor_pointer()
                     .child(
                         div()
-                            .h(px(6.))
+                            .h(px(5.))
                             .w_full()
                             .rounded_full()
                             .bg(rgba(palette.raised))
@@ -1098,16 +1137,6 @@ impl Soundscape {
                     ),
             )
     }
-
-    /// Hand over to the other window: open it, then close this one, so the music never stops and the
-    /// operator never has two players open at once.
-    fn switch_to(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
-        if mode == self.mode {
-            return;
-        }
-        open(cx, mode);
-        window.remove_window();
-    }
 }
 
 /// The drag payload of one bar. Its preview is nothing: a slider is not being carried anywhere, and
@@ -1121,14 +1150,41 @@ impl Render for DragKnob {
     }
 }
 
-/// The play/pause button, shared by both windows.
+/// Bars laid out two to a row.
+///
+/// Six values in one column make the panel taller than the window it slides over; two columns fit
+/// inside it and stay readable at 400 points, where a bar is still about 180 wide.
+fn columns(bars: &mut Vec<gpui_kit::Stateful<gpui_kit::Div>>) -> gpui_kit::Div {
+    let mut column = div().flex().flex_col().gap_2();
+    while !bars.is_empty() {
+        let left = bars.remove(0).flex_1();
+        let mut row = div().flex().gap_3().child(left);
+        if !bars.is_empty() {
+            row = row.child(bars.remove(0).flex_1());
+        }
+        column = column.child(row);
+    }
+    column
+}
+
+/// A labelled group inside the disclosure.
+fn section(label: &'static str, palette: Palette, child: gpui_kit::Div) -> gpui_kit::Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(div().text_xs().text_color(rgb(palette.muted)).child(label))
+        .child(child)
+}
+
+/// The play/pause button.
 fn transport(playing: bool, palette: Palette, cx: &mut Context<Soundscape>) -> AnyElement {
     div()
         .id("soundscape-transport")
         .flex_none()
-        .w(px(76.))
-        .h(px(28.))
-        .rounded(px(14.))
+        .w(px(88.))
+        .h(px(30.))
+        .rounded(px(15.))
         .flex()
         .items_center()
         .justify_center()
@@ -1150,8 +1206,7 @@ fn transport(playing: bool, palette: Palette, cx: &mut Context<Soundscape>) -> A
         .into_any_element()
 }
 
-/// One preset chip. In the mini the chip is the current preset and a click moves to the next one,
-/// which is the whole preset control a 400-point window can hold.
+/// One preset chip.
 fn preset_chip(
     preset: Preset,
     chosen: bool,
@@ -1181,7 +1236,7 @@ fn preset_chip(
         .into_any_element()
 }
 
-/// A small text button: `clear`, `mini`, `expand`.
+/// A small text button: `clear`, `next`, `×`.
 fn icon_button<F>(
     id: &'static str,
     label: &'static str,
@@ -1221,107 +1276,18 @@ where
     icon_button(id, label, palette, cx, apply)
 }
 
-/// The two open windows, so `open` finds one instead of starting a second player.
-#[derive(Default)]
-struct Windows {
-    full: Option<Open>,
-    mini: Option<Open>,
-}
-
-struct Open {
-    handle: gpui_kit::WindowHandle<gpui_kit::component::Root>,
-    view: gpui_kit::WeakEntity<Soundscape>,
-}
-
-impl gpui_kit::Global for Windows {}
-
-impl Windows {
-    fn slot(&mut self, mode: Mode) -> &mut Option<Open> {
-        match mode {
-            Mode::Full => &mut self.full,
-            Mode::Mini => &mut self.mini,
-        }
+/// The drag payload needs to carry the knob it belongs to; the write it applies comes from the
+/// closure on each bar, which is why nothing here holds a `Write`.
+impl Soundscape {
+    /// Bindings the panel carries. Registered once at launch, because a key binding belongs to the
+    /// app and the context it names ("Soundscape") is only carried by the panel's root.
+    pub fn keys() -> [gpui_kit::KeyBinding; 3] {
+        [
+            gpui_kit::KeyBinding::new("space", ToggleTransport, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("shift-cmd-n", NextPreset, Some("Soundscape")),
+            gpui_kit::KeyBinding::new("escape", CloseDrawer, Some("Soundscape")),
+        ]
     }
-
-    /// The live window of that mode, forgetting one whose view has gone (its window was closed).
-    fn live(&mut self, mode: Mode) -> Option<&Open> {
-        let slot = self.slot(mode);
-        match slot {
-            Some(open) if open.view.upgrade().is_some() => slot.as_ref(),
-            _ => {
-                *slot = None;
-                None
-            }
-        }
-    }
-}
-
-/// Open one of the two windows, or raise it if it is already open.
-pub fn open(cx: &mut App, mode: Mode) {
-    if cx.try_global::<Windows>().is_none() {
-        cx.set_global(Windows::default());
-    }
-    if let Some(handle) = cx
-        .global_mut::<Windows>()
-        .live(mode)
-        .map(|open| open.handle)
-    {
-        handle
-            .update(cx, |_, window, _| window.activate_window())
-            .ok();
-        return;
-    }
-
-    let size = mode.size();
-    let options = gpui_kit::WindowOptions {
-        window_bounds: Some(gpui_kit::WindowBounds::Windowed(
-            gpui_kit::Bounds::centered(None, size, cx),
-        )),
-        ..mode.options()
-    };
-    let mut created = None;
-    let Ok(handle) = cx.open_window(options, |window, cx| {
-        let view = cx.new(|cx| Soundscape::new(mode, cx));
-        created = Some(view.downgrade());
-        window.activate_window();
-        cx.new(|cx| gpui_kit::component::Root::new(view, window, cx).bg(rgba(0x00000000)))
-    }) else {
-        return;
-    };
-    if let Some(view) = created {
-        *cx.global_mut::<Windows>().slot(mode) = Some(Open { handle, view });
-    }
-}
-
-/// `⌘⇧M`: the mini player, on and off. A glanceable window has to be one keystroke from anywhere,
-/// and the second press should put it away rather than raise it again.
-pub fn toggle_mini(cx: &mut App) {
-    if cx.try_global::<Windows>().is_none() {
-        cx.set_global(Windows::default());
-    }
-    let existing = cx
-        .global_mut::<Windows>()
-        .live(Mode::Mini)
-        .map(|open| open.handle);
-    match existing {
-        Some(handle) => {
-            handle
-                .update(cx, |_, window, _| window.remove_window())
-                .ok();
-        }
-        None => open(cx, Mode::Mini),
-    }
-}
-
-/// Bindings the windows carry. Registered once at launch, because a key binding belongs to the app
-/// and the context it names ("Soundscape") is only carried by these windows' roots.
-pub fn bind_keys(cx: &mut App) {
-    cx.bind_keys([
-        gpui_kit::KeyBinding::new("space", ToggleTransport, Some("Soundscape")),
-        gpui_kit::KeyBinding::new("shift-cmd-n", NextPreset, Some("Soundscape")),
-        gpui_kit::KeyBinding::new("shift-cmd-m", OpenMini, Some("Soundscape")),
-    ]);
-    cx.on_action(|_: &OpenMini, cx| toggle_mini(cx));
 }
 
 /// Start playing through the conductor, for `SJEL_GPUI_SOUNDSCAPE=play`.
@@ -1367,7 +1333,7 @@ mod tests {
     }
 
     #[test]
-    fn every_preset_is_reachable_from_the_strip() {
+    fn every_preset_is_reachable_from_the_panel() {
         assert_eq!(PRESETS.len(), 6);
         let keys: Vec<&str> = PRESETS.iter().map(|preset| preset.key()).collect();
         assert_eq!(
@@ -1393,12 +1359,23 @@ mod tests {
         );
     }
 
+    /// The slide starts with the panel entirely off the right edge and ends flush to it, so the
+    /// motion is one number and the two ends are the two states.
     #[test]
-    fn the_mini_window_is_the_smaller_one_and_not_resizable() {
-        let mini = Mode::Mini.options();
-        assert!(!mini.is_resizable);
-        assert!(Mode::Full.options().is_resizable);
-        assert!(Mode::Mini.size().width < Mode::Full.size().width);
-        assert!(Mode::Mini.size().height < Mode::Full.size().height);
+    fn the_panel_slides_from_off_the_edge_to_flush() {
+        assert_eq!(Soundscape::offset(0.), -WIDTH);
+        assert_eq!(Soundscape::offset(1.), 0.);
+        assert!(Soundscape::offset(0.5) < 0., "halfway is still outside");
+        // Clamped, so a bad value cannot push the panel over the page it sits on.
+        assert_eq!(Soundscape::offset(2.), 0.);
+        assert_eq!(Soundscape::offset(-1.), -WIDTH);
+    }
+
+    /// The panel has to be narrower than the window it slides over, or there is no page left to
+    /// write in while it is open.
+    #[test]
+    fn the_panel_leaves_the_page_most_of_the_window() {
+        assert!(WIDTH < 760., "the window's own minimum width");
+        assert_eq!(Soundscape::keys().len(), 3);
     }
 }

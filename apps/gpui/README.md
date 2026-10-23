@@ -3,7 +3,7 @@
 A native desktop surface for Sjel. It is intentionally outside the production Cargo workspace: it
 does not change Sjel's shipping UI, capability processes, or production dependency lockfiles.
 
-The app has twelve pages, and ⌘1–⌘9 open the first nine in sidebar order. **Home** shows what needs you now: agent writes that wait for approval,
+The app has twenty-four pages, and ⌘1–⌘9 open the first nine in sidebar order. **Home** shows what needs you now: agent writes that wait for approval,
 kept-running capabilities that do not answer, calendar entries still ahead today and tomorrow, and
 the recent agent writes. **Capabilities** lists every capability with start and stop. **Projects**
 lists projects, tasks and notes, draws tasks as a table with due and priority edited in place, and
@@ -308,13 +308,20 @@ The record is `Sjel Life` (the store name `Sjel` is taken), the bundle `dev.sjel
 App Store Connect key can and cannot do, and the one-time steps in the web UI, are in
 [the operations guide](../../docs/operations/index.md).
 
-## Soundscape: a window with its own synth
+## Soundscape: a slideover with its own synth
 
-`⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** opens a second window: the player, with a
-drawn field, a transport, a preset row, an eleven-value mixer and the timed scenarios.
+`⌘⇧M`, the sidebar's ♪ row, or **Window ▸ Soundscape** slides a 400-point panel in from the right
+edge of the window: a drawn field, the transport, the six presets, volume and energy as full-width
+bars, the twelve-value mixer behind one `mix` disclosure, and the timed scenarios. The same
+keystroke, `esc`, the `×`, or the same row in the sidebar slides it away again, and the music keeps
+playing -- the audio device lives in an app global, not in the panel.
 
-It is the one page that is a window rather than a destination, because a soundscape is something
-you leave on beside a note, not a page you read inside it.
+It is a panel and not a destination, because a soundscape is something you leave on beside a note.
+It is a panel and not a window because a second window takes focus from that note, has to be found
+in the window list, and its size was never the size of the thing it held: the player was 980 by 700
+of mostly empty field, and between that and nothing there was no third option. The panel moves over
+the page column and never over the navigation, so the way out of a page stays reachable while the
+music is showing.
 
 ### Why there is a synthesizer in this app
 
@@ -333,7 +340,7 @@ oscillators and the clock. A native app has an audio device, so the same contrac
   lookahead scheduler because the audio callback *is* the clock. Each of those files says so where
   it deviates.
 - `src/audio.rs` is the Mac's device, through `cpal`. The stream lives in a `Global`, not in the
-  view, so closing the window does not cut the music.
+  view, so closing the panel does not cut the music.
 - `src/viz.rs` draws the field from the synth's own spectrum: seven ridges, one per slice of the
   bands, drifting at their own rates, with a ring per kick and a comet per note. It is not the
   dashboard's fluid sim -- that one is a GPU solver in a browser canvas -- and it is not a
@@ -341,16 +348,16 @@ oscillators and the clock. A native app has an audio device, so the same contrac
 
 The conductor stays the only source of truth. Every control writes a *patch* (`POST
 /soundscape/api/soundscape/state`), never a whole state, because the dashboard and the phone drive
-the same session; the window polls the conductor every three seconds so another surface's change
-arrives here on its own. When the conductor is unreachable the window keeps sounding the last known
-intent and says so in the strip -- it writes nothing, and it never becomes a second store.
+the same session; the panel polls the conductor every three seconds so another surface's change
+arrives here on its own. When the conductor is unreachable the panel keeps sounding the last known
+intent and says so in the header -- it writes nothing, and it never becomes a second store.
 
 | Key | Action |
 |---|---|
 | `space` | Play or pause |
 | `⇧⌘N` | Next preset |
-| `⌘⇧M` | Open or raise the window |
-| `⌘W` | Close it; the app keeps running and the music keeps playing |
+| `⌘⇧M` | Slide the panel in, or away |
+| `esc` | Slide it away; the music keeps playing |
 
 A bar is its own control: press anywhere on the track to set the value, drag to sweep it. A dragged
 value reaches the synth immediately and the conductor at most every 180 ms, so the sound never lags
@@ -358,8 +365,10 @@ the hand and a sweep is one write rather than dozens.
 
 `SJEL_GPUI_AUDIO_PROBE=<seconds>` is the check for "there is no sound": it starts the synth on the
 real device, prints the measured level, spectrum and event counts for that many seconds, and quits
-with a verdict. `SJEL_GPUI_SOUNDSCAPE=1` opens the window at launch and `=play` also starts it
+with a verdict. `SJEL_GPUI_SOUNDSCAPE=1` opens the panel at launch and `=play` also starts it
 through the conductor, which is what a screenshot test or a quick listen needs.
+`SJEL_GPUI_NO_AUDIO=1` keeps the app off the output device -- for a headless run, or a test that
+opens the panel without taking the speakers.
 
 ## Keys
 
@@ -370,7 +379,7 @@ through the conductor, which is what a screenshot test or a quick listen needs.
 | `g` + a letter | The rest by chord: `g x` Systems, `g u` Import, `g ,` Settings |
 | ⌘R | Refresh |
 | ⌘D | Open the current page in the dashboard |
-| ⌘⇧M | Open the Soundscape window |
+| ⌘⇧M | Slide the Soundscape panel in or away |
 | J / K, ↓ / ↑ | Select the next or previous row |
 | ↩ | Run the selected row's main action: Allow, Start, or open the calendar in the dashboard |
 | ⌘⌫ | Run the selected row's costly action: Deny or Stop |
@@ -441,8 +450,9 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_BENCH_SCROLL=1` | Scroll the page down and up, then quit |
 | `SJEL_GPUI_NO_SAVE=1` | Edit notes without writing them, to try the editor on real notes |
 | `SJEL_GPUI_BENCH_NOTE=<record path>` | Open that note with saving off, type 240 characters, then quit |
-| `SJEL_GPUI_SOUNDSCAPE=1\|play` | Open the Soundscape window at launch, and with `play` start it through the conductor |
+| `SJEL_GPUI_SOUNDSCAPE=1\|play` | Open the Soundscape panel at launch, and with `play` start it through the conductor |
 | `SJEL_GPUI_AUDIO_PROBE=<seconds>` | Run the synth on the real device, print what it measures, and quit |
+| `SJEL_GPUI_NO_AUDIO=1` | Keep the app off the output device, for a headless run or a panel test |
 
 The app icon comes from `brand/sjel-icon-maskable.svg`. `Resources/make-icon` builds
 `Resources/AppIcon.icns` from it. Run it again after a change to the brand mark.

@@ -182,8 +182,22 @@ impl Analyser {
             // full-scale tone reads about 256 here; a dense mix spreads that energy over hundreds
             // of bins, so the anchor is the mix and not the tone. The square root makes the low
             // end of that range visible, which a linear axis does not.
+            //
+            // The reference is 24 and not 6, and the top of the curve bends rather than clipping.
+            // At 6 and a hard `clamp` the spectrum was saturated: measured 2026-10-23 over 38 s of
+            // each preset, a third of every band-sample sat at 1.00 (EDM 32%, Ambient 34%, Focus
+            // 24%) and the ninetieth percentile was 1.00, so the field drawn from it had no
+            // dynamics left to show -- every ridge was pinned at its own maximum and the picture
+            // stopped answering the music.
+            //
+            // `tanh` is the part that keeps it honest at the top: it is unity-sloped near zero and
+            // asymptotic to one, so a loud passage still reads as louder than a louder one instead
+            // of flattening against a ceiling. At 24 the same measurement gives a median of 0.15 to
+            // 0.47, a ninetieth percentile of 0.58 to 0.75 and no sample pinned at the top, for
+            // four presets from Lo-fi to EDM. `the_spectrum_keeps_headroom_across_the_presets`
+            // holds those numbers.
             let tilt = (low_hz / LOWEST).powf(0.25).min(4.);
-            let scaled = ((magnitude * tilt) / 6.).sqrt().clamp(0., 1.);
+            let scaled = (((magnitude * tilt) / 24.).sqrt()).tanh();
             // Instant rise, slow fall.
             *slot = if scaled > self.bands[band] {
                 scaled

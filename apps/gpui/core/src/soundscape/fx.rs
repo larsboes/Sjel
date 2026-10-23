@@ -214,8 +214,11 @@ pub struct Echo {
     /// Where the read is now, in samples, and where it is heading.
     delay: f32,
     target: f32,
-    /// One-pole coefficient for the move, about a fifth of a second.
+    /// One-pole coefficient for the move, about a fifth of a second, and the shorter one a
+    /// preset change uses.
     smoothing: f32,
+    smoothing_drift: f32,
+    smoothing_retune: f32,
     feedback: f32,
     wet: f32,
     sample_rate: f32,
@@ -230,6 +233,8 @@ impl Echo {
             delay: sample_rate * 0.35,
             target: sample_rate * 0.35,
             smoothing: 0.,
+            smoothing_drift: 0.,
+            smoothing_retune: 0.,
             feedback: 0.32,
             wet: 0.5,
             sample_rate,
@@ -243,24 +248,40 @@ impl Echo {
         self.buffer_l = vec![0.; (sample_rate * 2.) as usize];
         self.buffer_r = vec![0.; (sample_rate * 2.) as usize];
         self.write = 0;
-        self.smoothing = 1. - (-1. / (0.2 * sample_rate)).exp();
+        self.smoothing_drift = 1. - (-1. / (0.2 * sample_rate)).exp();
+        // Twenty-five milliseconds: fast enough that a new preset's echo is in time by the time
+        // the bar is under way, slow enough that the read position never jumps under a ringing
+        // tail. A jump is what the previous version did, and a preset change clicked because of it.
+        self.smoothing_retune = 1. - (-1. / (0.025 * sample_rate)).exp();
+        self.smoothing = self.smoothing_drift;
         let seconds = self.target / self.sample_rate.max(1.);
-        self.snap_delay_seconds(seconds);
+        self.set_delay_now(seconds);
     }
 
     /// The browser puts the echo at three sixteenths of a beat.
     ///
-    /// The move is a glide, for a tempo that drifts. A *new* preset has to arrive at its own delay
-    /// immediately, or the echo spends half a second bending into place -- that is what
-    /// [`Self::snap_delay_seconds`] is for.
+    /// The move is a glide, for a tempo that drifts.
     pub fn set_delay_seconds(&mut self, seconds: f32) {
         self.target = self.seconds_to_samples(seconds);
+        self.smoothing = self.smoothing_drift;
     }
 
-    /// Move the delay at once, for a change that is not a drift.
-    pub fn snap_delay_seconds(&mut self, seconds: f32) {
+    /// Move the read position outright. Only safe when nothing is ringing through the buffer: a
+    /// buffer of silence has no position to jump out of, which is the case a new one is in.
+    pub fn set_delay_now(&mut self, seconds: f32) {
         self.target = self.seconds_to_samples(seconds);
         self.delay = self.target;
+    }
+
+    /// A new preset's own delay, reached quickly rather than glided to over a fifth of a second.
+    ///
+    /// It used to be a jump: the read position moved hundreds of milliseconds at once, under a
+    /// tail that was still ringing, which is a click at exactly the moment the operator is
+    /// listening for the new preset. Twenty-five milliseconds is inaudible as a bend and still
+    /// arrives before the first beat of the new bar.
+    pub fn retune_delay_seconds(&mut self, seconds: f32) {
+        self.target = self.seconds_to_samples(seconds);
+        self.smoothing = self.smoothing_retune;
     }
 
     fn seconds_to_samples(&self, seconds: f32) -> f32 {
@@ -271,6 +292,11 @@ impl Echo {
     pub fn process(&mut self, input: [f32; 2]) -> [f32; 2] {
         let length = self.buffer_l.len();
         self.delay += self.smoothing * (self.target - self.delay);
+        // Once it has arrived, the short coefficient has done its job and the tail goes back to
+        // tracking a drifting tempo rather than chasing it.
+        if self.smoothing == self.smoothing_retune && (self.target - self.delay).abs() < 1. {
+            self.smoothing = self.smoothing_drift;
+        }
         // Interpolated read, so a moving delay bends the tail instead of stepping through it.
         let mut position = self.write as f32 - self.delay;
         while position < 0. {
@@ -294,39 +320,58 @@ impl Echo {
     }
 }
 
-/// The sidechain: 0.22 on the kick, linear back to unity over 300 ms.
+/// The sidechain: a short attack to 0.22 on the kick, then linear back to unity over 300 ms.
+///
+/// The attack is a ramp and not a jump. A gain that steps under a continuous signal is a click:
+/// the browser's `linearRampToValueAtTime` takes the same few milliseconds over it, and without
+/// that the duck was a broadband transient on every beat rather than a breath -- measured
+/// 2026-10-23 at 0.78 of the bus level in a single sample.
 pub struct Duck {
     level: f32,
+    /// Per-sample fall while the kick is arriving, and per-sample rise while it recovers.
+    attack: f32,
     step: f32,
-    recovering: bool,
+    /// 0.22 on the kick, 1.0 at rest: the level walks towards it and never past it.
+    target: f32,
+    /// Whether the walk is still on its way down, so reaching the floor starts the recovery.
+    ducking: bool,
 }
 
 impl Duck {
     pub fn new(sample_rate: f32) -> Self {
-        Self {
+        let mut duck = Self {
             level: 1.,
-            step: 1. / (0.3 * sample_rate),
-            recovering: false,
-        }
+            attack: 0.,
+            step: 0.,
+            target: 1.,
+            ducking: false,
+        };
+        duck.set_sample_rate(sample_rate);
+        duck
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         self.step = 1. / (0.3 * sample_rate);
+        // Six milliseconds to the bottom: fast enough to read as a duck on the kick, long enough
+        // that no single sample carries the whole move.
+        self.attack = 1. / (0.006 * sample_rate);
     }
 
     pub fn trigger(&mut self) {
-        self.level = 0.22;
-        self.recovering = true;
+        self.target = 0.22;
+        self.ducking = true;
     }
 
     #[inline]
     pub fn apply(&mut self, input: [f32; 2]) -> [f32; 2] {
-        if self.recovering {
-            self.level += self.step;
-            if self.level >= 1. {
-                self.level = 1.;
-                self.recovering = false;
-            }
+        if self.level > self.target {
+            self.level = (self.level - self.attack).max(self.target);
+        } else if self.level < self.target {
+            self.level = (self.level + self.step).min(self.target);
+        } else if self.ducking {
+            // Arrived at the floor: the recovery is the same walk in the other direction.
+            self.ducking = false;
+            self.target = 1.;
         }
         [input[0] * self.level, input[1] * self.level]
     }
@@ -497,17 +542,54 @@ mod tests {
         assert!(previous > 0.001_5, "the gain never arrived: {previous}");
     }
 
+    /// The sidechain ducks on the kick, and no single sample carries the whole move.
     #[test]
     fn the_sidechain_ducks_then_recovers() {
         let mut duck = Duck::new(48_000.);
         assert_eq!(duck.apply([1., 1.]), [1., 1.]);
         duck.trigger();
-        let ducked = duck.apply([1., 1.]);
-        assert!(ducked[0] < 0.3, "{ducked:?}");
+        // Six milliseconds to the floor: the first sample is a step down, not the whole duck.
+        let first = duck.apply([1., 1.])[0];
+        assert!(first > 0.9, "the duck stepped to {first} in one sample");
+        let mut previous = first;
+        // A little short of the six milliseconds at 48 kHz: one sample past the floor the recovery
+        // starts, which is the same walk in the other direction.
+        for _ in 0..224 {
+            let value = duck.apply([1., 1.])[0];
+            assert!(
+                value <= previous + 1e-6,
+                "the duck rose during its attack: {value} above {previous}"
+            );
+            previous = value;
+        }
+        assert!(
+            (previous - 0.22).abs() < 0.01,
+            "the duck reached {previous}"
+        );
         for _ in 0..19_200 {
             duck.apply([1., 1.]);
         }
         assert!((duck.apply([1., 1.])[0] - 1.).abs() < 1e-6);
+    }
+
+    /// A second kick during the attack does not restart the fall from full, which would be the
+    /// same click the attack exists to remove.
+    #[test]
+    fn a_retriggered_duck_keeps_falling() {
+        let mut duck = Duck::new(48_000.);
+        duck.trigger();
+        for _ in 0..100 {
+            duck.apply([1., 1.]);
+        }
+        let part = duck.level();
+        assert!(part < 0.9 && part > 0.22, "{part}");
+        duck.trigger();
+        let after = duck.apply([1., 1.]);
+        assert!(
+            after[0] <= part + 1e-6,
+            "the retrigger jumped back up to {}",
+            after[0]
+        );
     }
 
     /// The room has to ring: an impulse in produces signal long after it.
@@ -541,7 +623,7 @@ mod tests {
     #[test]
     fn the_echo_repeats_at_the_delay_time() {
         let mut echo = Echo::new(48_000.);
-        echo.snap_delay_seconds(0.1);
+        echo.set_delay_now(0.1);
         echo.process([1., 0.]);
         let mut first_repeat = None;
         for step in 1..9_600 {

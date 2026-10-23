@@ -10,7 +10,6 @@ mod accounts;
 mod ask;
 mod audio;
 mod backup;
-mod calendar;
 mod calendar_view;
 mod capabilities;
 mod context_view;
@@ -39,6 +38,7 @@ mod research_view;
 mod selection;
 mod self_view;
 mod settings;
+mod setup_view;
 mod sidebar;
 mod software;
 mod soundscape;
@@ -49,13 +49,15 @@ pub mod update;
 mod viz;
 mod workspace;
 
+use sjel_gpui_core::area::Area;
 use sjel_gpui_core::{route, shell};
 
 use workspace::{
-    nav_pages, GoTo, OpenInDashboard, OpenPalette, OpenSettings, OpenSoundscape, Refresh, Workspace,
+    OpenArea, OpenInDashboard, OpenPalette, OpenSettings, OpenSoundscape, Refresh,
+    ToggleSoundscapePanel, Workspace,
 };
 
-actions!(sjel, [Quit, CloseWindow, OpenSoundscapeMini]);
+actions!(sjel, [Quit, CloseWindow]);
 
 /// The one main window, so a `sjel://` link or a Dock click finds it again.
 struct MainWindow {
@@ -100,17 +102,23 @@ fn main() {
         people_view::bind_keys(cx);
         backup::bind_keys(cx);
         inventory_view::bind_keys(cx);
-        soundscape::bind_keys(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-w", CloseWindow, None),
             KeyBinding::new("cmd-q", Quit, None),
-            KeyBinding::new("shift-cmd-m", OpenSoundscapeMini, None),
         ]);
         cx.on_action(|_: &Quit, cx| cx.quit());
-        cx.on_action(|_: &OpenSoundscape, cx| soundscape::open(cx, soundscape::Mode::Full));
-        // The mini player is the glanceable one, so it gets the keystroke; the full window has the
-        // menu item and the mini's expand button.
-        cx.on_action(|_: &OpenSoundscapeMini, cx| soundscape::toggle_mini(cx));
+        // The keystroke and the menu both land on the focused workspace, which owns the panel. With
+        // no window up there is nothing to slide it over, so the app-level fallback raises the main
+        // window first.
+        cx.on_action(|_: &ToggleSoundscapePanel, cx| {
+            if let Some((window, workspace)) = main_window(cx) {
+                let _ = window.update(cx, |_, window, cx| {
+                    let _ = workspace.update(cx, |view, cx| {
+                        view.open_soundscape(window, cx);
+                    });
+                });
+            }
+        });
         cx.on_action(|_: &CloseWindow, cx| {
             if let Some(window) = cx.active_window() {
                 let _ = window.update(cx, |_, window, _| window.remove_window());
@@ -128,8 +136,9 @@ fn main() {
             },
             Menu {
                 name: "Go".into(),
-                items: nav_pages()
-                    .map(|page| MenuItem::action(page.label(), GoTo(page)))
+                items: Area::ALL
+                    .into_iter()
+                    .map(|area| MenuItem::action(area.label(), OpenArea(area)))
                     .chain([
                         MenuItem::separator(),
                         MenuItem::action("Search…", OpenPalette),
@@ -143,7 +152,6 @@ fn main() {
                 name: "Window".into(),
                 items: vec![
                     MenuItem::action("Soundscape", OpenSoundscape),
-                    MenuItem::action("Soundscape Mini", OpenSoundscapeMini),
                     MenuItem::separator(),
                     MenuItem::action("Close", CloseWindow),
                 ],
@@ -160,15 +168,28 @@ fn main() {
         // conductor* -- the instructor of state is not this window, so a local `set_playing` here
         // would be overwritten by the first read.
         match std::env::var("SJEL_GPUI_SOUNDSCAPE").as_deref() {
-            Ok("1") => soundscape::open(cx, soundscape::Mode::Full),
-            Ok("play") => {
-                soundscape::open(cx, soundscape::Mode::Full);
-                soundscape::play_through_conductor(cx);
+            Ok("1") | Ok("play") => {
+                if let Some((window, workspace)) = main_window(cx) {
+                    let _ = window.update(cx, |_, window, cx| {
+                        let _ = workspace.update(cx, |view, cx| {
+                            view.open_soundscape(window, cx);
+                        });
+                    });
+                }
+                if std::env::var("SJEL_GPUI_SOUNDSCAPE").as_deref() == Ok("play") {
+                    soundscape::play_through_conductor(cx);
+                }
             }
-            Ok("mini") => soundscape::open(cx, soundscape::Mode::Mini),
-            Ok("mini-play") => {
-                soundscape::open(cx, soundscape::Mode::Mini);
-                soundscape::play_through_conductor(cx);
+            // The two window modes this used to have are one panel now: `mini` still opens the
+            // player, which is the only way to see what a preset change did.
+            Ok("mini") | Ok("mini-play") => {
+                if let Some((window, workspace)) = main_window(cx) {
+                    let _ = window.update(cx, |_, window, cx| {
+                        let _ = workspace.update(cx, |view, cx| {
+                            view.open_soundscape(window, cx);
+                        });
+                    });
+                }
             }
             _ => {}
         }

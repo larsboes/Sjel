@@ -37,10 +37,27 @@ pub struct Audio {
 
 impl Global for Audio {}
 
+/// `SJEL_GPUI_NO_AUDIO=1` keeps the app off the machine's output device.
+///
+/// Two callers need that. A test that opens the panel takes the speakers otherwise, and taking the
+/// device is a visible act -- the Mac switches its output route and the menu bar shows it -- which a
+/// test run has no business doing. And a headless or remote run should be able to open the window
+/// without claiming the audio hardware. Nothing else changes: the panel still opens, shows the
+/// device error, and every control still writes to the conductor.
+const NO_AUDIO: &str = "SJEL_GPUI_NO_AUDIO";
+
 impl Audio {
     fn open() -> Self {
         let control = Arc::new(Control::new());
         let visual = Arc::new(Visual::new());
+        if std::env::var_os(NO_AUDIO).is_some() {
+            return Self {
+                control,
+                visual,
+                device: None,
+                error: Some(format!("{NO_AUDIO} is set: no output device")),
+            };
+        }
         match start(control.clone(), visual.clone()) {
             Ok(device) => Self {
                 control,

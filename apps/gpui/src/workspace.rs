@@ -14,7 +14,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{IconName, IndexPath, Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, Focusable,
-    KeyBinding, ScrollHandle, SharedString, Subscription, Window, WindowAppearance,
+    KeyBinding, SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
@@ -30,10 +30,10 @@ use crate::inventory_view::InventoryPage;
 use crate::people_view::PeoplePage;
 use crate::projects::Projects;
 use crate::route::{self, Destination, Page, Target};
+use sjel_gpui_core::area::{self, Area, Tabs};
 use crate::selection::{Item, Selection};
 use crate::shell::{
-    self, AgentView, Backups, CalendarEntry, GlobalTask, NodeHealth, ShellError, Snapshot,
-    SoundscapeState,
+    self, AgentView, Backups, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{AppearanceSettings, GlassStyle, Palette};
 use crate::{capabilities, header, home, sidebar};
@@ -45,10 +45,14 @@ actions!(
         OpenPalette,
         /// Focus the active page's search field or open the search palette.
         FocusSearch,
-        /// Step to the next page in the sidebar.
+        /// Step to the next tab of the open area.
         NextPage,
-        /// Step to the previous page in the sidebar.
+        /// Step to the previous tab of the open area.
         PrevPage,
+        /// Step to the next area in the sidebar.
+        NextArea,
+        /// Step to the previous area in the sidebar.
+        PrevArea,
         Refresh,
         /// Open the current page in the web dashboard, logged in.
         OpenInDashboard,
@@ -69,8 +73,10 @@ actions!(
         OpenSettings,
         /// Open Settings at Appearance.
         OpenAppearance,
-        /// Open the soundscape player window.
+        /// Slide the soundscape panel in, or away again.
         OpenSoundscape,
+        /// Show the soundscape panel if it is hidden, hide it if it is showing.
+        ToggleSoundscapePanel,
         /// Toggle playback of the soundscape ambient synthesizer.
         ToggleSoundscape,
         /// Advance to the next ambient soundscape preset.
@@ -82,15 +88,32 @@ actions!(
     ]
 );
 
-/// Open a page. One action serves every page, so a page added to `Page::ALL` gets its ⌘ number,
-/// sidebar hint, palette row and Go menu item from `nav_pages` without another edit.
+/// Open a page. One action serves every page, so a page added to an area in `core::area` gets
+/// its palette row and tab from `nav_pages` without another edit.
 #[derive(Clone, PartialEq, gpui::Action)]
 #[action(namespace = sjel, no_json)]
 pub struct GoTo(pub Page);
 
-/// The pages the sidebar, ⌘1–⌘9 and the Go menu list, in that order. Settings has ⌘, instead.
+/// Open an area at the tab it showed last. ⌘1–⌘9, the sidebar rows and the Go menu use it.
+#[derive(Clone, PartialEq, gpui::Action)]
+#[action(namespace = sjel, no_json)]
+pub struct OpenArea(pub Area);
+
+/// Every page an area holds, in sidebar then tab order. Settings has ⌘, instead, and the old
+/// Today page is part of Home.
 pub fn nav_pages() -> impl Iterator<Item = Page> {
-    Page::ALL.into_iter().filter(|page| *page != Page::Settings)
+    Area::ALL
+        .into_iter()
+        .flat_map(|area| area.pages().iter().copied())
+}
+
+/// How the palette and the Go menu name a page: `Sjel › Packs` when the area has tabs.
+pub fn page_title(page: Page) -> String {
+    match Area::of(page) {
+        Some(area) if area.has_tabs() => format!("{} › {}", area.label(), page.label()),
+        Some(area) => area.label().to_owned(),
+        None => page.label().to_owned(),
+    }
 }
 
 fn page_icon(page: Page) -> IconName {
@@ -112,6 +135,7 @@ fn page_icon(page: Page) -> IconName {
         Page::Packs => IconName::Folder,
         Page::SelfModel => IconName::Cpu,
         Page::Research => IconName::BookOpen,
+        Page::Setup => IconName::Cpu,
         Page::Settings => IconName::Settings,
     }
 }
@@ -119,6 +143,8 @@ fn page_icon(page: Page) -> IconName {
 /// Workspace key bindings. Navigation keys bind to the "Workspace" context, which only the page
 /// frame carries, so they stay quiet while the palette's query field has focus.
 pub fn bind_keys(cx: &mut App) {
+    // What the panel itself carries: space, the next preset, and the way out.
+    cx.bind_keys(crate::soundscape::Soundscape::keys());
     cx.bind_keys([
         KeyBinding::new("cmd-k", OpenPalette, None),
         KeyBinding::new("cmd-f", FocusSearch, None),
@@ -127,17 +153,23 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
         KeyBinding::new("escape", ClearSelection, None),
-        // Sequential page cycling
+        // Tabs inside the open area, the way Safari and Xcode step tabs
         KeyBinding::new("cmd-alt-right", NextPage, None),
         KeyBinding::new("shift-cmd-]", NextPage, None),
         KeyBinding::new("ctrl-tab", NextPage, None),
         KeyBinding::new("cmd-alt-left", PrevPage, None),
         KeyBinding::new("shift-cmd-[", PrevPage, None),
         KeyBinding::new("ctrl-shift-tab", PrevPage, None),
+        // Areas, in sidebar order
+        KeyBinding::new("cmd-alt-down", NextArea, None),
+        KeyBinding::new("cmd-alt-up", PrevArea, None),
         // Soundscape ambient audio controls
         KeyBinding::new("cmd-alt-space", ToggleSoundscape, None),
         KeyBinding::new("shift-cmd-u", ToggleSoundscape, None),
         KeyBinding::new("cmd-alt-p", CycleSoundscapePreset, None),
+        // The player slides in over this window, so its keystroke belongs to the workspace and not
+        // to the app: there is no window to open, only a panel to move.
+        KeyBinding::new("shift-cmd-m", ToggleSoundscapePanel, None),
         // Workspace scoped navigation & selection
         KeyBinding::new("/", FocusSearch, Some("Workspace")),
         KeyBinding::new("j", SelectNext, Some("Workspace")),
@@ -180,12 +212,14 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g y", GoTo(Page::Cv), Some("Workspace")),
         KeyBinding::new("g w", GoTo(Page::Media), Some("Workspace")),
         KeyBinding::new("g z", GoTo(Page::Research), Some("Workspace")),
+        KeyBinding::new("g 0", GoTo(Page::Setup), Some("Workspace")),
         KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
     ]);
     cx.bind_keys(
-        nav_pages()
+        Area::ALL
+            .into_iter()
             .zip(1..=9)
-            .map(|(page, n)| KeyBinding::new(&format!("cmd-{n}"), GoTo(page), None)),
+            .map(|(area, n)| KeyBinding::new(&format!("cmd-{n}"), OpenArea(area), None)),
     );
     cx.bind_keys([
         KeyBinding::new("cmd-0", GoTo(Page::Documents), None),
@@ -211,10 +245,11 @@ const POLL: Duration = Duration::from_secs(10);
 
 pub struct Workspace {
     pub page: Page,
+    /// The tab each area shows, so ⌘1–⌘9 return to where you left an area.
+    pub tabs: Tabs,
     repo: Repo,
     pub health: Remote<NodeHealth>,
     pub agent: Remote<AgentView>,
-    pub calendar: Remote<Vec<CalendarEntry>>,
     pub focus_tasks: Remote<Vec<GlobalTask>>,
     pub soundscape: Remote<SoundscapeState>,
     pub backups: Remote<Backups>,
@@ -239,12 +274,10 @@ pub struct Workspace {
     pub cv_page: Entity<crate::cv_view::CvPage>,
     pub media_page: Entity<crate::media_view::MediaPage>,
     pub research_page: Entity<crate::research_view::ResearchPage>,
+    pub setup_page: Entity<crate::setup_view::SetupPage>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
-    /// The page list in the sidebar. At eighteen pages it is taller than a small window, so the
-    /// column scrolls and the selected row is brought into view when the page changes.
-    pub nav_scroll: ScrollHandle,
     /// True once the shell pushes its answers, so the timer stops reading them.
     streaming: bool,
     pub appearance_settings: AppearanceSettings,
@@ -257,6 +290,10 @@ pub struct Workspace {
     /// tree, which would leave every shortcut with no path to this view.
     refocus: bool,
     _appearance: Option<Subscription>,
+    /// The soundscape panel, built the first time it is asked for and kept afterwards: the audio
+    /// lives in an app global, so the view may as well too. `None` until something opens it, which is
+    /// what keeps a fresh window from paying for a panel nobody is looking at.
+    pub soundscape_panel: Option<Entity<crate::soundscape::Soundscape>>,
     frames: Option<crate::frames::FrameProbe>,
     #[cfg(target_os = "macos")]
     native_glass: Option<crate::macos_glass::NativeGlassRegion>,
@@ -301,15 +338,17 @@ impl Workspace {
         let cv_page = cx.new(|_| crate::cv_view::CvPage::new(repo.clone()));
         let media_page = cx.new(|_| crate::media_view::MediaPage::new(repo.clone()));
         let research_page = cx.new(|_| crate::research_view::ResearchPage::new(repo.clone()));
+        let setup_page = cx.new(|_| crate::setup_view::SetupPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let mut workspace = Self {
             page: Page::Home,
+            tabs: Tabs::default(),
             repo,
             health: Remote::default(),
             agent: Remote::default(),
-            calendar: Remote::default(),
             focus_tasks: Remote::default(),
             soundscape: Remote::default(),
+            soundscape_panel: None,
             backups: Remote::default(),
             projects,
             ask,
@@ -332,9 +371,9 @@ impl Workspace {
             cv_page,
             media_page,
             research_page,
+            setup_page,
             busy: Busy::default(),
             selection: Selection::default(),
-            nav_scroll: ScrollHandle::new(),
             streaming: false,
             focus,
             refocus: false,
@@ -353,6 +392,10 @@ impl Workspace {
         workspace.refresh(cx);
         workspace.check_updates(cx);
         workspace.follow(cx);
+        // The window opens on Today, which draws the day's timeline, so that read starts now.
+        workspace
+            .context_page
+            .update(cx, |context, cx| context.activate(cx));
         if let (Some(frames), true) = (
             workspace.frames.clone(),
             std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_some(),
@@ -386,6 +429,9 @@ impl Workspace {
     }
 
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
+        // Today was its own page and is part of Home now; its old shortcuts and links land here.
+        let page = area::canonical(page);
+        self.tabs.visit(page);
         if self.page != page {
             let previous = self.page;
             if previous == Page::Travel {
@@ -400,7 +446,6 @@ impl Workspace {
             self.page = page;
             self.refocus = true;
             self.selection.reset();
-            self.reveal_page(page, cx);
             if page == Page::Projects {
                 self.projects
                     .update(cx, |projects, cx| projects.load_projects(cx));
@@ -426,6 +471,8 @@ impl Workspace {
                 self.media_page.update(cx, |m, cx| m.load(cx));
             } else if page == Page::Research {
                 self.research_page.update(cx, |r, cx| r.load(cx));
+            } else if page == Page::Setup {
+                self.setup_page.update(cx, |s, cx| s.load(cx));
             } else if page == Page::Documents {
                 self.documents
                     .update(cx, |documents, cx| documents.load(cx));
@@ -436,7 +483,7 @@ impl Workspace {
             } else if page == Page::Calendar {
                 self.calendar_page
                     .update(cx, |calendar, cx| calendar.activate(cx));
-            } else if page == Page::Context {
+            } else if page == Page::Home {
                 self.context_page
                     .update(cx, |context, cx| context.activate(cx));
             } else if page == Page::Finance {
@@ -450,33 +497,6 @@ impl Workspace {
             }
         }
         cx.notify();
-    }
-
-    /// Brings the open page's row to the top of the sidebar list.
-    ///
-    /// One request is not enough. A scroll target is resolved against the rows the viewport
-    /// has painted, so the first request can only reach as far as the list had already been
-    /// scrolled, and each further frame reaches a little further. Four frames covers the
-    /// eighteen rows, and a list that fits its window is four no-ops.
-    fn reveal_page(&mut self, page: Page, cx: &mut Context<Self>) {
-        let Some(index) = nav_pages().position(|listed| listed == page) else {
-            return;
-        };
-        cx.spawn(async move |weak, cx| {
-            for _ in 0..4 {
-                let requested = weak.update(cx, |view, cx| {
-                    view.nav_scroll.scroll_to_top_of_item(index);
-                    cx.notify();
-                });
-                if requested.is_err() {
-                    return;
-                }
-                cx.background_executor()
-                    .timer(Duration::from_millis(8))
-                    .await;
-            }
-        })
-        .detach();
     }
 
     /// Follows the shell's change stream. Until a frame arrives the timer keeps reading health
@@ -544,15 +564,6 @@ impl Workspace {
                 |s| async move { s.backups().await },
             );
         }
-        let (from, to) = crate::calendar::range(chrono::Local::now().naive_local());
-        let repo = self.repo.clone();
-        data::read_repo(
-            cx,
-            self,
-            |w| &mut w.calendar,
-            &repo,
-            move |r| async move { r.fetch_calendar(&from, &to).await },
-        );
         let repo_tasks = self.repo.clone();
         data::read_repo(
             cx,
@@ -623,6 +634,33 @@ impl Workspace {
             });
         })
         .detach();
+    }
+
+    /// The panel, created on first use. Separate from [`Self::open_soundscape`] because the sidebar
+    /// and the palette both want it without asking for it to appear.
+    fn soundscape_panel(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<crate::soundscape::Soundscape> {
+        if let Some(panel) = &self.soundscape_panel {
+            return panel.clone();
+        }
+        let repo = self.repo.clone();
+        let panel = cx.new(|cx| crate::soundscape::Soundscape::new(repo, cx));
+        // It is a panel over this window, so it paints in this window's frame and follows its
+        // appearance; nothing here has to move it.
+        let _ = window;
+        cx.notify();
+        self.soundscape_panel = Some(panel.clone());
+        panel
+    }
+
+    /// Slide the player in. The panel owns whether it is open, so this is idempotent: asking for a
+    /// panel that is already showing does not restart the slide.
+    pub fn open_soundscape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let panel = self.soundscape_panel(window, cx);
+        panel.update(cx, |panel, cx| panel.set_open(true, cx));
     }
 
     pub fn toggle_soundscape(
@@ -754,7 +792,8 @@ impl Workspace {
     }
 
     pub fn go_to_project(&mut self, name: String, cx: &mut Context<Self>) {
-        self.page = Page::Projects;
+        // Through `go`, so the frame takes back the focus the page that sent us here was holding.
+        self.go(Page::Projects, cx);
         self.projects.update(cx, |projects, cx| {
             projects.open_project(name, cx);
             projects.tab = crate::projects::ProjectsTab::Hubs;
@@ -877,7 +916,7 @@ impl Workspace {
         }
         let state = cx.new(|cx| CommandState::new(window, cx));
         let this = cx.entity();
-        let native: Vec<Page> = Page::ALL.to_vec();
+        let native: Vec<Page> = nav_pages().chain([Page::Settings]).collect();
         let web: Vec<Destination> = route::DESTINATIONS
             .iter()
             .copied()
@@ -890,7 +929,10 @@ impl Workspace {
             let pages = CommandGroup::new()
                 .label("Go to")
                 .items(native.iter().map(|&page| {
-                    let item = CommandItem::new().label(page.label()).icon(page_icon(page));
+                    let item = CommandItem::new()
+                        .label(page_title(page))
+                        .icon(page_icon(page))
+                        .keywords([page.label()]);
                     match page {
                         Page::Settings => item.action(OpenSettings.boxed_clone()),
                         _ => item.action(GoTo(page).boxed_clone()),
@@ -985,7 +1027,7 @@ impl Workspace {
         } else if self.page == Page::Calendar {
             self.calendar_page
                 .update(cx, |calendar, cx| calendar.refresh(cx));
-        } else if self.page == Page::Context {
+        } else if matches!(self.page, Page::Home | Page::Context) {
             self.context_page
                 .update(cx, |context, cx| context.refresh(cx));
         } else if self.page == Page::Finance {
@@ -1009,6 +1051,8 @@ impl Workspace {
             self.media_page.update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Research {
             self.research_page.update(cx, |p, cx| p.refresh(cx));
+        } else if self.page == Page::Setup {
+            self.setup_page.update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -1029,9 +1073,29 @@ impl Workspace {
         self.open_settings(Some(crate::settings::Section::Appearance), cx);
     }
 
-    /// The player is its own window, so this hands the gesture to `soundscape::open`.
-    fn on_open_soundscape(&mut self, _: &OpenSoundscape, _: &mut Window, cx: &mut Context<Self>) {
-        crate::soundscape::open(cx, crate::soundscape::Mode::Full);
+    /// Open the panel, or leave it where it is when it is already showing.
+    fn on_open_soundscape(
+        &mut self,
+        _: &OpenSoundscape,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_soundscape(window, cx);
+    }
+
+    fn on_toggle_soundscape_panel(
+        &mut self,
+        _: &ToggleSoundscapePanel,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Nothing to toggle when the panel has never been built: build it, open.
+        match &self.soundscape_panel {
+            Some(panel) => {
+                panel.update(cx, |panel, cx| panel.toggle_open(cx));
+            }
+            None => self.open_soundscape(window, cx),
+        }
     }
 
     /// Opens Settings, at `section` when one is given and at the last one shown otherwise.
@@ -1151,23 +1215,45 @@ impl Workspace {
     }
 
     fn on_next_page(&mut self, _: &NextPage, _: &mut Window, cx: &mut Context<Self>) {
-        let pages: Vec<Page> = nav_pages().collect();
-        if let Some(pos) = pages.iter().position(|&p| p == self.page) {
-            let next = pages[(pos + 1) % pages.len()];
-            self.go(next, cx);
-        } else if let Some(&first) = pages.first() {
-            self.go(first, cx);
-        }
+        self.step_tab(1, cx);
     }
 
     fn on_prev_page(&mut self, _: &PrevPage, _: &mut Window, cx: &mut Context<Self>) {
-        let pages: Vec<Page> = nav_pages().collect();
-        if let Some(pos) = pages.iter().position(|&p| p == self.page) {
-            let prev = pages[(pos + pages.len() - 1) % pages.len()];
-            self.go(prev, cx);
-        } else if let Some(&first) = pages.first() {
-            self.go(first, cx);
+        self.step_tab(-1, cx);
+    }
+
+    /// Steps through the open area's tabs. Settings has no tabs, so it stays.
+    fn step_tab(&mut self, step: isize, cx: &mut Context<Self>) {
+        if let Some(area) = Area::of(self.page) {
+            self.go(area.step_tab(self.page, step), cx);
         }
+    }
+
+    fn on_next_area(&mut self, _: &NextArea, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_area(1, cx);
+    }
+
+    fn on_prev_area(&mut self, _: &PrevArea, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_area(-1, cx);
+    }
+
+    /// Steps through the sidebar. From Settings, down opens the first area and up the last.
+    fn step_area(&mut self, step: isize, cx: &mut Context<Self>) {
+        let next = match Area::of(self.page) {
+            Some(area) => area.step(step),
+            None if step > 0 => Area::ALL[0],
+            None => Area::ALL[Area::ALL.len() - 1],
+        };
+        self.open_area(next, cx);
+    }
+
+    /// Opens `area` at the tab it showed last.
+    pub fn open_area(&mut self, area: Area, cx: &mut Context<Self>) {
+        self.go(self.tabs.current(area), cx);
+    }
+
+    fn on_open_area(&mut self, OpenArea(area): &OpenArea, _: &mut Window, cx: &mut Context<Self>) {
+        self.open_area(*area, cx);
     }
 
     fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
@@ -1230,7 +1316,6 @@ impl Workspace {
         match self.selected() {
             Some(Item::Approval(id)) => self.decide(id, true, window, cx),
             Some(Item::Down(name)) => self.set_running(name, true, window, cx),
-            Some(Item::Entry(_)) => self.open_dashboard("/calendar".into(), window, cx),
             Some(Item::FocusTask(id)) => {
                 let current_done = self
                     .focus_tasks
@@ -1333,6 +1418,7 @@ impl Render for Workspace {
             Page::Cv => self.cv_page.clone().into_any_element(),
             Page::Media => self.media_page.clone().into_any_element(),
             Page::Research => self.research_page.clone().into_any_element(),
+            Page::Setup => self.setup_page.clone().into_any_element(),
             Page::Documents => {
                 self.documents
                     .update(cx, |documents, cx| documents.set_palette(palette, cx));
@@ -1353,11 +1439,7 @@ impl Render for Workspace {
                     .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
                 self.calendar_page.clone().into_any_element()
             }
-            Page::Context => {
-                self.context_page
-                    .update(cx, |context, cx| context.set_palette(palette, cx));
-                self.context_page.clone().into_any_element()
-            }
+            Page::Context => unreachable!("`/context` opens Home (`core::area::canonical`)"),
             Page::Finance => {
                 self.finance_page
                     .update(cx, |finance, cx| finance.set_palette(palette, cx));
@@ -1404,6 +1486,9 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_page))
             .on_action(cx.listener(Self::on_prev_page))
             .on_action(cx.listener(Self::on_go_to))
+            .on_action(cx.listener(Self::on_open_area))
+            .on_action(cx.listener(Self::on_next_area))
+            .on_action(cx.listener(Self::on_prev_area))
             .on_action(cx.listener(Self::on_refresh))
             .on_action(cx.listener(Self::on_open_in_dashboard))
             .on_action(cx.listener(Self::on_select_next))
@@ -1419,6 +1504,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_open_settings))
             .on_action(cx.listener(Self::on_open_appearance))
             .on_action(cx.listener(Self::on_open_soundscape))
+            .on_action(cx.listener(Self::on_toggle_soundscape_panel))
             .on_action(cx.listener(Self::on_check_for_updates))
             .on_action(cx.listener(Self::on_rebuild_app))
             .size_full()
@@ -1472,14 +1558,15 @@ impl Render for Workspace {
                                         | Page::Settings
                                         | Page::Documents
                                         | Page::Calendar
-                                        | Page::Context
                                         | Page::Finance
                                         | Page::People
                                         | Page::Backup
                                         | Page::Inventory
                                 ) {
-                                    // Projects, Settings, Documents, Calendar, Context and Finance manage their own layout
-                                    // and scroll boundaries. Documents, Calendar, Context and Finance need full width.
+                                    // Projects, Settings, Documents, Calendar, Finance, People,
+                                    // Backup and Inventory manage their own layout and scroll
+                                    // boundaries. Documents, Calendar, Finance, People, Backup and
+                                    // Inventory need full width.
                                     div().id("page").flex_1().min_h_0().px_8().pb_8().child(
                                         div()
                                             .size_full()
@@ -1488,7 +1575,6 @@ impl Render for Workspace {
                                                     self.page,
                                                     Page::Documents
                                                         | Page::Calendar
-                                                        | Page::Context
                                                         | Page::Finance
                                                         | Page::People
                                                         | Page::Backup
@@ -1508,7 +1594,10 @@ impl Render for Workspace {
                                         .vertical_scrollbar(&scroll)
                                         .child(div().px_8().pb_8().max_w(px(880.)).child(page))
                                 },
-                            ),
+                            )
+                            // The soundscape panel slides over the page and not the navigation: a
+                            // player that covers the way out of the page is a window again.
+                            .children(self.soundscape_panel.clone()),
                     ),
             )
             .children(self.frames.as_ref().map(|frames| frames.paint_marker()))
@@ -1546,7 +1635,9 @@ mod tests {
         });
         let view = slot.take().expect("workspace built");
         view.update(cx, |view, cx| {
-            view.page = Page::Capabilities;
+            // Through `go`, because that is the only way a page is opened: it hands the frame the
+            // focus the page it replaced was holding.
+            view.go(Page::Capabilities, cx);
             view.health.value = Some(
                 serde_json::from_str(
                     r#"{"version":"t","uptime_seconds":1,"capabilities":{
@@ -1586,6 +1677,41 @@ mod tests {
         assert_eq!(cx.update(|window, cx| window.notifications(cx).len()), 1);
     }
 
+    /// The player is a panel over this window now, so the keys and the sidebar row both have to
+    /// reach it through the workspace. This is the wiring test: opening builds it once, the
+    /// keystroke toggles the same view, and a second open does not build a second player on the same
+    /// session.
+    #[gpui::test]
+    fn the_soundscape_panel_opens_once_and_toggles_from_the_keyboard(cx: &mut TestAppContext) {
+        // Opening the panel starts the audio global, and a test must not take the machine's output
+        // device. This is the same switch a headless run uses.
+        std::env::set_var("SJEL_GPUI_NO_AUDIO", "1");
+        let (view, cx) = open(cx);
+        assert!(
+            view.read_with(cx, |view, _| view.soundscape_panel.is_none()),
+            "a fresh window pays for no panel"
+        );
+        cx.simulate_keystrokes("shift-cmd-m");
+        let panel = view.read_with(cx, |view, _| {
+            view.soundscape_panel.clone().expect("the panel was built")
+        });
+        let opened = cx.update(|_, cx| panel.read(cx).is_open());
+        assert!(opened, "the keystroke did not open the panel");
+
+        // The same keystroke closes the same view, rather than building a second one.
+        cx.simulate_keystrokes("shift-cmd-m");
+        let again = view.read_with(cx, |view, _| {
+            view.soundscape_panel.clone().expect("the panel stays")
+        });
+        assert_eq!(
+            panel.entity_id(),
+            again.entity_id(),
+            "a second panel was built"
+        );
+        let closed = cx.update(|_, cx| again.read(cx).is_open());
+        assert!(!closed, "the second press did not close it");
+    }
+
     #[gpui::test]
     fn typing_in_the_palette_does_not_move_the_selection(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
@@ -1604,12 +1730,24 @@ mod tests {
     }
 
     #[gpui::test]
-    fn the_first_nine_sidebar_pages_have_number_keys(cx: &mut TestAppContext) {
+    fn the_number_keys_open_the_nine_areas(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
-        for (page, n) in nav_pages().zip(1..=9) {
+        for (area, n) in Area::ALL.into_iter().zip(1..=9) {
             cx.simulate_keystrokes(&format!("cmd-{n}"));
-            view.read_with(cx, |view, _| assert_eq!(view.page, page));
+            view.read_with(cx, |view, _| assert_eq!(Area::of(view.page), Some(area)));
         }
+    }
+
+    #[gpui::test]
+    fn an_area_returns_to_the_tab_it_showed_last(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("cmd-9");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Capabilities));
+        view.update(cx, |view, cx| view.go(Page::Packs, cx));
+        cx.simulate_keystrokes("cmd-1");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
+        cx.simulate_keystrokes("cmd-9");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
     }
 
     #[gpui::test]
@@ -1694,32 +1832,39 @@ mod tests {
     }
 
     #[gpui::test]
-    fn sequential_page_cycling(cx: &mut TestAppContext) {
+    fn tab_keys_step_inside_the_open_area(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update(cx, |view, cx| view.go(Page::Inbox, cx));
+        cx.simulate_keystrokes("cmd-alt-right");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Feed));
+        cx.simulate_keystrokes("shift-cmd-]");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Inbox));
+        cx.simulate_keystrokes("cmd-alt-left");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Feed));
+        cx.simulate_keystrokes("ctrl-tab");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Inbox));
+        // An area with one tab keeps it: stepping never leaves the area.
+        view.update(cx, |view, cx| view.go(Page::Ask, cx));
+        cx.simulate_keystrokes("shift-cmd-]");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Ask));
+        // Life opens on People, and stepping back from it wraps to its last tab.
+        cx.simulate_keystrokes("cmd-8");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::People));
+        cx.simulate_keystrokes("cmd-alt-left");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
+    }
+
+    #[gpui::test]
+    fn the_area_keys_step_down_the_sidebar(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
         view.update(cx, |view, cx| view.go(Page::Home, cx));
-        cx.simulate_keystrokes("cmd-alt-right");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Context));
-        cx.simulate_keystrokes("cmd-alt-left");
+        cx.simulate_keystrokes("cmd-alt-down");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Ask));
+        cx.simulate_keystrokes("cmd-alt-up");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
-        // Backwards from the first page wraps to the last one the sidebar lists, and Systems
-        // sits fourth in that history rather than at the end.
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Research));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Media));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::SelfModel));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Import));
-        cx.simulate_keystrokes("shift-cmd-[");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Software));
-        view.update(cx, |view, cx| view.go(Page::Capabilities, cx));
-        cx.simulate_keystrokes("shift-cmd-]");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Systems));
+        // Up from the first area wraps to the last one.
+        cx.simulate_keystrokes("cmd-alt-up");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Capabilities));
     }
 
     #[gpui::test]
@@ -1745,6 +1890,8 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Media));
         cx.simulate_keystrokes("g z");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Research));
+        cx.simulate_keystrokes("g 0");
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Setup));
     }
 
     #[gpui::test]

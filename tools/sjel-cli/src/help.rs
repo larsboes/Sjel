@@ -29,7 +29,7 @@ Operate capabilities:
   distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start
   runtime status                 Runtime mode, power and On-the-go exceptions
   provider list|login|logout     Manage model-provider sign-ins in the OS keychain
-  credentials list|connect|move  Connect the Google grants capabilities declare, into the keychain
+  credentials list|connect|…     Connect the Google grants capabilities declare, into the keychain
   runtime mode <mode>            Owner-only: auto, normal or on-the-go
   runtime allow <category> on|off Owner-only: persistent On-the-go exception
   capability list                List registered HTTP capability surfaces and health
@@ -136,6 +136,8 @@ pub const CREDENTIALS: &str = r#"Usage: sjel credentials <command>
                                  writes the grant to the keychain
   move <id>                      Move a grant from its old overlay env file to the keychain,
                                  with no browser; the env file keeps only its other lines
+  prune <id>                     After a fresh connect: prove the keychain grant with a real
+                                 refresh, then remove the env file's older copy
 
 The desktop app does the same in Settings › Accounts. A Google client JSON comes from Google
 Cloud › Clients › your Desktop client › Download JSON (or Add secret)."#;

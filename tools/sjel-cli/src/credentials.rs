@@ -19,6 +19,10 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
             (Some(id), Some(file)) => connect(root, id, Path::new(file)),
             _ => Err("usage: sjel credentials connect <id> <client.json>".into()),
         },
+        Some("prune") => match args.get(1) {
+            Some(id) => prune(root, id),
+            None => Err("usage: sjel credentials prune <id>".into()),
+        },
         Some("move") => match args.get(1) {
             Some(id) => move_grant(root, id),
             None => Err("usage: sjel credentials move <id>".into()),
@@ -98,6 +102,20 @@ fn connect(root: &Path, id: &str, file: &Path) -> Result<(), String> {
         },
     )?;
     println!("{} is connected. The grant is in the OS keychain.", d.label);
+    Ok(())
+}
+
+fn prune(root: &Path, id: &str) -> Result<(), String> {
+    let (_, d) = find(root, id)?;
+    let env = d
+        .env_fallback
+        .as_deref()
+        .and_then(sjel_config::overlay_config)
+        .filter(|p| p.is_file())
+        .ok_or_else(|| format!("{id} has no old env file"))?;
+    let credential = CredentialId::parse(id).map_err(|e| e.to_string())?;
+    google::prune_env_grant(&credential, &env)?;
+    println!("{}: the keychain grant works; its old env-file copy is removed.", d.label);
     Ok(())
 }
 

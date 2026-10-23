@@ -393,6 +393,15 @@ pub fn move_env_grant(
     strip_env_keys(env_path)
 }
 
+/// Removes the old env-file copy of a grant the keychain already holds, after a real refresh
+/// proves the keychain grant works. For a grant connected fresh, whose env copy is older:
+/// [`move_env_grant`] would put that older token back over it.
+pub fn prune_env_grant(id: &CredentialId, env_path: &Path) -> Result<(), String> {
+    access_token(id.as_str(), Path::new("/nonexistent/sjel-keychain-check.env"))
+        .map_err(|e| format!("the keychain grant does not work, so the env file stays: {e}"))?;
+    strip_env_keys(env_path)
+}
+
 /// Removes [`ENV_KEYS`] from `path`, keeping every other line, with an atomic owner-only
 /// replace. Deletes the file when nothing else is left in it.
 fn strip_env_keys(path: &Path) -> Result<(), String> {

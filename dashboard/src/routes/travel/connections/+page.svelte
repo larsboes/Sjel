@@ -257,94 +257,94 @@
   {#if tab === "direct"}
     {#if journeys.length === 0}
       <p class="empty card">No connections at this time.</p>
-      <div class="direct-controls">
-        <div class="section-heading">
-          <div class="journey-sort" aria-label="Sort connections">
-            <button
-              class:active={journeySort === "ranked"}
-              type="button"
-              onclick={() => (journeySort = "ranked")}
-            >
-              Ranked
-            </button>
-            <button
-              class:active={journeySort === "price"}
-              type="button"
-              onclick={() => (journeySort = "price")}
-            >
-              Price
-            </button>
-            <button
-              class:active={journeySort === "duration"}
-              type="button"
-              onclick={() => (journeySort = "duration")}
-            >
-              Duration
-            </button>
-            <button
-              class:active={journeySort === "departure"}
-              type="button"
-              onclick={() => (journeySort = "departure")}
-            >
-              Departure
-            </button>
-          </div>
+    {/if}
+    <div class="direct-controls">
+      <div class="section-heading">
+        <div class="journey-sort" aria-label="Sort connections">
+          <button
+            class:active={journeySort === "ranked"}
+            type="button"
+            onclick={() => (journeySort = "ranked")}
+          >
+            Ranked
+          </button>
+          <button
+            class:active={journeySort === "price"}
+            type="button"
+            onclick={() => (journeySort = "price")}
+          >
+            Price
+          </button>
+          <button
+            class:active={journeySort === "duration"}
+            type="button"
+            onclick={() => (journeySort = "duration")}
+          >
+            Duration
+          </button>
+          <button
+            class:active={journeySort === "departure"}
+            type="button"
+            onclick={() => (journeySort = "departure")}
+          >
+            Departure
+          </button>
         </div>
-        <div class="priority-bar">
-          <span class="priority-label">Rank by</span>
-          <div class="sort-options">
+      </div>
+      <div class="priority-bar">
+        <span class="priority-label">Rank by</span>
+        <div class="sort-options">
+          <button
+            class:active={!journeyPriority && !journeyPhrase.trim()}
+            type="button"
+            use:tip={"the weights stored on your profile"}
+            onclick={() => {
+              journeyPriority = "";
+              journeyPhrase = "";
+              void search();
+            }}
+          >
+            My usual
+          </button>
+          {#each JOURNEY_PRIORITIES as preset (preset.id)}
             <button
-              class:active={!journeyPriority && !journeyPhrase.trim()}
+              class:active={journeyPriority === preset.id && !journeyPhrase.trim()}
               type="button"
-              use:tip={"the weights stored on your profile"}
+              use:tip={preset.hint}
               onclick={() => {
-                journeyPriority = "";
+                journeyPriority = preset.id;
                 journeyPhrase = "";
                 void search();
               }}
             >
-              My usual
+              {preset.label}
             </button>
-            {#each JOURNEY_PRIORITIES as preset (preset.id)}
-              <button
-                class:active={journeyPriority === preset.id && !journeyPhrase.trim()}
-                type="button"
-                use:tip={preset.hint}
-                onclick={() => {
-                  journeyPriority = preset.id;
-                  journeyPhrase = "";
-                  void search();
-                }}
-              >
-                {preset.label}
-              </button>
-            {/each}
-          </div>
-          <input
-            class="input priority-phrase"
-            bind:value={journeyPhrase}
-            aria-label="Rank journeys by a sentence"
-            onkeydown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void search();
-              }
-            }}
-            placeholder="or say it: cheapest, direct, schnell und zuverlässig"
-          />
+          {/each}
         </div>
+        <input
+          class="input priority-phrase"
+          bind:value={journeyPhrase}
+          aria-label="Rank journeys by a sentence"
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void search();
+            }
+          }}
+          placeholder="or say it: cheapest, direct, schnell und zuverlässig"
+        />
       </div>
+    </div>
 
-      <ol class="journey-list">
-        {#each orderedJourneys(journeys) as j (j.id)}
-          <JourneyOption
-            journey={j}
-            expanded={expandedJourneyId === j.id}
-            onToggle={() => (expandedJourneyId = expandedJourneyId === j.id ? null : j.id)}
-          />
-        {/each}
-      </ol>
-    {/if}
+    <ol class="journey-list">
+      {#each orderedJourneys(journeys) as j (j.id)}
+        <JourneyOption
+          journey={j}
+          expanded={expandedJourneyId === j.id}
+          onToggle={() => (expandedJourneyId = expandedJourneyId === j.id ? null : j.id)}
+        />
+      {/each}
+    </ol>
   {:else if split}
     <section class="card panel">
       <header>

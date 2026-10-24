@@ -987,8 +987,8 @@ Not started. Each item is a work package for a later session.
      container with CI's packages plus `libasound2-dev`. `pdf_kit` was the only blocker: Core
      Graphics is now gated to `Pdf` alone, and elsewhere `Pdf::open` answers
      `PdfError::Unsupported`, so Documents shows the extracted text. Not run on Linux yet, only
-     checked. CI's Linux leg now checks the shell. The Windows shell leg reports without failing
-     until its first green run.
+     checked. CI checks the shell on Linux and Windows. Every GPUI leg passed on 08a3347d and
+     fails the build when it breaks.
    - Done 2026-10-24: on Linux, `KeychainProvider::system()` stores credentials in the Secret
      Service through `secret-tool`, with the same hex and the same service and account names as
      the macOS Keychain. No caller changed. A real round trip against gnome-keyring passes in the

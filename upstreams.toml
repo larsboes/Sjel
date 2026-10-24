@@ -28,6 +28,27 @@
 # No adopt/overlay/fork verdict lands without an audit. That is a rule for the human editing this
 #   file -- since 2026-08-28 (PRD Q41) no script enforces it, and CONTRIBUTING.md#dependency-verdicts-and-provenance says so plainly.
 
+[python-eval-image]
+url = "https://github.com/docker-library/python"
+verdict = "adopt"
+license = "MIT (image recipes); various (bundled Python and Debian components)"
+summary = "Existing official Python image used only inside the bounded offline agent-evaluation guest"
+why = "Reviewed 2026-10-24: upstream image-recipe LICENSE is MIT. tools/lib/agent-eval-sandbox.ts reuses an existing local Python slim image through OrbStack's Docker engine; it resolves the local tag to an immutable image ID for each evaluation and never pulls an image. Only evaluator-owned guest code plus candidate source and events enter a disposable container. No host mounts, network, credentials, ports or expected rows are supplied. Non-root/read-only/capability/PID/resource controls were probed, and tests cover successful and broken artifacts, oracle separation, output spoofing, output overflow and deadline cleanup. The image's bundled components keep their own licenses; no image source is copied into Sjel. This is a bounded evaluation runtime, not authorization to run arbitrary agent workloads or proof against kernel escape. Python startup flags are not a strict import allowlist, so import-policy and semantic review remain separate."
+
+[meta-harness]
+url = "https://github.com/stanford-iris-lab/meta-harness"
+verdict = "inspiration"
+license = "MIT"
+summary = "Harness-code optimization from recorded experiments; informs Sjel's proposed evaluation loop"
+why = "Reviewed 2026-10-24: README, ONBOARDING.md and paper arXiv:2603.28052v1. Planning influence only: retain candidate code, observable execution traces and scores for selective diagnosis, keep the base model fixed during harness comparisons, and separate final testing from candidate generation. The v1 coding experiment searches and evaluates on the same 89 TerminalBench-2 tasks, unlike the held-out classification and math evaluations; do not treat its coding result as held-out generalization evidence. No code copied, dependency installed into Sjel, optimizer executed or runtime integration approved. Future integration requires interface, isolation, cost and task-specific evaluation review."
+
+[schema-harness]
+url = "https://github.com/guanning03/Schema"
+verdict = "inspiration"
+license = "MIT"
+summary = "Executable hypotheses with history checks and verified execution; informs Sjel's task-loop proposal"
+why = "Reviewed 2026-10-24: repository README and MIT LICENSE, original schema-harness.github.io blog, linked updated project page and arXiv:2609.39140. Planning influence only: separate observations from editable hypotheses, test executable predictions against recorded experience, and interrupt a plan when an observed result contradicts its prediction. Published evaluations concern ARC-AGI-3, DiG-bench and MazeBench; transfer to research, precise writing or legal/administrative work remains unproven. The original blog's fallback-pair scores differ from the newer paper's per-model evaluations; retain their context rather than merging them. No source copied or benchmark executed. Any implementation needs Sjel-owned contracts, sandboxing and independent evaluators; consistency with past observations is not proof of future correctness."
+
 [lifeos]
 url = "https://github.com/danielmiessler/LifeOS"
 verdict = "inspiration"
@@ -632,8 +653,8 @@ why = "Prof. Peng Sida's (彭思达) publicly shared research/paper-writing note
 url = "https://github.com/home-assistant/core"
 verdict = "adopt"
 license = "Apache-2.0"
-summary = "Home automation platform that Sjel deploys from one manifest as its home-assistant capability"
-why = "home-automation core for capabilities/home-assistant. Adopt rather than hand-roll; Sjel's value is the declared, host-portable deployment around it -- one manifest, one runner. The image tracks upstream's own `:stable` channel since Q77 (2026-09-02) and capabilities/container-refresh pulls it daily, so the deployment is reproducible from the manifest rather than from a version literal"
+summary = "Home automation platform Sjel deployed from one manifest as its home-assistant capability, until 2026-10-24"
+why = "RETIRED 2026-10-24, and the sentence after this one is kept as the record of what it was. A household's deployment moved with the household: the pinned container contract, the ten skills over it and the printer stack are now in axon-family (ops/sjel-retired-2026-10/), and Sjel carries neither the capability nor a manifest that deploys it. The verdict stays adopt because it describes how that deployment is still run there, not because this repository consumes it. Was: home-automation core for capabilities/home-assistant. Adopt rather than hand-roll; Sjel's value is the declared, host-portable deployment around it -- one manifest, one runner. The image tracks upstream's own `:stable` channel since Q77 (2026-09-02) and capabilities/container-refresh pulls it daily, so the deployment is reproducible from the manifest rather than from a version literal"
 
 [esphome]
 url = "https://github.com/esphome/esphome"

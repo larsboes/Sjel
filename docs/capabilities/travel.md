@@ -1,9 +1,46 @@
 # Travel & multi-modal routing architecture
 
 Trips owns itinerary state and composition. Transit owns journey search; Calendar owns availability;
-Punctuality provides measured historical reliability, rather than a live delay feed. See the
-[travel Pack](../../Packs/travel/skills/travel/SKILL.md) for the workflow and
-[Trips README](../../capabilities/trips/README.md) for the domain model.
+Punctuality provides measured historical reliability, rather than a live delay feed. See
+[Trips README](../../capabilities/trips/README.md) for the domain model, and
+[travel-traps.md](travel-traps.md) for the seven failures that return an empty or plausible answer
+instead of an error.
+
+## 0. The order the capabilities are asked in
+
+Five capabilities answer five different questions, and the order decides whether the answer is
+worth anything. This table and the order below were `Packs/travel`'s agent skill until 2026-10-24;
+they are the workflow, so they live beside the capabilities they describe.
+
+| Capability | Owns | Worth knowing |
+|---|---|---|
+| calendar | feasibility verdicts, feasible windows, dated commitments | A verdict is soft. `conflicts` is still returned, never hidden |
+| transit | journey search, split-ticket chains, rail ticket extraction | Owns no idea why a day is possible |
+| punctuality | measured delay history per station, train type and hour | Measured, not predicted, and not transfer risk |
+| scouting | opportunity discovery, scoring and event routing | Owns no time and no itinerary |
+| trips | the plan and its items | **Owns no search at all.** It stores what was decided |
+
+1. **calendar** — `GET /api/windows?from=&to=&min_days=` returns the runs of days travel is
+   possible in, each carrying the days inside it that would cost a travel day.
+2. **transit** — search only those days. Over HTTP that is `GET /api/search?from=&to=&time=`
+   per day. For a fuzzy multi-destination fan-out use the CLI: `transit plan --dates` takes the
+   day list from step 1 verbatim. There is no `plan` route on the server.
+3. **trips** — `POST /api/plans`, then `POST /api/plans/:id/items` for the connection, event or
+   stay that was chosen.
+
+Running 2 before 1 samples a month of dates and prices the ones nobody can travel on. Calendar
+publishes the days and transit never asks for them; the caller moves the list across. The
+argument for that direction is in `capabilities/calendar/README.md` § Calendar hands the days
+over. `--dates` is mutually exclusive with `--date-from`/`--date-to`, and `--max-queries` still
+caps the fan-out.
+
+Drive it with `sjel capability call <name> <verb> <path> [body]`, or read
+`bun tools/travel.ts candidates --json` for the assessment the Travel page renders — scouting
+opportunities matched against trip plans within 75 km, then calendar verdicts on whatever did not
+match. That script imports the page's own functions, so the 75 km rule has one home.
+
+Stations, home coordinates, calendar credentials and route defaults live in the active overlay.
+Never write a capability's tables directly; every cross-capability hand-off here goes over HTTP.
 
 ## 1. Intent-driven trip drafting
 

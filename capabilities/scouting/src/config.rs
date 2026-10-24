@@ -1,7 +1,11 @@
 //! Sjel doctrine: this crate is public. No personal value (interest-profile
 //! content, events-directory path, DB location) lives here -- those come
-//! from the private overlay at runtime. Mirrors
-//! `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly.
+//! from the private overlay at runtime. The order below is the one every Sjel
+//! CLI uses for the same reason: an explicit variable wins, then the overlay,
+//! then a gitignored file beside the source for development. It was copied from
+//! `capabilities/printing/printctl.py` in 2026-08, and that tree left the
+//! repository on 2026-10-24, so this comment is now the only description of the
+//! convention rather than a pointer to a second copy of it.
 //! Config is resolved in order:
 //!   1. `$SJEL_SCOUTING_CONFIG` (explicit override, full path to a JSON file)
 //!   2. `$SJEL_PERSONAL_ROOT/config/scouting.json` (the overlay; exported by

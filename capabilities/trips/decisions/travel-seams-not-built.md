@@ -6,9 +6,12 @@ and notices the gap. They are written down here so the argument happens once.
 
 ## No leave-home scheduler in Sjel
 
-`capabilities/home-assistant/` contains three files: `README.md`, `service.toml` and
-`home-assistant.env.example`. There is no `src/`, and the README says why: Sjel owns the pinned
-runtime and the public configuration shape, while the overlay owns the home's devices, entity
+`capabilities/home-assistant/` contained three files: `README.md`, a service manifest and an
+environment template. **That tree left this repository on 2026-10-24** and lives in axon-family
+now; the rejection below is about the shape Sjel had, and it does not change — a departure
+scheduler still belongs to whatever runs the home, not to a travel capability. It had no `src/`,
+and the README said why: Sjel owned the pinned runtime and the public configuration shape, while
+the overlay owned the home's devices, entity
 IDs and automations. A departure trigger is an automation over device state at a specific time,
 which is what Home Assistant already is, so building a second scheduler here would mean
 reimplementing the thing this capability exists to run.

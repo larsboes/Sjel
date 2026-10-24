@@ -1075,8 +1075,8 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
 ///
 /// A held unit is never written by `deploy` or `sync` for that harness, and `tools/doctor` reads
 /// the same table instead of reporting the unit as missing. It lives here and not in a Pack
-/// manifest for the reason Packs/home-automation/pack.toml records for its retired `# pi: REFUSED`
-/// line: a harness-specific rule does not belong in a manifest the schema keeps harness-neutral,
+/// manifest for the same reason a Pack's manifest never carried a harness veto: a
+/// harness-specific rule does not belong in a manifest the schema keeps harness-neutral,
 /// and this file is where operator decisions live.
 ///
 /// A hold is read at mutation time rather than remembered from `use`, because `sync` — the verb

@@ -3,10 +3,6 @@
   "generator": "tools/self",
   "units": [
     {
-      "name": "3d-printing",
-      "kind": "pack"
-    },
-    {
       "name": "agent",
       "kind": "lib"
     },
@@ -75,7 +71,7 @@
     },
     {
       "name": "cv",
-      "kind": "pack"
+      "kind": "capability"
     },
     {
       "name": "dashboard",
@@ -193,15 +189,6 @@
     {
       "name": "harness",
       "kind": "pack"
-    },
-    {
-      "name": "home-assistant",
-      "kind": "capability",
-      "service": {
-        "kind": "container",
-        "requires": [],
-        "image": "ghcr.io/home-assistant/home-assistant"
-      }
     },
     {
       "name": "home-automation",
@@ -340,15 +327,6 @@
       "service": {
         "kind": "process",
         "requires": []
-      }
-    },
-    {
-      "name": "pihole",
-      "kind": "capability",
-      "service": {
-        "kind": "container",
-        "requires": [],
-        "image": "pihole/pihole"
       }
     },
     {
@@ -536,10 +514,6 @@
         "requires": [],
         "port": "3000"
       }
-    },
-    {
-      "name": "travel",
-      "kind": "pack"
     },
     {
       "name": "traveler",
@@ -777,6 +751,16 @@
     },
     {
       "from": "calendar",
+      "to": "sjel-credentials",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "calendar",
       "to": "sjel-http",
       "kinds": [
         "cargo-dep"
@@ -888,6 +872,16 @@
     {
       "from": "comms",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "sjel-credentials",
       "kinds": [
         "cargo-dep"
       ],
@@ -1098,6 +1092,16 @@
     {
       "from": "entities",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "sjel-credentials",
       "kinds": [
         "cargo-dep"
       ],
@@ -1866,6 +1870,26 @@
       ]
     },
     {
+      "from": "sjel-credentials",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/sjel-credentials/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-credentials",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/sjel-credentials/Cargo.toml"
+      ]
+    },
+    {
       "from": "sjel-server",
       "to": "pseudonymize",
       "kinds": [
@@ -1928,6 +1952,16 @@
     {
       "from": "sjel-status",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "sjel-credentials",
       "kinds": [
         "cargo-dep"
       ],
@@ -2604,6 +2638,10 @@
       "verdict": "watch"
     },
     {
+      "name": "grafeo",
+      "verdict": "reject"
+    },
+    {
       "name": "graphify",
       "verdict": "adopt"
     },
@@ -2638,6 +2676,10 @@
     {
       "name": "ibm-plex",
       "verdict": "adopt"
+    },
+    {
+      "name": "indradb",
+      "verdict": "reject"
     },
     {
       "name": "interceptor",
@@ -2694,6 +2736,10 @@
     {
       "name": "mermaid",
       "verdict": "adopt"
+    },
+    {
+      "name": "meta-harness",
+      "verdict": "inspiration"
     },
     {
       "name": "mlx",
@@ -2808,6 +2854,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "python-eval-image",
+      "verdict": "adopt"
+    },
+    {
       "name": "r2d2",
       "verdict": "adopt"
     },
@@ -2854,6 +2904,10 @@
     {
       "name": "rustls",
       "verdict": "adopt"
+    },
+    {
+      "name": "schema-harness",
+      "verdict": "inspiration"
     },
     {
       "name": "scout",
@@ -2950,6 +3004,10 @@
     {
       "name": "trivy",
       "verdict": "reject"
+    },
+    {
+      "name": "turso",
+      "verdict": "watch"
     },
     {
       "name": "typst",

@@ -10,20 +10,12 @@
   },
   "plugins": [
     {
-      "name": "3d-printing",
-      "source": "3d-printing"
-    },
-    {
       "name": "coding",
       "source": "coding"
     },
     {
       "name": "cognitive-load",
       "source": "cognitive-load"
-    },
-    {
-      "name": "cv",
-      "source": "cv"
     },
     {
       "name": "deliberation",
@@ -38,10 +30,6 @@
       "source": "harness"
     },
     {
-      "name": "home-automation",
-      "source": "home-automation"
-    },
-    {
       "name": "knowledge",
       "source": "knowledge"
     },
@@ -52,10 +40,6 @@
     {
       "name": "security",
       "source": "security"
-    },
-    {
-      "name": "travel",
-      "source": "travel"
     },
     {
       "name": "writing",

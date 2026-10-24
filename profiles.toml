@@ -72,8 +72,8 @@
 # A profile is a SELECTION, not a recommendation: activating it replaces what the
 # harness loads with exactly this set. What is deployed, and what is not, is the
 # operator's decision and it is written HERE — see `full` below, and see the note on
-# the retired `# pi: REFUSED` line in Packs/home-automation/pack.toml for why it is
-# not written in a Pack any more.
+# the retired `# pi: REFUSED` line that Packs/home-automation's pack.toml used to carry — that
+# Pack left the repository on 2026-10-24 — for why a harness veto is not written in a Pack any more.
 #
 # PI IS PROFILE-DRIVEN (2026-09-11, Lars: "I want to be able to change through sjel
 # profiles what's deployed"; pi is used from the home folder, so the GLOBAL registry
@@ -117,7 +117,7 @@
 # missing. It is also a violation doctor reports if the unit IS at that destination.
 #
 # It lives in this file, and not in a Pack manifest, for the reason
-# Packs/home-automation/pack.toml records for its retired `# pi: REFUSED` line: a
+# Packs/home-automation's pack.toml recorded for its retired `# pi: REFUSED` line: a
 # harness-specific rule does not belong in a manifest the schema keeps harness-neutral.
 # This file is where operator decisions live.
 #
@@ -219,22 +219,19 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 
 [[profile]]
 name = "home"
-# DORMANT as of 2026-09-11 (Lars): home-automation is not deployed to any harness right
-# now; 3d-printing + cv remain live members. Activating this profile is the switch that
-# brings the house stack back.
+# RETIRED 2026-10-24, with the Packs it named. `home-automation` and `3d-printing` moved to
+# axon-family (`ops/sjel-retired-2026-10/`), where the household's containers, skills and
+# printctl live beside the deployment they describe, and `cv`'s Pack left the repository for
+# `capabilities/cv/RUNBOOK.md`. A profile that names Packs this repository does not carry
+# would resolve to nothing and report a missing Pack on every `use`, so it is kept as the
+# record of a decision rather than as something to activate. Rebuilding the house stack as
+# Sjel capabilities means writing the profile again from the capability names it grows, not
+# restoring this one.
 #
-# This is also why home-automation is still its own Pack after the 2026-09-17 merge pass,
-# and the reason is now a plain one: `full` excludes it by name, so a Pack holding both it
-# and the deployed 3d-printing/cv would have to be excluded or deployed as a unit. Merging
-# them would need per-skill exclusion, which is a feature, not a taxonomy.
-description = "Home automation, network, devices, CV, 3D printing"
-packs = ["home-automation", "3d-printing", "cv"]
-skills = { "home-automation" = ["homectl", "ha-cli", "pihole", "fritz", "netmon", "ha-deploy"] }
-# home-automation narrowed to the measured-by-use six (2026-09-11, runs):
-#   homectl 13 · ha-cli 27 · pihole 63 · fritz 60 · netmon 12 · ha-deploy 7
-# Excluded until used (≤1 session each): ha-inventory, wlanwatch, espctl,
-# energy-dashboard, ha-dashboard, ha-dashgen. Re-run `use home` after a full sync.
-# 3d-printing: printctl 6 runs (221 audit-era) · cv: cv build 2 runs (75 audit-era)
+# Measured by use while it was live (2026-09-11 runs): homectl 13 · ha-cli 27 · pihole 63 ·
+# fritz 60 · netmon 12 · ha-deploy 7 · printctl 6 · cv build 2.
+description = "Retired 2026-10-24 — the home stack lives in axon-family now"
+packs = []
 
 [[profile]]
 name = "coding"
@@ -260,30 +257,31 @@ packs = ["*"]
 # where the operator records decisions.
 #
 # `*` rather than an explicit list, deliberately: an explicit list would have to name
-# ytalbum, which lives in the private overlay and does not exist on another machine, and
-# it would silently stop deploying every Pack added later. `everything` below is the raw,
-# unfiltered set for the case where the dormant Packs are wanted too.
+# every Pack, and it would silently stop deploying every Pack added later. `everything`
+# below is the raw, unfiltered set.
 #
-except = [
-    "home-automation",
-    "3d-printing",
-    "travel",
-    "ytalbum",
-]
-# The 2026-10-13 trim, and it is a DEPLOYMENT decision: every Pack named above stays in the
-# repository, un-deployed, and `everything` puts all of them back in one command. Sources are
-# recoverable by re-activating a profile; nothing was deleted.
+# ── 2026-10-24: the `except` list is empty, because the Packs it named left the repository ──
+#
+# home-automation, 3d-printing, travel and ytalbum are no longer dormant — they are gone.
+# A household's deployment belongs with the household, so the home stack and the printer moved
+# to axon-family (`ops/sjel-retired-2026-10/`), ytalbum left the private overlay, and cv
+# followed them out of the Packs. What those Packs carried that is still Sjel's is now
+# documentation beside the tooling that replaced it: `capabilities/cv/RUNBOOK.md`,
+# `docs/capabilities/travel.md` and `docs/capabilities/travel-traps.md`. `full` therefore
+# needs no `except` at all: every Pack in the repository is deployed by it.
+except = []
+# The 2026-10-13 trim was a DEPLOYMENT decision, and the 2026-10-24 retirement is a different
+# one — those five trees no longer exist here, so there is nothing to put back. Re-activating
+# `everything` no longer changes anything; it is kept because a future dormant Pack would need
+# a profile that deploys it.
 #
 # 2026-10-17: `design` (ui-craftsmanship, 116 uses in a month) and `cv` (cv-builder) left the
-# except list. Lars: the always-on set is pi, Codex and Claude Code together, and `design` and
-# `cv` were already deployed to Claude Code, so `full` now says what the machines carry. The
-# Packs above stay dormant.
+# except list. `cv`'s Pack has since left the repository entirely.
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "everything"
 description = "All Packs, dormant ones included"
 packs = ["*"]
-# No `except`: this is the honest "everything", and it exists so `full` does not have to
-# be read as one. Deploying this brings home-automation's ten HA skills back onto every
-# harness that accepts them.
+# No `except`: this is the honest "everything". Since 2026-10-24 it deploys the same set as
+# `full`, because no dormant Pack is left to distinguish them.

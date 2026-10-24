@@ -103,7 +103,7 @@ nothing and says so once on stderr.
 and refuses a `port` alongside one. "A process, no schedule, run on demand" is not expressible,
 because it is not a service. Five capabilities already live with no manifest at all —
 `capabilities/host-firewall`, `capabilities/cv`, `capabilities/agentbox`,
-`capabilities/printing`, `capabilities/shell` — and the shell sweep puts their CLI on PATH with
+`capabilities/shell` — and the shell sweep puts their CLI on PATH with
 nothing registered.
 
 **Rust, not the shell its siblings use.** `capabilities/host-firewall` is Bash because its job

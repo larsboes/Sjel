@@ -350,7 +350,8 @@ printf 'os = "darwin"\ncontainer_runtime = "docker"\ncapabilities = ["dockhog"]\
 
 # The image reference carries a registry that is NOT Docker Hub, which is the second thing this
 # fixture falsifies: qualified_image prefixed every short name with `docker.io/` for
-# apple-container, and a ghcr reference came out as docker.io/ghcr.io/… (capabilities/home-assistant/service.toml).
+# apple-container, and a ghcr reference came out as docker.io/ghcr.io/… (the home-assistant
+# service.toml, which left this repository on 2026-10-24).
 # The prefix is gone; this asserts the reference reaches the runtime as the manifest wrote it.
 cat > "$DK_ROOT/capabilities/dockhog/service.toml" <<'TOML'
 name = "dockhog"

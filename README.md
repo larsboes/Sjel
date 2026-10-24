@@ -176,7 +176,7 @@ shows the ones on this machine.
 | Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |
 | Money | `finance`, `finance-prices` |
-| Home | `interior`, `home-assistant`, `soundscape`, `printing` |
+| Home | `interior`, `soundscape` |
 | Time and knowledge | `calendar`, `comms`, `knowledge-base`, `knowledge-graph`, `vault` |
 | Machines | `host-patch`, `host-watch`, `host-net`, `macmon`, `backup`, `container-refresh` |
 | Interfaces | `dashboard` (web and iPhone), `sjel-status` (the node's web server) |

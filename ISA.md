@@ -138,7 +138,10 @@ Migrated 2026-10-15 from §13 of the frozen PRD (now the `projects` record `Sjel
   proposals shipped on `GET /api/profile/proposals` with section gating; `F6` pseudonymous
   companion patterns shipped in `GET /api/profile/derived` keyed by `ent:` register IDs.)
 
-### Packs/travel · one open item
+### Pack retirement work · one open item
+
+The travel Pack left this repository on 2026-10-24 (with home-automation, 3d-printing and cv); its
+runbook now lives in `docs/capabilities/travel.md`. The open item it carried travels unchanged:
 
 - **An open segment has no home in the plan model.** A stage names a destination and date, an
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are

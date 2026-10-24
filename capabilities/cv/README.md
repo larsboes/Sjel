@@ -8,6 +8,10 @@ application, plus the full CV that LinkedIn mirrors.
 branch per target, and a React + Gemini rebuild far larger than the requirement. The data
 stays in the overlay (`$SJEL_PERSONAL_ROOT/data/cv/`); this directory holds code and the schema.
 
+[`RUNBOOK.md`](RUNBOOK.md) is the workflow over these verbs — building for a posting, curating the
+master, tracking applications, the LinkedIn import and diff, and the rules that keep a generated
+CV honest. It was an agent skill until 2026-10-24 and moved here rather than leaving with the Pack.
+
 ```bash
 cv build --all                                  # every profile; one page unless page_limit says otherwise
 cv build --profile swe --lang de

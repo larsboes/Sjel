@@ -272,7 +272,7 @@ pub fn derive(store: &TravelerStore, trips_prefix: &str) -> Fallible<DerivedTrav
             civil_date::unix_day_of_iso(&row.date_end),
         ) {
             // Inclusive, so a one-day trip is 1 and not 0 — the same convention
-            // `Packs/travel` uses for a date range a person reads.
+            // docs/capabilities/travel.md uses for a date range a person reads.
             lengths.push(end - start + 1);
             // A row created after the trip started is not a booking lead time,
             // it is the import date. Counting it would publish a negative number

@@ -568,9 +568,9 @@ mod tests {
             })
         );
         assert_eq!(
-            unit_for_path("Packs/cv/skills/cv-builder/SKILL.md"),
+            unit_for_path("Packs/knowledge/skills/obsidian/SKILL.md"),
             Some(Unit {
-                name: "cv".to_string(),
+                name: "knowledge".to_string(),
                 kind: UnitKind::Pack
             })
         );

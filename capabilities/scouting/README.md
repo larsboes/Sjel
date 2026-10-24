@@ -314,8 +314,9 @@ the try-before-you-declare path — the durable answer belongs in `sources[]`.
 
 ## Config resolution
 
-Mirrors `capabilities/printing/printctl.py`'s `_cfg_path()`/`load_cfg()` exactly (see
-`src/config.rs`):
+The same order every Sjel CLI uses — an explicit variable, then the overlay, then a gitignored
+file beside the source — carried here from `capabilities/printing/printctl.py` before that tree
+left the repository (see `src/config.rs`):
 
 1. `$SJEL_SCOUTING_CONFIG` — explicit override, full path to a JSON file
 2. `$SJEL_PERSONAL_ROOT/config/scouting.json` — the overlay (exported by `tools/lib/paths.sh`)

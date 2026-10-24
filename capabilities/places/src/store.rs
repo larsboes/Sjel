@@ -80,7 +80,7 @@ pub struct CacheEntry {
 /// One calendar month of a place's climate normal. Every measure is optional
 /// because a provider that reports nothing for a month must store nothing:
 /// a 0.0 that means "not observed" is the failure mode the nullable columns and
-/// `days_observed` exist to prevent (Packs/travel ISA: a guess that looks like a
+/// `days_observed` exist to prevent (docs/capabilities/travel.md: a guess that looks like a
 /// measurement is worse than a blank).
 #[derive(Debug, Clone, PartialEq)]
 pub struct MonthlyNormal {

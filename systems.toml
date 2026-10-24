@@ -65,11 +65,10 @@ kind  = "project"
 local = "yes"
 why   = "The public core: reusable contracts, capabilities and deployment tooling; private state is injected from the selected overlay."
 
-[home-automation]
-url   = "overlay:systems.local.toml"
-kind  = "project"
-local = "yes"
-why   = "Private home-automation deployment consumed through Sjel's public capability and Pack contracts; coordinates live in the selected overlay."
+# The home stack left this file on 2026-10-24 with the trees it described: [home-automation] and
+# the printer trio below named capabilities this repository no longer carries. A household's
+# deployment belongs with the household -- the containers, the Pack and printctl now live in
+# axon-family (ops/sjel-retired-2026-10), which is where those rows were rewritten, not here.
 
 [backup-target]
 url   = "overlay:systems.local.toml"
@@ -112,26 +111,6 @@ url   = "https://github.com/danielmiessler/LifeOS"
 kind  = "platform"
 local = "yes"
 why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Sjel held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel."
-
-# ---- 3d-printing stack (referenced by Packs/3d-printing) -------------------
-
-[moonraker]
-url   = "https://moonraker.readthedocs.io/"
-kind  = "service"
-local = "yes"
-why   = "Klipper's local REST API on the LAN — the actual integration surface printctl drives. Host in overlay config/printing.json."
-
-[fluidd]
-url   = "https://docs.fluidd.xyz/"
-kind  = "service"
-local = "yes"
-why   = "Web UI on top of Moonraker. Same API; not a separate integration."
-
-[orcaslicer]
-url   = "https://github.com/SoftFever/OrcaSlicer"
-kind  = "tool"
-local = "yes"
-why   = "Headless slicer printctl shells out to (STL/3MF -> gcode). User presets required (CLI rejects system presets)."
 
 # ---- graphify semantic-extraction backends (tools/graphify.sh) ------------
 

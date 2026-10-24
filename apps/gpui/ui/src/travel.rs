@@ -12,6 +12,7 @@ use sjel_gpui_core::{
 
 use crate::{Density, Palette};
 
+mod connections;
 mod details;
 mod forms;
 mod map;
@@ -71,6 +72,8 @@ pub struct Travel {
     scroll: ScrollHandle,
     /// The open trip, booking or stage form ([`forms`]).
     form: Option<forms::Form>,
+    /// The connection search, built the first time its page draws.
+    connections: Option<connections::Connections>,
     /// The row whose Remove was pressed once.
     confirm_remove: Option<String>,
     /// A remove that the Mac refused, when no form is open to say so.
@@ -120,6 +123,7 @@ impl Travel {
             map_dragged: false,
             scroll: ScrollHandle::new(),
             form: None,
+            connections: None,
             confirm_remove: None,
             write_error: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -451,7 +455,7 @@ impl Travel {
         match self.route {
             TravelRoute::Trip { section, .. } => section,
             TravelRoute::Map => TripSection::Map,
-            TravelRoute::Trips => TripSection::Overview,
+            TravelRoute::Trips | TravelRoute::Connections => TripSection::Overview,
         }
     }
 
@@ -507,7 +511,10 @@ impl Travel {
 }
 
 impl Render for Travel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.route == TravelRoute::Connections {
+            self.ensure_connections(window, cx);
+        }
         self.render_page(cx)
     }
 }

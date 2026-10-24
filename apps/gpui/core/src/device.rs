@@ -325,9 +325,7 @@ fn decode<T: DeserializeOwned>(status: u16, body: &[u8]) -> Result<T, String> {
         return serde_json::from_slice(body)
             .map_err(|_| "The Mac answered with something this app cannot read.".into());
     }
-    let error = serde_json::from_slice::<serde_json::Value>(body)
-        .ok()
-        .and_then(|body| body.get("error")?.as_str().map(str::to_owned));
+    let error = crate::shell::error_text(body);
     Err(error.unwrap_or_else(|| format!("The Mac refused the request ({status}).")))
 }
 

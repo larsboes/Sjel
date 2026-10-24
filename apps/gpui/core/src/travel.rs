@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{device::DeviceClient, shell::Shell};
 
+pub mod connections;
 mod details;
 pub mod edit;
 mod navigation;

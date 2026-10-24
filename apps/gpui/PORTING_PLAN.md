@@ -49,7 +49,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 
 | Route | Lines | In GPUI |
 |---|---|---|
-| `/travel/connections` | 817 | no page (connection search) |
+| `/travel/connections` | 817 | ported: Travel's connection search (Work Package 21) |
 | `/feed/library` | 373 | ported: Feed's Library tab (Work Package 19) |
 | `/feed/review` | 363 | ported: Feed's Review tab (Work Package 18) |
 | `/apps` | 217 | in `DESTINATIONS`, no `Page` (`Software` is `/software`) |
@@ -86,7 +86,7 @@ ports.
    counts are the gap list, and they replace the estimates above. Read them with
    `cut -f2 ~/.config/sjel/dashboard-fallbacks.tsv | sort | uniq -c | sort -rn`.
 2. **Travel authoring and connections.** The largest gap, and §4's highest priority. Authoring
-   shipped on the Mac in Work Package 17. `/travel/connections` is next.
+   shipped on the Mac in Work Package 17, connections in Work Package 21.
 3. **Feed review and library, then Inbox triage.** That finishes comms. Review shipped in Work
    Package 18, the library in Work Package 19, Inbox triage in Work Package 20.
 4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
@@ -685,6 +685,42 @@ ports.
   the context change (the cursor moved to the next capture). Live inbox draws 10 new, 9 done,
   1 dismissed. Edit and Restore were not clicked, because each writes to the live inbox.
 - **Target Files**: `apps/gpui/src/{inbox,workspace}.rs`
+
+### ✅ Work Package 21: train connections (§1b step 2, second half)
+- **Status**: Shipped (2026-10-24). Built in the shared travel surface, so a paired phone reaches
+  transit through the Mac as well; checked on the Mac only.
+- **Shipped**:
+  - `core/src/travel/connections.rs` (new): transit's wire types (`capabilities/transit/src/travel.rs`),
+    the query and its paths (one override: a typed phrase beats a preset), the presets
+    (`transit::ranking::PRIORITIES`), the four sorts, and the readings: clock, duration, price,
+    `NN% late`, first-leg delay, split saving, confidence and train-match notes.
+    `Source::{stations, connections, split}` work through the shell or the device client.
+  - `core/src/shell.rs`: `Shell::transit` reads `/transit/api/` paths only. `error_text` keeps a
+    plain-text refusal (transit's `fail`, the proxy's 502) instead of only its status, for the
+    shell and for the phone's `device::decode`.
+  - `core/src/travel/navigation.rs`: `TravelRoute::Connections` for `/travel/connections`, which
+    parsed as a trip with the id `connections` before.
+  - `ui/src/travel/connections.rs` (new): From and To fields that suggest stations after typing
+    pauses, a swap, date and time, and Search, which runs the direct search and the split together.
+    Direct: four sorts, Rank by (My usual and the five presets, or a sentence), journey rows that
+    expand to their legs and the ranking's factors. Split-ticket: direct against split price, the
+    verdict, the confidence note, one card per ticket with its train match, and Book on bahn.de
+    unless a ticket is for a different train. Opening the page starts transit on the Mac.
+  - The trip library has Find a connection.
+- **Not here**: the traveler profile dialog, the related-tools strip.
+- **Found**: transit's searches fail upstream today. `/api/suggest` answers, but `/api/search`
+  returns DB's `452 OPS_BLOCKED` on the default `dbnav` backend (`capabilities/transit/src/hafas.rs`,
+  `RailBackend`). `SJEL_TRANSIT_BACKEND=dbweb` is the documented alternative. This blocks the
+  dashboard's page as much as this one. The dashboard's page also drew its journey list only when
+  the list was empty (`{#if journeys.length === 0}` wraps it).
+- **Verified**: 5 tests in `travel::connections` (sorts, query paths and validation, readings,
+  split saving, a full transit split payload with the fields the page ignores) and 1 route
+  assertion. `live_search_reads_transit` (ignored, needs this Mac) reached transit: station lookup
+  answered, the search returned the HAFAS block above. The page draws on
+  `sjel://travel/connections`; no search has rendered results yet, for that reason.
+- **Target Files**: `apps/gpui/core/src/travel/{connections,navigation}.rs`,
+  `apps/gpui/core/src/{travel,shell,device}.rs`, `apps/gpui/ui/src/travel/{connections,pages}.rs`,
+  `apps/gpui/ui/src/travel.rs`
 
 ---
 

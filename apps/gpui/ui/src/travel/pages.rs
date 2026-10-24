@@ -45,6 +45,9 @@ impl Travel {
                     ),
             );
         }
+        if self.route == TravelRoute::Connections {
+            return page.child(self.connections_page(cx)).into_any_element();
+        }
         page = page
             .child(
                 div()
@@ -174,6 +177,15 @@ impl Travel {
             .flex()
             .flex_col()
             .gap_3()
+            .child(
+                div().child(
+                    self.button("open-connections")
+                        .label("Find a connection")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.open_route(TravelRoute::Connections, cx)
+                        })),
+                ),
+            )
             .children(self.form_button("new-trip", "New trip", FormKind::Trip, cx))
             .children(self.form_card(&FormKind::Trip, cx));
         if self.loaded && self.plans.is_empty() {

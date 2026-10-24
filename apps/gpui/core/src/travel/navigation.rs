@@ -37,6 +37,8 @@ pub enum TravelRoute {
     Trips,
     /// A map of the current trip, also reached from the app's Map destination.
     Map,
+    /// Train connections and split tickets between two stations (`/travel/connections`).
+    Connections,
     Trip {
         id: String,
         section: TripSection,
@@ -51,6 +53,9 @@ impl TravelRoute {
         }
         if path == "/travel" {
             return Some(Self::Trips);
+        }
+        if path == "/travel/connections" {
+            return Some(Self::Connections);
         }
         let mut parts = path.strip_prefix("/travel/")?.split('/');
         let id = parts.next()?;
@@ -77,6 +82,7 @@ impl TravelRoute {
         match self {
             Self::Trips => "/travel".into(),
             Self::Map => "/map".into(),
+            Self::Connections => "/travel/connections".into(),
             Self::Trip { id, section } => format!("/travel/{id}/{}", section.path()),
         }
     }
@@ -103,6 +109,10 @@ mod tests {
             };
             assert_eq!(TravelRoute::parse(&route.href()), Some(route));
         }
+        assert_eq!(
+            TravelRoute::parse("/travel/connections"),
+            Some(TravelRoute::Connections)
+        );
         assert_eq!(
             TravelRoute::parse("/travel/plan_42"),
             Some(TravelRoute::Trip {

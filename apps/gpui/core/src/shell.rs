@@ -1144,6 +1144,15 @@ impl Shell {
         self.json(Method::GET, "/trips/api/plans", None, 10).await
     }
 
+    /// A read from transit. Only `/transit/api/` paths, which `travel::connections` builds.
+    pub async fn transit<T: DeserializeOwned>(&self, path: &str) -> ShellResult<T> {
+        if !path.starts_with("/transit/api/") || path.contains("..") {
+            return Err(ShellError::Refused(400, Some("Not a transit path.".into())));
+        }
+        // A split search asks for many fares, one stop pair at a time.
+        self.json(Method::GET, path, None, 90).await
+    }
+
     pub async fn travel_details(&self, id: &str) -> ShellResult<crate::travel::Details> {
         let path = crate::travel::details_path(id)
             .map_err(|error| ShellError::Refused(400, Some(error)))?;
@@ -2982,12 +2991,8 @@ impl Shell {
         if status.is_success() {
             return Ok(response);
         }
-        let error = response
-            .json::<serde_json::Value>()
-            .await
-            .ok()
-            .and_then(|body| body.get("error")?.as_str().map(str::to_owned));
-        Err(ShellError::Refused(status.as_u16(), error))
+        let body = response.bytes().await.unwrap_or_default();
+        Err(ShellError::Refused(status.as_u16(), error_text(&body)))
     }
 
     fn token(&self) -> ShellResult<String> {
@@ -3210,9 +3215,33 @@ pub fn spawn(work: impl Future<Output = ()> + Send + 'static) {
     runtime().spawn(work);
 }
 
+/// The reason in a refused response: `{"error": …}`, or a short plain-text body. Some
+/// capabilities answer a refusal as text (transit's `fail`, the proxy's 502), and dropping it
+/// leaves only a status code to show.
+pub(crate) fn error_text(body: &[u8]) -> Option<String> {
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
+        return json.get("error")?.as_str().map(str::to_owned);
+    }
+    let text = std::str::from_utf8(body).ok()?.trim();
+    (!text.is_empty() && text.len() <= 300 && !text.starts_with('<')).then(|| text.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refusal_keeps_its_reason_in_json_or_text() {
+        assert_eq!(error_text(br#"{"error":"bad"}"#).as_deref(), Some("bad"));
+        assert_eq!(error_text(br#"{"detail":"x"}"#), None);
+        assert_eq!(
+            error_text(b"no cheaper split for this route\n").as_deref(),
+            Some("no cheaper split for this route")
+        );
+        assert_eq!(error_text(b""), None);
+        assert_eq!(error_text(b"<html>502</html>"), None);
+        assert_eq!(error_text("x".repeat(301).as_bytes()), None);
+    }
 
     #[test]
     fn software_keys_stay_one_path_segment() {

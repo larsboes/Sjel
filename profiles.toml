@@ -53,6 +53,22 @@
 # `~/.agents/skills` by hand and the 21 collisions return. The guards that say so are keyed on
 # the configured destination, not on a hardcoded path, so they stay true either way --
 # `tools/harnesses <verb>`, `tools/packs-codex remove`, and the doctor's absent-harness check.
+# ── 2026-10-24: copilot was on `everything`, and nobody had said so ─────────────────
+#
+# Measured that morning: `~/.copilot/skills` held all 42 Pack skills — home-automation's ten,
+# travel, ytalbum, home-3d-printing and defuddle included — from a ledger written 06:34 the
+# same day. This file did not mention copilot once, so the largest deployed skill set on the
+# machine was the one no line recorded. `tools/harnesses use full --harness copilot` brought it
+# to the same 28 the other harnesses carry; there is nothing copilot-specific to declare,
+# because it wants the same set they do. If a future session wants the dormant Packs back on a
+# harness, activate `everything` there and write the date and the reason HERE.
+#
+# That command also exposed the bug it was meant to apply: `activate_profile` compared
+# destinations, never unit sets, so a Pack deployed whole kept the skills a profile stopped
+# naming and kept missing ones it added, while printing "already current". claude and opencode
+# had carried `academic-writing` since 2026-10-13 for exactly that reason. Fixed in
+# tools/sjel-cli/src/harnesses/mutate.rs the same day.
+#
 # A profile is a SELECTION, not a recommendation: activating it replaces what the
 # harness loads with exactly this set. What is deployed, and what is not, is the
 # operator's decision and it is written HERE — see `full` below, and see the note on

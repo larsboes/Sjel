@@ -41,7 +41,8 @@ maintenance skills it never loaded.
 
 ## The tool and the hooks
 
-`tools/harnesses` is the cross-harness front end over the per-harness `packs-*` adapters:
+`tools/harnesses` is the cross-harness front end over the per-harness `packs-*` adapters and
+materialized harness destinations, including GitHub Copilot CLI's `~/.copilot/skills`:
 
 ```bash
 tools/harnesses list                     # which harnesses exist, and which are installed here
@@ -51,6 +52,20 @@ tools/harnesses sync <pack>|--all        # one-way Sjel -> harness
 tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
 tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
 ```
+
+GitHub Copilot CLI settings are managed separately from Pack contents:
+
+```bash
+sjel copilot apply                         # autopilot + assisted permissions + sandbox
+sjel copilot check                         # report settings drift
+tools/copilot                             # guarded launcher: blocks rm, git commit, git push
+```
+
+The baseline enables Copilot's sandbox, disables its bypass and keychain access, masks GitHub
+authentication through the sandbox proxy, keeps custom agents local, disables cross-session
+memory, and denies direct access to common Git credential files. Copilot does not persist
+`--deny-tool` rules in `settings.json`, so the three command blocks belong to `tools/copilot`;
+running the upstream `copilot` binary directly bypasses those launcher-only blocks.
 
 It exists because no adapter ever asked whether its harness was installed. On 2026-09-07 this
 machine had three Packs materialized into `~/.agents/skills` for a Codex that is not installed,

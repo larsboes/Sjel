@@ -79,9 +79,9 @@ a row still showing `D` afterwards means the copy and the source still differ.
 
 ## What each harness actually does with a Pack
 
-- **Materialized** (Claude Code, Codex, opencode): the adapter copies the skill and records a digest.
-  Drift is possible and detectable. Claude Code additionally takes a Pack's `agents/` directory as
-  one unit at `~/.claude/agents/<pack>`.
+- **Materialized** (Claude Code, Codex, opencode, GitHub Copilot CLI): the adapter copies the
+  skill and records a digest. Drift is possible and detectable. Claude Code additionally takes a
+  Pack's `agents/` directory as one unit at `~/.claude/agents/<pack>`.
 - **Registry** (pi): the harness reads the Pack source in place through a path list in its own
   settings. There is no copy, so there is no drift — the only defect is a registered path that no
   longer exists, which `status` reports as `missing`. `promote` and `accept` are meaningless there

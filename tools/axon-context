@@ -37,7 +37,38 @@ context_with() {
   echo "registry=$row"
   print_path_if_present "capabilities/$target/README.md"
   print_path_if_present "capabilities/$target/service.toml"
+  capability_facts "$target"
   echo "next=sjel capability url $target"
+}
+
+# What an agent otherwise finds by grepping: routes, settings, config, log, and callers. Read from
+# source and paths only, so it works whether or not the capability is running.
+capability_facts() {
+  local name="$1" src="$SJEL_ROOT/capabilities/$1/src" overlay="" file
+  if [ -d "$src" ] && command -v rg >/dev/null; then
+    local routes
+    routes="$(rg --no-filename -o '\.route\(\s*"[^"]+",\s*(get|post|put|patch|delete)' "$src" 2>/dev/null |
+      sed -E 's/.*"([^"]+)",[[:space:]]*([a-z]+)/route=\2 \1/' | sort -u)"
+    printf '%s\n' "$routes" | head -40
+    [ "$(printf '%s\n' "$routes" | wc -l)" -gt 40 ] &&
+      echo "routes=first 40 of $(printf '%s\n' "$routes" | wc -l | tr -d ' '); rg '\.route\(' capabilities/$name/src"
+    true
+    rg --no-filename -o '"SJEL_[A-Z0-9_]+"' "$src" 2>/dev/null | tr -d '"' | sort -u |
+      sed 's/^/env=/'
+  fi
+  overlay="$(. "$SJEL_ROOT/tools/lib/paths.sh" >/dev/null 2>&1 && printf '%s' "${SJEL_OVERLAY_ROOT:-}")"
+  if [ -n "$overlay" ]; then
+    for file in "$overlay/config/$name".*; do
+      case "$file" in *.bak*) continue ;; esac
+      [ -e "$file" ] && echo "config=$file"
+    done
+  fi
+  echo "log=/tmp/sjel-$name.log"
+  if command -v rg >/dev/null; then
+    rg -l --fixed-strings "\"/$name/" "$SJEL_ROOT/apps/gpui/core/src" "$SJEL_ROOT/apps/gpui/ui/src" \
+      "$SJEL_ROOT/apps/gpui/src" "$SJEL_ROOT/dashboard/src/lib" "$SJEL_ROOT/tools/sjel-cli/src" 2>/dev/null |
+      sed "s|^$SJEL_ROOT/|client=|" | sort | head -12
+  fi
 }
 
 unit_from_target() {

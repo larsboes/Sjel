@@ -1118,6 +1118,11 @@
             "path": "libs/sjel-turso/README.md",
             "contains": "begin_takes_the_writer_lock_before_it_reads_or_writes"
           }
+        ],
+        "retrieval_queries": [
+          "why does the turso store take the write lock up front",
+          "SQLITE_BUSY when a transaction reads and then writes",
+          "which test proves begin takes the writer lock"
         ]
       },
       "provenance": {
@@ -1413,6 +1418,11 @@
             "path": "upstreams.toml",
             "contains": "[grafeo]"
           }
+        ],
+        "retrieval_queries": [
+          "did we pick a graph database for the coding agent",
+          "Grafeo versus SQL edge tables results",
+          "what would make us reconsider an embedded graph engine"
         ]
       },
       "provenance": {
@@ -1708,6 +1718,11 @@
             "path": "libs/sjel-turso/README.md",
             "contains": "**Embedded Replicas**"
           }
+        ],
+        "retrieval_queries": [
+          "is libsql replication to a remote primary still on",
+          "why were embedded replicas taken out",
+          "can the phone sync through a libsql replica today"
         ]
       },
       "provenance": {
@@ -1997,6 +2012,11 @@
             "path": "upstreams.toml",
             "contains": "[sqlite-vec]"
           }
+        ],
+        "retrieval_queries": [
+          "how good is our vector search recall",
+          "do we use sqlite-vec or a vector index for comms",
+          "has anyone measured vector index against a linear scan"
         ]
       },
       "provenance": {

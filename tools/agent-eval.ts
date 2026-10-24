@@ -115,10 +115,12 @@ async function retrievalCheck(raw: any, findCase: (id: string) => EvalCase): Pro
     const targets = required.map((r) => all.find((sec) => sec.path === r.path && sec.text.includes(r.contains)));
     if (targets.some((t) => !t)) throw new Error(`${c.id}: a required section is not in the corpus`);
     const retriever = await Retriever.build(files, raw.sjel.binary, raw.retrieval.embedding_role, join(raw.output_dir, "retrieval-cache"));
-    for (const mode of ["vector", "graph"] as const) {
-      const hits = await retriever.search(c.prompt, mode);
+    // The prompt plus the oracle's paraphrases: the way a person would ask, not the case text.
+    const queries = [c.prompt, ...((c.oracle.retrieval_queries ?? []) as string[])];
+    for (const [qi, query] of queries.entries()) for (const mode of ["vector", "graph"] as const) {
+      const hits = await retriever.search(query, mode);
       const found = targets.filter((t) => hits.some((h) => h.path === t!.path && h.line === t!.line));
-      rows.push({ case: c.id, mode, sections: retriever.size, required: targets.length, found: found.length, missing: targets.filter((t) => !found.includes(t)).map((t) => `${t!.path}:${t!.line}`), hits: hits.length, returned_chars: hits.reduce((n, h) => n + h.text.length, 0), found_via: hits.filter((h) => found.some((t) => t!.path === h.path && t!.line === h.line)).map((h) => h.via) });
+      rows.push({ case: c.id, query: qi, mode, sections: retriever.size, required: targets.length, found: found.length, missing: targets.filter((t) => !found.includes(t)).map((t) => `${t!.path}:${t!.line}`), hits: hits.length, returned_chars: hits.reduce((n, h) => n + h.text.length, 0), found_via: hits.filter((h) => found.some((t) => t!.path === h.path && t!.line === h.line)).map((h) => h.via) });
     }
   }
   return { code: 0, output: JSON.stringify(rows, null, 2) + "\n" };

@@ -68,7 +68,7 @@ why   = "The public core: reusable contracts, capabilities and deployment toolin
 # The home stack left this file on 2026-10-24 with the trees it described: [home-automation] and
 # the printer trio below named capabilities this repository no longer carries. A household's
 # deployment belongs with the household -- the containers, the Pack and printctl now live in
-# axon-family (ops/sjel-retired-2026-10), which is where those rows were rewritten, not here.
+# that deployment's own repository, which is where those rows were rewritten, not here.
 
 [backup-target]
 url   = "overlay:systems.local.toml"

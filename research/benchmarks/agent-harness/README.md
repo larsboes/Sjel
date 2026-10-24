@@ -36,6 +36,14 @@ case's workspace is the same 36-file corpus snapped from revision `8cd46b23`: `A
 395 KB in all. Finding the passage is part of the task. Each case lists the corpus paths in
 `provenance.paths`, and every file carries its SHA-256.
 
+One edit departs from that revision, and the corpus says so rather than leaving a reader to
+find it: the `upstreams.toml` snapshot names a deployment this repository must not publish, so
+that one phrase reads "that deployment in its own repository". Every case carries a
+`provenance.redaction` note beside the revision, and each SHA-256 covers the bytes the case
+actually holds, not the bytes at `8cd46b23` — so the check a reader can still run is "this is
+the text as stored", not "this is the file as committed". No prompt, answer key or required
+section depends on the phrase.
+
 | ID | Situation | Question | What the check requires |
 |---|---|---|---|
 | D01 | Ordinary success | Why does `Store::begin` start with `BEGIN IMMEDIATE`, and which test guards it? | The upgrade-to-`SQLITE_BUSY` reason and the exact test name, from `libs/sjel-turso/README.md`. |

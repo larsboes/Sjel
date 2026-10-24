@@ -226,8 +226,8 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 [[profile]]
 name = "home"
 # RETIRED 2026-10-24, with the Packs it named. `home-automation` and `3d-printing` moved to
-# axon-family (`ops/sjel-retired-2026-10/`), where the household's containers, skills and
-# printctl live beside the deployment they describe, and `cv`'s Pack left the repository for
+# the household deployment's own repository, where its containers, skills and printctl live
+# beside the deployment they describe, and `cv`'s Pack left the repository for
 # `capabilities/cv/RUNBOOK.md`. A profile that names Packs this repository does not carry
 # would resolve to nothing and report a missing Pack on every `use`, so it is kept as the
 # record of a decision rather than as something to activate. Rebuilding the house stack as
@@ -236,7 +236,7 @@ name = "home"
 #
 # Measured by use while it was live (2026-09-11 runs): homectl 13 · ha-cli 27 · pihole 63 ·
 # fritz 60 · netmon 12 · ha-deploy 7 · printctl 6 · cv build 2.
-description = "Retired 2026-10-24 — the home stack lives in axon-family now"
+description = "Retired 2026-10-24 — the home stack lives with the household's deployment now"
 packs = []
 
 [[profile]]
@@ -290,7 +290,7 @@ packs = ["*"]
 #
 # home-automation, 3d-printing, travel and ytalbum are no longer dormant — they are gone.
 # A household's deployment belongs with the household, so the home stack and the printer moved
-# to axon-family (`ops/sjel-retired-2026-10/`), ytalbum left the private overlay, and cv
+# to the household deployment's own repository, ytalbum left the private overlay, and cv
 # followed them out of the Packs. What those Packs carried that is still Sjel's is now
 # documentation beside the tooling that replaced it: `capabilities/cv/RUNBOOK.md`,
 # `docs/capabilities/travel.md` and `docs/capabilities/travel-traps.md`. `full` therefore

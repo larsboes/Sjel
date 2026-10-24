@@ -7,8 +7,8 @@ and notices the gap. They are written down here so the argument happens once.
 ## No leave-home scheduler in Sjel
 
 `capabilities/home-assistant/` contained three files: `README.md`, a service manifest and an
-environment template. **That tree left this repository on 2026-10-24** and lives in axon-family
-now; the rejection below is about the shape Sjel had, and it does not change — a departure
+environment template. **That tree left this repository on 2026-10-24** and lives with that
+household deployment now; the rejection below is about the shape Sjel had, and it does not change — a departure
 scheduler still belongs to whatever runs the home, not to a travel capability. It had no `src/`,
 and the README said why: Sjel owned the pinned runtime and the public configuration shape, while
 the overlay owned the home's devices, entity

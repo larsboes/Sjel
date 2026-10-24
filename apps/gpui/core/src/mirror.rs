@@ -736,7 +736,7 @@ mod tests {
             built_at: "2026-10-21T21:21:30Z".to_owned(),
             integrity: "ok".to_owned(),
             foreign_key_violations: 0,
-            source: "/Users/someone/sjel-personal/data/axon/axon.db".to_owned(),
+            source: "/Users/someone/overlay/data/axon/axon.db".to_owned(),
             mode: "phone".to_owned(),
             tables: vec![
                 TableCopy {
@@ -751,7 +751,7 @@ mod tests {
             rows: 1223,
             bytes: bytes.len() as u64,
             sha256: sha256_of(bytes),
-            path: "/Users/someone/sjel-personal/data/mirror/mirror.db".to_owned(),
+            path: "/Users/someone/overlay/data/mirror/mirror.db".to_owned(),
         }
     }
 

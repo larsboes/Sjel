@@ -1,13 +1,12 @@
-# Sjel and Obsidian integration
+# Interactive figures in Obsidian and Sjel notes
 
-Read this when a figure belongs inside an Obsidian or Sjel note. Interactive figures are the
-normal output in both. Keep the drawing kit, examples and checks maintained in this Pack.
-Review upstream changes selectively.
+Read this when a figure belongs inside an Obsidian or Sjel note, whichever skill or hand drew
+it (the upstream Anatomy skill, `upstreams.toml` `[anatomy]`, is one source). Interactive
+figures are the normal output in both.
 
 ## Obsidian: embed the interactive figure in the note
 
-The local `interactive` plugin is maintained at `Packs/knowledge/plugins/interactive/` in Sjel.
-Its `interactive` code block mounts local HTML, styles and scripts directly inside the note;
+This plugin's `interactive` code block mounts local HTML, styles and scripts directly inside the note;
 it follows Obsidian's theme and reloads when the asset changes. Produce a self-contained HTML
 asset with inline CSS and JavaScript, then embed it in the owning note:
 

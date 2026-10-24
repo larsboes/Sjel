@@ -192,10 +192,8 @@ taxonomy (Wohlin et al.), with the constructs sourced from the `academic-writing
 The `deckkit` code is written against `python-pptx` and `pymupdf`, both pinned in
 `scripts/deck`.
 
-## Anatomy ownership
+## Anatomy
 
-Anatomy is intentionally maintained in Sjel, including its drawing kit, examples and checks.
-Local integration is described in
-[`references/sjel-integration.md`](skills/anatomy/references/sjel-integration.md): interactive embeds
-inside Obsidian and Sjel notes, optional static exports, and destination rules owned by the vault or project.
-Review upstream changes selectively and preserve local integration when upgrading.
+Anatomy is not part of this Pack. Install it from upstream when a figure needs
+it (`upstreams.toml` `[anatomy]`). Embedding a figure in a note is described in
+[`Packs/knowledge/plugins/interactive/README.md`](../knowledge/plugins/interactive/README.md).

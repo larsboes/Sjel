@@ -153,36 +153,6 @@ jobs:
             exit 1
           fi
 
-  # The anatomy figure skill's own checks. The root bunfig scopes it out of `bun test` (bun's
-  # 5 s per-test default kills every headless-Chrome check); here it runs under the runner
-  # upstream wrote it for, from the directory its relative script paths assume. 279 tests, 40 s.
-  anatomy-checks:
-    name: anatomy figure checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # No setup-node: actions here are pinned by SHA, and the image's Node is 20.10+.
-      - name: Report the Node the checks will run under
-        run: node --version
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: latest
-      # Into $RUNNER_TEMP, not the skill: a package.json in a vendored tree would make it a
-      # resolving tree for tools/check-bun-install-policy.sh. typescript 5 because 7 is the
-      # native compiler and drops the ts.ModuleKind the transpile test reads.
-      - name: install the checks' dependencies, outside the tree
-        run: |
-          mkdir -p "$RUNNER_TEMP/anatomy-deps"
-          cd "$RUNNER_TEMP/anatomy-deps"
-          bun add esbuild@0.28.2 react@19.3.1 react-dom@19.3.1 typescript@5.9.3
-          echo "NODE_PATH=$RUNNER_TEMP/anatomy-deps/node_modules" >> "$GITHUB_ENV"
-      # A glob, not the directory: Node 20 takes only files, later versions take either.
-      - name: node --test in the skill directory
-        working-directory: Packs/presentations/skills/anatomy
-        run: node --test scripts/*.test.mjs
-
   # Svelte type checks, local-only until 2026-07 and dashboard-only until now: a type
   # regression could land on main unseen (Sjel#41), and a capability that grows its own UI
   # was unchecked from the day it landed (Sjel#139 — the knowledge-graph UI carried six

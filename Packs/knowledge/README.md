@@ -79,7 +79,7 @@ Native controllers scope DOM lookups to their embed root and register a one-shot
 `interactive-dispose` listener there to release animation frames, timers and global listeners.
 The renderer sends that event before replacing content, when a note block is removed and when
 the plugin unloads. Asset reads that finish after teardown or a newer render are ignored.
-The Anatomy skill's local integration reference owns figure authoring guidance.
+[`plugins/interactive/README.md`](plugins/interactive/README.md) owns the embedding guidance for figures.
 
 Build with `bun build Packs/knowledge/plugins/interactive/src/main.ts --target browser
 --format cjs --external obsidian --outfile <staging>/main.js`. The installed plugin lives in the

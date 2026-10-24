@@ -1116,3 +1116,10 @@ license = "MIT"
 summary = "Typeset rendering of markdown, charts, and diagrams in terminals for Claude Code using Typst"
 why = "Reviewed 2026-10-20. Renders Claude Code responses as typeset visual output via Typst, CeTZ, and fletcher inside terminal emulators supporting graphics protocols (Ghostty, kitty, iTerm2). Informs inline terminal diagram generation and low-cognitive-load agent session output. Nothing vendored."
 
+
+[anatomy]
+url = "https://github.com/wheresryan22/anatomy"
+verdict = "adopt"
+license = "MIT"
+summary = "Isometric SVG figure skill, installed from upstream when a figure needs it; not vendored"
+why = "Vendored into Packs/presentations/skills/anatomy from b273010c until 2026-10-24: 67,545 lines, 141 of 144 files identical to upstream e948829, and 279 headless-Chrome tests in their own CI job that upstream's CI already runs. Nothing in Sjel imports it. Lars ruled 2026-10-24 to unvendor it, reversing the 'keep and adapt locally' row in Packs/harness/README.md. The one Sjel-specific file, references/sjel-integration.md, was not about Anatomy: it describes embedding any interactive figure in an Obsidian or Sjel note, and moved to Packs/knowledge/plugins/interactive/README.md. The other local changes (SKILL.md wording, eval assertions, references/examples.md) are in git history at that date. Install with the upstream README's `npx skills add`."

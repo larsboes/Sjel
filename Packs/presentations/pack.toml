@@ -1,5 +1,5 @@
 # See schemas/pack.toml.example for the field reference.
 name         = "presentations"
-description  = "Build, check, render and readiness-check slide decks as .pptx from a Python module, with talk-genre profiles (DSR/qualitative defence, empirical-CS talk), a role-based theme, and a contact-sheet verification loop. Renders Mermaid diagrams to themed figures from the same palette, and crafts interactive isometric physical explainer models via Anatomy."
-skills       = ["slide-deck", "diagrams", "anatomy"]
+description  = "Build, check, render and readiness-check slide decks as .pptx from a Python module, with talk-genre profiles (DSR/qualitative defence, empirical-CS talk), a role-based theme, and a contact-sheet verification loop. Renders Mermaid diagrams to themed figures from the same palette."
+skills       = ["slide-deck", "diagrams"]
 license      = "MIT"

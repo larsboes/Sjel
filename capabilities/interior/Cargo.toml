@@ -24,6 +24,7 @@ sjel-server = { path = "../../libs/sjel-server" }
 sjel-config = { path = "../../libs/sjel-config" }
 # `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
 route-manifest = { path = "../../libs/route-manifest" }
+schemars = "1.2.2"
 # Die Zeilen sind eine Tabelle, die `capabilities/inventory` besitzt (ISA F13), und diese
 # Capability liest sie aus derselben Datei — ohne sie ist kein Layout zu rechnen. Der eigene
 # Praefix traegt nur noch `interior_placement`. libs/sjel-store/README.md hat das Warum.

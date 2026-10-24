@@ -62,12 +62,13 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/roomplan/revisions",
         "Synced semantic RoomPlan revisions for comparison.",
     ),
-    r(
-        "POST",
-        "/api/roomplan/captures",
-        "Take one capture from the phone: the contract draft and its USDZ, validated, stored, and \
-         answered with the comparison against this flat.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/roomplan/captures",
+        summary: "Take one capture from the phone: the contract draft and its USDZ, validated, \
+                  stored, and answered with the comparison against this flat.",
+        request_schema: Some(route_manifest::schema_of::<CaptureUpload>),
+    },
     r(
         "POST",
         "/api/roomplan/revisions/{revision_id}/review",
@@ -500,7 +501,7 @@ async fn api_roomplan_asset(
 }
 
 /// A capture the phone made, as `libs/roomplan-contract` names it.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct CaptureUpload {
     /// The `roomplan-capture/v1` draft the native layer built from `CapturedRoom`.
     draft: roomplan_contract::CaptureDraft,

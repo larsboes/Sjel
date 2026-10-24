@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 pub const SCHEMA_VERSION: &str = "roomplan-capture/v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct CaptureDraft {
     pub schema_version: String,
     pub draft_id: String,
@@ -22,7 +22,7 @@ pub struct CaptureDraft {
     pub provenance: CaptureProvenance,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 pub struct CaptureSource {
     pub platform: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -31,7 +31,7 @@ pub struct CaptureSource {
     pub app_version: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 pub struct CoordinateSystem {
     pub units: String,
     pub up_axis: String,
@@ -39,7 +39,7 @@ pub struct CoordinateSystem {
     pub handedness: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct CapturedRoom {
     pub id: String,
     #[serde(default)]
@@ -50,7 +50,7 @@ pub struct CapturedRoom {
     pub objects: Vec<RoomObject>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct RoomSurface {
     pub id: String,
     pub category: String,
@@ -62,7 +62,7 @@ pub struct RoomSurface {
     pub source_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct RoomOpening {
     pub id: String,
     pub category: String,
@@ -74,7 +74,7 @@ pub struct RoomOpening {
     pub source_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct RoomObject {
     pub id: String,
     pub category: String,
@@ -86,14 +86,14 @@ pub struct RoomObject {
     pub source_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CaptureMode {
     RefineExisting,
     NewRoom,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CaptureConfidence {
     High,
@@ -101,7 +101,7 @@ pub enum CaptureConfidence {
     Low,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CaptureAssetRole {
     Parametric,
@@ -109,7 +109,7 @@ pub enum CaptureAssetRole {
     Model,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 pub struct CaptureAsset {
     pub asset_id: String,
     pub role: CaptureAssetRole,
@@ -120,7 +120,7 @@ pub struct CaptureAsset {
     pub storage_token: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq)]
 pub struct CaptureProvenance {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture_mode: Option<CaptureMode>,

@@ -147,6 +147,17 @@ runbook now lives in `docs/capabilities/travel.md`. The open item it carried tra
   item a day, and status is draft/saved/archived — none says "this part is undecided, here are
   the branches". What would settle it: a second trip planned this way.
 
+### settings · one claim
+
+- **SET-1 — every inference model and key this machine depends on is named by one surface that can
+  prove it.** The truth is currently spread across `inference.json` (backends and roles), the
+  overlay's `config/graphify.env` (the tool-level selection no role names), and key files that no
+  verb reports at all — `sjel credentials` covers only the two Google OAuth grants in the keychain.
+  Close when one authenticated read names every backend with its model and its key state, every
+  role with the backend and model behind it, and the tool-level selection, and a probe proves each
+  named model answers. Falsifier: a model or key file named by a tracked artifact that no surface
+  reports, or the surface's verdict for one backend disagreeing with `tools/model-check`'s.
+
 ### distribution
 
 - **DIST-1 to DIST-4 — a fresh-user Mac and iPhone install.** Tracked in

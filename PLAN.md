@@ -14,6 +14,7 @@ it is built.
 | 3 | Data into Sjel: import routes, the rest of the vault, the journal | Every file has one owner and one way in. | [Track 3](#track-3-data-into-sjel) |
 | 4 | Restructure, with the comment and documentation sweep in the same pass | Each file changes once. | [Track 4](#track-4-restructure-and-sweep) |
 | 5 | Data formats: conversion and enrichment | Needs the owners from track 3. | [Track 5](#track-5-data-formats) |
+| 6 | Operator settings surface: inference and credentials | Small and decided, and it answers the "which model, which key" question the other tracks keep asking of a file. Its client half rides Track 1's Settings tab rather than adding a surface. | [Track 6](#track-6-operator-settings-surface) |
 | — | Knowledge out of the vault | Deferred until it hurts (operator, 2026-10-23). The vault stays the knowledge base. | — |
 
 ## Track 1: GPUI and standalone iPhone
@@ -519,6 +520,39 @@ item in `ISA.md`.
 - Convert Notability and GoodNotes archives (237 `.note` files in the archive) to PDF, then OCR
   and enrich them.
 - Align the data formats across capabilities, so a fact has one shape wherever it is stored.
+
+## Track 6: Operator settings surface
+
+**Decision — 2026-10-24:** what the machine's inference backends, models and keys are is readable
+and provable from one surface, and that surface is a section of the Settings tab rather than a new
+client, a dashboard page, or a CLI verb set.
+
+- Why it is here at all, measured: on 2026-10-24 `tools/graphify.sh` ran a full semantic pass on a
+  model retired since 2026-08-07, because the only place that model was written down was a backend
+  field no tool read and no surface showed. The fix took an afternoon; finding it took a failed run
+  of 126 chunks and 455 missing files.
+- The capability owns the domain: `capabilities/settings`, read plus probe first, writes later. It
+  reads `inference.json` through `libs/inference`, which already parses backends, roles and key
+  resolution — the surface re-implements none of it.
+- The client half is a section inside the Settings tab GPUI already ports (`Tab::Settings`,
+  `apps/gpui/PORTING_PLAN.md` route 18, which holds appearance, notifications and permissions). The
+  tab bar and the sidebar's seat list do not change, so this adds no navigation.
+- What it shows, in this order: each backend with the model a tool would send it, whether that
+  model answers, and whether its key file is present; each role with the backend and model behind
+  it; then the tool-level selection that no role names (`config/graphify.env`'s chain and model).
+- Writes are deliberately not in the first delivery. `config/graphify.env` is gitignored machine
+  state and `inference.json` is shared by every operator of the overlay, so a write needs a
+  provider-side check before it lands and an undo path after — neither exists yet.
+- Gates a hand-built capability misses, so it is built with them from the first commit: a
+  `const ROUTES` manifest, because `tools/check-route-schemas.sh`'s baseline may only go down and a
+  write-shaped probe needs `schema_of::<T>()` at birth; a `service.toml` port no other
+  `service.toml` carries (the 81xx block holds 28 capabilities and ends at 8107); and regenerated
+  `ARCHITECTURE.md` and `self.json`.
+- Known obstruction, not part of the feature: secrets-guard refuses the tracked, published
+  `tools/graphify.env.example` by filename, for reads and diffs alike. It is machine state's file
+  naming colliding with a credential rule, and it blocks an agent from reading the very config the
+  surface documents. It needs an issue of its own.
+- Open claim: SET-1 in [`ISA.md`](ISA.md).
 
 ## Open questions
 

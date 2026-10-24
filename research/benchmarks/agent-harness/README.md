@@ -131,8 +131,14 @@ state between attempts. Repeat cases at least twice, as issue #241 requires; thi
 protocol, not a sample size sufficient for statistical significance. Compare each profile and
 case outcome before reporting an aggregate. Do not choose a winner from eight development cases.
 
-No model, provider, inference role, spend cap or launch command is selected here. Those settings
-must be written into a reviewed run manifest. The suite intentionally has no default command
+**Model, decided 2026-10-24 (operator):** Pi and Sjel are compared on DeepSeek V4.1 Flash through
+the DeepSeek API: Pi's built-in `deepseek` provider with model `deepseek-flash`, and an overlay
+role on Sjel's `deepseek` backend with the same model. Both read one Keychain credential. The
+Sjel role carries the cloud policy `libs/agent` requires: a daily request ceiling, an input-token
+ceiling and a prepaid-credit date. Pi has no equivalent ceiling; only the manifest's `max_turns`
+bounds it. Local models are not used for this comparison
+([why](../../local-decision-models.md#small-local-models-specific-jobs-only-decided-2026-10-24)).
+Limits and launch commands still go into each reviewed run manifest. The suite intentionally has no default command
 that starts paid requests. Protected final-test tasks must be authored later outside the
 optimizer's accessible history, with unrelated source families and fresh state.
 

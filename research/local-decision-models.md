@@ -128,3 +128,36 @@ The frozen inputs and reports are in
 `rule-baseline-v2-holdout-v1-2026-10-22.json`, and
 `cross-source-eval-combined-holdout-v1-2026-10-22.json`. The comparison set is spent; do not tune
 prompts or rules on it.
+
+## Small local models: specific jobs only (decided 2026-10-24)
+
+**Decision (operator, 2026-10-24):** local models on this Mac stay at about 4B parameters or
+fewer, and they do one specific Sjel job each: embedding, reranking, classification,
+extraction, routing or candidate scoring. They do not run agentic coding or any open-ended
+multi-turn agent loop. Candidates are Gemma (E2B/E4B), IBM Granite, Apple's Foundation Models
+and efficient CLM-style scorers. Pi and Sjel are compared on DeepSeek V4.1 Flash through the
+DeepSeek API instead ([benchmark contract](benchmarks/agent-harness/README.md#comparison-contract-before-launching-runs)).
+
+Two observations led to it:
+
+- **The Mac cannot carry it.** During a Qwen3.5-4B agent run on 2026-10-24, this 24 GiB M4 Pro
+  held 9.5 GiB wired memory (oMLX's models and KV cache), 3.8 GiB compressed and 2.5 of 3 GiB
+  swap, and it ran hot. Long tool results made it worse: a whole-file read of `upstreams.toml`
+  is roughly 40,000 tokens of prefill (my estimate).
+- **Multi-turn tool use collapses at this size.** In the TinyLLM paper's BFCL runs, Qwen3-4B
+  scores 62.0% overall but 35.3% on multi-turn, Qwen3-1.7B 16.9% and Qwen3-0.6B 1.4%; the best
+  3B model, xLAM-2-3b-fc-r, reaches 55.6% multi-turn
+  ([TinyLLM, arXiv:2511.22138](https://arxiv.org/pdf/2511.22138)). Single-call tasks hold up
+  far better, which is the job shape the decision keeps.
+
+Reported scores for the candidates are not comparable with each other: Google reports Tau2 42.2%
+for Gemma 4 E4B and 24.5% for E2B, and a Mac Mini M4 run of small models on BFCL and NexusRaven
+uses yet another harness ([small-llm-tool-use-bench](https://huggingface.co/Manojb/small-llm-tool-use-bench)).
+Each candidate needs its own `upstreams.toml` row and a measurement on the job it would do.
+
+oMLX settings that bound the memory and heat, read from its source on 2026-10-24
+(`omlx/settings.py`): `server.gpu_keep_warm_interval` keeps the GPU out of its idle power state
+for five minutes after each request (0 disables), `idle_timeout.idle_timeout_seconds` unloads
+idle models (`null` never does), and `memory.memory_guard_tier = "custom"` with
+`memory_guard_custom_ceiling_gb` evicts least-recently-used models above a ceiling.
+

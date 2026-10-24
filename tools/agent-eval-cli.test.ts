@@ -6,6 +6,18 @@ import { join } from "node:path";
 import { command } from "./agent-eval.ts";
 
 describe("offline evaluator command boundary", () => {
+  test("review renders each attempt with the case's claims as checkboxes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-eval-review-"));
+    const file = join(dir, "run.jsonl");
+    writeFileSync(file, JSON.stringify({ started: "t", case_id: "C01", harness: "sjel", repeat: 0, termination: "final", elapsed_ms: 1, model: "m", calls: [{ tool: "read", status: "denied", content: "path is not an allowed input file" }], error: null, answer: "line one\nline two" }) + "\n");
+    const { code, output } = await command(["review", file]);
+    expect(code).toBe(0);
+    expect(output).toContain("- [ ] C01.1: ");
+    expect(output).toContain("`read` → denied: path is not an allowed input file");
+    expect(output).toContain("> line one\n> line two");
+    rmSync(dir, { recursive: true });
+  });
+
   test("replay errors and unsupported execution have nonzero exit codes", async () => {
     const root = mkdtempSync(join(tmpdir(), "sjel-eval-replay-"));
     try {

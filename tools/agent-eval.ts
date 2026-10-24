@@ -12,6 +12,7 @@ const HELP = `Usage: bun tools/agent-eval.ts <command>
   sandbox                   Probe the local OrbStack candidate-code boundary
   grade C02 <projection.py> Evaluate a submitted artifact in that boundary
   run <manifest.json>       Run Pi and/or Sjel live on the manifest's cases and model
+  review <results.jsonl>    Render a run as Markdown for the human adjudicator
 
 Only run sends model requests, and only to the models a reviewed manifest names.
 Scripted replay is not evidence of a live solver's actions.
@@ -40,7 +41,7 @@ function readBounded(path: string | URL): string {
 export async function command(args: string[]): Promise<{ code: number; output: string }> {
   const [name, ...rest] = args;
   if (name === undefined || (name === "--help" && rest.length === 0)) return { code: 0, output: HELP };
-  const arity: Record<string, number> = { check: 0, input: 1, replay: 1, sandbox: 0, grade: 2, run: 1 };
+  const arity: Record<string, number> = { check: 0, input: 1, replay: 1, sandbox: 0, grade: 2, run: 1, review: 1 };
   if (!Object.hasOwn(arity, name) || rest.length !== arity[name]) throw new Error(HELP);
   if (name === "sandbox") {
     const { sandboxProbe } = await import("./lib/agent-eval-sandbox.ts");
@@ -53,6 +54,7 @@ export async function command(args: string[]): Promise<{ code: number; output: s
     if (!item) throw new Error(`unknown case: ${id}`);
     return item;
   };
+  if (name === "review") return { code: 0, output: reviewMarkdown(readBounded(rest[0]), findCase) };
   if (name === "run") return runManifest(JSON.parse(readBounded(rest[0])), findCase);
   if (name === "check") return { code: 0, output: JSON.stringify(suiteSummary(suite), null, 2) + "\n" };
   if (name === "input") return { code: 0, output: JSON.stringify(solverInput(findCase(rest[0])), null, 2) + "\n" };
@@ -95,6 +97,29 @@ async function runManifest(raw: unknown, findCase: (id: string) => EvalCase): Pr
   // A broker transcript can be "completed" for an attempt that never reached the model.
   const unfinished = summary.filter((a: any) => a.termination !== "final").length;
   return { code: unfinished ? 1 : 0, output: JSON.stringify({ results: file, factual_review: "pending", unfinished_attempts: unfinished, attempts: summary }, null, 2) + "\n" };
+}
+
+/** One section per case: the expected claims as checkboxes, then each attempt's answer and calls.
+ * The adjudicator marks claims; nothing here scores an answer. */
+function reviewMarkdown(jsonl: string, findCase: (id: string) => EvalCase): string {
+  const attempts = jsonl.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const out = [`# Agent-eval run for review`, "", `Results: ${attempts.length} attempts, started ${attempts[0]?.started ?? "?"}. Mark each claim per attempt: supported, contradicted, unsupported or missing.`, ""];
+  for (const id of [...new Set(attempts.map((a) => a.case_id as string))]) {
+    const c = findCase(id);
+    out.push(`## ${id}: ${c.scenario}`, "", `> ${c.prompt.replace(/\n/g, "\n> ")}`, "", "Expected claims:", "");
+    for (const claim of c.oracle.claims) out.push(`- **${claim.id}**${claim.critical ? " (critical)" : ""}: ${claim.text}`);
+    for (const a of attempts.filter((x) => x.case_id === id)) {
+      out.push("", `### ${a.harness}, repeat ${a.repeat}: ${a.termination}, ${a.elapsed_ms} ms, ${a.model}`, "");
+      for (const claim of c.oracle.claims) out.push(`- [ ] ${claim.id}: `);
+      out.push("", "Tool calls:", "");
+      for (const call of a.calls) out.push(`- \`${call.tool}\` → ${call.status}${call.status === "ok" ? "" : `: ${call.content.slice(0, 200)}`}`);
+      if (!a.calls.length) out.push("- none");
+      if (a.error) out.push("", `Error: ${a.error}`);
+      out.push("", "Answer:", "", ...String(a.answer).trim().split("\n").map((line: string) => `> ${line}`));
+    }
+    out.push("");
+  }
+  return out.join("\n") + "\n";
 }
 
 if (import.meta.main) {

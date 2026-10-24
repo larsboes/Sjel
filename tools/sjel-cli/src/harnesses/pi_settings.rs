@@ -49,10 +49,19 @@ fn state_home() -> PathBuf {
 }
 
 pub fn settings_path() -> PathBuf {
-    engine::resolve(
-        &env_path("PI_SETTINGS_FILE")
-            .unwrap_or_else(|| home().join(".pi").join("agent").join("settings.json")),
-    )
+    engine::resolve(&settings_target(
+        env_path("PI_SETTINGS_FILE"),
+        env_path("PI_CODING_AGENT_DIR"),
+        &home(),
+    ))
+}
+
+fn settings_target(explicit: Option<PathBuf>, agent_dir: Option<PathBuf>, home: &Path) -> PathBuf {
+    explicit.unwrap_or_else(|| {
+        agent_dir
+            .unwrap_or_else(|| home.join(".pi").join("agent"))
+            .join("settings.json")
+    })
 }
 
 pub fn state_path() -> PathBuf {
@@ -962,6 +971,27 @@ pub fn remove_packs(config: &DeployConfig, packs: &[String]) -> Result<Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_follows_pis_agent_directory_without_losing_explicit_fixture_paths() {
+        let home = Path::new("/synthetic/home");
+        assert_eq!(
+            settings_target(None, None, home),
+            home.join(".pi/agent/settings.json")
+        );
+        assert_eq!(
+            settings_target(None, Some(PathBuf::from("/synthetic/pi")), home),
+            PathBuf::from("/synthetic/pi/settings.json")
+        );
+        assert_eq!(
+            settings_target(
+                Some(PathBuf::from("/synthetic/fixture.json")),
+                Some(PathBuf::from("/synthetic/pi")),
+                home
+            ),
+            PathBuf::from("/synthetic/fixture.json")
+        );
+    }
 
     /// A `<pack>/<unit>` hold written the way `profiles.toml` writes one reaches the path pi would
     /// register, that path is what all three channels filter on, and the note names the decision.

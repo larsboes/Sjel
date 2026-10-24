@@ -45,6 +45,7 @@ Operate capabilities:
   mcp register [harness]         Register that server with pi or Claude Code, then verify it answers
   claude [apply|check]           Write or check THIS device's Claude Code settings
   copilot [apply|check]          Write or check THIS device's Copilot CLI settings and guard hook
+  pi [plan|apply|check|rollback] Manage Pi settings with owned-key drift checks and rollback
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness

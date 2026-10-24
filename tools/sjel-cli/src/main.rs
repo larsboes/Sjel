@@ -33,6 +33,7 @@ mod pack_hook;
 mod packs;
 mod paths;
 mod persist;
+mod pi_config;
 mod provider_login;
 mod registry;
 mod runargs;
@@ -125,6 +126,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
         "copilot" => copilot::run(root, rest),
+        "pi" => pi_config::run(root, rest),
         // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
         "setup" => setup::run(rest),
         // A read-only copy of this machine's data, for a device that is not here.
@@ -187,6 +189,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "provider" => help::PROVIDER,
         "credentials" => help::CREDENTIALS,
         "claude" => help::CLAUDE,
+        "pi" => pi_config::USAGE,
         "mcp" => help::MCP,
         "pack" => help::PACK,
         "context" => "Usage: sjel context with [capability] | on [unit-or-path]",

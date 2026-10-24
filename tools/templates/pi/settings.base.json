@@ -1,0 +1,6 @@
+{
+  "enableInstallTelemetry": false,
+  "enableAnalytics": false,
+  "cacheWarming": "off",
+  "showCacheMissNotices": true
+}

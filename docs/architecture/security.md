@@ -25,6 +25,19 @@ socket accessible to Tailscale Serve. Direct loopback callers must satisfy the s
 policy. See [`tailnet.rs`](../../libs/sjel-server/src/tailnet.rs) and
 [`auth.rs`](../../libs/sjel-server/src/auth.rs).
 
+**The socket half is blocked by Tailscale itself, measured 2026-10-24.** Since v1.98.9, Serve
+restricts Unix-socket proxy targets to a socket owned by `root` (the fix for TS-2026-004). The
+listener this design names is `<overlay>/secrets/sjel-status.sock`, owned by the operator, so
+Serve accepts the config and then answers `502` on every request. Measured on this machine with
+`tailscaled` 1.104.1: `serve --bg unix:<overlay socket>` → 502 while
+`curl --unix-socket <overlay socket>` → 200, and a `0777` socket under `/tmp` behaves the same,
+which rules out file mode; `serve --bg http://127.0.0.1:8082` → 200, which rules out Serve itself.
+The consequence is that an operator declaration is currently aspirational: no handler is
+published, so no header is injected, and doctor's `Tailnet identity gate` says so. Keeping the
+gate honest means *not* declaring the operator until either Tailscale relaxes the ownership rule
+or the socket is served from a root-owned location — an undeclared operator makes the tailnet
+listener require the deployment credential, which is the stronger posture anyway.
+
 The shared gate also supports deployment tokens, local browser sessions, and paired-device
 signatures. Agent tokens are admitted only by capabilities that enable the agent gate, under their
 per-capability access policy, with pseudonymized responses. Health and readiness routes have their own exemptions; consult the implementation

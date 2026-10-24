@@ -9,21 +9,460 @@ it is built.
 
 | # | Track | Why it is here | Detail |
 |---|---|---|---|
-| 1 | GPUI universal app and standalone iPhone, with the storage work it needs | The current priority in [`AGENTS.md`](AGENTS.md). The operator chose it over data-first on 2026-10-23. The phone is a replica (§6 below), so storage moves with it. | [`apps/gpui/PORTING_PLAN.md`](apps/gpui/PORTING_PLAN.md), [Storage](#storage-controlled-migration-from-sqlite-to-turso-libsql) |
-| 2 | Data into Sjel: import routes, the rest of the vault, the journal | Every file has one owner and one way in. | [Track 2](#track-2-data-into-sjel) |
-| 3 | Restructure, with the comment and documentation sweep in the same pass | Each file changes once. | [Track 3](#track-3-restructure-and-sweep) |
-| 4 | Data formats: conversion and enrichment | Needs the owners from track 2. | [Track 4](#track-4-data-formats) |
+| 1 | GPUI universal app and standalone iPhone | The current priority in [`AGENTS.md`](AGENTS.md). Finish the foundational native and standalone iOS work before expanding the storage platform. | [`apps/gpui/PORTING_PLAN.md`](apps/gpui/PORTING_PLAN.md) |
+| 2 | Turso for agent state and service-owned stores | After the GPUI/iOS foundation, pursue efficiency and simplicity through isolated per-agent or per-service databases, with broader sync later. | [Track 2](#track-2-turso-for-agents-and-services) |
+| 3 | Data into Sjel: import routes, the rest of the vault, the journal | Every file has one owner and one way in. | [Track 3](#track-3-data-into-sjel) |
+| 4 | Restructure, with the comment and documentation sweep in the same pass | Each file changes once. | [Track 4](#track-4-restructure-and-sweep) |
+| 5 | Data formats: conversion and enrichment | Needs the owners from track 3. | [Track 5](#track-5-data-formats) |
 | — | Knowledge out of the vault | Deferred until it hurts (operator, 2026-10-23). The vault stays the knowledge base. | — |
 
-## Track 1: GPUI and storage
+## Track 1: GPUI and standalone iPhone
 
 - The route matrix and work packages are in `apps/gpui/PORTING_PLAN.md`. A concurrent session
   created it on 2026-10-23 and it is not committed yet. It folds into this file after that.
 - Fix when it folds in: its matrix names `capabilities/context`, `capabilities/people` and
   `capabilities/travel`, and none of them exist (capability list, 2026-10-23).
+- Track 1 includes only storage work required to deliver the GPUI/iOS milestones. The broader
+  Turso adoption in Track 2 starts after the foundational standalone iOS workflows are usable:
+  local reads and writes, notes, tasks, capture, and the offline queue/sync path.
 - Open claims: DOC-4, DOC-5, IMP-2, DIST-1 to DIST-4, and "Capture from the phone" in `ISA.md`.
 
-## Track 2: Data into Sjel
+## Track 2: Turso for agents and services
+
+**Decision — 2026-10-23:** after the foundational GPUI and standalone iOS work, make Turso a
+measured platform upgrade for Sjel agents and services. Target one database per agent or service,
+with broader synchronization later. Do not turn this into one catch-all database: service-owned
+records remain behind their capability contracts, and agent state stays isolated until an explicit
+sync contract says otherwise. The driver is a simpler, more efficient system, not adopting every
+feature Turso offers.
+
+### Candidate capabilities
+
+Evaluate these as separate uses of the same local-first database substrate. None is approved for
+production solely because Turso documents a recipe:
+
+| Candidate | Sjel use | Gate before adoption |
+|---|---|---|
+| AgentFS (Rust SDK and MCP) | Per-agent filesystem/KV state, tool-call trace, and copy-on-write workspaces | AgentFS is marked beta. Verify crate/API maturity, licensing, isolation, filesystem semantics, audit coverage, and that its database lifecycle fits the overlay and backup contracts. MCP exposure must be allowlisted; do not expose unrestricted filesystem tools. |
+| AI memory | Durable, task-relevant agent memories with retrieval and correction history | Measure retrieval usefulness, stale/wrong-memory correction, retention, and data-class handling against current Sjel context sources. |
+| Code indexing | Incremental symbol/chunk index with keyword, vector, or hybrid search | Compare quality, update cost, and storage against existing Graphify and GPUI search; adopt only if it fills a measured gap. |
+| Content caching | Per-session content hashes and diffs to avoid rereading unchanged files | Measure tokens and latency saved; retain session isolation, invalidate on change, and never let a cache suppress a required security or freshness check. |
+| Secrets vault | Secret metadata, controlled use, and access audit | Keep secret values in the OS Keychain by default. Any database-backed value store needs a separate security decision covering encryption-key custody, process access, replication, backups, output scrubbing, and intentional exfiltration limits. |
+
+### Sequence and gates
+
+1. **Finish Track 1 first.** Do not let speculative Turso features displace the native GPUI work or
+   the standalone iOS foundation.
+2. **Reconcile the storage facts before expanding.** The detailed proposal below is historical
+   where it describes embedded replicas as active or one database as the target. The current
+   `libs/sjel-turso/README.md` says replica support was removed; confirm dependency status,
+   unresolved advisories, the `sqld` role, backup/restore behavior, and the supported local engine
+   before choosing an implementation path.
+3. **Run isolated agent pilots.** Evaluate AgentFS and the memory, indexing, and caching patterns
+   in separate per-agent databases. Compare each to Sjel’s existing tools and record a baseline,
+   safety boundary, recovery path, and success threshold before integration.
+4. **Keep secrets a distinct security decision.** A local encrypted database is not safe merely
+   because it is encrypted at rest: the unlock key, access path, subprocess environment, replicas,
+   backups, and logs all need explicit controls. Preserve Keychain as the value store unless a
+   reviewed design demonstrates a better end-to-end boundary.
+5. **Expand to service-owned stores selectively.** Move a capability only when it reduces measured
+   contention or operational friction and preserves ownership, backups, data classes, and recovery.
+   Do not make a workspace-wide database migration a prerequisite for agent features.
+6. **Consider broader sync last.** Start with local-only databases. Add synchronization only after
+   defining per-database identity, authorization, conflict behavior, revocation, freshness, and
+   data-class admission. Phone offline capability remains governed by Track 1 and its own
+   acceptance tests.
+
+### Agent data backbone: Turso and graph integration
+
+**Planning proposal, 2026-10-24; consumer and engine selection remain open.** The target is
+smaller, fresher, source-backed context for coding, productivity, and system reasoning. Keep
+Track 1's implementation priority. Planning and public-data measurements can proceed without
+migrating a live store or changing the phone's offline contract.
+
+#### Ground truth and engine distinctions
+
+- `Cargo.toml` selects `libsql 0.10.0` with only `core`. `libs/sjel-turso/src/lib.rs` opens a
+  local database and starts writes with `TransactionBehavior::Immediate`. Its README records
+  replica removal. The current adapter does not demonstrate concurrent MVCC writers merely
+  because its description says so; measure contention before promising a concurrency gain.
+- [Turso Database](https://github.com/tursodatabase/turso) is the newer Rust engine; libSQL is
+  the SQLite fork currently linked by Sjel. Evaluate compatibility, recursive queries, search,
+  concurrency, and recovery against the exact engine selected. Neither API similarity nor a
+  product feature list establishes interchangeability.
+- `libs/agent` already serves the coding CLI and `capabilities/assistant` with different tools.
+  `capabilities/knowledge-graph` serves Graphify output, with a cache keyed by path and mtime.
+  Graphify owns extraction; changing a query engine need not replace that extractor.
+- `capabilities/sjel-status/src/status/search.rs` already searches several domain tables in
+  the shared database. Its direct table reads are a coupling to resolve before splitting those
+  stores. A future cross-domain index needs owner-approved exports or contracts.
+- [Grafeo](https://github.com/GrafeoDB/grafeo) advertises embedded persistent LPG/RDF storage,
+  declarative query languages, graph algorithms, and vector/text retrieval. Treat language
+  coverage and query correctness as acceptance tests. Its
+  [server](https://github.com/GrafeoDB/grafeo-server) documents Bolt, gRPC and REST in different
+  build tiers; protocol availability does not establish compatibility with every Neo4j tool.
+  [IndraDB](https://github.com/indradb/indradb) documents programmatic multi-hop queries,
+  JSON properties, gRPC, and pluggable stores, including RocksDB and separate Postgres/sled
+  projects. Backend maintenance and native dependencies require separate review.
+
+#### Consumers and useful questions
+
+| Consumer | Example question | Sources and boundary |
+|---|---|---|
+| Coding agent | If this storage contract changes, which callers, tests and rules matter? | Repository source, manifests, self-model and Graphify; preserve source locations and working-tree revisions. |
+| Productivity agent / Ask | Which tasks and source notes prepare me for this meeting? | Authorized projects, calendar and entity contracts; keep personal context local and respect each owner's access rules. |
+| Sjel system automation | Which dependents are affected by this failed service, and what changed? | Declared dependencies plus timestamped health/change evidence; topology alone cannot establish the cause of a failure. |
+| Later specialist agents | What evidence connects this source, claim and project? | Reviewed domain exports; specialists use the same identity and provenance contracts with narrower permissions. |
+
+#### Proposed ownership and retrieval contract
+
+```mermaid
+flowchart LR
+    Owners["Capability-owned records / repository files"] -->|"Authorized export or change feed"| Index["Rebuildable text / vector / graph projections"]
+    Index --> Context["Permission-filtered, bounded context"]
+    Context --> Agents["Coding / Ask / system consumers"]
+    State["Isolated agent run state"] <--> Agents
+    Agents -->|"Existing command contracts"| Owners
+```
+
+Keep authoritative domain records with their capability. A graph is a disposable relationship
+projection; it must be possible to rebuild it without losing a task, note or decision. Agent
+databases hold isolated run state, cursors and caches. Repository rules remain in the repository;
+an agent memory entry cannot become an alternative source of doctrine.
+
+Use namespaced identities such as `(owner, kind, id)`. Retrieval results carry the source
+reference and revision, observation time, data class, access scope, and whether a relationship
+was extracted or inferred. Inferred links remain suggestions until an owner accepts them.
+Content hashes support deduplication and invalidation; they do not replace stable identities.
+
+Authorize seed selection and every expansion before ranking or returning context. Derived
+snippets, embeddings, relationships and caches inherit source restrictions; joins must not
+reveal a restricted source through an otherwise visible neighbor. C3 never enters the index.
+Return evidence paths, freshness and truncation within a caller-supplied budget. A stale graph
+must say so, and execution must revalidate current owner state.
+
+If SQL and a graph engine coexist, avoid application writes to both as independent authorities.
+Where an owner supports it, commit a change event with its record, then project through an
+idempotent consumer with a per-owner cursor. Otherwise use revisioned snapshots with explicit
+freshness. Exercise deletes, revocation, replay and interrupted rebuilds. No global transaction
+or cross-owner ordering is implied. The phone keeps local domain reads and queued writes; a
+Mac graph must not become a dependency for offline capture, notes or tasks.
+
+#### Integration candidates to narrow together
+
+These are different starting points, not five commitments. No option has been kept or rejected
+by the operator yet. Select a primary pilot; defer the others with a reason.
+
+| Option / generator | Candidate | Cheapest useful test |
+|---|---|---|
+| A / elimination | Keep SQL as the only database; index typed edges and use bounded recursive queries. | Compare known dependency/path answers with existing Graphify and self-model results on the selected SQL engine. |
+| B / recombination | Add a rebuildable embedded Grafeo projection beside owned SQL stores. | Import the same public graph fixture; compare query answers, update/rebuild cost and recovery with A. |
+| C / inversion | Start with a context broker over existing tools; optimize retrieval without adding storage. | Return a small evidence bundle for real coding questions and measure avoided reads and prompt size. |
+| D / extreme scale | Partition indexes by project or permission scope, querying only relevant partitions. | Change one project's fixture and measure invalidation work, query fan-out and isolation. |
+| E / analogy | Project state transitions into a temporal graph for workflow and system reasoning. | Replay synthetic task/service events; distinguish current dependencies from historical evidence. |
+
+**Measured, 2026-10-24: A covers the coding consumer.** The
+[graph-store spike](research/benchmarks/graph-store/README.md) ran A and B on Graphify's
+37,200-node repository graph. Both answered all 60 impact and connection queries exactly.
+Bounded impact queries were equal. Grafeo beat a recursive CTE about 8× on open-ended paths, and
+a BFS in code over the same SQL edges beat Grafeo about 4×. Keep typed edges in the owning SQL
+store and walk open-ended paths in code. Grafeo and IndraDB are `reject` in `upstreams.toml`,
+with revisit conditions: graph algorithms, hybrid graph+vector plans, or a graph too large for
+in-memory adjacency. Updates, recovery and the Turso Database rewrite remain unmeasured.
+
+#### Sjel questions over documents: a small GraphRAG
+
+**Consumer added, 2026-10-24 (operator):** `sjel-agent` answers questions about Sjel itself
+from its documents ("how does session recovery work", "which rule owns this decision"). The
+spike above measured code impact, not this. Its storage result carries over, because this
+graph is smaller. Its retrieval result does not, because the open question is answer quality.
+
+What exists (`graphify-out/graph.json`, built at `aaf300e7`): 2,908 document section nodes,
+each with a source file and line, 995 concept nodes and 230 rationale nodes. They are linked by
+`contains` (2,546), `references` (794), `rationale_for` (230) and `cites` (9) edges, plus
+import and call edges into code. All of them come from Graphify's structural pass
+(`_origin: ast`). There is no section text, no embedding and no extracted claim.
+
+Proposed retrieval path, all in the SQL engine already linked:
+
+1. Read each section's text from the repository at the graph's commit. The repository stays
+   the authority, and the index is a rebuildable projection.
+2. Embed sections through the existing `embedding` role in `libs/inference`, and store them as
+   `F32_BLOB` with a `libsql_vector_idx` index.
+3. Answer with `vector_top_k` seeds, then a 1–2 hop expansion over `contains`, `references`,
+   `rationale_for` and doc-to-code edges, walked in code. Return a budgeted evidence bundle in
+   which every item carries `path:line` and the commit.
+
+Baselines it must beat on evidence coverage: grep plus `sjel search`, and vector top-k without
+the expansion. If the expansion adds nothing over vector-only, drop it. LLM entity extraction
+and community summaries (Microsoft GraphRAG style) stay out until the structural graph
+measurably misses evidence, because they add model cost and go stale with every document edit.
+
+**Measured, 2026-10-24: drop the cross-document graph for now.** On the D01–D04 corpus, graph
+expansion found 18 of 24 required sections against 17 for vector-only search at the same 10-hit
+budget. Every section the expansion added came from a neighbouring heading in the same file;
+cross-document references added none
+([retrieval result](research/benchmarks/agent-harness/README.md#retrieval-alone-2026-10-24-graph-expansion-does-not-beat-vector-search)).
+Keep vector search with same-file section context. Revisit cross-document edges when a larger
+question set shows evidence that only a link reaches.
+
+This is the "proposed Sjel context tools" retrieval in cells B and D of the comparison table
+below. It is built after the live adapters give cells A and C a baseline. The current eight
+cases contain one Sjel-source question (C01), so the suite needs more Sjel-document questions
+with answer keys before this path can be scored.
+
+IndraDB remains a comparator if a consumer needs its programmatic storage model. Adding it
+alongside SQL requires a measured benefit over A's edge tables. AgentFS is a separate run-state
+experiment; it does not supply cross-capability semantics or authorize shared memory.
+
+#### Broader harness scope and factual precision
+
+**Scope clarified, 2026-10-24:** the operator wants several use cases, including coding,
+autonomous research and experimentation, precise writing, and legal/administrative work.
+Factual precision is a shared requirement. The storage proposal above supplies evidence and
+state to that harness; database speed alone cannot establish agent quality.
+
+Propose one shared runtime with task-specific tool permissions and completion checks. Reuse
+`libs/agent` and its extension boundary where they fit. A profile does not require a new agent
+process; introduce delegation only when a task benefits and its cost and authority are explicit.
+
+| Profile | Representative use case | Evidence and completion check |
+|---|---|---|
+| Coding | Repair a bug or change a cross-capability contract. | Reproduce the failure, identify the owning code/rules, apply the change, pass relevant tests and inspect the diff. Tests must exercise behavior beyond matching the implementation. |
+| Research and experiments | Investigate a technical claim, compare conflicting sources, or test an integration hypothesis. | Preserve source passages and retrieval times; separate hypotheses from observations; record a falsifying test, reproducible method and negative results. Give autonomous runs explicit scope, cost/time limits and stopping rules. |
+| Precise writing | Draft a sourced technical explanation, report or formal message. | Check material factual claims against evidence, preserve dates/numbers/qualifiers, and satisfy the requested structure and voice. Style scores cannot substitute for factual review. |
+| Legal and administrative | Assemble an application, analyze a document, or draft correspondence with deadlines. | Identify jurisdiction, effective date and document version; distinguish quoted requirements from interpretation; verify names, calculations, attachments and deadlines against authoritative sources. Missing decisive facts block a definitive conclusion. Drafting and external submission have separate authority. |
+| Productivity and system operations | Prepare a meeting, schedule tasks, or diagnose a service dependency. | Read authorized current owner state, distinguish historical evidence from present state, check scheduling/action preconditions, and verify the resulting state. A dependency path is evidence of possible impact, not proof of causation. |
+
+Record material claims with source locators and the passages that support them. A citation must
+support the associated claim, not merely mention the topic. Track contradictions and corrections
+without overwriting their supporting observations. Separate observed facts, source assertions,
+inferences and unknowns; a retrieved assertion is not automatically an established fact.
+
+Use executable checks for arithmetic, schemas, interface behavior and observable outcomes.
+Validate the premises separately: a successful program or a history-consistent model cannot
+prove that an external factual or legal assertion is true. Where the evidence is incomplete,
+narrow the conclusion or abstain. Evaluate answer coverage too, so refusing every task cannot
+win a factuality score. User corrections affect future behavior only with provenance and scope;
+they do not silently rewrite an authority or a repository rule.
+
+#### Two improvement loops, with different authority
+
+The evidence, evaluation limits and canonical links for Meta-Harness and Schema live in
+[`research/assistant-harness.md`](research/assistant-harness.md#can-the-harness-improve-through-code-and-experiments).
+Its [source index](research/assistant-harness.md#source-index) also connects the supplied papers
+and project pages to the SQL, agent-state and graph-engine candidates. These are design
+references; transfer to Sjel's profiles remains unmeasured.
+
+Meta-Harness motivates the outer loop of proposing and evaluating harness-code changes with a
+fixed model. Schema motivates the inner loop of executable hypotheses, history checks and
+execution interrupted by a prediction mismatch. Keep those loops separate in implementation
+and evaluation.
+
+For Sjel, the proposed inner loop is observe, hypothesize, test, act and verify. A prediction
+must name its observable check. A failed check interrupts dependent actions and returns the
+counterexample for diagnosis. Research may test claims and competing explanations without a
+complete world simulator; writing may use claim checks without generating executable prose.
+
+The proposed outer loop works on versioned candidates in an isolated experiment workspace.
+Allow edits to specified retrieval, context assembly or task-planning components. Keep evaluators,
+final-test data, permissions, egress rules and authoritative observations outside the candidate's
+write boundary. The proposer may inspect authorized development traces, never hidden final-test
+answers/results. Candidate code executes under enforced filesystem, process and network limits;
+a prompt telling the candidate to respect limits is insufficient.
+
+Save candidate source/diffs and exact model/configuration with tool requests/results, verification
+outcomes, errors, cost and elapsed time. Save observable evidence rather than requiring access
+to hidden model reasoning. Keep original evidence separately from compacted conversation state:
+`libs/agent/src/session.rs` can overwrite a compacted session, so current session persistence
+alone does not establish an immutable experiment history. Private traces stay in the overlay,
+subject to data-class admission, redaction and retention; durable public rules stay in the repo.
+
+A candidate proposes a production change only after independent checks. Proposed promotion
+requires correctness and permission gates, no critical profile regression, a reviewable diff and
+a rollback path through the normal repository change process. Autonomous hypothesis testing
+does not authorize autonomous changes to policy or the evaluation criteria. Scheduled optimization
+and automatic promotion remain undecided. Reset/isolate run memory, retrieval caches and learned
+artifacts between evaluation splits so evidence cannot leak through persistent state.
+
+#### Sequence: plan now, compare with Pi after the evaluation contract exists
+
+**Decision, 2026-10-24:** the operator selected coding and autonomous research/experiments as
+the first evaluation profiles and accepted planning before running the comparison. Establish
+representative fixtures and independent acceptance checks, then compare with Pi. Defer the
+earlier proposed database race until a measured retrieval bottleneck justifies it. This order
+tests source-grounded work and executable verification together while preserving Track 1's
+implementation priority. No model jobs, paid evaluations or live-store changes are launched by
+this planning step.
+
+1. Define a small development suite across all five profiles. A proposed seed is four cases per
+   profile: ordinary success, conflicting evidence, missing/stale evidence, and an incorrect or
+   unauthorized action. Twenty cases expose design gaps; they cannot establish production
+   reliability. Start the controlled comparison with the selected coding and research/experiments
+   pair; the other profiles remain in scope for later evaluation.
+   The first pair now has a [development specification](research/benchmarks/agent-harness/README.md), twelve cases with the D-case extension,
+   with frozen inputs, expected evidence and evaluator checks. Independent agent review has
+   corrected label and scoring gaps; human review remains pending. The
+   [offline evaluator and OrbStack path](research/benchmarks/agent-harness/README.md#offline-evaluator-and-orbstack-execution)
+   validate tool boundaries and candidate artifacts. These are preparation, not model results
+   or an untouched final-test set.
+2. Specify untouched final-test tasks separately, grouped by repository/project, source family
+   or administrative matter to prevent near-duplicate leakage. Fix the scoring rubric and name
+   who adjudicates ambiguous answers before optimizing. Use deterministic checks where valid
+   and blinded human source review for claims/quality they cannot decide; a model judge is
+   supporting evidence. Separate correctness from writing preference.
+3. Capture Pi's current configuration as the practical baseline and `sjel-agent` as the candidate.
+   Record model/revision, reasoning settings, tools, permissions, initial state, source snapshots,
+   limits and costs. Use paired tasks and repeated runs for stochastic outcomes; include failures
+   and timeouts. Run an additional best-available comparison only if useful, labeled separately
+   from a controlled same-model harness comparison.
+4. Isolate the cause of any gain with the comparison below. Add self-improvement only after a
+   runnable baseline and reproducible traces exist; optimize on development tasks, freeze the
+   candidate, then evaluate once on the untouched suite. If final-test feedback informs another
+   candidate, retire that suite from its untouched role. Choose iteration/spend caps before runs.
+5. Evaluate each profile separately. Reject fabricated references, critical factual errors and
+   permission violations; measure supported-claim precision, required-evidence coverage,
+   contradiction detection and appropriate abstention alongside task completion. Track human
+   corrections, tokens, tool calls and elapsed time. Efficiency gains count only after quality
+   gates pass. Establish thresholds and acceptable uncertainty before seeing candidate results;
+   the earlier 30% token/2x latency numbers were proposals, not measured targets or commitments.
+
+| Comparison cell | Harness | Retrieval | What comparison can isolate |
+|---|---|---|---|
+| A | Pi | Existing workflow | Practical baseline. |
+| B | Pi | Proposed Sjel context tools | B vs A tests retrieval while keeping the harness fixed. |
+| C | Sjel | Equivalent existing evidence/tools | C vs A tests the harness only to the extent tools and model settings match. |
+| D | Sjel | Proposed Sjel context tools | D vs C tests retrieval in Sjel; D vs B tests the harness with shared retrieval. |
+
+Expose the same bounded retrieval tool through each harness's supported extension/MCP interface
+where feasible; record integration gaps rather than calling unequal conditions controlled.
+Store/query microbenchmarks follow a measured retrieval bottleneck and remain distinct from
+end-to-end correctness. Choose SQL edges or a Grafeo projection only when that comparison shows
+the need. Ordinary experiment files plus a small SQL run index may be sufficient; neither paper
+requires a graph database. Review backend/license verdicts and recovery before runtime adoption.
+
+#### Pi daily use and managed configuration
+
+**Decision, 2026-10-24:** Pi remains usable as the daily agent while the Sjel harness is evaluated.
+Its settings, extension configuration and deployment lifecycle must be managed through Sjel,
+like the other supported harness configuration. An experimental integration is opt-in and
+removable; evaluating `sjel-agent` does not require replacing Pi or its existing sessions.
+
+**Built, 2026-10-24 (`6eef2c79`):** `sjel pi plan|apply|check|rollback`
+([`tools/sjel-cli/src/pi_config.rs`](tools/sjel-cli/src/pi_config.rs)) owns the keys in
+[`tools/templates/pi/settings.base.json`](tools/templates/pi/settings.base.json) plus an optional
+overlay fragment: telemetry and analytics off, cache warming off, cache-miss notices on. It was
+applied to this Mac's `~/.pi/agent/settings.json` after a backup, a hand edit was reported as a
+conflict (exit 3), and rollback restored a JSON-equal file. The baseline is applied again for
+daily use. `pi_settings.rs` still manages Pack-owned `skills`, `extensions` and `packages`
+registrations. Model selection and keybindings are not yet owned keys.
+
+Credentials and model registries stay outside `sjel pi`. On 2026-10-24, with the operator's
+approval, Pi's `~/.pi/agent/models.json` was pointed at the stores Sjel already reads instead of
+literal keys: oMLX's own `~/.omlx/settings.json` for `omlx`, and the Keychain item
+`com.sjel.credential.inference-deepseek` for `deepseek`. Backups sit beside the file.
+
+The deployment contract, met for the owned settings above:
+
+- Keep reusable defaults and the ownership definition in Sjel. Keep private provider/model
+  choices, machine paths and personal overrides in the active overlay. Credentials remain in
+  their existing protected store; never copy authentication files or render secret values as
+  dotfiles. Verify supported Pi settings against its installed interfaces before defining keys.
+- Merge only explicitly owned keys, including the selected model/reasoning, context-management,
+  UI/keybinding and extension preferences where Pi supports them. Preserve unrelated fields and
+  user-managed packages; do not replace or symlink Pi's entire state directory.
+- Provide a reviewable plan, apply and drift-check lifecycle through Sjel. Record which owned
+  values changed and their prior state. A change made interactively in Pi must be reported as
+  drift or deliberately accepted into its owning configuration, not silently overwritten.
+- Test disable/removal and rollback of owned configuration. Restore a prior value only when the
+  current value still matches what Sjel applied; report concurrent edits as conflicts. Removing
+  integration settings must not remove sessions or undo unrelated work. File/domain changes an
+  agent made require their own recovery path.
+- Keep evaluation configuration separate from daily-use settings. Capture the selected baseline
+  and launch isolated SDK sessions without ambient skills, extensions or history. No benchmark
+  should change the operator's normal defaults or authentication as a side effect.
+
+Still open: model and keybinding keys, and an opt-in Pi integration for the retrieval tool once
+it earns a place.
+
+#### Where this work is recorded
+
+Track 2 owns the direction and rollout order. Supporting research, fixtures and implementation
+stay with the owners below; their tests and interfaces establish what works. This table links
+the active work without creating a separate plan or task backlog.
+
+| Boundary | Owner | What it establishes |
+|---|---|---|
+| Research and source links | [Harness research](research/assistant-harness.md) | Meta-Harness, Schema, existing Pi comparison and limits on transfer. |
+| Development cases and evaluation contract | [Agent benchmark](research/benchmarks/agent-harness/README.md) | Selected profiles, source fixtures, answer keys, human-review requirements and comparison design. |
+| Offline evaluator and candidate sandbox | [Evaluator command](tools/agent-eval.ts), [sandbox](tools/lib/agent-eval-sandbox.ts) | Bounded virtual tools, oracle separation, tested OrbStack execution and explicit unsupported paths. |
+| Daily Pi configuration and deployment | [Managed defaults](tools/templates/pi/settings.base.json), [harness Pack](Packs/harness/README.md) | The active settings-management implementation: plan/apply/check/rollback, ownership, private overrides and reversible adoption. |
+| Live Pi/Sjel adapters | [Live adapters](research/benchmarks/agent-harness/README.md#live-adapters), [`agent-eval-live.ts`](tools/lib/agent-eval-live.ts), [`sjel-agent-eval`](libs/agent/src/bin/eval.rs) | One broker for both harnesses, manifest-gated `run`, `review` for the adjudicator, token usage from both, c0-attested tools for cloud roles. |
+| Retrieval for Sjel questions | [GraphRAG section](#sjel-questions-over-documents-a-small-graphrag), [`agent-eval-retrieval.ts`](tools/lib/agent-eval-retrieval.ts), [result](research/benchmarks/agent-harness/README.md#retrieval-alone-2026-10-24-graph-expansion-does-not-beat-vector-search) | Vector and graph-expanded `retrieve` over a case's corpus; graph expansion did not beat vector search. |
+| Graph engine choice | [Graph-store spike](research/benchmarks/graph-store/README.md), `upstreams.toml` `[grafeo]`, `[indradb]`, `[turso]` | SQL edges plus code cover the coding consumer; Grafeo and IndraDB rejected with reopening conditions. |
+| Which model runs what | [Small local models](research/local-decision-models.md#small-local-models-specific-jobs-only-decided-2026-10-24), [comparison model](research/benchmarks/agent-harness/README.md#comparison-contract-before-launching-runs), `providers.toml` `[deepseek]` | Local models ≤4B do one Sjel job each; Pi vs Sjel runs on DeepSeek V4.1 Flash, c0 only. |
+
+#### State at the end of 2026-10-24, and what comes next
+
+Done: the evaluator, both live adapters, 12 development cases (C01–C04, R01–R04, D01–D04), the
+graph-store spike, the retrieval check, Pi's managed settings, and two pipeline smoke runs on
+local Qwen3.5-4B (C01/R04 8 of 8 finished; D01–D04 14 of 16, two Sjel attempts lost to a binary
+rebuilt mid-run). Those runs are unscored and superseded by the DeepSeek decision. Private
+traces and `review.md` files are in the overlay under `data/agent-eval/runs/2026-10-24-*`.
+
+Blocked: the Keychain item `com.sjel.credential.inference-deepseek` holds a key DeepSeek
+rejects (401, 2026-10-24). The operator stores a fresh one with
+`security add-generic-password -U -s com.sjel.credential.inference-deepseek -a inference-deepseek -w`.
+The Sjel role is `agent_eval_deepseek` in the overlay's `config/inference.json`: model
+`deepseek-flash`, thinking disabled to match Pi's `off`, 200 requests a day, 65,536 input tokens,
+and a `credit_expires_on` of 2026-11-30 that marks the end of this eval budget, not a known credit date.
+
+Next, in order:
+
+1. Rerun the manifest in `data/agent-eval/runs/2026-10-24-deepseek-c01-r04/` once the key works,
+   then the same for D01–D04 (cells A and C).
+2. Human review of the `review.md` files. Labels for all 12 cases are still unapproved, and the
+   D-case keys have had no second review.
+3. Cells B and D: the same D cases with `"retrieval": {"mode": "vector", "embedding_role":
+   "embedding"}` in the manifest. Only a measured answer gain justifies porting retrieval into a
+   Sjel capability on libSQL (`F32_BLOB`, `vector_top_k`), with same-file section context and no
+   cross-document graph.
+4. Cloud roles for real `sjel-agent` work need tools that can attest their data class. Today only
+   the evaluator's proxy tools attest c0 (`Tool::data_class`, `libs/agent/src/lib.rs`).
+5. Local candidates (Gemma E2B/E4B, Granite, Apple Foundation Models, CLM-style scorers) each get
+   an `upstreams.toml` row and a measurement on the one job they would do.
+
+Not decided yet: final-test fixtures, the adjudicator, editable components and promotion policy.
+Concrete work goes to issues with acceptance checks; this plan keeps no second task backlog.
+
+### Sources this work started from (2026-10-24)
+
+- Meta-Harness, end-to-end optimization of model harnesses:
+  [arXiv:2603.28052](https://arxiv.org/html/2603.28052v1), with the
+  [TerminalBench-2 artifact](https://github.com/stanford-iris-lab/meta-harness-tbench2-artifact).
+  How it applies here is in [`research/assistant-harness.md`](research/assistant-harness.md#can-the-harness-improve-through-code-and-experiments).
+- Graph engines: [Grafeo](https://github.com/GrafeoDB/grafeo) and
+  [IndraDB](https://github.com/indradb/indradb); verdicts in `upstreams.toml`. The vault note
+  `Resources/Inbox/rust graphdbs.md` that raised them is an AI summary with redirect links, not a
+  source.
+- Small-model tool use: [TinyLLM, arXiv:2511.22138](https://arxiv.org/pdf/2511.22138) and
+  [small-llm-tool-use-bench](https://huggingface.co/Manojb/small-llm-tool-use-bench), summarized in
+  [`research/local-decision-models.md`](research/local-decision-models.md#small-local-models-specific-jobs-only-decided-2026-10-24).
+- Not used yet: [learnharness](https://github.com/amosblomqvist/learnharness)
+  ([video](https://www.youtube.com/watch?v=nfTDljFG2g0)), a learning harness that keeps a graph
+  of propositions and reasoning chains. Its vault note `Resources/Inbox/Agent Harness for Learning
+  Things.md` belongs to the `teach` skill, not to this track.
+
+### Turso references
+
+- [Agent databases](https://docs.turso.tech/guides/agent-databases)
+- [AgentFS introduction](https://docs.turso.tech/agentfs/introduction), [Rust SDK](https://docs.turso.tech/agentfs/sdk/rust), and [MCP guide](https://docs.turso.tech/agentfs/guides/mcp)
+- [AI memory](https://docs.turso.tech/guides/ai-memory)
+- [Code indexing](https://docs.turso.tech/guides/code-indexing)
+- [Content caching](https://docs.turso.tech/guides/content-caching)
+- [Secrets vault](https://docs.turso.tech/guides/secrets-vault)
+
+## Track 3: Data into Sjel
 
 Measured 2026-10-23 with `sjel-import plan /Volumes/Extreme/archive` (25,348 entries) and the
 documents library (7,154 records):
@@ -62,7 +501,7 @@ Decisions:
 Open claims: IMP-1, DOC-1 to DOC-3, DOC-6, DOC-7, the media `To Sort/` item and the projects
 item in `ISA.md`.
 
-## Track 3: Restructure and sweep
+## Track 4: Restructure and sweep
 
 - **Sweep** (2026-10-23): remove every code comment, config comment and README paragraph that
   repeats a decision, a rule or a history that Git or the owner's code already holds. Shrink
@@ -72,7 +511,7 @@ item in `ISA.md`.
 - An example of what goes: `.gitignore:46` says "PLAN.md is gone".
 - The restructure scope is not decided. That decision comes on the day the track starts.
 
-## Track 4: Data formats
+## Track 5: Data formats
 
 - **PDF rule** (2026-10-23): official documents (contracts, invoices, certificates, tax notices)
   stay PDF-first. For any other document, the extracted data in the owning capability is what
@@ -85,14 +524,17 @@ item in `ISA.md`.
 
 | # | Question | Decided by |
 |---|---|---|
-| P1 | Who owns the 700 notes in the archive that are outside the vault and the agent state? | Operator, before track 2 starts |
-| P2 | What does the restructure change: crate layout, capability boundaries, or both? | Operator, when track 3 starts |
+| P1 | Who owns the 700 notes in the archive that are outside the vault and the agent state? | Operator, before track 3 starts |
+| P2 | What does the restructure change: crate layout, capability boundaries, or both? | Operator, when track 4 starts |
 | P3 | In which track do F6, F9, B47, B48, B49, BKP-5, the traveler F4 item, the Packs/travel item and the host-patch item go? | Next planning round |
-| P4 | The replica path and one database or several | [§ Phase 2 open decision](#open-decision-2026-10-21-what-the-replica-path-is-for) and [§6](#open-decision-2026-10-21-one-database-or-one-per-capability) |
+| P4 | **Answered 2026-10-23:** target one database per agent or service; exact service splits and later sync contracts remain open for Track 2. | Operator, before each migration or sync pilot |
 
-## Storage: Controlled Migration from SQLite to Turso (LibSQL)
+## Historical storage proposal: SQLite to Turso/LibSQL
 
-> **Context**: Sjel currently persists all capability state into a single SQLite database (`axon.db`, ~273 MB, 108 tables) managed synchronously via `rusqlite` in WAL mode (PRD Q45). As the Zed GPUI desktop app evolves, background agents scale, and mobile shells connect, SQLite's single-writer limitation (`SQLITE_BUSY`) and lack of native embedded vector search create friction. This plan lays out a safe, stepwise migration to Turso / LibSQL with strict backup guarantees, zero data loss, and seamless GPUI integration.
+> This section preserves implementation evidence from the earlier storage proposal. It is not the
+> current adoption sequence or topology decision. Track 2 above supersedes its claims that replica
+> support is currently active or that one shared database is the long-term target. Re-verify all
+> implementation and security claims against the current checkout before acting on this history.
 
 ---
 

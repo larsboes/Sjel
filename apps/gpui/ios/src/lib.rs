@@ -367,6 +367,10 @@ impl Capabilities {
             InboxEvent::Editing(open) => keyboard(*open),
         })
         .detach();
+        let copy_events = events.clone();
+        shell::spawn(async move {
+            let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
+        });
         // The drawer holds the conductor and the report from the first frame, so it can show a preset
         // and a volume before any sound exists. Its settings are the ones the last launch left; the
         // edge's own open state and seat are the sidebar's.
@@ -1979,7 +1983,6 @@ impl Render for Capabilities {
                                 "travel" => Tab::Travel,
                                 "calendar" => Tab::Calendar,
                                 "people" => Tab::People,
-                                "inbox" => Tab::Inbox,
                                 _ => Tab::Today,
                             };
                             if view.active_tab == Tab::Travel {

@@ -85,7 +85,8 @@ ports.
    `~/.config/sjel/dashboard-fallbacks.tsv` (`Shell::dashboard_url`). After a week of use, the
    counts are the gap list, and they replace the estimates above. Read them with
    `cut -f2 ~/.config/sjel/dashboard-fallbacks.tsv | sort | uniq -c | sort -rn`.
-2. **Travel authoring and connections.** The largest gap, and §4's highest priority.
+2. **Travel authoring and connections.** The largest gap, and §4's highest priority. Authoring
+   shipped on the Mac in Work Package 17. `/travel/connections` is next.
 3. **Feed review and library, then Inbox triage.** That finishes comms.
 4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
 5. **Delete `dashboard/`.** Then the 78 references, `matches_dashboard_nav`, ⌘D "Open in the
@@ -587,6 +588,47 @@ ports.
   stream. RoomPlan moved to §3 item 5, where the operator's own iPhone 14 Pro made it a package with
   a verifier.
 
+### ✅ Work Package 17: trips are written on the Mac (§1b step 2, first half)
+- **Status**: Shipped (2026-10-24). Mac only. Travel no longer sends anyone to the dashboard to
+  create a trip, add a booking or change a stage.
+- **Why no capability change**: `capabilities/trips` already had every route. Create, update and
+  delete plans, add/edit/delete items, and `expected_updated_at` against a lost stage update were
+  all there. The page was read-only because nobody had built the forms.
+- **Shipped**:
+  - `core/src/travel/edit.rs` (new): the three drafts and their request bodies.
+    - `TripDraft` checks a date's shape, which the capability does not (it compares strings), so
+      `1.11.2026` is named in the form rather than stored.
+    - `BookingDraft` sends the two keys the capability requires (`provider`, `order_ref`) and
+      reuses `capture::cents_from` for the amount. An empty optional field is `null` on edit,
+      which removes the key. `external_id` is `booking:<provider>:<ref>`, so entering one booking
+      twice updates one row.
+    - `StageEdit` applies to the stages exactly as the capability returned them, so travelers,
+      the chosen connection and the branch note survive an edit the form knows nothing about.
+    - `typed_place` gives the id the dashboard's place field gives (`PlaceField.svelte`), so a
+      city typed in either client is one place.
+  - `core/src/shell.rs`: `trip_create`, `trip_booking_add`, `trip_booking_edit` (fields, then the
+    day, which only the item route moves), `trip_item_delete`, and `trip_stages`. `trip_stages`
+    reads the plan, edits, and writes back with the revision it read. A 409 says the trip changed
+    on the Mac. Every write then asks calendar to sync the trip, as `syncTripToCalendar` did. That
+    rule lived only in the dashboard's TypeScript.
+  - `ui/src/travel/forms.rs` (new): one form card for all three. It opens where its button is
+    (New trip on the library, Add stage and Edit on the itinerary, Add booking and Edit on saved
+    items). Remove asks once, then removes.
+  - `core/src/travel.rs`: `Stage` reads `id` and `transport_modes`, with defaults so a snapshot
+    saved before this still opens. `plan_path` encodes every segment.
+  - `core/src/travel/details.rs`: a booking row shows provider, reference and free-cancellation date.
+- **Not here**:
+  - The phone. It reads trips from a copy and has no outbox for them, so it shows no controls.
+  - Editing the trip's own title, dates and destinations.
+  - The itinerary timeline, the PNR copy button and fare alerts (§4).
+  - `/travel/connections`, the second half of step 2.
+- **Verified**: 5 new tests in `travel::edit`. `cargo test -p sjel-gpui-core -p sjel-gpui-ui` is
+  289 + 50, all green, and `cargo clippy --workspace --all-targets` is clean on these files. Not
+  yet clicked through in the running app.
+- **Target Files**:
+  - `apps/gpui/core/src/travel/{edit,details}.rs`, `apps/gpui/core/src/{travel,shell}.rs`
+  - `apps/gpui/ui/src/travel/{forms,pages}.rs`, `apps/gpui/ui/src/travel.rs`
+
 ---
 
 ## 3. Next, before everything below (operator, 2026-10-23)
@@ -693,8 +735,9 @@ A substantial amount of UI/UX craftsmanship is needed to make the native app fee
 ### 🚗 Travel & Map (`/travel`, `/map`) UX Overhaul (Highest Priority)
 The current Travel page is functionally capable of reading trips and drawing OpenStreetMap/MapLibre tiles, but the experience is rigid and lacks critical operator workflows:
 
-1. **Native Trip Creation & Booking Authoring**:
-   - *Current issue*: You cannot create a trip or add/edit a booking in GPUI; it redirects you to the web dashboard.
+1. **Native Trip Creation & Booking Authoring**: shipped on the Mac in Work Package 17
+   (2026-10-24). Editing the trip's own fields is still open.
+   - *Was*: You cannot create a trip or add/edit a booking in GPUI; it redirects you to the web dashboard.
    - *Fix*: Add in-app modals:
      - `Create Trip`: Title, primary destination, start date, end date, tag.
      - `Add/Edit Booking`: Transport/hotel/activity type, confirmation code, carrier/provider, check-in/out times, attachment/link.
@@ -811,6 +854,56 @@ flowchart TD
    - ~~**QR Code Scanner** (`tauri-plugin-barcode-scanner`)~~: shipped in Work Package 6
      (`apps/gpui/ios/host/PairScanner.swift`, `AVCaptureMetadataOutput`).
    - **Local Push Notifications** (`tauri-plugin-notification`): Use `UNUserNotificationCenter` for Sparpreis fare drops and calendar alarms without remote push servers.
+
+---
+
+## 5b. One app on every platform, and what it costs on disk (operator, 2026-10-24)
+
+Not started. Each item is a work package for a later session.
+
+1. **gpui-kit 0.8.0.** The app pins `gpui-kit = "=0.7.3"` and `gpui-pre = "=0.3.9"` in three
+   manifests (`Cargo.toml`, `ui/Cargo.toml`, `ios/Cargo.toml`). crates.io has 0.8.0. The iPhone
+   build also pins `gpui-mobile` to git rev `c24a1308e1`, which must resolve the same `gpui-pre`.
+   So the upgrade moves all four pins together, or it splits Mac and phone onto two GPUI copies.
+   What 0.8.0 changes is not read yet. Do it as its own commit, with `cargo test` on core and ui
+   and `ios/run-sim` before and after (the `gpui` skill: no pin change inside an unrelated change).
+2. **One UI crate, thin platform shells.** Measured 2026-10-24: `src/` (the Mac binary) holds
+   41 files and 27,944 lines, `ui/` (shared with the phone) 23 files and 13,499 lines, and
+   `ios/src` 2,664 lines. Most Mac pages (finance, inventory, systems, packs and more) live in
+   `src/` and so are Mac-only by placement, not by need.
+   - Move each page into `ui/` behind `Density`, the way Calendar, People, Today and Travel
+     already are. The Mac and phone shells keep only windowing, navigation chrome and platform
+     calls.
+   - Platform code is already gated: `objc2-*` sits under `cfg(target_os = "macos")`, and 5 files
+     use `target_os` or `native-maps` gates. Keep it that way. A platform call goes behind one
+     small trait in the shell (keychain, open URL, audio out, notifications, scanner), never as a
+     `cfg` inside a page.
+3. **Linux, Windows, Android.** These come after item 2. They mean a shell each, not a port each.
+   - Linux and Windows: GPUI has desktop backends. The open work is the keychain
+     (`libs/sjel-credentials`), the native map (`native-maps` is macOS only, the raster map is
+     not), and packaging.
+   - Android: the phone's offline core (`core/src/{store,sync,mirror}.rs`) is platform-free. The
+     open work is a GPUI mobile backend for Android, a host like `ios/host`, and discovery.
+     Unverified whether `gpui-mobile` supports Android today.
+   - A CI job that runs `cargo check --target` for each platform stops a platform `cfg` from
+     leaking into a page before anyone builds there.
+4. **Build footprint.** Measured 2026-10-24 (`du -sh`):
+   - `~/.cargo-target`: 21 GB (debug 13, release 6.9, `aarch64-apple-ios` 1.2)
+   - the repository's `target/`: 14 GB, of which 11 GB is `release/deps`
+   - `~/.cargo/registry`: 6.2 GB
+   - `ios/host/build`: 484 MB
+
+   The app builds into `~/.cargo-target` (`CARGO_TARGET_DIR`), and the root workspace builds
+   into `./target`, so shared crates compile and sit on disk twice. Fix: one target directory
+   for every workspace, a prune of artifacts nobody has read in N days, and a `tools/doctor`
+   line that names the size against a threshold. 174 GiB was free on the same day, so this is
+   hygiene, not an emergency.
+5. **Efficiency and simplicity.** Two known items:
+   - Documents still fetches 7,154 rows on mount (§4, cursor paging).
+   - The finder's server search uses `LIKE`, which folds ASCII case only (§3 item 1, FTS5).
+
+   Beyond those, run `simplify` over each page as it moves into `ui/` (item 2). A move is the
+   cheapest moment to delete what the second client does not need.
 
 ---
 

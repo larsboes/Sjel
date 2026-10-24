@@ -21,6 +21,9 @@ impl Item {
             ("check_in", "Check-in"),
             ("check_out", "Check-out"),
             ("address", "Address"),
+            ("provider", "Provider"),
+            ("order_ref", "Reference"),
+            ("free_cancellation_until", "Free cancellation until"),
             ("notes", "Notes"),
         ]
         .into_iter()

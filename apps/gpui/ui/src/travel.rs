@@ -13,6 +13,7 @@ use sjel_gpui_core::{
 use crate::{Density, Palette};
 
 mod details;
+mod forms;
 mod map;
 #[cfg(all(feature = "native-maps", target_os = "macos"))]
 mod native_renderer;
@@ -68,6 +69,12 @@ pub struct Travel {
     selected_stop: Option<Place>,
     map_dragged: bool,
     scroll: ScrollHandle,
+    /// The open trip, booking or stage form ([`forms`]).
+    form: Option<forms::Form>,
+    /// The row whose Remove was pressed once.
+    confirm_remove: Option<String>,
+    /// A remove that the Mac refused, when no form is open to say so.
+    write_error: Option<String>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
     vector: Option<vector::VectorMap>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -112,6 +119,9 @@ impl Travel {
             selected_stop: None,
             map_dragged: false,
             scroll: ScrollHandle::new(),
+            form: None,
+            confirm_remove: None,
+            write_error: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
             vector: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -421,6 +431,9 @@ impl Travel {
             _ => None,
         };
         self.route = route;
+        self.form = None;
+        self.confirm_remove = None;
+        self.write_error = None;
         if let Some(id) = id {
             self.selected = Some(id.clone());
             self.selected_stop = None;

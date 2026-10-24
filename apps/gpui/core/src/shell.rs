@@ -1124,6 +1124,104 @@ impl Shell {
         self.json(Method::GET, &path, None, 10).await
     }
 
+    /// `POST /trips/api/plans` with a body from [`crate::travel::edit::TripDraft::body`].
+    pub async fn trip_create(&self, body: serde_json::Value) -> ShellResult<crate::travel::Plan> {
+        let plan: crate::travel::Plan = self
+            .json(Method::POST, "/trips/api/plans", Some(body), 10)
+            .await?;
+        self.trip_calendar_sync(&plan.id).await;
+        Ok(plan)
+    }
+
+    /// `POST …/items` with a body from [`crate::travel::edit::BookingDraft::create_body`].
+    pub async fn trip_booking_add(&self, plan: &str, body: serde_json::Value) -> ShellResult<()> {
+        let path = crate::travel::plan_path(plan, &["items"]).map_err(refused)?;
+        self.send(Method::POST, &path, Some(body), 10).await?;
+        self.trip_calendar_sync(plan).await;
+        Ok(())
+    }
+
+    /// The two PATCHes an edited booking needs: its fields, then its day, which only the item
+    /// route moves (`set_item_day` in `capabilities/trips/src/server.rs`).
+    pub async fn trip_booking_edit(
+        &self,
+        plan: &str,
+        item: &str,
+        fields: serde_json::Value,
+        day: Option<String>,
+    ) -> ShellResult<()> {
+        let path = crate::travel::plan_path(plan, &["items", item, "fields"]).map_err(refused)?;
+        self.send(Method::PATCH, &path, Some(fields), 10).await?;
+        let path = crate::travel::plan_path(plan, &["items", item]).map_err(refused)?;
+        self.send(
+            Method::PATCH,
+            &path,
+            Some(serde_json::json!({ "day": day })),
+            10,
+        )
+        .await?;
+        self.trip_calendar_sync(plan).await;
+        Ok(())
+    }
+
+    pub async fn trip_item_delete(&self, plan: &str, item: &str) -> ShellResult<()> {
+        let path = crate::travel::plan_path(plan, &["items", item]).map_err(refused)?;
+        self.send(Method::DELETE, &path, None, 10).await?;
+        self.trip_calendar_sync(plan).await;
+        Ok(())
+    }
+
+    /// Reads the plan, applies `edit` to its stages as stored, and writes them back with the
+    /// revision it read. The capability answers 409 when another writer moved the plan in
+    /// between, instead of reverting their stages (`expected_updated_at` in
+    /// `capabilities/trips/src/store.rs`).
+    pub async fn trip_stages(
+        &self,
+        plan: &str,
+        edit: &crate::travel::edit::StageEdit,
+    ) -> ShellResult<()> {
+        let path = crate::travel::plan_path(plan, &[]).map_err(refused)?;
+        let current: serde_json::Value = self.json(Method::GET, &path, None, 10).await?;
+        let mut stages = current
+            .get("stages")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        edit.apply(&mut stages).map_err(refused)?;
+        let body = serde_json::json!({
+            "stages": stages,
+            "expected_updated_at": current.get("updated_at"),
+        });
+        match self.send(Method::PATCH, &path, Some(body), 10).await {
+            Err(ShellError::Refused(409, _)) => Err(ShellError::Refused(
+                409,
+                Some(
+                    "The trip changed on the Mac while this was open. Refresh and try again."
+                        .into(),
+                ),
+            )),
+            other => other.map(drop),
+        }?;
+        self.trip_calendar_sync(plan).await;
+        Ok(())
+    }
+
+    /// Calendar mirrors a trip's stages and booking deadlines when asked
+    /// (`/calendar/api/trip-plans/{id}/sync`); the dashboard asks after the same writes
+    /// (`syncTripToCalendar` in `dashboard/src/lib/api/travel.ts`). The trip write already
+    /// succeeded, so a calendar that is down is not an error.
+    async fn trip_calendar_sync(&self, plan: &str) {
+        let Ok(mut url) = reqwest::Url::parse("http://localhost/calendar/api/trip-plans/") else {
+            return;
+        };
+        if let Ok(mut segments) = url.path_segments_mut() {
+            segments.pop_if_empty().push(plan).push("sync");
+        }
+        let _ = self
+            .send(Method::POST, url.path(), Some(serde_json::json!({})), 10)
+            .await;
+    }
+
     /// `places` resolves a typed name to a coordinate; a miss answers `place: null`.
     ///
     /// The 20 s budget covers the provider request behind the capability, which its own
@@ -2995,6 +3093,11 @@ fn landing_url(base: &Url, open: &str, next: &str) -> Option<Url> {
     }
     url.query_pairs_mut().append_pair("next", next);
     Some(url)
+}
+
+/// A check this client made before asking, in the same shape as the shell's own refusal.
+fn refused(why: String) -> ShellError {
+    ShellError::Refused(400, Some(why))
 }
 
 /// Appends `<timestamp>\t<path>` to `dashboard-fallbacks.tsv` beside `appearance.json`: every

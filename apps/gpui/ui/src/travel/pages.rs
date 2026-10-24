@@ -1,4 +1,5 @@
 //! Travel's trip library and the four subpages of an opened trip.
+use super::forms::{FormKind, Remove};
 use super::Travel;
 use gpui::{div, prelude::*, rgb, rgba, AnyElement, ClipboardItem, Context};
 use gpui_kit::component::button::ButtonVariants;
@@ -72,6 +73,9 @@ impl Travel {
             )
             .when_some(self.error.clone(), |page, error| {
                 page.child(div().text_sm().text_color(rgb(palette.amber)).child(error))
+            })
+            .when_some(self.write_error.clone(), |page, error| {
+                page.child(div().text_sm().text_color(rgb(palette.red)).child(error))
             });
         if matches!(self.route, TravelRoute::Trips) {
             if let Some(stamp) = self
@@ -166,10 +170,18 @@ impl Travel {
     fn trip_library(&self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let mut list = div().flex().flex_col().gap_3();
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .children(self.form_button("new-trip", "New trip", FormKind::Trip, cx))
+            .children(self.form_card(&FormKind::Trip, cx));
         if self.loaded && self.plans.is_empty() {
-            list = list
-                .child("No trips saved here yet. Create a trip in the dashboard, then refresh.");
+            list = list.child(if self.writer().is_some() {
+                "No trips yet."
+            } else {
+                "No trips saved here yet. Create one on the Mac, then refresh."
+            });
         }
         let mut previous = None;
         for plan in self
@@ -334,6 +346,16 @@ impl Travel {
         }
         for (i, stage) in stages.into_iter().enumerate() {
             let destination = stage.destination.clone();
+            let editing = FormKind::Stage(Some(stage.id.clone()));
+            if let Some(card) = self.form_card(&editing, cx) {
+                page = page.child(card);
+                continue;
+            }
+            let mode = stage
+                .transport_modes
+                .first()
+                .map(|mode| format!(" · {mode}"))
+                .unwrap_or_default();
             page = page.child(
                 div()
                     .flex()
@@ -347,7 +369,7 @@ impl Travel {
                             .text_xs()
                             .text_color(rgb(self.palette.muted))
                             .child(format!(
-                                "{} · {}",
+                                "{} · {}{mode}",
                                 stage.date.as_deref().unwrap_or("Date open"),
                                 stage.status.replace('_', " ")
                             )),
@@ -357,15 +379,34 @@ impl Travel {
                         stage.origin.name, stage.destination.name
                     )))
                     .child(
-                        self.button(gpui::SharedString::from(format!("stage-map-{i}")))
-                            .label("Destination on map")
-                            .disabled(destination.coordinate().is_none())
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.show_stop(destination.clone(), cx)
-                            })),
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_2()
+                            .child(
+                                self.button(gpui::SharedString::from(format!("stage-map-{i}")))
+                                    .label("Destination on map")
+                                    .disabled(destination.coordinate().is_none())
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.show_stop(destination.clone(), cx)
+                                    })),
+                            )
+                            // A snapshot from before stage ids were read has nothing to address.
+                            .when(!stage.id.is_empty(), |row| {
+                                row.children(self.form_button(
+                                    gpui::SharedString::from(format!("stage-edit-{i}")),
+                                    "Edit",
+                                    editing,
+                                    cx,
+                                ))
+                                .children(self.remove_button(Remove::Stage(stage.id.clone()), cx))
+                            }),
                     ),
             );
         }
+        page = page
+            .children(self.form_button("add-stage", "Add stage", FormKind::Stage(None), cx))
+            .children(self.form_card(&FormKind::Stage(None), cx));
         page.child(
             div()
                 .text_sm()
@@ -388,6 +429,9 @@ impl Travel {
                 .child("Saved activities, stays and bookings appear when trip details have loaded.")
                 .into_any_element();
         };
+        page = page
+            .children(self.form_button("add-booking", "Add booking", FormKind::Booking(None), cx))
+            .children(self.form_card(&FormKind::Booking(None), cx));
         let mut items: Vec<_> = saved.details.items.iter().collect();
         items.sort_by(|a, b| {
             a.day
@@ -417,7 +461,11 @@ impl Travel {
         page.into_any_element()
     }
 
-    fn item_row(&self, item: &Item, _: &mut Context<Self>) -> AnyElement {
+    fn item_row(&self, item: &Item, cx: &mut Context<Self>) -> AnyElement {
+        let editing = FormKind::Booking(Some(item.id.clone()));
+        if let Some(card) = self.form_card(&editing, cx) {
+            return card;
+        }
         let mut row = div()
             .flex()
             .flex_col()
@@ -435,13 +483,23 @@ impl Travel {
         for (label, value) in item.fields() {
             row = row.child(div().text_sm().child(format!("{label}: {value}")));
         }
+        let mut actions = div().flex().flex_wrap().gap_2();
         if let Some(url) = item.source_url() {
-            row = row.child(
+            actions = actions.child(
                 self.button(gpui::SharedString::from(format!("open-item-{}", item.id)))
                     .label("Open source")
                     .on_click(move |_, _, cx| cx.open_url(url.as_str())),
             );
         }
-        row.into_any_element()
+        if item.item_type == "booking" {
+            actions = actions.children(self.form_button(
+                gpui::SharedString::from(format!("edit-item-{}", item.id)),
+                "Edit",
+                editing,
+                cx,
+            ));
+        }
+        row.child(actions.children(self.remove_button(Remove::Item(item.id.clone()), cx)))
+            .into_any_element()
     }
 }

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{device::DeviceClient, shell::Shell};
 
 mod details;
+pub mod edit;
 mod navigation;
 pub mod places;
 pub use details::{save_details, saved_details, Details, Item, SavedDetails};
@@ -30,11 +31,16 @@ impl Place {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Stage {
+    /// `stage:<n>`; empty in a snapshot saved before the app could edit stages.
+    #[serde(default)]
+    pub id: String,
     pub sequence: usize,
     pub origin: Place,
     pub destination: Place,
     pub date: Option<String>,
     pub status: String,
+    #[serde(default)]
+    pub transport_modes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -137,6 +143,11 @@ impl Source {
 }
 
 pub(crate) fn details_path(id: &str) -> Result<String, String> {
+    plan_path(id, &[])
+}
+
+/// `/trips/api/plans/{id}/{rest…}`, each segment percent-encoded so an id cannot add a path.
+pub(crate) fn plan_path(id: &str, rest: &[&str]) -> Result<String, String> {
     if !navigation::valid_id(id) {
         return Err("The trip identifier is invalid.".into());
     }
@@ -145,7 +156,8 @@ pub(crate) fn details_path(id: &str) -> Result<String, String> {
     url.path_segments_mut()
         .map_err(|_| "Cannot build the trip address.")?
         .pop_if_empty()
-        .push(id);
+        .push(id)
+        .extend(rest);
     Ok(url.path().to_owned())
 }
 

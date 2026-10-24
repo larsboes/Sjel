@@ -725,6 +725,18 @@ pub fn classify_archive_at_target(
 }
 
 /// A failed attempt is reported even while the last good receipt still looks fresh.
+/// Whether a later success retires a recorded failed attempt.
+///
+/// The attempt file exists so a failure outlives its log (`capabilities/backup/src/runner.rs`),
+/// and that runner clears it when a run succeeds. Nothing clears it when the success arrives by
+/// another road: `tools/backup-all.sh` is the documented manual path on this machine, it writes a
+/// fresh receipt and no attempt, so a stale `attempts/<capability>.json` kept doctor red for a
+/// capability whose backup was verified twelve minutes later -- measured 2026-10-24, documents.
+/// A check that cannot go out is a check that gets ignored, so the receipt wins on time.
+pub fn attempt_superseded(failed_at: f64, succeeded_at: Option<i64>) -> bool {
+    succeeded_at.is_some_and(|succeeded| succeeded as f64 >= failed_at)
+}
+
 pub fn attempt_finding(exit_code: f64, at_epoch: f64, detail: &str, now: f64) -> String {
     let since = (now - at_epoch).max(0.0);
     let reason = if detail.trim().is_empty() {
@@ -1771,6 +1783,21 @@ mod tests {
         );
         let terse = attempt_finding(23.0, 1_000_000.0, "", 1_000_000.0);
         assert!(terse.contains("exit 23") && terse.ends_with(')'));
+    }
+
+    #[test]
+    fn a_success_after_a_failure_retires_the_failure() {
+        // documents, measured 2026-10-24: a failed attempt at 13:40 and a verified receipt at
+        // 13:56 kept doctor red for a backup that had just been proven.
+        assert!(attempt_superseded(1_792_842_030.0, Some(1_792_842_994)));
+        assert!(
+            !attempt_superseded(1_792_842_030.0, Some(1_792_840_000)),
+            "a success BEFORE the failure does not retire it"
+        );
+        assert!(
+            !attempt_superseded(1_792_842_030.0, None),
+            "no receipt means nothing retires the claim"
+        );
     }
 
     // ---- scheduled producers

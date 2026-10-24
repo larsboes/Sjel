@@ -1878,10 +1878,15 @@ fn backups(ctx: &mut Ctx) {
                     Some(at_epoch) => {
                         let exit = a.get("exit_code").and_then(Json::as_f64).unwrap_or(-1.0);
                         let detail = a.get("detail").and_then(Json::as_str).unwrap_or("");
-                        ctx.bad(format!(
-                            "{name} — {}",
-                            pure::attempt_finding(exit, at_epoch, detail, now)
-                        ));
+                        // Silent when a later run succeeded: the age line below already reports
+                        // the backup, and repeating a resolved failure is how a real one stops
+                        // being read.
+                        if !pure::attempt_superseded(at_epoch, at) {
+                            ctx.bad(format!(
+                                "{name} — {}",
+                                pure::attempt_finding(exit, at_epoch, detail, now)
+                            ));
+                        }
                     }
                     None => ctx.warn(format!(
                         "{name} — {} has no timestamp; a failed attempt cannot be dated",

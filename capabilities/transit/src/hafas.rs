@@ -485,6 +485,12 @@ impl HafasClient {
         if !status.is_success() {
             let error = refusal(status.as_u16(), text);
             if let HafasError::Blocked { reference } = &error {
+                eprintln!(
+                    "transit: DB refused a journey request (OPS_BLOCKED, reference {}); journey \
+                     requests pause for {} minutes",
+                    reference.as_deref().unwrap_or("none"),
+                    BLOCK_COOLDOWN.as_secs() / 60
+                );
                 *self.blocked.lock().expect("block lock") =
                     Some((std::time::Instant::now(), reference.clone()));
             }

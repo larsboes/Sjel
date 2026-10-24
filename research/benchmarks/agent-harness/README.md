@@ -255,6 +255,36 @@ separate two harnesses. The run shows the pipeline works, not which harness is b
 C01 and R04 claims are `review_pending`: factual scoring needs the human adjudicator. Traces
 stay in the overlay under `data/agent-eval/runs/2026-10-24-qwen-pi-vs-sjel/`.
 
+### DeepSeek V4.1 Flash runs, 2026-10-24: both harnesses finish, quality unscored
+
+Pi 1.4.0 (`deepseek`/`deepseek-flash`, thinking off) against `sjel-agent-eval` at `c7300e1e`
+(role `agent_eval_deepseek`, `thinking: disabled`), the same endpoint, 2 repeats, harness order
+alternating. Prompt tokens are normalized: Pi's `input + cacheRead` against Sjel's whole
+`prompt_tokens`. Per-attempt values; ranges over the 2 repeats.
+
+| | Pi | Sjel |
+|---|---|---|
+| C01 + R04: attempts finished | 4 / 4 | 4 / 4 |
+| R04 one-probe check | 2 / 2 pass | 2 / 2 pass |
+| C01 prompt tokens | 2,600–3,500 | 1,796–1,821 |
+| R04 prompt tokens | 4,800–5,800 | 3,660–4,731 |
+| D01–D04: attempts finished | 8 / 8 | 8 / 8 |
+| D01–D04 prompt tokens per attempt | 10,603–483,554 | 26,171–304,008 |
+| D01–D04 prompt tokens, all 8 attempts | 1,347,230 | 1,040,303 |
+
+The D-case spread within one harness and case (up to 30×) is larger than the difference
+between harnesses, so two repeats decide nothing about cost. Per the comparison contract,
+efficiency counts only after factual review, which is pending; each run directory has a
+`review.md`.
+
+Setup facts the runs exposed:
+
+- `sjel-credentials` stores Keychain values hex-encoded (`libs/sjel-credentials/src/keychain.rs`,
+  `encode_hex`). Pi's `models.json` reads the item with `security ... -w | xxd -r -p`.
+- The cloud role's `max_input_tokens` is compared against request **bytes**
+  (`libs/agent/src/cloud.rs`, "input bytes; role limit"). The first D run set 65,536 and five Sjel
+  attempts were refused; the role now has 262,144, about 65,000 tokens (my estimate).
+
 ## Remaining decisions
 
 The profile pair and source-grounding requirement are decided, and the live adapters exist.

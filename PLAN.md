@@ -411,17 +411,18 @@ local Qwen3.5-4B (C01/R04 8 of 8 finished; D01–D04 14 of 16, two Sjel attempts
 rebuilt mid-run). Those runs are unscored and superseded by the DeepSeek decision. Private
 traces and `review.md` files are in the overlay under `data/agent-eval/runs/2026-10-24-*`.
 
-Blocked: the Keychain item `com.sjel.credential.inference-deepseek` holds a key DeepSeek
-rejects (401, 2026-10-24). The operator stores a fresh one with
-`security add-generic-password -U -s com.sjel.credential.inference-deepseek -a inference-deepseek -w`.
-The Sjel role is `agent_eval_deepseek` in the overlay's `config/inference.json`: model
-`deepseek-flash`, thinking disabled to match Pi's `off`, 200 requests a day, 65,536 input tokens,
-and a `credit_expires_on` of 2026-11-30 that marks the end of this eval budget, not a known credit date.
+Unblocked the same day: the Keychain item now holds the key hex-encoded, the format
+`sjel-credentials` writes, and Pi decodes it (`| xxd -r -p`). The Sjel role is
+`agent_eval_deepseek` in the overlay's `config/inference.json`: model `deepseek-flash`, thinking
+disabled to match Pi's `off`, 200 requests a day, `max_input_tokens` 262,144 (compared as request
+bytes in `libs/agent/src/cloud.rs`, so about 65,000 tokens), and a `credit_expires_on` of
+2026-11-30 that marks the end of this eval budget, not a known credit date. First DeepSeek results:
+[benchmark README](research/benchmarks/agent-harness/README.md#deepseek-v41-flash-runs-2026-10-24-both-harnesses-finish-quality-unscored).
 
 Next, in order:
 
-1. Rerun the manifest in `data/agent-eval/runs/2026-10-24-deepseek-c01-r04/` once the key works,
-   then the same for D01–D04 (cells A and C).
+1. Done 2026-10-24: C01/R04 and D01–D04 on DeepSeek, cells A and C, 24 attempts, all finished.
+   Two repeats leave cost undecided; repeat once quality is reviewed.
 2. Human review of the `review.md` files. Labels for all 12 cases are still unapproved, and the
    D-case keys have had no second review.
 3. Cells B and D: the same D cases with `"retrieval": {"mode": "vector", "embedding_role":

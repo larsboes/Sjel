@@ -43,7 +43,13 @@ case "$CAP" in
   ''|*[!A-Za-z0-9._-]*) echo "restore.sh: invalid capability name" >&2; exit 1 ;;
 esac
 
-MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
+# The manifest is read from the checkout by default. `SJEL_RESTORE_MANIFEST` exists for
+# tools/restore.test.sh: its container-path case needs a capability that declares
+# `backup_container_paths`, and after home-assistant left this repository on 2026-10-24 no
+# capability declares one. Pointing the check at a synthetic manifest keeps that feature
+# covered without inventing a contract in a real capability. Nothing in production sets it.
+
+MANIFEST="${SJEL_RESTORE_MANIFEST:-$SJEL_ROOT/capabilities/$CAP/service.toml}"
 [ -f "$MANIFEST" ] || { echo "restore.sh: no $MANIFEST" >&2; exit 1; }
 [ -f "$ARCHIVE" ] || { echo "restore.sh: archive not found: $ARCHIVE" >&2; exit 1; }
 ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd -P)/$(basename "$ARCHIVE")"

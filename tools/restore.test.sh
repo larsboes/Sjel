@@ -155,17 +155,27 @@ chmod 750 "$container_payload/required.txt"
 tar czpf "$container_stage/container-config.tar.gz" -C "$container_payload" .
 cat > "$container_stage/axon-backup.toml" <<'META'
 format = "1"
-capability = "home-assistant"
+capability = "container-demo"
 created_at = "2026-01-02T030405Z"
-image = "ghcr.io/home-assistant/home-assistant"
-tag = "stable"
+image = "sjel/container-demo"
+tag = "1"
 sqlite = ""
 sqlite_online = ""
 backup_paths = []
 backup_container_paths = ["/config"]
 META
-tar czf "$SCRATCH/home-assistant.tar.gz" -C "$container_stage" .
-expect_pass "container-path restore" "$RESTORE" home-assistant "$SCRATCH/home-assistant.tar.gz" --destination "$SCRATCH/container-out"
+# No capability in the checkout declares `backup_container_paths` since home-assistant left
+# (2026-10-24), so this case supplies its own manifest. Without it the container-path restore
+# would be the one path in restore.sh no test could reach.
+cat > "$SCRATCH/container-demo.service.toml" <<'MANIFEST'
+name     = "container-demo"
+image    = "sjel/container-demo"
+tag      = "1"
+backup_container_paths = ["/config"]
+MANIFEST
+tar czf "$SCRATCH/container-demo.tar.gz" -C "$container_stage" .
+SJEL_RESTORE_MANIFEST="$SCRATCH/container-demo.service.toml" \
+  expect_pass "container-path restore" "$RESTORE" container-demo "$SCRATCH/container-demo.tar.gz" --destination "$SCRATCH/container-out"
 case "$(uname -s)" in
   Darwin) restored_mode="$(stat -f %Lp "$SCRATCH/container-out/container/config/required.txt")" ;;
   *) restored_mode="$(stat -c %a "$SCRATCH/container-out/container/config/required.txt")" ;;

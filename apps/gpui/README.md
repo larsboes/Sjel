@@ -562,6 +562,9 @@ cargo run          # development
 ./install          # ~/Applications/Sjel Desktop.app, opened by the menu bar's Open App
 ```
 
+Both build into `CARGO_TARGET_DIR`; `./install` falls back to `$HOME/.cargo-target` when that is
+unset, so the in-app Rebuild shares the terminal's warm cache instead of building its own.
+
 `./install` also registers the `sjel://` scheme. Run it again after a change.
 
 ## Testing without taking focus

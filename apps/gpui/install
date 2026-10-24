@@ -25,6 +25,13 @@ fi
 
 # One commit for the binary (build.rs reads SJEL_BUILD_COMMIT) and for Info.plist, where the
 # menu-bar app reads it to tell whether this bundle is behind the checkout.
+# A Finder-launched rebuild carries no shell environment and would build a second cache beside
+# this app. Share the machine's when it is there.
+shared_target="$HOME/.cargo-target"
+if [ -d "$shared_target" ] && [ -z "${CARGO_TARGET_DIR:-}" ]; then
+  export CARGO_TARGET_DIR="$shared_target"
+fi
+
 commit="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
 if [ "$native_maps" = 1 ]; then
   (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" MLN_PRECOMPILE=1 cargo build --release --locked --features native-maps)

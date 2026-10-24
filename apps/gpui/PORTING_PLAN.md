@@ -924,8 +924,19 @@ Not started. Each item is a work package for a later session.
      `[profile.dev]`). It never inherited it, so every GPUI dependency carried full debug info.
      The saving is not measured yet. The first debug build after this rebuilds GPUI, and the
      old artifacts stay in `~/.cargo-target/debug` until the debug-cache class prunes them.
-   - The stray `apps/gpui/target` (1.9 GB, which cargo no longer builds into) was reclaimed
-     with `storage reclaim --repo --target`.
+   - The GPUI workspace and its installer share one target dir. `install` exported nothing and
+     `src/update.rs` passes only `PATH`, so the in-app Rebuild built a second release tree in
+     `apps/gpui/target`: byte-identical binaries eight seconds apart, and a cold build whenever
+     the two paths alternated. `install` now keeps `CARGO_TARGET_DIR` when set and otherwise uses
+     `$HOME/.cargo-target` when it exists, and `cargo metadata` follows it for the bundle path.
+     Measured in the shared tree, warm release builds: 0.2 s unchanged, 11.8 s for one file in
+     `src/`, 17.1 s for `ui/`, 21.1 s for `core/`. A cold build of the whole tree is about 3 min.
+     Left alone: `install` passes `SJEL_BUILD_COMMIT` and a bare `cargo build` does not, so
+     alternating between the two recompiles the binary (about 12 s).
+   - Both dead build trees were reclaimed 2026-10-24, 3.6 GB in total: `apps/gpui/target`
+     (1.9 GB) with `storage reclaim --repo --target`, and the repository's `target/debug`
+     (1.7 GB from 2026-10-22, unreachable because the shell sends every debug build to
+     `~/.cargo-target/debug`) with `cargo clean --profile dev --target-dir target`.
    - The soundscape's half-minute quality test is `#[ignore]`d: 20.8 s of every core test run.
      It takes 2.4 s with `--release --ignored`.
 

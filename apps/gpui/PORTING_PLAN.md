@@ -971,9 +971,14 @@ Not started. Each item is a work package for a later session.
      use `target_os` or `native-maps` gates. Keep it that way. A platform call goes behind one
      small trait in the shell (keychain, open URL, audio out, notifications, scanner), never as a
      `cfg` inside a page.
-   - Done 2026-10-24: Finance moved to `ui/src/finance.rs` unchanged. It used only `data`,
-     `theme` and `core`. `src/finance_view.rs` re-exports it, so the Mac shell did not change.
-     The phone has no Finance tab yet.
+   - Done 2026-10-24: twelve pages moved to `ui/` unchanged, apart from import paths: Finance,
+     Inventory, Packs, Media, CV, Research, Backup, Systems, Setup, Self, Software and Mail. Each
+     used only `data`, `theme`, `primitives` and `core`. Each old `src/` file now only re-exports
+     its page, so the Mac shell did not change. `ui` checks for `aarch64-apple-ios`. The phone has
+     no tab for any of them yet.
+   - Still in `src/`: Documents (`pdf_kit`, PDFKit), Feed (needs Documents), Capabilities
+     (`selection`, `workspace`), and the Mac wrappers `people_view`, `context_view` and
+     `calendar_view` over pages that are already shared.
 3. **Linux, Windows, Android.** These come after item 2. They mean a shell each, not a port each.
    - Linux and Windows: GPUI has desktop backends. The open work is the keychain
      (`libs/sjel-credentials`), the native map (`native-maps` is macOS only, the raster map is

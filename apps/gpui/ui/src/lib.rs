@@ -2,19 +2,30 @@
 //!
 //! Shared across macOS desktop and iOS mobile clients.
 
+pub mod backup;
 pub mod block_menu;
 pub mod calendar;
+pub mod cv;
 pub mod data;
 pub mod doc_view;
 pub mod editor;
 pub mod finance;
 pub mod inbox;
+pub mod inventory;
+pub mod mail;
+pub mod media;
 pub mod nav;
+pub mod packs;
 pub mod people;
 pub mod primitives;
 pub mod projects;
+pub mod research;
+pub mod self_view;
+pub mod setup;
 pub mod sidebar;
+pub mod software;
 pub mod soundscape;
+pub mod systems;
 pub mod tasks;
 pub mod theme;
 pub mod today;

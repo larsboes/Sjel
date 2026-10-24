@@ -295,7 +295,6 @@ impl Inbox {
 
     fn capture_row(&self, capture: &LocalCapture, index: usize) -> AnyElement {
         let palette = self.palette;
-        let on_the_mac = capture.on_the_mac();
         let refusal = self.refusal_of(capture);
         // The state is a sentence of the Mac's and can be long, so it goes in the column under the
         // title rather than beside the tag: a row that pushes its own text off the card is a row
@@ -325,20 +324,8 @@ impl Inbox {
                         },
                     ))
                     .when(refusal.is_none(), |line| {
-                        line.child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(if on_the_mac {
-                                    palette.green
-                                } else {
-                                    palette.amber
-                                }))
-                                .child(if on_the_mac {
-                                    "On the Mac"
-                                } else {
-                                    "Waiting for the Mac"
-                                }),
-                        )
+                        let (state, colour) = state_of(capture, palette);
+                        line.child(div().text_xs().text_color(rgb(colour)).child(state))
                     }),
             );
         if let Some(reason) = refusal {
@@ -380,6 +367,22 @@ impl Inbox {
                 )
             })
             .into_any_element()
+    }
+}
+
+/// The line that says where a capture is, in the Mac's own terms once it has one.
+///
+/// A capture this phone has not sent is waiting; one the Mac has is `new` until the operator
+/// triages it, and then it is `done` or `dismissed`. Saying "on the Mac" for all three would show a
+/// finished thought as if it were still in the inbox.
+fn state_of(capture: &LocalCapture, palette: Palette) -> (String, u32) {
+    if !capture.on_the_mac() {
+        return ("Waiting for the Mac".to_owned(), palette.amber);
+    }
+    match capture.status.as_deref() {
+        Some("done") => ("Done on the Mac".to_owned(), palette.green),
+        Some("dismissed") => ("Dismissed on the Mac".to_owned(), palette.muted),
+        _ => ("On the Mac".to_owned(), palette.green),
     }
 }
 
@@ -518,6 +521,9 @@ mod tests {
             tag: None,
             remote_id: remote.map(str::to_owned),
             created_at: "2026-10-24T07:00:00Z".to_owned(),
+            status: remote.map(|_| "new".to_owned()),
+            routed_to: None,
+            client: None,
         }
     }
 
@@ -554,6 +560,25 @@ mod tests {
             "To feed",
             "the host decides, the way the capability does"
         );
+    }
+
+    /// The state line says what the Mac said, not just "on the Mac": a capture the operator has
+    /// already dealt with must not read as still waiting for triage.
+    #[gpui::test]
+    fn the_state_line_follows_the_macs_triage(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let palette = Palette::light();
+        let waiting = captured("capture:local:1", "waiting", None);
+        assert_eq!(state_of(&waiting, palette).0, "Waiting for the Mac");
+        for (status, expected) in [
+            ("new", "On the Mac"),
+            ("done", "Done on the Mac"),
+            ("dismissed", "Dismissed on the Mac"),
+        ] {
+            let mut row = captured("abc", "kept", Some("abc"));
+            row.status = Some(status.to_owned());
+            assert_eq!(state_of(&row, palette).0, expected);
+        }
     }
 
     /// The count the header shows comes from the rows: a capture with the Mac's id has landed, one

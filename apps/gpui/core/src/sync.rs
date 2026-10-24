@@ -207,6 +207,7 @@ pub async fn run<H: Host>(store: &TursoStore, host: &H) -> Result<Report, String
     push(store, host, crate::store::DOMAIN_CAPTURES, &mut report).await?;
     pull(store, host, &mut report).await?;
     pull_calendar(store, host, &mut report).await?;
+    pull_captures(store, host, &mut report).await?;
     Ok(report)
 }
 
@@ -705,15 +706,59 @@ async fn capture_new<H: Host>(
     if !reply.ok() {
         return Err(reply.refused());
     }
-    let id = reply
+    // The Mac answers with the capture it stored, tag and status included: keeping the whole answer
+    // is what stops the next pull reading the same capture as news.
+    let capture = reply
         .json()
-        .and_then(|body| body["id"].as_str().map(str::to_owned))
+        .and_then(|body| serde_json::from_value::<crate::capture::Capture>(body).ok())
         .ok_or_else(|| "the Mac stored the capture but did not say which".to_owned())?;
     store
-        .rekey_capture(local_id, &id)
+        .settle_capture(local_id, &capture)
         .await
         .map_err(|e| e.to_string())?;
     report.created += 1;
+    Ok(())
+}
+
+// ---------------------------------------------------------------- captures pull
+
+/// Takes the Mac's captures into the replica, so the phone's inbox is the inbox rather than half of
+/// it.
+///
+/// No cursor: the capability has no change feed for captures, and there are hundreds at most, so one
+/// read answers the list. A capture this device typed and has not sent is not in the Mac's answer and
+/// is left alone; one that has landed is the same row, matched by the Mac's id
+/// ([`TursoStore::upsert_pulled_capture`]). A capture the Mac no longer has is left here rather than
+/// deleted: this page is where the person's own writing lives.
+async fn pull_captures<H: Host>(
+    store: &TursoStore,
+    host: &H,
+    report: &mut Report,
+) -> Result<(), String> {
+    let reply = host.send("GET", CAPTURES, None).await?;
+    if !reply.ok() {
+        // A capability that is down is not an error for the rest of the sync: the captures on screen
+        // are still true, only this phone's.
+        return Ok(());
+    }
+    let Some(answer) = reply.json() else {
+        return Ok(());
+    };
+    let Some(list) = answer.as_array() else {
+        return Ok(());
+    };
+    for value in list {
+        let Ok(capture) = serde_json::from_value::<crate::capture::Capture>(value.clone()) else {
+            continue;
+        };
+        if store
+            .upsert_pulled_capture(&capture)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            report.pulled += 1;
+        }
+    }
     Ok(())
 }
 
@@ -1362,6 +1407,109 @@ mod tests {
         });
     }
 
+    /// The Mac's own captures, and this phone's, in one list: what was typed here is not doubled by
+    /// the answer that says it landed, and the Mac's older captures now show up on the phone.
+    #[test]
+    fn the_macs_captures_join_this_phones_and_nothing_is_doubled() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            // One capture typed here that the Mac has never seen, and one that has landed.
+            store
+                .save_capture(Some("call the plumber"), None, None)
+                .await
+                .expect("waiting");
+            store
+                .save_capture(Some("Linen shirt"), None, Some("buy"))
+                .await
+                .expect("landed");
+            store
+                .rekey_capture("capture:local:2", "aaa111")
+                .await
+                .expect("landed id");
+
+            let mac_capture = |id: &str, text: &str, tag: Option<&str>, status: &str| {
+                json!({
+                    "id": id, "text": text, "url": Value::Null, "tag": tag,
+                    "status": status, "routed_to": Value::Null,
+                    "client": "Mac", "created_at": "2026-10-20T09:00:00Z",
+                })
+            };
+            let fake = Fake::default();
+            for _ in 0..3 {
+                fake.on("GET", PROJECTS, 200, projects(&[]));
+            }
+            // The two waiting captures are sent first, oldest first, and the Mac answers each with
+            // the id it chose and its own state.
+            fake.on(
+                "POST",
+                CAPTURES,
+                201,
+                json!({
+                    "id": "ddd444", "text": "call the plumber", "url": Value::Null,
+                    "tag": Value::Null, "status": "new", "routed_to": Value::Null,
+                    "client": "GPUI iPhone", "created_at": "2026-10-24T07:00:00Z",
+                }),
+            );
+            fake.on(
+                "POST",
+                CAPTURES,
+                201,
+                json!({
+                    "id": "aaa111", "text": "Linen shirt", "url": Value::Null,
+                    "tag": "buy", "status": "new", "routed_to": Value::Null,
+                    "client": "GPUI iPhone", "created_at": "2026-10-24T07:01:00Z",
+                }),
+            );
+            // The Mac's answer: the capture this phone already landed, one it has never heard of,
+            // and one it has already triaged.
+            for _ in 0..2 {
+                fake.on(
+                    "GET",
+                    CAPTURES,
+                    200,
+                    json!([
+                        mac_capture("aaa111", "Linen shirt", Some("buy"), "new"),
+                        mac_capture("bbb222", "read that paper", None, "new"),
+                        mac_capture("ccc333", "old thought", None, "done"),
+                    ]),
+                );
+            }
+
+            let report = run(&store, &fake).await.expect("sync");
+            let rows = store.captures().await.expect("captures");
+            // Two captures are news (bbb222, ccc333); the waiting one was not sent and is not in the
+            // answer, and aaa111 is the row this phone already has.
+            assert_eq!(report.pulled, 2, "{report:?} {rows:?}");
+            assert_eq!(rows.len(), 4, "no capture is drawn twice: {rows:?}");
+            let landed: Vec<_> = rows
+                .iter()
+                .filter(|row| row.remote_id.as_deref() == Some("aaa111"))
+                .collect();
+            assert_eq!(landed.len(), 1, "the landed capture is one row: {rows:?}");
+            assert_eq!(landed[0].text.as_deref(), Some("Linen shirt"));
+            assert!(rows
+                .iter()
+                .any(|row| row.label() == "read that paper" && row.on_the_mac()));
+            assert_eq!(
+                rows.iter()
+                    .find(|row| row.label() == "old thought")
+                    .and_then(|row| row.status.clone())
+                    .as_deref(),
+                Some("done"),
+                "the Mac's triage travels with the capture"
+            );
+
+            // A second sync finds nothing new: the list is a set, not a log.
+            let again = run(&store, &fake).await.expect("sync again");
+            assert_eq!(again.pulled, 0, "{again:?}");
+            assert_eq!(store.captures().await.expect("captures").len(), 4);
+        });
+    }
+
     /// A Mac that answers from a table. Each answer is used once, by method and exact path, so a
     /// test states the whole conversation and a request nobody expected fails loudly.
     #[derive(Default)]
@@ -1413,6 +1561,14 @@ mod tests {
                 // `run` pulls the calendar feed after every projects pull, so a test about a note
                 // states one conversation and gets an empty feed for the domain it is not about.
                 // A test that cares prepares its own answer, which wins above.
+                // The same courtesy for the capture inbox: a test about a note does not have to say
+                // that this phone has no captures.
+                if method == "GET" && path == CAPTURES {
+                    return Ok(Reply {
+                        status: 200,
+                        body: serde_json::to_vec(&json!([])).unwrap_or_default(),
+                    });
+                }
                 if method == "GET" && path.starts_with(ENTRY_CHANGES) {
                     let cursor = path
                         .split_once("since=")

@@ -325,8 +325,43 @@
   - `apps/gpui/ui/src/inbox.rs`
   - `apps/gpui/ios/src/lib.rs`
   - `apps/gpui/ios/host/UITests/InboxCapture.swift`
-- **Next**: reading the Mac's captures back (a pull, so the tab shows the whole inbox rather than this
-  phone's half of it), then the soundscape player, notifications and RoomPlan, in that order.
+- **Next**: reading the Mac's captures back (shipped in Work Package 13), then the soundscape player,
+  notifications and RoomPlan, in that order.
+
+### ✅ Work Package 13: the Mac's captures join the phone's
+- **Status**: Shipped (2026-10-24). The tab is the inbox, not this phone's half of it.
+- **Why**: the capture pull was the other half of WP12. A list that hides what was captured on the Mac
+  is a list of what this phone did, and a person looking for a thought they had at their desk would
+  not find it.
+- **Shipped**:
+  - `core/src/store.rs` — the `captures` table gains the Mac's columns (`status`, `routed_to`,
+    `client`), with `add_missing_capture_columns` for a device that ran the capture-only build;
+    `upsert_pulled_capture` matches on the Mac's id, so a capture typed here and then landed is one
+    row rather than two — matched on `remote_id` and not on the primary key, because the row keeps the
+    id it was typed under. `settle_capture` takes the whole answer a create returns (id, tag, status,
+    route), which is what stops the next pull reading that capture as news. `rekey_capture` now moves
+    the queued write with the id, the way a calendar entry's does; without it a retry would create the
+    capture twice.
+  - `core/src/sync.rs` — `pull_captures`: one `GET /comms/captures`, no cursor, because the capability
+    has no change feed for captures and there are hundreds at most. A capture the Mac does not have is
+    left alone rather than deleted: this page is where the person's own writing lives. The count is
+    what changed, not how many the Mac holds, so a quiet sync stays quiet. A capability that is down
+    is not an error for the rest of the sync.
+  - `ui/src/inbox.rs` — the state line in the Mac's own terms: `Waiting for the Mac`, `On the Mac`,
+    `Done on the Mac`, `Dismissed on the Mac`. Saying "on the Mac" for all three would show a finished
+    thought as if it were still in the inbox.
+- **Verified on a simulator**: the migration added the three columns to a table written by the
+  previous build, and a list mixing this phone's captures with the Mac's drew `Linen shirt 49,90 €`
+  `#buy` → To wishlist, waiting · `youtube.com` `#look` → To feed, on the Mac · `Sort the tax
+  paperwork` → Done on the Mac · `arxiv.org` `#learn` → To feed, on the Mac.
+- **Tests**: 1 new in `sync` (the Mac's captures join this phone's, nothing is doubled, a second sync
+  finds nothing new) and 1 in `ui/src/inbox.rs` (the state line follows the Mac's triage). core 277,
+  ui 42, app 81.
+- **Target Files**:
+  - `apps/gpui/core/src/{store,sync}.rs`
+  - `apps/gpui/ui/src/inbox.rs`
+- **Next**: the soundscape player (an output device in `ios/host`, the panel over `core/src/soundscape`,
+  and the two settings that do not persist today), then local notifications, then RoomPlan.
 
 ---
 

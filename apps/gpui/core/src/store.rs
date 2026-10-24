@@ -98,9 +98,19 @@ CREATE TABLE IF NOT EXISTS captures (
     url TEXT,
     tag TEXT,
     remote_id TEXT,
+    status TEXT,
+    routed_to TEXT,
+    client TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 "#;
+
+/// The columns a `captures` table written before the pull does not have yet.
+const ADDED_CAPTURE_COLUMNS: &[(&str, &str)] = &[
+    ("status", "TEXT"),
+    ("routed_to", "TEXT"),
+    ("client", "TEXT"),
+];
 
 /// The writes the Mac refused, one row per record, so the reason outlives the launch that heard it.
 ///
@@ -232,8 +242,31 @@ impl TursoStore {
         conn.execute_batch(SCHEMA_CAPTURES)
             .await
             .map_err(|e| StoreError::Libsql(format!("captures schema init failed: {e}")))?;
+        self.add_missing_capture_columns(&conn).await?;
         self.add_missing_columns(&conn).await?;
         self.add_missing_mutation_columns(&conn).await
+    }
+
+    /// `ALTER TABLE` for each column the capture table did not have when this database was made:
+    /// a build that only captured had no use for the Mac's status, and one that pulls has to keep it.
+    async fn add_missing_capture_columns(&self, conn: &libsql::Connection) -> StoreResult<()> {
+        let mut rows = conn
+            .query("SELECT name FROM pragma_table_info('captures')", ())
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read capture table info failed: {e}")))?;
+        let mut present = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            present.push(row.get::<String>(0).unwrap_or_default());
+        }
+        for (name, kind) in ADDED_CAPTURE_COLUMNS {
+            if present.iter().any(|column| column == name) {
+                continue;
+            }
+            conn.execute_batch(&format!("ALTER TABLE captures ADD COLUMN {name} {kind}"))
+                .await
+                .map_err(|e| StoreError::Libsql(format!("add captures.{name} failed: {e}")))?;
+        }
+        Ok(())
     }
 
     /// `ALTER TABLE` for each column the mutation log did not have when this database was made.
@@ -1103,8 +1136,8 @@ impl TursoStore {
         let conn = self.connection().await?;
         let mut rows = conn
             .query(
-                "SELECT id, body, url, tag, remote_id, created_at FROM captures \
-                 ORDER BY created_at DESC, rowid DESC",
+                "SELECT id, body, url, tag, remote_id, created_at, status, routed_to, client \
+                 FROM captures ORDER BY created_at DESC, rowid DESC",
                 (),
             )
             .await
@@ -1118,14 +1151,119 @@ impl TursoStore {
                 tag: row.get(3).ok(),
                 remote_id: row.get(4).ok(),
                 created_at: row.get(5).unwrap_or_default(),
+                status: row.get(6).ok(),
+                routed_to: row.get(7).ok(),
+                client: row.get(8).ok(),
             });
         }
         Ok(list)
     }
 
+    /// Takes one capture the Mac answered with, matched by the Mac's id.
+    ///
+    /// A capture typed here and then landed is the same row, so the match is on `remote_id` and not
+    /// on the primary key: inserting by id would draw the capture twice — once waiting, once on the
+    /// Mac — and no reader could tell which was true. `INSERT OR REPLACE` on that match keeps one row.
+    /// True when the row is new or changed, so the sync's count is what moved rather than how many
+    /// captures the Mac happens to have.
+    pub async fn upsert_pulled_capture(
+        &self,
+        capture: &crate::capture::Capture,
+    ) -> StoreResult<bool> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT body, url, tag, status, routed_to, client FROM captures \
+                 WHERE id = ?1 OR remote_id = ?1 LIMIT 1",
+                libsql::params![capture.id.clone()],
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read pulled capture failed: {e}")))?;
+        let same = match rows.next().await {
+            Ok(Some(row)) => {
+                row.get::<String>(0).ok().as_deref() == capture.text.as_deref()
+                    && row.get::<String>(1).ok().as_deref() == capture.url.as_deref()
+                    && row.get::<String>(2).ok().as_deref() == capture.tag.as_deref()
+                    && row.get::<String>(3).ok().as_deref() == Some(capture.status.as_str())
+                    // Where it was captured is provenance, not news: a Mac that echoes a different
+                    // client back would otherwise make every sync look like it moved something.
+                    && row.get::<String>(4).ok().as_deref() == capture.routed_to.as_deref()
+            }
+            _ => false,
+        };
+        if same {
+            return Ok(false);
+        }
+        conn.execute(
+            "INSERT INTO captures (id, body, url, tag, remote_id, status, routed_to, client, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?1, ?5, ?6, ?7, ?8) \
+             ON CONFLICT(id) DO UPDATE SET body = ?2, url = ?3, tag = ?4, remote_id = ?1, \
+                 status = ?5, routed_to = ?6, client = ?7",
+            libsql::params![
+                capture.id.clone(),
+                capture.text.clone(),
+                capture.url.clone(),
+                capture.tag.clone(),
+                capture.status.clone(),
+                capture.routed_to.clone(),
+                capture.client.clone(),
+                capture.created_at.clone(),
+            ],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("upsert pulled capture failed: {e}")))?;
+        // A capture that was typed here under a local id: the row it became is the Mac's id, so the
+        // local row goes rather than standing beside its own answer.
+        conn.execute(
+            "DELETE FROM captures WHERE remote_id = ?1 AND id <> ?1",
+            libsql::params![capture.id.clone()],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("drop the local twin failed: {e}")))?;
+        Ok(true)
+    }
+
+    /// Takes the Mac's whole answer for a capture it just created: the id it chose, and the tag,
+    /// status and route it decided.
+    ///
+    /// The create's answer is the only place the Mac's triage of a phone capture is stated, so
+    /// keeping it here is what stops the next pull seeing the same capture as news.
+    pub async fn settle_capture(
+        &self,
+        local_id: &str,
+        capture: &crate::capture::Capture,
+    ) -> StoreResult<()> {
+        self.rekey_capture(local_id, &capture.id).await?;
+        // The row keeps the id it was typed under; `rekey_capture` has already put the Mac's id in
+        // `remote_id`, which is what the list and the pull match on.
+        let conn = self.connection().await?;
+        conn.execute(
+            // Matched on either id: a retry that already moved the queue to the Mac's id comes back
+            // with that id, and the row is still the one that was typed.
+            "UPDATE captures SET body = ?2, url = ?3, tag = ?4, status = ?5, routed_to = ?6, \
+                 client = ?7 WHERE id = ?8 OR remote_id = ?8",
+            libsql::params![
+                capture.id.clone(),
+                capture.text.clone(),
+                capture.url.clone(),
+                capture.tag.clone(),
+                capture.status.clone(),
+                capture.routed_to.clone(),
+                capture.client.clone(),
+                local_id.to_owned(),
+            ],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("settle capture failed: {e}")))?;
+        Ok(())
+    }
+
     /// Records the Mac's id for a capture it took, and moves the queue with it: the local id was a
     /// placeholder, and a second write to it would create the capture twice.
     pub async fn rekey_capture(&self, from: &str, to: &str) -> StoreResult<()> {
+        if from == to {
+            return Ok(());
+        }
         let conn = self.connection().await?;
         conn.execute(
             "UPDATE captures SET remote_id = ?1 WHERE id = ?2",
@@ -1133,6 +1271,14 @@ impl TursoStore {
         )
         .await
         .map_err(|e| StoreError::Libsql(format!("rekey capture failed: {e}")))?;
+        // The queue moves with it, the way a calendar entry's does: a second write to the local id
+        // would create the capture on the Mac twice.
+        conn.execute(
+            "UPDATE _offline_mutations SET path = ?1 WHERE domain = ?2 AND path = ?3",
+            libsql::params![to, DOMAIN_CAPTURES, from],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("rekey capture mutations failed: {e}")))?;
         Ok(())
     }
 
@@ -1183,6 +1329,13 @@ pub struct LocalCapture {
     /// The Mac's id, once it took the capture.
     pub remote_id: Option<String>,
     pub created_at: String,
+    /// The Mac's own state for it: `new`, `done` or `dismissed`. `None` until it lands, because a
+    /// capture this phone has not sent has no state on the Mac.
+    pub status: Option<String>,
+    /// Where the Mac routed it: `feed:<id>`, `places:<id>` or `inventory:<id>`.
+    pub routed_to: Option<String>,
+    /// Who captured it, in the Mac's words: a phone that pulls the Mac's captures shows them too.
+    pub client: Option<String>,
 }
 
 impl LocalCapture {

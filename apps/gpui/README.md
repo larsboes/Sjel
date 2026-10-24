@@ -305,8 +305,10 @@ so on that page instead of falling back to memory.
 **Inbox** is the next tab: one field for whatever is in hand, four chips for the tags the comms
 capability knows, a line saying where the capture will land, and `Keep`. It writes the phone's own
 replica first and queues the capture for `POST /comms/captures`, so it works on a train; the list
-under the field says which captures have landed (`On the Mac`), which are waiting, and, when the Mac
-says no, its reason on the row it belongs to. Triage is not here — a wishlist item, a feed source or
+under the field mixes this phone's captures with the Mac's — one `GET /comms/captures` per sync,
+matched by the Mac's id so a capture typed here and then landed is one row and not two — and says
+which have landed (`On the Mac`), which are waiting, which the operator has already dealt with
+(`Done on the Mac`, `Dismissed on the Mac`), and, when the Mac says no, its reason on that row. Triage is not here — a wishlist item, a feed source or
 a place is the Mac's decision (`core/src/capture.rs` holds the rule both sides read).
 
 **Calendar** is the next tab, and it reads the same replica as Projects once the Mac's change feed

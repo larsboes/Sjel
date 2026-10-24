@@ -19,7 +19,16 @@ deleted, when a source turns out wrong.
   personal data in chat logs, and inference from pseudonymized text.
 - [Can an assistant act on a person's data safely?](agent-safety.md): agent benchmarks, prompt
   injection, confirmation fatigue.
-- [How much does the assistant's harness matter?](assistant-harness.md): HarnessTax.
+- [How much does the assistant's harness matter?](assistant-harness.md): HarnessTax, the local
+  Pi/Sjel smoke test, Meta-Harness and Schema, with a source index and limits on transfer to
+  factual research, writing and professional tasks. [Track 2](../PLAN.md#track-2-turso-for-agents-and-services)
+  owns the evaluation plan.
+- [Agent harness development cases](benchmarks/agent-harness/README.md): twelve coding,
+  research/experiment and Sjel-document cases with frozen fixtures, expected evidence and
+  evaluator checks; labels await human approval. Live Pi and Sjel adapters share one tool
+  broker. Recorded so far: unscored pipeline smoke runs and a retrieval-only check.
+- [Graph store spike](benchmarks/graph-store/README.md): libSQL edge tables against embedded
+  Grafeo on Graphify's repository graph.
 - [Can a local model make typed decisions for Sjel?](local-decision-models.md):
   CLM candidate scoring, Apple Foundation Models, keyword rules, and the limits of a synthetic
   English/German Documents comparison.

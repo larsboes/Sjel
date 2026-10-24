@@ -35,6 +35,10 @@ actions!(
         OpenLink,
         /// Type a new capture.
         NewCapture,
+        /// Edit the capture's text.
+        EditText,
+        /// Put a done or dismissed capture back to new.
+        Restore,
     ]
 );
 
@@ -52,6 +56,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("t", CycleTag, Some("CaptureList")),
         KeyBinding::new("o", OpenLink, Some("CaptureList")),
         KeyBinding::new("n", NewCapture, Some("CaptureList")),
+        KeyBinding::new("enter", EditText, Some("CaptureList")),
+        KeyBinding::new("u", Restore, Some("CaptureList")),
     ]);
 }
 
@@ -83,6 +89,8 @@ pub struct Inbox {
     /// The last write that failed.
     pub write_error: Option<ShellError>,
     input: Option<(Entity<InputState>, Subscription)>,
+    /// The capture whose text is open for editing, with its field.
+    pub editing: Option<(String, Entity<InputState>, Subscription)>,
     list_focus: FocusHandle,
     focus_list_next: bool,
 }
@@ -98,6 +106,7 @@ impl Inbox {
             busy: Vec::new(),
             write_error: None,
             input: None,
+            editing: None,
             list_focus: cx.focus_handle(),
             focus_list_next: true,
         }
@@ -294,6 +303,38 @@ impl Inbox {
         self.patch(id, serde_json::json!({ "tag": tag.unwrap_or("") }), cx);
     }
 
+    /// Opens the capture's text in a field. Enter saves it, leaving the field cancels. A price
+    /// typed at the end ("Linen shirt 49,90 €") is what the wishlist route reads.
+    fn edit_text(&mut self, capture: &Capture, window: &mut Window, cx: &mut Context<Self>) {
+        let text = capture.text.clone().unwrap_or_default();
+        let input = cx.new(|cx| {
+            let mut state = InputState::new(window, cx);
+            state.set_value(text, window, cx);
+            state
+        });
+        let id = capture.id.clone();
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            move |view, input, event, window, cx| match event {
+                InputEvent::PressEnter { .. } => {
+                    let text = input.read(cx).value().trim().to_owned();
+                    view.editing = None;
+                    window.focus(&view.list_focus, cx);
+                    view.patch(id.clone(), serde_json::json!({ "text": text }), cx);
+                }
+                InputEvent::Blur => {
+                    view.editing = None;
+                    cx.notify();
+                }
+                _ => {}
+            },
+        );
+        input.update(cx, |input, cx| input.focus(window, cx));
+        self.editing = Some((capture.id.clone(), input, subscription));
+        cx.notify();
+    }
+
     fn capture_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
         if let Some((input, _)) = &self.input {
             return input.clone();
@@ -355,6 +396,18 @@ impl Inbox {
         }
     }
 
+    fn on_edit_text(&mut self, _: &EditText, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(capture) = self.selected() {
+            self.edit_text(&capture, window, cx);
+        }
+    }
+
+    fn on_restore(&mut self, _: &Restore, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(capture) = self.selected().filter(|c| c.status != "new") {
+            self.set_status(capture.id, "new", cx);
+        }
+    }
+
     fn on_new_capture(&mut self, _: &NewCapture, window: &mut Window, cx: &mut Context<Self>) {
         let input = self.capture_field(window, cx);
         input.update(cx, |input, cx| input.focus(window, cx));
@@ -382,7 +435,7 @@ impl Render for Inbox {
                     .child("Inbox"),
             )
             .child(muted(
-                "j/k move · r send on · e done · d dismiss · t tag · o link · n new",
+                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · n new",
                 palette,
             ))
             .child(div().flex_1())
@@ -420,8 +473,10 @@ impl Render for Inbox {
                 cx.listener(|view, _, _, cx| view.set_filter(Filter::Dismissed, cx)),
             ));
 
+        // While a capture's text is open, the list drops its context, so the letters it binds
+        // type into the field.
         let mut list = div()
-            .key_context("CaptureList")
+            .when(self.editing.is_none(), |el| el.key_context("CaptureList"))
             .track_focus(&self.list_focus)
             .on_action(cx.listener(Self::on_next))
             .on_action(cx.listener(Self::on_previous))
@@ -431,6 +486,8 @@ impl Render for Inbox {
             .on_action(cx.listener(Self::on_cycle_tag))
             .on_action(cx.listener(Self::on_open_link))
             .on_action(cx.listener(Self::on_new_capture))
+            .on_action(cx.listener(Self::on_edit_text))
+            .on_action(cx.listener(Self::on_restore))
             .flex()
             .flex_col()
             .gap_1();
@@ -539,7 +596,38 @@ impl Inbox {
                             view.set_status(dismiss.clone(), "dismissed", cx)
                         })),
                 );
+        } else {
+            let restore = id.clone();
+            actions = actions.child(
+                Button::new(SharedString::from(format!("inbox-restore-{i}")))
+                    .small()
+                    .ghost()
+                    .label("Restore")
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.set_status(restore.clone(), "new", cx)
+                    })),
+            );
         }
+        if chosen {
+            let capture = capture.clone();
+            actions =
+                actions.child(
+                    Button::new(SharedString::from(format!("inbox-edit-{i}")))
+                        .small()
+                        .ghost()
+                        .label("Edit")
+                        .disabled(busy)
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.edit_text(&capture, window, cx)
+                        })),
+                );
+        }
+        let editor = self
+            .editing
+            .as_ref()
+            .filter(|(editing, _, _)| *editing == capture.id)
+            .map(|(_, input, _)| input.clone());
 
         let tags = chosen.then(|| {
             div().flex().gap_1().children(TAGS.iter().map(|tag| {
@@ -578,15 +666,21 @@ impl Inbox {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(
-                        div()
+                    .child(match editor {
+                        Some(input) => div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(Input::new(&input).small())
+                            .into_any_element(),
+                        None => div()
                             .flex_1()
                             .min_w_0()
                             .truncate()
                             .text_sm()
                             .when(!is_new, |el| el.text_color(rgb(palette.muted)))
-                            .child(capture.label()),
-                    )
+                            .child(capture.label())
+                            .into_any_element(),
+                    })
                     .when_some(tag, |el, tag| {
                         el.child(div().text_xs().text_color(rgb(palette.muted)).child(tag))
                     })

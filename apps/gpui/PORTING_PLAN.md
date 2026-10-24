@@ -14,8 +14,8 @@
 | 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (the replica, writes included; the Mac's copy until the first pull) | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
-| 6 | `/inbox` | Capture Inbox & Triage | **Partially Ported** | Native GPUI (`Inbox`) | Native GPUI Tab (capture only: triage stays on the Mac) | `capabilities/comms` |
-| 7 | `/feed` | Comms Feed & Mail Triage | **Partially Ported** | Native GPUI (`Feed`, `Mail`) | Planned | `capabilities/comms` |
+| 6 | `/inbox` | Capture Inbox & Triage | **Ported** | Native GPUI (`Inbox`) | Native GPUI Tab (capture only: triage stays on the Mac) | `capabilities/comms` |
+| 7 | `/feed` | Comms Feed & Mail Triage | **Ported** | Native GPUI (`Feed`: Reading, Review, Library, Mail) | Planned | `capabilities/comms` |
 | 8 | `/travel` | Trip Planner & Itinerary | **Partially Ported** | Native GPUI (`Travel`) | Native GPUI Tab | `capabilities/travel` |
 | 9 | `/map` | Interactive Travel Map | **Partially Ported** | Native GPUI (`Travel::Map`) | Native GPUI Map | `capabilities/travel` |
 | 10 | `/finance` | Financial Ledger & Subs | **Ported** | Native GPUI (`FinancePage`) | Planned | `capabilities/finance` |
@@ -59,7 +59,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 | `/feed/[id]`, `/scout`, `/trips` | ≤ 18 each | not checked, probably redirects |
 
 **Writes that still go to the browser.** Travel cannot create a trip, a booking or a stage (§4).
-Inbox triage, editing a person, adding to the wishlist and
+Editing a person, adding to the wishlist and
 recategorizing a transaction stay on the web. Fare alerts live only in
 `dashboard/src/lib/travel/fare-alerts.ts`.
 
@@ -88,7 +88,7 @@ ports.
 2. **Travel authoring and connections.** The largest gap, and §4's highest priority. Authoring
    shipped on the Mac in Work Package 17. `/travel/connections` is next.
 3. **Feed review and library, then Inbox triage.** That finishes comms. Review shipped in Work
-   Package 18, the library in Work Package 19.
+   Package 18, the library in Work Package 19, Inbox triage in Work Package 20.
 4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
 5. **Delete `dashboard/`.** Then the 78 references, `matches_dashboard_nav`, ⌘D "Open in the
    dashboard", and the `sjel-status` static serve.
@@ -669,6 +669,22 @@ ports.
   Against the live archive: 986 entries, 963 new, 21 kept, 2 dismissed, matching comms. Keep,
   Dismiss and opening a row were not clicked, because each writes to the live ledger.
 - **Target Files**: `apps/gpui/core/src/{shell,route}.rs`, `apps/gpui/src/feed.rs`
+
+### ✅ Work Package 20: Inbox triage on the Mac (§1b step 3, last of three)
+- **Status**: Shipped (2026-10-24). Mac only; the phone still captures and leaves triage here.
+- **Already there**: send on (`r`), done, dismiss, the tag (`t`), and Apply all suggestions.
+- **Shipped** (`src/inbox.rs`):
+  - Edit: `↩` or Edit on the selected capture opens its text in a field. `↩` saves through
+    `PATCH /comms/captures/:id`, leaving the field cancels. A price typed at the end is what the
+    wishlist route reads (`capture::extract_price`), so the dashboard's separate price field is
+    not needed.
+  - Restore: `u` or Restore puts a done or dismissed capture back to new.
+  - While a field is open, the list drops its `CaptureList` key context, so `j`, `e` and `d` type
+    into the field instead of triaging.
+- **Verified**: `typing_in_a_capture_edit_does_not_triage` in `src/workspace.rs`. It fails without
+  the context change (the cursor moved to the next capture). Live inbox draws 10 new, 9 done,
+  1 dismissed. Edit and Restore were not clicked, because each writes to the live inbox.
+- **Target Files**: `apps/gpui/src/{inbox,workspace}.rs`
 
 ---
 

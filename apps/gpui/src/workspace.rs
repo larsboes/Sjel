@@ -1705,6 +1705,44 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.selection.cursor, None));
     }
 
+    /// The edit field sits inside the capture list, so the letters the list binds must type into
+    /// it instead of moving the cursor or marking the capture done.
+    #[gpui::test]
+    fn typing_in_a_capture_edit_does_not_triage(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.update(|_, cx| crate::inbox::bind_keys(cx));
+        let inbox = view.update(cx, |view, cx| {
+            view.go(Page::Inbox, cx);
+            view.inbox.clone()
+        });
+        cx.run_until_parked();
+        inbox.update(cx, |inbox, cx| {
+            let capture = |id: &str| sjel_gpui_core::capture::Capture {
+                id: id.into(),
+                text: Some("shirt".into()),
+                url: None,
+                tag: None,
+                status: "new".into(),
+                routed_to: None,
+                client: None,
+                created_at: "2026-10-24".into(),
+            };
+            inbox.rows.value = Some(vec![capture("a"), capture("b")]);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.simulate_keystrokes("j");
+        inbox.read_with(cx, |inbox, _| assert_eq!(inbox.cursor.as_deref(), Some("a")));
+        cx.simulate_keystrokes("enter");
+        cx.simulate_input(" jed");
+        inbox.read_with(cx, |inbox, cx| {
+            assert_eq!(inbox.cursor.as_deref(), Some("a"));
+            let (id, field, _) = inbox.editing.as_ref().expect("the text is open");
+            assert_eq!(id, "a");
+            assert_eq!(field.read(cx).value(), "shirt jed");
+        });
+    }
+
     /// A question in Auto goes to the one Ask session, and the finder stays open to show it; ⌘↩
     /// sends a search-looking text as a question too.
     #[gpui::test]

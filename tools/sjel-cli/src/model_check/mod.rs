@@ -113,6 +113,10 @@ pub struct Outcome {
     pub failures: usize,
     pub stated_quota_breaches: usize,
     pub role_count: usize,
+    /// Backends that carry a model of their own, which no role names. Counted apart from
+    /// `role_count` because calling one a role is how the report would read as covering a field
+    /// it only started looking at on 2026-10-24.
+    pub backend_count: usize,
 }
 
 impl Outcome {
@@ -179,8 +183,13 @@ pub fn run(argv: &[String]) -> ExitCode {
 /// The closing line, which the TypeScript printed as one string with a leading blank line.
 fn footer(outcome: &Outcome, opts: &Options) -> String {
     let probed = opts.probe || opts.local_only;
+    let backends = match outcome.backend_count {
+        0 => String::new(),
+        1 => ", and 1 backend naming its own model".to_owned(),
+        n => format!(", and {n} backends naming their own model"),
+    };
     format!(
-        "\n{} role(s) checked{}{}, {} naming a model its backend does not list{}",
+        "\n{} role(s){backends} checked{}{}, {} naming a model its backend does not list{}",
         outcome.role_count,
         if opts.local_only { " on loopback" } else { "" },
         if probed {
@@ -205,6 +214,9 @@ struct BackendDecl {
     is_ollama: bool,
     base_url: Option<String>,
     api_key_file: Option<String>,
+    /// The backend's OWN model, not a role's. `tools/graphify.sh` reads this when it has no role
+    /// to ask, and nothing checked it until 2026-10-24 — see the backend pass in [`report`].
+    model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -247,6 +259,7 @@ fn read_config(overlay: &Path) -> Result<(HashMap<String, BackendDecl>, Vec<Role
                 is_ollama: b.get("api").and_then(Value::as_str) == Some("ollama"),
                 base_url: string("base_url"),
                 api_key_file: string("api_key_file"),
+                model: string("model"),
             },
         );
     }
@@ -308,16 +321,58 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
     // One catalogue per backend, read on the first role that reaches it.
     let mut cache: HashMap<String, Result<Vec<String>, String>> = HashMap::new();
 
-    for role in &roles {
-        let backend_name = role.backend.as_str();
-        let model = role.model.as_str();
+    // Every model this machine names, in the order a reader wants them: the roles the file declares,
+    // then the backends carrying a model of their own.
+    //
+    // That second half exists because it was checked by NOTHING. A backend's `model` is what a tool
+    // reads when it has no role to ask, and `tools/graphify.sh` takes its model from exactly there
+    // (`_comment_backends` in inference.json says so in as many words). On 2026-10-24 that field
+    // still named `deepseek-ai/deepseek-v4-flash`, retired 2026-08-07, and nothing noticed for two
+    // and a half months: this tool iterated roles only, and graphify's probe asks the provider's
+    // /models endpoint, which kept answering. The chain picked a dead model, all 126 semantic
+    // chunks failed, and the run wrote a partial graph and exited 1.
+    struct Check {
+        label: String,
+        backend: String,
+        model: String,
+        quota: Option<f64>,
+    }
+    let mut checks: Vec<Check> = roles
+        .iter()
+        .map(|r| Check {
+            label: r.name.clone(),
+            backend: r.backend.clone(),
+            model: r.model.clone(),
+            quota: r.max_requests_per_day,
+        })
+        .collect();
+    let mut own_model: Vec<(&String, &BackendDecl)> = backends
+        .iter()
+        .filter(|(_, b)| b.model.as_deref().is_some_and(|m| !m.is_empty()))
+        .filter(|(_, b)| {
+            !opts.local_only || sjel_inference::is_loopback_url(b.base_url.as_deref().unwrap_or(""))
+        })
+        .collect();
+    own_model.sort_by(|a, b| a.0.cmp(b.0));
+    checks.extend(own_model.into_iter().map(|(name, b)| Check {
+        label: format!("backend:{name}"),
+        backend: name.clone(),
+        model: b.model.clone().unwrap_or_default(),
+        // A backend-level model answers no role, so it declares no daily ceiling to compare.
+        quota: None,
+    }));
+
+    for check in &checks {
+        let label = check.label.as_str();
+        let backend_name = check.backend.as_str();
+        let model = check.model.as_str();
         let Some(backend) = backends.get(backend_name) else {
             checker.say(&format!(
                 "{}: incomplete declaration (backend='{backend_name}' model='{model}')",
-                role.name
+                label
             ));
             entries.push(Entry {
-                role: role.name.clone(),
+                role: label.to_owned(),
                 backend: backend_name.to_owned(),
                 model: model.to_owned(),
                 status: "incomplete",
@@ -329,10 +384,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
         if model.is_empty() {
             checker.say(&format!(
                 "{}: incomplete declaration (backend='{backend_name}' model='{model}')",
-                role.name
+                label
             ));
             entries.push(Entry {
-                role: role.name.clone(),
+                role: label.to_owned(),
                 backend: backend_name.to_owned(),
                 model: model.to_owned(),
                 status: "incomplete",
@@ -351,10 +406,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
         if backend.api_key_file.is_some() && key.is_none() {
             checker.say(&format!(
                 "{}: {} on {} — credential unavailable, not probed (materialize its key to enable this role)",
-                role.name, model, backend_name
+                label, model, backend_name
             ));
             entries.push(Entry {
-                role: role.name.clone(),
+                role: label.to_owned(),
                 backend: backend_name.to_owned(),
                 model: model.to_owned(),
                 status: "unreachable",
@@ -379,7 +434,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 // 405s here, so the provider that wrote 160 of this machine's 298 digests was the
                 // one role the tool said nothing about at all.
                 let reply = if opts.probe || opts.local_only {
-                    checker.ask(role, backend, model, key.as_deref())
+                    checker.ask(label, check.quota, backend, model, key.as_deref())
                 } else {
                     String::new()
                 };
@@ -390,10 +445,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 };
                 checker.say(&format!(
                     "{}: {model} on {backend_name} — {detail}",
-                    role.name
+                    label
                 ));
                 entries.push(Entry {
-                    role: role.name.clone(),
+                    role: label.to_owned(),
                     backend: backend_name.to_owned(),
                     model: model.to_owned(),
                     // Answering is what the role is for. A model that answers while its provider
@@ -447,10 +502,10 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                     };
                     checker.say(&format!(
                         "{}: ✗ {model} is NOT in {backend_name}'s catalogue{near_note}",
-                        role.name
+                        label
                     ));
                     entries.push(Entry {
-                        role: role.name.clone(),
+                        role: label.to_owned(),
                         backend: backend_name.to_owned(),
                         model: model.to_owned(),
                         status: "missing",
@@ -460,13 +515,13 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 }
 
                 let spoke = if opts.probe || opts.local_only {
-                    checker.ask(role, backend, model, key.as_deref())
+                    checker.ask(label, check.quota, backend, model, key.as_deref())
                 } else {
                     String::new()
                 };
                 checker.say(&format!(
                     "{}: {model} on {backend_name} ok{}{suffix}",
-                    role.name,
+                    label,
                     if spoke.is_empty() {
                         String::new()
                     } else {
@@ -474,7 +529,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                     }
                 ));
                 entries.push(Entry {
-                    role: role.name.clone(),
+                    role: label.to_owned(),
                     backend: backend_name.to_owned(),
                     model: model.to_owned(),
                     // A probe that came back as an HTTP status or a timeout is not an ok.
@@ -499,6 +554,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
         failures,
         stated_quota_breaches: checker.breaches,
         role_count: roles.len(),
+        backend_count: checks.len() - roles.len(),
     })
 }
 
@@ -559,23 +615,24 @@ impl Checker<'_> {
     /// One probe, with the declared-ceiling check that rides back on the refusal.
     fn ask(
         &mut self,
-        role: &RoleDecl,
+        label: &str,
+        quota: Option<f64>,
         backend: &BackendDecl,
         model: &str,
         key: Option<&str>,
     ) -> String {
-        let (reply, stated) = if asks_for_a_vector(&role.name) {
+        let (reply, stated) = if asks_for_a_vector(label) {
             self.probe_embedding(backend, model, key)
         } else {
             self.probe(backend, model, key)
         };
         if let Some(stated) = stated {
-            if let Some(declared) = role.max_requests_per_day {
+            if let Some(declared) = quota {
                 if declared > stated {
                     self.breaches += 1;
                     let line = format!(
                         "  ! {} declares max_requests_per_day {declared}, provider states {stated} — the local guard is above the real ceiling and stops guarding",
-                        role.name
+                        label
                     );
                     self.say(&line);
                 }
@@ -723,5 +780,46 @@ impl Checker<'_> {
             }
             Err(_) => ("no answer within 60s".to_owned(), None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The field that was invisible. A backend's OWN `model` is what a tool reads when it has no
+    /// role to ask, and `tools/graphify.sh` sends exactly this one. On 2026-10-24 it named
+    /// `deepseek-ai/deepseek-v4-flash`, retired 2026-08-07, and nothing in the toolchain had read
+    /// it since: `read_config` did not even parse it, so no amount of checking roles could find it.
+    #[test]
+    fn read_config_keeps_each_backends_own_model() {
+        let root = std::env::temp_dir().join(format!("sjel-model-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("config")).unwrap();
+        std::fs::write(
+            root.join("config").join("inference.json"),
+            r#"{
+              "backends": {
+                "tool":   { "base_url": "https://example.test/v1", "model": "retired-model" },
+                "rolely": { "base_url": "https://example.test/v1" },
+                "loopy":  { "api": "ollama", "base_url": "http://127.0.0.1:11434", "model": "" }
+              },
+              "roles": { "embedding": { "backend": "loopy", "model": "bge-m3" } }
+            }"#,
+        )
+        .unwrap();
+
+        let (backends, roles) = read_config(&root).unwrap();
+        assert_eq!(backends["tool"].model.as_deref(), Some("retired-model"));
+        assert_eq!(
+            backends["rolely"].model, None,
+            "a backend serving only roles declares no model of its own"
+        );
+        assert_eq!(
+            backends["loopy"].model, None,
+            "an empty string is the same as none, and must not be checked as a model"
+        );
+        assert_eq!(roles.len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

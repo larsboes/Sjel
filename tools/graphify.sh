@@ -117,7 +117,25 @@ try_backend() {
   fi
   model="${GRAPHIFY_MODEL:-$(_registry_field "$reg" model || true)}"
   # Header via stdin, never argv: a key in a command line is readable by every process on the box.
-  if ! printf 'Authorization: Bearer %s\n' "$key" |
+  #
+  # LIVENESS IS NOT ENOUGH TO PICK A BACKEND. Measured 2026-10-24: nvidia-nim's /models answered
+  # while the model this script was configured to send it — deepseek-ai/deepseek-v4-flash — had been
+  # retired on 2026-08-07 (HTTP 410 Gone). The chain chose nvidia, all 126 semantic chunks failed,
+  # 455 files stayed absent from the graph, and the run wrote a partial graph and exited 1.
+  #
+  # A catalogue is not the substitute either, in the other direction: gemini's OpenAI-compatible
+  # /models still advertises only models/gemini-2.5-* while serving 3.5, so "is it listed" would
+  # reject a model that works. Asking the named model to answer one token is the only check that is
+  # right about both, and it is what `tools/model-check --probe` does per role.
+  if [ -n "$model" ]; then
+    if ! printf 'Authorization: Bearer %s\n' "$key" |
+         curl -sf --max-time 20 -H @- -H 'Content-Type: application/json' \
+           -d "$(printf '{"model":"%s","messages":[{"role":"user","content":"ok"}],"max_tokens":1}' "$model")" \
+           "${base%/}/chat/completions" >/dev/null 2>&1; then
+      echo "graphify.sh: '$id' did not answer for model '$model' at ${base%/}/chat/completions — skipping (retired or renamed? run tools/model-check)" >&2
+      return 1
+    fi
+  elif ! printf 'Authorization: Bearer %s\n' "$key" |
        curl -sf --max-time 5 -H @- "${base%/}/models" >/dev/null 2>&1; then
     echo "graphify.sh: '$id' did not answer at ${base%/}/models — skipping" >&2
     return 1

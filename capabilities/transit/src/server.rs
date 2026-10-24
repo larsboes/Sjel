@@ -75,8 +75,12 @@ const fn r(
     route_manifest::get(method, path, summary)
 }
 
-async fn routes() -> Json<Value> {
-    Json(route_manifest::manifest("transit", ROUTES))
+/// Static documentation, so an agent reads it as written (`sjel_server::agent::PUBLIC_FIELDS_HEADER`).
+async fn routes() -> impl axum::response::IntoResponse {
+    (
+        [(sjel_server::agent::PUBLIC_FIELDS_HEADER, "path, summary")],
+        Json(route_manifest::manifest("transit", ROUTES)),
+    )
 }
 
 #[derive(Deserialize)]
@@ -179,13 +183,18 @@ struct AppState {
     config: Arc<Config>,
 }
 
+/// Station names from DB's public lookup are declared public for an agent: a known person's name
+/// inside one ("Eva", "Bonn") is a coincidence of spelling, not the person.
 async fn handle_suggest(
     State(state): State<AppState>,
     Query(params): Query<SuggestQuery>,
-) -> Result<Json<Value>, (axum::http::StatusCode, String)> {
+) -> Result<impl axum::response::IntoResponse, (axum::http::StatusCode, String)> {
     let client = state.hafas_client;
     match tokio::task::spawn_blocking(move || client.suggest_stations(&params.q)).await {
-        Ok(Ok(stations)) => Ok(Json(serde_json::to_value(stations).unwrap_or_default())),
+        Ok(Ok(stations)) => Ok((
+            [(sjel_server::agent::PUBLIC_FIELDS_HEADER, "name")],
+            Json(serde_json::to_value(stations).unwrap_or_default()),
+        )),
         Ok(Err(e)) => Err(hafas_fail(e)),
         Err(e) => Err(fail(axum::http::StatusCode::INTERNAL_SERVER_ERROR, e)),
     }

@@ -453,6 +453,18 @@ mod http_tests {
             )
             .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
             .route("/page", get(|| async { "<html>Katrin</html>" }))
+            .route(
+                "/stations",
+                get(|| async {
+                    (
+                        [(agent::PUBLIC_FIELDS_HEADER, "name, sender")],
+                        axum::Json(serde_json::json!([
+                            {"name": "Katrin Hbf", "note": "Katrin",
+                             "sender": "Katrin Wissem <katrin@example.com>"}
+                        ])),
+                    )
+                }),
+            )
             .route("/triage/{id}/status", post(|| async { "moved" }))
             .route("/discover", get(|| async { axum::Json(serde_json::json!({"crawled": true})) }))
             .route(
@@ -503,6 +515,21 @@ mod http_tests {
             .await
             .unwrap();
         assert_eq!(raw.status().as_u16(), 403);
+
+        // A capability declares a key public for one response: that string arrives verbatim,
+        // the rest of the row does not, and an identity key cannot be declared at all.
+        let stations: serde_json::Value = client
+            .get(format!("{base}/stations"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(stations[0]["name"], "Katrin Hbf");
+        assert_ne!(stations[0]["note"], "Katrin");
+        assert!(!stations[0]["sender"].as_str().unwrap().contains("Katrin"));
     }
 
     #[tokio::test]

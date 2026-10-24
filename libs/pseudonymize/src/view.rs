@@ -11,7 +11,8 @@
 //!   without it an agent cannot tell a parcel service from a bank. It is dropped for a freemail
 //!   domain, a domain that contains a known name, and every sender on a c2 object: a medical
 //!   practice's domain would say what the c2 mail is about.
-//! - Every other string goes through the text ladder ([`PseudonymizerSession::tokenize_text`]).
+//! - Every other string goes through the text ladder ([`PseudonymizerSession::tokenize_text`]),
+//!   unless the capability declared its key public for that response ([`agent_view_public`]).
 //!
 //! An object whose `data_class` is `c3` is removed and counted. Secret content never leaves
 //! the machine in any form, pseudonymized or not (Q27, amended for c2 only on 2026-09-30).
@@ -114,8 +115,23 @@ pub fn agent_view(
     session: &mut PseudonymizerSession,
     registry: &EntityRegistry,
 ) -> ViewReport {
+    agent_view_public(value, session, registry, &[])
+}
+
+/// [`agent_view`], with `public` keys whose strings the capability declared public for this one
+/// response (a station name in a station lookup), so they stay verbatim. A capability declares
+/// it per response, because the same key can be public in one answer and personal in another: a
+/// station searched for is timetable data, a station in the operator's trips is their travel.
+/// An identity key and every field of a c2 object stay pseudonymized whatever is declared, and a
+/// c3 object is still removed.
+pub fn agent_view_public(
+    value: &mut Value,
+    session: &mut PseudonymizerSession,
+    registry: &EntityRegistry,
+    public: &[&str],
+) -> ViewReport {
     let mut report = ViewReport::default();
-    walk(value, None, None, session, registry, &mut report);
+    walk(value, None, None, public, session, registry, &mut report);
     report
 }
 
@@ -152,6 +168,7 @@ fn walk(
     key: Option<&str>,
     // The nearest enclosing `data_class`, so a field knows which class of row it sits in.
     class: Option<&str>,
+    public: &[&str],
     session: &mut PseudonymizerSession,
     registry: &EntityRegistry,
     report: &mut ViewReport,
@@ -159,6 +176,8 @@ fn walk(
     match value {
         Value::String(s) => match key {
             Some(k) if is_structural(k) => {}
+            Some(k)
+                if public.contains(&k) && !IDENTITY_KEYS.contains(&k) && class != Some("c2") => {}
             Some(k) if IDENTITY_KEYS.contains(&k) => *s = identity(s, class, session, registry),
             Some(k) if PATH_KEYS.contains(&k) => *s = session.tokenize_path(s, registry),
             _ => *s = session.tokenize_text(s, registry),
@@ -169,7 +188,7 @@ fn walk(
             report.withheld_secret += before - items.len();
             for item in items {
                 // An array inherits its key: `"to": ["a@x.de"]` is still identities.
-                walk(item, key, class, session, registry, report);
+                walk(item, key, class, public, session, registry, report);
             }
         }
         Value::Object(map) => {
@@ -184,7 +203,15 @@ fn walk(
                     report.withheld_secret += 1;
                     continue;
                 }
-                walk(v, Some(k.as_str()), class, session, registry, report);
+                walk(
+                    v,
+                    Some(k.as_str()),
+                    class,
+                    public,
+                    session,
+                    registry,
+                    report,
+                );
             }
         }
         _ => {}
@@ -202,6 +229,28 @@ mod tests {
 
     fn registry() -> EntityRegistry {
         EntityRegistry::builder().add_people(["Katrin"]).build()
+    }
+
+    #[test]
+    fn a_declared_public_key_stays_and_nothing_else_does() {
+        let mut value = json!({
+            "name": "Katrin Hbf",
+            "summary": "Katrin",
+            "sender": "Katrin <k@x.de>",
+            "secret": {"data_class": "c3", "name": "Katrin"},
+            "letter": {"data_class": "c2", "name": "Katrin"},
+        });
+        let report =
+            agent_view_public(&mut value, &mut session(), &registry(), &["name", "sender"]);
+        assert_eq!(value["name"], "Katrin Hbf", "declared public");
+        assert_ne!(value["summary"], "Katrin", "not declared");
+        assert!(
+            !value["sender"].as_str().unwrap().contains("Katrin"),
+            "identity never public"
+        );
+        assert_eq!(value["secret"], Value::Null, "c3 still withheld");
+        assert_ne!(value["letter"]["name"], "Katrin", "c2 stays pseudonymized");
+        assert_eq!(report.withheld_secret, 1);
     }
 
     #[test]

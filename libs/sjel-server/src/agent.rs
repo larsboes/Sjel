@@ -43,13 +43,18 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::agent_policy::{write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles};
-use sjel_pseudonymize::view::{agent_view, is_withheld};
+use sjel_pseudonymize::view::{agent_view_public, is_withheld};
 use sjel_pseudonymize::{EntityRegistry, PseudonymizerSession};
 
 /// The header an agent may send to scope its tokens to one conversation.
 pub const AGENT_SESSION_HEADER: &str = "x-sjel-agent-session";
 /// The Q9b receipt for the response: what was replaced.
 pub const RECEIPT_HEADER: &str = "x-sjel-pseudonymized";
+
+/// A response header in which a capability names the keys it declares public for that one
+/// response, comma-separated (`name, summary`). Those strings reach an agent verbatim; see
+/// [`sjel_pseudonymize::view::agent_view_public`] for what can never be declared public.
+pub const PUBLIC_FIELDS_HEADER: &str = "x-sjel-public-fields";
 /// How many c3 objects the view removed.
 pub const WITHHELD_HEADER: &str = "x-sjel-withheld";
 /// The header an agent repeats a write with, once the owner allowed it.
@@ -561,9 +566,20 @@ async fn pseudonymize_response(
     if is_withheld(&value) {
         return refuse(StatusCode::FORBIDDEN, "withheld: this item is Secret (c3)");
     }
+    let declared = parts
+        .headers
+        .get(PUBLIC_FIELDS_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let public: Vec<&str> = declared
+        .split(',')
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .collect();
     let (report, receipt) = access.with_session(id, |session| {
         session.take_findings();
-        let report = agent_view(&mut value, session, &access.registry);
+        let report = agent_view_public(&mut value, session, &access.registry, &public);
         (report, session.receipt())
     });
     let out = serde_json::to_vec(&value).unwrap_or_default();

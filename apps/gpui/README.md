@@ -597,6 +597,7 @@ measured. Run `./install` first: both scripts use the installed release build.
 | `SJEL_GPUI_NO_ACTIVATE=1` | Start and follow `sjel://` links without taking focus |
 | `SJEL_GPUI_FLOAT=1` | Open the window in the bottom-right corner, above other apps |
 | `SJEL_GPUI_OPEN=sjel://…` | Open this destination after start |
+| `SJEL_GPUI_KEYS='wait 1000; type Köln Hbf; keys enter'` | Replay waits, keystrokes and typed text into the window after start (`src/script.rs`) |
 | `SJEL_GPUI_APPEARANCE=light\|dark` | Preview a palette without changing the system setting or the mode saved in Settings (⌘,) |
 | `SJEL_GPUI_OPAQUE=1` | Draw an opaque window instead of the blurred one |
 | `SJEL_GPUI_NO_GLASS=1` | Draw the normal sidebar instead of the glass one |

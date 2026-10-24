@@ -36,6 +36,7 @@ mod pdf_kit;
 mod people_view;
 mod projects;
 mod research_view;
+mod script;
 mod selection;
 mod self_view;
 mod settings;
@@ -164,6 +165,7 @@ fn main() {
         if let Ok(url) = std::env::var("SJEL_GPUI_OPEN") {
             open_link(&url, cx);
         }
+        script::run_from_env(cx);
         // `SJEL_GPUI_SOUNDSCAPE=1`: open the player at launch, so a test or a screenshot finds it
         // without a click. `SJEL_GPUI_SOUNDSCAPE=play` also starts it, and starts it *through the
         // conductor* -- the instructor of state is not this window, so a local `set_playing` here

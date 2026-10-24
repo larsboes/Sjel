@@ -93,7 +93,7 @@ impl Travel {
                     let text = input.read(cx).value().trim().to_owned();
                     view.station_typed(end, text, cx);
                 }
-                InputEvent::PressEnter { .. } => view.search_connections(window, cx),
+                InputEvent::PressEnter { .. } => view.station_enter(end, window, cx),
                 _ => {}
             }
         };
@@ -216,6 +216,33 @@ impl Travel {
         field.picked = Some(station.clone());
         input.update(cx, |input, cx| input.set_value(station.name, window, cx));
         cx.notify();
+    }
+
+    /// Enter takes the first suggestion and moves on to the next field; with both stations
+    /// picked, it searches.
+    fn station_enter(&mut self, end: End, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(field) = self.field(end) else { return };
+        let first = field
+            .picked
+            .is_none()
+            .then(|| field.suggestions.first().cloned())
+            .flatten();
+        let Some(station) = first else {
+            self.search_connections(window, cx);
+            return;
+        };
+        self.pick_station(end, station, window, cx);
+        let Some(page) = self.connections.as_ref() else {
+            return;
+        };
+        let next = match end {
+            End::From if page.to.picked.is_none() => Some(page.to.input.clone()),
+            _ => None,
+        };
+        match next {
+            Some(input) => input.update(cx, |input, cx| input.focus(window, cx)),
+            None => self.search_connections(window, cx),
+        }
     }
 
     fn swap_stations(&mut self, window: &mut Window, cx: &mut Context<Self>) {

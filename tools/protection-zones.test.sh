@@ -37,12 +37,17 @@ for h in $roster; do
   printf '%s' "$out" | grep -qE "^ +[✓◐✗] +$h " || missing="$missing $h"
 done
 check "every harness in the roster gets a verdict" "" "$missing"
-check "no harness is silently absent" "4" "$(printf '%s' "$out" | grep -cE '^ +[✓◐✗] ')"
+check "no harness is silently absent" "5" "$(printf '%s' "$out" | grep -cE '^ +[✓◐✗] ')"
 
 # The load-bearing claim of the whole issue: an unenforceable class must SAY so.
 check "codex is reported unsupported, not omitted"    "1" "$(printf '%s' "$out" | grep -c 'codex  *unsupported')"
 check "opencode is reported unsupported, not omitted" "1" "$(printf '%s' "$out" | grep -c 'opencode  *unsupported')"
 check "pi is separately-profiled, not claimed as host protection" "1" "$(printf '%s' "$out" | grep -c 'pi  *separately-profiled')"
+# Copilot joined the roster on 2026-10-24 (tools/agent-integrations.sh HARNESSES). Its guard
+# matches commands, not paths, so the honest verdict is unsupported — and it must SAY that
+# rather than fall through to the unknown-harness default.
+check "copilot is reported unsupported" "1" "$(printf '%s' "$out" | grep -c 'copilot  *unsupported')"
+check "and says why: it denies commands, not paths" "1" "$(printf '%s' "$out" | grep -c 'no path-deny setting')"
 case "$out" in
   *"CONTAINER paths"*) echo "  ✓ and says why: it protects container paths, not host paths" ;;
   *) echo "  ✗ pi's verdict does not state its actual boundary"; fails=$((fails + 1)) ;;

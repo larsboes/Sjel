@@ -1,3 +1,14 @@
+# Environment files hold one machine's credentials. Nothing in this repository should ever
+# carry one, so the shape is ignored at any depth rather than per directory: measured
+# 2026-10-24, a `.env` at the repo root was untracked and named by no rule at all, which left
+# it one `git add -A` away from a commit. Broad adds are not hypothetical here -- a shared
+# checkout already absorbed another session's staged deletions (b51839ef).
+# The example files stay tracked: `*.env.example` documents a shape without carrying a value,
+# and three of them are in the repository (schemas/deployment.env.example and two capabilities).
+.env
+.env.*
+!*.env.example
+
 # This machine's overlay location, written by tools/install.sh. Every machine has its
 # own; the tracked sjel.toml carries only a neutral default, so no machine ever has to
 # edit a shared file. See schemas/machine.toml.example.

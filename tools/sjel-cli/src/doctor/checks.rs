@@ -10,6 +10,7 @@ use serde_json::Value as Json;
 
 use crate::harnesses::engine::SkillStatus;
 use crate::harnesses::mutate::held_units;
+use crate::harnesses::mutate::hold_matches;
 use crate::harnesses::registry::{is_installed, Model, Registry};
 use crate::harnesses::statuses_for;
 
@@ -2070,7 +2071,7 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                 let held = held_units(&harness.config).unwrap_or_default();
                 for row in &rows {
                     let label = format!("{}/{}", row.pack, row.skill);
-                    if held.contains(&label) && row.status != SkillStatus::NotDeployed {
+                    if hold_matches(&held, &label) && row.status != SkillStatus::NotDeployed {
                         // The remedy differs by delivery model. A registry harness registers a
                         // PATH in its own settings file and has no per-unit verb —
                         // `tools/packs-pi remove` takes Packs — so naming that command would send
@@ -2098,7 +2099,7 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                     match row.status {
                         SkillStatus::Current => lines.push((Level::Ok, format!("{label} current"))),
                         SkillStatus::NotDeployed => {
-                            if held.contains(&label) {
+                            if hold_matches(&held, &label) {
                                 lines.push((
                                     Level::Ok,
                                     format!(

@@ -11,12 +11,12 @@
 //! ledger is read by name; and a pid-liveness check goes through `kill -0`, because std cannot
 //! signal a pid and the workspace denies `unsafe`.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{ErrorKind, Write as _};
 use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -37,15 +37,18 @@ const LOCK_STALE_MS: u128 = 30_000;
 // processes each hold a snapshot and the last writer erases the other's entries. Re-entrant on
 // purpose: activate_profile calls remove_pack and deploy_pack.
 
-struct LockState {
-    depth: u32,
-    path: Option<PathBuf>,
+thread_local! {
+    /// The ledger locks THIS THREAD already holds, outermost first.
+    ///
+    /// Reentrancy is a property of the call stack, not of the process. It used to be one
+    /// process-global `(depth, path)` pair, which conflated two different things: two threads
+    /// deploying two different state files reset each other's counter, so one thread's matching
+    /// decrement landed on a zero another thread had just written. Measured 2026-10-24 as
+    /// `attempt to subtract with overflow` at `depth` 0, from two tests running in parallel —
+    /// and a real `activate_profile` on one ledger beside a `sync` on another is the same shape,
+    /// which a test only made visible.
+    static HELD_LOCKS: RefCell<Vec<PathBuf>> = RefCell::new(Vec::new());
 }
-
-static LOCK: Mutex<LockState> = Mutex::new(LockState {
-    depth: 0,
-    path: None,
-});
 
 fn lock_path_for(config: &DeployConfig) -> PathBuf {
     let mut p = config.state_file.clone().into_os_string();
@@ -74,15 +77,10 @@ pub fn with_state_lock<T>(
     run: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
     let path = lock_path_for(config);
-    {
-        let mut held = LOCK.lock().unwrap();
-        if held.depth > 0 && held.path.as_deref() == Some(path.as_path()) {
-            held.depth += 1;
-            drop(held);
-            let out = run();
-            LOCK.lock().unwrap().depth -= 1;
-            return out;
-        }
+    if HELD_LOCKS.with(|held| held.borrow().iter().any(|p| p == &path)) {
+        // This thread already owns the file lock for this ledger: the caller is nested inside
+        // the run that took it, so it must not wait on itself.
+        return run();
     }
 
     let wait_ms: u64 = std::env::var("SJEL_PACK_LOCK_WAIT_MS")
@@ -141,17 +139,14 @@ pub fn with_state_lock<T>(
         }
     }
 
-    {
-        let mut held = LOCK.lock().unwrap();
-        held.depth = 1;
-        held.path = Some(path.clone());
-    }
+    HELD_LOCKS.with(|held| held.borrow_mut().push(path.clone()));
     let out = run();
-    {
-        let mut held = LOCK.lock().unwrap();
-        held.depth = 0;
-        held.path = None;
-    }
+    HELD_LOCKS.with(|held| {
+        let mut held = held.borrow_mut();
+        if let Some(pos) = held.iter().rposition(|p| p == &path) {
+            held.remove(pos);
+        }
+    });
     let _ = fs::remove_file(&path);
     out
 }
@@ -1083,6 +1078,15 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
 /// that writes without asking — has to honour it too.
 pub type UnitHolds = BTreeMap<String, Vec<String>>;
 
+/// The `[unit_hold]` key that names every harness, including ones the table does not mention.
+///
+/// Without it, one decision had to be written once per harness, and a harness that arrived later
+/// inherited nothing: measured 2026-10-24, `knowledge/defuddle` was spelled out five times (claude,
+/// pi, codex, antigravity, opencode), each copy added by hand when that harness appeared, and
+/// copilot arrived on `full` with no line and no verdict. That is the same shape as the
+/// protection-zones default `c196797b` removed on the same day, one table over.
+pub const HOLD_ALL: &str = "*";
+
 pub fn read_unit_holds_at(root: &Path) -> Result<UnitHolds, String> {
     let path = root.join("profiles.toml");
     if !path.is_file() {
@@ -1126,13 +1130,55 @@ pub fn read_unit_holds_at(root: &Path) -> Result<UnitHolds, String> {
     Ok(out)
 }
 
-/// The `<pack>/<unit>` keys held back from this deployment's harness.
+/// The `<pack>/<unit>` keys held back from this deployment's harness: the `*` entries, plus the
+/// ones written for this harness by name.
+///
+/// A per-harness entry only ADDS to the wildcard, so a harness cannot disagree with a decision
+/// the table says applies everywhere. It does not need to: a unit held everywhere is held here.
 pub fn held_units(config: &DeployConfig) -> Result<BTreeSet<String>, String> {
-    Ok(read_unit_holds_at(&config.axon_root)?
-        .remove(&config.adapter)
-        .unwrap_or_default()
-        .into_iter()
-        .collect())
+    let holds = read_unit_holds_at(&config.axon_root)?;
+    let mut out: BTreeSet<String> = holds
+        .get(HOLD_ALL)
+        .map(|keys| keys.iter().cloned().collect())
+        .unwrap_or_default();
+    if let Some(keys) = holds.get(&config.adapter) {
+        out.extend(keys.iter().cloned());
+    }
+    Ok(out)
+}
+
+/// A key in `<pack>/<unit>` form, whichever channel spelled it.
+///
+/// A Pack's skill is `<pack>/<skill>` to a materialized channel and `<pack>/skills/<skill>` to a
+/// path-keyed registry channel (pi_settings.rs, `held_for`, which joins the Pack root). A hold
+/// written once has to name both, so it is written in the unit-key form and every comparison is
+/// made in that form.
+fn unit_key_form(key: &str) -> String {
+    match key.split_once('/') {
+        Some((pack, rest)) => match rest.strip_prefix("skills/") {
+            Some(unit) => format!("{pack}/{unit}"),
+            None => key.to_owned(),
+        },
+        None => key.to_owned(),
+    }
+}
+
+/// Both spellings of one hold key, for a channel that compares PATHS instead of unit keys.
+///
+/// `held_for` (pi_settings.rs) turns each key into one absolute path per Pack root and matches it
+/// against what the registry holds, so a skill needs `skills/` in the middle of that path. Emitting
+/// both = one hold line covers a materialized harness and a registry harness; the spelling that
+/// names nothing simply matches nothing.
+///
+/// Only a two-segment key grows a second spelling: `<pack>/skills/pi-packages/accordion` is not a
+/// path any channel holds, and inventing it would be a hold that reads as enforced and is not.
+pub fn path_spellings(key: &str) -> Vec<String> {
+    let mut out = vec![key.to_owned()];
+    let parts: Vec<&str> = key.split('/').collect();
+    if parts.len() == 2 && !key.ends_with('/') && parts[1] != "skills" {
+        out.push(format!("{}/skills/{}", parts[0], parts[1]));
+    }
+    out
 }
 
 /// Whether a `[unit_hold]` entry names this unit, where the key is `<pack>/<unit>`.
@@ -1145,9 +1191,13 @@ pub fn held_units(config: &DeployConfig) -> Result<BTreeSet<String>, String> {
 /// hold that matches nothing looks identical to a hold that works. Measured 2026-10-13: with
 /// `writing/agents/` held, claude dropped the tree and pi silently redeployed all eight files.
 pub fn hold_matches(held: &BTreeSet<String>, key: &str) -> bool {
-    held.iter().any(|hold| match hold.strip_suffix('/') {
-        Some(prefix) => key == hold || key.starts_with(&format!("{prefix}/")),
-        None => hold == key,
+    let key = unit_key_form(key);
+    held.iter().any(|hold| {
+        let hold = unit_key_form(hold);
+        match hold.strip_suffix('/') {
+            Some(prefix) => key == hold || key.starts_with(&format!("{prefix}/")),
+            None => key == hold,
+        }
     })
 }
 
@@ -1496,6 +1546,57 @@ mod tests {
         assert!(err.contains("multi-line array"), "{err}");
     }
 
+    /// Every profile in the repository's own `profiles.toml` resolves against the Packs in the
+    /// same tree: every Pack it names exists, every skill it narrows to exists in that Pack, and
+    /// every `except` names a Pack that is there.
+    ///
+    /// Nothing checked this. A profile naming a renamed skill failed only when the operator ran
+    /// `use` — on the harness that is their daily driver — and the two wildcard profiles
+    /// (`full`, `everything`) resolve whatever is on disk, so CI exercised none of the narrow
+    /// ones. That is the shape `check-skill-metadata.sh` was written for, one file over: a rule
+    /// nothing checks has already been broken. Added with `thesis` on 2026-10-24, which is the
+    /// profile this test proves.
+    #[test]
+    fn every_shipped_profile_resolves_against_the_packs_in_this_tree() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let profiles = read_profiles_at(&root).expect("profiles.toml must parse");
+        assert!(!profiles.is_empty(), "no profiles found under {}", root.display());
+        let config = DeployConfig {
+            axon_root: root.clone(),
+            pack_roots: None,
+            destination: root.join("target/profile-check"),
+            state_file: root.join("target/profile-check.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        for profile in &profiles {
+            let packs = resolve_profile_packs(&config, profile)
+                .unwrap_or_else(|e| panic!("profile '{}': {e}", profile.name));
+            let subsets = resolve_profile_skills(&config, profile)
+                .unwrap_or_else(|e| panic!("profile '{}': {e}", profile.name));
+            for (pack, subset) in &subsets {
+                assert!(
+                    packs.contains(pack),
+                    "profile '{}' narrows '{pack}' but does not deploy it",
+                    profile.name
+                );
+                assert!(subset.is_some(), "profile '{}' resolved an empty subset", profile.name);
+            }
+        }
+        // The one profile whose point is a skill that loads nowhere else: a typo here would put
+        // academic-writing back to zero harnesses, which is the state `thesis` exists to end.
+        let thesis = profiles.iter().find(|p| p.name == "thesis");
+        let thesis = thesis.expect("the thesis profile is gone");
+        assert_eq!(
+            resolve_profile_packs(&config, thesis).unwrap(),
+            vec!["writing".to_owned()]
+        );
+    }
+
     #[test]
     fn sync_targets_selects_by_pack_or_all() {
         let known = vec![
@@ -1541,6 +1642,108 @@ mod tests {
         fs::write(root.join("profiles.toml"), "[[profile]]\nname = \"p\"\n").unwrap();
         assert!(read_unit_holds_at(&root).unwrap().is_empty());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// One decision, every harness. `[unit_hold]` is keyed per harness, so a decision that applies
+    /// everywhere had to be written once per harness, and a harness arriving later inherited
+    /// nothing: measured 2026-10-24, `knowledge/defuddle` stood in five lists, each copy added by
+    /// hand when its harness appeared, and copilot -- added that morning -- had no entry at all.
+    ///
+    /// The spellings are asserted in the same test because a wildcard that covers four harnesses
+    /// and silently misses the fifth is the failure it exists to prevent: a materialized channel
+    /// names a skill `demo/gamma`, a path-keyed registry channel names it `demo/skills/gamma`.
+    #[test]
+    fn a_wildcard_hold_covers_a_harness_the_table_never_names() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-harnesses-hold-all-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        for name in ["alpha", "beta", "gamma"] {
+            fs::create_dir_all(pack.join("skills").join(name)).unwrap();
+            fs::write(
+                pack.join("skills").join(name).join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: does a thing\n---\n\nbody\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\", \"beta\", \"gamma\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[unit_hold]\n\"*\" = [\"demo/gamma\"]\nclaude = [\"demo/beta\"]\n",
+        )
+        .unwrap();
+        let mut config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "opencode".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        // A harness the table never names still carries the wildcard, and nothing else.
+        let held = held_units(&config).unwrap();
+        assert_eq!(held, ["demo/gamma".to_owned()].into_iter().collect());
+        assert!(hold_matches(&held, "demo/gamma"));
+        assert!(
+            hold_matches(&held, "demo/skills/gamma"),
+            "the path spelling is the same hold"
+        );
+        assert!(
+            !hold_matches(&held, "demo/beta"),
+            "another harness's entry is not this harness's"
+        );
+
+        deploy_pack(&config, "demo", None).unwrap();
+        assert!(config.destination.join("alpha").exists());
+        assert!(
+            config.destination.join("beta").exists(),
+            "opencode does not hold beta"
+        );
+        assert!(
+            !config.destination.join("gamma").exists(),
+            "the wildcard holds gamma on a harness that never named it"
+        );
+
+        // A harness that names a unit itself takes the union: a named entry adds to the wildcard.
+        config.adapter = "claude".to_owned();
+        config.destination = root.join("dest-claude");
+        config.state_file = root.join("state-claude.json");
+        let held = held_units(&config).unwrap();
+        assert_eq!(held.len(), 2);
+        assert!(hold_matches(&held, "demo/beta"));
+        assert!(hold_matches(&held, "demo/gamma"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A hold names both spellings of a skill, and only one spelling of anything else: inventing
+    /// `harness/skills/pi-packages/accordion` would be a hold that reads as enforced and matches
+    /// nothing, which is the failure mode `hold_matches` exists to make impossible.
+    #[test]
+    fn a_hold_names_both_spellings_of_a_skill_and_neither_of_a_deeper_path() {
+        assert_eq!(
+            path_spellings("knowledge/defuddle"),
+            vec![
+                "knowledge/defuddle".to_owned(),
+                "knowledge/skills/defuddle".to_owned()
+            ]
+        );
+        assert_eq!(
+            path_spellings("harness/pi-packages/accordion"),
+            vec!["harness/pi-packages/accordion".to_owned()]
+        );
+        assert_eq!(
+            path_spellings("writing/agents/"),
+            vec!["writing/agents/".to_owned()]
+        );
     }
 
     /// A held unit is not written by deploy, is reported as held, and stays out of the ledger —

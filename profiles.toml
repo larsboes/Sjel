@@ -165,40 +165,46 @@
 # itself. Held rather than deleted for the same reason as the 2026-10-13 trim in `full`: the Pack
 # source stays, and `everything` or a direct deploy brings it back.
 #
-# THE KEY SHAPE DIFFERS BY CHANNEL, and this is the trap. A materialized channel matches a UNIT
-# KEY (`knowledge/defuddle`), while pi's settings channels are registered by PATH and match a path
-# from the Pack root (`knowledge/skills/defuddle`) — see pi_settings.rs, `held_for`. So the same
-# decision is spelled two ways, and getting it wrong is silent: a hold that matches nothing looks
-# exactly like one that works. Measured 2026-10-13: `knowledge/defuddle` held it from claude and
-# codex and left pi still registering it, which only `tools/harnesses status` showed.
+# `"*"` is every harness, named or not, and it is why this decision is now ONE line. It used to be
+# five: claude, pi, codex, antigravity, opencode each carried `knowledge/defuddle` and each copy
+# was added by hand when that harness appeared (antigravity 2026-10-17, opencode 2026-10-20), which
+# meant a harness that arrived before somebody remembered inherited nothing. Copilot did exactly
+# that on 2026-10-24 and only the `full` profile's skill subset kept defuddle out of it. A
+# per-harness entry still ADDS to `"*"` — it cannot disagree with a decision the table says applies
+# everywhere — so the wildcard is the default and a harness line is the exception.
+#
+# THE KEY SHAPE DIFFERS BY CHANNEL, and this is the trap the wildcard has to survive. A
+# materialized channel matches a UNIT KEY (`knowledge/defuddle`), while pi's settings channels are
+# registered by PATH and match a path from the Pack root (`knowledge/skills/defuddle`) — see
+# pi_settings.rs, `held_for`. So one hold line is spelled two ways at the last moment, and getting
+# it wrong is silent: a hold that matches nothing looks exactly like one that works. Measured
+# 2026-10-13: `knowledge/defuddle` held it from claude and codex and left pi still registering it,
+# which only `tools/harnesses status` showed. `mutate::path_spellings` now emits both spellings for
+# a two-segment key, so the operator writes the unit key once and no channel's form is forgotten.
 #
 # writing/agents/: all eight files in that tree are academic-writing subagents, so this is the
 # agents half of the same 2026-10-13 decision that narrowed academic-writing out of `full`. It
 # has to be a hold rather than a profile narrowing, because the profile `skills` map names SKILLS
 # and the agents channel ignores it by design — `activate_agents_for_profile` calls sync_pack,
 # which takes every agent unit in the Pack. A hold is absolute, so unlike the skill, these agents
-# are NOT restored by activating `everything`; restore them by removing this line. codex needs no
-# entry: it has no agents channel at all (`tree_convention: None`).
+# are NOT restored by activating a profile; restore them by removing this line. claude and pi are
+# the only two harnesses with an agents channel, so codex, opencode, copilot and antigravity need
+# no entry (`tree_convention: None`, `flat_file_convention: None`).
+#
+# The one asymmetry left, measured and deliberate: claude carries a Pack's `agents/` tree as a
+# SINGLE unit, so the eight reviewers cannot follow a profile there — the choice on claude is all
+# eight or none. pi materializes them per file, so a single reviewer can be named. That is why the
+# `thesis` profile below deploys academic-writing's skill on every harness and prints the one line
+# to remove when you want its reviewers too.
 
 [unit_hold]
-claude = ["harness/agents/", "knowledge/defuddle", "writing/agents/"]
+"*" = ["knowledge/defuddle"]
+claude = ["harness/agents/", "writing/agents/"]
 pi = [
     "harness/pi-packages/accordion",
-    "knowledge/skills/defuddle",
     "writing/agents/",
 ]
-codex = ["writing/skill-creator", "knowledge/defuddle"]
-# antigravity: defuddle is held here too (2026-10-17), for the same reason as above. Its skills.json
-# is written by `use`, so the hold is what keeps the entry out, and the Pack stays in place.
-antigravity = ["knowledge/defuddle"]
-# opencode: defuddle is held here too, for the same reason as every other harness. opencode
-# materializes the Packs into ~/.config/opencode/skills and carries the same Pack set Claude Code
-# carries (2026-10-20), so the hold is what keeps defuddle out of that copy. Its key is the UNIT
-# key, not a path: opencode is a materialized channel like claude and codex, not a registry like pi.
-# opencode needs no other entry — it has no agents channel (`tree_convention: None`) and ships no
-# system skill of its own, so nothing collides with the Pack set the way Codex's own
-# `skill-creator` did.
-opencode = ["knowledge/defuddle"]
+codex = ["writing/skill-creator"]
 
 [[profile]]
 name = "productive"
@@ -244,6 +250,26 @@ skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" =
 
 # Codex is installed but carries no Sjel Pack (see the 2026-10-09 note above). Its
 # `use` verb therefore still applies here as recorded: declined, on this host.
+
+[[profile]]
+name = "thesis"
+description = "DSR thesis and paper work: draft, critique and cite-check academic prose"
+packs = ["writing"]
+# academic-writing has loaded on NO harness since 2026-10-13, when it left `full` for size rather
+# than disuse (7 runs, 45 audit-era). A skill that loads nowhere is one nobody reaches for, and the
+# only route back was `everything`, which deploys every other Pack to get it. This is the narrow
+# route: one command, for a session whose subject is the thesis.
+#
+# No `skills` narrowing on purpose. Its own description says a thesis chapter is prose before it is
+# a citation, so human-writing's tell scanner and unslop read the same files, and a thesis session
+# tends to grow its own tooling (skill-creator). The four are exactly what `writing` carries.
+#
+# ITS EIGHT REVIEWERS ARE STILL HELD on claude and pi (`writing/agents/` in [unit_hold] above), and
+# this profile does not lift them: a hold is absolute, so `use thesis` prints
+# "- writing/agents/ held back from …" rather than deploying the skill quietly without the lenses
+# that are half its point. Restoring them is removing that one entry from the claude and pi lines.
+# claude cannot do better than all eight or none — it carries the Pack's `agents/` tree as a single
+# unit — while pi materializes them per file, so a single reviewer can be named there.
 
 [[profile]]
 name = "full"

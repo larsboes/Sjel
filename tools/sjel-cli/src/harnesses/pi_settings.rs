@@ -350,11 +350,17 @@ fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
     let roots = config.pack_roots.clone().unwrap_or_default();
     let mut out = Vec::new();
     for key in mutate::held_units(config)? {
-        for root in &roots {
-            out.push((
-                key.clone(),
-                engine::resolve(&root.join(&key)).display().to_string(),
-            ));
+        // Both spellings, so a hold written in the unit-key form (`knowledge/defuddle`) also
+        // matches the path this channel actually registered (`knowledge/skills/defuddle`).
+        for spelling in mutate::path_spellings(&key) {
+            for root in &roots {
+                out.push((
+                    key.clone(),
+                    engine::resolve(&root.join(&spelling))
+                        .display()
+                        .to_string(),
+                ));
+            }
         }
     }
     Ok(out)

@@ -191,10 +191,6 @@
       "kind": "pack"
     },
     {
-      "name": "home-automation",
-      "kind": "pack"
-    },
-    {
       "name": "host-firewall",
       "kind": "capability"
     },
@@ -341,10 +337,6 @@
     {
       "name": "presentations",
       "kind": "pack"
-    },
-    {
-      "name": "printing",
-      "kind": "capability"
     },
     {
       "name": "projects",

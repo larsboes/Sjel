@@ -1,5 +1,5 @@
-//! The four per-harness Pack adapters — `tools/packs-claude.ts`, `tools/packs-codex.ts`,
-//! `tools/packs-opencode.ts` and `tools/packs-pi.ts`, ported 2026-10-04.
+//! The per-harness Pack adapters — Claude Code, Codex, OpenCode, GitHub Copilot CLI and pi —
+//! ported from the legacy TypeScript launchers on 2026-10-04.
 //!
 //! Each is a launcher-shaped CLI over machinery that already lived in Rust: the deployment
 //! engine (`harnesses::engine` + `harnesses::mutate`) and pi's settings registry
@@ -67,6 +67,21 @@ Environment:
   OPENCODE_SKILLS_DIR              destination (default: $HOME/.config/opencode/skills)
   SJEL_OPENCODE_PACKS_STATE_FILE   ownership ledger override";
 
+const COPILOT_HELP: &str = "\
+tools/packs-copilot — materialize Sjel Packs into GitHub Copilot CLI.
+
+  tools/packs-copilot status [<pack>|--all]  show source/install/drift state
+  tools/packs-copilot deploy <pack>...       install one or more Packs
+  tools/packs-copilot adopt <pack>...        take ownership of identical copies already in place
+  tools/packs-copilot sync <pack>|--all      update already-deployed Packs
+  tools/packs-copilot remove <pack>...       remove one or more owned Packs
+  tools/packs-copilot list                   list available Packs
+  tools/harnesses use <profile> --harness copilot  activate a profile
+
+Environment:
+  COPILOT_SKILLS_DIR       destination (default: $HOME/.copilot/skills)
+  SJEL_COPILOT_STATE_FILE  ownership ledger override";
+
 const PI_USAGE: &str = "usage: tools/packs-pi list | status [pack ...] | deploy <pack ...> | \
                         sync <pack ...> | remove <pack ...> | use <profile>";
 
@@ -84,6 +99,7 @@ pub fn run(tool: &str, args: &[String]) -> ExitCode {
         "packs-claude" => claude(&registry, args),
         "packs-codex" => codex(&registry, args),
         "packs-opencode" => opencode(&registry, args),
+        "packs-copilot" => copilot(&registry, args),
         "packs-pi" => pi(&registry, args),
         other => Err(format!("unknown adapter '{other}'")),
     };
@@ -439,6 +455,47 @@ fn opencode(registry: &Registry, args: &[String]) -> Result<(), String> {
     }
 }
 
+// ---- copilot -------------------------------------------------------------------------------
+
+fn copilot(registry: &Registry, args: &[String]) -> Result<(), String> {
+    let verb = help_or_default(args).unwrap_or("status");
+    let rest = args.get(1..).unwrap_or(&[]);
+    let config = config(registry, "copilot")?;
+    if matches!(verb, "-h" | "--help" | "help") {
+        println!("{COPILOT_HELP}");
+        return Ok(());
+    }
+    match verb {
+        "list" => list(&config, true),
+        "status" => status(&config, rest.first().map(String::as_str)),
+        "deploy" => {
+            if rest.is_empty() {
+                return Err(COPILOT_HELP.to_string());
+            }
+            deploy(&config, rest, false)
+        }
+        "adopt" => {
+            if rest.is_empty() {
+                return Err(COPILOT_HELP.to_string());
+            }
+            adopt(&config, rest)
+        }
+        "sync" => {
+            if rest.is_empty() {
+                return Err(COPILOT_HELP.to_string());
+            }
+            sync(&config, rest.first().map(String::as_str), false)
+        }
+        "remove" => {
+            if rest.is_empty() {
+                return Err(COPILOT_HELP.to_string());
+            }
+            remove(&config, rest, false)
+        }
+        _ => Err(COPILOT_HELP.to_string()),
+    }
+}
+
 // ---- pi ------------------------------------------------------------------------------------
 
 fn pi(registry: &Registry, args: &[String]) -> Result<(), String> {
@@ -552,5 +609,12 @@ mod tests {
         assert!(OPENCODE_HELP.contains("OPENCODE_SKILLS_DIR"));
         assert!(OPENCODE_HELP.contains("SJEL_OPENCODE_PACKS_STATE_FILE"));
         assert!(!OPENCODE_HELP.contains("SJEL_CODEX_STATE_FILE"));
+    }
+
+    #[test]
+    fn copilot_help_lists_global_controls() {
+        assert!(COPILOT_HELP.contains("tools/packs-copilot deploy <pack>..."));
+        assert!(COPILOT_HELP.contains("COPILOT_SKILLS_DIR"));
+        assert!(COPILOT_HELP.contains("SJEL_COPILOT_STATE_FILE"));
     }
 }

@@ -82,6 +82,8 @@ impl Registry {
         with_overlay(&mut opencode_roots);
         let mut codex_roots = vec![root.join("Packs")];
         with_overlay(&mut codex_roots);
+        let mut copilot_roots = vec![root.join("Packs")];
+        with_overlay(&mut copilot_roots);
 
         let env_path = |name: &str| -> Option<PathBuf> {
             std::env::var(name)
@@ -169,6 +171,25 @@ impl Registry {
             validate_adapter_files: None,
         };
 
+        let copilot = DeployConfig {
+            axon_root: root.to_path_buf(),
+            pack_roots: Some(copilot_roots),
+            destination: resolved(
+                env_path("COPILOT_SKILLS_DIR")
+                    .unwrap_or_else(|| home.join(".copilot").join("skills")),
+            ),
+            state_file: resolved(
+                env_path("SJEL_COPILOT_STATE_FILE")
+                    .unwrap_or_else(|| state_dir.join("copilot.json")),
+            ),
+            adapter: "copilot".to_owned(),
+            state_env_var: Some("SJEL_COPILOT_STATE_FILE".to_owned()),
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
         let mut agent_roots = vec![root.join("Packs")];
         with_overlay(&mut agent_roots);
         let agent_destination = overlay
@@ -242,6 +263,14 @@ impl Registry {
                     config: pi,
                 },
                 Harness {
+                    id: "copilot",
+                    label: "GitHub Copilot CLI",
+                    marker: home.join(".copilot"),
+                    model: Model::Materialized,
+                    cli: "copilot",
+                    config: copilot,
+                },
+                Harness {
                     id: "sjel-agent",
                     label: "sjel-agent",
                     marker: agent_destination,
@@ -279,7 +308,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn six_harnesses_and_none_unsupported() {
+    fn seven_harnesses_and_none_unsupported() {
         let registry = Registry::new(Path::new("/tmp/sjel-registry-test"));
         let ids: Vec<&str> = registry.harnesses.iter().map(|h| h.id).collect();
         assert_eq!(
@@ -289,6 +318,7 @@ mod tests {
                 "codex",
                 "opencode",
                 "pi",
+                "copilot",
                 "sjel-agent",
                 "antigravity"
             ]

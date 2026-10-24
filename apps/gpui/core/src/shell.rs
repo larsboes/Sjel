@@ -773,6 +773,7 @@ pub struct FeedQualityRefresh {
 pub enum FeedSurface {
     Inbox,
     Reader,
+    Library,
 }
 
 impl FeedSurface {
@@ -780,6 +781,7 @@ impl FeedSurface {
         match self {
             Self::Inbox => "inbox",
             Self::Reader => "reader",
+            Self::Library => "library",
         }
     }
 }

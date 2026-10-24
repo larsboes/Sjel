@@ -176,11 +176,12 @@ pub fn destination(href: &str) -> Option<Destination> {
 }
 
 /// The Feed page's tabs. Reading is the comms feed, Review is comms' computed quality queue
-/// (`/feed/review`), Mail is Gmail triage.
+/// (`/feed/review`), Library is the whole archive (`/feed/library`), Mail is Gmail triage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeedTab {
     Reading,
     Review,
+    Library,
     Mail,
 }
 
@@ -216,8 +217,10 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
             return Some(Target::Travel(route));
         }
     }
-    if path == "/feed/review" {
-        return Some(Target::Feed(FeedTab::Review));
+    match path.as_str() {
+        "/feed/review" => return Some(Target::Feed(FeedTab::Review)),
+        "/feed/library" => return Some(Target::Feed(FeedTab::Library)),
+        _ => {}
     }
     if matches!(path_only, "/ask" | "/") && path.contains('?') {
         if let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1{path}")) {
@@ -300,6 +303,10 @@ mod tests {
         assert_eq!(
             parse_deep_link("sjel://feed/review"),
             Some(Target::Feed(FeedTab::Review))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://feed/library"),
+            Some(Target::Feed(FeedTab::Library))
         );
         assert_eq!(parse_deep_link("sjel://"), Some(Target::Native(Page::Home)));
         assert_eq!(

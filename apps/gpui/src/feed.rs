@@ -6,10 +6,11 @@
 //! (`dashboard/src/routes/feed/+page.svelte`, "Keyboard triage"), so the two surfaces agree.
 
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    FontWeight, KeyBinding, SharedString, Window,
+    FontWeight, KeyBinding, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
     self, FeedDetail, FeedEntry, FeedQualityFlag, FeedQualityRefresh, FeedSurface, ShellError,
@@ -45,6 +46,12 @@ actions!(
 /// How far back the list reads. The dashboard's inbox reads 7 days by default; a native window
 /// that stays open longer gets a month.
 const DAYS: u32 = 30;
+
+/// The library reads the whole archive, as the dashboard's library does.
+const ARCHIVE_DAYS: u32 = 3650;
+
+/// How many library rows draw before `Show more`, as in `crate::documents`.
+const ROW_BATCH: usize = 200;
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
@@ -102,6 +109,14 @@ pub struct Feed {
     /// What the last explicit refresh checked; `None` until one ran this session.
     pub review_refresh: Option<FeedQualityRefresh>,
     pub refreshing: bool,
+    /// Every entry comms holds, dismissed included.
+    pub library: Remote<Vec<FeedEntry>>,
+    /// `None` shows every status.
+    pub library_status: Option<Filter>,
+    pub library_kind: Option<String>,
+    library_query: String,
+    library_shown: usize,
+    library_input: Option<(Entity<InputState>, Subscription)>,
     focus: FocusHandle,
     focus_next: bool,
 }
@@ -123,6 +138,12 @@ impl Feed {
             review: Remote::default(),
             review_refresh: None,
             refreshing: false,
+            library: Remote::default(),
+            library_status: None,
+            library_kind: None,
+            library_query: String::new(),
+            library_shown: ROW_BATCH,
+            library_input: None,
             focus: cx.focus_handle(),
             focus_next: true,
         }
@@ -145,6 +166,7 @@ impl Feed {
                 self.load(cx);
             }
             Tab::Review => self.load_review(cx),
+            Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.activate(cx)),
         }
     }
@@ -154,6 +176,7 @@ impl Feed {
         match self.tab {
             Tab::Reading => self.load(cx),
             Tab::Review => self.load_review(cx),
+            Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
         }
     }
@@ -240,14 +263,43 @@ impl Feed {
         .detach();
     }
 
-    /// Opens a flagged entry in the reader.
-    fn open_flagged(&mut self, id: String, cx: &mut Context<Self>) {
-        self.tab = Tab::Reading;
-        self.focus_next = true;
-        if self.rows.value.is_none() {
-            self.load(cx);
+    fn load_library(&mut self, cx: &mut Context<Self>) {
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.library.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        self.library.loading = true;
+        cx.notify();
+        let work = shell::run(async move { shell.feed(ARCHIVE_DAYS).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.library.settle(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn library_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+        if let Some((input, _)) = &self.library_input {
+            return input.clone();
         }
-        self.open(id, cx);
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search title, author or link…"));
+        let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
+            if matches!(event, InputEvent::Change) {
+                view.library_query = input.read(cx).value().trim().to_lowercase();
+                view.library_shown = ROW_BATCH;
+                cx.notify();
+            }
+        });
+        self.library_input = Some((input.clone(), subscription));
+        input
     }
 
     pub fn visible(&self) -> Vec<&FeedEntry> {
@@ -295,6 +347,8 @@ impl Feed {
         let Ok(shell) = self.repo.shell() else { return };
         let surface = if self.reading.is_some() {
             FeedSurface::Reader
+        } else if self.tab == Tab::Library {
+            FeedSurface::Library
         } else {
             FeedSurface::Inbox
         };
@@ -334,27 +388,33 @@ impl Feed {
         if let Some(detail) = self.detail.value.as_mut().filter(|d| d.id == id) {
             detail.status = status.to_owned();
         }
-        let row = self.rows.value.iter_mut().flatten().find(|e| e.id == id)?;
-        let before = [Filter::New, Filter::Kept, Filter::Dismissed]
-            .into_iter()
-            .map(Filter::status)
-            .find(|s| *s == row.status);
-        row.status = status.to_owned();
+        for flag in self.review.value.iter_mut().flatten() {
+            if flag.feed_id == id {
+                flag.status = status.to_owned();
+            }
+        }
+        let mut before = None;
+        let rows = self.rows.value.iter_mut().flatten();
+        for row in rows.chain(self.library.value.iter_mut().flatten()) {
+            if row.id == id {
+                before = before.or_else(|| {
+                    [Filter::New, Filter::Kept, Filter::Dismissed]
+                        .into_iter()
+                        .map(Filter::status)
+                        .find(|s| *s == row.status)
+                });
+                row.status = status.to_owned();
+            }
+        }
         before
     }
 
     fn status_of(&self, id: &str) -> Option<&str> {
-        self.rows
-            .value
-            .iter()
-            .flatten()
-            .find(|e| e.id == id)
-            .map(|e| e.status.as_str())
-            .or_else(|| {
-                let flags = self.review.value.as_ref()?;
-                let flag = flags.iter().find(|f| f.feed_id == id)?;
-                Some(flag.status.as_str())
-            })
+        self.entry(id).map(|e| e.status.as_str()).or_else(|| {
+            let flags = self.review.value.as_ref()?;
+            let flag = flags.iter().find(|f| f.feed_id == id)?;
+            Some(flag.status.as_str())
+        })
     }
 
     fn open(&mut self, id: String, cx: &mut Context<Self>) {
@@ -382,12 +442,15 @@ impl Feed {
         .detach();
     }
 
-    fn url_of(&self, id: &str) -> Option<String> {
-        self.rows
-            .value
-            .iter()
-            .flatten()
+    /// The entry in the feed list or the library, whichever holds it.
+    fn entry(&self, id: &str) -> Option<&FeedEntry> {
+        let rows = self.rows.value.iter().flatten();
+        rows.chain(self.library.value.iter().flatten())
             .find(|e| e.id == id)
+    }
+
+    fn url_of(&self, id: &str) -> Option<String> {
+        self.entry(id)
             .map(|e| e.url.clone())
             .or_else(|| self.detail.value.as_ref().map(|d| d.url.clone()))
     }
@@ -455,7 +518,10 @@ impl Render for Feed {
             window.focus(&self.focus, cx);
         }
         let palette = self.palette.unwrap_or_else(Palette::dark);
-        let reading = self.tab == Tab::Reading;
+        // The reader draws over Reading, Review and Library, and Escape returns to the tab that
+        // opened it. Only then, or on the Reading list, do the Feed keys act: elsewhere they would
+        // move a cursor nobody sees.
+        let reading = self.tab != Tab::Mail && (self.tab == Tab::Reading || self.reading.is_some());
         let body = if self.tab == Tab::Mail {
             div()
                 .flex()
@@ -464,15 +530,15 @@ impl Render for Feed {
                 .child(self.title_row(cx))
                 .child(self.mail.clone())
                 .into_any_element()
-        } else if self.tab == Tab::Review {
-            self.review_list(palette, cx)
         } else if self.reading.is_some() {
             self.reader(palette, cx)
+        } else if self.tab == Tab::Review {
+            self.review_list(palette, cx)
+        } else if self.tab == Tab::Library {
+            self.library_list(palette, window, cx)
         } else {
             self.list(palette, cx)
         };
-        // Only the Reading tab carries the Feed keys, so s, u and ⇧O never act on an entry the
-        // other tabs hide.
         div()
             .when(reading, |el| el.key_context("Feed"))
             .track_focus(&self.focus)
@@ -637,7 +703,7 @@ impl Feed {
             .into_any_element()
     }
 
-    /// The page title with the Reading | Review | Mail switch.
+    /// The page title with the Reading | Review | Library | Mail switch.
     fn title_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let tab = |label: &'static str, tab: Tab, cx: &mut Context<Self>| {
             Button::new(SharedString::from(format!("feed-tab-{label}")))
@@ -659,6 +725,7 @@ impl Feed {
             )
             .child(tab("Reading", Tab::Reading, cx))
             .child(tab("Review", Tab::Review, cx))
+            .child(tab("Library", Tab::Library, cx))
             .child(tab("Mail", Tab::Mail, cx))
             .into_any_element()
     }
@@ -667,7 +734,11 @@ impl Feed {
         let back = Button::new("feed-back")
             .small()
             .ghost()
-            .label("← Feed")
+            .label(match self.tab {
+                Tab::Review => "← Review",
+                Tab::Library => "← Library",
+                _ => "← Feed",
+            })
             .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
         let Some(detail) = &self.detail.value else {
             let state = match &self.detail.error {
@@ -848,9 +919,9 @@ impl Feed {
                                 .font_weight(FontWeight::MEDIUM)
                                 .cursor_pointer()
                                 .hover(move |style| style.text_color(rgb(palette.accent)))
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.open_flagged(id.clone(), cx)
-                                }))
+                                .on_click(
+                                    cx.listener(move |view, _, _, cx| view.open(id.clone(), cx)),
+                                )
                                 .child(title(first.title.as_deref(), &first.url)),
                         )
                         .child(
@@ -917,6 +988,235 @@ impl Feed {
             .child(list)
             .into_any_element()
     }
+}
+
+impl Feed {
+    /// The archive as one table, newest first. A row opens the reader; its buttons decide.
+    fn library_list(
+        &mut self,
+        palette: Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let input = self.library_field(window, cx);
+        let all: Vec<&FeedEntry> = self.library.value.iter().flatten().collect();
+        let kind = self.library_kind.as_deref();
+        let query = self.library_query.as_str();
+        let count = |status| in_library(all.iter().copied(), status, kind, query).len();
+        let pill = |label: &'static str, status: Option<Filter>, cx: &mut Context<Self>| {
+            filter_pill(
+                label,
+                count(status),
+                self.library_status == status,
+                palette,
+                cx.listener(move |view, _, _, cx| {
+                    view.library_status = status;
+                    view.library_shown = ROW_BATCH;
+                    cx.notify();
+                }),
+            )
+        };
+        let kind_button = |label: String, kind: Option<String>, cx: &mut Context<Self>| {
+            let active = self.library_kind == kind;
+            Button::new(SharedString::from(format!("feed-kind-{label}")))
+                .small()
+                .label(label)
+                .when(active, |b| b.primary())
+                .when(!active, |b| b.ghost())
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.library_kind = kind.clone();
+                    view.library_shown = ROW_BATCH;
+                    cx.notify();
+                }))
+        };
+        let mut kind_row = div().flex().flex_wrap().gap_1().child(kind_button(
+            format!("All {}", all.len()),
+            None,
+            cx,
+        ));
+        for (kind, n) in kinds(&all) {
+            kind_row = kind_row.child(kind_button(format!("{kind} {n}"), Some(kind), cx));
+        }
+        let toolbar = div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(pill("All", None, cx))
+            .child(pill("New", Some(Filter::New), cx))
+            .child(pill("Kept", Some(Filter::Kept), cx))
+            .child(pill("Dismissed", Some(Filter::Dismissed), cx))
+            .child(div().flex_1())
+            .child(div().w(px(280.)).child(Input::new(&input).small()));
+
+        let visible = in_library(all.iter().copied(), self.library_status, kind, query);
+        let mut list = div().flex().flex_col();
+        if let Some(error) = &self.library.error {
+            list = list.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.red))
+                    .child(error.to_string()),
+            );
+        } else if self.library.value.is_none() && self.library.loading {
+            list = list.child(muted("Loading the archive…", palette));
+        } else if visible.is_empty() && !self.library.loading {
+            list = list.child(muted("No entries match these filters.", palette));
+        }
+        let hidden = visible.len().saturating_sub(self.library_shown);
+        for (i, entry) in visible.into_iter().take(self.library_shown).enumerate() {
+            list = list.child(library_row(i, entry, palette, cx));
+        }
+        if hidden > 0 {
+            list = list.child(
+                div().pt_2().child(
+                    Button::new("feed-library-more")
+                        .small()
+                        .ghost()
+                        .label(format!("Show more ({hidden} left)"))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.library_shown += ROW_BATCH;
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(self.title_row(cx))
+            .child(toolbar)
+            .child(kind_row)
+            .child(list)
+            .into_any_element()
+    }
+}
+
+fn library_row(
+    i: usize,
+    entry: &FeedEntry,
+    palette: Palette,
+    cx: &mut Context<Feed>,
+) -> AnyElement {
+    let cell = |width: f32, text: String| {
+        div()
+            .w(px(width))
+            .flex_none()
+            .truncate()
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child(text)
+    };
+    // Author and lens give way first, so a narrow window still shows the title.
+    let shrinking = |width: f32, text: String| cell(width, text).flex_shrink(1.).min_w_0();
+    let action = |label: &'static str, status: &'static str, cx: &mut Context<Feed>| {
+        let id = entry.id.clone();
+        Button::new(SharedString::from(format!("feed-library-{label}-{i}")))
+            .small()
+            .ghost()
+            .label(label)
+            .on_click(cx.listener(move |view, _, _, cx| view.decide(id.clone(), status, cx)))
+    };
+    let actions = match entry.status.as_str() {
+        "new" => div()
+            .flex()
+            .child(action("Keep", "keeper", cx))
+            .child(action("Dismiss", "dismissed", cx)),
+        _ => div().flex().child(action("Restore", "new", cx)),
+    };
+    let score = entry.score();
+    let lens = entry
+        .relevance
+        .as_ref()
+        .map_or("Unassigned".to_owned(), |r| r.profile_label.clone());
+    let status = match entry.status.as_str() {
+        "keeper" => "Kept",
+        "dismissed" => "Dismissed",
+        _ => "New",
+    };
+    let id = entry.id.clone();
+    div()
+        .id(("feed-library-row", i))
+        .flex()
+        .items_center()
+        .gap_3()
+        .px_2()
+        .py_1()
+        .rounded(px(6.))
+        .when(entry.status == "dismissed", |el| el.opacity(0.5))
+        .hover(move |style| style.bg(rgba(palette.raised)))
+        .cursor_pointer()
+        .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx)))
+        .child(cell(80., entry.kind.clone()))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(180.))
+                .truncate()
+                .text_sm()
+                .child(title(entry.title.as_deref(), &entry.url)),
+        )
+        .child(shrinking(120., entry.author.clone().unwrap_or_default()))
+        .child(shrinking(110., lens))
+        .child(cell(
+            40.,
+            if score > 0.0 {
+                format!("{:.0}%", score * 100.0)
+            } else {
+                String::new()
+            },
+        ))
+        .child(cell(70., status.to_owned()))
+        .child(cell(80., entry.day.clone()))
+        .child(
+            div()
+                .w(px(150.))
+                .flex_none()
+                .flex()
+                .justify_end()
+                .child(actions),
+        )
+        .into_any_element()
+}
+
+/// The library's rows for one status (`None`: all), kind and lowercase query, newest day first
+/// and best score first within a day.
+fn in_library<'a>(
+    rows: impl Iterator<Item = &'a FeedEntry>,
+    status: Option<Filter>,
+    kind: Option<&str>,
+    query: &str,
+) -> Vec<&'a FeedEntry> {
+    let mut rows: Vec<&FeedEntry> = rows
+        .filter(|e| status.is_none_or(|s| e.status == s.status()))
+        .filter(|e| kind.is_none_or(|k| e.kind == k))
+        .filter(|e| {
+            query.is_empty()
+                || [
+                    e.title.as_deref(),
+                    e.author.as_deref(),
+                    Some(e.url.as_str()),
+                ]
+                .into_iter()
+                .flatten()
+                .any(|text| text.to_lowercase().contains(query))
+        })
+        .collect();
+    rows.sort_by(|a, b| b.day.cmp(&a.day).then(b.score().total_cmp(&a.score())));
+    rows
+}
+
+/// Each kind in the archive with its count, most common first.
+fn kinds(rows: &[&FeedEntry]) -> Vec<(String, usize)> {
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    for row in rows {
+        match counts.iter_mut().find(|(kind, _)| *kind == row.kind) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((row.kind.clone(), 1)),
+        }
+    }
+    counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    counts
 }
 
 /// The queue's rows grouped by entry, in the order comms returned the entries.
@@ -1045,6 +1345,30 @@ mod tests {
         };
         assert_eq!(order(None), "cba");
         assert_eq!(order(Some("media")), "");
+    }
+
+    #[test]
+    fn library_filters_by_status_kind_and_query() {
+        let mut rows = [
+            entry('a', "2026-10-20", "new", 0.9),
+            entry('b', "2026-10-21", "dismissed", 0.1),
+            entry('c', "2026-10-21", "keeper", 0.8),
+        ];
+        rows[2].kind = "github".into();
+        rows[2].author = Some("Ferris".into());
+        let order = |status, kind, query| -> String {
+            in_library(rows.iter(), status, kind, query)
+                .iter()
+                .map(|e| e.title.clone().unwrap())
+                .collect()
+        };
+        assert_eq!(order(None, None, ""), "cba");
+        assert_eq!(order(Some(Filter::Dismissed), None, ""), "b");
+        assert_eq!(order(None, Some("github"), ""), "c");
+        assert_eq!(order(None, None, "ferris"), "c");
+        assert_eq!(order(None, None, "example.org/a"), "a");
+        let refs: Vec<&FeedEntry> = rows.iter().collect();
+        assert_eq!(kinds(&refs), [("article".into(), 2), ("github".into(), 1)]);
     }
 
     #[test]

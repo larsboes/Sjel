@@ -50,7 +50,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 | Route | Lines | In GPUI |
 |---|---|---|
 | `/travel/connections` | 817 | no page (connection search) |
-| `/feed/library` | 373 | no page |
+| `/feed/library` | 373 | ported: Feed's Library tab (Work Package 19) |
 | `/feed/review` | 363 | ported: Feed's Review tab (Work Package 18) |
 | `/apps` | 217 | in `DESTINATIONS`, no `Page` (`Software` is `/software`) |
 | `/docs`, `/docs/[...slug]` | 211 | in `DESTINATIONS`, no `Page` |
@@ -59,7 +59,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 | `/feed/[id]`, `/scout`, `/trips` | ≤ 18 each | not checked, probably redirects |
 
 **Writes that still go to the browser.** Travel cannot create a trip, a booking or a stage (§4).
-Inbox triage, the feed's library, editing a person, adding to the wishlist and
+Inbox triage, editing a person, adding to the wishlist and
 recategorizing a transaction stay on the web. Fare alerts live only in
 `dashboard/src/lib/travel/fare-alerts.ts`.
 
@@ -88,7 +88,7 @@ ports.
 2. **Travel authoring and connections.** The largest gap, and §4's highest priority. Authoring
    shipped on the Mac in Work Package 17. `/travel/connections` is next.
 3. **Feed review and library, then Inbox triage.** That finishes comms. Review shipped in Work
-   Package 18.
+   Package 18, the library in Work Package 19.
 4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
 5. **Delete `dashboard/`.** Then the 78 references, `matches_dashboard_nav`, ⌘D "Open in the
    dashboard", and the `sjel-status` static serve.
@@ -649,6 +649,26 @@ ports.
   live comms queue through `SJEL_GPUI_OPEN=sjel://feed/review`: 405 entries draw with their signals.
   Recompute not clicked, because it rewrites the stored flags.
 - **Target Files**: `apps/gpui/core/src/{shell,route}.rs`, `apps/gpui/src/{feed,workspace}.rs`
+
+### ✅ Work Package 19: the feed's library (§1b step 3, second of three)
+- **Status**: Shipped (2026-10-24). Mac only.
+- **Shipped**:
+  - `src/feed.rs`: a Library tab after Review. It reads the whole archive (`GET /comms/feed`,
+    3650 days, dismissed included) as one table: kind, title, author, lens, fit, status, day.
+    Status pills, kind buttons with counts, and a search over title, author and link filter it.
+    Rows draw 200 at a time behind Show more, as in `documents.rs`. A new row has Keep and
+    Dismiss, any other row Restore. A row opens the reader, and Back returns to the library.
+  - `core/src/shell.rs`: `FeedSurface::Library`, so the ledger records where the decision was
+    made (comms' CHECK list already allowed `library`).
+  - `core/src/route.rs`: `sjel://feed/library` opens the tab.
+  - The reader now draws over Reading, Review and Library. The Feed keys act on the Reading list
+    or in the reader, never on a list the open tab hides.
+- **Not here**: the dashboard's Board and Calendar views, the metrics bar, the trip timeline, and
+  the side peek (the reader replaces it).
+- **Verified**: 1 new test (`library_filters_by_status_kind_and_query`) and 1 route assertion.
+  Against the live archive: 986 entries, 963 new, 21 kept, 2 dismissed, matching comms. Keep,
+  Dismiss and opening a row were not clicked, because each writes to the live ledger.
+- **Target Files**: `apps/gpui/core/src/{shell,route}.rs`, `apps/gpui/src/feed.rs`
 
 ---
 

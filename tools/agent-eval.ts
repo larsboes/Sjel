@@ -92,7 +92,9 @@ async function runManifest(raw: unknown, findCase: (id: string) => EvalCase): Pr
       summary.push({ case: c.id, repeat, harness, model: meta.model, endpoint: meta.endpoint, termination: meta.termination, replay_status: report.replay_status, calls: report.calls.length, policy_failures: report.policy_failures.length, elapsed_ms: meta.elapsed_ms, behavior: report.behavior?.status ?? null });
     }
   }
-  return { code: 0, output: JSON.stringify({ results: file, factual_review: "pending", attempts: summary }, null, 2) + "\n" };
+  // A broker transcript can be "completed" for an attempt that never reached the model.
+  const unfinished = summary.filter((a: any) => a.termination !== "final").length;
+  return { code: unfinished ? 1 : 0, output: JSON.stringify({ results: file, factual_review: "pending", unfinished_attempts: unfinished, attempts: summary }, null, 2) + "\n" };
 }
 
 if (import.meta.main) {

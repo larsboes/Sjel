@@ -239,9 +239,8 @@ fn wait_for_code(listener: &TcpListener, state: &str) -> Result<Zeroizing<String
         } else {
             "Google sign-in was not completed. Return to Sjel."
         };
-        let body = format!(
-            "<!doctype html><meta charset=utf-8><title>Sjel</title><p>{message}</p>"
-        );
+        let body =
+            format!("<!doctype html><meta charset=utf-8><title>Sjel</title><p>{message}</p>");
         let _ = stream.write_all(
             format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -295,7 +294,10 @@ pub fn store(
 }
 
 /// The grant under `id`, or `None` when the catalog does not name it.
-fn from_keychain(catalog: &Path, id: &CredentialId) -> Result<Option<GoogleOAuthCredential>, String> {
+fn from_keychain(
+    catalog: &Path,
+    id: &CredentialId,
+) -> Result<Option<GoogleOAuthCredential>, String> {
     let manager = manager(catalog)?;
     let named = manager
         .list()
@@ -375,6 +377,30 @@ const ENV_KEYS: [&str; 3] = [
 ///
 /// Order matters, because the env file is the only copy until the end: store in the keychain,
 /// prove the keychain copy works with a real token refresh, and only then remove the three
+/// Whether any source could answer for this grant, without asking for a token.
+///
+/// The question a caller with a schedule actually has: "should I run at all on this machine?"
+/// It is not `env_path.is_file()`, and that difference cost a day of mail collection. Measured
+/// 2026-10-24: the `google-comms` grant had moved into the OS keychain (`in_keychain: true`,
+/// `env_file: false`), while `capabilities/comms` still gated its hourly inbox sweep on the env
+/// file existing. The gate was true before the migration and false after it, so every tick
+/// returned "nothing to do" with no failure, no log line and a `last_success_at` frozen at the
+/// last manual sweep. A file check cannot see a keychain item; this can.
+///
+/// Deliberately not `access_token`: that refreshes over the network and would turn "is this
+/// configured" into a request every tick. Reading the catalog and the file is local and cheap.
+pub fn configured(id: &str, env_fallback: &Path) -> bool {
+    let Ok(credential_id) = CredentialId::parse(id) else {
+        return false;
+    };
+    if let Some(catalog) = sjel_config::overlay_config("credentials.toml") {
+        if matches!(from_keychain(&catalog, &credential_id), Ok(Some(_))) {
+            return true;
+        }
+    }
+    from_env(env_fallback).is_ok()
+}
+
 /// `GOOGLE_*` lines from the env file. Other lines stay; a file left empty is deleted.
 pub fn move_env_grant(
     catalog: &Path,
@@ -388,8 +414,11 @@ pub fn move_env_grant(
     grant.scopes = scopes.iter().map(|s| scope_url(s)).collect();
     store(catalog, id, label, consumers, &grant)?;
     // A fallback path that cannot exist, so only the keychain item can answer.
-    access_token(id.as_str(), Path::new("/nonexistent/sjel-keychain-check.env"))
-        .map_err(|e| format!("the keychain copy does not work yet, so the env file stays: {e}"))?;
+    access_token(
+        id.as_str(),
+        Path::new("/nonexistent/sjel-keychain-check.env"),
+    )
+    .map_err(|e| format!("the keychain copy does not work yet, so the env file stays: {e}"))?;
     strip_env_keys(env_path)
 }
 
@@ -397,22 +426,27 @@ pub fn move_env_grant(
 /// proves the keychain grant works. For a grant connected fresh, whose env copy is older:
 /// [`move_env_grant`] would put that older token back over it.
 pub fn prune_env_grant(id: &CredentialId, env_path: &Path) -> Result<(), String> {
-    access_token(id.as_str(), Path::new("/nonexistent/sjel-keychain-check.env"))
-        .map_err(|e| format!("the keychain grant does not work, so the env file stays: {e}"))?;
+    access_token(
+        id.as_str(),
+        Path::new("/nonexistent/sjel-keychain-check.env"),
+    )
+    .map_err(|e| format!("the keychain grant does not work, so the env file stays: {e}"))?;
     strip_env_keys(env_path)
 }
 
 /// Removes [`ENV_KEYS`] from `path`, keeping every other line, with an atomic owner-only
 /// replace. Deletes the file when nothing else is left in it.
 fn strip_env_keys(path: &Path) -> Result<(), String> {
-    let body = Zeroizing::new(
-        std::fs::read_to_string(path).map_err(|_| format!("cannot read {path:?}"))?,
-    );
+    let body =
+        Zeroizing::new(std::fs::read_to_string(path).map_err(|_| format!("cannot read {path:?}"))?);
     let kept: Vec<&str> = body
         .lines()
         .filter(|l| !ENV_KEYS.iter().any(|k| l.starts_with(&format!("{k}="))))
         .collect();
-    if kept.iter().all(|l| l.trim().is_empty() || l.trim_start().starts_with('#')) {
+    if kept
+        .iter()
+        .all(|l| l.trim().is_empty() || l.trim_start().starts_with('#'))
+    {
         return std::fs::remove_file(path).map_err(|_| format!("cannot remove {path:?}"));
     }
     let temp = path.with_extension("env.tmp");
@@ -549,6 +583,39 @@ mod tests {
     }
 
     #[test]
+    fn configured_answers_from_the_env_fallback_when_no_keychain_grant_is_named() {
+        // The measured failure this replaces: comms gated its hourly sweep on the env file
+        // existing, the grant moved to the keychain, and mail collection stopped silently for a
+        // day. `configured` is the question that survives the migration: any source, not the one
+        // that happened to be the only source when the gate was written.
+        let dir =
+            std::env::temp_dir().join(format!("sjel-google-configured-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let present = dir.join("present.txt");
+        std::fs::write(
+            &present,
+            "GOOGLE_CLIENT_ID=id\nGOOGLE_CLIENT_SECRET=s\nGOOGLE_REFRESH_TOKEN=r\n",
+        )
+        .unwrap();
+        assert!(configured("google-unlisted-grant", &present));
+
+        let empty = dir.join("empty.txt");
+        std::fs::write(&empty, "OTHER=1\n").unwrap();
+        assert!(
+            !configured("google-unlisted-grant", &empty),
+            "a file with no GOOGLE_* lines answers nothing"
+        );
+        assert!(!configured(
+            "google-unlisted-grant",
+            &dir.join("absent.txt")
+        ));
+        assert!(
+            !configured("not a grant id", &present),
+            "an unparseable id is not configured"
+        );
+    }
+
+    #[test]
     fn the_env_fallback_reads_the_three_keys() {
         let dir = std::env::temp_dir().join(format!("sjel-google-env-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -581,7 +648,11 @@ mod tests {
         strip_env_keys(&mixed).unwrap();
         assert_eq!(std::fs::read_to_string(&mixed).unwrap(), "OTHER=1\n");
         let only = dir.join("entities.env");
-        std::fs::write(&only, "# minted\nGOOGLE_CLIENT_ID=id\nGOOGLE_REFRESH_TOKEN=r\n").unwrap();
+        std::fs::write(
+            &only,
+            "# minted\nGOOGLE_CLIENT_ID=id\nGOOGLE_REFRESH_TOKEN=r\n",
+        )
+        .unwrap();
         strip_env_keys(&only).unwrap();
         assert!(!only.exists());
         let _ = std::fs::remove_dir_all(dir);

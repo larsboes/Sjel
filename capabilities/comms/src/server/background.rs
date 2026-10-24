@@ -286,14 +286,29 @@ fn spawn_inbox_sweep(
         ),
         None => eprintln!("Inbox sweep: every {every_minutes} min, newest {max_threads}"),
     }
+    // One line per process, not per tick: the absence of a grant is a state, not an event.
+    let announced_missing_grant = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     Some(tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(every_minutes * 60));
         loop {
             ticker.tick().await;
+            let announced = std::sync::Arc::clone(&announced_missing_grant);
             let joined = tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
                 let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
                 let cfg = Config::load();
-                if !cfg.google_env_path.is_file() {
+                // Configured, not "the legacy env file exists". The grant lives in the OS
+                // keychain since 2026-10-2x, and this gate kept answering the old question: the
+                // file was gone, so every tick returned Ok(None) with no failure and no log
+                // line, and mail collection stopped for a day without anything saying so.
+                // Announced once per process, because a machine with no Gmail at all is a
+                // legitimate deployment and must not fill the log hourly.
+                if !sjel_credentials::google::configured(google::GRANT_ID, &cfg.google_env_path) {
+                    if !announced.swap(true, Ordering::Relaxed) {
+                        eprintln!(
+                            "Inbox sweep: no Google grant in the keychain and none in the env \
+                             fallback — the schedule will not run until one is connected"
+                        );
+                    }
                     return Ok(None);
                 }
                 let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;

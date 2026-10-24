@@ -372,3 +372,72 @@ jobs:
       # and the test pass over an empty report — green for the wrong reason.
       - name: doctor reports orphan units, and only orphan units
         run: tools/persistence-orphans.test.sh
+
+  # The GPUI app is its own workspace (apps/gpui/Cargo.toml), so nothing above builds it. Each
+  # platform checks natively: a cross check from one host needs every target's C toolchain
+  # (aws-lc-sys, libsql). Linux and Windows check the shared crates only, core and ui, because
+  # the desktop shell in apps/gpui/src is still Mac-only by placement (PORTING_PLAN.md §5b).
+  # Windows and Android have never been built; they report without failing the run until
+  # their first green check, then lose `experimental`.
+  gpui-targets:
+    name: gpui cargo check (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos + ios
+            os: macos-latest
+            experimental: false
+            target: aarch64-apple-ios
+            check: cargo check --locked --workspace --exclude sjel-gpui-ios --all-targets && cargo check --locked -p sjel-gpui-ios --target aarch64-apple-ios
+          - name: linux
+            os: ubuntu-latest
+            experimental: false
+            target: ""
+            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
+          - name: windows
+            os: windows-latest
+            experimental: true
+            target: ""
+            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
+          - name: android
+            os: ubuntu-latest
+            experimental: true
+            target: aarch64-linux-android
+            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --target aarch64-linux-android
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/gpui
+    steps:
+      - name: Check out Sjel
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Cache cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: gpui-registry-${{ runner.os }}-${{ hashFiles('apps/gpui/Cargo.lock') }}
+          restore-keys: |
+            gpui-registry-${{ runner.os }}-
+      - name: Linux libraries GPUI's build scripts look for
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y pkg-config clang libxkbcommon-dev
+          libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev
+          libfontconfig-dev libfreetype-dev libssl-dev
+      - name: Add the target
+        if: matrix.target != ''
+        run: rustup target add ${{ matrix.target }}
+      - name: Point the Android target at the runner's NDK
+        if: matrix.target == 'aarch64-linux-android'
+        run: |
+          bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "CC_aarch64_linux_android=$bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$bin/llvm-ar" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
+      - name: cargo check
+        run: ${{ matrix.check }}

@@ -980,8 +980,11 @@ Not started. Each item is a work package for a later session.
      traits. Checked 2026-10-24: the pinned `gpui-mobile` rev `c24a1308e1` already has an Android
      backend (`src/android`, 347 `target_os = "android"` gates, an Android accessibility test), so
      no GPUI backend has to be written.
-   - A CI job that runs `cargo check --target` for each platform stops a platform `cfg` from
-     leaking into a page before anyone builds there.
+   - Done 2026-10-24: `gpui-targets` in `.github/workflows/ci.yml` checks the GPUI workspace
+     natively on each platform: macOS plus the iOS target, and Linux, on core and ui, both
+     strict; Windows and Android (NDK) report without failing until their first green run. A
+     cross check from the Mac needs every target's C toolchain (`aws-lc-sys`), so each leg runs
+     on its own runner. Checked locally: the iOS target builds. The other legs run first on push.
 4. **Build footprint.** Measured 2026-10-24 (`du -sh`):
    - `~/.cargo-target`: 21 GB (debug 13, release 6.9, `aarch64-apple-ios` 1.2)
    - the repository's `target/`: 14 GB, of which 11 GB is `release/deps`

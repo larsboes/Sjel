@@ -528,7 +528,8 @@
   - `apps/gpui/ios/host/UITests/SidebarTap.swift`, `apps/gpui/ios/host/UITests/ScanTap.swift`
 - **Next**: the docked form on the Mac, where the width exists — the frame is shared and the Mac's
   finder overlay (⌘K) is the view that docks into it — then the agent's steps as the activity seat's
-  stream, then RoomPlan with a LiDAR phone in hand.
+  stream. RoomPlan moved to §3 item 5, where the operator's own iPhone 14 Pro made it a package with
+  a verifier.
 
 ---
 
@@ -594,6 +595,38 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
      15, calendar entries and tasks; fare alerts stay unclaimed until the phone has a read path for
      them).
    - Still unclaimed after these: RoomPlan, and the right sidebar of item 2.
+
+5. **RoomPlan comes to the phone, in three parts.** The operator's own phone is an iPhone 14 Pro, so
+   `RoomCaptureSession.isSupported` is true and the scan is verifiable by hand on a real device —
+   which is the one thing in this port that a simulator can never show. Two facts settled the shape:
+   **RoomPlan is not Foundation Models.** RoomPlan is ARKit plus the LiDAR scanner and returns walls,
+   openings and furniture as dimensions; Foundation Models is Apple's on-device language model, which
+   has nothing to do with scanning (and whose Apple model needs an Apple Intelligence–eligible
+   device). And the capture code **already exists**: `plugins/roomplan` on the retiring Tauri client
+   holds 821 lines of Swift that build exactly the `roomplan-capture/v1` draft `libs/roomplan-contract`
+   names and the Mac already reads. So this is a port, not a greenfield build, and the draft it
+   produces is the one the review is tuned to.
+   - Decided 2026-10-24 (operator): the phone captures **and reviews**. The review is a view over the
+     capability's answer, not a second implementation: the comparison is `interior`'s,
+     `roomplan::compare` against the flat's `room.toml`, and the phone draws what it returns.
+   - Done 2026-10-24, part 1 — **the capture arrives**: `POST /api/roomplan/captures` in
+     `capabilities/interior` takes the contract draft and the base64 USDZ, validates the draft with
+     `roomplan_contract::CaptureDraft::validate` (the contract crate had no reader on this side until
+     now), loads the flat's model *before* writing anything, stores
+     `<assets_root>/captures/<flat>/<draft id>/{captured-room.usdz,observation.json}`, reads the file
+     back through `roomplan::read_usdz`, and answers with `roomplan::comparison_json` — the document
+     `interior roomplan --json` now also prints, extracted from `main.rs` so one shape has three
+     callers instead of three copies. A capture the reader cannot parse is removed rather than left
+     behind as the newest one. Tests: 1 in `api.rs` (a capture is stored and read back, or leaves
+     nothing), 1 in `roomplan.rs` (the comparison names the capture as its caller does). interior 145.
+   - Open, part 2 — **the Swift port**: `plugins/roomplan/ios/Sources/RoomPlanPlugin/RoomPlanPlugin.swift`
+     moves into `apps/gpui/ios/host/` with the Tauri `Invoke`/`WKWebView` glue removed, writing the
+     draft and the USDZ into the app's own storage with its sha256. Verified only on the 14 Pro.
+   - Open, part 3 — **the review seat**: the right edge's third seat (`ui/src/sidebar.rs`), drawing
+     the `comparison` document: wall height scan against `room.toml`, openings with widths, floor area,
+     the objects, and the confidence; then accept, which posts to
+     `/api/roomplan/revisions/{id}/review`. The simulator can show it over a fixture capture — the
+     LiDAR line is the only part that needs the phone.
 
 ---
 

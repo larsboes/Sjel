@@ -714,12 +714,50 @@ pub fn compare(scan: &Scan, model: &Model) -> Diff {
     diff(scan, &model.room)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// The comparison as one document, for the CLI (`interior roomplan --json`), for the endpoint that
+/// takes a capture from the phone, and for anything after them.
+///
+/// One shape and three callers on purpose: a copy of this literal in `main.rs` and another in
+/// `api.rs` would be two answers to "how far apart are the scan and the flat", and only one of them
+/// could be right. `capture` is the caller's name for the capture — a path for the CLI, the draft id
+/// for the phone, which never sees an absolute path on this Mac.
+pub fn comparison_json(scan: &Scan, d: &Diff, capture: &str) -> serde_json::Value {
+    serde_json::json!({
+        "capture": capture,
+        "sha256": scan.sha256,
+        "byte_length": scan.byte_length,
+        "mesh_assets": scan.mesh_assets,
+        "room_groups": scan.room_groups,
+        "capture_finished_at": scan.capture_finished_at,
+        "categories": scan.categories(),
+        "scan_wall_height_cm": d.scan_wall_height_cm,
+        "scan_wall_thickness_cm": scan.wall_thickness_m().map(|m| m * 100.0),
+        "model_height_cm": d.model_height_cm,
+        "scan_wall_length_cm": d.scan_wall_length_cm,
+        "scan_openings": d.scan_openings.iter().map(|(id, cat, b, h)| serde_json::json!({
+            "id": id, "category": cat, "width_cm": b, "height_cm": h
+        })).collect::<Vec<_>>(),
+        "model_openings": d.model_openings.iter().map(|(id, b)| serde_json::json!({
+            "id": id, "width_cm": b
+        })).collect::<Vec<_>>(),
+        "scan_floor_area_m2": d.scan_floor_area_m2,
+        "model_inner_area_m2": d.model_inner_area_m2,
+        "scan_objects": d.scan_objects.iter().map(|(n, m)| serde_json::json!({
+            "element": n, "cm": m
+        })).collect::<Vec<_>>(),
+    })
+}
 
-    /// A ZIP with stored entries, as `zip -0` writes it; only as much format as the reader claims.
-    fn zip(entries: &[(&str, &str)]) -> Vec<u8> {
+/// Fixtures the reader's own tests and the ingest endpoint's share.
+///
+/// The endpoint is tested with a file the reader accepts, not with a stub that only looks like one:
+/// a ZIP as `zip -0` writes it, and one invented wall.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use super::METHOD_STORED;
+
+    /// A ZIP with stored entries; only as much format as the reader claims.
+    pub(crate) fn stored_zip(entries: &[(&str, &str)]) -> Vec<u8> {
         let mut out = Vec::new();
         let mut central = Vec::new();
         // A fixed timestamp, 1980-01-01 00:00, so the test does not depend on the clock.
@@ -772,7 +810,7 @@ mod tests {
     }
 
     /// A wall 3.00 m long, 2.50 m high and 0.16 m thick, translated by (1, 2, 3). Invented numbers.
-    fn wand_usda() -> String {
+    pub(crate) fn wall_usda() -> String {
         r#"#usda 1.0
 (
     defaultPrim = "Wall0"
@@ -795,10 +833,16 @@ def Xform "Wall0" (
 "#
         .to_string()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fixtures::{stored_zip, wall_usda};
+    use super::*;
 
     #[test]
     fn a_stored_entry_is_read_and_its_timestamp_recognised() {
-        let bytes = zip(&[("CapturedRoom.usda", "def Xform \"Section_grp\"\n")]);
+        let bytes = stored_zip(&[("CapturedRoom.usda", "def Xform \"Section_grp\"\n")]);
         let path = std::env::temp_dir().join(format!("interior-zip-{}.usdz", std::process::id()));
         std::fs::write(&path, &bytes).expect("Testdatei");
         let entries = zip_entries(&bytes, &path).expect("read");
@@ -815,7 +859,7 @@ def Xform "Wall0" (
     /// A compressed entry is an error, not an empty answer.
     #[test]
     fn a_compressed_entry_is_an_error() {
-        let mut bytes = zip(&[("CapturedRoom.usda", "empty")]);
+        let mut bytes = stored_zip(&[("CapturedRoom.usda", "empty")]);
         // Set the method to 8 (deflate) in the local and the central header.
         let local = bytes.iter().position(|_| true).unwrap();
         bytes[local + 8] = 8;
@@ -841,7 +885,7 @@ def Xform "Wall0" (
     /// The translation must land in `[12..15]`; read wrongly, nothing fails.
     #[test]
     fn the_translation_lands_in_the_fourth_column() {
-        let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
+        let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wall_usda()).expect("Element");
         assert_eq!(e.id, "Wall0");
         assert_eq!(e.category, "Wall");
         assert_eq!(
@@ -854,7 +898,7 @@ def Xform "Wall0" (
 
     #[test]
     fn the_extent_comes_from_the_local_frame_in_metres() {
-        let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wand_usda()).expect("Element");
+        let e = parse_usda("assets/Mesh/Walls/Wall0/Wall0.usda", &wall_usda()).expect("Element");
         // Points written in centimetres and meant as metres by metersPerUnit = 1: the span is the
         // difference of the points, unchanged.
         assert_eq!(e.dimensions_m, [300.0, 250.0, 16.0]);
@@ -867,7 +911,7 @@ def Xform "Wall0" (
     point3f[] points = [(0, 0, 0), (90, 0, 0), (90, 120, 0)]
     matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
 } }"#;
-        let w = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
+        let w = parse_usda("Wall0.usda", &wall_usda()).expect("Wand");
         let f = parse_usda("Window0.usda", window).expect("Fenster");
         assert!(w.is_surface() && !w.is_opening() && !w.is_object());
         assert!(f.is_opening() && !f.is_door());
@@ -925,7 +969,7 @@ def Xform "Wall0" (
     /// A contradicting scan gives no number.
     #[test]
     fn contradicting_walls_give_no_height() {
-        let mut a = parse_usda("Wall0.usda", &wand_usda()).expect("Wand");
+        let mut a = parse_usda("Wall0.usda", &wall_usda()).expect("Wand");
         let mut b = a.clone();
         b.dimensions_m[1] = 111.0;
         a.dimensions_m[1] = 222.0;
@@ -935,7 +979,7 @@ def Xform "Wall0" (
         };
         assert_eq!(scan.wall_height_m(), None);
         let one = Scan {
-            elements: vec![parse_usda("Wall0.usda", &wand_usda()).expect("Wand")],
+            elements: vec![parse_usda("Wall0.usda", &wall_usda()).expect("Wand")],
             ..Default::default()
         };
         assert_eq!(one.wall_height_m(), Some(250.0));
@@ -947,8 +991,8 @@ def Xform "Wall0" (
     fn the_draft_has_the_client_shape() {
         let scan = Scan {
             elements: vec![
-                parse_usda("Wall0.usda", &wand_usda()).expect("Wand"),
-                parse_usda("Bed0.usda", &wand_usda().replace("Wall", "Bed")).expect("Bett"),
+                parse_usda("Wall0.usda", &wall_usda()).expect("Wand"),
+                parse_usda("Bed0.usda", &wall_usda().replace("Wall", "Bed")).expect("Bett"),
             ],
             sha256: "a".repeat(64),
             byte_length: 123,
@@ -967,5 +1011,41 @@ def Xform "Wall0" (
             "the client reads the translation here"
         );
         assert_eq!(e["confidence"], "low");
+    }
+
+    /// The comparison document is one shape for three callers, and its `capture` field is the caller's
+    /// own name for the capture: a path for the CLI, a draft id for the phone, which never sees this
+    /// Mac's absolute paths.
+    #[test]
+    fn the_comparison_names_the_capture_as_its_caller_does() {
+        let scan = Scan::default();
+        let d = Diff {
+            scan_wall_height_cm: Some(250.0),
+            model_height_cm: 0,
+            scan_openings: vec![("T1".to_string(), "Door".to_string(), 88.0, 205.0)],
+            model_openings: Vec::new(),
+            scan_floor_area_m2: None,
+            model_inner_area_m2: 21.5,
+            scan_wall_length_cm: 1200.0,
+            scan_objects: Vec::new(),
+        };
+        let json = comparison_json(&scan, &d, "2026-10-24T120000");
+        assert_eq!(json["capture"], "2026-10-24T120000");
+        assert_eq!(json["scan_wall_height_cm"], 250.0);
+        assert_eq!(
+            json["model_height_cm"], 0,
+            "0 in room.toml means not measured"
+        );
+        assert_eq!(json["scan_openings"][0]["category"], "Door");
+        assert_eq!(json["scan_openings"][0]["width_cm"], 88.0);
+        assert!(
+            json["scan_wall_thickness_cm"].is_null(),
+            "a scan with no walls has no thickness"
+        );
+        assert_eq!(
+            json["categories"],
+            serde_json::json!({}),
+            "an empty scan is an empty catalogue"
+        );
     }
 }

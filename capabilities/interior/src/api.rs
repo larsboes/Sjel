@@ -10,6 +10,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -60,6 +61,12 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/roomplan/revisions",
         "Synced semantic RoomPlan revisions for comparison.",
+    ),
+    r(
+        "POST",
+        "/api/roomplan/captures",
+        "Take one capture from the phone: the contract draft and its USDZ, validated, stored, and \
+         answered with the comparison against this flat.",
     ),
     r(
         "POST",
@@ -492,6 +499,96 @@ async fn api_roomplan_asset(
     ))
 }
 
+/// A capture the phone made, as `libs/roomplan-contract` names it.
+#[derive(Debug, Deserialize)]
+struct CaptureUpload {
+    /// The `roomplan-capture/v1` draft the native layer built from `CapturedRoom`.
+    draft: roomplan_contract::CaptureDraft,
+    /// The parametric export (`captured-room.usdz`), base64: the shell proxies JSON and a paired
+    /// device posts JSON, so a second content type would need a second path through both.
+    usdz_base64: String,
+}
+
+/// `POST /api/roomplan/captures`: the phone's capture becomes the Mac's.
+///
+/// Three things happen in this order, and the order is the design: the draft is validated against the
+/// contract the native layer promises, the flat's own model is loaded (a capture for a flat this Mac
+/// does not know is refused before anything is written), and only then is the file written and read
+/// back through [`crate::roomplan::read_usdz`]. The comparison is computed from the file the Mac now
+/// holds, never from the numbers the phone sent: a phone that lies about its walls would otherwise
+/// have its numbers reviewed instead of its walls.
+async fn api_roomplan_capture(
+    State(s): State<Arc<AppState>>,
+    Json(upload): Json<CaptureUpload>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    upload
+        .draft
+        .validate()
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let model = load(&s)?;
+    let usdz = base64::engine::general_purpose::STANDARD
+        .decode(upload.usdz_base64.as_bytes())
+        .map_err(|error| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("usdz_base64 is not base64: {error}"),
+            )
+        })?;
+    let root = crate::model::assets_dir()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .join("captures")
+        .join(&s.flat);
+    let (directory, scan) = store_capture(&root, &upload.draft, &usdz).await?;
+    let diff = crate::roomplan::compare(&scan, &model);
+    Ok(Json(serde_json::json!({
+        "flat": s.flat,
+        "draft_id": upload.draft.draft_id,
+        "room_id": upload.draft.room.id,
+        // The comparison is the phone's review: the same document the dashboard and the CLI read,
+        // named by the draft id rather than by a path inside this Mac.
+        "comparison": crate::roomplan::comparison_json(
+            &scan,
+            &diff,
+            &directory
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        ),
+    })))
+}
+
+/// Writes one capture and reads it back through the same reader the review uses.
+///
+/// `draft_id` names the directory, so a re-post of the same capture replaces it instead of stacking a
+/// second copy beside it — and a capture the reader cannot parse is removed rather than left to be
+/// the "newest capture" that `/api/roomplan/reference` and the dashboard would then draw.
+async fn store_capture(
+    root: &std::path::Path,
+    draft: &roomplan_contract::CaptureDraft,
+    usdz: &[u8],
+) -> Result<(PathBuf, crate::roomplan::Scan), (StatusCode, String)> {
+    let directory = root.join(&draft.draft_id);
+    tokio::fs::create_dir_all(&directory).await.map_err(boom)?;
+    let asset = directory.join("captured-room.usdz");
+    tokio::fs::write(&asset, usdz).await.map_err(boom)?;
+    let draft_json = serde_json::to_vec_pretty(draft).map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("the draft would not serialise: {error}"),
+        )
+    })?;
+    tokio::fs::write(directory.join("observation.json"), draft_json)
+        .await
+        .map_err(boom)?;
+    match crate::roomplan::read_usdz(&asset) {
+        Ok(scan) => Ok((directory, scan)),
+        Err(error) => {
+            let _ = tokio::fs::remove_dir_all(&directory).await;
+            Err((StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))
+        }
+    }
+}
+
 async fn roomplan_revision_drafts(
     flat: &str,
 ) -> Result<Vec<serde_json::Value>, (StatusCode, String)> {
@@ -919,6 +1016,7 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/roomplan/reference", get(api_roomplan_reference))
         .route("/api/roomplan/asset", get(api_roomplan_asset))
         .route("/api/roomplan/revisions", get(api_roomplan_revisions))
+        .route("/api/roomplan/captures", post(api_roomplan_capture))
         .route(
             "/api/roomplan/revisions/{revision_id}/review",
             post(api_roomplan_review),
@@ -1363,4 +1461,65 @@ async fn api_purchase_order(
 
 fn not_found(e: crate::model::ModelError) -> (StatusCode, String) {
     (StatusCode::NOT_FOUND, e.to_string())
+}
+
+/// The capture a phone sends is a file this Mac either holds or does not: nothing half-written becomes
+/// the newest capture that `/api/roomplan/reference` and the dashboard would then draw.
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+    use crate::roomplan::fixtures::{stored_zip, wall_usda};
+
+    /// A draft that passes the contract: one room, no elements. Enough for the store, which reads the
+    /// id and writes the document.
+    const DRAFT: &str = r#"{
+        "schema_version": "roomplan-capture/v1",
+        "draft_id": "2026-10-24T120000",
+        "created_at": "2026-10-24T12:00:00Z",
+        "source": { "platform": "ios" },
+        "coordinate_system": { "units": "meters", "up_axis": "Y" },
+        "room": { "id": "wohnzimmer", "surfaces": [], "openings": [], "objects": [] },
+        "provenance": {}
+    }"#;
+
+    #[tokio::test]
+    async fn a_capture_is_stored_and_read_back_or_leaves_nothing() {
+        let draft: roomplan_contract::CaptureDraft =
+            serde_json::from_str(DRAFT).expect("the fixture is a draft");
+        draft.validate().expect("the fixture passes the contract");
+
+        let root = std::env::temp_dir().join(format!("interior-capture-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let wall = wall_usda();
+        let usdz = stored_zip(&[
+            ("CapturedRoom.usda", "def Xform \"Section_grp\"\n"),
+            ("assets/Mesh/wall.usda", wall.as_str()),
+        ]);
+
+        let (directory, scan) = store_capture(&root, &draft, &usdz).await.expect("stored");
+        assert_eq!(directory, root.join(&draft.draft_id));
+        assert!(directory.join("captured-room.usdz").exists());
+        assert!(
+            directory.join("observation.json").exists(),
+            "the draft travels with the capture, so the review has the phone's own document"
+        );
+        assert_eq!(scan.byte_length, usdz.len());
+        assert_eq!(scan.surfaces().count(), 1, "the fixture's single wall");
+        assert!(!scan.sha256.is_empty(), "the Mac hashes what it holds");
+
+        // A file the reader cannot parse is not a capture, and the directory goes with it.
+        let bad = std::env::temp_dir().join(format!("interior-capture-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&bad);
+        let error = store_capture(&bad, &draft, b"not a zip")
+            .await
+            .expect_err("refused");
+        assert_eq!(error.0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(
+            !bad.join(&draft.draft_id).exists(),
+            "a refused capture must not become the newest capture"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&bad);
+    }
 }

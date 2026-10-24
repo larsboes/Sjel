@@ -28,6 +28,27 @@ The dashboard page is `/interior` (`dashboard/src/routes/interior/`). It renders
 capability returns and computes nothing itself: every verdict, corridor width and plan SVG comes
 from here.
 
+## A capture arrives from the phone
+
+`POST /api/roomplan/captures` is the one write on the RoomPlan surface. The phone scans a room with
+`RoomCaptureSession` and posts two things: the `roomplan-capture/v1` draft its native layer built
+(`libs/roomplan-contract`, which had no reader on this side until this endpoint) and the parametric
+USDZ as base64 — base64 because the shell proxies JSON and a paired device posts JSON, so a second
+content type would need a second path through both.
+
+Three things happen in that order, and the order is the design: the draft is validated against the
+contract, the flat's own model is loaded (a capture for a flat this Mac does not know is refused
+before anything is written), then the file is written to `<assets_root>/captures/<flat>/<draft id>/`
+with the draft beside it as `observation.json` and read back through `roomplan::read_usdz`. The
+capture is named by the phone's draft id, so a re-post replaces it instead of stacking a second copy
+beside it, and a file the reader cannot parse is removed rather than left to become the "newest
+capture" that `/api/roomplan/reference` and the dashboard would then draw.
+
+The answer carries the comparison — the same document `interior roomplan --json` prints, from
+`roomplan::comparison_json`, with the draft id where the CLI puts a path. The comparison is computed
+from the file this Mac now holds, never from the numbers the phone sent: a phone that lied about its
+walls would otherwise have its numbers reviewed instead of its walls.
+
 ## Where the data lives
 
 No flat is in this repository (`tests/containment.rs` checks that). Everything comes from the

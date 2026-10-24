@@ -1088,30 +1088,7 @@ fn roomplan_show(model: &Model, argv: &[String]) -> i32 {
     let d = roomplan::compare(&scan, model);
 
     if argv.iter().any(|a| a == "--json") {
-        let content = serde_json::json!({
-            "capture": dir_path.display().to_string(),
-            "sha256": scan.sha256,
-            "byte_length": scan.byte_length,
-            "mesh_assets": scan.mesh_assets,
-            "room_groups": scan.room_groups,
-            "capture_finished_at": scan.capture_finished_at,
-            "categories": scan.categories(),
-            "scan_wall_height_cm": d.scan_wall_height_cm,
-            "scan_wall_thickness_cm": scan.wall_thickness_m().map(|m| m * 100.0),
-            "model_height_cm": d.model_height_cm,
-            "scan_wall_length_cm": d.scan_wall_length_cm,
-            "scan_openings": d.scan_openings.iter().map(|(id, cat, b, h)| serde_json::json!({
-                "id": id, "category": cat, "width_cm": b, "height_cm": h
-            })).collect::<Vec<_>>(),
-            "model_openings": d.model_openings.iter().map(|(id, b)| serde_json::json!({
-                "id": id, "width_cm": b
-            })).collect::<Vec<_>>(),
-            "scan_floor_area_m2": d.scan_floor_area_m2,
-            "model_inner_area_m2": d.model_inner_area_m2,
-            "scan_objects": d.scan_objects.iter().map(|(n, m)| serde_json::json!({
-                "element": n, "cm": m
-            })).collect::<Vec<_>>(),
-        });
+        let content = roomplan::comparison_json(&scan, &d, &dir_path.display().to_string());
         println!(
             "{}",
             serde_json::to_string_pretty(&content).unwrap_or_default()

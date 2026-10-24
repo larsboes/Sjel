@@ -37,6 +37,12 @@ civil-date = { path = "../../libs/civil-date" }
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# Der Vertrag, den der native RoomPlan-Layer erzeugt (`libs/roomplan-contract`). Bis heute hatte er
+# auf dieser Seite keinen Leser: der Endpunkt prueft damit, statt einem Dokument zu glauben.
+roomplan-contract = { path = "../../libs/roomplan-contract" }
+# The capture the phone posts is JSON — the shell proxies JSON and a paired device posts JSON — so the
+# parametric export travels base64 inside it rather than as a second content type.
+base64.workspace = true
 sha2.workspace = true
 toml.workspace = true
 # Not `full`: these are the drivers this crate reaches for, verified with a lone

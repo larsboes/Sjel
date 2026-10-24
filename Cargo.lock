@@ -4903,8 +4903,10 @@ name = "sjel-interior"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "civil-date",
  "rayon",
+ "roomplan-contract",
  "route-manifest",
  "rusqlite",
  "serde",

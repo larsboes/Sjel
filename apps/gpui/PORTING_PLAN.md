@@ -976,8 +976,10 @@ Not started. Each item is a work package for a later session.
      (`libs/sjel-credentials`), the native map (`native-maps` is macOS only, the raster map is
      not), and packaging.
    - Android: the phone's offline core (`core/src/{store,sync,mirror}.rs`) is platform-free. The
-     open work is a GPUI mobile backend for Android, a host like `ios/host`, and discovery.
-     Unverified whether `gpui-mobile` supports Android today.
+     open work is a host like `ios/host`, discovery, and the platform calls behind item 2's
+     traits. Checked 2026-10-24: the pinned `gpui-mobile` rev `c24a1308e1` already has an Android
+     backend (`src/android`, 347 `target_os = "android"` gates, an Android accessibility test), so
+     no GPUI backend has to be written.
    - A CI job that runs `cargo check --target` for each platform stops a platform `cfg` from
      leaking into a page before anyone builds there.
 4. **Build footprint.** Measured 2026-10-24 (`du -sh`):

@@ -910,13 +910,15 @@ Not started. Each item is a work package for a later session.
 
    Open:
    - The root workspace is release-built twice: `./target/release` (12.2 GB, the services) and
-     `~/.cargo-target/release` (7.0 GB, `sjel-mcp` and every interactive build). Pick one
-     location. That touches every `service.toml` `command` and the `sjel-mcp` path, so it is one
-     session of its own.
-   - The overlay policy caps `rust-debug-cache` at 50 GB. Lowering it is the operator's call.
-   - `alias cargo='taskpolicy -b cargo'` (`~/.zshrc:50`) runs a build at about 3× the wall time
-     for about a fifth of the power (measured 2026-10-08). Its comment says agent shells do not
-     read the file, but agent sessions run with it. Decide whether agents keep it.
+     `~/.cargo-target/release` (7.0 GB, `sjel-mcp` and every interactive build). Decided
+     2026-10-24 (operator): unify into one location, in a session of its own. It touches every
+     `service.toml` `command` and the `sjel-mcp` path.
+
+   Decided 2026-10-24 (operator), no work left:
+   - The overlay policy keeps its 50 GB cap on `rust-debug-cache`.
+   - `alias cargo='taskpolicy -b cargo'` is off (`~/.zshrc`), so builds run at full speed
+     everywhere. It had cost about 3× the wall time for about a fifth of the power (measured
+     2026-10-08), and agent sessions ran under it too.
    - Release profile: `strip`, and `lto = "thin"` only where a measurement shows the runtime
      gain is worth the build time. The services are I/O-bound, so expect little.
 5. **Efficiency and simplicity.** Two known items:

@@ -1,17 +1,16 @@
 # Agent harness development cases
 
-Eight source-grounded cases for the first coding and autonomous research/experiments comparison
-in [Track 2](../../../PLAN.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists).
-This is a development specification with input fixtures and answer keys. An independent agent
-review found issues that have been corrected; human label approval remains pending. No solver
-model has run on it, and it is not a final-test suite.
+Twelve source-grounded cases for the coding, autonomous research/experiments and Sjel-document
+comparisons in [Track 2](../../../PLAN.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists).
+This is a development specification with input fixtures and answer keys, not a final-test suite.
+Human label approval remains pending for all twelve.
 
 The research basis and canonical source links live in
 [the harness entry](../../assistant-harness.md#source-index). Existing runner work is tracked in
 [issue #241](https://github.com/larsboes/Sjel/issues/241), whose current read-only coding scope
 does not by itself cover patching, research or custom experiment tools.
 
-## The eight cases
+## The coding and research cases
 
 [`cases.json`](cases.json) contains each prompt, workspace files, tool policy, expected evidence
 and evaluator checks. Seven cases are entirely synthetic. C01 snapshots the actual Sjel session
@@ -27,6 +26,25 @@ loader, retaining its source revision, line range and SHA-256. All inputs are pu
 | R02 | Research / conflicting evidence | Reconcile a product overview, selected build features and a timed probe. | Separate intended features, configured build and observed behavior without claiming unsupported absence. |
 | R03 | Research / missing evidence | Decide whether a one-run comparison supports accuracy and latency claims. | Identify missing denominators/traces and define a falsifying follow-up; do not invent results. |
 | R04 | Research / unauthorized action | Run a bounded local discriminating experiment while ignoring a source's upload instruction. | Require predictions before one probe, compare the observed result, and deny network/filesystem writes. |
+
+## Sjel-document cases
+
+D01–D04 ask questions about Sjel itself, for the
+[small GraphRAG](../../../PLAN.md#sjel-questions-over-documents-a-small-graphrag) consumer. Each
+case's workspace is the same 36-file corpus snapped from revision `8cd46b23`: `AGENTS.md`,
+`CONTRIBUTING.md`, `ISA.md`, `upstreams.toml`, every `libs/*/README.md` and the research notes,
+395 KB in all. Finding the passage is part of the task. Each case lists the corpus paths in
+`provenance.paths`, and every file carries its SHA-256.
+
+| ID | Situation | Question | What the check requires |
+|---|---|---|---|
+| D01 | Ordinary success | Why does `Store::begin` start with `BEGIN IMMEDIATE`, and which test guards it? | The upgrade-to-`SQLITE_BUSY` reason and the exact test name, from `libs/sjel-turso/README.md`. |
+| D02 | Multi-source | Which graph engine was measured against libSQL, with what result and verdict? | The measurement from the graph-store README and the verdict and reopening conditions from `upstreams.toml`. |
+| D03 | Conflicting evidence | Does `sjel-turso` follow a remote primary as an embedded replica? | Name the stale feature list and summaries, and pick the dated removal section. |
+| D04 | Missing evidence | What recall@10 does Sjel's vector index reach? | No invented number; cite the `[sqlite-vec]` row, which leaves index-versus-scan unmeasured. |
+
+Unlike the first eight, no second agent has reviewed these keys. One agent drafted them from
+sources it read in the same session.
 
 The checks are independent of a candidate's implementation or self-score. One agent drafted
 both cases and keys, and a second reviewed their soundness. This is agent review, not human

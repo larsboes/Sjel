@@ -363,6 +363,54 @@
 - **Next**: the soundscape player (an output device in `ios/host`, the panel over `core/src/soundscape`,
   and the two settings that do not persist today), then local notifications, then RoomPlan.
 
+### ✅ Work Package 14: sound on the phone
+- **Status**: Shipped (2026-10-24). The drawer opens from Today, and the device is the host's.
+- **Why**: `core/src/soundscape` was already platform-free for exactly this, and the phone had no
+  player: the Mac's `apps/gpui/src/audio.rs` owns a CPAL stream, which is the Mac's device and not
+  the phone's.
+- **Decided 2026-10-24**: the device lives in Swift, not in Rust. `AVAudioEngine` and the audio
+  session are Apple's own and are what `host/` already knows how to set up; CPAL on iOS would have
+  meant getting `AVAudioSession` right from Rust anyway. The contract between the halves is one call:
+  the node asks for N frames into two buffers and Rust renders exactly N.
+- **Shipped**:
+  - `ios/host/Audio.swift` (new) — the session (`.playback` with `.mixWithOthers`: a focus soundscape is
+    played *with* whatever else the phone is doing, not instead of it), an `AVAudioSourceNode` at
+    48 kHz stereo, and `sjel_ios_audio_start`, which answers `ok:<device>:<rate>` or `err:<why>`.
+  - `ios/src/audio.rs` (new) — the drawer's two halves ([`Control`], [`Visual`]) from the first frame,
+    the [`Engine`] born on the first render because it needs the device's rate, and
+    `sjel_ios_soundscape_render`, which renders one interleaved block and splits it into the node's two
+    buffers. `SJEL_GPUI_NO_AUDIO=1` is honoured, the way the Mac's own switch is.
+  - `ui/src/soundscape.rs` (new) — the drawer: transport with the state in words (`lofi · 9 voices ·
+    playing`), the six presets, volume, a live meter from the analyser's bands, and the mixer as five
+    layers. A value is a row of ten cells, not a track to measure: a thumb on a phone wants an exact
+    tap. The meter asks for one frame in five, because the analyser's own release is a tenth of a
+    second and a phone pays for every frame.
+  - `ui/src/theme.rs` — `SoundscapePrefs` beside `appearance.json`: open state, mixer disclosure, preset
+    and volume. `playing` is deliberately not kept — a phone that starts making sound by itself is a
+    different thing from one that remembers its settings.
+  - `apps/gpui/ios/src/lib.rs` — the drawer over the page (right edge, not a sixth tab), opened by the
+    note in Today's header or by `SJEL_SOUNDSCAPE=1`, with the device taken when it opens and paused
+    when it closes.
+  - `apps/gpui/ios/host/UITests/SoundscapeTap.swift` (new) — play, play again, and the mixer.
+- **Verified on a simulator**: the drawer with the session open (`Speaker · 48000 Hz`); playing at
+  `lofi · 13 voices · playing` with the meter drawn from the analyser's bands, and at 9 voices in a
+  second run; the two-way transport (playing then paused); the mixer opening on five layers; and the
+  preset, volume and both disclosures restored on the next launch.
+- **Not verified, and not claimed**: sound from a real iPhone's speaker — there is no device here — and
+  the simulator's audio route is not stable across repeated XCUITest launches: one run showed
+  `playing · 0 voices` with a flat meter, which is the drawer telling the truth about a device that
+  stopped pulling frames rather than a panel that lied.
+- **Tests**: 2 in `ui/src/soundscape.rs` (the drawer carries its settings into the conductor and
+  remembers the next change; a preset key is a key, not a label), 1 in `ui/src/theme.rs` (the settings
+  keep their shape, and a damaged file is not a half-applied panel) and 1 in `ios/src/audio.rs` (the
+  drawer's halves exist before any device does). core 277, ui 45, ios 1, app 81.
+- **Target Files**:
+  - `apps/gpui/ios/src/audio.rs`, `apps/gpui/ios/host/Audio.swift`
+  - `apps/gpui/ui/src/soundscape.rs`, `apps/gpui/ui/src/theme.rs`
+  - `apps/gpui/ios/src/lib.rs`, `apps/gpui/ui/src/today.rs`
+- **Next**: local notifications (`UNUserNotificationCenter`, no remote push), then RoomPlan, then the
+  right sidebar that the drawer's edge is waiting for.
+
 ---
 
 ## 3. Next, before everything below (operator, 2026-10-23)
@@ -396,10 +444,13 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
    the overlay from item 1 so the same view can dock here later, and so a stream of agent steps
    (the Ask turn's tool activity today) can drive navigation in the main column. The soundscape
    panel also slides in from the right edge; how the two share it is decided when this is built.
-3. **Soundscape, what the 2026-10-23 pass left.** The phone has no player:
+3. **Soundscape, what the 2026-10-23 pass left.** ~~The phone has no player:
    `core/src/soundscape` is platform-free, so the iOS app needs an output device and a panel, not
    a second engine. The panel's own open state and the mixer disclosure are not kept across
-   launches; nothing in the panel persists locally today.
+   launches; nothing in the panel persists locally today.~~ Shipped for the phone in Work Package
+   14: `AVAudioSourceNode` pulls the frames, and `SoundscapePrefs` keeps the open state, the mixer
+   disclosure, the preset and the volume. The Mac still has its own panel; one panel for both
+   belongs to item 2's right edge.
 4. **The phone's next two moves (operator, 2026-10-24).** `Today` becomes the landing tab and
    `Projects` folds into it as a list, because `mobile_tab_bar` is full at five items and the phone
    opens on tasks more often than on the project list. Then `Inbox` — capture, writing to the

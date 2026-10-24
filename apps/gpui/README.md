@@ -302,6 +302,16 @@ field, because gpui-mobile raises none on focus. A fresh install starts empty an
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
+**Soundscape** is a drawer, not a tab: the note in Today's header opens it over the page, and it holds
+the transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape.rs`). The
+engine is the Mac's own (`core/src/soundscape`, platform-free); the difference is who drives the clock.
+On the Mac a CPAL stream asks for frames; on the phone `AVAudioSourceNode` does (`ios/host/Audio.swift`,
+`ios/src/audio.rs`), on a `.playback` session that mixes with whatever else is playing. The drawer keeps
+its open state, its mixer disclosure, its preset and its volume in `soundscape.json` beside
+`appearance.json`; it does not keep `playing`, so a phone never starts making sound by itself. A value is
+a row of ten cells rather than a track to drag: a thumb wants an exact tap, and a measured rectangle is
+one more thing to get wrong.
+
 **Inbox** is the next tab: one field for whatever is in hand, four chips for the tags the comms
 capability knows, a line saying where the capture will land, and `Keep`. It writes the phone's own
 replica first and queues the capture for `POST /comms/captures`, so it works on a train; the list

@@ -12,6 +12,7 @@ pub mod nav;
 pub mod people;
 pub mod primitives;
 pub mod projects;
+pub mod soundscape;
 pub mod tasks;
 pub mod theme;
 pub mod today;
@@ -24,6 +25,6 @@ pub use primitives::{
     priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, DueStatus,
 };
 pub use theme::{
-    AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, Palette, ThemeMode,
-    WindowOpacity,
+    AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, Palette, SoundscapePrefs,
+    ThemeMode, WindowOpacity,
 };

@@ -38,6 +38,8 @@ pub enum TodayEvent {
     OpenProject(String),
     /// The person tapped the gear, or the banner that says this phone is not paired yet.
     Settings,
+    /// The person tapped the note: the soundscape drawer, which the host slides in.
+    Soundscape,
     /// The person asked for newer data.
     Refresh,
     /// A task was written here and is waiting for the Mac, so the host may sync now.
@@ -304,10 +306,18 @@ impl Today {
         &mut self.busy
     }
 
-    fn gear(&self, cx: &mut Context<Self>) -> AnyElement {
+    /// One round button in the header. `event` is what a tap asks the host for: the gear and the note
+    /// are the same control drawn twice, so neither can drift.
+    fn header_button(
+        &self,
+        id: &'static str,
+        glyph: &'static str,
+        event: TodayEvent,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let palette = self.palette;
         div()
-            .id("today-settings")
+            .id(id)
             .flex_none()
             .size(px(36.))
             .rounded_full()
@@ -319,10 +329,10 @@ impl Today {
             .bg(rgba(palette.surface))
             .border_1()
             .border_color(rgba(palette.border))
-            .child("⚙")
+            .child(glyph)
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|_, _, _, cx| cx.emit(TodayEvent::Settings)),
+                cx.listener(move |_, _, _, cx| cx.emit(event.clone())),
             )
             .into_any_element()
     }
@@ -442,7 +452,24 @@ impl Today {
                                     .child(summary),
                             ),
                     )
-                    .child(self.gear(cx)),
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(self.header_button(
+                                "today-soundscape",
+                                "♪",
+                                TodayEvent::Soundscape,
+                                cx,
+                            ))
+                            .child(self.header_button(
+                                "today-settings",
+                                "⚙",
+                                TodayEvent::Settings,
+                                cx,
+                            )),
+                    ),
             )
             .child(self.source_line(cx))
             .into_any_element()

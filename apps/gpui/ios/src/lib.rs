@@ -22,7 +22,7 @@ use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::StreamExt;
 use serde::Deserialize;
 
-use gpui::{div, prelude::*, px, rgb, Context, MouseButton, SharedString, Window};
+use gpui::{div, prelude::*, px, rgb, rgba, Context, MouseButton, SharedString, Window};
 use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
@@ -33,12 +33,14 @@ use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
+use sjel_gpui_ui::soundscape::{Soundscape, SoundscapeEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
-    ThemeMode,
+    SoundscapePrefs, ThemeMode,
 };
 
+mod audio;
 mod identity;
 
 const HEALTH: &str = "/api/sjel-status/health";
@@ -181,6 +183,9 @@ pub struct Capabilities {
     calendar: gpui::Entity<Calendar>,
     /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
     inbox: gpui::Entity<Inbox>,
+    /// The soundscape drawer over the platform-free engine (`sjel_gpui_ui::soundscape`). The device
+    /// is the host's (`host/Audio.swift`), started the first time the drawer is opened.
+    soundscape: gpui::Entity<Soundscape>,
     /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
     /// the registry's writes are the operator's, so this tab draws and never offers a control that
     /// would have to be refused.
@@ -196,6 +201,8 @@ pub struct Capabilities {
     client: Option<Arc<DeviceClient>>,
     /// True while a sync is in flight, so one tap cannot start a second.
     syncing: bool,
+    /// True once this launch asked the host for the audio device, so it is asked once.
+    audio_started: bool,
     appearance: AppearanceSettings,
     events: UnboundedSender<Event>,
 }
@@ -278,6 +285,27 @@ impl Capabilities {
                 }
             }
             TodayEvent::Settings => view.active_tab = Tab::Settings,
+            // The drawer slides in over the page rather than becoming a tab: the bar holds five and
+            // is full, and the plan's own shape for it is a panel from the right edge.
+            TodayEvent::Soundscape => {
+                view.soundscape
+                    .update(cx, |drawer, cx| drawer.set_open(true, cx));
+                // The device is taken here and not at launch: claiming the audio route is a visible
+                // act, and belongs to opening the drawer.
+                if view.soundscape.read(cx).is_open() && !view.audio_started {
+                    view.audio_started = true;
+                    match audio::start() {
+                        Ok(device) => {
+                            view.soundscape
+                                .update(cx, |drawer, cx| drawer.set_device(Some(device), None, cx));
+                        }
+                        Err(why) => {
+                            view.soundscape
+                                .update(cx, |drawer, cx| drawer.set_device(None, Some(why), cx));
+                        }
+                    }
+                }
+            }
             TodayEvent::Refresh => {
                 if view.board.is_some() {
                     view.maybe_sync(cx);
@@ -311,10 +339,38 @@ impl Capabilities {
             InboxEvent::Editing(open) => keyboard(*open),
         })
         .detach();
-        let copy_events = events.clone();
-        shell::spawn(async move {
-            let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
-        });
+        // The drawer holds the conductor and the report from the first frame, so it can show a preset
+        // and a volume before any sound exists. Its settings are the ones the last launch left.
+        let (control, visual) = audio::parts();
+        let soundscape =
+            cx.new(|_| Soundscape::new(control, visual, SoundscapePrefs::load(), Density::Mobile));
+        // `SJEL_SOUNDSCAPE=1` opens the drawer at launch, the way `SJEL_TAB` opens a tab: a
+        // screenshot of a panel no hand opened still has to be possible.
+        if let Some(open) = launch_soundscape() {
+            soundscape.update(cx, |drawer, cx| drawer.set_open(open, cx));
+        }
+        // Left open last time: the drawer comes back and the device is taken, because that is what
+        // remembering an open drawer means. It starts paused: `playing` is not remembered.
+        let mut audio_started = false;
+        if soundscape.read(cx).is_open() {
+            audio_started = true;
+            match audio::start() {
+                Ok(device) => {
+                    soundscape.update(cx, |drawer, cx| drawer.set_device(Some(device), None, cx))
+                }
+                Err(why) => {
+                    soundscape.update(cx, |drawer, cx| drawer.set_device(None, Some(why), cx))
+                }
+            }
+        }
+        cx.subscribe(&soundscape, |view, _, event, cx| match event {
+            SoundscapeEvent::Close => {
+                // Closing the drawer stops the sound and keeps nothing of it running: a drawer that is
+                // away is not a thing that should still be playing in a pocket.
+                view.soundscape.update(cx, |drawer, cx| drawer.pause(cx));
+            }
+        })
+        .detach();
 
         cx.spawn(async move |this, cx| {
             while let Some(event) = received.next().await {
@@ -571,6 +627,7 @@ impl Capabilities {
             calendar,
             people,
             inbox,
+            soundscape,
             today,
             copy: None,
             copying: false,
@@ -578,6 +635,7 @@ impl Capabilities {
             board: None,
             client: None,
             syncing: false,
+            audio_started,
             appearance: AppearanceSettings::load(),
             events,
         }
@@ -853,6 +911,13 @@ fn launch_tab() -> Tab {
     }
 }
 
+/// `SJEL_SOUNDSCAPE=1` opens the soundscape drawer at launch. A phone never sets it.
+fn launch_soundscape() -> Option<bool> {
+    std::env::var("SJEL_SOUNDSCAPE")
+        .ok()
+        .map(|value| value != "0")
+}
+
 /// The day a launch flag fixed, for a page that must not move under a screenshot. A phone never
 /// sets `SJEL_DAY`, so the live landing page reads the clock on every rebuild.
 fn frozen_day() -> Option<chrono::NaiveDate> {
@@ -887,12 +952,15 @@ impl Render for Capabilities {
             .update(cx, |today, cx| today.set_palette(palette, cx));
         self.inbox
             .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
+        self.soundscape
+            .update(cx, |drawer, cx| drawer.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
             projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
         }
         div()
             .id("capabilities")
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .bg(rgb(page_bg))
@@ -1503,6 +1571,23 @@ impl Render for Capabilities {
                             cx.notify();
                         });
                     },
+                )
+            })
+            // The drawer sits over the page and above the bar, the way the plan puts it: from the
+            // right edge, not as a sixth tab.
+            .when(self.soundscape.read(cx).is_open(), |page| {
+                page.child(
+                    div()
+                        .id("soundscape-overlay")
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .bg(rgba(0x00000059))
+                        .flex()
+                        .flex_col()
+                        .child(div().flex_1().min_h_0().child(self.soundscape.clone())),
                 )
             })
     }

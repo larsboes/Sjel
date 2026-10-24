@@ -452,8 +452,94 @@ impl AppearanceSettings {
     }
 }
 
+/// What the soundscape drawer remembers between launches.
+///
+/// The panel's own open state, the mixer disclosure, the preset and the volume: the plan's
+/// `2026-10-23` note said none of them persisted, and a drawer that forgets that it was open is one
+/// the operator has to find again every morning. `playing` is deliberately *not* here — a phone that
+/// starts making sound at launch is a different thing from one that remembers its settings.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SoundscapePrefs {
+    pub open: bool,
+    pub mixer: bool,
+    /// The preset's key ([`sjel_gpui_core::soundscape::Preset::key`]).
+    pub preset: String,
+    pub volume: f32,
+}
+
+impl Default for SoundscapePrefs {
+    fn default() -> Self {
+        Self {
+            open: false,
+            mixer: false,
+            preset: "focus".to_owned(),
+            volume: 0.55,
+        }
+    }
+}
+
+impl SoundscapePrefs {
+    /// Beside `appearance.json`, because they are the same kind of thing: what this person likes,
+    /// kept on this device.
+    pub fn config_path() -> Option<std::path::PathBuf> {
+        let dir = std::env::var("SJEL_CONFIG_DIR")
+            .ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|home| std::path::PathBuf::from(home).join(".config/sjel"))
+            })?;
+        Some(dir.join("soundscape.json"))
+    }
+
+    pub fn load() -> Self {
+        let Some(path) = Self::config_path() else {
+            return Self::default();
+        };
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let Some(path) = Self::config_path() else {
+            return Err("this platform names no place for it".to_owned());
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| format!("Write error to {:?}: {e}", path))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// The drawer's settings keep their shape through JSON, and a damaged file is not a half-applied
+    /// panel. The write itself is covered on the device: `SJEL_CONFIG_DIR` is not something this test
+    /// may set, because `ui` denies unsafe code and `set_var` is unsafe in this edition.
+    #[test]
+    fn soundscape_settings_keep_their_shape() {
+        let prefs = SoundscapePrefs {
+            open: true,
+            mixer: true,
+            preset: "lofi".to_owned(),
+            volume: 0.3,
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<SoundscapePrefs>(&json).expect("read"),
+            prefs
+        );
+        assert!(serde_json::from_str::<SoundscapePrefs>("{").is_err());
+        let default = SoundscapePrefs::default();
+        assert!(!default.open, "a phone does not open sound by itself");
+        assert_eq!(default.preset, "focus");
+        assert!(default.volume > 0. && default.volume <= 1.);
+    }
+
     use super::*;
 
     #[test]

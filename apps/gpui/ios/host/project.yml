@@ -12,6 +12,7 @@ targets:
     platform: iOS
     sources:
       - path: App.swift
+      - path: Audio.swift
       - path: DeviceIdentity.swift
       - path: Discovery.swift
       - path: PairScanner.swift

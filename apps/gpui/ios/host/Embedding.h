@@ -15,3 +15,6 @@ void sjel_ios_nodes(const char *json);
 // open when it could not. Both are NUL-terminated UTF-8, valid only for the call.
 void sjel_ios_scanned_pairing(const char *text);
 void sjel_ios_scan_failed(const char *text);
+// host/Audio.swift: the phone's output device, asked for the next block of frames. Rust renders
+// exactly `frames` samples into each channel (ios/src/audio.rs).
+void sjel_ios_soundscape_render(double sample_rate, float *left, float *right, unsigned int frames);

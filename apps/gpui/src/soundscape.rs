@@ -39,7 +39,7 @@ use sjel_gpui_core::shell::{
 use sjel_gpui_core::soundscape::{self, LayerName, ParamName, Preset, Visual};
 
 use crate::data;
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use crate::viz::{self, Field};
 
 actions!(
@@ -1259,7 +1259,7 @@ fn preset_chip(
         .text_xs()
         .cursor_pointer()
         .bg(rgba(if chosen {
-            palette.accent << 8 | 0x2a
+            tint(palette.accent, 0x2a)
         } else {
             palette.raised
         }))

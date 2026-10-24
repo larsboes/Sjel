@@ -31,6 +31,26 @@ pub struct TimelineItem {
     pub completed: bool,
 }
 
+/// How many urgent rows Today draws before the rest becomes a count.
+pub const ATTENTION_SHOWN: usize = 6;
+
+/// Open tasks that are P1 or due by `today` (`YYYY-MM-DD`). The TASKS count and its rows both
+/// call this, so they cannot disagree.
+pub fn needs_attention(tasks: &[GlobalTask], today: &str) -> Vec<GlobalTask> {
+    tasks
+        .iter()
+        .filter(|task| !task.done)
+        .filter(|task| {
+            task.priority == 1
+                || task
+                    .due
+                    .as_deref()
+                    .is_some_and(|due| !due.is_empty() && due <= today)
+        })
+        .cloned()
+        .collect()
+}
+
 /// Consolidated state for a day's context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ContextDay {
@@ -230,6 +250,34 @@ mod tests {
         assert_eq!(format_money(-999, "EUR"), "-9,99 €");
         assert_eq!(format_money(0, "EUR"), "0,00 €");
         assert_eq!(format_money(2500, "USD"), "$25.00");
+    }
+
+    #[test]
+    fn attention_is_open_and_either_p1_or_due_by_today() {
+        let task = |id: &str, due: Option<&str>, priority: u8, done: bool| GlobalTask {
+            id: id.to_owned(),
+            kind: "task".to_owned(),
+            title: id.to_owned(),
+            done,
+            due: due.map(ToOwned::to_owned),
+            priority,
+            summary: None,
+            project: String::new(),
+        };
+        let tasks = vec![
+            task("p1-no-due", None, 1, false),
+            task("p1-done", None, 1, true),
+            task("overdue", Some("2026-10-22"), 2, false),
+            task("due-today", Some("2026-10-24"), 3, false),
+            task("later", Some("2026-10-26"), 2, false),
+            task("undated-p2", None, 2, false),
+            task("empty-due", Some(""), 2, false),
+        ];
+        let ids = needs_attention(&tasks, "2026-10-24")
+            .into_iter()
+            .map(|task| task.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["p1-no-due", "overdue", "due-today"]);
     }
 
     #[test]

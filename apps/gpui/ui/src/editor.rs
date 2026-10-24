@@ -29,7 +29,7 @@ use sjel_gpui_core::inline::{Inline, Mark};
 use sjel_gpui_core::shell::{self, ProjectRecord, ShellError};
 
 use crate::block_menu::{self, Choice};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(editor, [SaveNote, CloseNote, MoveBlockUp, MoveBlockDown]);
 
@@ -700,7 +700,7 @@ impl NoteEditor {
                 .border_l_3()
                 .border_color(rgba(palette.accent))
                 .rounded_r(px(8.))
-                .bg(rgba(palette.accent & 0x00ffffff | 0x0c000000))
+                .bg(rgba(tint(palette.accent, 0x0c)))
                 .px_3()
                 .py(px(4.))
                 .italic()
@@ -990,7 +990,7 @@ fn runs(
             ..Default::default()
         },
         Mark::Highlight => HighlightStyle {
-            background_color: Some(rgba(palette.amber & 0xffffff | 0x30000000).into()),
+            background_color: Some(rgba(tint(palette.amber, 0x30)).into()),
             ..Default::default()
         },
     };
@@ -1043,7 +1043,7 @@ impl Render for NoteEditor {
             .px_2()
             .py(px(1.5))
             .rounded_full()
-            .bg(rgba(dot_color & 0xffffff | 0x18000000))
+            .bg(rgba(tint(dot_color, 0x18)))
             .child(div().size(px(6.)).rounded_full().bg(rgb(dot_color)))
             .child(
                 div()

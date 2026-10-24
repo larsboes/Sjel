@@ -22,6 +22,12 @@ pub struct Palette {
     pub red: u32,
 }
 
+/// A palette tone at `alpha`, as `0xRRGGBBAA` for `rgba()`. The only way to give a tone an alpha:
+/// `tone | alpha << 24` puts the bytes in the wrong channels. A tone's own alpha is replaced.
+pub const fn tint(tone: u32, alpha: u8) -> u32 {
+    (tone << 8) | alpha as u32
+}
+
 impl Palette {
     /// The colour a surface that covers something is painted in: the window tint with its alpha
     /// forced to opaque.
@@ -726,6 +732,19 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn a_tint_keeps_the_hue_and_sets_only_the_alpha() {
+        let red = Palette::light().red;
+        let painted = gpui::rgba(tint(red, 0x22));
+        let tone = gpui::rgb(red);
+        assert_eq!(
+            (painted.r, painted.g, painted.b),
+            (tone.r, tone.g, tone.b),
+            "the alpha must not steal a channel"
+        );
+        assert_eq!(painted.a, 0x22 as f32 / 255.0);
+    }
 
     #[test]
     fn appearance_selects_distinct_palettes() {

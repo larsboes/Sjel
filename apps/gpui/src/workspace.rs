@@ -1518,6 +1518,7 @@ impl Render for Workspace {
                             // The page column may not be wider than the window: Documents draws a
                             // table whose min-content width would otherwise push the column out.
                             .min_w_0()
+                            // Glass on purpose; the low label contrast on it is accepted.
                             .h_full()
                             .when(glass, |page| page.bg(rgba(tint)))
                             .flex()
@@ -1534,11 +1535,10 @@ impl Render for Workspace {
                                         | Page::People
                                         | Page::Backup
                                         | Page::Inventory
+                                        | Page::Packs
                                 ) {
                                     // Projects, Settings, Documents, Calendar, Finance, People,
-                                    // Backup and Inventory manage their own layout and scroll
-                                    // boundaries. Documents, Calendar, Finance, People, Backup and
-                                    // Inventory need full width.
+                                    // Pages that scroll themselves get the full width.
                                     div().id("page").flex_1().min_h_0().px_8().pb_8().child(
                                         div()
                                             .size_full()
@@ -1551,6 +1551,7 @@ impl Render for Workspace {
                                                         | Page::People
                                                         | Page::Backup
                                                         | Page::Inventory
+                                                        | Page::Packs
                                                 ),
                                                 |el| el.max_w(px(880.)),
                                             )

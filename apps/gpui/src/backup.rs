@@ -12,7 +12,7 @@ use gpui_kit::{
 
 use crate::data::{Remote, Repo};
 use crate::shell::{self, BackupStatus, Backups, ShellError};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use crate::ui::dot;
 use sjel_gpui_core::backup::{
     format_age_seconds, format_bytes, format_duration, run_outcome, BackupRunAttemptRecord,
@@ -276,7 +276,7 @@ impl BackupPage {
             .justify_between()
             .pb_3()
             .border_b_1()
-            .border_color(rgba(palette.border << 8 | 0x22))
+            .border_color(rgba(tint(palette.border, 0x22)))
             .child(
                 div()
                     .flex()
@@ -355,7 +355,7 @@ impl BackupPage {
                 gpui::FontWeight::NORMAL
             })
             .bg(if is_active {
-                rgba(palette.accent << 8 | 0x20)
+                rgba(tint(palette.accent, 0x20))
             } else {
                 rgba(0)
             })
@@ -364,7 +364,7 @@ impl BackupPage {
             } else {
                 rgb(palette.muted)
             })
-            .hover(|s| s.bg(rgba(palette.border << 8 | 0x30)))
+            .hover(|s| s.bg(rgba(tint(palette.border, 0x30))))
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |page, _, _, cx| page.set_tab(tab, cx)),
@@ -426,27 +426,27 @@ impl BackupPage {
 
         let (badge_bg, badge_fg, badge_text) = match b.state.as_str() {
             "ok" | "fresh" => (
-                rgba(palette.green << 8 | 0x20),
+                rgba(tint(palette.green, 0x20)),
                 palette.green,
                 "ok".to_string(),
             ),
             "due" => (
-                rgba(palette.amber << 8 | 0x20),
+                rgba(tint(palette.amber, 0x20)),
                 palette.amber,
                 "due".to_string(),
             ),
             "overdue" => (
-                rgba(palette.red << 8 | 0x20),
+                rgba(tint(palette.red, 0x20)),
                 palette.red,
                 "overdue".to_string(),
             ),
             "never" => (
-                rgba(palette.red << 8 | 0x20),
+                rgba(tint(palette.red, 0x20)),
                 palette.red,
                 "never".to_string(),
             ),
             _ => (
-                rgba(palette.muted << 8 | 0x20),
+                rgba(tint(palette.muted, 0x20)),
                 palette.muted,
                 b.state.clone(),
             ),
@@ -459,8 +459,8 @@ impl BackupPage {
             .p_4()
             .rounded_lg()
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x30))
-            .bg(rgba(palette.raised << 8 | 0x40))
+            .border_color(rgba(tint(palette.border, 0x30)))
+            .bg(rgba(tint(palette.raised, 0x40)))
             .flex()
             .flex_col()
             .gap_3()
@@ -502,7 +502,7 @@ impl BackupPage {
                                                 .py_0p5()
                                                 .rounded_full()
                                                 .text_xs()
-                                                .bg(rgba(palette.amber << 8 | 0x20))
+                                                .bg(rgba(tint(palette.amber, 0x20)))
                                                 .text_color(rgb(palette.amber))
                                                 .child("holds-service"),
                                         )
@@ -597,9 +597,9 @@ impl BackupPage {
                         div()
                             .p_3()
                             .rounded_md()
-                            .bg(rgba(palette.red << 8 | 0x15))
+                            .bg(rgba(tint(palette.red, 0x15)))
                             .border_1()
-                            .border_color(rgba(palette.red << 8 | 0x30))
+                            .border_color(rgba(tint(palette.red, 0x30)))
                             .flex()
                             .flex_col()
                             .gap_1()
@@ -645,9 +645,9 @@ impl BackupPage {
                     div()
                         .p_3()
                         .rounded_md()
-                        .bg(rgba(palette.amber << 8 | 0x15))
+                        .bg(rgba(tint(palette.amber, 0x15)))
                         .border_1()
-                        .border_color(rgba(palette.amber << 8 | 0x30))
+                        .border_color(rgba(tint(palette.amber, 0x30)))
                         .text_xs()
                         .text_color(rgb(palette.amber))
                         .child(format!(
@@ -720,8 +720,8 @@ impl BackupPage {
             .p_4()
             .rounded_lg()
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x30))
-            .bg(rgba(palette.raised << 8 | 0x40))
+            .border_color(rgba(tint(palette.border, 0x30)))
+            .bg(rgba(tint(palette.raised, 0x40)))
             .flex()
             .flex_col()
             .gap_3()
@@ -752,7 +752,7 @@ impl BackupPage {
                                             .py_0p5()
                                             .rounded_full()
                                             .text_xs()
-                                            .bg(rgba(palette.border << 8 | 0x30))
+                                            .bg(rgba(tint(palette.border, 0x30)))
                                             .text_color(rgb(palette.muted))
                                             .child(t.kind.clone()),
                                     )
@@ -762,7 +762,7 @@ impl BackupPage {
                                             .py_0p5()
                                             .rounded_full()
                                             .text_xs()
-                                            .bg(rgba(present_color << 8 | 0x20))
+                                            .bg(rgba(tint(present_color, 0x20)))
                                             .text_color(rgb(present_color))
                                             .child(match t.present.as_str() {
                                                 "true" => "present".to_string(),
@@ -803,9 +803,9 @@ impl BackupPage {
                 div()
                     .p_2p5()
                     .rounded_md()
-                    .bg(rgba(tone << 8 | 0x15))
+                    .bg(rgba(tint(tone, 0x15)))
                     .border_1()
-                    .border_color(rgba(tone << 8 | 0x30))
+                    .border_color(rgba(tint(tone, 0x30)))
                     .text_xs()
                     .text_color(rgb(tone))
                     .child(format!(
@@ -825,7 +825,7 @@ impl BackupPage {
                     .gap_3()
                     .pt_2()
                     .border_t_1()
-                    .border_color(rgba(palette.border << 8 | 0x20))
+                    .border_color(rgba(tint(palette.border, 0x20)))
                     .child(
                         div()
                             .text_xs()
@@ -868,9 +868,9 @@ impl BackupPage {
                     .text_xs()
                     .cursor_pointer()
                     .bg(if is_selected {
-                        rgba(palette.accent << 8 | 0x25)
+                        rgba(tint(palette.accent, 0x25))
                     } else {
-                        rgba(palette.raised << 8 | 0x20)
+                        rgba(tint(palette.raised, 0x20))
                     })
                     .text_color(if is_selected {
                         rgb(palette.accent)
@@ -881,7 +881,7 @@ impl BackupPage {
                     .border_color(if is_selected {
                         rgb(palette.accent)
                     } else {
-                        rgba(palette.border << 8 | 0x30)
+                        rgba(tint(palette.border, 0x30))
                     })
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -929,9 +929,9 @@ impl BackupPage {
     fn render_run_row(&self, r: &BackupRunAttemptRecord, palette: Palette) -> AnyElement {
         let outcome = run_outcome(r.exit_code, r.finished_epoch);
         let (outcome_bg, outcome_fg, outcome_label) = match outcome {
-            "ok" => (rgba(palette.green << 8 | 0x20), palette.green, "exit 0"),
-            "running" => (rgba(palette.accent << 8 | 0x20), palette.accent, "running"),
-            _ => (rgba(palette.red << 8 | 0x20), palette.red, "failed"),
+            "ok" => (rgba(tint(palette.green, 0x20)), palette.green, "exit 0"),
+            "running" => (rgba(tint(palette.accent, 0x20)), palette.accent, "running"),
+            _ => (rgba(tint(palette.red, 0x20)), palette.red, "failed"),
         };
 
         let duration_label = format_duration(r.started_epoch, r.finished_epoch);
@@ -940,8 +940,8 @@ impl BackupPage {
             .p_3()
             .rounded_md()
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x20))
-            .bg(rgba(palette.raised << 8 | 0x30))
+            .border_color(rgba(tint(palette.border, 0x20)))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .flex()
             .flex_col()
             .gap_1p5()

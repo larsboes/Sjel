@@ -16,7 +16,7 @@ use crate::primitives::{
     row_for_density, section,
 };
 use crate::tasks::{self, TaskFilter};
-use crate::theme::{Density, Palette};
+use crate::theme::{tint, Density, Palette};
 use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
     self, GlobalNote, GlobalTask, ProjectRecord, ProjectSummary, ShellError,
@@ -291,7 +291,7 @@ impl Projects {
                 .rounded(px(10.))
                 .bg(rgba(palette.surface))
                 .border_1()
-                .border_color(rgba(palette.red & 0xffffff | 0x55000000))
+                .border_color(rgba(tint(palette.red, 0x55)))
                 .px_3()
                 .py_2()
                 .flex()
@@ -319,7 +319,7 @@ impl Projects {
                                 .px_3()
                                 .py(px(4.))
                                 .rounded(px(6.))
-                                .bg(rgba(palette.accent & 0xffffff | 0x22000000))
+                                .bg(rgba(tint(palette.accent, 0x22)))
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(rgb(palette.accent))
@@ -949,7 +949,7 @@ impl Projects {
         let header = row_for_density(cols.density)
             .min_h(px(34.))
             .py_1()
-            .bg(rgba(palette.raised & 0x00ffffff | 0x30000000))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
@@ -1016,7 +1016,7 @@ impl Projects {
                     .group("task-row")
                     .min_h(px(40.))
                     .py_1()
-                    .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
+                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
                         div().w(px(24.)).flex().items_center().child(
@@ -1166,7 +1166,7 @@ impl Projects {
         let header = row_for_density(cols.density)
             .min_h(px(34.))
             .py_1()
-            .bg(rgba(palette.raised & 0x00ffffff | 0x30000000))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
@@ -1216,7 +1216,7 @@ impl Projects {
                     .group("all-task-row")
                     .min_h(px(40.))
                     .py_1()
-                    .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
+                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
                         div().w(px(24.)).flex().items_center().child(
@@ -1244,16 +1244,16 @@ impl Projects {
                                 .px_2()
                                 .py(px(1.5))
                                 .rounded(px(4.))
-                                .bg(rgba(palette.accent & 0x00ffffff | 0x12000000))
+                                .bg(rgba(tint(palette.accent, 0x12)))
                                 .border_1()
-                                .border_color(rgba(palette.accent & 0x00ffffff | 0x24000000))
+                                .border_color(rgba(tint(palette.accent, 0x24)))
                                 .text_color(rgb(palette.accent))
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .truncate()
                                 .cursor_pointer()
                                 .hover(move |s| {
-                                    s.bg(rgba(palette.accent & 0x00ffffff | 0x22000000))
+                                    s.bg(rgba(tint(palette.accent, 0x22)))
                                         .text_color(rgb(palette.text))
                                 })
                                 .on_click(cx.listener(move |view, _, _, cx| {
@@ -1312,7 +1312,7 @@ impl Projects {
         let header = row_for_density(cols.density)
             .min_h(px(34.))
             .py_1()
-            .bg(rgba(palette.raised & 0x00ffffff | 0x30000000))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
@@ -1356,7 +1356,7 @@ impl Projects {
                     .group("all-note-row")
                     .min_h(px(40.))
                     .py_1()
-                    .hover(move |s| s.bg(rgba(palette.raised & 0x00ffffff | 0x55000000)))
+                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
                     .child(
                         div().w(px(24.)).flex().items_center().child(
                             div()
@@ -1396,16 +1396,16 @@ impl Projects {
                                 .px_2()
                                 .py(px(1.5))
                                 .rounded(px(4.))
-                                .bg(rgba(palette.accent & 0x00ffffff | 0x12000000))
+                                .bg(rgba(tint(palette.accent, 0x12)))
                                 .border_1()
-                                .border_color(rgba(palette.accent & 0x00ffffff | 0x24000000))
+                                .border_color(rgba(tint(palette.accent, 0x24)))
                                 .text_color(rgb(palette.accent))
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .truncate()
                                 .cursor_pointer()
                                 .hover(move |s| {
-                                    s.bg(rgba(palette.accent & 0x00ffffff | 0x22000000))
+                                    s.bg(rgba(tint(palette.accent, 0x22)))
                                         .text_color(rgb(palette.text))
                                 })
                                 .on_click(cx.listener(move |view, _, _, cx| {
@@ -1422,13 +1422,13 @@ impl Projects {
                                 .py(px(1.5))
                                 .rounded(px(4.))
                                 .bg(rgba(if is_hub {
-                                    palette.accent & 0x00ffffff | 0x18000000
+                                    tint(palette.accent, 0x18)
                                 } else {
                                     palette.raised
                                 }))
                                 .border_1()
                                 .border_color(rgba(if is_hub {
-                                    palette.accent & 0x00ffffff | 0x30000000
+                                    tint(palette.accent, 0x30)
                                 } else {
                                     palette.border
                                 }))
@@ -1872,9 +1872,7 @@ impl Render for Projects {
                                                 .py_1()
                                                 .cursor_pointer()
                                                 .hover(move |style| {
-                                                    style.bg(rgba(
-                                                        palette.raised & 0x00ffffff | 0x55000000,
-                                                    ))
+                                                    style.bg(rgba(tint(palette.raised, 0x55)))
                                                 })
                                                 .on_click(cx.listener(
                                                     move |view, _, window, cx| {
@@ -2178,7 +2176,7 @@ impl Render for Projects {
                             .px_3()
                             .py(px(4.))
                             .rounded(px(6.))
-                            .bg(rgba(palette.accent & 0xffffff | 0x22000000))
+                            .bg(rgba(tint(palette.accent, 0x22)))
                             .text_color(rgb(palette.accent))
                             .font_weight(FontWeight::MEDIUM)
                             .text_xs()
@@ -2226,7 +2224,7 @@ impl Render for Projects {
                                     .px_2()
                                     .py(px(1.5))
                                     .rounded(px(4.))
-                                    .bg(rgba(palette.amber & 0xffffff | 0x22000000))
+                                    .bg(rgba(tint(palette.amber, 0x22)))
                                     .text_color(rgb(palette.amber))
                                     .text_xs()
                                     .child(format!("● {} open", project.open))
@@ -2236,7 +2234,7 @@ impl Render for Projects {
                                     .px_2()
                                     .py(px(1.5))
                                     .rounded(px(4.))
-                                    .bg(rgba(palette.green & 0xffffff | 0x22000000))
+                                    .bg(rgba(tint(palette.green, 0x22)))
                                     .text_color(rgb(palette.green))
                                     .text_xs()
                                     .child(format!("✓ {} done", project.done))

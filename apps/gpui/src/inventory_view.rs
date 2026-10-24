@@ -12,7 +12,7 @@ use gpui_kit::{
 
 use crate::data::{Remote, Repo};
 use crate::shell::{self, ShellError};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use sjel_gpui_core::inventory::{
     filter_inventory, format_cents, format_dimensions, group_of, InteriorLayoutSummary,
     InventoryItem, InventoryRow, InventoryWishlist,
@@ -197,7 +197,7 @@ impl InventoryPage {
             .justify_between()
             .pb_3()
             .border_b_1()
-            .border_color(rgba(palette.border << 8 | 0x22))
+            .border_color(rgba(tint(palette.border, 0x22)))
             .child(
                 div()
                     .flex()
@@ -258,7 +258,7 @@ impl InventoryPage {
                 gpui::FontWeight::NORMAL
             })
             .bg(if is_active {
-                rgba(palette.accent << 8 | 0x20)
+                rgba(tint(palette.accent, 0x20))
             } else {
                 rgba(0)
             })
@@ -267,7 +267,7 @@ impl InventoryPage {
             } else {
                 rgb(palette.muted)
             })
-            .hover(|s| s.bg(rgba(palette.border << 8 | 0x30)))
+            .hover(|s| s.bg(rgba(tint(palette.border, 0x30))))
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |page, _, _, cx| page.set_tab(tab, cx)),
@@ -410,9 +410,9 @@ impl InventoryPage {
             .flex_1()
             .p_3()
             .rounded_lg()
-            .bg(rgba(palette.raised << 8 | 0x40))
+            .bg(rgba(tint(palette.raised, 0x40)))
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x30))
+            .border_color(rgba(tint(palette.border, 0x30)))
             .child(
                 div()
                     .text_xs()
@@ -436,9 +436,9 @@ impl InventoryPage {
         div()
             .p_3p5()
             .rounded_lg()
-            .bg(rgba(palette.raised << 8 | 0x30))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x25))
+            .border_color(rgba(tint(palette.border, 0x25)))
             .flex()
             .items_center()
             .justify_between()
@@ -464,7 +464,7 @@ impl InventoryPage {
                                     .py_0p5()
                                     .rounded_full()
                                     .text_xs()
-                                    .bg(rgba(palette.accent << 8 | 0x20))
+                                    .bg(rgba(tint(palette.accent, 0x20)))
                                     .text_color(rgb(palette.accent))
                                     .child(group_of(item)),
                             )
@@ -475,7 +475,7 @@ impl InventoryPage {
                                         .py_0p5()
                                         .rounded_full()
                                         .text_xs()
-                                        .bg(rgba(palette.border << 8 | 0x25))
+                                        .bg(rgba(tint(palette.border, 0x25)))
                                         .text_color(rgb(palette.muted))
                                         .child(item.kind.clone()),
                                 )
@@ -548,9 +548,9 @@ impl InventoryPage {
                 div()
                     .p_4()
                     .rounded_lg()
-                    .bg(rgba(palette.raised << 8 | 0x40))
+                    .bg(rgba(tint(palette.raised, 0x40)))
                     .border_1()
-                    .border_color(rgba(palette.border << 8 | 0x30))
+                    .border_color(rgba(tint(palette.border, 0x30)))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -651,9 +651,9 @@ impl InventoryPage {
         div()
             .p_3p5()
             .rounded_lg()
-            .bg(rgba(palette.raised << 8 | 0x30))
+            .bg(rgba(tint(palette.raised, 0x30)))
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x25))
+            .border_color(rgba(tint(palette.border, 0x25)))
             .flex()
             .items_center()
             .justify_between()
@@ -684,7 +684,7 @@ impl InventoryPage {
                                     .py_0p5()
                                     .rounded_full()
                                     .text_xs()
-                                    .bg(rgba(color << 8 | 0x20))
+                                    .bg(rgba(tint(color, 0x20)))
                                     .text_color(rgb(color))
                                     .child(pri.clone())
                             })),
@@ -767,9 +767,9 @@ impl InventoryPage {
         div()
             .p_4()
             .rounded_lg()
-            .bg(rgba(palette.raised << 8 | 0x40))
+            .bg(rgba(tint(palette.raised, 0x40)))
             .border_1()
-            .border_color(rgba(palette.border << 8 | 0x30))
+            .border_color(rgba(tint(palette.border, 0x30)))
             .flex()
             .items_center()
             .justify_between()
@@ -795,7 +795,7 @@ impl InventoryPage {
                                     .py_0p5()
                                     .rounded_full()
                                     .text_xs()
-                                    .bg(rgba(status_color << 8 | 0x20))
+                                    .bg(rgba(tint(status_color, 0x20)))
                                     .text_color(rgb(status_color))
                                     .child(status_text),
                             ),

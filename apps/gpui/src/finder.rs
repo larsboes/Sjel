@@ -27,7 +27,7 @@ use crate::ask::Ask;
 use crate::data::Repo;
 use crate::route::Page;
 use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
 
@@ -476,7 +476,7 @@ impl Render for Finder {
                 .text_xs()
                 .cursor_pointer()
                 .bg(rgba(if chosen {
-                    palette.accent << 8 | 0x2a
+                    tint(palette.accent, 0x2a)
                 } else {
                     palette.raised
                 }))

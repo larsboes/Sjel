@@ -29,7 +29,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::shell::{AgentGate, AgentView, Approval};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use crate::ui::{card, dot, list, note, placeholder, row, section};
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, clock_label, dated_absences, day_label, gigabytes,
@@ -468,8 +468,8 @@ impl SystemsPage {
                                 .text_xs()
                                 .when(enabled, |pill| pill.cursor_pointer())
                                 .when(allowed && enabled, |pill| {
-                                    pill.bg(rgba(palette.accent & 0xffffff | 0x22000000))
-                                        .border_color(rgba(palette.accent & 0xffffff | 0x55000000))
+                                    pill.bg(rgba(tint(palette.accent, 0x22)))
+                                        .border_color(rgba(tint(palette.accent, 0x55)))
                                         .text_color(rgb(palette.accent))
                                 })
                                 .when(!(allowed && enabled), |pill| {
@@ -1401,7 +1401,7 @@ fn trend_row(history: Option<&StorageHistory>, palette: Palette) -> AnyElement {
                 .w(px(2.))
                 .h(px(height))
                 .rounded(px(1.))
-                .bg(rgba(palette.accent & 0xffffff | 0xaa000000))
+                .bg(rgba(tint(palette.accent, 0xaa)))
                 .into_any_element()
         })
         .collect();

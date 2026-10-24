@@ -12,8 +12,8 @@ use sjel_gpui_core::area::Area;
 use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
-use crate::theme::Palette;
-use crate::workspace::{OpenArea, OpenPalette, OpenSettings, Workspace};
+use crate::theme::{tint, Palette};
+use crate::workspace::{OpenArea, OpenPalette, OpenSettings, ToggleSoundscapePanel, Workspace};
 
 /// The column the sidebar occupies, and the gap the glass panel leaves to the window edge.
 pub const WIDTH: f32 = 208.;
@@ -52,7 +52,7 @@ pub fn render(
                 .flex_col()
                 .children(nav(view, palette, window, cx)),
         )
-        .child(soundscape(view, palette, cx))
+        .child(soundscape(view, palette, window, cx))
         .child(palette_hint(palette, window))
         .child(settings_row(view, palette, window, cx))
         .child(footer(view, palette))
@@ -97,28 +97,36 @@ fn nav(
                         .child(area.label())
                         .children(shortcut.map(|kbd| kbd.appearance(false))),
                 )
-                // Which tab ⌘9 will return to, when it is not the one the area opens on.
-                .when(area.has_tabs() && tab != area.default_page(), |row| {
-                    row.child(
-                        div().flex().items_center().child(
-                            div()
-                                .px_2()
-                                .py(px(1.))
-                                .rounded(px(4.))
-                                .bg(rgba(palette.accent << 8 | 0x1c))
-                                .text_color(rgb(palette.accent))
-                                .text_xs()
-                                .child(tab.label()),
-                        ),
-                    )
-                })
+                // The tab ⌘9 returns to, shown only when it differs from the open one.
+                .when(
+                    area.has_tabs() && tab != area.default_page() && !selected,
+                    |row| {
+                        row.child(
+                            div().flex().items_center().child(
+                                div()
+                                    .px_2()
+                                    .py(px(1.))
+                                    .rounded(px(4.))
+                                    .bg(rgba(tint(palette.accent, 0x1c)))
+                                    .text_color(rgb(palette.accent))
+                                    .text_xs()
+                                    .child(tab.label()),
+                            ),
+                        )
+                    },
+                )
                 .into_any_element()
         })
         .collect()
 }
 
 /// The mini player, shown only while the soundscape capability answers or has answered.
-fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
+fn soundscape(
+    view: &Workspace,
+    palette: Palette,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
     let state = view.soundscape.value.as_ref();
     let is_up = view
         .health
@@ -154,7 +162,7 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .py(px(5.))
         .rounded(px(7.))
         .bg(rgba(if panel_open {
-            palette.accent << 8 | 0x1c
+            tint(palette.accent, 0x1c)
         } else {
             palette.raised
         }))
@@ -194,7 +202,7 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 .py(px(2.))
                 .rounded(px(4.))
                 .bg(rgba(if playing {
-                    palette.accent << 8 | 0x24
+                    tint(palette.accent, 0x24)
                 } else {
                     palette.raised
                 }))
@@ -210,6 +218,11 @@ fn soundscape(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                     view.toggle_soundscape(!playing, window, cx);
                 }))
                 .child(if playing { "Pause" } else { "Play" }),
+        )
+        // The player is ⌘0, listed after the nine areas.
+        .children(
+            Kbd::binding_for_action(&ToggleSoundscapePanel, None, window)
+                .map(|kbd| kbd.appearance(false)),
         )
         .into_any_element()
 }

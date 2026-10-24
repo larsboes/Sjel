@@ -7,9 +7,11 @@ use std::rc::Rc;
 use gpui_kit::component::ElementExt;
 use gpui_kit::{point, prelude::*, px, rgba, Div, ScrollHandle};
 
+use sjel_gpui_core::context::{needs_attention, ATTENTION_SHOWN};
+
 use crate::route::Page;
 use crate::shell::GlobalTask;
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use crate::workspace::Workspace;
 
 /// One row the keyboard can reach, in the order the page draws it.
@@ -73,7 +75,7 @@ impl Selection {
             return row;
         }
         let (reveal, scroll) = (self.reveal.clone(), self.scroll.clone());
-        row.bg(rgba(palette.accent << 8 | 0x24))
+        row.bg(rgba(tint(palette.accent, 0x24)))
             .on_prepaint(move |bounds, window, _| {
                 if !reveal.replace(false) {
                     return;
@@ -157,26 +159,27 @@ impl Workspace {
         self.items().get(self.selection.cursor?).cloned()
     }
 
-    /// Urgent or due-today tasks, as Home draws them.
+    /// The urgent rows the Today page draws: the first [`ATTENTION_SHOWN`] of
+    /// [`Self::urgent_task_count`], so a row the reader can select is a row that is on screen.
     pub fn urgent_tasks(&self) -> Vec<GlobalTask> {
+        self.urgent_task_count_all()
+            .into_iter()
+            .take(ATTENTION_SHOWN)
+            .collect()
+    }
+
+    /// Every open task that is P1 or due by today, including the ones the list does not draw.
+    /// The TASKS card counts these, and the list says how many it left out.
+    pub fn urgent_task_count(&self) -> usize {
+        self.urgent_task_count_all().len()
+    }
+
+    fn urgent_task_count_all(&self) -> Vec<GlobalTask> {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         self.focus_tasks
             .value
             .as_ref()
-            .map(|tasks| {
-                tasks
-                    .iter()
-                    .filter(|t| !t.done)
-                    .filter(|t| {
-                        t.priority == 1
-                            || t.due
-                                .as_deref()
-                                .is_some_and(|d| !d.is_empty() && d <= today.as_str())
-                    })
-                    .take(6)
-                    .cloned()
-                    .collect()
-            })
+            .map(|tasks| needs_attention(tasks, &today))
             .unwrap_or_default()
     }
 }

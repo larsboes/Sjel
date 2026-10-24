@@ -12,7 +12,7 @@ use gpui_kit::{
     KeyBinding, SharedString, Window,
 };
 use sjel_gpui_core::context::{
-    format_day_header, format_money, ContextDay, TimelineItem, TimelineKind,
+    format_day_header, format_money, needs_attention, ContextDay, TimelineItem, TimelineKind,
 };
 use sjel_gpui_core::shell::{
     self, CalendarEntry, FinanceDashboardProjection, GlobalTask, ShellError,
@@ -125,8 +125,9 @@ impl ContextPage {
         .detach();
 
         // 2. Fetch Tasks
-        let shell_tasks = shell.clone();
-        let tasks_work = shell::run(async move { shell_tasks.tasks(None).await });
+        // Same source as Home's rows (`Repo::fetch_tasks`), so the count matches the list.
+        let repo_tasks = self.repo.clone();
+        let tasks_work = shell::run(async move { repo_tasks.fetch_tasks(None).await });
         cx.spawn(async move |this, cx| {
             let res = tasks_work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |page, cx| {
@@ -297,7 +298,23 @@ impl ContextPage {
 
         // Stat cards strip
         let event_count = context.events.len();
-        let open_task_count = context.tasks.iter().filter(|t| !t.done).count();
+        // One predicate for the card and the rows: `core::context::needs_attention`.
+        let today_str = Local::now().format("%Y-%m-%d").to_string();
+        let attention = needs_attention(tasks, &today_str);
+        let mut open_ids: Vec<&str> = context
+            .tasks
+            .iter()
+            .filter(|task| !task.done)
+            .map(|task| task.id.as_str())
+            .collect();
+        if is_today {
+            for task in &attention {
+                if !open_ids.contains(&task.id.as_str()) {
+                    open_ids.push(task.id.as_str());
+                }
+            }
+        }
+        let open_task_count = open_ids.len();
         let done_task_count = context.tasks.iter().filter(|t| t.done).count();
         let total_spend_str = format_money(context.total_spent_cents, &context.currency);
 
@@ -317,7 +334,9 @@ impl ContextPage {
             .child(stat_card(
                 "TASKS",
                 format!("{open_task_count} open"),
-                if done_task_count > 0 {
+                if is_today && !attention.is_empty() {
+                    "Urgent or due today".to_string()
+                } else if done_task_count > 0 {
                     format!("{done_task_count} completed")
                 } else {
                     "Due today".to_string()

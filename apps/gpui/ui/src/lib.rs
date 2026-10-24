@@ -27,6 +27,6 @@ pub use primitives::{
 };
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{
-    AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs, Palette,
-    SidebarPrefs, SoundscapePrefs, ThemeMode, WindowOpacity,
+    tint, AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs,
+    Palette, SidebarPrefs, SoundscapePrefs, ThemeMode, WindowOpacity,
 };

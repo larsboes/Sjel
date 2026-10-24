@@ -27,7 +27,7 @@ use sjel_gpui_core::today::{self, Entry, Project, Spot, Task, Today as View};
 
 use crate::data::{self, Press};
 use crate::primitives::{priority_pill, progress_bar};
-use crate::{Density, Palette};
+use crate::{tint, Density, Palette};
 
 /// What the page asks its host to do. The host owns the network, the copy on disk and the sync.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -726,7 +726,7 @@ fn due_mark(due: &str, overdue: bool, palette: Palette) -> AnyElement {
             .px_2()
             .py(px(2.))
             .rounded(px(6.))
-            .bg(rgba(palette.red & 0xffffff | 0x22000000))
+            .bg(rgba(tint(palette.red, 0x22)))
             .text_color(rgb(palette.red))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)

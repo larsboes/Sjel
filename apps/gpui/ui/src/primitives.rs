@@ -4,7 +4,7 @@ use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, FontWeight, SharedString, Window,
 };
 
-use crate::theme::{Density, Palette};
+use crate::theme::{tint, Density, Palette};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DueStatus {
@@ -135,7 +135,7 @@ pub fn filter_pill(
         .text_xs()
         .cursor_pointer()
         .when(active, |el| {
-            el.bg(rgba(palette.accent & 0xffffff | 0x22000000))
+            el.bg(rgba(tint(palette.accent, 0x22)))
                 .text_color(rgb(palette.accent))
                 .font_weight(FontWeight::SEMIBOLD)
         })
@@ -157,14 +157,14 @@ pub fn filter_pill(
 pub fn priority_pill(priority: u8, palette: Palette) -> AnyElement {
     let (bg_color, border_color, text_color, label) = match priority {
         1 => (
-            palette.red & 0xffffff | 0x20000000,
-            palette.red & 0xffffff | 0x40000000,
+            tint(palette.red, 0x20),
+            tint(palette.red, 0x40),
             palette.red,
             "P1",
         ),
         2 => (
-            palette.amber & 0xffffff | 0x18000000,
-            palette.amber & 0xffffff | 0x35000000,
+            tint(palette.amber, 0x18),
+            tint(palette.amber, 0x35),
             palette.amber,
             "P2",
         ),
@@ -194,9 +194,9 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .px_2()
             .py(px(1.5))
             .rounded(px(4.))
-            .bg(rgba(palette.amber & 0xffffff | 0x22000000))
+            .bg(rgba(tint(palette.amber, 0x22)))
             .border_1()
-            .border_color(rgba(palette.amber & 0xffffff | 0x38000000))
+            .border_color(rgba(tint(palette.amber, 0x38)))
             .text_color(rgb(palette.amber))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
@@ -218,9 +218,9 @@ pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -
             .px_2()
             .py(px(1.5))
             .rounded(px(4.))
-            .bg(rgba(palette.red & 0xffffff | 0x22000000))
+            .bg(rgba(tint(palette.red, 0x22)))
             .border_1()
-            .border_color(rgba(palette.red & 0xffffff | 0x38000000))
+            .border_color(rgba(tint(palette.red, 0x38)))
             .text_color(rgb(palette.red))
             .text_xs()
             .font_weight(FontWeight::SEMIBOLD)
@@ -282,23 +282,11 @@ pub fn back_button(
 /// Badge showing sync and offline mutation queue status.
 pub fn sync_status_badge(pending: usize, syncing: bool, palette: Palette) -> AnyElement {
     let (text, color, bg) = if syncing {
-        (
-            "Syncing…",
-            palette.accent,
-            palette.accent & 0xffffff | 0x20000000,
-        )
+        ("Syncing…", palette.accent, tint(palette.accent, 0x20))
     } else if pending > 0 {
-        (
-            "Offline queue",
-            palette.amber,
-            palette.amber & 0xffffff | 0x20000000,
-        )
+        ("Offline queue", palette.amber, tint(palette.amber, 0x20))
     } else {
-        (
-            "Synced",
-            palette.green,
-            palette.green & 0xffffff | 0x20000000,
-        )
+        ("Synced", palette.green, tint(palette.green, 0x20))
     };
     div()
         .flex()

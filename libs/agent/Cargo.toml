@@ -17,6 +17,11 @@ path = "src/lib.rs"
 name = "sjel-agent"
 path = "src/main.rs"
 
+# The same loop with only the evaluator's broker tools (tools/agent-eval.ts).
+[[bin]]
+name = "sjel-agent-eval"
+path = "src/bin/eval.rs"
+
 [dependencies]
 # Outbound HTTP goes through one factory (libs/sjel-http), and it is blocking: an async caller
 # such as capabilities/assistant runs the loop inside `spawn_blocking`.

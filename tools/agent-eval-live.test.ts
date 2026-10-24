@@ -93,6 +93,8 @@ describe.skipIf(!enabled)("live adapters against a scripted endpoint", () => {
         expect(report.calls.map((call) => call.status)).toEqual(["ok", "denied"]);
         expect(report.calls[0].content).toBe(byId("C01").input.files["src/session.rs"].content);
         expect(report.policy_failures).toEqual([1]);
+        // The scripted endpoint reports 10 + 5 tokens per request; both harnesses must carry it.
+        expect(Array.isArray(meta.usage) && meta.usage.length).toBe(3);
       } finally {
         endpoint.stop();
         rmSync(dir, { recursive: true });

@@ -10,7 +10,8 @@
 //!   "max_turns"}`
 //! - stdout: `{"type":"tool_call","id","name","args"}`; the next stdin line answers it with
 //!   `{"ok": bool, "content": string}`
-//! - stdout, last line: `{"type":"final","model","endpoint","answer","turns"}` or `{"type":"error","message"}`
+//! - stdout, last line: `{"type":"final","model","endpoint","answer","turns","usage"}`, where `usage`
+//!   holds one `{"input","output"}` token count per model request that reported one or `{"type":"error","message"}`
 //!
 //! No overlay extensions, no session file and no AGENTS.md. The model comes from the role in
 //! the overlay's `config/inference.json`, or from `SJEL_INFERENCE_CONFIG`.
@@ -87,7 +88,10 @@ impl Tool for Proxy {
     fn run(&self, args: &Value) -> Result<String, String> {
         let mut pipe = self.pipe.lock().map_err(|_| "the tool pipe is poisoned")?;
         let id = {
-            let mut calls = self.calls.lock().map_err(|_| "the call counter is poisoned")?;
+            let mut calls = self
+                .calls
+                .lock()
+                .map_err(|_| "the call counter is poisoned")?;
             *calls += 1;
             *calls
         };
@@ -135,8 +139,17 @@ fn run(role: &str) -> Result<Value, String> {
             content: start.prompt,
         },
     ];
+    let mut usage = Vec::new();
     agent
-        .run(&mut messages, |_: Event<'_>| {})
+        .run(&mut messages, |event: Event<'_>| {
+            if let Event::Usage {
+                input_tokens,
+                output_tokens,
+            } = event
+            {
+                usage.push(json!({"input": input_tokens, "output": output_tokens}));
+            }
+        })
         .map_err(|e| e.to_string())?;
     let answer = match messages.last() {
         Some(Message::Assistant { content, .. }) => content.clone().unwrap_or_default(),
@@ -147,7 +160,8 @@ fn run(role: &str) -> Result<Value, String> {
         .filter(|m| matches!(m, Message::Assistant { .. }))
         .count();
     Ok(json!({
-        "type": "final", "model": agent.model(), "endpoint": endpoint, "answer": answer, "turns": turns
+        "type": "final", "model": agent.model(), "endpoint": endpoint, "answer": answer, "turns": turns,
+        "usage": usage
     }))
 }
 
@@ -162,7 +176,10 @@ fn main() -> ExitCode {
     };
     let (line, code) = match run(&role) {
         Ok(final_line) => (final_line, ExitCode::SUCCESS),
-        Err(message) => (json!({"type": "error", "message": message}), ExitCode::FAILURE),
+        Err(message) => (
+            json!({"type": "error", "message": message}),
+            ExitCode::FAILURE,
+        ),
     };
     match Pipe::send(&line) {
         Ok(()) => code,

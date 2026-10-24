@@ -23,6 +23,18 @@ struct Chunk<'a> {
     /// Some providers report a failure inside a 200 stream.
     #[serde(default)]
     error: Option<serde_json::Value>,
+    /// Sent once, in a final chunk with no choices, when the request asks for
+    /// `stream_options.include_usage`.
+    #[serde(default)]
+    usage: Option<ChatUsage>,
+}
+
+#[derive(Deserialize)]
+struct ChatUsage {
+    #[serde(default)]
+    prompt_tokens: u64,
+    #[serde(default)]
+    completion_tokens: u64,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +107,12 @@ pub fn fold(
                 &error.to_string(),
                 2_000,
             )));
+        }
+        if let Some(usage) = &chunk.usage {
+            on(Event::Usage {
+                input_tokens: usage.prompt_tokens,
+                output_tokens: usage.completion_tokens,
+            });
         }
         let Some(delta) = chunk.choices.into_iter().next().map(|c| c.delta) else {
             continue;
@@ -183,6 +201,20 @@ pub fn fold_responses(
                 2_000,
             )));
         }
+        if kind == "response.completed" {
+            if let Some(usage) = event.pointer("/response/usage") {
+                let tokens = |key| {
+                    usage
+                        .get(key)
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(0)
+                };
+                on(Event::Usage {
+                    input_tokens: tokens("input_tokens"),
+                    output_tokens: tokens("output_tokens"),
+                });
+            }
+        }
         if let Some(delta) = event.get("delta").and_then(serde_json::Value::as_str) {
             match kind {
                 "response.output_text.delta" | "response.refusal.delta" => {
@@ -260,6 +292,40 @@ mod tests {
             _ => {}
         });
         (result, text, thinking)
+    }
+
+    /// The usage chunk has no choices; it must report tokens and still end as the same message.
+    #[test]
+    fn a_usage_chunk_reports_tokens_in_both_stream_shapes() {
+        let mut seen = Vec::new();
+        let mut on = |e: Event<'_>| {
+            if let Event::Usage {
+                input_tokens,
+                output_tokens,
+            } = e
+            {
+                seen.push((input_tokens, output_tokens));
+            }
+        };
+        let chat = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n",
+            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":3}}\n",
+            "data: [DONE]\n",
+        );
+        let message = fold(chat.as_bytes(), &AtomicBool::new(false), &mut on).unwrap();
+        let responses = concat!(
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":7,\"output_tokens\":2}}}\n",
+        );
+        fold_responses(responses.as_bytes(), &AtomicBool::new(false), &mut on).unwrap();
+        assert_eq!(seen, [(12, 3), (7, 2)]);
+        assert_eq!(
+            message,
+            Message::Assistant {
+                content: Some("ok".into()),
+                tool_calls: None
+            }
+        );
     }
 
     #[test]

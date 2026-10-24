@@ -707,7 +707,7 @@ fn run_ask_with_input(
             "name": call.function.name,
             "content": content,
         })),
-        Event::Reasoning(_) => {}
+        Event::Reasoning(_) | Event::Usage { .. } => {}
     };
     let result = if cloud {
         agent.run_public(&mut messages, on_event)

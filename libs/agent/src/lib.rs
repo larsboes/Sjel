@@ -156,6 +156,12 @@ pub enum Event<'a> {
     Reasoning(&'a str),
     /// A call, complete, before it runs.
     ToolCall(&'a ToolCall),
+    /// Tokens one model request used, as the provider reported them. Absent when the provider
+    /// sends no usage.
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+    },
     ToolResult {
         call: &'a ToolCall,
         content: &'a str,
@@ -510,7 +516,11 @@ impl Agent {
         if self.role.uses_responses_api() {
             return self.responses_request_body(messages);
         }
-        let mut body = json!({ "model": self.role.model, "messages": messages, "stream": true });
+        // `include_usage` makes OpenAI-compatible servers end the stream with a usage chunk.
+        let mut body = json!({
+            "model": self.role.model, "messages": messages, "stream": true,
+            "stream_options": { "include_usage": true },
+        });
         let Some(object) = body.as_object_mut() else {
             unreachable!("json! object literal")
         };
@@ -1302,6 +1312,7 @@ mod tests {
                 "model": "m",
                 "messages": [{ "role": "user", "content": "ping" }],
                 "stream": true,
+                "stream_options": { "include_usage": true },
                 "tools": [{ "type": "function", "function": {
                     "name": "echo",
                     "description": "Returns its text argument.",

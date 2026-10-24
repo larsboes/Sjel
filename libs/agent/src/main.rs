@@ -496,6 +496,7 @@ fn turn(agent: &Agent, messages: &mut Vec<Message>, prompt: String) -> Result<()
                 let _ = out.flush();
             }
             Event::Reasoning(text) => eprint!("{DIM}{text}{RESET}"),
+            Event::Usage { .. } => {}
             Event::ToolCall(call) => eprintln!(
                 "\n{DIM}> {}({}){RESET}",
                 call.function.name, call.function.arguments

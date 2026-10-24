@@ -45,7 +45,7 @@ export interface LiveMeta {
   error: string | null;
   elapsed_ms: number;
   turns: number | null;
-  /** Raw provider usage where the harness exposes it; sjel-agent reports none yet. */
+  /** Provider usage per model request: Pi's raw objects, Sjel's `{input, output}`. */
   usage: unknown;
   system_prompt: string;
   tools_offered: string[];
@@ -203,7 +203,7 @@ export async function runSjel(c: EvalCase, m: RunManifest, revision: string): Pr
   const timer = setTimeout(() => { termination = "timeout"; child.kill("SIGKILL"); }, m.timeout_ms);
   const send = (value: unknown) => child.stdin.write(JSON.stringify(value) + "\n");
   send({ system: SYSTEM_PROMPT, prompt: c.prompt, tools: defs, max_turns: m.max_turns });
-  let last: { type: string; answer?: string; model?: string; endpoint?: string; turns?: number; message?: string } | undefined;
+  let last: { type: string; answer?: string; model?: string; endpoint?: string; turns?: number; usage?: unknown[]; message?: string } | undefined;
   for await (const line of createInterface({ input: child.stdout })) {
     const msg = JSON.parse(line);
     if (msg.type === "tool_call") {
@@ -230,7 +230,7 @@ export async function runSjel(c: EvalCase, m: RunManifest, revision: string): Pr
     error,
     elapsed_ms: Math.round(performance.now() - started),
     turns: last?.turns ?? null,
-    usage: null,
+    usage: last?.usage ?? null,
     system_prompt: SYSTEM_PROMPT,
     tools_offered: defs.map((d) => d.name),
   };

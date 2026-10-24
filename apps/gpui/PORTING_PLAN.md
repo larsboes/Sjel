@@ -30,7 +30,7 @@
 | 19 | `/systems` | Systems & Host Telemetry | **Ported** | Native GPUI (`SystemsPage`) | N/A | `capabilities/sjel-status`, `macmon` |
 | 20 | `/packs` | Packs & Harness Sync | **Ported** | Native GPUI (`PacksPage`) | N/A | `tools/harnesses` |
 | 21 | `/self` | Self-Model & Knowledge | **Ported** | Native GPUI (`SelfPage`) | N/A | `self.json` / `graphify` |
-| 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `Packs/cv` / `cv` CLI |
+| 22 | `/cv` | CV Builder & Applications| **Ported** | Native GPUI (`CvPage`) | N/A | `cv` CLI |
 | 23 | `/media` | Media Ingest Ledger | **Ported** | Native GPUI (`MediaPage`) | N/A | `capabilities/media` |
 | 24 | `/research` | Local Models & Evals | **Ported** | Native GPUI (`ResearchPage`)| N/A | `research/`, `upstreams.toml`, `systems.toml` |
 | 25 | `/setup` | Node Setup & QR Pairing | **Ported** | Native GPUI (`SetupPage`) | Native Scanner | `capabilities/devices`, `capabilities/sjel-status` |
@@ -408,8 +408,72 @@
   - `apps/gpui/ios/src/audio.rs`, `apps/gpui/ios/host/Audio.swift`
   - `apps/gpui/ui/src/soundscape.rs`, `apps/gpui/ui/src/theme.rs`
   - `apps/gpui/ios/src/lib.rs`, `apps/gpui/ui/src/today.rs`
-- **Next**: local notifications (`UNUserNotificationCenter`, no remote push), then RoomPlan, then the
-  right sidebar that the drawer's edge is waiting for.
+- **Next**: local notifications (shipped in WP15), then RoomPlan, then the right sidebar that the
+  drawer's edge is waiting for.
+
+### ✅ Work Package 15: the phone's own lock screen
+- **Status**: Shipped (2026-10-24). Local only, and the number on the card is the system's.
+- **Why**: a phone is the device you carry when an entry starts, and the replica already holds what
+  would earn a reminder — the calendar's next weeks and the open tasks. Nothing here needs a server:
+  there is no `registerForRemoteNotifications`, no device token and no push service in the plan.
+- **Decided 2026-10-24 (operator)**: **what fires** is calendar entries plus tasks with a due date.
+  Fare alerts are deferred — they exist only as dashboard TypeScript over `sparpreis-watch`
+  (`dashboard/src/lib/travel/fare-alerts.ts`) and the phone has no read path for them, so including
+  them here would have doubled the package. **Where the switch lives** is the Settings page, not a
+  drawer off Today: a permission is a decision, and the soundscape drawer took the right edge because
+  that is something you play.
+- **Shipped**:
+  - `core/src/notify.rs` (new) — the platform-free rule. A timed entry fires its lead (`At start`,
+    `10 min`, `1 hour`) before it starts; an all-day entry at `08:00` on the day it covers, because
+    subtracting ten minutes from "all day" means nothing; a task at `09:00` on its due date, for the
+    same reason. `possible` blocks nothing, so it earns nothing — a reminder a person learns to swipe
+    away is worse than none. Stable ids (`cal:<entry id>`, `task:<path>`) mean a re-plan replaces a
+    request instead of scheduling a second one beside it, and `reconcile` hands back only what left
+    the list. The cap is 60 against iOS's 64, and `Plan::dropped` says how many it left out rather
+    than letting a shortened list pass for the whole of it.
+  - `ios/src/notify.rs` (new) — the bridge: the whole list in, `State` out, and `SJEL_GPUI_NO_NOTIFICATIONS=1`
+    honoured the way `SJEL_GPUI_NO_AUDIO` is. `apply` compares against the last list it sent, so a
+    rebuild that changed nothing does not ask the notification centre to replace what it already
+    holds. `ready()` is called once the view exists, because a tap launches the app and the response
+    arrives while the window is still being built.
+  - `ios/host/Notifications.swift` (new) — `UNUserNotificationCenter`: the prompt (asked when the
+    switch is turned on, never at launch), `UNCalendarNotificationTrigger` from the epoch seconds Rust
+    sends (a wall-clock moment, not a countdown, so a request is still right after a day asleep), the
+    delegate that shows a banner while the app is open, and a tap's link. `report()` answers with
+    `getPendingNotificationRequests`' own count and `nextTriggerDate()`, which is why the line on the
+    card cannot claim more than the system holds.
+  - `ui/src/theme.rs` — `NotifyPrefs` beside `appearance.json` and `soundscape.json`: the switch and
+    the lead. What is *scheduled* is never read from the file; a lead key this build does not know
+    falls back to the default instead of a wrong number of minutes.
+  - `ios/src/lib.rs` — the reminder card at the top of Settings (a switch, the system's own answer,
+    the three lead chips, the way back from a refusal through iOS Settings, and the cap's own
+    admission), rebuilt when the replica opens, after a write, after a pull and when the scene becomes
+    active (`sjel_ios_became_active`, from `App.swift`) — a phone in a pocket moves through days
+    without the app running. A tap opens the day it announced on the Calendar tab.
+  - `ios/host/UITests/NotificationsTap.swift` (new) — the switch, the system prompt answered, and off
+    again.
+- **Verified on a simulator**: the prompt answered from a tap and the card reading
+  `Allowed · Thu 31 Dec 09:00 · Decide master program` — a task out of this phone's replica, planned
+  by the rule, accepted by the notification centre and read back from `nextTriggerDate()` — then
+  `Off · nothing is announced` after the second tap.
+- **Not verified, and not claimed**: the banner being delivered, and a tap on it opening the day.
+  Both need a reminder whose minute is about to happen, and this simulator's replica holds no
+  calendar entry it may write (its calendar change feed has never been read: "The calendar was not
+  read"), so nothing can be made to land inside the next minute. The trigger the system accepted does
+  resolve to the moment the card shows, which is what `nextTriggerDate()` proves; delivery itself is
+  Apple's half. Also not claimed: a real iPhone, and a reminder that fires while the phone is off.
+- **Tests**: 5 in `core/src/notify.rs` (the lead off a timed start and the all-day hour; what earns
+  nothing — `possible`, past, done, undated; the cap keeping the soonest and admitting the rest; a
+  rebuild cancelling only what left; the summary and a link's day), 1 in `ui/src/theme.rs` (the
+  settings keep their shape, and an unknown lead is not a wrong number of minutes) and 1 in
+  `ios/src/notify.rs` (the host's answer read as the system gave it). core 282, ui 46, ios 2, app 81.
+- **Target Files**:
+  - `apps/gpui/core/src/notify.rs`, `apps/gpui/ios/src/notify.rs`
+  - `apps/gpui/ios/host/Notifications.swift`, `apps/gpui/ios/host/App.swift`
+  - `apps/gpui/ui/src/theme.rs`, `apps/gpui/ios/src/lib.rs`
+  - `apps/gpui/ios/host/UITests/NotificationsTap.swift`
+- **Next**: RoomPlan (LiDAR room capture into the interior layouts), then the right sidebar that the
+  drawer's edge is waiting for.
 
 ---
 
@@ -465,7 +529,10 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
      moment a banner on the landing tab is the better affordance. Reversible in one line.
    - `Inbox` cannot queue offline before #244's blocked-write recovery: a capture that cannot
      reach the Mac keeps its text, says why, and retries when discovery finds the host again.
-   - Still unclaimed after these two: soundscape player, notifications, RoomPlan.
+   - Done 2026-10-24: the soundscape player (Work Package 14) and local notifications (Work Package
+     15, calendar entries and tasks; fare alerts stay unclaimed until the phone has a read path for
+     them).
+   - Still unclaimed after these: RoomPlan, and the right sidebar of item 2.
 
 ---
 

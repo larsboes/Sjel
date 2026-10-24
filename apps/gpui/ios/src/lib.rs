@@ -27,6 +27,7 @@ use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
 use sjel_gpui_core::mirror::{self, Mirror};
+use sjel_gpui_core::notify as reminders;
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
@@ -36,12 +37,13 @@ use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::soundscape::{Soundscape, SoundscapeEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
-    mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
-    SoundscapePrefs, ThemeMode,
+    mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, NotifyPrefs,
+    Palette, SoundscapePrefs, ThemeMode,
 };
 
 mod audio;
 mod identity;
+mod notify;
 
 const HEALTH: &str = "/api/sjel-status/health";
 /// How often a waiting join asks whether the owner decided. A request expires after ten minutes
@@ -94,6 +96,18 @@ enum Event {
     Copy(Result<Arc<Mirror>, String>),
     /// A sync finished: what it moved, or why it could not run, plus the replica after it.
     Synced(Result<Report, String>, Board),
+    /// Reminders were rebuilt from the replica: what to hold, and what the cap left out.
+    Reminded(reminders::Plan),
+    /// What the notification centre holds, in the system's own count (`host/Notifications.swift`).
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    NotifyState(notify::State),
+    /// A reminder was tapped: the `calendar:<day>` link it carried.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    NotifyOpen(String),
+    /// The app came back to the foreground. A phone in a pocket moves through days without the app
+    /// running, so this is the moment to re-read the replica and re-schedule.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    Foreground,
 }
 
 /// A Mac that `host/Discovery.swift` found over Bonjour, from the TXT record the LAN listener
@@ -203,6 +217,16 @@ pub struct Capabilities {
     syncing: bool,
     /// True once this launch asked the host for the audio device, so it is asked once.
     audio_started: bool,
+    /// What this phone remembers about its lock screen: the switch and the lead time
+    /// (`ui/src/theme.rs`). What is *scheduled* is never read from here.
+    notify_prefs: NotifyPrefs,
+    /// The system's own answer: whether reminders may be shown, how many it holds, which is next.
+    notify_state: notify::State,
+    /// The last rebuild's list, for the "next" line and for the cap's own admission.
+    notify_plan: reminders::Plan,
+    /// This device's own store as the reminder rebuild reads it, kept from the row that also handed
+    /// it to the calendar page.
+    repo: Option<Repo>,
     appearance: AppearanceSettings,
     events: UnboundedSender<Event>,
 }
@@ -212,6 +236,19 @@ impl Capabilities {
         let (events, mut received) = unbounded();
         // The C entry point reads this, so the browse can start before the view exists.
         let _ = EVENTS.set(Mutex::new(Some(events.clone())));
+        // The notification centre may already hold a tap that launched this launch. It is released
+        // now that there is a channel to receive it, and the state comes back as an event.
+        notify::ready();
+        // `SJEL_NOTIFY=1` turns reminders on for a run that asks for them, the way `SJEL_SOUNDSCAPE`
+        // opens the drawer: a card nobody switched on still has to be photographable.
+        let notify_prefs = NotifyPrefs::load();
+        if notify::launch_enabled() && !notify_prefs.enabled {
+            notify::authorize();
+        }
+        let notify_prefs = NotifyPrefs {
+            enabled: notify_prefs.enabled || notify::launch_enabled(),
+            ..notify_prefs
+        };
         let pair = std::env::var("SJEL_PAIR").ok();
         let join = std::env::var("SJEL_JOIN").ok();
         let failed = events.clone();
@@ -284,7 +321,10 @@ impl Capabilities {
                     projects.update(cx, |projects, cx| projects.open_project(name, cx));
                 }
             }
-            TodayEvent::Settings => view.active_tab = Tab::Settings,
+            TodayEvent::Settings => {
+                view.active_tab = Tab::Settings;
+                notify::report();
+            }
             // The drawer slides in over the page rather than becoming a tab: the bar holds five and
             // is full, and the plan's own shape for it is a panel from the right edge.
             TodayEvent::Soundscape => {
@@ -433,8 +473,11 @@ impl Capabilities {
                                     });
                                     let repo = view.repo_for(store);
                                     view.calendar.update(cx, |calendar, cx| {
-                                        calendar.set_store(Some(repo), cx)
+                                        calendar.set_store(Some(repo.clone()), cx)
                                     });
+                                    // The reminder rebuild reads the same store: an entry written on
+                                    // the phone is a reminder on the same phone, without the Mac.
+                                    view.repo = Some(repo);
                                 }
                             }
                             // The landing page draws the replica's tasks and projects from these
@@ -452,6 +495,9 @@ impl Capabilities {
                                 today.set_travel(board.pending(), view.client.is_some(), cx);
                             });
                             view.board = Some(board);
+                            // The replica moved: the lock screen follows it, whether or not the Mac
+                            // answered (`rebuild_reminders`).
+                            view.rebuild_reminders(cx);
                             // A local write landed. If this launch has reached the Mac, it goes
                             // there now instead of waiting for the next launch.
                             view.maybe_sync(cx);
@@ -596,6 +642,20 @@ impl Capabilities {
                                 }
                                 .into(),
                             );
+                            // A pull lands the ids a local entry was given, and the tasks the Mac
+                            // ticked off: both change what earns a reminder.
+                            view.rebuild_reminders(cx);
+                        }
+                        Event::Reminded(plan) => {
+                            view.notify_plan = plan;
+                        }
+                        Event::NotifyState(state) => view.notify_state = state,
+                        Event::NotifyOpen(link) => view.open_link(&link, cx),
+                        Event::Foreground => {
+                            view.rebuild_reminders(cx);
+                            // The count is the system's, so it is asked for rather than assumed:
+                            // a reminder that fired while the phone was away is gone from it.
+                            notify::report();
                         }
                     }
                     cx.notify();
@@ -636,6 +696,10 @@ impl Capabilities {
             client: None,
             syncing: false,
             audio_started,
+            notify_prefs,
+            notify_state: notify::State::default(),
+            notify_plan: reminders::Plan::default(),
+            repo: None,
             appearance: AppearanceSettings::load(),
             events,
         }
@@ -664,6 +728,77 @@ impl Capabilities {
             let _ = board.reload().await;
             let _ = events.unbounded_send(Event::Synced(outcome, board));
         });
+        cx.notify();
+    }
+
+    /// Rebuilds the lock screen from what this phone holds: the calendar's next weeks and the open
+    /// tasks, through the same store their pages read.
+    ///
+    /// Called when the replica opens, after a write, after a pull and when the app comes back into
+    /// view. A phone with reminders off takes every request away here rather than leaving stale ones
+    /// to fire at a time nobody asked about.
+    fn rebuild_reminders(&mut self, cx: &mut Context<Self>) {
+        if notify::disabled_reason().is_some() {
+            // This build may not touch the notification centre at all, so the card says why and
+            // nothing is scheduled. The preference is left as the person set it: the switch is
+            // about their intent, not this launch's build.
+            self.notify_plan = reminders::Plan::default();
+            self.notify_state = notify::State::default();
+            notify::clear();
+            cx.notify();
+            return;
+        }
+        if !self.notify_prefs.enabled {
+            notify::clear();
+            self.notify_plan = reminders::Plan::default();
+            cx.notify();
+            return;
+        }
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
+        let lead = self.notify_prefs.lead();
+        let events = self.events.clone();
+        shell::spawn(async move {
+            // A month is what a phone can be asked to remind about without reading the whole
+            // history; the plan keeps the soonest sixty of them anyway
+            // (`sjel_gpui_core::notify::MAX_PENDING`).
+            let today = chrono::Local::now().date_naive();
+            let from = format!("{today}T00:00:00");
+            let to = format!("{}T00:00:00", today + chrono::Duration::days(31));
+            let entries = repo.fetch_calendar(&from, &to).await.unwrap_or_default();
+            let tasks = repo.fetch_tasks(Some("open")).await.unwrap_or_default();
+            let plan = reminders::plan(&entries, &tasks, lead, chrono::Local::now());
+            notify::apply(&plan);
+            let _ = events.unbounded_send(Event::Reminded(plan));
+        });
+        cx.notify();
+    }
+
+    /// The switch on the Settings page. On: the permission is asked for (once in the app's life) and
+    /// the requests are laid down — iOS accepts them before they may be shown, so a person who grants
+    /// the prompt a moment later still gets the reminders already scheduled. Off: every request goes.
+    fn toggle_reminders(&mut self, cx: &mut Context<Self>) {
+        self.notify_prefs.enabled = !self.notify_prefs.enabled;
+        let _ = self.notify_prefs.save();
+        if self.notify_prefs.enabled {
+            notify::authorize();
+            self.rebuild_reminders(cx);
+        } else {
+            notify::clear();
+            self.notify_plan = reminders::Plan::default();
+        }
+        cx.notify();
+    }
+
+    /// Where a tapped reminder goes: the day it announced, on the Calendar tab.
+    fn open_link(&mut self, link: &str, cx: &mut Context<Self>) {
+        let Some(day) = reminders::link_day(link) else {
+            return;
+        };
+        self.active_tab = Tab::Calendar;
+        self.calendar
+            .update(cx, |calendar, cx| calendar.open_day(day, cx));
         cx.notify();
     }
 
@@ -926,6 +1061,181 @@ fn frozen_day() -> Option<chrono::NaiveDate> {
         .and_then(|day| sjel_gpui_core::calendar::parse_day(&day))
 }
 
+impl Capabilities {
+    /// The notification card on the Settings page: the switch, the system's own answer, the lead
+    /// time, and the way back from a refusal (`apps/gpui/PORTING_PLAN.md` Work Package 15).
+    ///
+    /// The count here is `getPendingNotificationRequests`' count and not this app's memory of what
+    /// it asked for (`ios/src/notify.rs`), so the line cannot claim more than the system holds.
+    fn reminders_card(&self, palette: Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let on = self.notify_prefs.enabled;
+        let lead = self.notify_prefs.lead();
+        let denied = self.notify_state.authorization == notify::Authorization::Denied;
+        let sentence: SharedString = match notify::disabled_reason() {
+            Some(reason) => reason.into(),
+            None if !on => "Off · nothing is announced".into(),
+            None => match self.notify_state.next {
+                Some((at, ref title)) => format!(
+                    "{} · {}",
+                    self.notify_state.authorization.phrase(),
+                    reminders::when(at, title, chrono::Local::now())
+                )
+                .into(),
+                None if self.notify_state.scheduled > 0 => format!(
+                    "{} · {} held",
+                    self.notify_state.authorization.phrase(),
+                    self.notify_state.scheduled
+                )
+                .into(),
+                None => format!(
+                    "{} · nothing scheduled",
+                    self.notify_state.authorization.phrase()
+                )
+                .into(),
+            },
+        };
+        let dropped = self.notify_plan.dropped;
+        div()
+            .rounded(px(12.))
+            .bg(rgb(0xffffff))
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w_0()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.text))
+                                    .child("Reminders"),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(sentence),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("reminders-toggle")
+                            .flex_none()
+                            .w(px(48.))
+                            .h(px(28.))
+                            .p(px(3.))
+                            .rounded_full()
+                            .flex()
+                            .items_center()
+                            .when(on, |el| el.justify_end().bg(rgb(palette.accent)))
+                            .when(!on, |el| el.bg(rgb(0xe5e7eb)))
+                            .child(
+                                div()
+                                    .size(px(22.))
+                                    .rounded_full()
+                                    .bg(rgb(0xffffff))
+                                    .shadow_sm(),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|view, _, _, cx| view.toggle_reminders(cx)),
+                            ),
+                    ),
+            )
+            // A refusal is not this app's to undo: iOS allows the prompt once, so the way back is
+            // the system's own page for this app.
+            .when(denied, |card| {
+                card.child(
+                    div()
+                        .id("reminders-open-settings")
+                        .self_end()
+                        .px_3()
+                        .py(px(6.))
+                        .rounded(px(8.))
+                        .bg(rgb(0xe5e7eb))
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(rgb(0x1c1c1e))
+                        .child("Open iOS Settings")
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|_, _, _, _| notify::open_settings()),
+                        ),
+                )
+            })
+            .when(on, |card| {
+                card.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child("HOW EARLY"),
+                        )
+                        .child({
+                            let mut row = div().flex().items_center().gap_1();
+                            for option in reminders::Lead::ALL {
+                                let is_active = lead == option;
+                                row = row.child(
+                                    div()
+                                        .flex_1()
+                                        .py(px(6.))
+                                        .rounded(px(6.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_xs()
+                                        .when(is_active, |el| {
+                                            el.bg(rgb(palette.accent))
+                                                .text_color(rgb(0xffffff))
+                                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        })
+                                        .when(!is_active, |el| {
+                                            el.bg(rgb(0xf3f5f9)).text_color(rgb(palette.muted))
+                                        })
+                                        .child(option.label())
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |view, _, _, cx| {
+                                                view.notify_prefs.set_lead(option);
+                                                let _ = view.notify_prefs.save();
+                                                view.rebuild_reminders(cx);
+                                            }),
+                                        ),
+                                );
+                            }
+                            row
+                        })
+                        // The cap is admitted rather than hidden: a shortened list that says nothing
+                        // reads as though it were the whole of it.
+                        .when(dropped > 0, |column| {
+                            column.child(div().text_xs().text_color(rgb(0x8e8e93)).child(format!(
+                                "{} further date{} past the {} iOS holds",
+                                dropped,
+                                if dropped == 1 { "" } else { "s" },
+                                reminders::MAX_PENDING
+                            )))
+                        }),
+                )
+            })
+    }
+}
+
 impl Render for Capabilities {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_dark = self.appearance.theme_mode.is_dark(false);
@@ -1164,6 +1474,9 @@ impl Render for Capabilities {
                                     })),
                             )
                         })
+                        // The reminder card comes before the appearance one: it asks for a
+                        // decision, where the rest of this page records a taste.
+                        .child(self.reminders_card(palette, cx))
                         .child(
                             div()
                                 .rounded(px(12.))
@@ -1560,6 +1873,12 @@ impl Render for Capabilities {
                             if view.active_tab == Tab::Inbox {
                                 view.inbox.update(cx, |inbox, cx| inbox.load(cx));
                             }
+                            // Settings is where the reminder card lives, so the system's own count
+                            // is asked for again as it comes into view rather than drawn from a
+                            // number that was true an hour ago.
+                            if view.active_tab == Tab::Settings {
+                                notify::report();
+                            }
                             if (view.active_tab == Tab::Today
                                 || view.active_tab == Tab::Calendar
                                 || view.active_tab == Tab::People)
@@ -1668,6 +1987,15 @@ pub unsafe extern "C" fn sjel_ios_scan_failed(text: *const std::ffi::c_char) {
         return;
     };
     announce(Event::ScanFailed(reason.to_string()));
+}
+
+/// Called by `host/App.swift` when the scene becomes active: the phone may have been in a pocket
+/// through several days, so the reminders are rebuilt from the replica the moment it is looked at.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_became_active() {
+    announce(Event::Foreground);
 }
 
 /// Called by `host/App.swift` before `gpui_ios_run_demo`: registers what the GPUI window shows.

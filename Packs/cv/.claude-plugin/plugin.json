@@ -1,9 +1,0 @@
-{
-  "name": "cv",
-  "description": "Build tailored CV PDFs from one master file, track applications, and compare the master with LinkedIn.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

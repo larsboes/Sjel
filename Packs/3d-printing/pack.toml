@@ -1,8 +1,0 @@
-# See schemas/pack.toml.example for the field reference.
-name         = "3d-printing"
-description  = "Slice + drive a home Klipper/Moonraker 3D printer safely from the terminal."
-skills       = ["home-3d-printing"]
-license      = "MIT"
-capabilities = ["printing"]
-personal     = ["config/printing.json"]
-links        = ["moonraker", "orcaslicer", "fluidd"]

@@ -1,9 +1,0 @@
-{
-  "name": "home-automation",
-  "description": "Home Assistant capability tooling — materialize templated automations from an instance var map, fetch pinned custom components, query the Fritz!Box, network/DNS ops.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

@@ -20,6 +20,8 @@
 //!   the pages the phone reads but does not write.
 //! - [`people`] and [`places`]: the contact registry and the places register, and the name the two
 //!   are joined by ([`places::name_key`], the same one `capabilities/places` keys its decisions by).
+//! - [`notify`]: what the phone puts on its lock screen, and when — the lead a person sets, the
+//!   entries and tasks that earn a reminder, and what a rebuild cancels.
 //! - [`today`]: the phone's landing page — the day the Mac's copy answered, the tasks the replica
 //!   holds, and the projects those tasks belong to.
 
@@ -39,6 +41,7 @@ pub mod inventory;
 pub mod mail;
 pub mod media;
 pub mod mirror;
+pub mod notify;
 pub mod packs;
 pub mod people;
 pub mod places;

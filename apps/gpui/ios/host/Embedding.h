@@ -18,3 +18,9 @@ void sjel_ios_scan_failed(const char *text);
 // host/Audio.swift: the phone's output device, asked for the next block of frames. Rust renders
 // exactly `frames` samples into each channel (ios/src/audio.rs).
 void sjel_ios_soundscape_render(double sample_rate, float *left, float *right, unsigned int frames);
+// ios/src/notify.rs: what the notification centre holds, `{"authorization":"allowed","scheduled":3}`
+// after any ask; a tapped reminder's link; and the app coming back to the foreground, which is when
+// the phone re-reads its replica and re-schedules. All NUL-terminated UTF-8, valid only for the call.
+void sjel_ios_notifications_state(const char *json);
+void sjel_ios_notification_opened(const char *json);
+void sjel_ios_became_active(void);

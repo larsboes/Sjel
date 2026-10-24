@@ -515,6 +515,79 @@ impl SoundscapePrefs {
     }
 }
 
+/// What the phone remembers about its lock screen.
+///
+/// Two things only: whether reminders were turned on, and the lead time they use. What is
+/// *scheduled* is never read from here — the requests themselves live in
+/// `UNUserNotificationCenter`, and the phone asks the system what it holds rather than trusting a
+/// file to describe it. `enabled` therefore means "this person turned it on", which is not the
+/// same as "the system allowed it": a person who chose reminders and then denied the permission
+/// in iOS Settings keeps the choice here and is told on screen where to change it.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct NotifyPrefs {
+    pub enabled: bool,
+    /// A [`sjel_gpui_core::notify::Lead`] key: `at_start`, `ten` or `hour`.
+    pub lead: String,
+}
+
+impl Default for NotifyPrefs {
+    fn default() -> Self {
+        Self {
+            // Off until somebody says otherwise: a phone that asks for the permission at launch
+            // has spent its only prompt before the person knew what it was for.
+            enabled: false,
+            lead: sjel_gpui_core::notify::Lead::default().key().to_owned(),
+        }
+    }
+}
+
+impl NotifyPrefs {
+    /// Beside `appearance.json` and `soundscape.json`: what this person likes, kept on this device.
+    pub fn config_path() -> Option<std::path::PathBuf> {
+        let dir = std::env::var("SJEL_CONFIG_DIR")
+            .ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|home| std::path::PathBuf::from(home).join(".config/sjel"))
+            })?;
+        Some(dir.join("notifications.json"))
+    }
+
+    /// The lead the file names, or the default for a key this build does not know: an edited or
+    /// older file must not turn every reminder on at the same minute as the entry.
+    pub fn lead(&self) -> sjel_gpui_core::notify::Lead {
+        sjel_gpui_core::notify::Lead::from_key(&self.lead)
+            .unwrap_or_else(sjel_gpui_core::notify::Lead::default)
+    }
+
+    pub fn set_lead(&mut self, lead: sjel_gpui_core::notify::Lead) {
+        self.lead = lead.key().to_owned();
+    }
+
+    pub fn load() -> Self {
+        let Some(path) = Self::config_path() else {
+            return Self::default();
+        };
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let Some(path) = Self::config_path() else {
+            return Err("this platform names no place for it".to_owned());
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| format!("Write error to {:?}: {e}", path))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// The drawer's settings keep their shape through JSON, and a damaged file is not a half-applied
@@ -538,6 +611,39 @@ mod tests {
         assert!(!default.open, "a phone does not open sound by itself");
         assert_eq!(default.preset, "focus");
         assert!(default.volume > 0. && default.volume <= 1.);
+    }
+
+    /// The reminder settings keep their shape, and a lead this build does not know falls back to
+    /// the default instead of turning every reminder on at the entry's own minute.
+    #[test]
+    fn reminder_settings_keep_their_shape_and_an_unknown_lead_falls_back() {
+        let prefs = NotifyPrefs {
+            enabled: true,
+            lead: "hour".to_owned(),
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<NotifyPrefs>(&json).expect("read"),
+            prefs
+        );
+        assert!(serde_json::from_str::<NotifyPrefs>("{").is_err());
+        assert!(
+            !NotifyPrefs::default().enabled,
+            "a phone asks nothing of you by itself"
+        );
+        assert_eq!(
+            NotifyPrefs::default().lead(),
+            sjel_gpui_core::notify::Lead::Ten
+        );
+        let stale = NotifyPrefs {
+            enabled: true,
+            lead: "fifteen".to_owned(),
+        };
+        assert_eq!(
+            stale.lead(),
+            sjel_gpui_core::notify::Lead::default(),
+            "an old file is not a wrong number of minutes"
+        );
     }
 
     use super::*;

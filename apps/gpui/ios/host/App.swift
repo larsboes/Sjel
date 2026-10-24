@@ -28,7 +28,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         self.window = window
     }
 
-    func sceneDidBecomeActive(_ scene: UIScene) { gpui_ios_did_become_active(nil) }
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        gpui_ios_did_become_active(nil)
+        // The phone was in a pocket and the day moved on: the reminders it holds are the ones it
+        // scheduled last time it was awake (`ios/src/notify.rs` rebuilds them).
+        sjel_ios_became_active()
+    }
     func sceneWillResignActive(_ scene: UIScene) { gpui_ios_will_resign_active(nil) }
 }
 
@@ -46,6 +51,9 @@ final class SjelController: UIViewController {
         gpui_ios_set_embedded()
         gpui_ios_register_app()
         gpui_ios_run_demo()
+        // The notification centre's delegate, so a reminder is shown while the app is open and a tap
+        // on one reaches Rust (`Notifications.swift`). Local only: no push registration here.
+        Reminders.shared.configure()
         // Browses for the Mac while the app is open; every answer goes to Rust (Discovery.swift).
         let discovery = Discovery()
         discovery.start()

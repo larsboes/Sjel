@@ -312,6 +312,21 @@ its open state, its mixer disclosure, its preset and its volume in `soundscape.j
 a row of ten cells rather than a track to drag: a thumb wants an exact tap, and a measured rectangle is
 one more thing to get wrong.
 
+**Reminders** are the phone's own lock screen, local only: no push registration, no device token and no
+server that would need one (`core/src/notify.rs`, `ios/src/notify.rs`, `ios/host/Notifications.swift`).
+The card at the top of Settings carries one switch, the lead time (`At start`, `10 min`, `1 hour`) and
+the notification centre's own answer — the count and the next moment come from
+`getPendingNotificationRequests` and `nextTriggerDate()`, so the line cannot claim more than iOS holds.
+What earns a reminder: a timed entry at its lead, an all-day entry at 08:00 on the day it covers, an
+open task at 09:00 on its due date; an entry whose commitment is `possible` blocks nothing and earns
+nothing. The permission is asked when the switch is turned on and never at launch, because iOS offers
+that prompt once; a refusal says where to change it and offers the way there. The rule is rebuilt when
+the replica opens, after a write, after a pull, and when the scene becomes active — a phone in a pocket
+crosses days without the app running. The switch and the lead live in `notifications.json`; what is
+scheduled is never read from a file. A tap opens the day it announced on the Calendar tab.
+`SJEL_GPUI_NO_NOTIFICATIONS=1` keeps the app away from the notification centre entirely, for a run that
+has no business asking for a permission.
+
 **Inbox** is the next tab: one field for whatever is in hand, four chips for the tags the comms
 capability knows, a line saying where the capture will land, and `Keep`. It writes the phone's own
 replica first and queues the capture for `POST /comms/captures`, so it works on a train; the list
@@ -356,12 +371,13 @@ and `phones` as arrays, so no contact card on either client had ever shown an em
 number; the parser accepts both spellings now, which is a Mac fix as much as a phone one.
 
 The tabs ship on TestFlight (People arrived in build 1363, internal group `Team`), the only
-distribution today. The touch checks are `host/UITests/JoinTap.swift`, `ScanTap.swift`, and
-`TodaySwipe.swift`, which drags the landing page up and proves both that a finger reaches GPUI's
-scroll and that the projects below the fold are really drawn. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
-`SJEL_REGISTER=places`, `SJEL_PERSON=Ada` and `SJEL_DAY=2026-10-21` open a given tab, register, card
-and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not the first one
-without a hand on the screen.
+distribution today. The touch checks are `host/UITests/`: `JoinTap.swift`, `ScanTap.swift`,
+`TodaySwipe.swift` (which drags the landing page up and proves both that a finger reaches GPUI's
+scroll and that the projects below the fold are really drawn), `InboxCapture.swift`,
+`SoundscapeTap.swift` and `NotificationsTap.swift`. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
+`SJEL_REGISTER=places`, `SJEL_PERSON=Ada`, `SJEL_DAY=2026-10-21` and `SJEL_NOTIFY=1` open a given tab,
+register, card, day, or the reminder card with its switch on, at launch — which is how `ios/run-sim`
+and a screenshot reach a page that is not the first one without a hand on the screen.
 
 A write the Mac will not take is named rather than counted. `sync` used to stop at the first refusal,
 so one duplicate note title held every later write in the queue and nothing said which record it was

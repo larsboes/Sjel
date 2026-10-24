@@ -25,6 +25,6 @@ pub use primitives::{
     priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, DueStatus,
 };
 pub use theme::{
-    AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, Palette, SoundscapePrefs,
-    ThemeMode, WindowOpacity,
+    AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs, Palette,
+    SoundscapePrefs, ThemeMode, WindowOpacity,
 };

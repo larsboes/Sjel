@@ -1,9 +1,0 @@
-{
-  "name": "3d-printing",
-  "description": "Slice + drive a home Klipper/Moonraker 3D printer safely from the terminal.",
-  "author": {
-    "name": "Lars Boes",
-    "url": "https://github.com/larsboes/Sjel"
-  },
-  "license": "MIT"
-}

@@ -7,6 +7,7 @@ pub mod calendar;
 pub mod data;
 pub mod doc_view;
 pub mod editor;
+pub mod finance;
 pub mod inbox;
 pub mod nav;
 pub mod people;

@@ -20,6 +20,8 @@
 //!   the pages the phone reads but does not write.
 //! - [`people`] and [`places`]: the contact registry and the places register, and the name the two
 //!   are joined by ([`places::name_key`], the same one `capabilities/places` keys its decisions by).
+//! - [`today`]: the phone's landing page — the day the Mac's copy answered, the tasks the replica
+//!   holds, and the projects those tasks belong to.
 
 pub mod accounts;
 pub mod area;
@@ -50,4 +52,5 @@ pub mod soundscape;
 pub mod store;
 pub mod sync;
 pub mod systems;
+pub mod today;
 pub mod travel;

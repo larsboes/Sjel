@@ -13,6 +13,7 @@ pub mod primitives;
 pub mod projects;
 pub mod tasks;
 pub mod theme;
+pub mod today;
 pub mod travel;
 
 pub use doc_view::{render_block, render_doc};

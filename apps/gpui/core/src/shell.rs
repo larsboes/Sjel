@@ -409,6 +409,11 @@ pub struct ProjectSummary {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProjectRecord {
     pub path: String,
+    /// The project the record is filed under, which is not the path's first segment: the vault
+    /// files `Archive/Soma/Tasks/Reopen.md` under `Soma` (`capabilities/projects`). Absent from a
+    /// read that did not carry it, in which case the path prefix is the best answer there is.
+    #[serde(default)]
+    pub project: String,
     /// `project`, `task` or `note`.
     pub kind: String,
     pub title: String,

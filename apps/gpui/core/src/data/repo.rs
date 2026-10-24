@@ -539,6 +539,7 @@ impl Repo {
                     let due: Option<String> = row.get(4).ok();
                     let priority_int: i64 = row.get(5).unwrap_or(2);
                     list.push(ProjectRecord {
+                        project: String::new(),
                         path,
                         kind,
                         title,
@@ -586,6 +587,7 @@ impl Repo {
                     let due: Option<String> = row.get(5).ok();
                     let priority_int: i64 = row.get(6).unwrap_or(2);
                     return Ok(ProjectRecord {
+                        project: String::new(),
                         path,
                         kind,
                         title,
@@ -888,6 +890,7 @@ mod tests {
 
     fn note(path: &str) -> ProjectRecord {
         ProjectRecord {
+            project: String::new(),
             path: path.into(),
             kind: "note".into(),
             title: "Plan".into(),

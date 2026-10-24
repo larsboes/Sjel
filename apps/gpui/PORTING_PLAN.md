@@ -9,8 +9,8 @@
 
 | # | Route | Page / Destination | Status | Desktop Client | iOS Mobile Client | Capability / Source |
 |---|---|---|---|---|---|---|
-| 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home` + `ContextPage`) | In progress | Sjel Shell / Core |
-| 2 | `/context` | Today (Timeline & Focus) | **Ported** (`/` and `/context` are one page) | Native GPUI (`Home` + `ContextPage`) | Planned Tab | `capabilities/context` |
+| 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home` + `ContextPage`) | Native GPUI Tab (`Today`, below) | Sjel Shell / Core |
+| 2 | `/context` | Today (Timeline & Focus) | **Ported** (`/` and `/context` are one page) | Native GPUI (`Home` + `ContextPage`) | Native GPUI Tab (`Today`: the day off the copy, the tasks and projects off the replica) | `capabilities/context`, `capabilities/projects` |
 | 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (the replica, writes included; the Mac's copy until the first pull) | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
@@ -196,6 +196,52 @@
   writes (a note ref, a value, a link decision) are the replica's third domain when the tab stops
   being read-only.
 
+### ✅ Work Package 10: Today lands, and the bar changes shape
+- **Status**: Shipped (2026-10-24). `Today` is the page the phone opens on.
+- **Why now**: `mobile_tab_bar` (`ui/src/nav.rs`) draws one row with `justify_around` and a 64 px
+  floor per item, so five items need 320 px of the 375 pt of the narrowest current iPhone and a
+  sixth needs 384. The bar was full, and `Today` plus `Inbox` could not both be added to it.
+- **Decided 2026-10-24**: `Today` becomes the landing tab and `Projects` folds into it; the bar is
+  `Today | Calendar | People | Travel`, `Settings` sits behind Today's gear with a `← Today` row of
+  its own, and `Inbox` takes the fifth slot when it ships. `Travel` kept its slot because it is the
+  one page with a full map and a phone is the device carried on the trip.
+- **Shipped**:
+  - `core/src/today.rs` (new) — the reduction, with no GPUI in it: the day's entries with the clock's
+    marks (`Now`, and one `Next`; an all-day entry is never next because it is already under way), the
+    open tasks ordered by the operator's priority then due date and capped at five with a count for
+    the rest, and the projects those tasks are filed under with their progress. 12 tests.
+  - `ui/src/today.rs` (new) — the page: the headline and one summary line, one line naming the source
+    and its age, one line for what is queued and whether this launch is connected, then THE DAY, UP
+    NEXT (a 44 pt checkbox per task, `Overdue` as a word rather than a colour) and PROJECTS with a
+    progress bar and a row that opens the project. Ticking a task writes the replica optimistically
+    and puts the row back if the write fails.
+  - `apps/gpui/ios/src/lib.rs` — `Tab::Today` as the default, the four-item bar, `Tab::Projects` and
+    `Tab::Settings` reached from Today, `SJEL_TAB=projects` kept, and `SJEL_DAY` freezing the landing
+    page's day the way it freezes the calendar's.
+  - `apps/gpui/ios/host/UITests/TodaySwipe.swift` (new) — drags the page up and attaches the frames:
+    a screenshot cannot show that a finger scrolls a GPUI surface, and PROJECTS is below the fold.
+- **A bug in shared core, found by the page**: `ProjectRecord` (`core/src/shell.rs`) dropped the
+  capability's own `project` field, so `Board` could not tell which project a record was filed under
+  and the first folder of the path is not the answer — the vault files `Archive/Soma/Tasks/Reopen.md`
+  under `Soma`. 22 of the copy's 62 task rows would have been filed wrong, on the phone and in the
+  sync's pull. The field travels now, the replica queries read the column, and `filed_under`
+  (`core/src/sync.rs`) prefers it over the path.
+- **Verified on a simulator** (`ios/run-sim`, replica seeded from the copy): the landing page on
+  2026-10-24, one day earlier with `SJEL_DAY=2026-10-20` (one entry, `all day`), and after a drag the
+  PROJECTS list, whose numbers were checked against the replica row by row — Soma 10 of 21,
+  Washing Machine 1 of 8, Credential Stack 2 of 7, Hearth 4 of 8, Home-Lab 0 of 4, Life-Plan 4 of 8,
+  in open-task order. Settings and Projects were screenshotted on their own tabs, and the Calendar
+  tab still draws the copy it drew before.
+- **Tests**: 12 new in core `today`, 1 in `sync`; 3 in `ui/src/today.rs`. core 268, ui 37, app 81.
+- **Target Files**:
+  - `apps/gpui/core/src/{today,shell,store,sync}.rs`
+  - `apps/gpui/ui/src/today.rs`
+  - `apps/gpui/ios/src/lib.rs`
+  - `apps/gpui/ios/host/UITests/TodaySwipe.swift`
+- **Next**: `Inbox` — the fifth slot, and the second write path — which cannot queue offline before
+  #244's blocked-write recovery: a capture that cannot reach the Mac must keep its text, say why, and
+  retry when discovery finds the host again.
+
 ---
 
 ## 3. Next, before everything below (operator, 2026-10-23)
@@ -238,6 +284,7 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
    opens on tasks more often than on the project list. Then `Inbox` — capture, writing to the
    replica through the outbox — because the calendar is the only write path today and a phone is a
    capture device first.
+   - Done 2026-10-24: `Today` landed (Work Package 10), with `Projects` and `Settings` behind it.
    - Decided 2026-10-24: the bar becomes `Today | Inbox | Calendar | People | Travel`, and
      `Settings` moves behind Today's header, with a banner on Today while the phone holds no copy
      or no pairing. Travel keeps a slot because it is the one page with a full map and a phone is
@@ -345,19 +392,22 @@ flowchart TD
 ```
 
 1. **Expanding iOS Tab Navigation**:
-   - Current tabs: `Projects` (replica, read and write), `Calendar` (replica, read and write; the
-     Mac's copy until the first pull), `People` (contacts and places, read-only over the copy),
-     `Travel`, `Settings`.
+   - Current tabs: `Today` (the day off the copy, the tasks and projects off the replica),
+     `Calendar` (replica, read and write; the Mac's copy until the first pull), `People` (contacts
+     and places, read-only over the copy), `Travel`. `Projects` is the list a project row on Today
+     opens, and `Settings` — the pairing — is behind Today's gear.
    - Add tabs:
-     - `Today`: Daily context timeline, focus tasks with large tap target checkboxes.
+     - ~~`Today`: Daily context timeline, focus tasks with large tap target checkboxes.~~ shipped in
+       Work Package 10, which is also where the bar lost `Projects` and `Settings`.
      - `Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).
      - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7; a writing tab since Work
        Package 8, when the calendar joined the replica.
      - ~~`People` / `Places`: two registers, one tab.~~ shipped in Work Package 9.
    - **The bar is full at five.** `mobile_tab_bar` (`ui/src/nav.rs`) draws one row with
      `justify_around` and a 64 px floor per item: five items need 320 px, a sixth needs 384 px,
-     which is wider than the 375 pt of the narrowest current iPhone. `Today` and `Inbox` cannot
-     both be added as tabs, so one replaces a tab or the bar changes shape before either ships.
+     which is wider than the 375 pt of the narrowest current iPhone. `Today` took the slot `Projects`
+     gave up (Work Package 10) and `Inbox` takes the fifth, so a seventh page needs a different bar
+     rather than a seventh item.
 
 2. **Autonomous Offline Store**:
    - Bundle `rusqlite` / `libsql` directly inside the iOS app sandbox.

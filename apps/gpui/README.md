@@ -287,15 +287,22 @@ answers at launch, after every local write, and on the Sync button; a phone that
 the Mac this launch never starts one, because its queue is the only copy of those edits.
 
 The iOS app works with no Mac at all (`research/offline-on-the-phone.md`, "Decided 2026-10-22: the
-phone stands on its own"). It opens on **Projects**, the Mac's Projects page over the phone's own
-records, under the queued/synced badge and the report of the last sync. Tables drop the project and
+phone stands on its own"). It opens on **Today** (`core/src/today.rs`, `ui/src/today.rs`): the day
+the Mac's copy answered, then the tasks the phone's own replica holds with a checkbox the thumb can
+hit, then the projects those tasks are filed under, each with its progress and a row that opens it in
+the Mac's Projects page. A page that reads two sources says so: one line names the copy and its age,
+one says what is queued and whether this launch is connected. Nothing on it is a chart or a greeting.
+The bar holds four items at its 64 px floor, so Projects is not one of them — it is the list a
+project on Today opens — and **Settings**, which holds the pairing: the found Mac, the Join tap, and
+the capability health list it answers with once the owner allows the device, sits behind Today's
+gear, one row from it. **Projects** is where a person writes: the Mac's Projects page over the
+phone's own records, under the queued/synced badge and the report of the last sync. Tables drop the project and
 type columns at phone width. The software keyboard opens with a note and after a tap into a text
 field, because gpui-mobile raises none on focus. A fresh install starts empty and queues
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
-so on that page instead of falling back to memory. **Settings** holds the pairing: the found Mac,
-the Join tap, and the capability health list it answers with once the owner allows the device.
+so on that page instead of falling back to memory.
 
-**Calendar** is the second tab, and it reads the same replica as Projects once the Mac's change feed
+**Calendar** is the next tab, and it reads the same replica as Projects once the Mac's change feed
 has been read: `GET /calendar/api/entries/changes?since=` answers what moved, and only the cursor
 keeps the pull cheap. Until that first pull lands — a fresh install, or a phone that has not reached
 the Mac yet — the tab draws the Mac's read-only mirror instead (`core/src/mirror.rs`,
@@ -312,7 +319,7 @@ asks the Mac to rebuild and refetches the copy. `places_*` and `entities_*` are 
 copy, so People and Places are a page away; the pages that write need a domain of their own, which is
 the shape the calendar just took.
 
-**People** is the third tab: the contact registry and the places register, one behind the other under
+**People** is the last tab but one: the contact registry and the places register, one behind the other under
 a `People` | `Places` switch with one search field for both, read from the same copy the calendar
 reads — one fetch feeds both tabs. A person's row carries their initials and what they do; the card
 holds the email, the phone, whatever else the registry has on them, and the places the register links
@@ -329,11 +336,20 @@ are in `PHONE_SET` now, and the copy is 2,493 rows in 11.3 MB instead of 1,878 i
 and `phones` as arrays, so no contact card on either client had ever shown an email or a phone
 number; the parser accepts both spellings now, which is a Mac fix as much as a phone one.
 
-All three tabs ship on TestFlight (build 1363, internal group `Team`), the only distribution today.
-The touch check is `host/UITests/JoinTap.swift`. `SJEL_TAB=calendar`, `SJEL_TAB=people`,
+The tabs ship on TestFlight (People arrived in build 1363, internal group `Team`), the only
+distribution today. The touch checks are `host/UITests/JoinTap.swift`, `ScanTap.swift`, and
+`TodaySwipe.swift`, which drags the landing page up and proves both that a finger reaches GPUI's
+scroll and that the projects below the fold are really drawn. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
 `SJEL_REGISTER=places`, `SJEL_PERSON=Ada` and `SJEL_DAY=2026-10-21` open a given tab, register, card
 and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not the first one
 without a hand on the screen.
+
+The project a task is filed under came back to the phone in this pass, and it is not the path's first
+folder: the vault files `Archive/Soma/Tasks/Reopen.md` under `Soma`. `ProjectRecord` had dropped the
+capability's own `project` field, so `Board`, the sync's pull, and the landing page's grouping would
+all have said `Archive` — 22 of the copy's 62 task rows, measured 2026-10-24. The field
+travels now (`core/src/shell.rs`), the replica queries read the column, and `filed_under` in
+`core/src/sync.rs` prefers it.
 
 ### Shipping it to TestFlight
 

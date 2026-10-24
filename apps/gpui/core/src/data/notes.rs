@@ -100,6 +100,7 @@ mod tests {
 
     fn note(path: &str) -> ProjectRecord {
         ProjectRecord {
+            project: String::new(),
             path: path.into(),
             kind: "note".into(),
             title: path.trim_end_matches(".md").into(),

@@ -268,7 +268,9 @@ impl TursoStore {
             let done_int: i64 = row.get(3).unwrap_or(0);
             let due: Option<String> = row.get(4).ok();
             let priority_int: i64 = row.get(5).unwrap_or(2);
+            let project: String = row.get(6).unwrap_or_default();
             list.push(ProjectRecord {
+                project,
                 path,
                 kind,
                 title,
@@ -284,7 +286,7 @@ impl TursoStore {
     /// Reads all records across projects ordered by done, priority, updated_at.
     pub async fn fetch_all_records(&self) -> StoreResult<Vec<ProjectRecord>> {
         let conn = self.connection().await?;
-        let query = "SELECT path, kind, title, done, due, priority \
+        let query = "SELECT path, kind, title, done, due, priority, project \
                      FROM projects_records \
                      ORDER BY done ASC, priority DESC, updated_at DESC";
         let mut rows = conn
@@ -300,7 +302,9 @@ impl TursoStore {
             let done_int: i64 = row.get(3).unwrap_or(0);
             let due: Option<String> = row.get(4).ok();
             let priority_int: i64 = row.get(5).unwrap_or(2);
+            let project: String = row.get(6).unwrap_or_default();
             list.push(ProjectRecord {
+                project,
                 path,
                 kind,
                 title,
@@ -316,7 +320,7 @@ impl TursoStore {
     /// Reads a single note or task record including markdown content.
     pub async fn fetch_record(&self, path: &str) -> StoreResult<Option<ProjectRecord>> {
         let conn = self.connection().await?;
-        let query = "SELECT path, kind, title, content, done, due, priority \
+        let query = "SELECT path, kind, title, content, done, due, priority, project \
                      FROM projects_records \
                      WHERE path = ?1 LIMIT 1";
         let mut rows = conn
@@ -332,7 +336,9 @@ impl TursoStore {
             let done_int: i64 = row.get(4).unwrap_or(0);
             let due: Option<String> = row.get(5).ok();
             let priority_int: i64 = row.get(6).unwrap_or(2);
+            let project: String = row.get(7).unwrap_or_default();
             Ok(Some(ProjectRecord {
+                project,
                 path,
                 kind,
                 title,

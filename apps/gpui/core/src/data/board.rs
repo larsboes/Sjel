@@ -186,6 +186,7 @@ impl Board {
             self.reload().await?;
         } else {
             self.records.push(ProjectRecord {
+                project: String::new(),
                 path: path.clone(),
                 title: title.to_string(),
                 kind: "task".to_string(),
@@ -217,6 +218,7 @@ impl Board {
                 record.content = content.to_string();
             } else {
                 self.records.push(ProjectRecord {
+                    project: String::new(),
                     path: path.to_string(),
                     title: title.to_string(),
                     kind: "note".to_string(),
@@ -392,6 +394,7 @@ mod tests {
     fn board_from_records_queries_and_mutates_in_memory() {
         let records = vec![
             ProjectRecord {
+                project: String::new(),
                 path: "Project/Task-1.md".to_string(),
                 title: "Task 1".to_string(),
                 kind: "task".to_string(),
@@ -401,6 +404,7 @@ mod tests {
                 priority: 1,
             },
             ProjectRecord {
+                project: String::new(),
                 path: "Project/Note-1.md".to_string(),
                 title: "Note 1".to_string(),
                 kind: "note".to_string(),

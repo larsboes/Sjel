@@ -1200,6 +1200,7 @@ mod tests {
 
     fn record() -> ProjectRecord {
         ProjectRecord {
+            project: String::new(),
             path: "P/Plan.md".into(),
             kind: "note".into(),
             title: "Plan".into(),

@@ -32,6 +32,7 @@ use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
+use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
     ThemeMode,
@@ -49,6 +50,9 @@ const LOCAL_NETWORK_DENIED: &str =
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
+    /// The landing page: today's entries off the copy, the tasks and projects off the replica.
+    Today,
+    /// Every record the phone holds, reached from a project on Today rather than from the bar.
     Projects,
     /// The day's entries, read from the Mac's read-only copy of its data.
     Calendar,
@@ -167,6 +171,9 @@ pub struct Capabilities {
     board: Option<Board>,
     /// The Mac's Projects page over the replica (`sjel_gpui_ui::projects`), once the store opens.
     projects: Option<gpui::Entity<Projects>>,
+    /// The landing page: the day the copy answered and the tasks the replica holds
+    /// (`sjel_gpui_ui::today`). It reads both, so it exists before either has answered.
+    today: gpui::Entity<Today>,
     /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
     calendar: gpui::Entity<Calendar>,
     /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
@@ -242,6 +249,40 @@ impl Capabilities {
         // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
         // newer copy: there is nothing to sync, because nothing here writes.
         let people = cx.new(|_| People::new(Density::Mobile));
+        // The landing page reads the copy for the day and the replica for the tasks, so it is built
+        // before either answers and says what it is missing until one does. A launch with
+        // `SJEL_DAY` freezes the day, the way the calendar's does: a screenshot cannot be allowed to
+        // disagree with itself a minute later.
+        let today = cx.new(|_| match frozen_day() {
+            Some(day) => Today::at(day, Density::Mobile),
+            None => Today::new(Density::Mobile),
+        });
+        cx.subscribe(&today, |view, _, event, cx| match event {
+            // A day or a project is a place in another tab: the page names it and the app goes
+            // there, so a thumb never has to work out which tab holds what it just tapped.
+            TodayEvent::OpenDay(day) => {
+                view.active_tab = Tab::Calendar;
+                view.calendar
+                    .update(cx, |calendar, cx| calendar.open_day(*day, cx));
+            }
+            TodayEvent::OpenProject(name) => {
+                view.active_tab = Tab::Projects;
+                if let Some(projects) = &view.projects {
+                    let name = name.clone();
+                    projects.update(cx, |projects, cx| projects.open_project(name, cx));
+                }
+            }
+            TodayEvent::Settings => view.active_tab = Tab::Settings,
+            TodayEvent::Refresh => {
+                if view.board.is_some() {
+                    view.maybe_sync(cx);
+                } else {
+                    view.refresh_copy(cx);
+                }
+            }
+            TodayEvent::Wrote => view.maybe_sync(cx),
+        })
+        .detach();
         // The register and the card a screenshot needs, for the same reason `SJEL_DAY` exists: a
         // page a hand did not navigate to still has to be photographable (`launch_register`,
         // `launch_person`).
@@ -276,7 +317,10 @@ impl Capabilities {
                                         calendar.set_copy(Some(copy.clone()), None, cx)
                                     });
                                     view.people.update(cx, |people, cx| {
-                                        people.set_copy(Some(copy), None, cx)
+                                        people.set_copy(Some(copy.clone()), None, cx)
+                                    });
+                                    view.today.update(cx, |today, cx| {
+                                        today.set_copy(Some(copy), None, cx)
                                     });
                                 }
                                 // A refresh that fails leaves the copy already on screen alone:
@@ -287,7 +331,10 @@ impl Capabilities {
                                             calendar.set_copy(None, Some(error.clone()), cx)
                                         });
                                         view.people.update(cx, |people, cx| {
-                                            people.set_copy(None, Some(error), cx)
+                                            people.set_copy(None, Some(error.clone()), cx)
+                                        });
+                                        view.today.update(cx, |today, cx| {
+                                            today.set_copy(None, Some(error), cx)
                                         });
                                     } else {
                                         let note = format!("Could not fetch a newer copy: {error}");
@@ -295,8 +342,10 @@ impl Capabilities {
                                             calendar.set_note(Some(note.clone()), cx)
                                         });
                                         view.people.update(cx, |people, cx| {
-                                            people.set_note(Some(note), cx)
+                                            people.set_note(Some(note.clone()), cx)
                                         });
+                                        view.today
+                                            .update(cx, |today, cx| today.set_note(Some(note), cx));
                                     }
                                 }
                             }
@@ -315,6 +364,14 @@ impl Capabilities {
                                     });
                                 }
                             }
+                            // The landing page draws the replica's tasks and projects from these
+                            // rows: `Board` already read them, and a second read here could only
+                            // disagree with the queue count beside them.
+                            let records = board.records().to_vec();
+                            view.today.update(cx, |today, cx| {
+                                today.set_records(records, cx);
+                                today.set_travel(board.pending(), view.client.is_some(), cx);
+                            });
                             view.board = Some(board);
                             // A local write landed. If this launch has reached the Mac, it goes
                             // there now instead of waiting for the next launch.
@@ -403,6 +460,10 @@ impl Capabilities {
                             }
                             view.maybe_sync(cx);
                             view.refresh_copy(cx);
+                            let paired = view.client.is_some();
+                            let pending = view.board.as_ref().map_or(0, Board::pending);
+                            view.today
+                                .update(cx, |today, cx| today.set_travel(pending, paired, cx));
                         }
                         Event::Wrote => {
                             if let Some(board) = view.board.clone() {
@@ -423,6 +484,19 @@ impl Capabilities {
                             }
                             // A pull lands entries too, and the ids a create answered with.
                             view.calendar.update(cx, |calendar, cx| calendar.load(cx));
+                            let (pending, paired) = (
+                                view.board.as_ref().map_or(0, Board::pending),
+                                view.client.is_some(),
+                            );
+                            let records = view
+                                .board
+                                .as_ref()
+                                .map(|board| board.records().to_vec())
+                                .unwrap_or_default();
+                            view.today.update(cx, |today, cx| {
+                                today.set_records(records, cx);
+                                today.set_travel(pending, paired, cx);
+                            });
                             view.synced = Some(
                                 match outcome {
                                     Ok(report) => report.summary(),
@@ -460,6 +534,7 @@ impl Capabilities {
             projects: None,
             calendar,
             people,
+            today,
             copy: None,
             copying: false,
             store_error: None,
@@ -708,24 +783,31 @@ fn label() -> &'static str {
 /// `SJEL_DAY=2026-10-21` opens the calendar on that day, for a screenshot a hand did not navigate
 /// to. A date it cannot read is today.
 fn launch_day() -> chrono::NaiveDate {
-    std::env::var("SJEL_DAY")
-        .ok()
-        .and_then(|day| sjel_gpui_core::calendar::parse_day(&day))
-        .unwrap_or_else(|| chrono::Local::now().date_naive())
+    frozen_day().unwrap_or_else(|| chrono::Local::now().date_naive())
 }
 
-/// `SJEL_TAB=calendar` opens that tab at launch.
+/// `SJEL_TAB=calendar` opens that tab at launch. Today is the default, because it is the page the
+/// app opens on.
 ///
 /// A screenshot of a page that is not the first one needs no hand on the screen for this: the
 /// touch checks (`host/UITests`) and `ios/run-sim` use it, and a phone never sets it.
 fn launch_tab() -> Tab {
     match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
+        "projects" => Tab::Projects,
         "calendar" => Tab::Calendar,
         "people" => Tab::People,
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
-        _ => Tab::Projects,
+        _ => Tab::Today,
     }
+}
+
+/// The day a launch flag fixed, for a page that must not move under a screenshot. A phone never
+/// sets `SJEL_DAY`, so the live landing page reads the clock on every rebuild.
+fn frozen_day() -> Option<chrono::NaiveDate> {
+    std::env::var("SJEL_DAY")
+        .ok()
+        .and_then(|day| sjel_gpui_core::calendar::parse_day(&day))
 }
 
 impl Render for Capabilities {
@@ -739,6 +821,7 @@ impl Render for Capabilities {
         let palette = self.appearance.apply_to_palette(base_palette, is_dark);
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;
+        let is_today = self.active_tab == Tab::Today;
         let is_travel = self.active_tab == Tab::Travel;
         let is_calendar = self.active_tab == Tab::Calendar;
         let is_people = self.active_tab == Tab::People;
@@ -748,6 +831,8 @@ impl Render for Capabilities {
             .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
         self.people
             .update(cx, |people, cx| people.set_palette(palette, cx));
+        self.today
+            .update(cx, |today, cx| today.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
             projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
         }
@@ -768,9 +853,10 @@ impl Render for Capabilities {
                     .flex_1()
                     .min_h_0()
                     // Projects scrolls inside itself, so the page holds still around it.
-                    .when(is_mac || is_travel || is_calendar || is_people, |page| {
-                        page.overflow_y_scroll()
-                    })
+                    .when(
+                        is_mac || is_today || is_travel || is_calendar || is_people,
+                        |page| page.overflow_y_scroll(),
+                    )
                     // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
                     // so after a tap the keyboard follows whether one holds it.
                     .on_mouse_up(
@@ -782,7 +868,26 @@ impl Render for Capabilities {
                     .flex_col()
                     .gap_3()
                     .when(is_mac, |page| {
+                        // Settings is reached from the landing page's gear, so the bar holds no
+                        // item that lights up here: the way back is this row.
                         page.child(
+                            div()
+                                .id("settings-back")
+                                .flex()
+                                .items_center()
+                                .min_h(px(44.))
+                                .text_sm()
+                                .text_color(rgb(palette.accent))
+                                .child("← Today")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.active_tab = Tab::Today;
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(
                             div()
                                 .text_sm()
                                 .text_color(rgb(0x646b77))
@@ -1172,11 +1277,12 @@ impl Render for Capabilities {
                                 ),
                         )
                     })
+                    .when(is_today, |page| page.child(self.today.clone()))
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
                     .when(is_people, |page| page.child(self.people.clone()))
                     .when(
-                        !is_mac && !is_travel && !is_calendar && !is_people,
+                        !is_mac && !is_today && !is_travel && !is_calendar && !is_people,
                         |page| {
                             let pending = self.board.as_ref().map_or(0, Board::pending);
                             page.when_some(self.store_error.clone(), |page, error| {
@@ -1254,11 +1360,14 @@ impl Render for Capabilities {
             // Bottom Tab Bar
             .child({
                 let pending = self.board.as_ref().map_or(0, Board::pending);
+                // Five items is the bar's whole width at its 64 px floor, so the queue count rides
+                // on Today and Settings sits behind Today's gear (`apps/gpui/PORTING_PLAN.md` §5).
+                // Projects is not a tab either: it is the list a project on Today opens.
                 let items = [
                     NavItem {
-                        id: "projects",
-                        label: "Projects",
-                        icon: "📝",
+                        id: "today",
+                        label: "Today",
+                        icon: "☀",
                         badge: if pending > 0 { Some(pending) } else { None },
                     },
                     NavItem {
@@ -1279,19 +1388,15 @@ impl Render for Capabilities {
                         icon: "◎",
                         badge: None,
                     },
-                    NavItem {
-                        id: "settings",
-                        label: "Settings",
-                        icon: "⚙️",
-                        badge: None,
-                    },
                 ];
                 let active_id = match self.active_tab {
-                    Tab::Settings => "settings",
+                    // Settings is behind Today's gear and Projects behind a project row, so
+                    // neither lights a tab of its own.
+                    Tab::Settings | Tab::Today => "today",
+                    Tab::Projects => "today",
                     Tab::Travel => "travel",
                     Tab::Calendar => "calendar",
                     Tab::People => "people",
-                    Tab::Projects => "projects",
                 };
                 let entity = cx.entity().clone();
                 mobile_tab_bar(
@@ -1304,11 +1409,10 @@ impl Render for Capabilities {
                                 view.travel.update(cx, |travel, _| travel.deactivate());
                             }
                             view.active_tab = match id {
-                                "settings" => Tab::Settings,
                                 "travel" => Tab::Travel,
                                 "calendar" => Tab::Calendar,
                                 "people" => Tab::People,
-                                _ => Tab::Projects,
+                                _ => Tab::Today,
                             };
                             if view.active_tab == Tab::Travel {
                                 view.travel.update(cx, |travel, cx| travel.activate(cx));
@@ -1316,7 +1420,9 @@ impl Render for Capabilities {
                             // Opening the calendar or the registers with no copy asks for one, so a
                             // phone that was paired here but never fetched does not have to know to
                             // tap Refresh.
-                            if (view.active_tab == Tab::Calendar || view.active_tab == Tab::People)
+                            if (view.active_tab == Tab::Today
+                                || view.active_tab == Tab::Calendar
+                                || view.active_tab == Tab::People)
                                 && view.copy.is_none()
                                 && !view.copying
                             {

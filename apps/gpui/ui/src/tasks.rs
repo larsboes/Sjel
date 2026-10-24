@@ -62,6 +62,7 @@ mod tests {
     #[test]
     fn open_dated_urgent_tasks_come_first() {
         let task = |title: &str, done: bool, due: Option<&str>, priority: u8| ProjectRecord {
+            project: String::new(),
             path: format!("P/{title}.md"),
             kind: "task".into(),
             title: title.into(),

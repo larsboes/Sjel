@@ -2169,6 +2169,7 @@ mod tests {
 
     fn record() -> ProjectRecord {
         ProjectRecord {
+            project: String::new(),
             path: "P/Plan.md".into(),
             kind: "note".into(),
             title: "Plan".into(),
@@ -2188,6 +2189,7 @@ mod tests {
             let view = cx.new(|_| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
                 let task = |title: &str, done: bool| ProjectRecord {
+                    project: String::new(),
                     path: format!("P/{title}.md"),
                     kind: "task".into(),
                     title: title.into(),
@@ -2309,6 +2311,7 @@ mod tests {
             let view = cx.new(|_| {
                 let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
                 let hub = ProjectRecord {
+                    project: String::new(),
                     path: "P/P.md".into(),
                     kind: "project".into(),
                     title: "P".into(),

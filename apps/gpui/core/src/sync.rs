@@ -822,8 +822,12 @@ async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Res
                         || state.priority != record.priority
                 }
             };
+            // The record's own project, because a path's first folder is not it: the vault files
+            // `Archive/Soma/Tasks/Reopen.md` under `Soma`, and a sweep that wrote `Archive` into
+            // the local project column would file the phone's whole history under the wrong name.
+            let filed = filed_under(&record);
             store
-                .upsert_pulled(&project_of(&path), &record, &stamp)
+                .upsert_pulled(&filed, &record, &stamp)
                 .await
                 .map_err(|e| e.to_string())?;
             if news {
@@ -881,6 +885,7 @@ async fn read_record_timed<H: Host>(
 
 fn record_from_json(path: &str, value: &Value) -> ProjectRecord {
     let kind = value["kind"].as_str().unwrap_or("note").to_string();
+    let project = value["project"].as_str().unwrap_or_default().to_string();
     let title = value["title"].as_str().unwrap_or_default().to_string();
     let priority = value["priority"]
         .as_u64()
@@ -888,6 +893,7 @@ fn record_from_json(path: &str, value: &Value) -> ProjectRecord {
         .unwrap_or(2)
         .clamp(1, 3);
     ProjectRecord {
+        project,
         path: path.to_string(),
         kind,
         title,
@@ -898,8 +904,16 @@ fn record_from_json(path: &str, value: &Value) -> ProjectRecord {
     }
 }
 
-/// The project a record belongs to: the first folder of its path, which is what the record's
-/// project is on the Mac too (`capabilities/projects/src/record.rs`).
+/// The project a record belongs to: the answer the Mac filed it under, else the path's first
+/// folder, which is what this app writes for a record it made itself (`Board::task_path`).
+fn filed_under(record: &ProjectRecord) -> String {
+    if !record.project.trim().is_empty() {
+        return record.project.clone();
+    }
+    project_of(&record.path)
+}
+
+/// The first folder of a path. Only a fallback: see [`filed_under`].
 fn project_of(path: &str) -> String {
     path.split('/').next().unwrap_or_default().to_string()
 }
@@ -924,6 +938,29 @@ mod tests {
     use super::*;
     use crate::store::{TursoStore, DOMAIN_CALENDAR, LOCAL_ENTRY_ID_PREFIX};
     use std::sync::Mutex;
+
+    /// A pulled record keeps the project the Mac filed it under, and falls back on the path only
+    /// when no project travelled: the vault's paths are not `<project>/…`.
+    #[test]
+    fn a_pulled_record_is_filed_under_the_project_the_mac_named() {
+        let mut record = ProjectRecord {
+            path: "Archive/Soma/Tasks/Reopen Obsidian.md".to_owned(),
+            project: "Soma".to_owned(),
+            kind: "task".to_owned(),
+            title: "Reopen Obsidian".to_owned(),
+            content: String::new(),
+            done: false,
+            due: None,
+            priority: 2,
+        };
+        assert_eq!(filed_under(&record), "Soma");
+        record.project.clear();
+        assert_eq!(
+            filed_under(&record),
+            "Archive",
+            "the fallback, and only that"
+        );
+    }
 
     /// A Mac that answers from a table. Each answer is used once, by method and exact path, so a
     /// test states the whole conversation and a request nobody expected fails loudly.
@@ -1142,6 +1179,7 @@ mod tests {
                 .upsert_pulled(
                     "Inbox",
                     &ProjectRecord {
+                        project: String::new(),
                         path: "Inbox/Plan.md".into(),
                         kind: "note".into(),
                         title: "Plan".into(),
@@ -1313,6 +1351,7 @@ mod tests {
                 .upsert_pulled(
                     "Inbox",
                     &ProjectRecord {
+                        project: String::new(),
                         path: "Inbox/Tasks/Call.md".into(),
                         kind: "task".into(),
                         title: "Call".into(),
@@ -1387,6 +1426,7 @@ mod tests {
         rt.block_on(async {
             let store = TursoStore::in_memory().await.expect("store");
             let quiet = ProjectRecord {
+            project: String::new(),
                 path: "Inbox/Quiet.md".into(),
                 kind: "note".into(),
                 title: "Quiet".into(),
@@ -1396,6 +1436,7 @@ mod tests {
                 priority: 2,
             };
             let dirty = ProjectRecord {
+            project: String::new(),
                 path: "Inbox/Dirty.md".into(),
                 kind: "note".into(),
                 title: "Dirty".into(),
@@ -1405,6 +1446,7 @@ mod tests {
                 priority: 2,
             };
             let gone = ProjectRecord {
+            project: String::new(),
                 path: "Inbox/Gone.md".into(),
                 kind: "note".into(),
                 title: "Gone".into(),

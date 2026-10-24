@@ -266,8 +266,8 @@ alternating. Prompt tokens are normalized: Pi's `input + cacheRead` against Sjel
 |---|---|---|
 | C01 + R04: attempts finished | 4 / 4 | 4 / 4 |
 | R04 one-probe check | 2 / 2 pass | 2 / 2 pass |
-| C01 prompt tokens | 2,600–3,500 | 1,796–1,821 |
-| R04 prompt tokens | 4,800–5,800 | 3,660–4,731 |
+| C01 prompt tokens | 1,918–4,145 | 1,796–1,821 |
+| R04 prompt tokens | 5,130–5,515 | 3,660–4,731 |
 | D01–D04: attempts finished | 8 / 8 | 8 / 8 |
 | D01–D04 prompt tokens per attempt | 10,603–483,554 | 26,171–304,008 |
 | D01–D04 prompt tokens, all 8 attempts | 1,347,230 | 1,040,303 |

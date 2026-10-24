@@ -17,12 +17,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::shell::ProjectRecord;
 use crate::store::{StoreResult, TursoStore};
 
+/// A record the Mac refused, as a page draws it: which record, what it is called, and why.
+///
+/// Built here rather than in the sync because the title lives in the replica, not in the refusal:
+/// a sync knows a path and a reason, and a page needs to show the person the note they wrote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Blocked {
+    pub path: String,
+    pub title: String,
+    pub kind: String,
+    pub reason: String,
+}
+
 /// The app's own copy of projects, tasks and notes, plus the count of writes waiting for the Mac.
 #[derive(Clone)]
 pub struct Board {
     store: Option<Arc<TursoStore>>,
     records: Vec<ProjectRecord>,
     pending: usize,
+    /// The records the Mac refused, with its reason, read from the store so a relaunch still knows
+    /// them. Their writes are still queued and their content is still here.
+    blocked: Vec<Blocked>,
 }
 
 impl Board {
@@ -42,6 +57,7 @@ impl Board {
             store: Some(store),
             records: Vec::new(),
             pending: 0,
+            blocked: Vec::new(),
         };
         board.reload().await?;
         Ok(board)
@@ -54,6 +70,7 @@ impl Board {
             store: None,
             records,
             pending: 0,
+            blocked: Vec::new(),
         }
     }
 
@@ -82,6 +99,12 @@ impl Board {
     /// How many writes are waiting to reach the Mac.
     pub fn pending(&self) -> usize {
         self.pending
+    }
+
+    /// The records the Mac refused, each with the reason it gave. The content of every one of them
+    /// is still here: a refusal is a write that has not landed, never a write that was dropped.
+    pub fn blocked(&self) -> &[Blocked] {
+        &self.blocked
     }
 
     /// Every task, done ones included, in the store's order: open first, then priority, then path.
@@ -120,6 +143,27 @@ impl Board {
         if let Some(store) = &self.store {
             self.records = store.fetch_all_records().await?;
             self.pending = store.pending_mutation_count().await?;
+            // The title comes from the rows, so the band names the note the person typed rather
+            // than the path the queue happens to hold.
+            self.blocked = store
+                .refusals()
+                .await?
+                .into_iter()
+                .map(|(path, reason)| {
+                    let record = self.records.iter().find(|record| record.path == path);
+                    Blocked {
+                        title: record
+                            .map(|record| record.title.clone())
+                            .filter(|title| !title.is_empty())
+                            .unwrap_or_else(|| path.clone()),
+                        kind: record
+                            .map(|record| record.kind.clone())
+                            .unwrap_or_else(|| "record".to_owned()),
+                        path,
+                        reason,
+                    }
+                })
+                .collect();
         }
         Ok(())
     }

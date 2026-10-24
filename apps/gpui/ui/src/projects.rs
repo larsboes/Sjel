@@ -17,6 +17,7 @@ use crate::primitives::{
 };
 use crate::tasks::{self, TaskFilter};
 use crate::theme::{Density, Palette};
+use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
     self, GlobalNote, GlobalTask, ProjectRecord, ProjectSummary, ShellError,
 };
@@ -95,6 +96,8 @@ fn search_box(width: Option<f32>) -> Div {
 pub enum ProjectsEvent {
     /// A note's editor opened (`true`) or closed. The phone shows or hides its keyboard.
     Editing(bool),
+    /// The person asked to send the blocked writes again. The app owns the sync, so it runs one.
+    Retry,
 }
 
 pub struct Projects {
@@ -132,6 +135,9 @@ pub struct Projects {
     /// The "New note" field inside project view.
     new_note: Option<(Entity<InputState>, Subscription)>,
     pub adding_note: bool,
+    /// The writes the Mac refused, with its reasons. Their content is still here and still queued:
+    /// the band these draw is the only place that says so.
+    blocked: Vec<Blocked>,
 }
 
 impl gpui_kit::EventEmitter<ProjectsEvent> for Projects {}
@@ -164,7 +170,22 @@ impl Projects {
             adding_project: false,
             new_note: None,
             adding_note: false,
+            blocked: Vec::new(),
         }
+    }
+
+    /// The records the Mac refused, handed in by the app after a sync read them back.
+    pub fn set_blocked(&mut self, blocked: Vec<Blocked>, cx: &mut Context<Self>) {
+        if self.blocked == blocked {
+            return;
+        }
+        self.blocked = blocked;
+        cx.notify();
+    }
+
+    /// What the page is showing as blocked, for a host that wants to say so elsewhere.
+    pub fn blocked(&self) -> &[Blocked] {
+        &self.blocked
     }
 
     /// The same page laid out for `density`: the phone passes `Density::Mobile`.
@@ -183,6 +204,133 @@ impl Projects {
             editor.update(cx, |editor, cx| editor.set_palette(palette, cx));
         }
         cx.notify();
+    }
+
+    /// The writes the Mac would not take: what each record is, why the Mac said no, and that it is
+    /// still here. Nothing here renames, deletes or edits a record to make the refusal go away —
+    /// a duplicate title and an archived project are the operator's decision, so the page names them
+    /// and offers the two things that are this page's to offer: open it, or send it again.
+    fn blocked_band(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.blocked.is_empty() {
+            return None;
+        }
+        let mut rows: Vec<AnyElement> = Vec::new();
+        for (index, refusal) in self.blocked.clone().into_iter().enumerate() {
+            // The record's own title when the replica still has it, else the path: a blocked record
+            // that somebody deleted from under the queue is not a record to name.
+            let title = refusal.title.clone();
+            let kind = refusal.kind.clone();
+            let open = refusal.path.clone();
+            rows.push(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .py_2()
+                    .when(index > 0, |row| {
+                        row.border_t_1().border_color(rgba(palette.border))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_sm()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(palette.text))
+                                    .child(title),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(kind),
+                            )
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("blocked-open-{open}")))
+                                    .flex_none()
+                                    .px_3()
+                                    .py(px(4.))
+                                    .rounded(px(6.))
+                                    .bg(rgba(palette.raised))
+                                    .text_xs()
+                                    .text_color(rgb(palette.accent))
+                                    .cursor_pointer()
+                                    .child("Open")
+                                    .on_click(cx.listener(move |view, _, window, cx| {
+                                        view.open_note(open.clone(), true, window, cx)
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.red))
+                            .child(refusal.reason),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Saved here and still queued. Nothing was lost or renamed."),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let count = rows.len();
+        Some(
+            div()
+                .mb_3()
+                .rounded(px(10.))
+                .bg(rgba(palette.surface))
+                .border_1()
+                .border_color(rgba(palette.red & 0xffffff | 0x55000000))
+                .px_3()
+                .py_2()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(palette.red))
+                                .child(match count {
+                                    1 => "The Mac would not take one write".to_owned(),
+                                    n => format!("The Mac would not take {n} writes"),
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id("blocked-retry")
+                                .flex_none()
+                                .px_3()
+                                .py(px(4.))
+                                .rounded(px(6.))
+                                .bg(rgba(palette.accent & 0xffffff | 0x22000000))
+                                .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.accent))
+                                .cursor_pointer()
+                                .child("Try again")
+                                .on_click(cx.listener(|_, _, _, cx| cx.emit(ProjectsEvent::Retry))),
+                        ),
+                )
+                .children(rows)
+                .into_any_element(),
+        )
     }
 
     fn columns(&self) -> Columns {
@@ -2155,6 +2303,9 @@ impl Render for Projects {
                         .child(Input::new(&new_project).small()),
                 )
             })
+            .when_some(self.blocked_band(palette, cx), |page, band| {
+                page.child(band)
+            })
             .child(section("Projects", body, palette))
             .into_any_element()
     }
@@ -2178,6 +2329,40 @@ mod tests {
             due: None,
             priority: 2,
         }
+    }
+
+    /// The band the #244 work is about: what the host handed in is what the page holds, and a second
+    /// sync that cleared it takes it away. The drawing itself needs a window; what this pins down is
+    /// that the page never invents a blocked record and never keeps one the store has forgotten.
+    #[gpui::test]
+    fn the_blocked_band_holds_what_the_sync_reported(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let view = cx.new(|cx| {
+            let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            projects.set_blocked(
+                vec![Blocked {
+                    path: "Old/One.md".into(),
+                    title: "One".into(),
+                    kind: "note".into(),
+                    reason: "the project Old is archived".into(),
+                }],
+                cx,
+            );
+            projects
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |projects, _| {
+            assert_eq!(projects.blocked().len(), 1);
+            assert_eq!(projects.blocked()[0].title, "One");
+            assert!(projects.blocked()[0].reason.contains("archived"));
+        });
+        view.update(cx, |projects, cx| projects.set_blocked(Vec::new(), cx));
+        view.read_with(cx, |projects, _| {
+            assert!(
+                projects.blocked().is_empty(),
+                "a landed write takes its band with it"
+            );
+        });
     }
 
     #[gpui::test]

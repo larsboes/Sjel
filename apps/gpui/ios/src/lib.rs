@@ -368,6 +368,12 @@ impl Capabilities {
                             // rows: `Board` already read them, and a second read here could only
                             // disagree with the queue count beside them.
                             let records = board.records().to_vec();
+                            let blocked = board.blocked().to_vec();
+                            if let Some(projects) = &view.projects {
+                                projects.update(cx, |projects, cx| {
+                                    projects.set_blocked(blocked, cx)
+                                });
+                            }
                             view.today.update(cx, |today, cx| {
                                 today.set_records(records, cx);
                                 today.set_travel(board.pending(), view.client.is_some(), cx);
@@ -493,6 +499,17 @@ impl Capabilities {
                                 .as_ref()
                                 .map(|board| board.records().to_vec())
                                 .unwrap_or_default();
+                            // A sync is also how a refusal arrives, or stops being one.
+                            let blocked = view
+                                .board
+                                .as_ref()
+                                .map(|board| board.blocked().to_vec())
+                                .unwrap_or_default();
+                            if let Some(projects) = &view.projects {
+                                projects.update(cx, |projects, cx| {
+                                    projects.set_blocked(blocked, cx)
+                                });
+                            }
                             view.today.update(cx, |today, cx| {
                                 today.set_records(records, cx);
                                 today.set_travel(pending, paired, cx);
@@ -607,8 +624,20 @@ impl Capabilities {
     ) -> gpui::Entity<Projects> {
         let repo = self.repo_for(store);
         let projects = cx.new(|_| Projects::new(repo).with_density(Density::Mobile));
-        cx.subscribe(&projects, |_, _, event, _| match event {
+        cx.subscribe(&projects, |view, _, event, cx| match event {
             ProjectsEvent::Editing(open) => keyboard(*open),
+            // The band's "Try again": the same sync any local write starts, because the writes it
+            // sends are the ones already queued. Nothing is re-typed to make a refusal go away. A
+            // phone with no Mac says why instead of appearing to press a dead button.
+            ProjectsEvent::Retry => {
+                if view.client.is_some() {
+                    view.maybe_sync(cx);
+                } else {
+                    view.synced =
+                        Some("Not connected: pair with your Mac in Settings, then try again.".into());
+                    cx.notify();
+                }
+            }
         })
         .detach();
         projects.update(cx, |projects, cx| projects.load_projects(cx));

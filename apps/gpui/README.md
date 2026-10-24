@@ -344,6 +344,15 @@ scroll and that the projects below the fold are really drawn. `SJEL_TAB=today|pr
 and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not the first one
 without a hand on the screen.
 
+A write the Mac will not take is named rather than counted. `sync` used to stop at the first refusal,
+so one duplicate note title held every later write in the queue and nothing said which record it was
+(`#244`). Now a refusal blocks its own record and the queue keeps draining behind it, the reason is
+written into the replica (`_sync_refusals`), and the Projects page draws a band above the list: the
+record's title and kind, the Mac's reason in its own words, "Saved here and still queued. Nothing was
+lost or renamed.", an `Open` per record and one `Try again`. A record is never renamed or deleted to
+make a refusal go away — a duplicate title and an archived project are the operator's decision, and
+`Try again` on a phone with no Mac says so instead of pressing a dead button.
+
 The project a task is filed under came back to the phone in this pass, and it is not the path's first
 folder: the vault files `Archive/Soma/Tasks/Reopen.md` under `Soma`. `ProjectRecord` had dropped the
 capability's own `project` field, so `Board`, the sync's pull, and the landing page's grouping would

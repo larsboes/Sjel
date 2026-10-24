@@ -242,6 +242,42 @@
   #244's blocked-write recovery: a capture that cannot reach the Mac must keep its text, say why, and
   retry when discovery finds the host again.
 
+### ✅ Work Package 11: the queue goes around a refused record (#244)
+- **Status**: Shipped (2026-10-24). #244's acceptance checks are met.
+- **Why**: `push` stopped at the first write the Mac refused, so one duplicate note title or one
+  archived project held every later write in the queue, and no view named the record or the reason.
+  A phone shown only a queue count that will not drain has nothing to act on.
+- **Shipped**:
+  - `core/src/sync.rs` — a refusal names its record ([`Refusal`]: path and the Mac's words), a
+    refusal blocks that record and no other, and the queue keeps draining behind it. A queued row
+    this build cannot parse is stepped over as a fault here rather than reported as the Mac's
+    opinion. `Report::refused` carries them and `summary` says how many.
+  - `core/src/store.rs` — `_sync_refusals`, one row per record, written when the Mac refuses and
+    cleared when that record goes through, so the band outlives the launch that heard it and
+    disappears when the problem does. A refusal is never a lost write: the record and its queued
+    mutation stay exactly where they were.
+  - `core/src/data/board.rs` — `Blocked { path, title, kind, reason }`, joined from the refusals and
+    the replica's rows so a page can name the note rather than a path.
+  - `ui/src/projects.rs` — the band above the project list: the count, each record with its kind,
+    the Mac's reason in the Mac's words, "Saved here and still queued. Nothing was lost or renamed.",
+    `Open` per record and one `Try again`. Nothing renames, deletes or edits a record to make a
+    refusal go away: a duplicate title and an archived project are the operator's decision.
+  - `apps/gpui/ios/src/lib.rs` — `ProjectsEvent::Retry` runs the sync the writes were queued for; a
+    phone with no Mac says so instead of pressing a dead button.
+- **Verified on a simulator**: two refusals seeded into the replica — one archived project, one
+  duplicate title, the second with no record behind it — drew as two rows, the first with the note's
+  own title, the second falling back to its path, and the header counting two.
+- **Tests**: 3 new in `sync` (a duplicate title keeps its text, queued count and reason; an archived
+  project is refused while the next write still goes; a refusal is cleared when the write lands) and
+  1 in `ui/src/projects.rs` (the page holds what the sync reported and drops it when cleared).
+  core 271, ui 38, app 81.
+- **Target Files**:
+  - `apps/gpui/core/src/{sync,store}.rs`
+  - `apps/gpui/core/src/data/board.rs`
+  - `apps/gpui/ui/src/projects.rs`
+  - `apps/gpui/ios/src/lib.rs`
+- **Next**: `Inbox` — the fifth slot and the second write path — which can now queue offline.
+
 ---
 
 ## 3. Next, before everything below (operator, 2026-10-23)

@@ -86,6 +86,21 @@ CREATE TABLE IF NOT EXISTS _offline_mutations (
 /// The columns an existing mutation log from before the second domain does not have yet.
 const ADDED_MUTATION_COLUMNS: &[(&str, &str)] = &[("domain", "TEXT NOT NULL DEFAULT 'projects'")];
 
+/// The writes the Mac refused, one row per record, so the reason outlives the launch that heard it.
+///
+/// A refusal is not a lost write: the record and its queued mutation are both still here, and this
+/// table is what lets the page say which record it is and why, hours after the sync that found it.
+/// It is cleared when that record finally goes through ([`crate::sync`]) or when the record is
+/// removed, and it is never a decision of its own: nothing here renames, deletes or edits a record
+/// to make a refusal go away.
+const SCHEMA_REFUSALS: &str = r#"
+CREATE TABLE IF NOT EXISTS _sync_refusals (
+    path TEXT PRIMARY KEY,
+    reason TEXT NOT NULL,
+    at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+"#;
+
 /// The calendar's own replica: the entries the phone holds, and the cursor it has read to.
 ///
 /// `remote_at` is the Mac's `updated_at` stamp for the entry, which is also the change feed's
@@ -190,6 +205,9 @@ impl TursoStore {
         conn.execute_batch(SCHEMA_CALENDAR)
             .await
             .map_err(|e| StoreError::Libsql(format!("calendar schema init failed: {e}")))?;
+        conn.execute_batch(SCHEMA_REFUSALS)
+            .await
+            .map_err(|e| StoreError::Libsql(format!("refusals schema init failed: {e}")))?;
         self.add_missing_columns(&conn).await?;
         self.add_missing_mutation_columns(&conn).await
     }
@@ -549,6 +567,54 @@ impl TursoStore {
                 .map_err(|e| StoreError::Libsql(format!("clear mutation failed: {e}")))?;
         }
         Ok(cleared as usize)
+    }
+
+    /// Remembers that the Mac refused the queued write for `path`, in the Mac's own words.
+    ///
+    /// Overwrites an older reason for the same record: a second refusal is what the Mac says now,
+    /// and a list that showed both would ask the person to fix a contradiction.
+    pub async fn record_refusal(&self, path: &str, reason: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "INSERT INTO _sync_refusals (path, reason) VALUES (?1, ?2) \
+             ON CONFLICT(path) DO UPDATE SET reason = ?2, at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            libsql::params![path, reason],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("record refusal failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Forgets a refusal: the record went through, or it is gone.
+    pub async fn clear_refusal(&self, path: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "DELETE FROM _sync_refusals WHERE path = ?1",
+            libsql::params![path],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("clear refusal failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Every record the Mac refused, oldest first, as `path (reason)` pairs.
+    pub async fn refusals(&self) -> StoreResult<Vec<(String, String)>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT path, reason FROM _sync_refusals ORDER BY at ASC",
+                (),
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read refusals failed: {e}")))?;
+        let mut list = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            list.push((
+                row.get::<String>(0).unwrap_or_default(),
+                row.get::<String>(1).unwrap_or_default(),
+            ));
+        }
+        Ok(list)
     }
 
     /// The records with a write still waiting for the Mac.

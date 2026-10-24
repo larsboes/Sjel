@@ -568,9 +568,12 @@ impl Today {
                         column.child(div().text_xs().text_color(rgb(palette.muted)).child(second))
                     }),
             )
-            .when_some(task.due.as_deref().map(|due| due_mark(due, task.overdue, palette)), |row, mark| {
-                row.child(mark)
-            })
+            .when_some(
+                task.due
+                    .as_deref()
+                    .map(|due| due_mark(due, task.overdue, palette)),
+                |row, mark| row.child(mark),
+            )
             .when(task.priority < 2, |row| {
                 row.child(priority_pill(task.priority, palette))
             })

@@ -115,6 +115,19 @@ impl<T: Host + Send + Sync> Host for std::sync::Arc<T> {
     }
 }
 
+/// A queued write the Mac would not take, and why, in the Mac's words.
+///
+/// It names the record rather than a count, because the person's next move is to open that record:
+/// a duplicate note title and an archived project are both things only the operator can settle, and
+/// this app does not rename or delete anything to make a refusal go away.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    /// The record's path on this device, which is also what its queued writes name.
+    pub path: String,
+    /// The Mac's reason, as it answered it.
+    pub reason: String,
+}
+
 /// What one sync did, in the counts the screen shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Report {
@@ -128,8 +141,12 @@ pub struct Report {
     pub pulled: usize,
     /// Records the Mac no longer had, deleted here.
     pub removed: usize,
-    /// Writes still queued, each `path (reason)`. Non-empty means the queue stopped there.
+    /// Writes still queued, each `path (reason)`.
     pub kept: Vec<String>,
+    /// The records the Mac refused, one entry each. Their writes are still queued and their content
+    /// is still here; a push now goes around them, so one refused record no longer holds back the
+    /// rest of the queue.
+    pub refused: Vec<Refusal>,
 }
 
 impl Report {
@@ -154,6 +171,12 @@ impl Report {
         if self.removed > 0 {
             parts.push(format!("{} removed", self.removed));
         }
+        if self.refused.len() > 0 {
+            parts.push(match self.refused.len() {
+                1 => format!("1 the Mac refused: {}", self.refused[0].reason),
+                n => format!("{n} the Mac refused"),
+            });
+        }
         if parts.is_empty() {
             return match self.kept.first() {
                 None => "In step with the Mac.".to_string(),
@@ -161,7 +184,7 @@ impl Report {
             };
         }
         let mut text = parts.join(" \u{00b7} ");
-        if let Some(first) = self.kept.first() {
+        if let Some(first) = self.kept.first().filter(|_| self.refused.is_empty()) {
             text.push_str(&format!(" \u{00b7} kept for later: {first}"));
         }
         text
@@ -195,14 +218,20 @@ async fn push<H: Host>(
     // The oldest write each time, read fresh: a create moves its record, and any write queued for
     // that record, to the path the Mac picked (`TursoStore::rekey`), so a list read once at the
     // start would go on naming paths that no longer exist.
+    //
+    // A refusal blocks its own record and nothing else. The Mac refusing one note says nothing about
+    // the note queued behind it for a different project, and stopping there meant a duplicate title
+    // could hold the whole queue until somebody noticed — which, with no per-record view, was never.
     let mut attempted: HashSet<i64> = HashSet::new();
+    let mut blocked: HashSet<String> = HashSet::new();
     loop {
-        let Some(mutation) = store
+        let pending = store
             .pending_in(Some(domain))
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        let Some(mutation) = pending
             .into_iter()
-            .next()
+            .find(|mutation| !blocked.contains(&mutation.path))
         else {
             break;
         };
@@ -213,17 +242,42 @@ async fn push<H: Host>(
             ));
             break;
         }
+        // A queued row this build cannot read is a fault here, not a refusal from the Mac: it is
+        // named in the sync line and stepped over, but it is not what the page's blocked band is
+        // about, and nothing is written down as the Mac's opinion.
+        if serde_json::from_str::<Value>(&mutation.payload).is_err() {
+            blocked.insert(mutation.path.clone());
+            report.kept.push(format!(
+                "{} (this device queued a write it cannot read)",
+                mutation.path
+            ));
+            continue;
+        }
         match replay(store, host, report, &mutation).await {
             Ok(()) => {
                 store
                     .clear_mutations(&[mutation.id])
                     .await
                     .map_err(|e| e.to_string())?;
+                store
+                    .clear_refusal(&mutation.path)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 report.pushed += 1;
             }
             Err(reason) => {
+                // The record and its write stay exactly where they are. The refusal is written down
+                // so the page can name it after this launch is gone.
+                blocked.insert(mutation.path.clone());
+                store
+                    .record_refusal(&mutation.path, &reason)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 report.kept.push(format!("{} ({reason})", mutation.path));
-                break;
+                report.refused.push(Refusal {
+                    path: mutation.path,
+                    reason,
+                });
             }
         }
     }
@@ -960,6 +1014,221 @@ mod tests {
             "Archive",
             "the fallback, and only that"
         );
+    }
+
+    /// A note whose title the Mac already has: the Mac answers 409 and this device keeps its text.
+    ///
+    /// The whole point of #244: the write stays queued, the record stays readable, and the reason is
+    /// written down where a page can name it after this launch is gone.
+    #[test]
+    fn a_duplicate_title_is_kept_with_the_macs_reason() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let (store, content) = store_with_note().await;
+            let fake = Fake::default();
+            fake.on("GET", PROJECTS, 200, projects(&["Inbox"]));
+            // The Mac already has a note with that title, and refuses instead of overwriting it.
+            fake.on(
+                "POST",
+                NOTES,
+                409,
+                json!({ "error": "a note with that title already exists" }),
+            );
+            fake.on(
+                "GET",
+                "/projects/api/project?name=Inbox&content=false",
+                200,
+                json!({ "records": [] }),
+            );
+            // The pull that follows reads the project list again.
+            fake.on("GET", PROJECTS, 200, projects(&["Inbox"]));
+            fake.on(
+                "GET",
+                "/projects/api/project?name=Inbox&content=false",
+                200,
+                json!({ "records": [] }),
+            );
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.pushed, 0, "{report:?}");
+            assert_eq!(report.refused.len(), 1, "{report:?}");
+            assert_eq!(report.refused[0].path, "Inbox/Welcome.md", "{report:?}");
+            assert!(
+                report.refused[0].reason.contains("already exists"),
+                "the Mac's words, not ours: {report:?}"
+            );
+            assert!(
+                report.summary().contains("refused"),
+                "the sync line says it: {report:?}"
+            );
+
+            // Nothing was lost: the text is still here, the write is still queued, and the refusal
+            // is on disk for the page to read on the next launch.
+            let kept = store
+                .fetch_record("Inbox/Welcome.md")
+                .await
+                .unwrap()
+                .expect("the note is still here");
+            assert_eq!(kept.content, content);
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
+            let refusals = store.refusals().await.expect("refusals");
+            assert_eq!(refusals.len(), 1, "{refusals:?}");
+            assert_eq!(refusals[0].0, "Inbox/Welcome.md");
+            assert!(refusals[0].1.contains("already exists"));
+        });
+    }
+
+    /// A write for a record whose project the Mac archived: refused, named, and the queue moves on
+    /// to the next record instead of stopping behind it.
+    #[test]
+    fn an_archived_project_is_refused_and_the_queue_goes_on() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            // A note in a project the Mac archived, created here and never on the Mac.
+            store
+                .save_record("Old", "Old/One.md", "note", "One", "first")
+                .await
+                .expect("save");
+            // A record both sides already have, edited offline: a plain update, not a create.
+            store
+                .upsert_pulled(
+                    "Home",
+                    &ProjectRecord {
+                        project: "Home".to_owned(),
+                        path: "Home/Two.md".to_owned(),
+                        kind: "note".to_owned(),
+                        title: "Two".to_owned(),
+                        content: "before".to_owned(),
+                        done: false,
+                        due: None,
+                        priority: 2,
+                    },
+                    "stamp-1",
+                )
+                .await
+                .expect("seed");
+            store
+                .save_record("Home", "Home/Two.md", "note", "Two", "second")
+                .await
+                .expect("edit");
+
+            let fake = Fake::default();
+            for _ in 0..4 {
+                fake.on("GET", PROJECTS, 200, projects(&["Old", "Home"]));
+            }
+            // The create into the archived project is refused...
+            fake.on(
+                "POST",
+                NOTES,
+                409,
+                json!({ "error": "the project Old is archived" }),
+            );
+            // ...and the update for the other project still goes through.
+            fake.on(
+                "POST",
+                RECORD,
+                200,
+                json!({ "path": "Home/Two.md", "kind": "note" }),
+            );
+            for _ in 0..3 {
+                fake.on(
+                    "GET",
+                    "/projects/api/project?name=Home&content=false",
+                    200,
+                    json!({ "records": [] }),
+                );
+                fake.on(
+                    "GET",
+                    "/projects/api/project?name=Old&content=false",
+                    200,
+                    json!({ "records": [] }),
+                );
+            }
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.refused.len(), 1, "{report:?}");
+            assert_eq!(report.refused[0].path, "Old/One.md", "{report:?}");
+            assert!(report.refused[0].reason.contains("archived"), "{report:?}");
+            assert_eq!(report.pushed, 1, "the other record still went: {report:?}");
+            // One write left: the refused one, with its text intact.
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
+            let left = store
+                .fetch_record("Old/One.md")
+                .await
+                .unwrap()
+                .expect("the refused record is still here");
+            assert_eq!(left.content, "first");
+        });
+    }
+
+    /// A refusal is forgotten once the record goes through, so the band does not outlive the problem.
+    #[test]
+    fn a_refusal_is_cleared_when_the_write_lands() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            store
+                .upsert_pulled(
+                    "Inbox",
+                    &ProjectRecord {
+                        project: "Inbox".to_owned(),
+                        path: "Inbox/One.md".to_owned(),
+                        kind: "note".to_owned(),
+                        title: "One".to_owned(),
+                        content: "before".to_owned(),
+                        done: false,
+                        due: None,
+                        priority: 2,
+                    },
+                    "stamp-1",
+                )
+                .await
+                .expect("seed");
+            store
+                .save_record("Inbox", "Inbox/One.md", "note", "One", "text")
+                .await
+                .expect("edit");
+            store
+                .record_refusal("Inbox/One.md", "a note with that title already exists")
+                .await
+                .expect("refusal");
+            assert_eq!(store.refusals().await.unwrap().len(), 1);
+
+            let fake = Fake::default();
+            fake.on(
+                "POST",
+                RECORD,
+                200,
+                json!({ "path": "Inbox/One.md", "kind": "note" }),
+            );
+            for _ in 0..3 {
+                fake.on("GET", PROJECTS, 200, projects(&["Inbox"]));
+                fake.on(
+                    "GET",
+                    "/projects/api/project?name=Inbox&content=false",
+                    200,
+                    json!({ "records": [] }),
+                );
+            }
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.pushed, 1, "{report:?}");
+            assert!(report.refused.is_empty(), "{report:?}");
+            assert!(
+                store.refusals().await.unwrap().is_empty(),
+                "the band goes when the problem does"
+            );
+        });
     }
 
     /// A Mac that answers from a table. Each answer is used once, by method and exact path, so a

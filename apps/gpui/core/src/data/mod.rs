@@ -22,7 +22,7 @@ pub mod board;
 pub mod notes;
 pub mod repo;
 
-pub use board::Board;
+pub use board::{Blocked, Board};
 pub use notes::Notes;
 pub use repo::Repo;
 

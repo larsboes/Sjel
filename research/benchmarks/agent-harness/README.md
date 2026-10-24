@@ -43,7 +43,25 @@ case's workspace is the same 36-file corpus snapped from revision `8cd46b23`: `A
 | D03 | Conflicting evidence | Does `sjel-turso` follow a remote primary as an embedded replica? | Name the stale feature list and summaries, and pick the dated removal section. |
 | D04 | Missing evidence | What recall@10 does Sjel's vector index reach? | No invented number; cite the `[sqlite-vec]` row, which leaves index-versus-scan unmeasured. |
 
-Unlike the first eight, no second agent has reviewed these keys. One agent drafted them from
+### Retrieval alone, 2026-10-24: graph expansion does not beat vector search
+
+`bun tools/agent-eval.ts retrieval <manifest>` runs each D case's prompt and three paraphrases
+(`oracle.retrieval_queries`) as queries over that case's corpus (979 sections), with the
+`embedding` role (`bge-m3-mlx-fp16`) and no chat model. A required section
+(`oracle.required_sections`) counts as found when a hit starts at its line. Both modes return
+10 hits.
+
+| Mode | Required sections found | Text returned |
+|---|---|---|
+| Vector only, top 10 | 17 / 24 | 156,185 chars |
+| Vector top 5 + 5 one-hop neighbours | 18 / 24 | 134,093 chars |
+
+Per query, the expansion was better on 3, worse on 2 and equal on 11. All 5 sections it found
+by expansion came through `contains` edges, the headings above or below a hit in the same file.
+Cross-document `references` edges found none. The test is small: 16 queries, paraphrases
+written by the agent that wrote the keys, and one embedding model.
+
+No second agent has reviewed the D-case keys. One agent drafted them from
 sources it read in the same session.
 
 The checks are independent of a candidate's implementation or self-score. One agent drafted

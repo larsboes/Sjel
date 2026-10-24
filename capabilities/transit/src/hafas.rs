@@ -188,6 +188,15 @@ pub enum HafasError {
     Request(String),
     #[error("HAFAS query failed with status {status}: {body}")]
     BadStatus { status: u16, body: String },
+    /// DB's edge refuses this client (`"code":"OPS_BLOCKED"`). Not a parse or query fault, and
+    /// asking again while it holds can extend it, so the client waits ([`BLOCK_COOLDOWN`]).
+    #[error(
+        "DB is refusing journey requests from this machine (OPS_BLOCKED{}). transit asks again \
+         after a {}-minute pause, because asking sooner can extend the block.",
+        reference.as_deref().map(|r| format!(", reference {r}")).unwrap_or_default(),
+        BLOCK_COOLDOWN.as_secs() / 60
+    )]
+    Blocked { reference: Option<String> },
     #[error("could not parse response: {0} (body: {1})")]
     Parse(String, String),
     /// No cheaper combination exists for this route. An outcome, not a failure: the
@@ -377,6 +386,30 @@ pub struct HafasClient {
     client: Client,
     backend: RailBackend,
     endpoints: Endpoints,
+    /// When the last OPS_BLOCKED journey answer arrived, and its reference. Journey requests
+    /// wait [`BLOCK_COOLDOWN`] after it.
+    // ponytail: in-process only, so a restart asks DB at once; persist it if restarts get frequent.
+    blocked: std::sync::Mutex<Option<(std::time::Instant, Option<String>)>>,
+}
+
+/// How long journey requests pause after DB answers OPS_BLOCKED.
+pub const BLOCK_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// A non-success answer as an error: OPS_BLOCKED is its own variant, anything else keeps its
+/// status and body.
+fn refusal(status: u16, body: String) -> HafasError {
+    let json: Option<Value> = serde_json::from_str(&body).ok();
+    match json {
+        Some(json) if json.get("code").and_then(Value::as_str) == Some("OPS_BLOCKED") => {
+            HafasError::Blocked {
+                reference: json
+                    .get("errorRefId")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            }
+        }
+        _ => HafasError::BadStatus { status, body },
+    }
 }
 
 impl Default for HafasClient {
@@ -406,7 +439,58 @@ impl HafasClient {
             client,
             backend,
             endpoints: Endpoints::from_env(),
+            blocked: std::sync::Mutex::new(None),
         }
+    }
+
+    /// One journey query on the selected backend, answered as its body. The direct search and
+    /// the split both go through here, so a block is seen, and waited out, in one place.
+    fn fahrplan(
+        &self,
+        from_eva: &str,
+        to_eva: &str,
+        datetime: &str,
+        fare: &FareOptions,
+    ) -> Result<Value, HafasError> {
+        if let Some((at, reference)) = self.blocked.lock().expect("block lock").as_ref() {
+            if at.elapsed() < BLOCK_COOLDOWN {
+                return Err(HafasError::Blocked {
+                    reference: reference.clone(),
+                });
+            }
+        }
+        let request = match self.backend {
+            RailBackend::DbWeb => self
+                .client
+                .post(&self.endpoints.fahrplan)
+                .header("User-Agent", BROWSER_UA)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .json(&Self::fahrplan_payload(from_eva, to_eva, datetime, fare)?),
+            RailBackend::DbNav => self
+                .client
+                .post(&self.endpoints.dbnav_fahrplan)
+                .header("X-Correlation-ID", dbnav_correlation_id())
+                .header("Accept", DBNAV_MEDIA_TYPE)
+                .header("Content-Type", DBNAV_MEDIA_TYPE)
+                .json(&Self::dbnav_payload(from_eva, to_eva, datetime, fare)?),
+        };
+        let response = request
+            .send()
+            .map_err(|e| HafasError::Request(e.to_string()))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| HafasError::Request(e.to_string()))?;
+        if !status.is_success() {
+            let error = refusal(status.as_u16(), text);
+            if let HafasError::Blocked { reference } = &error {
+                *self.blocked.lock().expect("block lock") =
+                    Some((std::time::Instant::now(), reference.clone()));
+            }
+            return Err(error);
+        }
+        serde_json::from_str(&text).map_err(|e| HafasError::Parse(e.to_string(), text))
     }
 
     fn fahrplan_payload(
@@ -523,40 +607,7 @@ impl HafasClient {
         datetime: &str,
         fare: &FareOptions,
     ) -> Result<Vec<Journey>, HafasError> {
-        let request = match self.backend {
-            RailBackend::DbWeb => self
-                .client
-                .post(&self.endpoints.fahrplan)
-                .header("User-Agent", BROWSER_UA)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json; charset=UTF-8")
-                .json(&Self::fahrplan_payload(from_eva, to_eva, datetime, fare)?),
-            RailBackend::DbNav => self
-                .client
-                .post(&self.endpoints.dbnav_fahrplan)
-                .header("X-Correlation-ID", dbnav_correlation_id())
-                .header("Accept", DBNAV_MEDIA_TYPE)
-                .header("Content-Type", DBNAV_MEDIA_TYPE)
-                .json(&Self::dbnav_payload(from_eva, to_eva, datetime, fare)?),
-        };
-
-        let response = request
-            .send()
-            .map_err(|e| HafasError::Request(e.to_string()))?;
-
-        let status = response.status();
-        let text = response
-            .text()
-            .map_err(|e| HafasError::Request(e.to_string()))?;
-        if !status.is_success() {
-            return Err(HafasError::BadStatus {
-                status: status.as_u16(),
-                body: text,
-            });
-        }
-
-        let body: Value =
-            serde_json::from_str(&text).map_err(|e| HafasError::Parse(e.to_string(), text))?;
+        let body = self.fahrplan(from_eva, to_eva, datetime, fare)?;
         Ok(match self.backend {
             RailBackend::DbWeb => parse_journeys_from_response(&body),
             RailBackend::DbNav => parse_dbnav_journeys(&body),
@@ -576,10 +627,10 @@ impl HafasClient {
 
         let status = response.status();
         if !status.is_success() {
-            return Err(HafasError::BadStatus {
-                status: status.as_u16(),
-                body: String::new(),
-            });
+            return Err(refusal(
+                status.as_u16(),
+                response.text().unwrap_or_default(),
+            ));
         }
 
         let list: Vec<Value> = response
@@ -605,51 +656,8 @@ impl HafasClient {
         datetime: &str,
         fare: &FareOptions,
     ) -> Result<SplitResult, HafasError> {
-        // Same dispatch as `search_connections`, because this is the same query:
-        // one direct journey, read for its structure instead of returned. Keeping
-        // the two in step is the point -- a backend that can answer journeys can
-        // answer this, and split-ticketing stopped being dbweb-only the moment the
-        // stop and span readers below existed for both shapes.
-        let request = match self.backend {
-            RailBackend::DbWeb => self
-                .client
-                .post(&self.endpoints.fahrplan)
-                .header("User-Agent", BROWSER_UA)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json; charset=UTF-8")
-                .json(&Self::fahrplan_payload(from_eva, to_eva, datetime, fare)?),
-            RailBackend::DbNav => self
-                .client
-                .post(&self.endpoints.dbnav_fahrplan)
-                .header("X-Correlation-ID", dbnav_correlation_id())
-                .header("Accept", DBNAV_MEDIA_TYPE)
-                .header("Content-Type", DBNAV_MEDIA_TYPE)
-                .json(&Self::dbnav_payload(from_eva, to_eva, datetime, fare)?),
-        };
-
-        let response = request
-            .send()
-            .map_err(|e| HafasError::Request(e.to_string()))?;
-
-        let status = response.status();
-        let text = response
-            .text()
-            .map_err(|e| HafasError::Request(e.to_string()))?;
-        if !status.is_success() {
-            // The body used to be dropped here (`body: String::new()`) while
-            // `search_connections` kept it. On dbweb that cost little, because the
-            // same request shape was already debuggable through the other method.
-            // On dbnav it is the difference between a diagnosable rejection and a
-            // bare number, and a versioned vendor media type is exactly the kind of
-            // thing that starts failing with a message worth reading.
-            return Err(HafasError::BadStatus {
-                status: status.as_u16(),
-                body: text,
-            });
-        }
-
-        let body: Value =
-            serde_json::from_str(&text).map_err(|e| HafasError::Parse(e.to_string(), text))?;
+        // The same query as `search_connections`, read for its structure instead of returned.
+        let body = self.fahrplan(from_eva, to_eva, datetime, fare)?;
 
         // Which train the traveller is actually on over each stop pair comes from
         // this same payload, so classifying a segment costs no extra request.
@@ -693,6 +701,9 @@ impl HafasClient {
                         Some(first) => first.total_price.map(|price| (price, first.clone())),
                         None => None,
                     },
+                    // A block stops the whole split: every later pair would be refused too, and
+                    // counting them unpriced would report "no cheaper split" instead.
+                    Err(error @ HafasError::Blocked { .. }) => return Err(error),
                     Err(_) => None,
                 };
                 match priced {
@@ -1598,6 +1609,71 @@ pub fn parse_suggest_response(list: &[Value]) -> Vec<Station> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A stub DB edge that answers every request with OPS_BLOCKED and counts them.
+    fn blocking_stub() -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/fahrplan", listener.local_addr().unwrap());
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = hits.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 8192];
+                let _ = stream.read(&mut buf);
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let body = r#"{"status":"ERROR","code":"OPS_BLOCKED","errorRefId": "0.ref"}"#;
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 452 Blocked\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        (url, hits)
+    }
+
+    #[test]
+    fn a_block_is_named_and_waited_out_and_stops_a_split() {
+        let (url, hits) = blocking_stub();
+        let mut client = HafasClient::with_backend(RailBackend::DbNav);
+        client.endpoints = Endpoints::resolve(|var| {
+            (var == "SJEL_TRANSIT_DBNAV_FAHRPLAN_URL").then(|| url.clone())
+        });
+        let fare = FareOptions::default();
+        let first = client.search_connections("8000207", "8000105", "2026-10-25T10:00:00", &fare);
+        assert!(
+            matches!(&first, Err(HafasError::Blocked { reference }) if reference.as_deref() == Some("0.ref")),
+            "{first:?}"
+        );
+        assert!(first
+            .unwrap_err()
+            .to_string()
+            .contains("OPS_BLOCKED, reference 0.ref"));
+        let split = client.search_split_tickets("8000207", "8000105", "2026-10-25T10:00:00", &fare);
+        assert!(
+            matches!(split, Err(HafasError::Blocked { .. })),
+            "{split:?}"
+        );
+        assert_eq!(
+            hits.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the pause sent nothing"
+        );
+    }
+
+    #[test]
+    fn only_ops_blocked_is_a_block() {
+        assert!(matches!(
+            refusal(452, r#"{"code":"OPS_BLOCKED"}"#.into()),
+            HafasError::Blocked { reference: None }
+        ));
+        assert!(matches!(
+            refusal(500, String::new()),
+            HafasError::BadStatus { status: 500, .. }
+        ));
+    }
 
     #[test]
     fn cheapest_split_prefers_two_hop_over_direct_when_cheaper() {

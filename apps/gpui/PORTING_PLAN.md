@@ -708,11 +708,11 @@ ports.
     unless a ticket is for a different train. Opening the page starts transit on the Mac.
   - The trip library has Find a connection.
 - **Not here**: the traveler profile dialog, the related-tools strip.
-- **Found**: transit's searches fail upstream today. `/api/suggest` answers, but `/api/search`
-  returns DB's `452 OPS_BLOCKED` on the default `dbnav` backend (`capabilities/transit/src/hafas.rs`,
-  `RailBackend`). `SJEL_TRANSIT_BACKEND=dbweb` is the documented alternative. This blocks the
-  dashboard's page as much as this one. The dashboard's page also drew its journey list only when
-  the list was empty (`{#if journeys.length === 0}` wraps it).
+- **Found**: transit's searches fail upstream today. `/api/suggest` answers, but DB refuses
+  journey requests from this Mac with `OPS_BLOCKED` on both backends (`dbnav` 452, `dbweb` 403,
+  `capabilities/transit/src/hafas.rs`, `RailBackend`), so switching backends does not help. transit
+  now names the block, answers 503, and sends nothing for 15 minutes after one. The dashboard's
+  page drew its journey list only when the list was empty; fixed separately.
 - **Verified**: 5 tests in `travel::connections` (sorts, query paths and validation, readings,
   split saving, a full transit split payload with the fields the page ignores) and 1 route
   assertion. `live_search_reads_transit` (ignored, needs this Mac) reached transit: station lookup

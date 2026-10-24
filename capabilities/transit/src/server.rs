@@ -166,6 +166,8 @@ fn hafas_fail(e: transit::hafas::HafasError) -> (axum::http::StatusCode, String)
     let status = match e {
         transit::hafas::HafasError::NoSplitFound => axum::http::StatusCode::NOT_FOUND,
         transit::hafas::HafasError::InvalidDatetime(_) => axum::http::StatusCode::BAD_REQUEST,
+        // DB refuses this machine for now: unavailable, not broken.
+        transit::hafas::HafasError::Blocked { .. } => axum::http::StatusCode::SERVICE_UNAVAILABLE,
         _ => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
     };
     fail(status, e)

@@ -272,7 +272,10 @@ mod tests {
         agent_view(&mut value, &mut session(), &registry());
         assert_eq!(value["due"], "2026-10-23");
         assert_eq!(value["fields"]["scheduled"], "2026-10-20");
-        assert!(!value["summary"].as_str().unwrap().contains("1990"), "{value}");
+        assert!(
+            !value["summary"].as_str().unwrap().contains("1990"),
+            "{value}"
+        );
     }
 
     #[test]

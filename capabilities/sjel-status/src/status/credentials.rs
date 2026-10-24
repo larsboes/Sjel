@@ -69,7 +69,12 @@ mod tests {
         let rows = super::declared(&root);
         assert!(rows.iter().all(|r| r.get("error").is_none()), "{rows:?}");
         let ids: Vec<&str> = rows.iter().filter_map(|r| r["id"].as_str()).collect();
-        assert!(ids.contains(&"google-comms") && ids.contains(&"google-entities"), "{ids:?}");
-        assert!(rows.iter().all(|r| r.get("value").is_none() && r.get("refresh_token").is_none()));
+        assert!(
+            ids.contains(&"google-comms") && ids.contains(&"google-entities"),
+            "{ids:?}"
+        );
+        assert!(rows
+            .iter()
+            .all(|r| r.get("value").is_none() && r.get("refresh_token").is_none()));
     }
 }

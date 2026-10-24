@@ -1342,11 +1342,8 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
             let Some(record) = state.packs.get(pack) else {
                 continue;
             };
-            let want = profile_unit_keys(
-                config,
-                pack,
-                subsets.get(pack).cloned().flatten().as_ref(),
-            )?;
+            let want =
+                profile_unit_keys(config, pack, subsets.get(pack).cloned().flatten().as_ref())?;
             let have: BTreeSet<String> = record.skills.keys().cloned().collect();
             if want != have {
                 narrowed.push((pack.clone(), want));
@@ -1560,7 +1557,11 @@ mod tests {
     fn every_shipped_profile_resolves_against_the_packs_in_this_tree() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let profiles = read_profiles_at(&root).expect("profiles.toml must parse");
-        assert!(!profiles.is_empty(), "no profiles found under {}", root.display());
+        assert!(
+            !profiles.is_empty(),
+            "no profiles found under {}",
+            root.display()
+        );
         let config = DeployConfig {
             axon_root: root.clone(),
             pack_roots: None,
@@ -1584,7 +1585,11 @@ mod tests {
                     "profile '{}' narrows '{pack}' but does not deploy it",
                     profile.name
                 );
-                assert!(subset.is_some(), "profile '{}' resolved an empty subset", profile.name);
+                assert!(
+                    subset.is_some(),
+                    "profile '{}' resolved an empty subset",
+                    profile.name
+                );
             }
         }
         // The one profile whose point is a skill that loads nowhere else: a typo here would put
@@ -1762,7 +1767,8 @@ mod tests {
     /// checked in the same fixture because a hold is the one unit a ledger must never hold.
     #[test]
     fn activating_a_profile_narrows_a_pack_that_is_already_deployed() {
-        let root = std::env::temp_dir().join(format!("sjel-harnesses-narrow-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("sjel-harnesses-narrow-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let pack = root.join("repo/Packs/demo");
         for name in ["alpha", "beta", "gamma"] {
@@ -1808,7 +1814,10 @@ mod tests {
             messages.iter().any(|m| m.contains("Narrowing 1 pack")),
             "{messages:?}"
         );
-        assert!(config.destination.join("alpha").exists(), "the named skill stays");
+        assert!(
+            config.destination.join("alpha").exists(),
+            "the named skill stays"
+        );
         assert!(
             !config.destination.join("beta").exists(),
             "the skill the profile stopped naming must leave the destination"
@@ -1822,7 +1831,10 @@ mod tests {
 
         // Re-activating the same profile is a no-op: the narrowing converged.
         let messages = activate_profile(&config, &profile).unwrap();
-        assert!(messages.iter().any(|m| m.contains("already current")), "{messages:?}");
+        assert!(
+            messages.iter().any(|m| m.contains("already current")),
+            "{messages:?}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

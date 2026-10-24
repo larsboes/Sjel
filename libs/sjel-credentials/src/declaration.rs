@@ -47,7 +47,10 @@ pub fn parse(manifest: &str) -> Result<Vec<Declaration>, String> {
             return Err(format!("credential {}: unknown kind {}", d.id, d.kind));
         }
         if d.scopes.is_empty() {
-            return Err(format!("credential {}: a google-oauth grant needs scopes", d.id));
+            return Err(format!(
+                "credential {}: a google-oauth grant needs scopes",
+                d.id
+            ));
         }
     }
     Ok(manifest.credentials)

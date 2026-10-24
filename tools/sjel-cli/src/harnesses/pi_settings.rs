@@ -356,9 +356,7 @@ fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
             for root in &roots {
                 out.push((
                     key.clone(),
-                    engine::resolve(&root.join(&spelling))
-                        .display()
-                        .to_string(),
+                    engine::resolve(&root.join(&spelling)).display().to_string(),
                 ));
             }
         }

@@ -226,10 +226,8 @@ mod tests {
     use super::*;
 
     fn scratch_db(name: &str) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "sjel-search-{name}-{}.db",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sjel-search-{name}-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
@@ -253,13 +251,25 @@ mod tests {
         let db = scratch_db("words");
         let hits = search(&db, "lisbon");
         let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind).collect();
-        assert_eq!(kinds, ["trip", "mail"], "source order, missing tables skipped");
+        assert_eq!(
+            kinds,
+            ["trip", "mail"],
+            "source order, missing tables skipped"
+        );
         assert_eq!(hits[0].link, "sjel://travel/t1/overview");
         assert_eq!(hits[0].detail, "2026-11-02 – 2026-11-09");
 
-        assert_eq!(search(&db, "lisbon sintra").len(), 1, "both words, trip only");
+        assert_eq!(
+            search(&db, "lisbon sintra").len(),
+            1,
+            "both words, trip only"
+        );
         assert!(search(&db, "lisbon zzz").is_empty());
-        assert_eq!(search(&db, "ANNA")[0].title, "Anna Berg", "ASCII case folds");
+        assert_eq!(
+            search(&db, "ANNA")[0].title,
+            "Anna Berg",
+            "ASCII case folds"
+        );
         assert!(search(&db, "   ").is_empty());
     }
 

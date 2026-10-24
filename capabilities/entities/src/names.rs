@@ -142,8 +142,14 @@ mod tests {
             person("Events Team Hamburg", &[]),
             person("eliah", &[]),
         ]);
-        assert!(!r.tokens.iter().any(|t| t == "aus" || t == "Events"), "{:?}", r.tokens);
-        assert!(r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string()));
+        assert!(
+            !r.tokens.iter().any(|t| t == "aus" || t == "Events"),
+            "{:?}",
+            r.tokens
+        );
+        assert!(
+            r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string())
+        );
         // A real name typed in lowercase still redacts: a leak costs more than a wrong match.
         assert!(r.tokens.contains(&"eliah".to_string()));
         assert!(r.tokens.contains(&"Max".to_string()));

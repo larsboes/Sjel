@@ -49,8 +49,8 @@ mod pure;
 use crate::paths::Paths;
 use pure::{
     classify_processes, credential_finding, decide_emission, decide_resolutions, net_finding,
-    parse_ps_output,
-    storage_finding, Emission, Finding, FindingRow, NetReport, Proc, StorageReport, WatchPolicy,
+    parse_ps_output, storage_finding, Emission, Finding, FindingRow, NetReport, Proc,
+    StorageReport, WatchPolicy,
 };
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};

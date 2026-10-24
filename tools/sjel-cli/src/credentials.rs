@@ -115,7 +115,10 @@ fn prune(root: &Path, id: &str) -> Result<(), String> {
         .ok_or_else(|| format!("{id} has no old env file"))?;
     let credential = CredentialId::parse(id).map_err(|e| e.to_string())?;
     google::prune_env_grant(&credential, &env)?;
-    println!("{}: the keychain grant works; its old env-file copy is removed.", d.label);
+    println!(
+        "{}: the keychain grant works; its old env-file copy is removed.",
+        d.label
+    );
     Ok(())
 }
 
@@ -136,6 +139,9 @@ fn move_grant(root: &Path, id: &str) -> Result<(), String> {
         &d.scopes,
         &env,
     )?;
-    println!("{} moved to the OS keychain; the env file no longer holds it.", d.label);
+    println!(
+        "{} moved to the OS keychain; the env file no longer holds it.",
+        d.label
+    );
     Ok(())
 }

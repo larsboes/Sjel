@@ -109,7 +109,11 @@ fn line(item: &TriageItem) -> Option<String> {
         .as_deref()
         .and_then(crate::mail_model::sender_domain)
         .unwrap_or_else(|| "unknown sender".into());
-    let what = if is_delivery(item) { "Delivered" } else { "Mail" };
+    let what = if is_delivery(item) {
+        "Delivered"
+    } else {
+        "Mail"
+    };
     let subject = match (item.data_class.as_str(), item.subject.as_deref()) {
         ("c2", _) | (_, None) => String::new(),
         (_, Some(s)) => format!(": \"{}\"", s.replace('"', "'")),
@@ -147,16 +151,19 @@ impl Projects<'_> {
 
     fn get(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
         let url = self.url(path);
-        let response = sjel_server::InboundAuth::with_loopback_auth(
-            self.client.get(&url).query(query),
-            &url,
-        )
-        .send()
-        .map_err(|_| format!("Projects did not answer {path}"))?;
+        let response =
+            sjel_server::InboundAuth::with_loopback_auth(self.client.get(&url).query(query), &url)
+                .send()
+                .map_err(|_| format!("Projects did not answer {path}"))?;
         if !response.status().is_success() {
-            return Err(format!("Projects refused {path} (HTTP {})", response.status()));
+            return Err(format!(
+                "Projects refused {path} (HTTP {})",
+                response.status()
+            ));
         }
-        response.json().map_err(|_| format!("Projects answered {path} without JSON"))
+        response
+            .json()
+            .map_err(|_| format!("Projects answered {path} without JSON"))
     }
 
     fn post(&self, path: &str, body: &Value) -> Result<(), String> {
@@ -166,7 +173,10 @@ impl Projects<'_> {
                 .send()
                 .map_err(|_| format!("Projects did not answer {path}"))?;
         if !response.status().is_success() {
-            return Err(format!("Projects refused {path} (HTTP {})", response.status()));
+            return Err(format!(
+                "Projects refused {path} (HTTP {})",
+                response.status()
+            ));
         }
         Ok(())
     }
@@ -326,8 +336,18 @@ mod tests {
 
     #[test]
     fn each_matcher_kind_matches_only_its_own_shape() {
-        let mail = item("eBay <ebay@ebay.com>", "PAKET ZUGESTELLT: Schlauch 1995932", "c1");
-        for hit in ["ebay.com", "ebay@ebay.com", "1995932", "1a15954fa689d5cc", "zugestellt"] {
+        let mail = item(
+            "eBay <ebay@ebay.com>",
+            "PAKET ZUGESTELLT: Schlauch 1995932",
+            "c1",
+        );
+        for hit in [
+            "ebay.com",
+            "ebay@ebay.com",
+            "1995932",
+            "1a15954fa689d5cc",
+            "zugestellt",
+        ] {
             assert!(terms(hit).iter().all(|t| matches(t, &mail)), "{hit}");
         }
         for miss in ["miele.de", "com", "bay.com", "x@ebay.com", "199", "Miele"] {

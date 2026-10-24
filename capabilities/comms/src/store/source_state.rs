@@ -290,14 +290,18 @@ mod db_tests {
         store
             .record_sweep_success("github-trending-daily", 10, 3)
             .expect("a collector succeeds");
-        let collected = store.newest_source_success(&[]).expect("a freshness answer");
+        let collected = store
+            .newest_source_success(&[])
+            .expect("a freshness answer");
         assert!(collected.is_some(), "a real collector answers the contract");
 
         store
             .record_relevance_pass("semantic|relevance-revision|:0", 372, 12, None)
             .expect("the receipt writes");
         assert_eq!(
-            store.newest_source_success(&[]).expect("a freshness answer"),
+            store
+                .newest_source_success(&[])
+                .expect("a freshness answer"),
             collected,
             "a relevance pass takes delivery of nothing and must not answer for arrivals"
         );
@@ -306,7 +310,9 @@ mod db_tests {
             .record_sweep_success(crate::capacity::LOCAL_INFERENCE_SOURCE, 0, 0)
             .expect("the local model drain succeeds");
         assert_eq!(
-            store.newest_source_success(&[]).expect("a freshness answer"),
+            store
+                .newest_source_success(&[])
+                .expect("a freshness answer"),
             collected,
             "a machine talking to itself cannot satisfy its own health contract"
         );

@@ -133,7 +133,8 @@ fn candidate_pairs(texts: &[(&str, HashSet<u64>)]) -> BTreeSet<(usize, usize)> {
         rarest.sort_unstable_by_key(|shingle| (postings[shingle].len(), *shingle));
         // One extra shingle absorbs float rounding in ceil(); a longer prefix
         // only adds candidates, never loses one.
-        let prefix = (set.len() - (set.len() as f64 * min_overlap).ceil() as usize + 2).min(set.len());
+        let prefix =
+            (set.len() - (set.len() as f64 * min_overlap).ceil() as usize + 2).min(set.len());
         for shingle in &rarest[..prefix] {
             for &j in &postings[shingle] {
                 if j != i && texts[j].1.len() >= set.len() {
@@ -163,7 +164,11 @@ pub fn candidates(documents: &[Document], sources: &[(String, String)]) -> Vec<R
 
     // One record found in several folders stores one blob; only several
     // records for the same bytes leave something to decide.
-    for group in report.copies.into_iter().filter(|group| group.ids.len() > 1) {
+    for group in report
+        .copies
+        .into_iter()
+        .filter(|group| group.ids.len() > 1)
+    {
         let mut member_ids = group.ids;
         member_ids.sort();
         candidates.push(ReviewCandidate {
@@ -318,7 +323,11 @@ mod tests {
                 shared / sets[i].1.len().min(sets[j].1.len()) as f64 >= RESCAN_MIN_JACCARD
             })
             .collect();
-        assert!(reachable.len() > 10, "fixture too sparse: {}", reachable.len());
+        assert!(
+            reachable.len() > 10,
+            "fixture too sparse: {}",
+            reachable.len()
+        );
         assert!(candidate_pairs(&sets).is_superset(&reachable));
     }
 
@@ -332,7 +341,12 @@ mod tests {
             ("a".repeat(64), "/x/a.md".into()),
             ("a".repeat(64), "/y/a.md".into()),
         ];
-        assert_eq!(report(&[note.clone(), edited.clone()], &sources).copies.len(), 1);
+        assert_eq!(
+            report(&[note.clone(), edited.clone()], &sources)
+                .copies
+                .len(),
+            1
+        );
         assert!(candidates(&[note, edited], &sources).is_empty());
     }
 

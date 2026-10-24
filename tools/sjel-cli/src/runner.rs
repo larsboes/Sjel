@@ -1606,8 +1606,11 @@ mod tests {
         let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2_000_000);
         std::fs::write(repo.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
         write_at(&repo.join("Cargo.toml"), old);
-        std::fs::write(repo.join("tools/storage/Cargo.toml"), "[package]\nname = \"s\"\n")
-            .unwrap();
+        std::fs::write(
+            repo.join("tools/storage/Cargo.toml"),
+            "[package]\nname = \"s\"\n",
+        )
+        .unwrap();
         write_at(&repo.join("tools/storage/Cargo.toml"), old);
 
         let build = vec![
@@ -1626,7 +1629,10 @@ mod tests {
         // The overlay on its own would call this current: it has no sources to compare.
         assert!(artifact_is_current(&build, &artifact, &overlay));
         let sources = source_root(&build, &overlay);
-        assert_eq!(sources, repo, "a manifest in the repository names the repository");
+        assert_eq!(
+            sources, repo,
+            "a manifest in the repository names the repository"
+        );
         assert!(!artifact_is_current(&build, &artifact, &sources));
 
         write_at(&artifact, new);
@@ -1641,10 +1647,16 @@ mod tests {
     fn a_manifest_belongs_to_its_workspace_or_to_itself() {
         let root = scratch("manifest-root");
         std::fs::create_dir_all(root.join("crates/member/src")).unwrap();
-        std::fs::write(root.join("Cargo.toml"), "[workspace]\nmembers = [\"crates/member\"]\n")
-            .unwrap();
-        std::fs::write(root.join("crates/member/Cargo.toml"), "[package]\nname = \"m\"\n")
-            .unwrap();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/member\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("crates/member/Cargo.toml"),
+            "[package]\nname = \"m\"\n",
+        )
+        .unwrap();
 
         let member = root.join("crates/member/Cargo.toml").display().to_string();
         let build = vec![

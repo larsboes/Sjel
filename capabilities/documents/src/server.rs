@@ -575,12 +575,25 @@ mod tests {
         let (app, _root) = fixture();
         for name in ["a.pdf", "b.pdf"] {
             let path = format!("/api/documents?filename={name}");
-            assert_eq!(call(&app, "POST", &path, "same bytes").await.status(), StatusCode::CREATED);
+            assert_eq!(
+                call(&app, "POST", &path, "same bytes").await.status(),
+                StatusCode::CREATED
+            );
         }
         let sha = crate::library::hex(&<sha2::Sha256 as sha2::Digest>::digest(b"same bytes"));
-        let found = json_body(call(&app, "GET", &format!("/api/documents?sha256={sha}"), "").await).await;
+        let found =
+            json_body(call(&app, "GET", &format!("/api/documents?sha256={sha}"), "").await).await;
         assert_eq!(found["total"], 2);
-        let absent = json_body(call(&app, "GET", &format!("/api/documents?sha256={}", "0".repeat(64)), "").await).await;
+        let absent = json_body(
+            call(
+                &app,
+                "GET",
+                &format!("/api/documents?sha256={}", "0".repeat(64)),
+                "",
+            )
+            .await,
+        )
+        .await;
         assert_eq!(absent["total"], 0);
     }
 

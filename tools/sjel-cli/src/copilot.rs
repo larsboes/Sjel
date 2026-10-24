@@ -160,7 +160,10 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
         changed = true;
     }
     if !changed {
-        println!("Copilot settings and guard are already current: {}", target.display());
+        println!(
+            "Copilot settings and guard are already current: {}",
+            target.display()
+        );
     }
     ExitCode::SUCCESS
 }

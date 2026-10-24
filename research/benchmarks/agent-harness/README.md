@@ -197,6 +197,24 @@ cargo build -p sjel-agent --bin sjel-agent-eval
 SJEL_AGENT_EVAL_LIVE_ADAPTERS=1 bun --no-env-file test tools/agent-eval-live.test.ts
 ```
 
+### First live run, 2026-10-24: pipeline smoke, unscored
+
+Pi 1.4.0 and `sjel-agent-eval` at `22acddce`, both on `Qwen3.5-4B-MLX-4bit` through the same
+oMLX endpoint (`127.0.0.1:8000`), thinking off, C01 and R04, 2 repeats, harness order
+alternating. This is the only chat model oMLX served that day, and a 4B model is too small to
+separate two harnesses. The run shows the pipeline works, not which harness is better.
+
+| | Pi | Sjel |
+|---|---|---|
+| Attempts reaching a final answer | 4 / 4 | 4 / 4 |
+| Policy failures | 0 | 0 |
+| R04 behaviour check (one valid probe) | 2 / 2 pass | 2 / 2 pass |
+| Elapsed per attempt | 13.2–31.5 s | 12.6–20.6 s |
+| Tokens (input + output) | 2,344–4,261 | not reported |
+
+C01 and R04 claims are `review_pending`: factual scoring needs the human adjudicator. Traces
+stay in the overlay under `data/agent-eval/runs/2026-10-24-qwen-pi-vs-sjel/`.
+
 ## Remaining decisions
 
 The profile pair and source-grounding requirement are decided, and the live adapters exist.

@@ -18,7 +18,7 @@
 //!    the first attempt answers 202 with an approval id, and the agent
 //!    repeats the same write with `X-Sjel-Approval: <id>`;
 //! 4. gets a JSON response rewritten by `sjel_pseudonymize::view::agent_view`, with c3
-//!    objects removed. A read whose response is not JSON is refused;
+//!    objects removed. A read whose response is not JSON is refused with its status;
 //! 5. leaves one line in the call log, with no body and no query.
 //!
 //! Only a capability that calls [`crate::InboundAuth::admit_agents`] accepts the agent token.
@@ -232,6 +232,23 @@ fn session_id(request: &Request) -> String {
             format!("day:{days}")
         }
     }
+}
+
+/// A read that answered something other than JSON. The body is withheld, because only JSON can
+/// be pseudonymized; the status and content type carry no personal data and say what happened,
+/// so a refusal keeps its own status instead of turning into a 406.
+fn withheld_read(status: StatusCode, content_type: &str) -> (StatusCode, String) {
+    let message = format!(
+        "the capability answered {} with {content_type}; agent reads are JSON only, so the body \
+         is withheld",
+        status.as_u16()
+    );
+    let status = if status.is_client_error() || status.is_server_error() {
+        status
+    } else {
+        StatusCode::NOT_ACCEPTABLE
+    };
+    (status, message)
 }
 
 fn refuse(status: StatusCode, message: &str) -> Response {
@@ -507,11 +524,13 @@ async fn pseudonymize_response(
     read: bool,
 ) -> Response {
     let (mut parts, body) = response.into_parts();
-    let is_json = parts
+    let content_type = parts
         .headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.starts_with("application/json"));
+        .unwrap_or("no content type")
+        .to_owned();
+    let is_json = content_type.starts_with("application/json");
     let Ok(bytes) = axum::body::to_bytes(body, MAX_RESPONSE_BYTES).await else {
         return refuse(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -523,10 +542,8 @@ async fn pseudonymize_response(
     }
     if !is_json {
         if read {
-            return refuse(
-                StatusCode::NOT_ACCEPTABLE,
-                "agent reads are JSON only: this response cannot be pseudonymized",
-            );
+            let (status, message) = withheld_read(parts.status, &content_type);
+            return refuse(status, &message);
         }
         let status = parts.status;
         return (
@@ -611,6 +628,20 @@ mod tests {
     fn the_artifact_parser_skips_short_entries() {
         let names = people_from_artifact(r#"{"tokens":["Jo","Katrin","Anna Lena"]}"#).unwrap();
         assert_eq!(names, vec!["Katrin".to_string(), "Anna Lena".to_string()]);
+    }
+
+    #[test]
+    fn a_withheld_read_names_the_status_it_hides() {
+        let (status, message) =
+            withheld_read(StatusCode::SERVICE_UNAVAILABLE, "text/plain; charset=utf-8");
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            message,
+            "the capability answered 503 with text/plain; charset=utf-8; agent reads are JSON \
+             only, so the body is withheld"
+        );
+        let (status, _) = withheld_read(StatusCode::OK, "text/html");
+        assert_eq!(status, StatusCode::NOT_ACCEPTABLE);
     }
 
     #[test]

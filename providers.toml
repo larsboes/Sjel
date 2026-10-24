@@ -28,6 +28,11 @@ highest_data_class = "c0"
 reviewed_at = "2026-08-30"
 why = "Google AI Studio / Gemini API free tier, approved for c0 public content only. Evaluated 2026-08-30."
 
+[deepseek]
+highest_data_class = "c0"
+reviewed_at = "2026-10-24"
+why = "DeepSeek API, approved for c0 public content only: the Pi/Sjel agent comparison on DeepSeek V4.1 Flash (operator decision 2026-10-24, research/benchmarks/agent-harness/README.md). Its privacy policy (last updated 2026-02-10, cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html) states that personal data is collected, processed and stored in the People's Republic of China, kept as long as the account exists, and may be used to train models; the only stated opt-out is an email to privacy@deepseek.com. Nothing above c0 goes to this provider."
+
 [some-provider]
 highest_data_class = "c1"
 reviewed_at = "2026-09-01"

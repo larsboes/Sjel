@@ -17,12 +17,7 @@
     | { kind: "table"; headers: InlinePart[][]; rows: InlinePart[][][] }
     | { kind: "rule" };
 
-  let {
-    content,
-    compact = false,
-    resolveLink,
-    onToggle,
-  } = $props<{
+  type Props = {
     content: string;
     compact?: boolean;
     /**
@@ -36,7 +31,13 @@
      * new state. Without it the boxes show their state and cannot be changed.
      */
     onToggle?: (box: number, checked: boolean) => void;
-  }>();
+  };
+
+  // The annotation form, not `$props<Props>()`: svelte-check 4.7.7 reports the generic call as
+  // "Expected 0 type arguments" and the type then collapses to `any`, which turns every call
+  // site's missing optional prop into an error. Both forms are documented; this one survives
+  // the checker.
+  let { content, compact = false, resolveLink, onToggle }: Props = $props();
   const blocks = $derived(parseMarkdown(content));
 
   function inlineParts(value: string): InlinePart[] {

@@ -333,6 +333,27 @@ license = "MIT"
 summary = "sqld, the libSQL database server: the primary a phone or a second machine holds an embedded replica of"
 why = "The server half of the same repository as [libsql], split into its own row because it is consumed completely differently: the crate comes from crates.io and is pinned by Cargo.lock, while sqld ships only as release binaries and is installed by tools/install-sqld.sh at one version and one digest (libsql-server-v0.24.32, aarch64-apple-darwin, sha256 ced2a9d6...381dd, verified against the archive this machine installed on 2026-10-21). Not on Homebrew and not on crates.io, which is why a repository script owns it rather than a package manager. Adopted for the topology decided 2026-10-21 (PLAN.md section 6): this Mac is the primary, a phone is the first replica, and a home server takes over later by changing SJEL_TURSO_URL and nothing else. The pin is a compatibility fact, not a preference: 0.24.32 is the release measured against the libsql 0.10.0 crate (pull, forwarded write, a second replica seeing the first one's write). Upstream has been quiet since 2025-02-14; that is recorded as a risk rather than as comfort, because a primary is now on the critical path for whatever replicates from it. Untrusted surface when it is exposed beyond loopback: sqld's own JWT check, minted by libs/libsql-auth from a key in the macOS Keychain."
 
+[grafeo]
+url = "https://github.com/GrafeoDB/grafeo"
+verdict = "reject"
+license = "Apache-2.0"
+summary = "Embedded Rust graph database (LPG/RDF, Cypher/GQL, HNSW); measured against SQL edge tables, no gap found"
+why = "Measured 2026-10-24 in research/benchmarks/graph-store/ (0.6.0, features cypher + grafeo-file, standalone crate outside the workspace) on Graphify's 37,200-node repository graph, against libSQL edge tables and an in-memory BFS as reference. Both engines returned all 60 impact and connection answers exactly. Grafeo was about 8x faster than a recursive CTE on open-ended undirected paths, but an in-memory BFS over the same SQL edges was about 4x faster than Grafeo, and bounded 3-hop impact queries were equal (under 0.2 ms p95). Reopen cost 81-96 ms against 0.5 ms. Its planner did not reorder a pattern: anchoring the indexed node last cost 42 ms instead of 0.04 ms. Rejected for the coding-agent consumer because it adds a second database for speed that code already provides. Repository created 2026-01-26; MSRV 1.99.0. Revisit when a consumer needs what was not measured: graph algorithms, hybrid graph+vector queries in one plan, or a graph too large for in-memory adjacency."
+
+[indradb]
+url = "https://github.com/indradb/indradb"
+verdict = "reject"
+license = "MPL-2.0"
+summary = "Programmatic Rust graph store (TAO-style) with pluggable backends; nothing over SQL edge tables"
+why = "Checked 2026-10-24 against GitHub and crates.io: indradb-lib 5.0.0 published 2025-08-16, which is also the last push to the repository. It offers programmatic vertex and edge queries without a query language. research/benchmarks/graph-store/ showed that SQL edge tables plus a BFS in code answer the coding-agent impact and path questions exactly and fast, and that is the same programming model IndraDB offers, without a second store or the RocksDB native dependency. Not built or measured. Revisit only if its maintenance resumes and a consumer needs a distributed backend."
+
+[turso]
+url = "https://github.com/tursodatabase/turso"
+verdict = "watch"
+license = "MIT"
+summary = "Turso Database, the Rust rewrite of SQLite; a successor candidate to the libSQL fork Sjel links"
+why = "noted 2026-10-24 for PLAN.md Track 2. NOT READ. The turso crate stood at 0.8.3 (2026-10-15) on crates.io that day. Sjel links [libsql] 0.10.0, whose core feature already provides F32_BLOB vectors, a libsql_vector_idx index and vector_top_k (libs/sjel-turso/src/lib.rs, test native_vector_index_and_top_k, passing 2026-10-24). The question a reading answers: whether this engine opens axon.db unchanged, runs the recursive CTEs and vector queries the stores use, and recovers after a crash, measured against libSQL rather than inferred from the shared name."
+
 [bun]
 url = "https://github.com/oven-sh/bun"
 verdict = "adopt"

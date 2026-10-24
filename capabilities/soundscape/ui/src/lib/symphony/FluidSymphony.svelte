@@ -6,18 +6,7 @@
   import { symphonyStore } from "./symphonyStore.svelte";
   import { formatSeed, parseSeed } from "./rng";
 
-  let {
-    preset = "edm" as PresetKey,
-    volume = 0.65,
-    energy = 0.7,
-    showControls = true,
-    showOverlay = true,
-    autoStart = false,
-    maxDpr = 1.25,
-    simRes = 128,
-    dyeRes = 640,
-    oncollapse = undefined,
-  } = $props<{
+  type Props = {
     preset?: PresetKey;
     volume?: number;
     energy?: number;
@@ -29,7 +18,22 @@
     dyeRes?: number;
     /** Set when framed: collapsing back to the dock replaces leaving the page. */
     oncollapse?: () => void;
-  }>();
+  };
+
+  // The annotation form, not `$props<Props>()`: svelte-check 4.7.7 reports the generic call as
+  // "Expected 0 type arguments", which collapses the prop types to `any`.
+  let {
+    preset = "edm" as PresetKey,
+    volume = 0.65,
+    energy = 0.7,
+    showControls = true,
+    showOverlay = true,
+    autoStart = false,
+    maxDpr = 1.25,
+    simRes = 128,
+    dyeRes = 640,
+    oncollapse = undefined,
+  }: Props = $props();
 
   let canvasRef = $state<HTMLCanvasElement | null>(null);
   let isSupported = $state(true);

@@ -38,7 +38,7 @@ regex.workspace = true
 sha2.workspace = true
 civil-date = { path = "../../libs/civil-date" }
 zeroize.workspace = true
-signal-hook = "=0.4.4"
+signal-hook = "=0.4.5"
 # host-watch writes its findings into the one shared SQLite file, so it opens it the way every
 # capability does — `sjel-config` owns where that file is and `sjel-store` owns the pragmas,
 # the once-per-database migration and the write transaction. Both are already in the workspace

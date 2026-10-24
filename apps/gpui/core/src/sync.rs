@@ -27,7 +27,7 @@ use std::future::Future;
 use serde_json::{json, Value};
 
 use crate::device::DeviceClient;
-use crate::shell::ProjectRecord;
+use crate::shell::{CalendarEntry, ProjectRecord};
 use crate::store::TursoStore;
 
 const PROJECTS: &str = "/projects/api/projects";
@@ -38,6 +38,10 @@ const TASKS: &str = "/projects/api/tasks";
 const TASKS_DONE: &str = "/projects/api/tasks/done";
 const RECORD_PROPERTY: &str = "/projects/api/record/property";
 const RECORD_REMOVE: &str = "/projects/api/record/remove";
+/// The calendar's entries: a create on the collection, a change and a delete by id, and a change
+/// feed that answers what moved since a cursor (`capabilities/calendar/src/server.rs`).
+const ENTRIES: &str = "/calendar/api/entries";
+const ENTRY_CHANGES: &str = "/calendar/api/entries/changes";
 
 /// One HTTP answer from the Mac, undecoded, so a 409's `current` can be read instead of lost.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,21 +175,30 @@ impl Report {
 /// error: it is reported in [`Report::kept`], and the write stays queued.
 pub async fn run<H: Host>(store: &TursoStore, host: &H) -> Result<Report, String> {
     let mut report = Report::default();
-    push(store, host, &mut report).await?;
+    // One push per domain, in a fixed order so a run is reproducible. Ordering only has to hold
+    // inside a domain, and a calendar write the Mac refuses must not hold up a note.
+    push(store, host, crate::store::DOMAIN_PROJECTS, &mut report).await?;
+    push(store, host, crate::store::DOMAIN_CALENDAR, &mut report).await?;
     pull(store, host, &mut report).await?;
+    pull_calendar(store, host, &mut report).await?;
     Ok(report)
 }
 
 // ---------------------------------------------------------------- push
 
-async fn push<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Result<(), String> {
+async fn push<H: Host>(
+    store: &TursoStore,
+    host: &H,
+    domain: &str,
+    report: &mut Report,
+) -> Result<(), String> {
     // The oldest write each time, read fresh: a create moves its record, and any write queued for
     // that record, to the path the Mac picked (`TursoStore::rekey`), so a list read once at the
     // start would go on naming paths that no longer exist.
     let mut attempted: HashSet<i64> = HashSet::new();
     loop {
         let Some(mutation) = store
-            .pending_mutations()
+            .pending_in(Some(domain))
             .await
             .map_err(|e| e.to_string())?
             .into_iter()
@@ -232,6 +245,8 @@ async fn replay<H: Host>(
         "set_task_priority" => priority(store, host, report, &mutation.path, &payload).await,
         "set_task_due" => due(host, &mutation.path, &payload).await,
         "delete_record" => remove(store, host, report, &mutation.path).await,
+        "calendar_save" => calendar_save(store, host, report, &mutation.path, &payload).await,
+        "calendar_delete" => calendar_delete(host, &mutation.path).await,
         other => Err(format!("this app has no way to replay a {other}")),
     }
 }
@@ -527,6 +542,205 @@ async fn ensure_project<H: Host>(host: &H, project: &str) -> Result<(), String> 
     }
 }
 
+// ---------------------------------------------------------------- calendar push
+
+/// Replays one entry write: create what the Mac has never had, change what it has.
+///
+/// An id the phone minted ([`crate::store::LOCAL_ENTRY_ID_PREFIX`]) is a create; the Mac answers
+/// with the entry it made, and the local row and its queue take that id (`rekey_calendar`). Any
+/// other id is a change, and a Mac that no longer has the entry (404) gets it created again rather
+/// than losing the edit.
+async fn calendar_save<H: Host>(
+    store: &TursoStore,
+    host: &H,
+    report: &mut Report,
+    id: &str,
+    payload: &Value,
+) -> Result<(), String> {
+    if id.starts_with(crate::store::LOCAL_ENTRY_ID_PREFIX) {
+        let (entry, stamp) = create_entry(host, payload).await?;
+        store
+            .rekey_calendar(id, &entry.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        store
+            .upsert_pulled_calendar(&entry, &stamp)
+            .await
+            .map_err(|e| e.to_string())?;
+        report.created += 1;
+        return Ok(());
+    }
+    let reply = host
+        .send(
+            "PATCH",
+            &format!("{ENTRIES}/{}", quote(id)),
+            Some(payload.to_string().as_bytes()),
+        )
+        .await?;
+    if reply.ok() {
+        if let Some((entry, stamp)) = entry_from_reply(&reply, id) {
+            store
+                .upsert_pulled_calendar(&entry, &stamp)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    if reply.status != 404 {
+        return Err(reply.refused());
+    }
+    // The Mac does not have it any more: create it, and follow the id it picks.
+    let (entry, stamp) = create_entry(host, payload).await?;
+    store
+        .rekey_calendar(id, &entry.id)
+        .await
+        .map_err(|e| e.to_string())?;
+    store
+        .upsert_pulled_calendar(&entry, &stamp)
+        .await
+        .map_err(|e| e.to_string())?;
+    report.created += 1;
+    Ok(())
+}
+
+/// Creates an entry on the Mac and answers the entry it made and its stamp.
+async fn create_entry<H: Host>(
+    host: &H,
+    payload: &Value,
+) -> Result<(CalendarEntry, String), String> {
+    let reply = host
+        .send("POST", ENTRIES, Some(payload.to_string().as_bytes()))
+        .await?;
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    entry_from_reply(&reply, "").ok_or_else(|| "the Mac did not say which entry it made".to_owned())
+}
+
+/// Replays one entry deletion. An entry the Mac does not have is already deleted there.
+async fn calendar_delete<H: Host>(host: &H, id: &str) -> Result<(), String> {
+    let reply = host
+        .send("DELETE", &format!("{ENTRIES}/{}", quote(id)), None)
+        .await?;
+    if reply.ok() || reply.status == 404 {
+        return Ok(());
+    }
+    Err(reply.refused())
+}
+
+// ---------------------------------------------------------------- calendar pull
+
+/// Takes what the calendar capability changed since this replica last read it.
+///
+/// The feed is a cursor, not a scan: `GET /api/entries/changes?since=` answers every entry written
+/// or deleted after that stamp, so a pull costs what changed rather than every entry in the
+/// database. An id with an unsent local write is skipped, the rule the projects pull keeps: the
+/// phone's edit is newer than anything the Mac can answer with. The cursor moves only after every
+/// answer has been applied, so a pull that stops halfway is repeated rather than lost.
+///
+/// No sweep runs afterwards, unlike the projects pull: a feed read from 0 carries every deletion
+/// there has ever been, so a local row the Mac no longer has arrives as a tombstone instead of
+/// lingering until someone notices.
+async fn pull_calendar<H: Host>(
+    store: &TursoStore,
+    host: &H,
+    report: &mut Report,
+) -> Result<(), String> {
+    let since = store
+        .cursor(crate::store::DOMAIN_CALENDAR)
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| "0".to_owned());
+    let reply = get(host, &format!("{ENTRY_CHANGES}?since={since}")).await?;
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    let Some(body) = reply.json() else {
+        return Err("the Mac's change feed is not readable".to_owned());
+    };
+    let dirty: HashSet<String> = store
+        .dirty_keys(crate::store::DOMAIN_CALENDAR)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+    for value in body["upserted"].as_array().cloned().unwrap_or_default() {
+        let Some((entry, stamp)) = entry_from_json(&value) else {
+            continue;
+        };
+        if dirty.contains(&entry.id) {
+            continue;
+        }
+        let local = store
+            .calendar_entry(&entry.id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let news = local.as_ref() != Some(&entry);
+        store
+            .upsert_pulled_calendar(&entry, &stamp)
+            .await
+            .map_err(|e| e.to_string())?;
+        if news {
+            report.pulled += 1;
+        }
+    }
+    for tombstone in body["deleted"].as_array().cloned().unwrap_or_default() {
+        let id = tombstone["id"].as_str().unwrap_or_default();
+        if id.is_empty() || dirty.contains(id) {
+            continue;
+        }
+        store
+            .remove_local_calendar(id)
+            .await
+            .map_err(|e| e.to_string())?;
+        report.removed += 1;
+    }
+    if let Some(cursor) = body["cursor"].as_str() {
+        store
+            .set_cursor(crate::store::DOMAIN_CALENDAR, cursor)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// One entry out of the calendar capability's JSON (`Entry` in
+/// `capabilities/calendar/src/model.rs`), with the stamp this replica records it at.
+fn entry_from_json(value: &Value) -> Option<(CalendarEntry, String)> {
+    let stamp = value["updated_at"].as_str().unwrap_or_default().to_owned();
+    let entry = CalendarEntry {
+        id: value["id"].as_str()?.to_owned(),
+        kind: value["kind"].as_str().unwrap_or("event").to_owned(),
+        commitment: value["commitment"]
+            .as_str()
+            .unwrap_or("possible")
+            .to_owned(),
+        title: value["title"].as_str().unwrap_or_default().to_owned(),
+        starts_at: value["starts_at"].as_str().unwrap_or_default().to_owned(),
+        ends_at: value["ends_at"].as_str().unwrap_or_default().to_owned(),
+        all_day: value["all_day"].as_bool().unwrap_or(false),
+        location: value["location"].as_str().map(str::to_owned),
+        notes: value["notes"].as_str().map(str::to_owned),
+        source: value["source"].as_str().unwrap_or("manual").to_owned(),
+    };
+    Some((entry, stamp))
+}
+
+/// One entry out of a create or change answer, which is the entry itself.
+fn entry_from_reply(reply: &Reply, fallback_id: &str) -> Option<(CalendarEntry, String)> {
+    let body = reply.json()?;
+    let value = if body["entry"].is_object() {
+        body["entry"].clone()
+    } else {
+        body
+    };
+    let (mut entry, stamp) = entry_from_json(&value)?;
+    if entry.id.is_empty() {
+        entry.id = fallback_id.to_owned();
+    }
+    Some((entry, stamp))
+}
+
 // ---------------------------------------------------------------- pull
 
 async fn pull<H: Host>(store: &TursoStore, host: &H, report: &mut Report) -> Result<(), String> {
@@ -708,7 +922,7 @@ fn quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::TursoStore;
+    use crate::store::{TursoStore, DOMAIN_CALENDAR, LOCAL_ENTRY_ID_PREFIX};
     use std::sync::Mutex;
 
     /// A Mac that answers from a table. Each answer is used once, by method and exact path, so a
@@ -757,8 +971,26 @@ mod tests {
             let mut answers = self.answers.lock().unwrap();
             let at = answers
                 .iter()
-                .position(|(m, p, _, _)| m == method && p == path)
-                .ok_or_else(|| format!("no answer prepared for {method} {path}"))?;
+                .position(|(m, p, _, _)| m == method && p == path);
+            let Some(at) = at else {
+                // `run` pulls the calendar feed after every projects pull, so a test about a note
+                // states one conversation and gets an empty feed for the domain it is not about.
+                // A test that cares prepares its own answer, which wins above.
+                if method == "GET" && path.starts_with(ENTRY_CHANGES) {
+                    let cursor = path
+                        .split_once("since=")
+                        .map(|(_, since)| since)
+                        .unwrap_or("0");
+                    return Ok(Reply {
+                        status: 200,
+                        body: serde_json::to_vec(&json!({
+                            "upserted": [], "deleted": [], "cursor": cursor,
+                        }))
+                        .unwrap_or_default(),
+                    });
+                }
+                return Err(format!("no answer prepared for {method} {path}"));
+            };
             let (_, _, status, value) = answers.remove(at);
             Ok(Reply {
                 status,
@@ -1306,6 +1538,313 @@ mod tests {
                 store.fetch_record("Inbox/One.md").await.unwrap().is_some(),
                 "the phone keeps its copy"
             );
+        });
+    }
+
+    // ------------------------------------------------------------ calendar
+
+    /// One entry as the calendar capability answers it: `Entry` flattened into `EntryListItem`, so
+    /// the entry's own fields sit at the top level beside the class.
+    fn entry_json(id: &str, title: &str, stamp: &str) -> Value {
+        json!({
+            "id": id,
+            "kind": "event",
+            "commitment": "planned",
+            "title": title,
+            "starts_at": "2026-10-24T09:00:00",
+            "ends_at": "2026-10-24T10:00:00",
+            "all_day": false,
+            "location": Value::Null,
+            "notes": Value::Null,
+            "attendees": [],
+            "source": "manual",
+            "external_id": Value::Null,
+            "rhythm_id": Value::Null,
+            "updated_at": stamp,
+            "created_at": stamp,
+            "data_class": "personal",
+        })
+    }
+
+    /// The same entry as this replica holds it.
+    fn local_entry(id: &str, title: &str) -> CalendarEntry {
+        CalendarEntry {
+            id: id.to_string(),
+            kind: "event".into(),
+            commitment: "planned".into(),
+            title: title.into(),
+            starts_at: "2026-10-24T09:00:00".into(),
+            ends_at: "2026-10-24T10:00:00".into(),
+            all_day: false,
+            location: None,
+            notes: None,
+            source: "manual".into(),
+        }
+    }
+
+    /// `GET /calendar/api/entries/changes` at one cursor. Stamps and tombstones are the integer
+    /// milliseconds the feed's cursor counts in.
+    fn feed(upserted: Vec<Value>, deleted: &[(&str, &str)], cursor: &str) -> Value {
+        json!({
+            "upserted": upserted,
+            "deleted": deleted
+                .iter()
+                .map(|(id, at)| json!({ "id": id, "deleted_at": at }))
+                .collect::<Vec<_>>(),
+            "cursor": cursor,
+        })
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+    }
+
+    #[test]
+    fn an_entry_made_on_the_phone_is_created_and_takes_the_macs_id() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let local = format!("{LOCAL_ENTRY_ID_PREFIX}7f3a");
+            store
+                .save_calendar_entry(&local_entry(&local, "Dentist"))
+                .await
+                .expect("save");
+
+            let fake = Fake::default();
+            fake.on(
+                "POST",
+                ENTRIES,
+                201,
+                entry_json("calendar:1f2e", "Dentist", "1761000001000"),
+            );
+            fake.on("GET", PROJECTS, 200, projects(&[]));
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.created, 1, "{report:?}");
+            assert_eq!(report.pushed, 1, "{report:?}");
+            assert!(report.kept.is_empty(), "{report:?}");
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
+
+            // The row and the write queued for it both moved to the id the Mac assigned.
+            let moved = store
+                .calendar_entry("calendar:1f2e")
+                .await
+                .unwrap()
+                .expect("the row followed the Mac's id");
+            assert_eq!(moved.title, "Dentist");
+            assert!(store.calendar_entry(&local).await.unwrap().is_none());
+
+            // The create carried what the person typed, and no id the Mac has not made.
+            let writes = fake.bodies_to(ENTRIES);
+            assert_eq!(writes.len(), 1, "{writes:?}");
+            assert_eq!(writes[0]["title"], json!("Dentist"));
+            assert!(writes[0].get("id").is_none(), "{writes:?}");
+        });
+    }
+
+    #[test]
+    fn an_entry_the_mac_already_has_is_changed_rather_than_created() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = "calendar:1f2e";
+            store
+                .save_calendar_entry(&local_entry(id, "Dentist at nine"))
+                .await
+                .expect("save");
+
+            let fake = Fake::default();
+            let one = format!("{ENTRIES}/calendar%3A1f2e");
+            fake.on(
+                "PATCH",
+                &one,
+                200,
+                entry_json(id, "Dentist at nine", "1761000002000"),
+            );
+            fake.on("GET", PROJECTS, 200, projects(&[]));
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.pushed, 1, "{report:?}");
+            assert_eq!(report.created, 0, "the Mac already had it");
+            assert!(
+                fake.bodies_to(ENTRIES).is_empty(),
+                "no second entry was made"
+            );
+            assert_eq!(
+                store.calendar_entry(id).await.unwrap().unwrap().title,
+                "Dentist at nine"
+            );
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
+        });
+    }
+
+    #[test]
+    fn an_entry_the_mac_no_longer_has_is_created_again_with_the_phones_text() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = "calendar:1f2e";
+            store
+                .save_calendar_entry(&local_entry(id, "Dentist at nine"))
+                .await
+                .expect("save");
+
+            let fake = Fake::default();
+            fake.on(
+                "PATCH",
+                &format!("{ENTRIES}/calendar%3A1f2e"),
+                404,
+                json!({ "error": "no such entry" }),
+            );
+            fake.on(
+                "POST",
+                ENTRIES,
+                201,
+                entry_json("calendar:9a41", "Dentist at nine", "1761000003000"),
+            );
+            fake.on("GET", PROJECTS, 200, projects(&[]));
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.created, 1, "{report:?}");
+            assert!(report.kept.is_empty(), "{report:?}");
+
+            // The edit survived the Mac losing the entry: it is on the entry the Mac made instead.
+            let made = store
+                .calendar_entry("calendar:9a41")
+                .await
+                .unwrap()
+                .expect("the entry the Mac made instead");
+            assert_eq!(made.title, "Dentist at nine");
+            assert!(store.calendar_entry(id).await.unwrap().is_none());
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
+        });
+    }
+
+    #[test]
+    fn a_pull_takes_the_macs_entries_and_a_tombstone_after_them() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            store
+                .upsert_pulled_calendar(&local_entry("calendar:old", "Gone"), "1761000000000")
+                .await
+                .expect("seed");
+
+            let fake = Fake::default();
+            let first = format!("{ENTRY_CHANGES}?since=0");
+            fake.on(
+                "GET",
+                &first,
+                200,
+                feed(
+                    vec![entry_json("calendar:1f2e", "Dentist", "1761000001000")],
+                    &[("calendar:old", "1761000001000")],
+                    "1761000001000",
+                ),
+            );
+
+            let mut report = Report::default();
+            pull_calendar(&store, &fake, &mut report)
+                .await
+                .expect("pull");
+            assert_eq!(report.pulled, 1, "{report:?}");
+            assert_eq!(report.removed, 1, "{report:?}");
+            assert!(store
+                .calendar_entry("calendar:1f2e")
+                .await
+                .unwrap()
+                .is_some());
+            assert!(
+                store
+                    .calendar_entry("calendar:old")
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "a feed read from 0 carries every deletion there has been"
+            );
+            assert_eq!(
+                store.cursor(DOMAIN_CALENDAR).await.unwrap().as_deref(),
+                Some("1761000001000")
+            );
+
+            // The next pull asks from where that one ended, so nothing is read twice.
+            let second = format!("{ENTRY_CHANGES}?since=1761000001000");
+            fake.on("GET", &second, 200, feed(Vec::new(), &[], "1761000001000"));
+            let mut report = Report::default();
+            pull_calendar(&store, &fake, &mut report)
+                .await
+                .expect("second pull");
+            assert_eq!(report.pulled, 0, "{report:?}");
+            assert_eq!(report.removed, 0, "{report:?}");
+        });
+    }
+
+    #[test]
+    fn an_unsent_edit_is_not_written_over_by_the_feed() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = "calendar:1f2e";
+            store
+                .save_calendar_entry(&local_entry(id, "Mine, typed in a tunnel"))
+                .await
+                .expect("save");
+
+            let fake = Fake::default();
+            fake.on(
+                "GET",
+                &format!("{ENTRY_CHANGES}?since=0"),
+                200,
+                feed(
+                    vec![entry_json(id, "Theirs", "1761000004000")],
+                    &[],
+                    "1761000004000",
+                ),
+            );
+
+            let mut report = Report::default();
+            pull_calendar(&store, &fake, &mut report)
+                .await
+                .expect("pull");
+            assert_eq!(report.pulled, 0, "{report:?}");
+            assert_eq!(
+                store.calendar_entry(id).await.unwrap().unwrap().title,
+                "Mine, typed in a tunnel",
+                "the phone's unsent edit is newer than anything the Mac can answer with"
+            );
+            assert_eq!(
+                store.cursor(DOMAIN_CALENDAR).await.unwrap().as_deref(),
+                Some("1761000004000"),
+                "the edit travels, the cursor still moves"
+            );
+        });
+    }
+
+    #[test]
+    fn an_entry_this_replica_already_holds_is_not_news() {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = "calendar:1f2e";
+            store
+                .upsert_pulled_calendar(&local_entry(id, "Dentist"), "1761000001000")
+                .await
+                .expect("seed");
+
+            let fake = Fake::default();
+            fake.on(
+                "GET",
+                &format!("{ENTRY_CHANGES}?since=0"),
+                200,
+                feed(
+                    vec![entry_json(id, "Dentist", "1761000001000")],
+                    &[],
+                    "1761000001000",
+                ),
+            );
+
+            let mut report = Report::default();
+            pull_calendar(&store, &fake, &mut report)
+                .await
+                .expect("pull");
+            assert_eq!(report.pulled, 0, "the row already said this: {report:?}");
         });
     }
 }

@@ -1,13 +1,19 @@
-//! A day of the calendar, drawn from whatever copy of the data this client can read.
+//! A day of the calendar, drawn from wherever this device keeps it.
 //!
 //! The Mac's page (`apps/gpui/src/calendar_view.rs`) draws a month for a machine that is here. This
-//! one is the phone's: one day at a time, seven day chips around it, and no editor, because what it
-//! reads is the Mac's read-only copy ([`sjel_gpui_core::mirror`]) and a copy takes no writes.
+//! one is the phone's: one day at a time, seven day chips around it, and the two writes a day needs
+//! — an entry made, an entry deleted.
 //!
-//! The page knows nothing about the network. It is handed a [`Mirror`] by its host, says when that
-//! copy was built, and emits [`CalendarEvent::Refresh`] when the person asks for a newer one; the
-//! host owns the fetch and hands the result back. That is the split the Projects page keeps with
-//! its replica, and it lets either client draw this page.
+//! Two sources, one page, and the page picks per read. This device's own store
+//! ([`sjel_gpui_core::data::Repo`]: the phone's replica, or the Mac's database) answers once its
+//! change feed has been read ([`Repo::has_calendar`]), and takes writes into that store, queueing
+//! them for the next sync. Until then the Mac's read-only copy ([`sjel_gpui_core::mirror`]) draws
+//! the day; the page says which one it is drawing and offers no editor over a copy, because a copy
+//! takes no writes.
+//!
+//! The page knows nothing about the network. Its host hands it the store and the copy, and it emits
+//! [`CalendarEvent::Refresh`] when the person asks for newer data and [`CalendarEvent::Wrote`] when
+//! an entry landed; the host owns the fetch and the sync.
 //!
 //! A day an entry covers is a day it is shown on, including the middle days of a trip
 //! ([`sjel_gpui_core::calendar::covers_day`]) — the rule the Mac's month grid already keeps.
@@ -16,36 +22,79 @@ use std::sync::Arc;
 
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, EventEmitter, MouseButton, Render,
-    SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, EventEmitter, MouseButton, Render,
+    SharedString, Subscription, Window,
 };
-use sjel_gpui_core::calendar;
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::Sizable;
+use sjel_gpui_core::calendar::{self, Draft};
 use sjel_gpui_core::mirror::Mirror;
-use sjel_gpui_core::shell::CalendarEntry;
+use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
+use crate::data::{self, Press, Repo};
 use crate::{Density, Palette};
 
-/// What the page asks its host to do. The host owns the network and the copy on disk.
+/// What the page asks its host to do. The host owns the network, the copy on disk, and the sync.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarEvent {
-    /// The person asked for a newer copy of the Mac's data.
+    /// The person asked for newer data: a sync into the store, or a newer copy when there is none.
     Refresh,
+    /// An entry was written here and is waiting for the Mac, so the host may sync now.
+    Wrote,
+    /// The new-entry form opened (`true`) or closed, so the host can show or hide the keyboard.
+    Editing(bool),
 }
 
-/// The page's own state: which day, what the copy answered, and why it could not.
+/// Where the week on screen was read from, which is also what the page may do with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// This device's own store: the phone's replica, or the Mac's database. Writes land here.
+    Store,
+    /// The Mac's read-only copy, because the store holds no calendar yet.
+    Copy,
+    /// Neither answered.
+    Unread,
+}
+
+/// The new-entry form: a title, and the two choices a thumb reaches without a second screen.
+///
+/// A time picker is deliberately absent: a timed entry here is `09:00`–`10:00` on the open day and
+/// is corrected on the Mac, which has the room for it. Guessing hours on a phone is worse than two
+/// taps on a keyboard.
+struct Composer {
+    input: Entity<InputState>,
+    all_day: bool,
+    commitment: &'static str,
+    /// The listener that saves on Enter, held for as long as the form is open.
+    _subscription: Subscription,
+}
+
+/// The page's own state: which day, what answered it, and why nothing did.
 pub struct Calendar {
-    mirror: Option<Arc<Mirror>>,
-    /// Why there is no copy to read, in the words the person needs. `None` when nothing failed.
+    /// This device's own store, once the app has one.
+    store: Option<Repo>,
+    /// The Mac's read-only copy, when one is on disk.
+    copy: Option<Arc<Mirror>>,
+    /// Why the Mac's copy could not be opened, in the words the person needs.
     missing: Option<SharedString>,
+    /// Which of the two answered the week on screen.
+    origin: Origin,
     day: NaiveDate,
     week: Vec<NaiveDate>,
-    /// The copy's entries for the week on screen, all days at once: one read answers the day list
-    /// and the chips' dots, and a second read could only disagree with the first.
+    /// The week's entries, all days at once: one read answers the day list and the chips' dots, and
+    /// a second read could only disagree with the first.
     entries: Vec<CalendarEntry>,
     loaded: bool,
     loading: bool,
     /// A failed read, kept beside the rows that answered before it.
     error: Option<SharedString>,
+    /// The open new-entry form, and its complaint when it cannot be saved.
+    composer: Option<Composer>,
+    form_error: Option<SharedString>,
+    /// The entry whose Delete was asked for, waiting for the second tap.
+    confirm_delete: Option<SharedString>,
+    /// True while a write is in flight, so one tap cannot make two entries.
+    saving: bool,
     /// A host's word about this copy, e.g. why a newer one could not be fetched.
     note: Option<SharedString>,
     palette: Palette,
@@ -66,14 +115,20 @@ impl Calendar {
     /// not today needs this; `ios/run-sim` sets it from `SJEL_DAY`.
     pub fn at(day: NaiveDate, density: Density) -> Self {
         Self {
-            mirror: None,
+            store: None,
+            copy: None,
             missing: None,
+            origin: Origin::Unread,
             day,
             week: calendar::week_dates(day),
             entries: Vec::new(),
             loaded: false,
             loading: false,
             error: None,
+            composer: None,
+            form_error: None,
+            confirm_delete: None,
+            saving: false,
             note: None,
             palette: Palette::light(),
             density,
@@ -81,26 +136,37 @@ impl Calendar {
         }
     }
 
-    /// Hands the page a copy to read, or the reason the Mac has not sent one.
+    /// Hands the page this device's own store once it opens.
+    ///
+    /// The store wins over the copy from the moment its change feed has been read, which the read
+    /// itself decides ([`Self::load`]): a replica that has never pulled holds no entries, and
+    /// drawing its empty month over a readable copy would hide a day that is there.
+    pub fn set_store(&mut self, store: Option<Repo>, cx: &mut Context<Self>) {
+        self.store = store;
+        self.loaded = false;
+        self.load(cx);
+    }
+
+    /// Hands the page the Mac's copy, or the reason it is not there.
     ///
     /// A newer copy replaces the old one without the page forgetting which day is open, so a
     /// refresh that lands while it is on screen moves the entries, not the person.
-    pub fn set_mirror(
+    pub fn set_copy(
         &mut self,
-        mirror: Option<Arc<Mirror>>,
+        copy: Option<Arc<Mirror>>,
         missing: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        self.mirror = mirror;
+        self.copy = copy;
         self.missing = missing.map(SharedString::from);
         self.loaded = false;
         self.error = None;
         self.load(cx);
     }
 
-    /// A sentence about this copy from the host — most often why a newer one could not be fetched.
-    /// A failed fetch does not take away the rows already on screen: they are still true, only
-    /// older, and the copy line above says how old.
+    /// A sentence about the data on screen from the host — most often why a newer copy could not be
+    /// fetched. A failed fetch does not take away the rows already there: they are still true, only
+    /// older, and the line above says how old.
     pub fn set_note(&mut self, note: Option<String>, cx: &mut Context<Self>) {
         self.note = note.map(SharedString::from);
         cx.notify();
@@ -113,42 +179,68 @@ impl Calendar {
         }
     }
 
-    /// True once the copy has answered this week, so a host can tell a blank page from a loading one.
+    /// True once something has answered this week, so a host can tell a blank page from a loading
+    /// one.
     pub fn loaded(&self) -> bool {
         self.loaded
     }
 
-    /// Reads the week on screen from the copy.
+    /// True when the day on screen came from this device's own store, so entries can be written.
+    pub fn writable(&self) -> bool {
+        self.origin == Origin::Store && self.store.is_some()
+    }
+
+    /// Reads the week on screen from the store, or from the Mac's copy until the store can answer.
     ///
-    /// Nothing happens without one: a phone that has not reached its Mac reads nothing, and says so
-    /// through [`Self::set_mirror`]'s `missing` instead of drawing zeroes that look like an answer.
+    /// Nothing happens without either: a phone that has not reached its Mac and has no copy reads
+    /// nothing, and says so through [`Self::set_copy`]'s `missing` instead of drawing zeroes that
+    /// look like an answer.
     pub fn load(&mut self, cx: &mut Context<Self>) {
-        let Some(mirror) = self.mirror.clone() else {
+        if self.store.is_none() && self.copy.is_none() {
             return;
-        };
+        }
         let Some((from, to)) = calendar::window(&self.week) else {
             return;
         };
         self.generation += 1;
         let generation = self.generation;
         self.loading = true;
-        let work = sjel_gpui_core::shell::run(async move { mirror.calendar(&from, &to).await });
+        let store = self.store.clone();
+        let copy = self.copy.clone();
+        let work = shell::run(async move {
+            if let Some(store) = store {
+                if store.has_calendar().await {
+                    let answer = store.fetch_calendar(&from, &to).await;
+                    return (Origin::Store, answer);
+                }
+            }
+            if let Some(copy) = copy {
+                let answer = copy.calendar(&from, &to).await.map_err(ShellError::Store);
+                return (Origin::Copy, answer);
+            }
+            (
+                Origin::Unread,
+                Err(ShellError::Store("The calendar was not read.".to_owned())),
+            )
+        });
         cx.spawn(async move |this, cx| {
-            let answer = work
-                .await
-                .unwrap_or_else(|| Err("The copy was not read.".to_owned()));
+            let (origin, answer) = work.await.unwrap_or((
+                Origin::Unread,
+                Err(ShellError::Store("The calendar was not read.".to_owned())),
+            ));
             let _ = this.update(cx, |view, cx| {
                 if view.generation != generation {
                     return;
                 }
                 view.loading = false;
                 view.loaded = true;
+                view.origin = origin;
                 match answer {
                     Ok(entries) => {
                         view.entries = entries;
                         view.error = None;
                     }
-                    Err(error) => view.error = Some(SharedString::from(error)),
+                    Err(error) => view.error = Some(SharedString::from(error.to_string())),
                 }
                 cx.notify();
             });
@@ -187,16 +279,136 @@ impl Calendar {
             .collect()
     }
 
-    /// The copy's age, in the words the page shows under its title.
-    fn copy_line(&self) -> Option<String> {
-        let mirror = self.mirror.as_ref()?;
-        Some(format!(
-            "Copy from {} · read-only",
-            mirror.manifest().built_label()
-        ))
+    /// The line under the title: where this week came from, and whether it can be changed here.
+    fn source_line(&self) -> Option<String> {
+        match self.origin {
+            Origin::Store => Some("Your own store · sends itself when your Mac answers".to_owned()),
+            Origin::Copy => self
+                .copy
+                .as_ref()
+                .map(|copy| format!("Copy from {} · read-only", copy.manifest().built_label())),
+            Origin::Unread => None,
+        }
     }
 
-    fn row(&self, entry: &CalendarEntry, day: NaiveDate) -> AnyElement {
+    /// Opens the new-entry form on the day on screen, with the keyboard asked for.
+    fn open_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.writable() || self.composer.is_some() {
+            return;
+        }
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("What is it?"));
+        let subscription = cx.subscribe_in(&input, window, |view, _, event, window, cx| {
+            if let InputEvent::PressEnter { .. } = event {
+                view.save_composer(window, cx);
+            }
+        });
+        input.update(cx, |input, cx| input.focus(window, cx));
+        self.composer = Some(Composer {
+            input,
+            all_day: false,
+            commitment: "planned",
+            _subscription: subscription,
+        });
+        self.form_error = None;
+        cx.emit(CalendarEvent::Editing(true));
+        cx.notify();
+    }
+
+    fn close_composer(&mut self, cx: &mut Context<Self>) {
+        if self.composer.take().is_some() {
+            self.form_error = None;
+            cx.emit(CalendarEvent::Editing(false));
+        }
+        cx.notify();
+    }
+
+    /// Writes the form's entry into this device's store, where the next sync carries it to the Mac.
+    fn save_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.saving {
+            return;
+        }
+        let Some(composer) = self.composer.as_ref() else {
+            return;
+        };
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        // A timed entry here is nine to ten on the open day; the Mac is where an hour is picked.
+        let draft = Draft {
+            title: composer.input.read(cx).value().to_string(),
+            day: self.day,
+            start: "09:00".to_owned(),
+            end: "10:00".to_owned(),
+            all_day: composer.all_day,
+            kind: "event".to_owned(),
+            commitment: composer.commitment.to_owned(),
+        };
+        let entry = match draft.entry(String::new()) {
+            Ok(entry) => entry,
+            Err(why) => {
+                self.form_error = Some(SharedString::from(why));
+                cx.notify();
+                return;
+            }
+        };
+        self.saving = true;
+        data::write_repo(
+            cx,
+            window,
+            self,
+            &store,
+            Press::quiet("Entry saved."),
+            move |repo| async move { repo.save_calendar_entry(entry).await },
+            |this, saved, cx| {
+                this.saving = false;
+                if saved.is_some() {
+                    this.composer = None;
+                    this.confirm_delete = None;
+                    this.load(cx);
+                    cx.emit(CalendarEvent::Wrote);
+                    cx.emit(CalendarEvent::Editing(false));
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    /// Asks for a second tap before an entry goes: a list is tapped through, and one tap that
+    /// deletes what a thumb brushed is not a rule a phone should keep.
+    fn ask_delete(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.confirm_delete = Some(SharedString::from(id.to_owned()));
+        cx.notify();
+    }
+
+    /// Deletes the entry whose Delete was confirmed, here and — queued — on the Mac.
+    fn delete_entry(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.saving {
+            return;
+        }
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        self.saving = true;
+        data::write_repo(
+            cx,
+            window,
+            self,
+            &store,
+            Press::quiet("Entry deleted."),
+            move |repo| async move { repo.delete_calendar_entry(&id).await },
+            |this, done, cx| {
+                this.saving = false;
+                this.confirm_delete = None;
+                if done.is_some() {
+                    this.load(cx);
+                    cx.emit(CalendarEvent::Wrote);
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    fn row(&self, entry: &CalendarEntry, day: NaiveDate, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let rail = calendar::kind_color(&entry.kind);
         let time = calendar::time_label(entry, day);
@@ -289,6 +501,76 @@ impl Calendar {
                     }))
                     .child(commitment.to_owned()),
             )
+            .when(self.writable(), |row| {
+                row.child(self.row_actions(entry, cx))
+            })
+            .into_any_element()
+    }
+
+    /// What can be done to one row: the ask, and the second tap that deletes.
+    ///
+    /// Nothing renders when the day came from the Mac's copy: a copy takes no writes, and a button
+    /// that cannot work is worse than no button.
+    fn row_actions(&self, entry: &CalendarEntry, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let confirming = self.confirm_delete.as_deref() == Some(entry.id.as_str());
+        if confirming {
+            let id = entry.id.clone();
+            return div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap_1()
+                .child(
+                    div()
+                        .id(SharedString::from(format!("calendar-delete-{}", entry.id)))
+                        .px_2()
+                        .py(px(6.))
+                        .rounded(px(6.))
+                        .bg(rgb(palette.red))
+                        .text_xs()
+                        .text_color(rgb(0xffffff))
+                        .child("Delete")
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |view, _, window, cx| {
+                                view.delete_entry(id.clone(), window, cx)
+                            }),
+                        ),
+                )
+                .child(
+                    div()
+                        .id(SharedString::from(format!("calendar-keep-{}", entry.id)))
+                        .px_2()
+                        .py(px(6.))
+                        .rounded(px(6.))
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("Keep")
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|view, _, _, cx| {
+                                view.confirm_delete = None;
+                                cx.notify();
+                            }),
+                        ),
+                )
+                .into_any_element();
+        }
+        let id = entry.id.clone();
+        div()
+            .id(SharedString::from(format!("calendar-more-{}", entry.id)))
+            .flex_none()
+            .px_2()
+            .py(px(6.))
+            .rounded(px(6.))
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child("⋯")
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |view, _, _, cx| view.ask_delete(&id, cx)),
+            )
             .into_any_element()
     }
 
@@ -378,10 +660,147 @@ impl Calendar {
             )
             .into_any_element()
     }
+
+    /// The new-entry form: one field, two choices that fit a thumb, and the two buttons that end
+    /// it. Only drawn from a writable store ([`Self::writable`]).
+    fn composer_card(&self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let Some(composer) = self.composer.as_ref() else {
+            return div().into_any_element();
+        };
+        let commitment_chips: Vec<AnyElement> = calendar::COMMITMENTS
+            .iter()
+            .map(|(key, label)| {
+                let key: &'static str = key;
+                let on = composer.commitment == key;
+                div()
+                    .id(SharedString::from(format!(
+                        "calendar-form-commitment-{key}"
+                    )))
+                    .flex_1()
+                    .py(px(8.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .when(on, |chip| chip.bg(rgb(palette.accent)))
+                    .when(!on, |chip| chip.bg(rgba(palette.border)))
+                    .text_xs()
+                    .text_color(rgb(if on { 0xffffff } else { palette.text }))
+                    .child(*label)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |view, _, _, cx| {
+                            if let Some(composer) = view.composer.as_mut() {
+                                composer.commitment = key;
+                            }
+                            cx.notify();
+                        }),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        let all_day = composer.all_day;
+        let when_button = |label: &'static str, day: bool| {
+            let on = all_day == day;
+            div()
+                .id(SharedString::from(format!("calendar-form-{label}")))
+                .flex_1()
+                .py(px(8.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(8.))
+                .when(on, |pill| pill.bg(rgb(palette.text)))
+                .when(!on, |pill| pill.bg(rgba(palette.border)))
+                .text_xs()
+                .text_color(rgb(if on { 0xffffff } else { palette.text }))
+                .child(label)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |view, _, _, cx| {
+                        if let Some(composer) = view.composer.as_mut() {
+                            composer.all_day = day;
+                        }
+                        cx.notify();
+                    }),
+                )
+                .into_any_element()
+        };
+        let saving = self.saving;
+        let form_error = self.form_error.clone();
+
+        div()
+            .rounded(px(12.))
+            .bg(rgba(palette.surface))
+            .p_3()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(Input::new(&composer.input).small())
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(when_button("All day", true))
+                    .child(when_button("09:00–10:00", false)),
+            )
+            .child(div().flex().gap_2().children(commitment_chips))
+            .when_some(form_error, |card, why| {
+                card.child(div().text_xs().text_color(rgb(palette.red)).child(why))
+            })
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .id("calendar-form-save")
+                            .flex_1()
+                            .py(px(10.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(8.))
+                            .bg(rgb(if saving {
+                                palette.muted
+                            } else {
+                                palette.accent
+                            }))
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(0xffffff))
+                            .child(if saving { "Saving…" } else { "Save" })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|view, _, window, cx| view.save_composer(window, cx)),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("calendar-form-cancel")
+                            .flex_none()
+                            .px_4()
+                            .py(px(10.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(8.))
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child("Cancel")
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|view, _, _, cx| view.close_composer(cx)),
+                            ),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
 impl Render for Calendar {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette;
         let day = self.day;
         let today = Local::now().date_naive();
@@ -389,7 +808,7 @@ impl Render for Calendar {
         let rows: Vec<AnyElement> = self
             .entries_of_day()
             .into_iter()
-            .map(|entry| self.row(entry, day))
+            .map(|entry| self.row(entry, day, cx))
             .collect();
         let count = rows.len();
         let chips: Vec<AnyElement> = self
@@ -399,20 +818,26 @@ impl Render for Calendar {
             .zip(dotted)
             .map(|(date, dotted)| self.chip(date, dotted, cx))
             .collect();
-        let copy_line = self.copy_line();
+        let source_line = self.source_line();
         let error = self.error.clone();
         let note = self.note.clone();
         let missing = self.missing.clone();
         let loading = self.loading;
+        let writable = self.writable();
+        let composing = self.composer.is_some();
         let empty_line = match (missing.is_some(), loading, count) {
             (true, _, _) => None,
             // Rows that answered before a refresh stay on screen while the new week is read.
             (false, _, 1..) => None,
-            (false, true, 0) => Some("Reading the copy…".to_owned()),
-            (false, false, _) if self.loaded => Some("Nothing on this day in the copy.".to_owned()),
-            (false, false, _) => Some("Not read yet.".to_owned()),
+            (false, true, 0) => Some("Reading the calendar…".to_owned()),
+            (false, false, _) if !self.loaded => Some("Not read yet.".to_owned()),
+            (false, false, _) if self.origin == Origin::Copy => {
+                Some("Nothing on this day in the copy.".to_owned())
+            }
+            (false, false, _) => Some("Nothing on this day.".to_owned()),
         };
         let refresh = self.refresh_button(cx);
+        let composer = self.composer_card(window, cx);
         let to_today = cx.entity().clone();
 
         div()
@@ -420,7 +845,7 @@ impl Render for Calendar {
             .flex_col()
             .size_full()
             .gap_3()
-            // Title row: the day, and what it was read from.
+            // Title row: the day, what it was read from, and the one write a day needs.
             .child(
                 div()
                     .flex()
@@ -438,13 +863,40 @@ impl Render for Calendar {
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .child(day.format("%A, %-d %B").to_string()),
                             )
-                            .when_some(copy_line, |column, line| {
+                            .when_some(source_line, |column, line| {
                                 column.child(
                                     div().text_xs().text_color(rgb(palette.muted)).child(line),
                                 )
                             }),
                     )
-                    .child(refresh),
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .when(writable && !composing, |row| {
+                                row.child(
+                                    div()
+                                        .id("calendar-new")
+                                        .flex_none()
+                                        .px_3()
+                                        .py(px(6.))
+                                        .rounded(px(8.))
+                                        .bg(rgb(palette.accent))
+                                        .text_xs()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .text_color(rgb(0xffffff))
+                                        .child("New")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|view, _, window, cx| {
+                                                view.open_composer(window, cx)
+                                            }),
+                                        ),
+                                )
+                            })
+                            .child(refresh),
+                    ),
             )
             // The week around it, with a dot on every day that holds something.
             .child(
@@ -468,6 +920,7 @@ impl Render for Calendar {
                         |view, cx| view.step(1, cx),
                     )),
             )
+            .when(composing, |page| page.child(composer))
             .when(day != today, |page| {
                 page.child(
                     div()
@@ -500,7 +953,7 @@ impl Render for Calendar {
                             div()
                                 .text_sm()
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .child("The calendar reads a copy of your Mac’s data"),
+                                .child("The calendar is not on this phone yet"),
                         )
                         .child(
                             div()
@@ -613,6 +1066,21 @@ mod tests {
         assert_eq!(
             page.dotted(),
             vec![false, false, true, true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn a_page_that_has_read_nothing_offers_no_editor() {
+        let day = calendar::parse_day("2026-10-24").expect("a date");
+        let page = Calendar::at(day, Density::Mobile);
+        assert_eq!(page.origin, Origin::Unread);
+        assert!(
+            !page.writable(),
+            "an editor over nothing would drop what it was given"
+        );
+        assert!(
+            page.source_line().is_none(),
+            "and there is no source to name yet"
         );
     }
 

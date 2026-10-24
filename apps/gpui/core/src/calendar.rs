@@ -145,8 +145,14 @@ pub struct Draft {
 }
 
 impl Draft {
-    /// The `POST /calendar/api/entries` body, or why the draft cannot be saved.
-    pub fn body(&self) -> Result<serde_json::Value, &'static str> {
+    /// The entry this draft describes, with `id`: empty for one this device is about to name
+    /// ([`crate::store::LOCAL_ENTRY_ID_PREFIX`]), or the id the Mac assigned. `Err` is why the
+    /// draft cannot be saved.
+    ///
+    /// One place decides what a form's fields mean, because two callers ask: the Mac posts
+    /// [`Self::body`] to the capability, and the phone writes the entry straight into its replica
+    /// and lets `crate::sync` replay it.
+    pub fn entry(&self, id: String) -> Result<CalendarEntry, &'static str> {
         let title = self.title.trim();
         if title.is_empty() {
             return Err("Give the entry a title.");
@@ -169,13 +175,30 @@ impl Draft {
             }
             (start.format(TIME).to_string(), end.format(TIME).to_string())
         };
+        Ok(CalendarEntry {
+            id,
+            kind: self.kind.clone(),
+            commitment: self.commitment.clone(),
+            title: title.to_owned(),
+            starts_at,
+            ends_at,
+            all_day: self.all_day,
+            location: None,
+            notes: None,
+            source: "manual".to_owned(),
+        })
+    }
+
+    /// The `POST /calendar/api/entries` body, or why the draft cannot be saved.
+    pub fn body(&self) -> Result<serde_json::Value, &'static str> {
+        let entry = self.entry(String::new())?;
         Ok(serde_json::json!({
-            "kind": self.kind,
-            "commitment": self.commitment,
-            "title": title,
-            "starts_at": starts_at,
-            "ends_at": ends_at,
-            "all_day": self.all_day,
+            "kind": entry.kind,
+            "commitment": entry.commitment,
+            "title": entry.title,
+            "starts_at": entry.starts_at,
+            "ends_at": entry.ends_at,
+            "all_day": entry.all_day,
         }))
     }
 }
@@ -255,5 +278,44 @@ mod tests {
         draft.all_day = false;
         draft.start = "9.30".into();
         assert!(draft.body().is_err());
+    }
+
+    /// Two callers ask what a form means: the Mac posts [`Draft::body`] and the phone writes
+    /// [`Draft::entry`] into its replica. They must not disagree about the same fields.
+    #[test]
+    fn the_entry_a_draft_names_is_the_one_its_body_posts() {
+        let draft = Draft {
+            title: "  Dentist ".into(),
+            day: day("2026-10-24"),
+            start: "09:00".into(),
+            end: "10:00".into(),
+            all_day: false,
+            kind: "event".into(),
+            commitment: "planned".into(),
+        };
+        let entry = draft.entry("calendar:local:1".into()).expect("entry");
+        assert_eq!(entry.id, "calendar:local:1", "the id is the caller's");
+        assert_eq!(entry.title, "Dentist", "the title is trimmed");
+        assert_eq!(
+            entry.source, "manual",
+            "a phone-made entry is the operator's"
+        );
+
+        let body = draft.body().expect("body");
+        assert_eq!(body["title"], entry.title);
+        assert_eq!(body["starts_at"], entry.starts_at);
+        assert_eq!(body["ends_at"], entry.ends_at);
+        assert_eq!(body["all_day"], false);
+        assert_eq!(body["kind"], entry.kind);
+        assert_eq!(body["commitment"], entry.commitment);
+
+        // An all-day entry runs to the next midnight, wherever it is written.
+        let all_day = Draft {
+            all_day: true,
+            ..draft
+        };
+        let entry = all_day.entry(String::new()).expect("entry");
+        assert_eq!(entry.starts_at, "2026-10-24");
+        assert_eq!(entry.ends_at, "2026-10-25");
     }
 }

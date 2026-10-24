@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|---|
 | 1 | `/` | Home (Command Center) | **Ported** | Native GPUI (`Home` + `ContextPage`) | In progress | Sjel Shell / Core |
 | 2 | `/context` | Today (Timeline & Focus) | **Ported** (`/` and `/context` are one page) | Native GPUI (`Home` + `ContextPage`) | Planned Tab | `capabilities/context` |
-| 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (day view off the Mac's read-only copy) | `capabilities/calendar` |
+| 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (the replica, writes included; the Mac's copy until the first pull) | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
 | 6 | `/inbox` | Capture Inbox & Triage | **Partially Ported** | Native GPUI (`Inbox`) | Planned Tab | `capabilities/comms` |
@@ -111,6 +111,42 @@
 - **Next**: People and Places are a page away, because `places_*` and `entities_*` are already in
   the phone's table set. The pages that write need the replica's second domain, which is the same
   shape as `core/src/sync.rs` per capability.
+
+### ✅ Work Package 8: the calendar joins the replica, and the phone's tab writes
+- **Status**: Shipped (2026-10-23). The tab reads and writes the replica; the Mac's copy is the
+  fallback until the first pull.
+- **Shipped**:
+  - `apps/gpui/core/src/store.rs` — the replica's second domain: a `calendar_entries` table, a
+    `_replica_meta` cursor per domain, and a `domain` column on `_offline_mutations` with the
+    migration that defaults an old log to `projects`.
+  - `apps/gpui/core/src/sync.rs` — `push` per domain (one refused calendar write cannot hold up a
+    note), `calendar_save` (a phone-minted id creates, anything else changes, and a 404 re-creates
+    rather than losing the edit), `calendar_delete`, and `pull_calendar`: a change feed read from a
+    cursor, tombstones applied, an id with an unsent write skipped, and the cursor moved only after
+    everything in the answer has been applied.
+  - `apps/gpui/core/src/data/repo.rs` — `Repo::fetch_calendar` answers from the replica with the
+    full entry (id, kind, place, notes, source), plus `save_calendar_entry`,
+    `delete_calendar_entry`, and `has_calendar`.
+  - `apps/gpui/core/src/calendar.rs` — `Draft::entry`, so the Mac's form body and the phone's replica
+    write agree about what a field means.
+  - `apps/gpui/ui/src/calendar.rs` — two sources, one page: the store answers once
+    `Repo::has_calendar` is true, the Mac's copy until then, and the title line says which one drew
+    the day. The **New** form (title, all-day or 09:00–10:00, commitment) writes one entry on the
+    open day; a row's **⋯** asks, and a second tap deletes. Both are absent over a copy.
+  - `apps/gpui/ios/src/lib.rs` — hands the page the replica `Repo` when the store opens, reloads it
+    after every sync, and treats **Refresh** as a sync when there is a store.
+- **Why writes are thin on purpose**: a timed entry made here is 09:00–10:00 on the open day and is
+  corrected on the Mac, which has the room for a time picker. Guessing hours on a phone is worse
+  than two taps on a keyboard.
+- **Tests**: 14 new (6 in `sync.rs`, 1 in `store.rs`, 5 in `data/repo.rs`, 1 in `calendar.rs`, 1 in
+  `ui/src/calendar.rs`); `cargo test -p sjel-gpui-core -p sjel-gpui-ui` is 248 + 30, all green.
+- **Target Files**:
+  - `apps/gpui/core/src/{store,sync,calendar}.rs`
+  - `apps/gpui/core/src/data/repo.rs`
+  - `apps/gpui/ui/src/calendar.rs`
+  - `apps/gpui/ios/src/lib.rs`
+- **Next**: the same shape per capability. Each remaining table set needs a feed and a table before
+  its page can leave the copy, and the copy's table set shrinks as they move.
 
 ---
 
@@ -248,13 +284,13 @@ flowchart TD
 ```
 
 1. **Expanding iOS Tab Navigation**:
-   - Current tabs: `Projects` (replica, read and write), `Calendar` (the Mac's read-only copy, a day
-     at a time), `Travel`, `Settings`.
+   - Current tabs: `Projects` (replica, read and write), `Calendar` (replica, read and write; the
+     Mac's copy until the first pull), `Travel`, `Settings`.
    - Add tabs:
      - `Today`: Daily context timeline, focus tasks with large tap target checkboxes.
      - `Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).
-     - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7, read-only; it becomes a
-       writing tab when the calendar joins the replica.
+     - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7; a writing tab since Work
+       Package 8, when the calendar joined the replica.
 
 2. **Autonomous Offline Store**:
    - Bundle `rusqlite` / `libsql` directly inside the iOS app sandbox.

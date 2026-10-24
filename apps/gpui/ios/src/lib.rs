@@ -219,7 +219,17 @@ impl Capabilities {
         // the Mac (`core/src/mirror.rs`).
         let calendar = cx.new(|_| Calendar::at(launch_day(), Density::Mobile));
         cx.subscribe(&calendar, |view, _, event, cx| match event {
-            CalendarEvent::Refresh => view.refresh_copy(cx),
+            // Newer data: a sync when this phone has a store to sync, the Mac's copy otherwise.
+            CalendarEvent::Refresh => {
+                if view.board.is_some() {
+                    view.maybe_sync(cx);
+                } else {
+                    view.refresh_copy(cx);
+                }
+            }
+            // An entry landed in the replica: the queue moved, so the Mac can have it now.
+            CalendarEvent::Wrote => view.maybe_sync(cx),
+            CalendarEvent::Editing(open) => keyboard(*open),
         })
         .detach();
         let copy_events = events.clone();
@@ -239,7 +249,7 @@ impl Capabilities {
                                 Ok(copy) => {
                                     view.copy = Some(copy.clone());
                                     view.calendar.update(cx, |calendar, cx| {
-                                        calendar.set_mirror(Some(copy), None, cx)
+                                        calendar.set_copy(Some(copy), None, cx)
                                     });
                                 }
                                 // A refresh that fails leaves the copy already on screen alone:
@@ -247,7 +257,7 @@ impl Capabilities {
                                 Err(error) => {
                                     if view.copy.is_none() {
                                         view.calendar.update(cx, |calendar, cx| {
-                                            calendar.set_mirror(None, Some(error), cx)
+                                            calendar.set_copy(None, Some(error), cx)
                                         });
                                     } else {
                                         view.calendar.update(cx, |calendar, cx| {
@@ -265,8 +275,15 @@ impl Capabilities {
                         Event::Board(board) => {
                             if view.projects.is_none() {
                                 if let Some(store) = board.store().cloned() {
-                                    let projects = view.open_projects(store, cx);
+                                    let projects = view.open_projects(store.clone(), cx);
                                     view.projects = Some(projects);
+                                    // The Calendar tab writes to the same store, and reads it as
+                                    // soon as its change feed has been read once — until then the
+                                    // Mac's copy keeps drawing the day (`ui/src/calendar.rs`).
+                                    let repo = view.repo_for(store);
+                                    view.calendar.update(cx, |calendar, cx| {
+                                        calendar.set_store(Some(repo), cx)
+                                    });
                                 }
                             }
                             view.board = Some(board);
@@ -375,6 +392,8 @@ impl Capabilities {
                             if let Some(projects) = &view.projects {
                                 projects.update(cx, |projects, cx| projects.reload(cx));
                             }
+                            // A pull lands entries too, and the ids a create answered with.
+                            view.calendar.update(cx, |calendar, cx| calendar.load(cx));
                             view.synced = Some(
                                 match outcome {
                                     Ok(report) => report.summary(),
@@ -481,10 +500,7 @@ impl Capabilities {
         store: Arc<sjel_gpui_core::store::TursoStore>,
         cx: &mut Context<Self>,
     ) -> gpui::Entity<Projects> {
-        let events = self.events.clone();
-        let repo = Repo::replica(store, move || {
-            let _ = events.unbounded_send(Event::Wrote);
-        });
+        let repo = self.repo_for(store);
         let projects = cx.new(|_| Projects::new(repo).with_density(Density::Mobile));
         cx.subscribe(&projects, |_, _, event, _| match event {
             ProjectsEvent::Editing(open) => keyboard(*open),
@@ -492,6 +508,15 @@ impl Capabilities {
         .detach();
         projects.update(cx, |projects, cx| projects.load_projects(cx));
         projects
+    }
+
+    /// The phone's `Repo` over one store: every write it takes comes back as [`Event::Wrote`], so
+    /// the queue count moves and a sync may start.
+    fn repo_for(&self, store: Arc<sjel_gpui_core::store::TursoStore>) -> Repo {
+        let events = self.events.clone();
+        Repo::replica(store, move || {
+            let _ = events.unbounded_send(Event::Wrote);
+        })
     }
 }
 

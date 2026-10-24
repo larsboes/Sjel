@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::shell::{ProjectRecord, ShellError};
+use crate::shell::{CalendarEntry, ProjectRecord, ShellError};
 
 /// Specific errors for Turso / LibSQL local storage.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,15 +67,59 @@ CREATE INDEX IF NOT EXISTS idx_projects_records_done ON projects_records(done);
 const ADDED_COLUMNS: &[(&str, &str)] = &[("synced_content", "TEXT"), ("remote_at", "TEXT")];
 
 /// Offline mutation log to replay deltas when reconnected to the host.
+///
+/// `domain` names which capability the write belongs to, because the two replays are not
+/// interchangeable: a record replays against a path the Mac names and may rekey, an entry replays
+/// against an id the Mac assigned or the phone minted. One table keeps one order and one badge;
+/// [`crate::sync`] pushes per domain anyway, because ordering only has to hold inside a domain.
 const SCHEMA_MUTATIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS _offline_mutations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL DEFAULT 'projects',
     path TEXT NOT NULL,
     action TEXT NOT NULL,
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 "#;
+
+/// The columns an existing mutation log from before the second domain does not have yet.
+const ADDED_MUTATION_COLUMNS: &[(&str, &str)] = &[("domain", "TEXT NOT NULL DEFAULT 'projects'")];
+
+/// The calendar's own replica: the entries the phone holds, and the cursor it has read to.
+///
+/// `remote_at` is the Mac's `updated_at` stamp for the entry, which is also the change feed's
+/// cursor unit, so a row reconciled at stamp N is skipped by every pull that asks from N.
+const SCHEMA_CALENDAR: &str = r#"
+CREATE TABLE IF NOT EXISTS calendar_entries (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'event',
+    commitment TEXT NOT NULL DEFAULT 'possible',
+    title TEXT NOT NULL,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    all_day INTEGER NOT NULL DEFAULT 1,
+    location TEXT,
+    notes TEXT,
+    source TEXT NOT NULL DEFAULT 'manual',
+    remote_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_entries_starts ON calendar_entries(starts_at);
+CREATE TABLE IF NOT EXISTS _replica_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"#;
+
+/// The replica's name for one domain, used by the queue and by the pull cursors.
+pub const DOMAIN_PROJECTS: &str = "projects";
+pub const DOMAIN_CALENDAR: &str = "calendar";
+/// The key a change feed's cursor is kept under, per domain.
+const CURSOR_PREFIX: &str = "cursor:";
+/// The id prefix an entry made on this phone carries until the Mac assigns one. A write to such an
+/// id creates; a write to any other id updates.
+pub const LOCAL_ENTRY_ID_PREFIX: &str = "calendar:local:";
 
 /// Direct Turso/LibSQL database handle held by the application.
 #[derive(Clone)]
@@ -143,7 +187,40 @@ impl TursoStore {
         conn.execute_batch(SCHEMA_MUTATIONS)
             .await
             .map_err(|e| StoreError::Libsql(format!("mutations schema init failed: {e}")))?;
-        self.add_missing_columns(&conn).await
+        conn.execute_batch(SCHEMA_CALENDAR)
+            .await
+            .map_err(|e| StoreError::Libsql(format!("calendar schema init failed: {e}")))?;
+        self.add_missing_columns(&conn).await?;
+        self.add_missing_mutation_columns(&conn).await
+    }
+
+    /// `ALTER TABLE` for each column the mutation log did not have when this database was made.
+    /// A log written before the calendar is a projects-only log, which the default says it is.
+    async fn add_missing_mutation_columns(&self, conn: &libsql::Connection) -> StoreResult<()> {
+        let mut rows = conn
+            .query(
+                "SELECT name FROM pragma_table_info('_offline_mutations')",
+                (),
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read mutation table info failed: {e}")))?;
+        let mut present = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            if let Ok(name) = row.get::<String>(0) {
+                present.push(name);
+            }
+        }
+        for (name, kind) in ADDED_MUTATION_COLUMNS {
+            if present.iter().any(|have| have == name) {
+                continue;
+            }
+            conn.execute_batch(&format!(
+                "ALTER TABLE _offline_mutations ADD COLUMN {name} {kind}"
+            ))
+            .await
+            .map_err(|e| StoreError::Libsql(format!("add mutations.{name} failed: {e}")))?;
+        }
+        Ok(())
     }
 
     /// `ALTER TABLE` for each column [`ADDED_COLUMNS`] names that the table does not have.
@@ -299,7 +376,8 @@ impl TursoStore {
             "content": content,
         })
         .to_string();
-        self.queue_mutation(path, "save_record", &payload).await?;
+        self.queue_mutation(DOMAIN_PROJECTS, path, "save_record", &payload)
+            .await?;
         Ok(())
     }
 
@@ -315,7 +393,8 @@ impl TursoStore {
         .map_err(|e| StoreError::Libsql(format!("update task done failed: {e}")))?;
 
         let payload = serde_json::json!({ "done": done }).to_string();
-        self.queue_mutation(path, "set_task_done", &payload).await?;
+        self.queue_mutation(DOMAIN_PROJECTS, path, "set_task_done", &payload)
+            .await?;
         Ok(())
     }
 
@@ -330,7 +409,7 @@ impl TursoStore {
         .map_err(|e| StoreError::Libsql(format!("update task priority failed: {e}")))?;
 
         let payload = serde_json::json!({ "priority": priority }).to_string();
-        self.queue_mutation(path, "set_task_priority", &payload)
+        self.queue_mutation(DOMAIN_PROJECTS, path, "set_task_priority", &payload)
             .await?;
         Ok(())
     }
@@ -346,7 +425,8 @@ impl TursoStore {
         .map_err(|e| StoreError::Libsql(format!("update task due failed: {e}")))?;
 
         let payload = serde_json::json!({ "due": due }).to_string();
-        self.queue_mutation(path, "set_task_due", &payload).await?;
+        self.queue_mutation(DOMAIN_PROJECTS, path, "set_task_due", &payload)
+            .await?;
         Ok(())
     }
 
@@ -361,16 +441,23 @@ impl TursoStore {
         .map_err(|e| StoreError::Libsql(format!("delete record failed: {e}")))?;
 
         let payload = serde_json::json!({ "path": path }).to_string();
-        self.queue_mutation(path, "delete_record", &payload).await?;
+        self.queue_mutation(DOMAIN_PROJECTS, path, "delete_record", &payload)
+            .await?;
         Ok(())
     }
 
     /// Records an offline mutation to replay once connectivity to host is restored.
-    async fn queue_mutation(&self, path: &str, action: &str, payload: &str) -> StoreResult<()> {
+    async fn queue_mutation(
+        &self,
+        domain: &str,
+        path: &str,
+        action: &str,
+        payload: &str,
+    ) -> StoreResult<()> {
         let conn = self.connection().await?;
         conn.execute(
-            "INSERT INTO _offline_mutations (path, action, payload) VALUES (?1, ?2, ?3)",
-            libsql::params![path, action, payload],
+            "INSERT INTO _offline_mutations (domain, path, action, payload) VALUES (?1, ?2, ?3, ?4)",
+            libsql::params![domain, path, action, payload],
         )
         .await
         .map_err(|e| StoreError::Libsql(format!("queue mutation failed: {e}")))?;
@@ -397,21 +484,43 @@ impl TursoStore {
     /// The order is the contract: two edits of the same note replay in the order the person typed
     /// them, so a sync never applies the older one last.
     pub async fn pending_mutations(&self) -> StoreResult<Vec<PendingMutation>> {
+        self.pending_in(None).await
+    }
+
+    /// The queued writes of one domain, oldest first, or of every domain when `domain` is `None`.
+    ///
+    /// A sync pushes per domain: ordering only has to hold inside one, and a calendar write that
+    /// the Mac refuses must not hold up a note.
+    pub async fn pending_in(&self, domain: Option<&str>) -> StoreResult<Vec<PendingMutation>> {
         let conn = self.connection().await?;
-        let mut rows = conn
-            .query(
-                "SELECT id, path, action, payload FROM _offline_mutations ORDER BY id ASC",
-                (),
-            )
-            .await
-            .map_err(|e| StoreError::Libsql(format!("read mutations failed: {e}")))?;
+        let read = match domain {
+            Some(domain) => {
+                conn.query(
+                    "SELECT id, domain, path, action, payload FROM _offline_mutations \
+                     WHERE domain = ?1 ORDER BY id ASC",
+                    libsql::params![domain],
+                )
+                .await
+            }
+            None => {
+                conn.query(
+                    "SELECT id, domain, path, action, payload FROM _offline_mutations \
+                     ORDER BY id ASC",
+                    (),
+                )
+                .await
+            }
+        };
+        let mut rows =
+            read.map_err(|e| StoreError::Libsql(format!("read mutations failed: {e}")))?;
         let mut list = Vec::new();
         while let Ok(Some(row)) = rows.next().await {
             list.push(PendingMutation {
                 id: row.get(0).unwrap_or(0),
-                path: row.get(1).unwrap_or_default(),
-                action: row.get(2).unwrap_or_default(),
-                payload: row.get(3).unwrap_or_default(),
+                domain: row.get(1).unwrap_or_else(|_| DOMAIN_PROJECTS.into()),
+                path: row.get(2).unwrap_or_default(),
+                action: row.get(3).unwrap_or_default(),
+                payload: row.get(4).unwrap_or_default(),
             });
         }
         Ok(list)
@@ -441,11 +550,19 @@ impl TursoStore {
     /// A pull skips these: the phone's unsent edit is newer than anything the Mac can answer with,
     /// so writing the Mac's version over it would lose the edit.
     pub async fn dirty_paths(&self) -> StoreResult<Vec<String>> {
+        self.dirty_keys(DOMAIN_PROJECTS).await
+    }
+
+    /// The keys of one domain with a write still waiting for the Mac.
+    pub async fn dirty_keys(&self, domain: &str) -> StoreResult<Vec<String>> {
         let conn = self.connection().await?;
         let mut rows = conn
-            .query("SELECT DISTINCT path FROM _offline_mutations", ())
+            .query(
+                "SELECT DISTINCT path FROM _offline_mutations WHERE domain = ?1",
+                libsql::params![domain],
+            )
             .await
-            .map_err(|e| StoreError::Libsql(format!("read dirty paths failed: {e}")))?;
+            .map_err(|e| StoreError::Libsql(format!("read dirty keys failed: {e}")))?;
         let mut list = Vec::new();
         while let Ok(Some(row)) = rows.next().await {
             list.push(row.get::<String>(0).unwrap_or_default());
@@ -600,12 +717,275 @@ impl TursoStore {
         }
         Ok(list)
     }
+
+    // ------------------------------------------------------------ calendar
+
+    /// The replica's entries touching `[from, to)`, all-day first then by start.
+    ///
+    /// The window is the calendar capability's own (`list_entries`): a timed entry ending at
+    /// midnight does not reach into the next day, and an all-day entry ending that morning is in
+    /// the day before.
+    pub async fn calendar_between(&self, from: &str, to: &str) -> StoreResult<Vec<CalendarEntry>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, kind, commitment, title, starts_at, ends_at, all_day, location, notes, \
+                 source FROM calendar_entries WHERE starts_at < ?1 AND ends_at > ?2 \
+                 ORDER BY all_day DESC, starts_at ASC",
+                libsql::params![to.to_owned(), format!("{from}T00:00:00")],
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("query calendar failed: {e}")))?;
+        let mut list = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            list.push(CalendarEntry {
+                id: row.get(0).unwrap_or_default(),
+                kind: row.get(1).unwrap_or_else(|_| "event".into()),
+                commitment: row.get(2).unwrap_or_else(|_| "possible".into()),
+                title: row.get(3).unwrap_or_default(),
+                starts_at: row.get(4).unwrap_or_default(),
+                ends_at: row.get(5).unwrap_or_default(),
+                all_day: row.get::<i64>(6).unwrap_or(1) != 0,
+                location: row.get(7).ok(),
+                notes: row.get(8).ok(),
+                source: row.get(9).unwrap_or_else(|_| "manual".into()),
+            });
+        }
+        Ok(list)
+    }
+
+    /// Writes one entry to the replica and queues it for the Mac.
+    pub async fn save_calendar_entry(&self, entry: &CalendarEntry) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            r#"
+            INSERT INTO calendar_entries
+                (id, kind, commitment, title, starts_at, ends_at, all_day, location, notes, source,
+                 updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(id) DO UPDATE SET
+                kind = excluded.kind,
+                commitment = excluded.commitment,
+                title = excluded.title,
+                starts_at = excluded.starts_at,
+                ends_at = excluded.ends_at,
+                all_day = excluded.all_day,
+                location = excluded.location,
+                notes = excluded.notes,
+                updated_at = excluded.updated_at
+            "#,
+            libsql::params![
+                entry.id.clone(),
+                entry.kind.clone(),
+                entry.commitment.clone(),
+                entry.title.clone(),
+                entry.starts_at.clone(),
+                entry.ends_at.clone(),
+                if entry.all_day { 1i64 } else { 0i64 },
+                entry.location.clone(),
+                entry.notes.clone(),
+                entry.source.clone(),
+            ],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("save calendar entry failed: {e}")))?;
+        let payload = serde_json::json!({
+            "kind": entry.kind,
+            "commitment": entry.commitment,
+            "title": entry.title,
+            "starts_at": entry.starts_at,
+            "ends_at": entry.ends_at,
+            "all_day": entry.all_day,
+            "location": entry.location,
+            "notes": entry.notes,
+        })
+        .to_string();
+        self.queue_mutation(DOMAIN_CALENDAR, &entry.id, "calendar_save", &payload)
+            .await?;
+        Ok(())
+    }
+
+    /// Drops one entry from the replica and queues the deletion for the Mac.
+    pub async fn delete_calendar_entry(&self, id: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "DELETE FROM calendar_entries WHERE id = ?1",
+            libsql::params![id],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("delete calendar entry failed: {e}")))?;
+        let payload = serde_json::json!({ "id": id }).to_string();
+        self.queue_mutation(DOMAIN_CALENDAR, id, "calendar_delete", &payload)
+            .await?;
+        Ok(())
+    }
+
+    /// Writes one entry the Mac answered with, without queueing it back at the Mac.
+    pub async fn upsert_pulled_calendar(
+        &self,
+        entry: &CalendarEntry,
+        remote_at: &str,
+    ) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            r#"
+            INSERT INTO calendar_entries
+                (id, kind, commitment, title, starts_at, ends_at, all_day, location, notes, source,
+                 remote_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(id) DO UPDATE SET
+                kind = excluded.kind,
+                commitment = excluded.commitment,
+                title = excluded.title,
+                starts_at = excluded.starts_at,
+                ends_at = excluded.ends_at,
+                all_day = excluded.all_day,
+                location = excluded.location,
+                notes = excluded.notes,
+                source = excluded.source,
+                remote_at = excluded.remote_at,
+                updated_at = excluded.updated_at
+            "#,
+            libsql::params![
+                entry.id.clone(),
+                entry.kind.clone(),
+                entry.commitment.clone(),
+                entry.title.clone(),
+                entry.starts_at.clone(),
+                entry.ends_at.clone(),
+                if entry.all_day { 1i64 } else { 0i64 },
+                entry.location.clone(),
+                entry.notes.clone(),
+                entry.source.clone(),
+                remote_at.to_owned(),
+            ],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("upsert pulled entry failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Drops one entry the Mac no longer has.
+    pub async fn remove_local_calendar(&self, id: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "DELETE FROM calendar_entries WHERE id = ?1",
+            libsql::params![id],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("remove local entry failed: {e}")))?;
+        Ok(())
+    }
+
+    /// One entry from the replica, for a caller that needs to compare before it writes.
+    pub async fn calendar_entry(&self, id: &str) -> StoreResult<Option<CalendarEntry>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, kind, commitment, title, starts_at, ends_at, all_day, location, notes, \
+                 source FROM calendar_entries WHERE id = ?1 LIMIT 1",
+                libsql::params![id],
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read calendar entry failed: {e}")))?;
+        let Ok(Some(row)) = rows.next().await else {
+            return Ok(None);
+        };
+        Ok(Some(CalendarEntry {
+            id: row.get(0).unwrap_or_default(),
+            kind: row.get(1).unwrap_or_else(|_| "event".into()),
+            commitment: row.get(2).unwrap_or_else(|_| "possible".into()),
+            title: row.get(3).unwrap_or_default(),
+            starts_at: row.get(4).unwrap_or_default(),
+            ends_at: row.get(5).unwrap_or_default(),
+            all_day: row.get::<i64>(6).unwrap_or(1) != 0,
+            location: row.get(7).ok(),
+            notes: row.get(8).ok(),
+            source: row.get(9).unwrap_or_else(|_| "manual".into()),
+        }))
+    }
+
+    /// Every entry id this replica holds, so a pull can sweep what the Mac deleted.
+    pub async fn calendar_ids(&self) -> StoreResult<Vec<String>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query("SELECT id FROM calendar_entries", ())
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read entry ids failed: {e}")))?;
+        let mut list = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            list.push(row.get::<String>(0).unwrap_or_default());
+        }
+        Ok(list)
+    }
+
+    /// True once this replica has read a change feed, which is how the Calendar page knows the
+    /// replica can answer for calendar at all instead of the Mac's read-only copy.
+    pub async fn has_calendar(&self) -> StoreResult<bool> {
+        Ok(self.cursor(DOMAIN_CALENDAR).await?.is_some())
+    }
+
+    /// Where one domain's change feed was read to.
+    pub async fn cursor(&self, domain: &str) -> StoreResult<Option<String>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT value FROM _replica_meta WHERE key = ?1",
+                libsql::params![format!("{CURSOR_PREFIX}{domain}")],
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read cursor failed: {e}")))?;
+        Ok(rows
+            .next()
+            .await
+            .ok()
+            .flatten()
+            .and_then(|row| row.get::<String>(0).ok()))
+    }
+
+    /// Records how far one domain's change feed has been read.
+    pub async fn set_cursor(&self, domain: &str, cursor: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "INSERT INTO _replica_meta (key, value) VALUES (?1, ?2) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            libsql::params![format!("{CURSOR_PREFIX}{domain}"), cursor],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("write cursor failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Moves an entry, and any write queued for it, to the id the Mac assigned on create.
+    pub async fn rekey_calendar(&self, from: &str, to: &str) -> StoreResult<()> {
+        if from == to {
+            return Ok(());
+        }
+        let conn = self.connection().await?;
+        conn.execute(
+            "UPDATE calendar_entries SET id = ?1 WHERE id = ?2",
+            libsql::params![to, from],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("rekey entry failed: {e}")))?;
+        conn.execute(
+            "UPDATE _offline_mutations SET path = ?1 WHERE domain = ?2 AND path = ?3",
+            libsql::params![to, DOMAIN_CALENDAR, from],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("rekey entry mutations failed: {e}")))?;
+        Ok(())
+    }
 }
 
 /// One write waiting in `_offline_mutations` for the Mac.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingMutation {
     pub id: i64,
+    /// Which capability the write belongs to ([`DOMAIN_PROJECTS`] or [`DOMAIN_CALENDAR`]).
+    pub domain: String,
     pub path: String,
     /// `save_record` or `set_task_done`, the two writes a phone makes.
     pub action: String,
@@ -684,6 +1064,92 @@ mod tests {
                 .expect("task found");
             assert!(task.done);
             assert_eq!(store.pending_mutation_count().await.unwrap(), 3);
+        });
+    }
+
+    /// The day window is the calendar capability's own rule (`list_entries`): an entry that ends at
+    /// midnight belongs to the day it started in, and an id the phone minted queues in the calendar
+    /// domain so a projects push neither waits on it nor sends it.
+    #[test]
+    fn a_calendar_day_follows_the_capabilitys_own_window() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("open in-memory");
+            let entry =
+                |id: &str, title: &str, starts: &str, ends: &str, all_day: bool| CalendarEntry {
+                    id: id.to_string(),
+                    kind: "event".into(),
+                    commitment: "planned".into(),
+                    title: title.to_string(),
+                    starts_at: starts.to_string(),
+                    ends_at: ends.to_string(),
+                    all_day,
+                    location: None,
+                    notes: None,
+                    source: "manual".into(),
+                };
+
+            store
+                .save_calendar_entry(&entry(
+                    "calendar:all-day",
+                    "All day",
+                    "2026-10-24",
+                    "2026-10-25",
+                    true,
+                ))
+                .await
+                .expect("save all-day");
+            store
+                .save_calendar_entry(&entry(
+                    "calendar:late",
+                    "Late",
+                    "2026-10-23T23:00:00",
+                    "2026-10-24T00:00:00",
+                    false,
+                ))
+                .await
+                .expect("save late");
+            store
+                .save_calendar_entry(&entry(
+                    "calendar:morning",
+                    "Morning",
+                    "2026-10-24T09:00:00",
+                    "2026-10-24T10:00:00",
+                    false,
+                ))
+                .await
+                .expect("save morning");
+
+            // All-day first, then by start. The entry ending at midnight is the day before.
+            let day = store
+                .calendar_between("2026-10-24", "2026-10-25")
+                .await
+                .expect("day");
+            let titles: Vec<&str> = day.iter().map(|e| e.title.as_str()).collect();
+            assert_eq!(titles, ["All day", "Morning"], "{day:?}");
+
+            let previous = store
+                .calendar_between("2026-10-23", "2026-10-24")
+                .await
+                .expect("previous day");
+            let titles: Vec<&str> = previous.iter().map(|e| e.title.as_str()).collect();
+            assert_eq!(titles, ["Late"], "{previous:?}");
+
+            // Calendar writes queue in the calendar domain, not in the projects one.
+            assert_eq!(
+                store.pending_in(Some(DOMAIN_PROJECTS)).await.unwrap().len(),
+                0
+            );
+            assert_eq!(
+                store.pending_in(Some(DOMAIN_CALENDAR)).await.unwrap().len(),
+                3
+            );
+            assert!(store.dirty_keys(DOMAIN_CALENDAR).await.unwrap().len() == 3);
+            assert!(store.dirty_keys(DOMAIN_PROJECTS).await.unwrap().is_empty());
         });
     }
 }

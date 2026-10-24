@@ -16,7 +16,7 @@ use crate::shell::{
     ShellResult, SoundscapeState,
 };
 
-use crate::store::{StoreError, TursoStore};
+use crate::store::{StoreError, TursoStore, LOCAL_ENTRY_ID_PREFIX};
 
 use super::{board::task_path, Notes};
 
@@ -80,6 +80,49 @@ fn note_path(project: &str, at: SystemTime) -> String {
         .map(|since| since.as_secs())
         .unwrap_or(0);
     format!("{}/Note-{secs}.md", project.trim_end_matches('/'))
+}
+
+/// `calendar:local:<nanos>`, the id an entry made on this device has until the Mac names it.
+///
+/// Nanoseconds because two entries made in the same second are ordinary on a phone, and a
+/// duplicate id would make the second overwrite the first in the replica and in its queue.
+fn local_entry_id(at: SystemTime) -> String {
+    let nanos = at
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_nanos())
+        .unwrap_or(0);
+    format!("{LOCAL_ENTRY_ID_PREFIX}{nanos:x}")
+}
+
+/// One entry as `POST /calendar/api/entries` takes it (`NewEntry` in the calendar capability).
+///
+/// The Mac's own page builds this from a form's [`crate::calendar::Draft`]; a caller holding an
+/// entry it already made, here or on the phone, sends the entry back.
+fn entry_body(entry: &CalendarEntry) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "kind": if entry.kind.is_empty() { "event" } else { entry.kind.as_str() },
+        "commitment": if entry.commitment.is_empty() {
+            "possible"
+        } else {
+            entry.commitment.as_str()
+        },
+        "title": entry.title,
+        "starts_at": entry.starts_at,
+        "ends_at": entry.ends_at,
+        "all_day": entry.all_day,
+        "source": if entry.source.is_empty() {
+            "manual"
+        } else {
+            entry.source.as_str()
+        },
+    });
+    if let Some(location) = &entry.location {
+        body["location"] = serde_json::json!(location);
+    }
+    if let Some(notes) = &entry.notes {
+        body["notes"] = serde_json::json!(notes);
+    }
+    body
 }
 
 /// The one direct handle on the local database file, shared by every `Repo` clone.
@@ -360,36 +403,46 @@ impl Repo {
         shell.notes().await
     }
 
-    /// Read calendar entries directly from the local LibSQL database if accessible, otherwise the
-    /// shell.
+    /// Read calendar entries from wherever this device keeps them.
+    ///
+    /// On the phone that is the replica, read through [`TursoStore::calendar_between`], so the day
+    /// window has one owner and the id, kind, place and notes come with every row: a page that can
+    /// change an entry needs to name it. On the Mac the local database is read with the same window
+    /// and the same columns. Either way the shell answers when the database does not.
     pub async fn fetch_calendar(&self, from: &str, to: &str) -> ShellResult<Vec<CalendarEntry>> {
+        if let Some(replica) = &self.replica {
+            return replica
+                .store
+                .calendar_between(from, to)
+                .await
+                .map_err(store_error);
+        }
         if let Some(conn) = self.connection().await {
-            // The window the calendar capability uses (`day_window_bounds` in its store.rs):
-            // `[from, to)`, with the bare `to` date so all-day and timed entries end alike.
+            // `[from, to)`, with the bare `to` date so all-day and timed entries end alike, and
+            // all-day first, which is the order the list reads in.
             let from_bound = format!("{from}T00:00:00");
-            let to_bound = to.to_owned();
-            let query = "SELECT title, starts_at, ends_at, all_day, commitment \
-                         FROM calendar_entries \
+            let query =
+                "SELECT id, kind, commitment, title, starts_at, ends_at, all_day, location, \
+                         notes, source FROM calendar_entries \
                          WHERE starts_at < ?1 AND ends_at > ?2 \
-                         ORDER BY starts_at ASC";
+                         ORDER BY all_day DESC, starts_at ASC";
             if let Ok(mut rows) = conn
-                .query(query, libsql::params![to_bound, from_bound])
+                .query(query, libsql::params![to.to_owned(), from_bound])
                 .await
             {
                 let mut list = Vec::new();
                 while let Ok(Some(row)) = rows.next().await {
-                    let title: String = row.get(0).unwrap_or_default();
-                    let starts_at: String = row.get(1).unwrap_or_default();
-                    let ends_at: String = row.get(2).unwrap_or_default();
-                    let all_day_int: i64 = row.get(3).unwrap_or(0);
-                    let commitment: String = row.get(4).unwrap_or_else(|_| "possible".into());
                     list.push(CalendarEntry {
-                        title,
-                        starts_at,
-                        ends_at,
-                        all_day: all_day_int != 0,
-                        commitment,
-                        ..CalendarEntry::default()
+                        id: row.get(0).unwrap_or_default(),
+                        kind: row.get(1).unwrap_or_else(|_| "event".into()),
+                        commitment: row.get(2).unwrap_or_else(|_| "possible".into()),
+                        title: row.get(3).unwrap_or_default(),
+                        starts_at: row.get(4).unwrap_or_default(),
+                        ends_at: row.get(5).unwrap_or_default(),
+                        all_day: row.get::<i64>(6).unwrap_or(0) != 0,
+                        location: row.get(7).ok(),
+                        notes: row.get(8).ok(),
+                        source: row.get(9).unwrap_or_else(|_| "manual".into()),
                     });
                 }
                 return Ok(list);
@@ -397,6 +450,75 @@ impl Repo {
         }
         let shell = self.fallback()?;
         shell.calendar(from, to).await
+    }
+
+    /// True once the calendar can be answered from here: the replica, once its change feed has
+    /// been read ([`TursoStore::has_calendar`]), or this Mac's own database, which is always there.
+    ///
+    /// A page reads the Mac's read-only copy until this answers true, because a replica that has
+    /// never pulled holds no entries and would draw an empty month beside a readable one.
+    pub async fn has_calendar(&self) -> bool {
+        match &self.replica {
+            Some(replica) => replica.store.has_calendar().await.unwrap_or(false),
+            None => self.has_direct_db(),
+        }
+    }
+
+    /// Writes one entry where this device writes.
+    ///
+    /// On the phone that is the replica, and the write is queued for the Mac like any other. An
+    /// entry with no id is one this device just made, and gets a local id
+    /// ([`LOCAL_ENTRY_ID_PREFIX`]) that the sync replaces with the Mac's, moving the row and the
+    /// queued write together (`crate::sync`). On the Mac it is the shell, and the answer is the
+    /// entry the capability made.
+    pub async fn save_calendar_entry(&self, entry: CalendarEntry) -> ShellResult<CalendarEntry> {
+        let mut entry = entry;
+        // What a blank field means is decided here rather than per store, so the phone's replica and
+        // the Mac's shell cannot disagree about the entry that was sent.
+        if entry.kind.is_empty() {
+            entry.kind = "event".to_owned();
+        }
+        if entry.commitment.is_empty() {
+            entry.commitment = "possible".to_owned();
+        }
+        if entry.source.is_empty() {
+            entry.source = "manual".to_owned();
+        }
+        match &self.replica {
+            Some(replica) => {
+                if entry.id.is_empty() {
+                    entry.id = local_entry_id(SystemTime::now());
+                }
+                replica
+                    .store
+                    .save_calendar_entry(&entry)
+                    .await
+                    .map_err(store_error)?;
+                (replica.wrote)();
+                Ok(entry)
+            }
+            None => {
+                self.shell()?
+                    .create_calendar_entry(entry_body(&entry))
+                    .await
+            }
+        }
+    }
+
+    /// Drops one entry here and queues the deletion for the Mac.
+    pub async fn delete_calendar_entry(&self, id: &str) -> ShellResult<()> {
+        match &self.replica {
+            Some(replica) => {
+                replica
+                    .store
+                    .delete_calendar_entry(id)
+                    .await
+                    .map_err(store_error)?;
+                (replica.wrote)();
+                Ok(())
+            }
+            None => self.shell()?.delete_calendar_entry(id).await,
+        }
     }
 
     /// Read project records directly from the local LibSQL database if accessible, otherwise the
@@ -622,6 +744,147 @@ impl Repo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::DOMAIN_CALENDAR;
+
+    /// A fresh store and the phone's repo over it, for the calendar tests below.
+    async fn replica() -> (Arc<TursoStore>, Repo) {
+        let store = Arc::new(TursoStore::in_memory().await.expect("store"));
+        let repo = Repo::replica(store.clone(), || {});
+        (store, repo)
+    }
+
+    fn an_entry(title: &str, starts_at: &str, ends_at: &str) -> CalendarEntry {
+        CalendarEntry {
+            title: title.to_owned(),
+            starts_at: starts_at.to_owned(),
+            ends_at: ends_at.to_owned(),
+            all_day: false,
+            commitment: "planned".to_owned(),
+            kind: "event".to_owned(),
+            ..CalendarEntry::default()
+        }
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime")
+    }
+
+    /// An entry made on the phone gets an id this device can name, and the page needs that id back:
+    /// it is what a later edit and a delete are addressed to.
+    #[test]
+    fn an_entry_made_here_is_stored_with_a_local_id_and_queued_for_the_mac() {
+        runtime().block_on(async {
+            let (store, repo) = replica().await;
+            let saved = repo
+                .save_calendar_entry(an_entry(
+                    "Dentist",
+                    "2026-10-24T09:00:00",
+                    "2026-10-24T10:00:00",
+                ))
+                .await
+                .expect("save");
+            assert!(
+                saved.id.starts_with(LOCAL_ENTRY_ID_PREFIX),
+                "a local id until the Mac names one: {saved:?}"
+            );
+
+            let day = repo
+                .fetch_calendar("2026-10-24", "2026-10-25")
+                .await
+                .expect("day");
+            assert_eq!(day.len(), 1, "{day:?}");
+            assert_eq!(day[0].id, saved.id, "the id survives the read");
+            assert_eq!(day[0].title, "Dentist");
+            assert_eq!(day[0].kind, "event");
+            assert_eq!(day[0].source, "manual");
+            assert_eq!(day[0].commitment, "planned");
+            assert_eq!(
+                store.pending_in(Some(DOMAIN_CALENDAR)).await.unwrap().len(),
+                1,
+                "the write is queued for the next sync"
+            );
+        });
+    }
+
+    /// Two entries made in the same second are ordinary on a phone, and a shared id would make the
+    /// second overwrite the first in the replica and in its queue.
+    #[test]
+    fn two_entries_made_here_carry_different_ids() {
+        runtime().block_on(async {
+            let (_, repo) = replica().await;
+            let one = repo
+                .save_calendar_entry(an_entry("One", "2026-10-24", "2026-10-25"))
+                .await
+                .expect("save one");
+            let two = repo
+                .save_calendar_entry(an_entry("Two", "2026-10-24", "2026-10-25"))
+                .await
+                .expect("save two");
+            assert_ne!(one.id, two.id);
+            let day = repo
+                .fetch_calendar("2026-10-24", "2026-10-25")
+                .await
+                .expect("day");
+            assert_eq!(day.len(), 2, "{day:?}");
+        });
+    }
+
+    #[test]
+    fn a_deleted_entry_leaves_the_day_and_queues_the_deletion() {
+        runtime().block_on(async {
+            let (store, repo) = replica().await;
+            let saved = repo
+                .save_calendar_entry(an_entry("Dentist", "2026-10-24", "2026-10-25"))
+                .await
+                .expect("save");
+            repo.delete_calendar_entry(&saved.id).await.expect("delete");
+
+            assert!(repo
+                .fetch_calendar("2026-10-24", "2026-10-25")
+                .await
+                .expect("day")
+                .is_empty());
+            // The create replays first and takes the Mac's id, and the rekey moves the deletion
+            // with it, so the entry the Mac made is the one the deletion names.
+            assert_eq!(
+                store.pending_in(Some(DOMAIN_CALENDAR)).await.unwrap().len(),
+                2
+            );
+        });
+    }
+
+    /// A replica that has never pulled holds no entries, and the page must keep drawing the Mac's
+    /// copy until this answers true.
+    #[test]
+    fn the_calendar_is_read_off_the_replica_once_its_feed_has_been_read() {
+        runtime().block_on(async {
+            let (store, repo) = replica().await;
+            assert!(!repo.has_calendar().await);
+            store
+                .set_cursor(DOMAIN_CALENDAR, "1761000000000")
+                .await
+                .expect("cursor");
+            assert!(repo.has_calendar().await);
+        });
+    }
+
+    /// A device with no store and no shell has nowhere to write an entry, and says so rather than
+    /// losing it.
+    #[test]
+    fn an_entry_with_no_store_to_write_to_is_refused() {
+        runtime().block_on(async {
+            let repo = Repo::new(Err(ShellError::NotLoopback));
+            assert!(!repo.has_calendar().await);
+            assert!(repo
+                .save_calendar_entry(an_entry("Dentist", "2026-10-24", "2026-10-25"))
+                .await
+                .is_err());
+            assert!(repo.delete_calendar_entry("calendar:1").await.is_err());
+        });
+    }
 
     fn note(path: &str) -> ProjectRecord {
         ProjectRecord {

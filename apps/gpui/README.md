@@ -295,16 +295,22 @@ nothing, so pairing later sends the Mac only what the person wrote. A store that
 so on that page instead of falling back to memory. **Settings** holds the pairing: the found Mac,
 the Join tap, and the capability health list it answers with once the owner allows the device.
 
-**Calendar** is the second tab, and it reads a different kind of copy: a day at a time from the
-Mac's read-only mirror (`core/src/mirror.rs`, `ui/src/calendar.rs`), which is the route R1 copy
-`sjel mirror build` writes and `GET /api/sjel-status/mirror` serves. The manifest travels first, so a
-copy already current costs one small answer; the bytes are checked against the manifest's digest
-before they replace anything, and the new file is renamed into place, so a fetch that dies halfway
-leaves the previous copy whole. The tab prints when the copy was built and takes no writes: a change
-to an entry stays a Mac action until the calendar joins the replica. The copy on disk is read before
-the Mac answers, so the day is there with the Mac out of range, and **Refresh** asks the Mac to
-rebuild its copy and then fetches it. `places_*` and `entities_*` are already in the same copy, so
-People and Places are a page away; the pages that write need the replica's second domain.
+**Calendar** is the second tab, and it reads the same replica as Projects once the Mac's change feed
+has been read: `GET /calendar/api/entries/changes?since=` answers what moved, and only the cursor
+keeps the pull cheap. Until that first pull lands — a fresh install, or a phone that has not reached
+the Mac yet — the tab draws the Mac's read-only mirror instead (`core/src/mirror.rs`,
+`ui/src/calendar.rs`), which is the route R1 copy `sjel mirror build` writes and
+`GET /api/sjel-status/mirror` serves: the manifest travels first, so a copy already current costs one
+small answer; the bytes are checked against the manifest's digest before they replace anything, and
+the new file is renamed into place, so a fetch that dies halfway leaves the previous copy whole. The
+line under the day's title says which source drew it, and only a day off the replica carries an
+editor. **New** writes an entry on the open day into the replica — title, all-day or 09:00–10:00 and
+a commitment; a row's **⋯** asks and a second tap deletes — and the queue carries both to the Mac on
+the next sync, where a phone-minted id is replaced by the one the Mac assigns. Both writes are absent
+over the copy, because a copy takes no writes. **Refresh** syncs when there is a store, and otherwise
+asks the Mac to rebuild and refetches the copy. `places_*` and `entities_*` are already in the same
+copy, so People and Places are a page away; the pages that write need a domain of their own, which is
+the shape the calendar just took.
 
 Both tabs ship on TestFlight (build 1363, internal group `Team`), the only distribution today. The
 touch check is `host/UITests/JoinTap.swift`. `SJEL_TAB=calendar` and `SJEL_DAY=2026-10-21` open a

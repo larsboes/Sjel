@@ -63,8 +63,8 @@ mod pure;
 
 use crate::paths::Paths;
 use pure::{
-    answered, asks_for_a_vector, catalogue_ids, declared_as, family, js_number, newer,
-    refusal_detail, status_for, OrderedMap,
+    answered, asks_for_a_rerank, asks_for_a_vector, catalogue_ids, declared_as, family, js_number,
+    newer, refusal_detail, status_for, OrderedMap,
 };
 use serde_json::{json, Value};
 use sjel_http::Purpose;
@@ -443,10 +443,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 } else {
                     format!("{note}, but {reply}")
                 };
-                checker.say(&format!(
-                    "{}: {model} on {backend_name} — {detail}",
-                    label
-                ));
+                checker.say(&format!("{}: {model} on {backend_name} — {detail}", label));
                 entries.push(Entry {
                     role: label.to_owned(),
                     backend: backend_name.to_owned(),
@@ -621,7 +618,9 @@ impl Checker<'_> {
         model: &str,
         key: Option<&str>,
     ) -> String {
-        let (reply, stated) = if asks_for_a_vector(label) {
+        let (reply, stated) = if asks_for_a_rerank(label) {
+            self.probe_rerank(backend, model, key)
+        } else if asks_for_a_vector(label) {
             self.probe_embedding(backend, model, key)
         } else {
             self.probe(backend, model, key)
@@ -704,6 +703,80 @@ impl Checker<'_> {
                     "answered without a message"
                 };
                 (reply.to_owned(), None)
+            }
+            Err(_) => ("no answer within 60s".to_owned(), None),
+        }
+    }
+
+    /// Ask a reranker for relevance scores. The third answer shape: not text, not a vector.
+    ///
+    /// The request body is `libs/inference`'s own (`rerank_request_body`), because a probe that
+    /// invents its own shape is a second opinion about the API it is supposed to be checking.
+    fn probe_rerank(
+        &self,
+        backend: &BackendDecl,
+        model: &str,
+        key: Option<&str>,
+    ) -> (String, Option<f64>) {
+        let Some(base) = backend.base_url.as_deref() else {
+            return ("no base_url declared".to_owned(), None);
+        };
+        if backend.is_ollama {
+            // The Ollama-native API has no rerank route, and neither does `libs/inference`'s
+            // `rerank_endpoint`. Saying so is more use than a 404 dressed up as a failure.
+            return (
+                "the Ollama-native API does not expose /v1/rerank".to_owned(),
+                None,
+            );
+        }
+        let base = base.trim_end_matches('/');
+        let body = json!({
+            "model": model,
+            "query": "probe",
+            "documents": ["probe one", "probe two"],
+            "top_n": 2,
+            "return_documents": false,
+        });
+        let mut request = self.probe_client.post(format!("{base}/rerank")).json(&body);
+        if let Some(key) = key {
+            request = request.bearer_auth(key);
+        }
+        let response = match request.send() {
+            Ok(r) => r,
+            Err(_) => return ("no answer within 60s".to_owned(), None),
+        };
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let text = response.text().unwrap_or_default();
+            let (detail, stated) = refusal_detail(&text);
+            let reply = format!(
+                "answers HTTP {status}{}",
+                if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!(" — {detail}")
+                }
+            );
+            return (reply, stated);
+        }
+        match response.json::<Value>() {
+            Ok(body) => {
+                let scored = body
+                    .get("results")
+                    .and_then(Value::as_array)
+                    .map(|results| {
+                        results
+                            .iter()
+                            .filter(|r| r.get("relevance_score").and_then(Value::as_f64).is_some())
+                            .count()
+                    })
+                    .unwrap_or(0);
+                let reply = if scored > 0 {
+                    format!("answers ({scored} document(s) scored)")
+                } else {
+                    "answered without relevance scores".to_owned()
+                };
+                (reply, None)
             }
             Err(_) => ("no answer within 60s".to_owned(), None),
         }

@@ -166,6 +166,28 @@ pub fn asks_for_a_vector(role_name: &str) -> bool {
     false
 }
 
+/// A role whose answer is a relevance score, not text.
+///
+/// The third API shape, beside chat and embedding. omlx refuses a chat request for a reranker
+/// with `400 Model 'bge-reranker-v2-m3-mlx' is not an LLM / chat model. Use /v1/rerank`, so
+/// probing one as chat reported a working role as broken -- measured 2026-10-24, while
+/// `POST /v1/rerank` answered in 0.15 s with 0.996 for the relevant document and 0.0000157 for
+/// the other.
+///
+/// Matched on the role name at word boundaries, like [`asks_for_a_vector`], so `reranking` and
+/// `cloud_rerank_light` both land and `preranked_cache` does not.
+pub fn asks_for_a_rerank(role_name: &str) -> bool {
+    ["reranking", "rerank"].iter().any(|stem| {
+        let bytes = role_name.as_bytes();
+        role_name.match_indices(stem).any(|(i, _)| {
+            let before_ok = i == 0 || bytes[i - 1] == b'_';
+            let after = i + stem.len();
+            let after_ok = after == role_name.len() || bytes[after] == b'_';
+            before_ok && after_ok
+        })
+    })
+}
+
 /// A JSON object as its declaration order, which `serde_json`'s own `Map` does not give: it is a
 /// `BTreeMap` unless the `preserve_order` feature is on, and this crate deliberately does not turn
 /// it on (it would change `serde_json::Map` for every consumer of this binary — the same reason
@@ -379,6 +401,20 @@ mod tests {
         assert!(!answered("answers HTTP 503 — high demand"));
         assert!(!answered("no answer within 60s"));
         assert!(!answered(""));
+    }
+
+    #[test]
+    fn a_reranker_is_a_score_probe_not_a_chat_probe() {
+        for name in ["reranking", "cloud_rerank_light", "local_rerank"] {
+            assert!(asks_for_a_rerank(name), "{name} asks for scores");
+            assert!(
+                !asks_for_a_vector(name),
+                "{name} is not an embedding role, and probing it for a vector fails the same way"
+            );
+        }
+        for name in ["summarization", "preranked_cache", "rerankers"] {
+            assert!(!asks_for_a_rerank(name), "{name} is not a rerank role");
+        }
     }
 
     #[test]

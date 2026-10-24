@@ -73,6 +73,14 @@ export async function command(args: string[]): Promise<{ code: number; output: s
   return { code, output: JSON.stringify(report, null, 2) + "\n" };
 }
 
+/** Prompt and output tokens summed over an attempt's requests, comparable across harnesses: Pi
+ * reports cache hits apart (`input` + `cacheRead`), Sjel reports the provider's whole prompt. */
+function tokens(usage: unknown): { prompt_tokens: number | null; output_tokens: number | null } {
+  if (!Array.isArray(usage) || !usage.length) return { prompt_tokens: null, output_tokens: null };
+  const sum = (f: (u: any) => number) => usage.reduce((n: number, u: any) => n + (u ? f(u) : 0), 0);
+  return { prompt_tokens: sum((u) => (u.input ?? 0) + (u.cacheRead ?? 0)), output_tokens: sum((u) => u.output ?? 0) };
+}
+
 /** Every case × harness × repeat, harness order alternating per repeat. One JSON line per
  * attempt goes to the manifest's output directory; stdout gets a summary without answers. */
 async function runManifest(raw: unknown, findCase: (id: string) => EvalCase): Promise<{ code: number; output: string }> {
@@ -93,7 +101,7 @@ async function runManifest(raw: unknown, findCase: (id: string) => EvalCase): Pr
       const { meta, broker, answer } = harness === "pi" ? await runPi(c, manifest) : await runSjel(c, manifest, revision);
       const report = broker.report(answer, "live_harness");
       appendFileSync(file, JSON.stringify({ started, repeat, manifest, ...meta, ...report }) + "\n");
-      summary.push({ case: c.id, repeat, harness, model: meta.model, endpoint: meta.endpoint, termination: meta.termination, replay_status: report.replay_status, calls: report.calls.length, policy_failures: report.policy_failures.length, elapsed_ms: meta.elapsed_ms, behavior: report.behavior?.status ?? null });
+      summary.push({ case: c.id, repeat, harness, model: meta.model, endpoint: meta.endpoint, termination: meta.termination, replay_status: report.replay_status, calls: report.calls.length, policy_failures: report.policy_failures.length, elapsed_ms: meta.elapsed_ms, behavior: report.behavior?.status ?? null, ...tokens(meta.usage) });
     }
   }
   // A broker transcript can be "completed" for an attempt that never reached the model.

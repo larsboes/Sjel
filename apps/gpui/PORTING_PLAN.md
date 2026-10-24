@@ -92,7 +92,9 @@
   - `apps/gpui/src/setup_view.rs`
 
 ### ✅ Work Package 7: the phone's Calendar tab, off the Mac's read-only copy
-- **Status**: Native iOS tab, read-only (2026-10-23). Shipped to TestFlight as build 1363.
+- **Status**: Native iOS tab (2026-10-23). Shipped to TestFlight as build 1363. Read-only when it
+  shipped; it has written the replica since Work Package 8, so read this package for how the copy
+  is fetched, not for what the tab does now.
 - **Shipped**: `apps/gpui/core/src/mirror.rs` (the manifest, the digest- and byte-checked fetch that
   stages and renames into place, the rebuild request, and the day read; 8 tests against a fake Mac
   and a real SQLite copy) and `apps/gpui/ui/src/calendar.rs` (one day, seven day chips with a dot on
@@ -231,6 +233,19 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
    `core/src/soundscape` is platform-free, so the iOS app needs an output device and a panel, not
    a second engine. The panel's own open state and the mixer disclosure are not kept across
    launches; nothing in the panel persists locally today.
+4. **The phone's next two moves (operator, 2026-10-24).** `Today` becomes the landing tab and
+   `Projects` folds into it as a list, because `mobile_tab_bar` is full at five items and the phone
+   opens on tasks more often than on the project list. Then `Inbox` — capture, writing to the
+   replica through the outbox — because the calendar is the only write path today and a phone is a
+   capture device first.
+   - Decided 2026-10-24: the bar becomes `Today | Inbox | Calendar | People | Travel`, and
+     `Settings` moves behind Today's header, with a banner on Today while the phone holds no copy
+     or no pairing. Travel keeps a slot because it is the one page with a full map and a phone is
+     the device you carry on the trip; Settings is opened when something is wrong, which is the
+     moment a banner on the landing tab is the better affordance. Reversible in one line.
+   - `Inbox` cannot queue offline before #244's blocked-write recovery: a capture that cannot
+     reach the Mac keeps its text, says why, and retries when discovery finds the host again.
+   - Still unclaimed after these two: soundscape player, notifications, RoomPlan.
 
 ---
 
@@ -339,6 +354,10 @@ flowchart TD
      - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7; a writing tab since Work
        Package 8, when the calendar joined the replica.
      - ~~`People` / `Places`: two registers, one tab.~~ shipped in Work Package 9.
+   - **The bar is full at five.** `mobile_tab_bar` (`ui/src/nav.rs`) draws one row with
+     `justify_around` and a 64 px floor per item: five items need 320 px, a sixth needs 384 px,
+     which is wider than the 375 pt of the narrowest current iPhone. `Today` and `Inbox` cannot
+     both be added as tabs, so one replaces a tab or the bar changes shape before either ships.
 
 2. **Autonomous Offline Store**:
    - Bundle `rusqlite` / `libsql` directly inside the iOS app sandbox.

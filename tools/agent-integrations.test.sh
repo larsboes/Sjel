@@ -38,9 +38,17 @@ fi
 STUB
 chmod +x "$tmp/bin/opencode"
 
-# No version is read from anywhere, and that is the assertion: upstreams.toml carries no
-# `pin` since Q77 (2026-09-02), so the installer is driven at whatever `uv tool run
-# --from graphifyy` resolves today.
+# The gate stand-in: the release tools/intake approved.
+cat > "$tmp/bin/intake" <<'STUB'
+#!/bin/bash
+[ "$1" = version ] && [ "$2" = graphify ] && [ "${SJEL_TEST_NO_APPROVAL:-0}" != 1 ] && { echo 9.9.9; exit 0; }
+exit 1
+STUB
+chmod +x "$tmp/bin/intake"
+export SJEL_INTAKE="$tmp/bin/intake"
+
+# upstreams.toml carries no `pin` since Q77 (2026-09-02). The version comes from tools/intake,
+# which records the release this machine read, not from the register.
 if grep -q '^pin = ' "$SJEL_ROOT/upstreams.toml"; then
   echo "upstreams.toml still declares a pin — this script must not resolve one" >&2
   exit 1
@@ -62,7 +70,7 @@ $SCRIPT install opencode
 plugin="$HOME/.config/opencode/plugins/graphify.js"
 test -s "$plugin"
 grep -q 'graphify' "$plugin"
-grep -Fq "tool run --from graphifyy graphify install --platform opencode" "$SJEL_TEST_UV_LOG"
+grep -Fq "tool run --from graphifyy==9.9.9 graphify install --platform opencode" "$SJEL_TEST_UV_LOG"
 
 scratch="$(head -n 1 "$SJEL_TEST_UV_LOG" | cut -d '|' -f 1)"
 test "$scratch" != "$SJEL_ROOT"
@@ -126,5 +134,15 @@ if SJEL_TEST_PI_EXIT=23 $SCRIPT install accordion pi; then
   echo "failed Pi install unexpectedly succeeded" >&2
   exit 1
 fi
+
+
+# Without an approved release nothing is installed, and uv is never reached.
+: > "$SJEL_TEST_UV_LOG"
+if SJEL_TEST_NO_APPROVAL=1 $SCRIPT install opencode 2>"$tmp/err"; then
+  echo "install ran without an approved graphify release" >&2
+  exit 1
+fi
+grep -q 'tools/intake check graphify' "$tmp/err"
+test ! -s "$SJEL_TEST_UV_LOG"
 
 echo "agent-integrations tests passed"

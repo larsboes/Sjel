@@ -1,0 +1,12 @@
+#!/bin/bash
+# tools/intake — read third-party agent tooling before it reaches an agent. Launcher only; the
+# logic is tools/sjel-cli/src/intake/. `tools/intake help` prints the usage.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+# shellcheck source=tools/lib/paths.sh
+# shellcheck source=tools/lib/sjel-cli.sh
+set -u
+
+_here="$(cd "$(dirname "$0")" && pwd)"
+. "$_here/lib/paths.sh"
+. "$_here/lib/sjel-cli.sh"
+sjel_cli_exec intake "$@"

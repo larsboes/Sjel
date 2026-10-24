@@ -126,22 +126,21 @@ HARNESSES="claude opencode codex pi copilot"
 ASSISTANT_INTEGRATION_STATE_FILE=".graphify-upstream-installed"
 
 # ── graphify ────────────────────────────────────────────────────────────────
-# `uv tool run --from graphifyy` and NOT the bare `graphify` on PATH — the interactive skill
-# upgrades that one for its own purposes and Sjel's runs would ride along; `--from` keeps
-# them in their own ephemeral environment. Same reasoning, and the same invocation shape, as
-# tools/graphify.sh. See upstreams.toml [graphify].
+# `uv tool run --from <approved release>` and NOT the bare `graphify` on PATH — the interactive
+# skill upgrades that one for its own purposes, unread, and what `graphify install` writes is
+# loaded by every agent. tools/intake approves the release (`check graphify`); graphify_spec
+# names it. Same invocation shape as tools/graphify.sh. See upstreams.toml [graphify].
+# shellcheck source=tools/lib/graphify.sh
+. "$SJEL_ROOT/tools/lib/graphify.sh"
 
 graphify_has_real_graph() {
   [ -f "$SJEL_ROOT/graphify-out/graph.json" ] && [ -s "$SJEL_ROOT/graphify-out/graph.json" ]
 }
 
 graphify_install_command() {  # graphify_install_command <harness>
-  local harness="$1"
-  if command -v graphify >/dev/null 2>&1; then
-    printf 'graphify install --platform %s' "$harness"
-    return 0
-  fi
-  printf 'uv tool run --from graphifyy graphify install --platform %s' "$harness"
+  local harness="$1" spec
+  spec="$(graphify_spec)" || return 1
+  printf 'uv tool run --from %s graphify install --platform %s' "$spec" "$harness"
 }
 
 graphify_command_version() {  # graphify_command_version <command>
@@ -166,14 +165,11 @@ graphify_install() {  # graphify_install <harness>
   # shellcheck disable=SC2064
   trap "rm -rf '$scratch'" RETURN
 
-  if command -v graphify >/dev/null 2>&1; then
-    ( cd "$scratch" && graphify install --platform "$harness" ) \
-      || { echo "✗ graphify install --platform $harness failed" >&2; return 1; }
-  else
-    need_uv
-    ( cd "$scratch" && uv tool run --from graphifyy graphify install --platform "$harness" ) \
-      || { echo "✗ graphify install --platform $harness failed" >&2; return 1; }
-  fi
+  local spec
+  spec="$(graphify_spec)" || return 1
+  need_uv
+  ( cd "$scratch" && uv tool run --from "$spec" graphify install --platform "$harness" ) \
+    || { echo "✗ graphify install --platform $harness failed" >&2; return 1; }
 
   graphify_post_install "$harness" "$scratch"
 }

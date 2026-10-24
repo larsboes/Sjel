@@ -1,0 +1,20 @@
+tools/intake — read third-party agent tooling before it reaches an agent.
+
+  tools/intake scan <dir> [--against <dir>]
+        The fixed rules: instructions aimed at the agent, hidden characters, fetch-and-run,
+        exfiltration endpoints, credential paths, hooks and broad tool grants. With
+        --against, only what is new relative to that copy is read.
+  tools/intake review <dir> [--against <dir>] [--source <name>]
+        The model review on the `intake_review` inference role (a c0 cloud role). It adds
+        findings; it cannot clear one.
+  tools/intake gate <dir> --source <name> [--against <dir>] [--no-review]
+        Both. Passes an approved digest at once. Holds (exit 2) on a medium or high finding.
+  tools/intake approve <dir> --source <name> [--version <v>]
+        Records the digest of exactly this copy, after a person read the findings.
+  tools/intake version <source>
+        The last approved version (graphify).
+  tools/intake check graphify [--no-review]
+        Installs the newest graphify release into an empty home, gates what it writes for
+        agents against the approved version, and records the version when nothing holds.
+
+Exit codes: 0 passes, 2 holds, 1 is an error. State: ~/.local/state/sjel/intake/.

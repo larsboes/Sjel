@@ -61,6 +61,8 @@ sjel-skill-metadata = { path = "../../libs/skill-metadata" }
 # `libs/inference` (`is_loopback_url`, `resolve_key_file` + `api_key_from_file`) and are reused
 # rather than re-derived, which is also why the doctor can run the sweep in-process.
 sjel-inference = { path = "../../libs/inference" }
+# `tools/intake review` runs the shared agent loop on a c0 cloud role with read-only tools.
+sjel-agent = { path = "../../libs/agent" }
 # The two scheduled jobs that call another capability over HTTP — feed-sweep to comms,
 # sparpreis-watch to trips and transit. `sjel-http` owns the blocking client, its user-agent, the
 # timeout no caller can forget and the redirect policy; `sjel-server` owns `InboundAuth`, which is

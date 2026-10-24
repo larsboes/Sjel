@@ -4667,6 +4667,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "signal-hook",
+ "sjel-agent",
  "sjel-config",
  "sjel-credentials",
  "sjel-http",

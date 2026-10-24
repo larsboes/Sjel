@@ -19,6 +19,11 @@
 #   pin_kind, tracked_by and installed_probe went the same way on 2026-09-02 under Q74: all
 #   three described an entry's opt-out from renovate.json5's release watch, and that file is
 #   deleted.
+# AGENT-FACING TOOLING IS THE EXCEPTION (Lars, 2026-10-24). A skill, or the files a tool writes
+#   for agents, lands only after tools/intake reads it: fixed rules decide, a model review on a
+#   c0 role can only add findings, and a held release waits for `tools/intake approve`. That
+#   covers tools/skills add|update and graphify, which runs at the release tools/intake
+#   approved (machine state in ~/.local/state/sjel/intake, not a pin in this file).
 # Dated documents that cite a version -- the `why` strings below, capabilities/comms/eval/results/,
 #   a capability README quoting an evaluated model revision -- record what was MEASURED on that
 #   date. They are left as written: rewriting a measurement to match a later rule falsifies it.
@@ -120,6 +125,13 @@ verdict = "reject"
 license = "MIT"
 summary = "Document parser that reads math notation; rejected because its yield was low and it ran too slowly"
 why = "MEASURED and rejected 2026-08-31 as the recognition engine for the extraction ladder (PRD Q63, work sized as B30), on 1,281 real attachments from the Notability migration rather than on a fixture. Started by IBM Research Zurich, now hosted by the LF AI & Data Foundation. The reason to want it is the one thing Apple Vision cannot do -- read mathematical notation -- and on the same page it delivered where Vision returned nothing usable. THE YIELD IS WHAT KILLS IT. Formula enrichment emitted LaTeX on 58 of 1,065 sidecars, 5.4%, while Vision returned MORE text on 550 of 1,027 pairs, at ~24 s per file behind a 1.1 GB PyTorch environment needing its own interpreter (3.12; this host's 3.14 is too new for PyTorch). READ THE 5.4% PRECISELY: it bounds what Docling PRODUCED, not what the pages CONTAIN, because a formula it failed to read is indistinguishable here from a page carrying none, and the 216 attachments it had not yet reached sit outside the denominator. Two configuration findings are worth more than the verdict, because a re-attempt would otherwise rediscover them at the same price: do_table_structure plus an explicit ocr_options.lang cost ~10 MINUTES per image, and formula enrichment at 1600 px produced output identical to full resolution in half the time, so any future run downscales before converting. Its RapidOCR backend logged an empty text-detection result continuously on this corpus. Rejected as a DEPENDENCY and not as an idea: Q63 puts the heavy rung behind an `ocr` role in libs/inference, where a model of this kind is a config entry rather than 1.1 GB inside the tree."
+
+[lopdf]
+url = "https://github.com/J-F-Liu/lopdf"
+verdict = "adopt"
+license = "MIT"
+summary = "Rust PDF reader and writer used to materialize reviewed page ranges"
+why = "Used by the Documents capability to remove every page outside an operator-reviewed range, prune unreachable objects, and write the selected pages as a standalone child PDF. The parent remains unchanged and the child is stored as a separate content-addressed blob. It does not infer boundaries or supply OCR. The same crate already arrives transitively through xberg; this direct use is limited to reviewed splitting."
 
 [dolphin]
 url = "https://github.com/bytedance/Dolphin"

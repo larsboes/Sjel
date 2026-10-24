@@ -33,11 +33,15 @@
 #   tools/skills list [--global] [--json]    what is installed, in this project or globally
 #   tools/skills audit                       global skills no Sjel Pack owns; exit 1 if any
 #   tools/skills remove [...]                pass-through (global removal allowed)
-#   tools/skills update [...]                pass-through
+#   tools/skills update                      re-reads every locked source through the gate, then updates
 #   tools/skills find [<query>]              pass-through
 #   tools/skills -h | --help
 #
-# Exit 0 = done / nothing to report, 1 = usage, refusal, or audit findings.
+# Exit 0 = done / nothing to report, 1 = usage, refusal, or audit findings, 2 = held by
+# tools/intake: nothing was installed.
+#
+# `add` and `update` fetch into a stage under ~/.local/state/sjel/intake/staged first, and
+# tools/intake gates each skill against the installed copy. Only a pass installs.
 # bash 3.2-safe (CONTRIBUTING.md#portable-shell): no associative arrays, no `${arr[@]}` on an
 # empty array under `set -u`.
 
@@ -89,6 +93,32 @@ USAGE
 die() { printf 'tools/skills: %s\n' "$1" >&2; exit 1; }
 
 cli() { npx --yes skills "$@"; }
+
+TOOLS_DIR="$(cd "$(dirname "$0")" && pwd)"
+# SJEL_INTAKE replaces the gate in tools/skills.test.sh.
+INTAKE="${SJEL_INTAKE:-$TOOLS_DIR/intake}"
+STAGE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/sjel/intake/staged"
+
+# stage_and_gate <root> <package> [--skill <name>]...  -> 0 when every skill passes, else 2.
+# Claude Code's layout is a plain copy, so the stage holds exactly the files the gate reads.
+stage_and_gate() {
+  local root="$1" package="$2" stage dir name held=0 rc
+  shift 2
+  stage="$STAGE_ROOT/skills-$(printf '%s' "$package" | tr -c 'A-Za-z0-9._-' '_')"
+  rm -rf "$stage"
+  mkdir -p "$stage"
+  (cd "$stage" && cli add "$package" "$@" -a claude-code -y >/dev/null) \
+    || die "could not fetch $package into $stage"
+  for dir in "$stage"/.claude/skills/*/; do
+    [ -d "$dir" ] || die "$package staged no skill under $stage/.claude/skills"
+    name="$(basename "$dir")"
+    rc=0
+    "$INTAKE" gate "${dir%/}" --source "skills:$package/$name" \
+      --against "$root/.claude/skills/$name" || rc=$?
+    [ "$rc" -eq 0 ] || held=2
+  done
+  return "$held"
+}
 
 # The project a project-scoped install belongs to: the repository root, so running this from a
 # subdirectory does not scatter .agents/skills and .claude/skills below the root.
@@ -146,7 +176,26 @@ cmd_add() {
   printf '  pi           -> %s/.agents/skills\n' "$root"
   printf '  claude-code  -> %s/.claude/skills\n' "$root"
   printf '  package      %s\n\n' "$package"
+  stage_and_gate "$root" "$package" ${skill_args[@]+"${skill_args[@]}"} \
+    || { printf '\nnothing installed: %s is held.\n' "$package" >&2; exit 2; }
   (cd "$root" && cli add "$package" ${skill_args[@]+"${skill_args[@]}"} ${agent_args[@]+"${agent_args[@]}"} -y)
+}
+
+# Every source in the project's skills-lock.json goes through the gate before the CLI updates.
+# ponytail: the CLI fetches again after the gate, so a push between the two lands unread;
+# install from the stage instead when the CLI can take a local path for a locked skill.
+cmd_update() {
+  local root lock sources source held=0
+  root="$(project_root)"
+  lock="$root/skills-lock.json"
+  [ -f "$lock" ] || die "no skills-lock.json in $root: nothing project-scoped to update"
+  sources="$(python3 -c 'import json,sys
+for s in sorted({v["source"] for v in json.load(open(sys.argv[1]))["skills"].values()}): print(s)' "$lock")"
+  for source in $sources; do
+    stage_and_gate "$root" "$source" || held=2
+  done
+  [ "$held" -eq 0 ] || { printf '\nnothing updated: a source is held.\n' >&2; exit 2; }
+  (cd "$root" && cli update "$@")
 }
 
 cmd_list() {
@@ -203,7 +252,8 @@ case "$verb" in
   add) cmd_add "$@" ;;
   list|ls) cmd_list "$@" ;;
   audit) cmd_audit "$@" ;;
-  remove|rm|update|upgrade|find|init) cli "$verb" "$@" ;;
+  update|upgrade) cmd_update "$@" ;;
+  remove|rm|find|init) cli "$verb" "$@" ;;
   -h|--help|help|"") usage ;;
   *) die "unknown command '$verb' (try: tools/skills --help)" ;;
 esac

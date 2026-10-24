@@ -16,18 +16,31 @@ LOG="$SCRATCH/npx.log"
 GLOBAL_JSON="$SCRATCH/global.json"
 mkdir -p "$SCRATCH/bin"
 
+# In a stage, the fake also writes the skill the gate would read.
 cat > "$SCRATCH/bin/npx" <<'FAKE'
 #!/bin/bash
-printf '%s\n' "$*" >> "$SKILLS_TEST_LOG"
+printf '%s  [cwd %s]\n' "$*" "$PWD" >> "$SKILLS_TEST_LOG"
 case " $* " in
   *" list -g --json "*) cat "$SKILLS_TEST_GLOBAL_JSON" ;;
+  *" add "*)
+    case "$PWD" in
+      */intake/staged/*) mkdir -p .claude/skills/staged-skill && echo '# skill' > .claude/skills/staged-skill/SKILL.md ;;
+    esac ;;
   *) : ;;
 esac
 FAKE
-chmod +x "$SCRATCH/bin/npx"
+# The gate stand-in records its arguments and answers SKILLS_TEST_GATE_RC.
+cat > "$SCRATCH/bin/intake" <<'FAKE'
+#!/bin/bash
+printf 'intake %s\n' "$*" >> "$SKILLS_TEST_LOG"
+exit "${SKILLS_TEST_GATE_RC:-0}"
+FAKE
+chmod +x "$SCRATCH/bin/npx" "$SCRATCH/bin/intake"
 export PATH="$SCRATCH/bin:$PATH"
 export SKILLS_TEST_LOG="$LOG"
 export SKILLS_TEST_GLOBAL_JSON="$GLOBAL_JSON"
+export SJEL_INTAKE="$SCRATCH/bin/intake"
+export XDG_STATE_HOME="$SCRATCH/state"
 
 fails=0
 
@@ -61,15 +74,17 @@ expect() { # expect <description> <substring> <present:1|absent:0>
   fi
 }
 
-# The argv npx actually received, which is where install scope is visible.
+# The argv npx received for the real install, which is where install scope is visible. The
+# staging call and the gate are filtered out; expect_stage reads those.
+installs() { grep -v -e 'intake/staged' -e '^intake ' "$LOG"; }
 expect_log() { # expect_log <description> <substring> <present:1|absent:0>
   if [ "$3" = "1" ]; then
-    if ! grep -qF -- "$2" "$LOG"; then
+    if ! installs | grep -qF -- "$2"; then
       echo "FAIL: $1 — expected npx to receive '$2'"
       sed 's/^/    /' "$LOG"
       fails=$((fails + 1))
     fi
-  elif grep -qF -- "$2" "$LOG"; then
+  elif installs | grep -qF -- "$2"; then
     echo "FAIL: $1 — expected npx NOT to receive '$2'"
     sed 's/^/    /' "$LOG"
     fails=$((fails + 1))
@@ -102,6 +117,33 @@ run "$tree" add remotion-dev/skills --skill remotion-maps --agent codex
 expect_log "add forwards --skill" "-s remotion-maps" 1
 expect_log "add forwards --agent" "-a codex" 1
 expect_log "explicit --agent replaces the default" "-a claude-code" 0
+
+# --- add: the stage is fetched for Claude Code only and gated against the installed copy -----
+tree=$(project add-gated)
+: > "$LOG"
+run "$tree" add remotion-dev/skills
+if ! grep -q "add remotion-dev/skills -a claude-code -y  \[cwd $SCRATCH/state/sjel/intake/staged/" "$LOG"; then
+  echo "FAIL: add should fetch into the intake stage for Claude Code only"
+  sed 's/^/    /' "$LOG"
+  fails=$((fails + 1))
+fi
+if ! grep -q "^intake gate .*/staged-skill --source skills:remotion-dev/skills/staged-skill --against $tree/.claude/skills/staged-skill" "$LOG"; then
+  echo "FAIL: add should gate the staged skill against the installed copy"
+  sed 's/^/    /' "$LOG"
+  fails=$((fails + 1))
+fi
+
+# --- add: a held package installs nothing --------------------------------------------------
+tree=$(project add-held)
+: > "$LOG"
+SKILLS_TEST_GATE_RC=2 run "$tree" add remotion-dev/skills
+[ "$status" -eq 2 ] || { echo "FAIL: a held add should exit 2, got $status"; fails=$((fails + 1)); }
+expect "a held add says so" "nothing installed: remotion-dev/skills is held" 1
+if [ -n "$(installs)" ]; then
+  echo "FAIL: a held add still installed"
+  sed 's/^/    /' "$LOG"
+  fails=$((fails + 1))
+fi
 
 # --- add --global: refused, and npx is never reached ---------------------------------------
 tree=$(project add-global)

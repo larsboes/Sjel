@@ -27,6 +27,7 @@ mod harnesses;
 mod help;
 mod host_watch;
 mod inference_keys;
+mod intake;
 mod mirror;
 mod model_check;
 mod pack_hook;
@@ -81,6 +82,7 @@ fn main() -> ExitCode {
     // Ported tools/ scripts, run by their launchers under the script's own name.
     match command {
         "audit" => return audit::run(rest),
+        "intake" => return intake::run(rest),
         "host-watch" => return host_watch::run(rest),
         "feed-sweep" => return feed_sweep::run(rest),
         "sparpreis-watch" => return sparpreis_watch::run(rest),

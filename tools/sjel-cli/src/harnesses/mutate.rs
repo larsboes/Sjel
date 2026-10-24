@@ -47,7 +47,7 @@ thread_local! {
     /// `attempt to subtract with overflow` at `depth` 0, from two tests running in parallel —
     /// and a real `activate_profile` on one ledger beside a `sync` on another is the same shape,
     /// which a test only made visible.
-    static HELD_LOCKS: RefCell<Vec<PathBuf>> = RefCell::new(Vec::new());
+    static HELD_LOCKS: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
 }
 
 fn lock_path_for(config: &DeployConfig) -> PathBuf {

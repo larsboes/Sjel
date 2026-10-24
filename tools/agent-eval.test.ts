@@ -88,7 +88,8 @@ describe("virtual file broker", () => {
     const matches = JSON.parse(searched.calls[0].content);
     expect(matches.truncated).toBe(true);
     expect(matches.matches).toHaveLength(1000);
-    const repeated = replay(c, Array.from({ length: 8 }, () => ({ tool: "read", args: { path: "many.txt" } })));
+    // Reads are paged, so it takes more of them to reach the cumulative output limit.
+    const repeated = replay(c, Array.from({ length: 50 }, () => ({ tool: "read", args: { path: "many.txt" } })));
     expect(repeated.replay_status).toBe("failed");
     expect(repeated.calls.at(-1)?.status).toBe("error");
     expect(repeated.calls.reduce((n, r) => n + r.content.length, 0)).toBeLessThan(1_001_000);

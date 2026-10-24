@@ -239,7 +239,8 @@ export async function runSjel(c: EvalCase, m: RunManifest, revision: string): Pr
   child.stderr.on("data", (chunk) => { if (stderr.length < 8_000) stderr += String(chunk); });
   const timer = setTimeout(() => { termination = "timeout"; child.kill("SIGKILL"); }, m.timeout_ms);
   const send = (value: unknown) => child.stdin.write(JSON.stringify(value) + "\n");
-  send({ system: SYSTEM_PROMPT, prompt: c.prompt, tools: defs, max_turns: m.max_turns });
+  // validateSuite admits only c0 suites, so every case and its corpus is public data.
+  send({ system: SYSTEM_PROMPT, prompt: c.prompt, tools: defs, max_turns: m.max_turns, data_class: "c0" });
   let last: { type: string; answer?: string; model?: string; endpoint?: string; turns?: number; usage?: unknown[]; message?: string } | undefined;
   for await (const line of createInterface({ input: child.stdout })) {
     const msg = JSON.parse(line);

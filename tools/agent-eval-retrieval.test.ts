@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { Broker, validateSuite, type EvalCase } from "./lib/agent-eval.ts";
+import { Broker, READ_PAGE, validateSuite, type EvalCase } from "./lib/agent-eval.ts";
 import { edges, sections } from "./lib/agent-eval-retrieval.ts";
 
 const files = {
@@ -39,4 +39,17 @@ test("a recorded extra tool call shares the transcript and the call budget", () 
   const report = broker.report("", "live_harness");
   expect(report.calls.map((c) => `${c.index} ${c.tool} ${c.status}`)).toEqual(["0 retrieve ok", "1 list ok"]);
   expect(report.replay_status).toBe("completed");
+});
+
+test("read pages a long file and tells the model where to continue", () => {
+  const suite = validateSuite(JSON.parse(readFileSync(new URL("../research/benchmarks/agent-harness/cases.json", import.meta.url), "utf8")));
+  const c = suite.cases.find((x) => x.id === "D01") as EvalCase;
+  const full = c.input.files["upstreams.toml"].content;
+  const broker = new Broker(c);
+  const first = broker.call("read", { path: "upstreams.toml" });
+  expect(first.content.startsWith(full.slice(0, READ_PAGE))).toBe(true);
+  expect(first.content).toContain(`read again with offset ${READ_PAGE}]`);
+  const rest = broker.call("read", { path: "upstreams.toml", offset: full.length - 10 });
+  expect(rest.content).toBe(full.slice(-10));
+  expect(broker.call("read", { path: "upstreams.toml", offset: -1 }).status).toBe("error");
 });

@@ -184,6 +184,12 @@ pub trait Tool: Send + Sync {
     fn read_only(&self) -> bool {
         false
     }
+    /// The data class of everything this tool returns, when the tool can attest it. A cloud
+    /// run accepts tools only when every one returns `Some("c0")`: public content cannot leak
+    /// a private value to the provider. `None` means unclassified, which keeps a tool local.
+    fn data_class(&self) -> Option<&str> {
+        None
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -270,6 +276,13 @@ impl Agent {
         })
     }
 
+    /// True when every tool attests that its results are public. Vacuously true with none.
+    fn tools_attest_public(&self) -> bool {
+        self.tools
+            .iter()
+            .all(|tool| tool.data_class() == Some("c0"))
+    }
+
     /// Relaxed: the flag carries no data, only "stop", and every check rereads it.
     fn stopped(&self) -> bool {
         self.stop.load(Ordering::Relaxed)
@@ -347,9 +360,9 @@ impl Agent {
                     "cloud agent requests require explicit public-data mode".into(),
                 ));
             }
-            if !self.tools.is_empty() || !self.extensions.is_empty() {
+            if !self.extensions.is_empty() || !self.tools_attest_public() {
                 return Err(AgentError::RequestRefused(
-                    "cloud agent requests currently require no tools or extensions because their data egress is not classified".into(),
+                    "cloud agent requests require no extensions, and only tools that attest c0 results, because other egress is not classified".into(),
                 ));
             }
         }
@@ -395,7 +408,7 @@ impl Agent {
                     return Ok(());
                 }
             };
-            if self.role.is_cloud_endpoint() {
+            if self.role.is_cloud_endpoint() && !self.tools_attest_public() {
                 return Err(AgentError::RequestRefused(
                     "cloud model requested a tool, but cloud Ask has no tools; no call or follow-up was run".into(),
                 ));
@@ -656,8 +669,13 @@ impl Agent {
             .admit_chat_request(&body)
             .map_err(AgentError::RequestRefused)?;
         if self.role.is_cloud_endpoint() {
-            cloud::admit_and_reserve(&self.role, &body, data_class.unwrap_or("unknown"))
-                .map_err(AgentError::RequestRefused)?;
+            cloud::admit_and_reserve(
+                &self.role,
+                &body,
+                data_class.unwrap_or("unknown"),
+                self.tools_attest_public(),
+            )
+            .map_err(AgentError::RequestRefused)?;
         }
         let response = request.send()?;
         let status = response.status();
@@ -818,6 +836,43 @@ mod tests {
         );
     }
 
+    /// A tool that attests c0 results gets past the tool gate, and the request still stops at
+    /// the cloud billing policy before anything is sent: attestation widens no other check.
+    #[test]
+    fn public_cloud_mode_admits_c0_attested_tools_to_the_remaining_checks() {
+        struct PublicEcho;
+        impl Tool for PublicEcho {
+            fn name(&self) -> &str {
+                "echo"
+            }
+            fn description(&self) -> &str {
+                "Returns its text argument."
+            }
+            fn parameters(&self) -> Value {
+                json!({ "type": "object" })
+            }
+            fn run(&self, _: &Value) -> Result<String, String> {
+                Ok(String::new())
+            }
+            fn data_class(&self) -> Option<&str> {
+                Some("c0")
+            }
+        }
+        let mut cloud = role(1);
+        cloud.backend.base_url = "https://provider.example/v1".into();
+        let agent = Agent::new(cloud, vec![Box::new(PublicEcho)], [], Arc::default()).unwrap();
+        let mut messages = vec![Message::User {
+            content: "public question".into(),
+        }];
+
+        let error = agent.run_public(&mut messages, |_| {}).unwrap_err();
+
+        assert!(
+            matches!(&error, AgentError::RequestRefused(reason) if reason.contains("billing policy")),
+            "{error}"
+        );
+    }
+
     #[test]
     fn public_cloud_mode_refuses_unclassified_tool_surfaces() {
         let mut cloud = role(1);
@@ -830,7 +885,7 @@ mod tests {
         let error = agent.run_public(&mut messages, |_| {}).unwrap_err();
 
         assert!(
-            matches!(error, AgentError::RequestRefused(reason) if reason.contains("no tools or extensions"))
+            matches!(error, AgentError::RequestRefused(reason) if reason.contains("only tools that attest c0"))
         );
         assert_eq!(
             messages.len(),

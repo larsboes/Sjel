@@ -1,8 +1,8 @@
 //! Narrow cloud admission for the shared agent loop.
 //!
 //! An arbitrary agent transcript is not a reviewed cloud derivative. This module admits only
-//! explicitly selected c0 conversations, with no tools or extensions, and reserves every
-//! provider request against a private, cross-process daily ledger.
+//! explicitly selected c0 conversations, with no extensions and only tools that attest c0
+//! results, and reserves every provider request against a private, cross-process daily ledger.
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -20,12 +20,13 @@ pub(crate) fn admit_and_reserve(
     role: &ResolvedRole,
     body: &serde_json::Value,
     data_class: &str,
+    tools_attest_public: bool,
 ) -> Result<(), String> {
     if data_class != "c0" {
         return Err("cloud agent mode currently admits public c0 content only".into());
     }
-    if body.get("tools").is_some() {
-        return Err("cloud agent request contains tool definitions".into());
+    if body.get("tools").is_some() && !tools_attest_public {
+        return Err("cloud agent request contains tool definitions that do not attest c0".into());
     }
     if !role.has_cloud_policy() {
         return Err("cloud role is missing a complete HTTPS provider and billing policy".into());

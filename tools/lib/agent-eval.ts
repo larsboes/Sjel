@@ -5,6 +5,9 @@ const MAX_FILES = 64;
 const MAX_CALLS = 128;
 const MAX_REPORT_TEXT = 1_000_000;
 const MAX_SUITE_TEXT = 4_000_000;
+/** One read returns at most this many characters; `offset` continues. Bounds one tool result
+ * to about 6,000 tokens, so a whole-file read cannot flood a small model's context. */
+export const READ_PAGE = 24_000;
 const TOOLS = new Set(["read", "list", "search", "edit", "probe", "sandbox_python"]);
 
 export interface ToolCall {
@@ -238,7 +241,10 @@ export function toolDefinitions(c: EvalCase): { name: string; description: strin
   const str = (description: string) => ({ type: "string", description });
   const schema = (properties: Record<string, unknown>) => ({ type: "object", properties, required: Object.keys(properties), additionalProperties: false });
   const all: Record<string, { description: string; parameters: Record<string, unknown> }> = {
-    read: { description: "Read one workspace file by its relative path.", parameters: schema({ path: str("relative path from list") }) },
+    read: {
+      description: `Read one workspace file by its relative path, ${READ_PAGE} characters at a time. A longer file ends with a note giving the offset to continue from.`,
+      parameters: { ...schema({ path: str("relative path from list") }), properties: { path: str("relative path from list"), offset: { type: "integer", minimum: 0, description: "character offset to start from; default 0" } } },
+    },
     list: { description: "List the workspace files.", parameters: schema({}) },
     search: { description: "Find lines that contain a literal string. Returns {matches:[{path,line,text}],truncated}.", parameters: schema({ query: str("literal text, not a regex") }) },
     edit: { description: "Replace text that occurs exactly once in a writable workspace file.", parameters: schema({ path: str("relative path"), old_text: str("exact text to replace"), new_text: str("replacement text") }) },
@@ -301,11 +307,16 @@ export class Broker {
     if (!c.policy.tools.includes(tool)) return deny("tool is not allowed by this case");
     if (tool === "sandbox_python") { result.status = "unsupported"; result.content = "candidate execution requires a verified process sandbox; nothing was executed"; return; }
     if (tool === "read") {
-      exactArgs(args, ["path"]);
+      exactArgs(args, Object.hasOwn(args, "offset") ? ["path", "offset"] : ["path"]);
       let path: string;
       try { path = relativePath(args.path); } catch { return deny("path is outside the virtual workspace"); }
-      if (!files.has(path)) deny("path is not an allowed input file");
-      else result.content = files.get(path)!;
+      if (!files.has(path)) return deny("path is not an allowed input file");
+      const offset = args.offset ?? 0;
+      if (!Number.isInteger(offset) || (offset as number) < 0) throw new Error("offset must be a non-negative integer");
+      const content = files.get(path)!;
+      const end = Math.min(content.length, (offset as number) + READ_PAGE);
+      result.content = content.slice(offset as number, end);
+      if (end < content.length) result.content += `\n[${content.length - end} more characters; read again with offset ${end}]`;
     } else if (tool === "list") {
       exactArgs(args, []);
       result.content = JSON.stringify([...files.keys()].sort());

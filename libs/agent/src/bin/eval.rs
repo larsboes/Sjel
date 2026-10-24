@@ -8,7 +8,7 @@
 //!
 //! Protocol, one JSON object per line:
 //! - stdin, first line: `{"system", "prompt", "tools": [{"name", "description", "parameters"}],
-//!   "max_turns"}`
+//!   "max_turns", "data_class"}`
 //! - stdout: `{"type":"tool_call","id","name","args"}`; the next stdin line answers it with
 //!   `{"ok": bool, "content": string}`
 //! - stdout, last line: `{"type":"final","model","endpoint","answer","turns","usage"}` or
@@ -35,6 +35,9 @@ struct Start {
     prompt: String,
     tools: Vec<ToolSpec>,
     max_turns: usize,
+    /// The case data's class. `"c0"` lets the proxy tools attest public results, which is what
+    /// a cloud role requires (`Agent::run_public`). The evaluator's suite check refuses others.
+    data_class: String,
 }
 
 #[derive(Deserialize)]
@@ -75,6 +78,7 @@ impl Pipe {
 
 struct Proxy {
     spec: ToolSpec,
+    public: bool,
     pipe: Arc<Mutex<Pipe>>,
     calls: Arc<Mutex<u64>>,
 }
@@ -108,6 +112,9 @@ impl Tool for Proxy {
             Err(reply.content)
         }
     }
+    fn data_class(&self) -> Option<&str> {
+        self.public.then_some("c0")
+    }
     // Default `read_only() == false`: calls run one at a time, in the order the transcript
     // records them.
 }
@@ -123,12 +130,15 @@ fn run(role: &str) -> Result<Value, String> {
     let endpoint = role.backend.base_url.clone();
     let pipe = Arc::new(Mutex::new(pipe));
     let calls = Arc::new(Mutex::new(0));
+    let public = start.data_class == "c0";
+    let cloud = role.is_cloud_endpoint();
     let tools: Vec<Box<dyn Tool>> = start
         .tools
         .into_iter()
         .map(|spec| {
             Box::new(Proxy {
                 spec,
+                public,
                 pipe: Arc::clone(&pipe),
                 calls: Arc::clone(&calls),
             }) as Box<dyn Tool>
@@ -145,17 +155,22 @@ fn run(role: &str) -> Result<Value, String> {
         },
     ];
     let mut usage = Vec::new();
-    agent
-        .run(&mut messages, |event: Event<'_>| {
-            if let Event::Usage {
-                input_tokens,
-                output_tokens,
-            } = event
-            {
-                usage.push(json!({"input": input_tokens, "output": output_tokens}));
-            }
-        })
-        .map_err(|e| e.to_string())?;
+    let on = |event: Event<'_>| {
+        if let Event::Usage {
+            input_tokens,
+            output_tokens,
+        } = event
+        {
+            usage.push(json!({"input": input_tokens, "output": output_tokens}));
+        }
+    };
+    // A cloud role takes the public path, whose gate checks that every tool attests c0.
+    if cloud {
+        agent.run_public(&mut messages, on)
+    } else {
+        agent.run(&mut messages, on)
+    }
+    .map_err(|e| e.to_string())?;
     let answer = match messages.last() {
         Some(Message::Assistant { content, .. }) => content.clone().unwrap_or_default(),
         _ => String::new(),

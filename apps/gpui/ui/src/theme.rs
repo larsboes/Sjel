@@ -454,13 +454,13 @@ impl AppearanceSettings {
 
 /// What the soundscape drawer remembers between launches.
 ///
-/// The panel's own open state, the mixer disclosure, the preset and the volume: the plan's
-/// `2026-10-23` note said none of them persisted, and a drawer that forgets that it was open is one
-/// the operator has to find again every morning. `playing` is deliberately *not* here — a phone that
-/// starts making sound at launch is a different thing from one that remembers its settings.
+/// The mixer disclosure, the preset and the volume: a drawer that forgets them is one the operator
+/// has to set up again every morning. `playing` is deliberately *not* here — a phone that starts
+/// making sound at launch is a different thing from one that remembers its settings — and neither is
+/// the drawer's open state: the right edge is one panel with seats, and whether it is showing is
+/// [`SidebarPrefs`]' business (`ui/src/sidebar.rs`).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SoundscapePrefs {
-    pub open: bool,
     pub mixer: bool,
     /// The preset's key ([`sjel_gpui_core::soundscape::Preset::key`]).
     pub preset: String,
@@ -470,7 +470,6 @@ pub struct SoundscapePrefs {
 impl Default for SoundscapePrefs {
     fn default() -> Self {
         Self {
-            open: false,
             mixer: false,
             preset: "focus".to_owned(),
             volume: 0.55,
@@ -588,6 +587,65 @@ impl NotifyPrefs {
     }
 }
 
+/// What the right edge remembers: whether it is showing, and which seat it was on.
+///
+/// Its own file rather than a field of [`SoundscapePrefs`], because the edge is not the soundscape's:
+/// the soundscape is one seat on it (`ui/src/sidebar.rs`). A file written before the edge had seats
+/// carries an `open` key in `soundscape.json`; serde ignores what it does not know, so that file still
+/// reads and the person's first visit to the edge is the one that writes this one.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SidebarPrefs {
+    pub open: bool,
+    /// A [`crate::sidebar::Seat`] key: `soundscape` or `activity`.
+    pub seat: String,
+}
+
+impl Default for SidebarPrefs {
+    fn default() -> Self {
+        Self {
+            // A phone that opens a panel by itself covers its own page before the person asked.
+            open: false,
+            seat: crate::sidebar::Seat::default().key().to_owned(),
+        }
+    }
+}
+
+impl SidebarPrefs {
+    /// Beside `appearance.json`, `soundscape.json` and `notifications.json`.
+    pub fn config_path() -> Option<std::path::PathBuf> {
+        let dir = std::env::var("SJEL_CONFIG_DIR")
+            .ok()
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|home| std::path::PathBuf::from(home).join(".config/sjel"))
+            })?;
+        Some(dir.join("sidebar.json"))
+    }
+
+    pub fn load() -> Self {
+        let Some(path) = Self::config_path() else {
+            return Self::default();
+        };
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let Some(path) = Self::config_path() else {
+            return Err("this platform names no place for it".to_owned());
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| format!("Write error to {:?}: {e}", path))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// The drawer's settings keep their shape through JSON, and a damaged file is not a half-applied
@@ -596,7 +654,6 @@ mod tests {
     #[test]
     fn soundscape_settings_keep_their_shape() {
         let prefs = SoundscapePrefs {
-            open: true,
             mixer: true,
             preset: "lofi".to_owned(),
             volume: 0.3,
@@ -608,9 +665,31 @@ mod tests {
         );
         assert!(serde_json::from_str::<SoundscapePrefs>("{").is_err());
         let default = SoundscapePrefs::default();
-        assert!(!default.open, "a phone does not open sound by itself");
         assert_eq!(default.preset, "focus");
         assert!(default.volume > 0. && default.volume <= 1.);
+        // A file from the build before the edge had seats carries `open`; it still reads, and the
+        // key is dropped rather than mistaken for a setting this build has.
+        let older = r#"{"open":true,"mixer":false,"preset":"lofi","volume":0.4}"#;
+        let read: SoundscapePrefs = serde_json::from_str(older).expect("an older file reads");
+        assert_eq!(read.preset, "lofi");
+    }
+
+    /// The right edge's settings keep their shape, and a damaged file is a closed edge rather than a
+    /// panel over the page at launch.
+    #[test]
+    fn sidebar_settings_keep_their_shape() {
+        let prefs = SidebarPrefs {
+            open: true,
+            seat: "activity".to_owned(),
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        assert_eq!(
+            serde_json::from_str::<SidebarPrefs>(&json).expect("read"),
+            prefs
+        );
+        assert!(serde_json::from_str::<SidebarPrefs>("{").is_err());
+        assert!(!SidebarPrefs::default().open);
+        assert_eq!(SidebarPrefs::default().seat, "soundscape");
     }
 
     /// The reminder settings keep their shape, and a lead this build does not know falls back to

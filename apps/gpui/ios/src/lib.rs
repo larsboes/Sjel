@@ -22,7 +22,7 @@ use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::StreamExt;
 use serde::Deserialize;
 
-use gpui::{div, prelude::*, px, rgb, rgba, Context, MouseButton, SharedString, Window};
+use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton, SharedString, Window};
 use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
@@ -34,7 +34,8 @@ use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
-use sjel_gpui_ui::soundscape::{Soundscape, SoundscapeEvent};
+use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
+use sjel_gpui_ui::soundscape::Soundscape;
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, NotifyPrefs,
@@ -198,8 +199,12 @@ pub struct Capabilities {
     /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
     inbox: gpui::Entity<Inbox>,
     /// The soundscape drawer over the platform-free engine (`sjel_gpui_ui::soundscape`). The device
-    /// is the host's (`host/Audio.swift`), started the first time the drawer is opened.
+    /// is the host's (`host/Audio.swift`), started the first time the edge is opened on this seat.
     soundscape: gpui::Entity<Soundscape>,
+    /// The right edge: one panel with seats (`sjel_gpui_ui::sidebar`), which owns whether it is
+    /// showing and which seat it is on. The soundscape is one seat; the phone's own activity is the
+    /// other, and the agent's step stream lands there when a client has one to stream.
+    sidebar: Sidebar,
     /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
     /// the registry's writes are the operator's, so this tab draws and never offers a control that
     /// would have to be refused.
@@ -325,27 +330,10 @@ impl Capabilities {
                 view.active_tab = Tab::Settings;
                 notify::report();
             }
-            // The drawer slides in over the page rather than becoming a tab: the bar holds five and
-            // is full, and the plan's own shape for it is a panel from the right edge.
-            TodayEvent::Soundscape => {
-                view.soundscape
-                    .update(cx, |drawer, cx| drawer.set_open(true, cx));
-                // The device is taken here and not at launch: claiming the audio route is a visible
-                // act, and belongs to opening the drawer.
-                if view.soundscape.read(cx).is_open() && !view.audio_started {
-                    view.audio_started = true;
-                    match audio::start() {
-                        Ok(device) => {
-                            view.soundscape
-                                .update(cx, |drawer, cx| drawer.set_device(Some(device), None, cx));
-                        }
-                        Err(why) => {
-                            view.soundscape
-                                .update(cx, |drawer, cx| drawer.set_device(None, Some(why), cx));
-                        }
-                    }
-                }
-            }
+            // The edge slides in over the page rather than becoming a tab: the bar holds five and is
+            // full, and the plan's own shape for it is a panel from the right edge (`ui/src/sidebar.rs`).
+            TodayEvent::Soundscape => view.open_edge(Seat::Soundscape, cx),
+            TodayEvent::Activity => view.open_edge(Seat::Activity, cx),
             TodayEvent::Refresh => {
                 if view.board.is_some() {
                     view.maybe_sync(cx);
@@ -380,19 +368,25 @@ impl Capabilities {
         })
         .detach();
         // The drawer holds the conductor and the report from the first frame, so it can show a preset
-        // and a volume before any sound exists. Its settings are the ones the last launch left.
+        // and a volume before any sound exists. Its settings are the ones the last launch left; the
+        // edge's own open state and seat are the sidebar's.
         let (control, visual) = audio::parts();
         let soundscape =
             cx.new(|_| Soundscape::new(control, visual, SoundscapePrefs::load(), Density::Mobile));
-        // `SJEL_SOUNDSCAPE=1` opens the drawer at launch, the way `SJEL_TAB` opens a tab: a
-        // screenshot of a panel no hand opened still has to be possible.
-        if let Some(open) = launch_soundscape() {
-            soundscape.update(cx, |drawer, cx| drawer.set_open(open, cx));
+        let mut sidebar = Sidebar::load();
+        // `SJEL_SIDEBAR=soundscape|activity` opens the edge at launch, the way `SJEL_TAB` opens a tab:
+        // a screenshot of a panel no hand opened still has to be possible. `SJEL_SOUNDSCAPE=1` still
+        // opens it on the sound seat, because that is what it meant before the edge had seats.
+        if launch_edge_off() {
+            sidebar.close();
+        } else if let Some(seat) = launch_edge() {
+            sidebar.open_on(seat);
         }
-        // Left open last time: the drawer comes back and the device is taken, because that is what
-        // remembering an open drawer means. It starts paused: `playing` is not remembered.
+        // Left open last time: the edge comes back on its seat, and the device is taken when that
+        // seat is the soundscape, because that is what remembering an open edge means. It starts
+        // paused: `playing` is not remembered.
         let mut audio_started = false;
-        if soundscape.read(cx).is_open() {
+        if sidebar.is_open() && sidebar.seat() == Seat::Soundscape {
             audio_started = true;
             match audio::start() {
                 Ok(device) => {
@@ -403,14 +397,6 @@ impl Capabilities {
                 }
             }
         }
-        cx.subscribe(&soundscape, |view, _, event, cx| match event {
-            SoundscapeEvent::Close => {
-                // Closing the drawer stops the sound and keeps nothing of it running: a drawer that is
-                // away is not a thing that should still be playing in a pocket.
-                view.soundscape.update(cx, |drawer, cx| drawer.pause(cx));
-            }
-        })
-        .detach();
 
         cx.spawn(async move |this, cx| {
             while let Some(event) = received.next().await {
@@ -688,6 +674,7 @@ impl Capabilities {
             people,
             inbox,
             soundscape,
+            sidebar,
             today,
             copy: None,
             copying: false,
@@ -729,6 +716,115 @@ impl Capabilities {
             let _ = events.unbounded_send(Event::Synced(outcome, board));
         });
         cx.notify();
+    }
+
+    /// Opens the right edge on `seat` (`ui/src/sidebar.rs`).
+    ///
+    /// The audio device is taken here and not at launch: claiming the audio route is a visible act,
+    /// and belongs to opening the panel that plays. Switching seats keeps the sound running — the
+    /// edge is beside the page, not away from it — and only closing it stops the sound.
+    fn open_edge(&mut self, seat: Seat, cx: &mut Context<Self>) {
+        self.sidebar.open_on(seat);
+        if seat == Seat::Soundscape && !self.audio_started {
+            self.audio_started = true;
+            match audio::start() {
+                Ok(device) => self
+                    .soundscape
+                    .update(cx, |drawer, cx| drawer.set_device(Some(device), None, cx)),
+                Err(why) => self
+                    .soundscape
+                    .update(cx, |drawer, cx| drawer.set_device(None, Some(why), cx)),
+            }
+        }
+        if seat == Seat::Activity {
+            // The activity seat's numbers are the system's and the last sync's, so they are asked for
+            // again as the seat comes into view rather than drawn from an hour ago.
+            notify::report();
+        }
+        cx.notify();
+    }
+
+    /// Puts the edge away, and stops the sound with it: a panel that is not on screen is not a thing
+    /// that should still be playing in a pocket.
+    fn close_edge(&mut self, cx: &mut Context<Self>) {
+        self.sidebar.close();
+        self.soundscape.update(cx, |drawer, cx| drawer.pause(cx));
+        cx.notify();
+    }
+
+    /// The activity seat: what this phone is doing, in its own words.
+    ///
+    /// Every line here is a fact the app already holds — the Mac's answer, the queue, the last sync,
+    /// the reminders the notification centre is holding — and none of it is a promise about the
+    /// future. The agent's step stream is the next thing to land in this seat
+    /// (`apps/gpui/PORTING_PLAN.md` §3 item 2); until a client has an Ask turn to stream, this is what
+    /// "Sjel works in view" honestly means on a phone.
+    fn activity_panel(&self, palette: Palette) -> AnyElement {
+        let pending = self.board.as_ref().map_or(0, Board::pending);
+        let paired = self.client.is_some();
+        let with_mac: Vec<String> = vec![
+            self.status.to_string(),
+            match (&self.synced, paired) {
+                (Some(synced), _) => synced.to_string(),
+                (None, true) => "Paired. Nothing has moved this launch.".to_owned(),
+                (None, false) => "Not paired: this phone keeps its own records.".to_owned(),
+            },
+            if pending > 0 {
+                format!("{pending} queued for the Mac")
+            } else {
+                "Nothing queued".to_owned()
+            },
+        ];
+        // One coherent answer, not two lines that contradict each other: with the switch off, the
+        // permission's state is the Settings card's business, not a "Allowed" above "Reminders are
+        // off".
+        let mut reminders: Vec<String> = Vec::new();
+        match notify::disabled_reason() {
+            Some(reason) => reminders.push(reason),
+            None if !self.notify_prefs.enabled => reminders.push("Reminders are off".to_owned()),
+            None => {
+                reminders.push(self.notify_state.authorization.phrase().to_owned());
+                for reminder in self.notify_plan.reminders.iter().take(3) {
+                    reminders.push(reminders::when(
+                        reminder.at,
+                        &reminder.title,
+                        chrono::Local::now(),
+                    ));
+                }
+                if reminders.len() == 1 {
+                    reminders.push("Nothing scheduled".to_owned());
+                }
+            }
+        }
+        let section = |title: &'static str, lines: Vec<String>| {
+            let mut column = div().flex().flex_col().gap_1().child(
+                div()
+                    .text_xs()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(rgb(palette.muted))
+                    .child(title),
+            );
+            for line in lines {
+                column = column.child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.text))
+                        .child(SharedString::from(line)),
+                );
+            }
+            column
+        };
+        div()
+            .id("activity")
+            .flex()
+            .flex_col()
+            .gap_4()
+            .p_4()
+            .pt(px(12.))
+            .overflow_y_scroll()
+            .child(section("WITH THE MAC", with_mac))
+            .child(section("REMINDERS", reminders))
+            .into_any_element()
     }
 
     /// Rebuilds the lock screen from what this phone holds: the calendar's next weeks and the open
@@ -1046,11 +1142,33 @@ fn launch_tab() -> Tab {
     }
 }
 
-/// `SJEL_SOUNDSCAPE=1` opens the soundscape drawer at launch. A phone never sets it.
-fn launch_soundscape() -> Option<bool> {
-    std::env::var("SJEL_SOUNDSCAPE")
-        .ok()
-        .map(|value| value != "0")
+/// `SJEL_SIDEBAR=soundscape|activity` opens the right edge at launch on that seat. A phone never sets
+/// it; `ios/run-sim` does, because a panel no hand opened still has to be photographable.
+///
+/// `SJEL_SOUNDSCAPE` keeps its old meaning — `1` opens the edge on the sound seat, `0` closes it —
+/// so a script written before the edge had seats still does what it says.
+fn launch_edge() -> Option<Seat> {
+    if let Ok(seat) = std::env::var("SJEL_SIDEBAR") {
+        if seat == "0" || seat.is_empty() {
+            return None;
+        }
+        if let Some(seat) = Seat::from_key(&seat) {
+            return Some(seat);
+        }
+    }
+    match std::env::var("SJEL_SOUNDSCAPE").ok().as_deref() {
+        Some("0") | Some("") => None,
+        Some(_) => Some(Seat::Soundscape),
+        None => None,
+    }
+}
+
+/// `SJEL_SIDEBAR=off` (or `SJEL_SOUNDSCAPE=0`) closes the edge for this launch. A run that takes a
+/// picture of a page needs the page, not whatever was left open on it last time.
+fn launch_edge_off() -> bool {
+    let flag = std::env::var("SJEL_SIDEBAR").unwrap_or_default();
+    let sound = std::env::var("SJEL_SOUNDSCAPE").unwrap_or_default();
+    matches!(flag.as_str(), "off" | "0") || matches!(sound.as_str(), "off" | "0")
 }
 
 /// The day a launch flag fixed, for a page that must not move under a screenshot. A phone never
@@ -1892,22 +2010,38 @@ impl Render for Capabilities {
                     },
                 )
             })
-            // The drawer sits over the page and above the bar, the way the plan puts it: from the
-            // right edge, not as a sixth tab.
-            .when(self.soundscape.read(cx).is_open(), |page| {
-                page.child(
+            // The right edge sits over the page and above the bar, the way the plan puts it: from the
+            // edge, not as a sixth tab. One frame with seats (`ui/src/sidebar.rs`), because two panels
+            // cannot own one edge: the soundscape is one seat and the phone's activity is the other.
+            .when(self.sidebar.is_open(), |page| {
+                let entity = cx.entity().clone();
+                let seat = self.sidebar.seat();
+                let body = match seat {
+                    Seat::Soundscape => self.soundscape.clone().into_any_element(),
+                    Seat::Activity => self.activity_panel(palette),
+                };
+                let on_seat = {
+                    let entity = entity.clone();
+                    move |seat: Seat, _: &mut Window, app: &mut gpui::App| {
+                        entity.update(app, |view, cx| view.open_edge(seat, cx));
+                    }
+                };
+                let on_close = move |_: &mut Window, app: &mut gpui::App| {
+                    entity.update(app, |view, cx| view.close_edge(cx));
+                };
+                page.child(sidebar_scrim(
+                    {
+                        let entity = cx.entity().clone();
+                        move |_: &mut Window, app: &mut gpui::App| {
+                            entity.update(app, |view, cx| view.close_edge(cx));
+                        }
+                    },
                     div()
-                        .id("soundscape-overlay")
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .bg(rgba(0x00000059))
-                        .flex()
-                        .flex_col()
-                        .child(div().flex_1().min_h_0().child(self.soundscape.clone())),
-                )
+                        .flex_1()
+                        .min_h_0()
+                        .child(sidebar_frame(palette, seat, body, on_seat, on_close))
+                        .into_any_element(),
+                ))
             })
     }
 }

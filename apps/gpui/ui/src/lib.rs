@@ -12,6 +12,7 @@ pub mod nav;
 pub mod people;
 pub mod primitives;
 pub mod projects;
+pub mod sidebar;
 pub mod soundscape;
 pub mod tasks;
 pub mod theme;
@@ -24,7 +25,8 @@ pub use primitives::{
     back_button, card, dot, due_badge, due_status, filter_pill, list, note, placeholder,
     priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, DueStatus,
 };
+pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{
     AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs, Palette,
-    SoundscapePrefs, ThemeMode, WindowOpacity,
+    SidebarPrefs, SoundscapePrefs, ThemeMode, WindowOpacity,
 };

@@ -16,8 +16,8 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, EventEmitter, FontWeight, MouseButton,
-    Render, SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton, Render,
+    SharedString, Window,
 };
 use sjel_gpui_core::soundscape::{self, Control, LayerName, Playback, Preset, Visual};
 
@@ -31,21 +31,16 @@ const STEPS: usize = 10;
 /// more than the meter can show, and a phone pays for every one.
 const METER_EVERY: usize = 5;
 
-/// What the drawer tells its host.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SoundscapeEvent {
-    /// The person closed it: the host puts it away and remembers that.
-    Close,
-}
-
-/// The soundscape drawer.
+/// The soundscape drawer: one seat of the right edge (`crate::sidebar`), which owns whether the edge
+/// is showing at all and draws the title, the seat chips and the close button around this content.
+/// Nothing here opens or closes the edge, and nothing here remembers that it was open.
 pub struct Soundscape {
     /// The conductor the device plays. Writing to it is what makes sound; reading it says what was
     /// asked for.
     control: Arc<Control>,
     /// What is actually sounding, published by the audio thread on every block.
     visual: Arc<Visual>,
-    /// Open state, mixer disclosure, preset and volume, as the last launch left them.
+    /// Mixer disclosure, preset and volume, as the last launch left them.
     prefs: SoundscapePrefs,
     /// The device's own name and rate, or why there is no sound. The host knows; the drawer says.
     device: Option<SharedString>,
@@ -55,8 +50,6 @@ pub struct Soundscape {
     /// Counts renders between two frames asked for, so the meter redraws at a fifth of the rate.
     tick: usize,
 }
-
-impl EventEmitter<SoundscapeEvent> for Soundscape {}
 
 impl Soundscape {
     pub fn new(
@@ -86,20 +79,6 @@ impl Soundscape {
     /// The settings as they stand, for a host that saves them when the app leaves.
     pub fn prefs(&self) -> &SoundscapePrefs {
         &self.prefs
-    }
-
-    pub fn is_open(&self) -> bool {
-        self.prefs.open
-    }
-
-    /// Shows or puts away the drawer, and remembers it.
-    pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        if self.prefs.open == open {
-            return;
-        }
-        self.prefs.open = open;
-        let _ = self.prefs.save();
-        cx.notify();
     }
 
     /// The host's word about the device: its name and rate, or why there is none.
@@ -170,42 +149,6 @@ impl Soundscape {
         self.prefs.mixer = mixer;
         let _ = self.prefs.save();
         cx.notify();
-    }
-
-    fn header(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.muted))
-                    .child("SOUNDSCAPE"),
-            )
-            .child(
-                div()
-                    .id("soundscape-close")
-                    .flex_none()
-                    .size(px(36.))
-                    .rounded_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(rgba(palette.raised))
-                    .text_color(rgb(palette.muted))
-                    .child("✕")
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|view, _, _, cx| {
-                            view.set_open(false, cx);
-                            cx.emit(SoundscapeEvent::Close);
-                        }),
-                    ),
-            )
-            .into_any_element()
     }
 
     /// Play or pause, and one line about what is sounding.
@@ -489,10 +432,10 @@ impl Render for Soundscape {
             .flex_col()
             .gap_3()
             .p_4()
+            .pt(px(12.))
             .bg(rgb(palette.panel()))
             .text_color(rgb(palette.text))
             .overflow_y_scroll()
-            .child(self.header(palette, cx))
             .child(self.transport(palette, cx))
             .child(self.presets(palette, cx))
             .child(
@@ -538,16 +481,16 @@ mod tests {
 
     use super::*;
 
-    /// The drawer opens where the last launch left it, writes the remembered preset and volume into
-    /// the conductor, and remembers the next thing the person does. The device is not started here:
-    /// `Soundscape::new` only needs the two halves of the engine, which a test makes itself.
+    /// The drawer carries its remembered settings into the conductor, and remembers the next thing the
+    /// person does. Whether the edge is *showing* is the sidebar's (`ui/src/sidebar.rs`), so nothing
+    /// here answers that question. The device is not started here: `Soundscape::new` only needs the two
+    /// halves of the engine, which a test makes itself.
     #[gpui::test]
     fn the_drawer_carries_its_settings_and_writes_them(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
         let control = Arc::new(Control::new());
         let visual = Arc::new(Visual::new());
         let prefs = SoundscapePrefs {
-            open: true,
             mixer: true,
             preset: "lofi".to_owned(),
             volume: 0.2,
@@ -555,34 +498,18 @@ mod tests {
         let made = control.clone();
         let view = cx.new(|_| Soundscape::new(made, visual, prefs.clone(), Density::Mobile));
         cx.run_until_parked();
-        view.read_with(cx, |drawer, _| assert!(drawer.is_open(), "remembered open"));
         assert_eq!(control.preset(), Preset::Lofi, "the conductor has it");
         assert!((control.volume() - 0.2).abs() < f32::EPSILON);
 
         view.update(cx, |drawer, cx| {
             drawer.choose_preset(Preset::Sleep, cx);
             drawer.set_mixer(false, cx);
-            drawer.set_open(false, cx);
         });
         view.read_with(cx, |drawer, _| {
             assert_eq!(drawer.prefs().preset, "sleep");
             assert!(!drawer.prefs().mixer);
-            assert!(!drawer.is_open(), "closing is remembered too");
         });
         assert_eq!(control.preset(), Preset::Sleep);
-        // ...and a new drawer built from those settings starts where this one left off.
-        let next = control.clone();
-        let reopened = cx.new(|_| {
-            Soundscape::new(
-                next,
-                Arc::new(Visual::new()),
-                SoundscapePrefs::load(),
-                Density::Mobile,
-            )
-        });
-        reopened.read_with(cx, |drawer, _| {
-            assert!(!drawer.is_open(), "a phone does not open sound by itself");
-        });
     }
 
     #[test]

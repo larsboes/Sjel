@@ -12,17 +12,18 @@ import XCTest
 final class ScanTap: XCTestCase {
   func testTappingScanOpensTheCameraScreen() {
     let app = XCUIApplication()
+    // Settings is behind Today's gear since the bar became five tabs, so a run that needs the page
+    // asks for it rather than hunting for a tab that is no longer there. The right edge is also
+    // remembered open and would cover the page (`ui/src/sidebar.rs`), so this launch closes it.
+    app.launchEnvironment["SJEL_TAB"] = "settings"
+    app.launchEnvironment["SJEL_SIDEBAR"] = "off"
     app.launch()
     sleep(6)
-
-    // The Settings tab, bottom right: 0.81 × 0.93 of the window.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.81, dy: 0.934)).tap()
-    sleep(3)
     attach("settings")
 
     // The Scan pill on the "Scan your Mac's code" card, measured from the `settings` shot above:
-    // 0.835 × 0.306 of the window.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.835, dy: 0.306)).tap()
+    // 0.832 × 0.367 of the window.
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.832, dy: 0.367)).tap()
     sleep(3)
     attach("after-scan-tap")
 

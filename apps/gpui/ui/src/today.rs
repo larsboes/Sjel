@@ -38,8 +38,10 @@ pub enum TodayEvent {
     OpenProject(String),
     /// The person tapped the gear, or the banner that says this phone is not paired yet.
     Settings,
-    /// The person tapped the note: the soundscape drawer, which the host slides in.
+    /// The person tapped the note: the soundscape seat of the right edge, which the host slides in.
     Soundscape,
+    /// The person tapped the list: the activity seat of the same edge — what this phone is doing.
+    Activity,
     /// The person asked for newer data.
     Refresh,
     /// A task was written here and is waiting for the Mac, so the host may sync now.
@@ -461,6 +463,12 @@ impl Today {
                                 "today-soundscape",
                                 "♪",
                                 TodayEvent::Soundscape,
+                                cx,
+                            ))
+                            .child(self.header_button(
+                                "today-activity",
+                                "≡",
+                                TodayEvent::Activity,
                                 cx,
                             ))
                             .child(self.header_button(

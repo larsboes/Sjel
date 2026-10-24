@@ -302,15 +302,27 @@ field, because gpui-mobile raises none on focus. A fresh install starts empty an
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
-**Soundscape** is a drawer, not a tab: the note in Today's header opens it over the page, and it holds
-the transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape.rs`). The
-engine is the Mac's own (`core/src/soundscape`, platform-free); the difference is who drives the clock.
-On the Mac a CPAL stream asks for frames; on the phone `AVAudioSourceNode` does (`ios/host/Audio.swift`,
-`ios/src/audio.rs`), on a `.playback` session that mixes with whatever else is playing. The drawer keeps
-its open state, its mixer disclosure, its preset and its volume in `soundscape.json` beside
-`appearance.json`; it does not keep `playing`, so a phone never starts making sound by itself. A value is
-a row of ten cells rather than a track to drag: a thumb wants an exact tap, and a measured rectangle is
-one more thing to get wrong.
+**The right edge** is one panel with seats, not a drawer per feature (`ui/src/sidebar.rs`): the frame
+draws the title, the seat chips and the close button, and a seat is the content a host hands in. On the
+phone it is an overlay 340 pt wide from the right edge with the page dimmed beside it — a phone has no
+width to dock beside a page — and the same frame docks where a Mac has the room. Which seat is showing
+and whether it is showing at all live in `sidebar.json`; the frame's scrim is `.occlude()`d, so a tap
+that closes the edge cannot reach the page underneath it.
+
+**Soundscape** is the first seat: the note in Today's header opens the edge on it, and it holds the
+transport, the six presets, the volume and a mixer of five layers (`ui/src/soundscape.rs`). The engine
+is the Mac's own (`core/src/soundscape`, platform-free); the difference is who drives the clock. On the
+Mac a CPAL stream asks for frames; on the phone `AVAudioSourceNode` does (`ios/host/Audio.swift`,
+`ios/src/audio.rs`), on a `.playback` session that mixes with whatever else is playing. The seat keeps
+its mixer disclosure, its preset and its volume in `soundscape.json` beside `appearance.json`; it does
+not keep `playing`, so a phone never starts making sound by itself. A value is a row of ten cells rather
+than a track to drag: a thumb wants an exact tap, and a measured rectangle is one more thing to get
+wrong.
+
+**Activity** is the second seat, behind the list button in Today's header: what this phone is doing, in
+its own words — the Mac's answer, the last sync, the queue, and the reminders the notification centre
+holds. It is where an agent's steps will stream once a phone client has an Ask turn to stream, which is
+the plan's own point about Sjel working in view (`PORTING_PLAN.md` §3 item 2).
 
 **Reminders** are the phone's own lock screen, local only: no push registration, no device token and no
 server that would need one (`core/src/notify.rs`, `ios/src/notify.rs`, `ios/host/Notifications.swift`).
@@ -374,10 +386,12 @@ The tabs ship on TestFlight (People arrived in build 1363, internal group `Team`
 distribution today. The touch checks are `host/UITests/`: `JoinTap.swift`, `ScanTap.swift`,
 `TodaySwipe.swift` (which drags the landing page up and proves both that a finger reaches GPUI's
 scroll and that the projects below the fold are really drawn), `InboxCapture.swift`,
-`SoundscapeTap.swift` and `NotificationsTap.swift`. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
-`SJEL_REGISTER=places`, `SJEL_PERSON=Ada`, `SJEL_DAY=2026-10-21` and `SJEL_NOTIFY=1` open a given tab,
-register, card, day, or the reminder card with its switch on, at launch — which is how `ios/run-sim`
-and a screenshot reach a page that is not the first one without a hand on the screen.
+`SoundscapeTap.swift`, `NotificationsTap.swift` and `SidebarTap.swift`. `SJEL_TAB=today|projects|calendar|people|travel|settings`,
+`SJEL_REGISTER=places`, `SJEL_PERSON=Ada`, `SJEL_DAY=2026-10-21`, `SJEL_NOTIFY=1` and
+`SJEL_SIDEBAR=soundscape|activity|off` open a given tab, register, card, day, the reminder card with its
+switch on, or the right edge on a seat (or away), at launch — which is how `ios/run-sim` and a
+screenshot reach a page that is not the first one without a hand on the screen. Only the scanner check
+asserts anything: GPUI paints its own pixels, so the rest are screenshots a person reads.
 
 A write the Mac will not take is named rather than counted. `sync` used to stop at the first refusal,
 so one duplicate note title held every later write in the queue and nothing said which record it was

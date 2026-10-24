@@ -472,8 +472,63 @@
   - `apps/gpui/ios/host/Notifications.swift`, `apps/gpui/ios/host/App.swift`
   - `apps/gpui/ui/src/theme.rs`, `apps/gpui/ios/src/lib.rs`
   - `apps/gpui/ios/host/UITests/NotificationsTap.swift`
-- **Next**: RoomPlan (LiDAR room capture into the interior layouts), then the right sidebar that the
-  drawer's edge is waiting for.
+- **Next**: RoomPlan (LiDAR room capture into the interior layouts), which needs a LiDAR phone to
+  verify, and which the operator deferred in favour of Work Package 16 below.
+
+### ✅ Work Package 16: one right edge, with seats
+- **Status**: Shipped (2026-10-24). The soundscape is one seat of the edge; the phone's own activity is
+  the other.
+- **Why**: §3 item 2 asks for a panel beside the page, and notes that the soundscape drawer already
+  slides in from that same edge. Two panels cannot own one edge, and the plan's own open question —
+  "how the two share it is decided when this is built" — had no answer that survived a person using
+  both. The edge is now one object with seats, so the next thing that wants it (the agent's step
+  stream) is a seat and not a third panel.
+- **Decided 2026-10-24 (operator)**: the frame is shared and the seat is chosen from the panel's own
+  header; the seats are the soundscape and the phone's activity. A phone has no width to dock beside
+  the page, so the frame is an overlay at 340 pt from the right edge with the page dimmed beside it,
+  and the same frame docks when a Mac has the room.
+- **Shipped**:
+  - `ui/src/sidebar.rs` (new) — `Seat` (a key, a chip's word, a title), `Sidebar` (which seat, whether
+    it is showing, every change written to `sidebar.json`), and the frame: title, seat chips, close,
+    and the body a host hands in. `sidebar_scrim` is the overlay form — a panel at the right edge and
+    a dimmed page beside it — and it is `.occlude()`d, because a tap that closed the edge used to reach
+    the page underneath it.
+  - `ui/src/theme.rs` — `SidebarPrefs` in its own file; `SoundscapePrefs` loses `open`, because the
+    edge is not the soundscape's. A `soundscape.json` written before this still reads: serde drops the
+    key it no longer knows.
+  - `ui/src/soundscape.rs` — the drawer is content now: its own header, its close button and its
+    `SoundscapeEvent::Close` are gone, because the frame draws them once for every seat.
+  - `ui/src/today.rs` — a second header button (≡) for the activity seat, beside the note for the
+    sound seat.
+  - `ios/src/lib.rs` — the edge in place of the drawer's overlay; opening takes the audio device only
+    when the seat is the soundscape, switching seats keeps the sound running, and closing pauses it.
+    The activity seat draws what the phone already knows — the Mac's answer, the last sync, the queue,
+    and the reminders the notification centre holds — and is where the agent's steps will stream.
+    `SJEL_SIDEBAR=soundscape|activity|off` opens or closes the edge for a run; `SJEL_SOUNDSCAPE` keeps
+    its old meaning.
+  - `ios/host/UITests/SidebarTap.swift` (new) — the ≡ button, the Sound chip, the ✕. `ScanTap.swift`
+    was repaired in the same pass: it tapped a tab that has not existed since the bar became five
+    tabs, and its Scan coordinate was measured before the Settings page grew.
+- **Verified on a simulator**: the edge closed; ≡ opening it on `ACTIVITY` with `Sound`/`Activity`
+  chips and `Reminders are off`; the Sound chip moving it to `SOUNDSCAPE` with the transport, presets
+  and volume; and ✕ putting it away onto Today. `ios/run-sim --tap` is green on all seven checks.
+- **A defect the tap test found**: closing the edge also opened Settings. The ✕ sits exactly where
+  Today's gear does, the overlay was already gone when the finger came up, and the up reached the page.
+  The scrim is now `.occlude()`d. Two real bugs in one package — this one and the drawer's remembered
+  open state masking `ScanTap` — is the argument for the tap checks existing.
+- **Tests**: 2 in `ui/src/sidebar.rs` (a seat is a key and an unknown one falls back; opening names a
+  seat, the chips keep the edge open and closing keeps the seat) and 1 in `ui/src/theme.rs` (the edge's
+  settings keep their shape; the older `soundscape.json` still reads). core 282, ui 49, ios 2, app 81.
+- **Not claimed**: the docked form on a Mac, which has no host wiring yet — the frame is written for it
+  and nothing on the Mac draws it. And the agent's step stream in the activity seat: the seat is real
+  and its content is what the phone knows today, not a live run.
+- **Target Files**:
+  - `apps/gpui/ui/src/sidebar.rs`, `apps/gpui/ui/src/soundscape.rs`, `apps/gpui/ui/src/theme.rs`
+  - `apps/gpui/ui/src/today.rs`, `apps/gpui/ios/src/lib.rs`
+  - `apps/gpui/ios/host/UITests/SidebarTap.swift`, `apps/gpui/ios/host/UITests/ScanTap.swift`
+- **Next**: the docked form on the Mac, where the width exists — the frame is shared and the Mac's
+  finder overlay (⌘K) is the view that docks into it — then the agent's steps as the activity seat's
+  stream, then RoomPlan with a LiDAR phone in hand.
 
 ---
 
@@ -508,6 +563,12 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
    the overlay from item 1 so the same view can dock here later, and so a stream of agent steps
    (the Ask turn's tool activity today) can drive navigation in the main column. The soundscape
    panel also slides in from the right edge; how the two share it is decided when this is built.
+   - Decided 2026-10-24, and built for the phone in Work Package 16: **one edge with seats.** The
+     frame (`ui/src/sidebar.rs`) draws the title, the seat chips and the close; a seat is the content
+     a host hands in. The soundscape is one seat, the phone's own activity is the other, and the
+     agent's step stream becomes a third rather than a rival panel. On the phone the frame is an
+     overlay at 340 pt, because a phone has no width to dock beside a page; the same frame docks on
+     the Mac, which is the next piece — the finder overlay (⌘K) is the view that docks into it.
 3. **Soundscape, what the 2026-10-23 pass left.** ~~The phone has no player:
    `core/src/soundscape` is platform-free, so the iOS app needs an output device and a panel, not
    a second engine. The panel's own open state and the mixer disclosure are not kept across

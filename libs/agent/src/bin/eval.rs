@@ -1,5 +1,6 @@
 //! `sjel-agent-eval --role <name>`: the agent loop with no tools of its own, for
-//! tools/agent-eval.ts.
+//! tools/agent-eval.ts. `sjel-agent-eval --embed <role>` embeds texts with that role instead, so
+//! the evaluator's retrieval tools reach the model without handling its credentials.
 //!
 //! The evaluator owns every tool, so a comparison with Pi gives both harnesses the same broker
 //! (research/benchmarks/agent-harness/README.md, "How a future runner prepares a case").
@@ -10,8 +11,12 @@
 //!   "max_turns"}`
 //! - stdout: `{"type":"tool_call","id","name","args"}`; the next stdin line answers it with
 //!   `{"ok": bool, "content": string}`
-//! - stdout, last line: `{"type":"final","model","endpoint","answer","turns","usage"}`, where `usage`
-//!   holds one `{"input","output"}` token count per model request that reported one or `{"type":"error","message"}`
+//! - stdout, last line: `{"type":"final","model","endpoint","answer","turns","usage"}` or
+//!   `{"type":"error","message"}`. `usage` holds one `{"input","output"}` token count per
+//!   model request that reported one.
+//!
+//! `--embed`: stdin `{"texts": [..], "kind": "query" | "document"}`, stdout
+//! `{"type":"embeddings","model","vectors"}` in input order, or the same error line.
 //!
 //! No overlay extensions, no session file and no AGENTS.md. The model comes from the role in
 //! the overlay's `config/inference.json`, or from `SJEL_INFERENCE_CONFIG`.
@@ -165,16 +170,46 @@ fn run(role: &str) -> Result<Value, String> {
     }))
 }
 
+#[derive(Deserialize)]
+struct EmbedRequest {
+    texts: Vec<String>,
+    kind: String,
+}
+
+/// Requests this many texts at a time; a 400 KB corpus in one request is too large for a local server.
+const EMBED_BATCH: usize = 64;
+
+fn embed(role: &str) -> Result<Value, String> {
+    let mut pipe = Pipe {
+        lines: std::io::BufReader::new(std::io::stdin()).lines(),
+    };
+    let request: EmbedRequest = pipe.receive()?;
+    let kind = match request.kind.as_str() {
+        "query" => sjel_inference::TextRole::Query,
+        "document" => sjel_inference::TextRole::Document,
+        other => return Err(format!("kind must be query or document, not `{other}`")),
+    };
+    let role = sjel_inference::InferenceConfig::load(sjel_config::overlay_config)
+        .role(role)
+        .ok_or_else(|| format!("the inference role `{role}` is not configured"))?;
+    let mut vectors = Vec::with_capacity(request.texts.len());
+    for batch in request.texts.chunks(EMBED_BATCH) {
+        vectors.extend(role.embed(batch, kind)?);
+    }
+    Ok(json!({"type": "embeddings", "model": role.model, "vectors": vectors}))
+}
+
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    let role = match (args.next().as_deref(), args.next(), args.next()) {
-        (Some("--role"), Some(role), None) => role,
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+        ["--role", role] => run(role),
+        ["--embed", role] => embed(role),
         _ => {
-            eprintln!("usage: sjel-agent-eval --role <name>");
+            eprintln!("usage: sjel-agent-eval --role <name> | --embed <name>");
             return ExitCode::from(2);
         }
     };
-    let (line, code) = match run(&role) {
+    let (line, code) = match result {
         Ok(final_line) => (final_line, ExitCode::SUCCESS),
         Err(message) => (
             json!({"type": "error", "message": message}),

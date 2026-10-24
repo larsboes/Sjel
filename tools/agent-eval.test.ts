@@ -10,7 +10,7 @@ const replay = (c: EvalCase, calls: { tool: string; args: Record<string, unknown
 
 describe("suite contract", () => {
   test("validates frozen inputs and counts the development suite", () => {
-    expect(suiteSummary(suite())).toMatchObject({ cases: 8, source_files: 20, expected_claims: 24, split: "development", results_status: "not_run" });
+    expect(suiteSummary(suite())).toMatchObject({ cases: 12, source_files: 164, expected_claims: 35, split: "development", results_status: "not_run" });
   });
 
   test("rejects source tampering, duplicate IDs and unknown claim sources", () => {

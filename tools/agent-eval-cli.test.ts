@@ -46,7 +46,7 @@ describe("offline evaluator command boundary", () => {
   test("checks the catalogue without launching a solver", async () => {
     const result = await command(["check"]);
     expect(result.code).toBe(0);
-    expect(JSON.parse(result.output)).toMatchObject({ cases: 8, results_status: "not_run" });
+    expect(JSON.parse(result.output)).toMatchObject({ cases: 12, results_status: "not_run" });
   });
 
   test("exports workspace inputs without answer keys", async () => {

@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { Broker, toolDefinitions, type EvalCase } from "./agent-eval.ts";
+import { RETRIEVE_TOOL, Retriever, type RetrievalMode } from "./agent-eval-retrieval.ts";
 
 /** One system prompt for both harnesses. Each result records what the harness actually sent. */
 export const SYSTEM_PROMPT = `You solve one evaluation task. Use only the tools you are given; they act on a virtual workspace.
@@ -33,6 +34,39 @@ export interface RunManifest {
     config_dir?: string;
   };
   sjel: { role: string; binary: string; inference_config?: string };
+  /** Adds a `retrieve` tool for both harnesses: comparison cells B and D in PLAN.md. */
+  retrieval?: { mode: RetrievalMode; embedding_role: string };
+}
+
+/** The tools one attempt offers, and how to answer a call to each. */
+interface Toolset {
+  defs: { name: string; description: string; parameters: Record<string, unknown> }[];
+  call(broker: Broker, name: string, args: unknown): Promise<{ ok: boolean; content: string }>;
+}
+
+const retrievers = new Map<string, Promise<Retriever>>();
+
+/** Policy tools from the broker, plus `retrieve` over this case's corpus when the manifest asks. */
+async function toolset(c: EvalCase, m: RunManifest): Promise<Toolset> {
+  const defs = toolDefinitions(c);
+  const r = m.retrieval;
+  if (!r) return { defs, call: async (broker, name, args) => { const res = broker.call(name, args); return { ok: res.status === "ok", content: res.content }; } };
+  const key = `${c.id}:${r.embedding_role}`;
+  if (!retrievers.has(key)) retrievers.set(key, Retriever.build(Object.fromEntries(Object.entries(c.input.files).map(([p, f]) => [p, f.content])), m.sjel.binary, r.embedding_role, join(m.output_dir, "retrieval-cache")));
+  const retriever = await retrievers.get(key)!;
+  return {
+    defs: [...defs, RETRIEVE_TOOL],
+    async call(broker, name, args) {
+      if (name !== RETRIEVE_TOOL.name) { const res = broker.call(name, args); return { ok: res.status === "ok", content: res.content }; }
+      const query = (args as { query?: unknown } | null)?.query;
+      if (typeof query !== "string" || !query.trim() || query.length > 2_000) {
+        const res = broker.record(name, "error", "retrieve needs a nonempty query of at most 2,000 characters");
+        return { ok: false, content: res.content };
+      }
+      const res = broker.record(name, "ok", JSON.stringify(await retriever.search(query, r.mode)));
+      return { ok: res.status === "ok", content: res.content };
+    },
+  };
 }
 
 export interface LiveMeta {
@@ -77,7 +111,8 @@ export function validateManifest(raw: unknown, repoRoot: string): RunManifest {
     text(m.pi?.provider, "pi.provider"); text(m.pi?.model, "pi.model");
     if (!["off", "low", "medium", "high"].includes(m.pi.thinking)) throw new Error("manifest pi.thinking: expected off|low|medium|high");
   }
-  if (m.harnesses.includes("sjel")) { text(m.sjel?.role, "sjel.role"); text(m.sjel?.binary, "sjel.binary"); }
+  if (m.harnesses.includes("sjel") || m.retrieval) { text(m.sjel?.role, "sjel.role"); text(m.sjel?.binary, "sjel.binary"); }
+  if (m.retrieval && (!["vector", "graph"].includes(m.retrieval.mode) || !m.retrieval.embedding_role)) throw new Error("manifest retrieval: expected {mode: vector|graph, embedding_role}");
   return structuredClone(m);
 }
 
@@ -96,6 +131,7 @@ export async function runPi(c: EvalCase, m: RunManifest): Promise<{ meta: LiveMe
   const pi = await import(join(root, "pi-coding-agent", "dist", "index.js"));
   const { Type } = await import(join(root, "pi-ai", "dist", "index.js"));
   const broker = new Broker(c);
+  const tools = await toolset(c, m);
   const started = performance.now();
   // The operator's own credential and model stores, read in-process; nothing is copied or printed.
   const modelRuntime = await pi.ModelRuntime.create({
@@ -108,7 +144,7 @@ export async function runPi(c: EvalCase, m: RunManifest): Promise<{ meta: LiveMe
   if (!model) throw new Error(`Pi has no model ${m.pi.provider}/${m.pi.model}`);
   let session: { prompt(t: string): Promise<void>; abort(): Promise<void>; dispose(): void; messages: any[]; systemPrompt: string; getActiveToolNames(): string[]; getLastAssistantText(): string | undefined } | undefined;
   let termination: LiveMeta["termination"] = "final";
-  const customTools = toolDefinitions(c).map((def) => ({
+  const customTools = tools.defs.map((def) => ({
     name: def.name,
     label: def.name,
     description: def.description,
@@ -116,8 +152,8 @@ export async function runPi(c: EvalCase, m: RunManifest): Promise<{ meta: LiveMe
     executionMode: "sequential",
     async execute(_id: string, params: unknown) {
       if (broker.exhausted) { termination = "call_budget"; void session?.abort(); throw new Error("call budget exhausted"); }
-      const result = broker.call(def.name, params);
-      if (result.status !== "ok") throw new Error(result.content);
+      const result = await tools.call(broker, def.name, params);
+      if (!result.ok) throw new Error(result.content);
       return { content: [{ type: "text", text: result.content }], details: {} };
     },
   }));
@@ -192,7 +228,8 @@ export async function runPi(c: EvalCase, m: RunManifest): Promise<{ meta: LiveMe
 /** Run one case in Sjel: sjel-agent-eval with only proxy tools, answered by the broker. */
 export async function runSjel(c: EvalCase, m: RunManifest, revision: string): Promise<{ meta: LiveMeta; broker: Broker; answer: string }> {
   const broker = new Broker(c);
-  const defs = toolDefinitions(c);
+  const tools = await toolset(c, m);
+  const defs = tools.defs;
   const started = performance.now();
   const env = { ...process.env };
   if (m.sjel.inference_config) env.SJEL_INFERENCE_CONFIG = m.sjel.inference_config;
@@ -208,8 +245,7 @@ export async function runSjel(c: EvalCase, m: RunManifest, revision: string): Pr
     const msg = JSON.parse(line);
     if (msg.type === "tool_call") {
       if (broker.exhausted) { termination = "call_budget"; child.kill("SIGKILL"); break; }
-      const result = broker.call(msg.name, msg.args);
-      send({ ok: result.status === "ok", content: result.content });
+      send(await tools.call(broker, msg.name, msg.args));
     } else {
       last = msg;
     }

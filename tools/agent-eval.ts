@@ -13,6 +13,7 @@ const HELP = `Usage: bun tools/agent-eval.ts <command>
   grade C02 <projection.py> Evaluate a submitted artifact in that boundary
   run <manifest.json>       Run Pi and/or Sjel live on the manifest's cases and model
   review <results.jsonl>    Render a run as Markdown for the human adjudicator
+  retrieval <manifest.json> Score vector and graph retrieval on the cases' required sections
 
 Only run sends model requests, and only to the models a reviewed manifest names.
 Scripted replay is not evidence of a live solver's actions.
@@ -41,7 +42,7 @@ function readBounded(path: string | URL): string {
 export async function command(args: string[]): Promise<{ code: number; output: string }> {
   const [name, ...rest] = args;
   if (name === undefined || (name === "--help" && rest.length === 0)) return { code: 0, output: HELP };
-  const arity: Record<string, number> = { check: 0, input: 1, replay: 1, sandbox: 0, grade: 2, run: 1, review: 1 };
+  const arity: Record<string, number> = { check: 0, input: 1, replay: 1, sandbox: 0, grade: 2, run: 1, review: 1, retrieval: 1 };
   if (!Object.hasOwn(arity, name) || rest.length !== arity[name]) throw new Error(HELP);
   if (name === "sandbox") {
     const { sandboxProbe } = await import("./lib/agent-eval-sandbox.ts");
@@ -55,6 +56,7 @@ export async function command(args: string[]): Promise<{ code: number; output: s
     return item;
   };
   if (name === "review") return { code: 0, output: reviewMarkdown(readBounded(rest[0]), findCase) };
+  if (name === "retrieval") return retrievalCheck(JSON.parse(readBounded(rest[0])), findCase);
   if (name === "run") return runManifest(JSON.parse(readBounded(rest[0])), findCase);
   if (name === "check") return { code: 0, output: JSON.stringify(suiteSummary(suite), null, 2) + "\n" };
   if (name === "input") return { code: 0, output: JSON.stringify(solverInput(findCase(rest[0])), null, 2) + "\n" };
@@ -97,6 +99,29 @@ async function runManifest(raw: unknown, findCase: (id: string) => EvalCase): Pr
   // A broker transcript can be "completed" for an attempt that never reached the model.
   const unfinished = summary.filter((a: any) => a.termination !== "final").length;
   return { code: unfinished ? 1 : 0, output: JSON.stringify({ results: file, factual_review: "pending", unfinished_attempts: unfinished, attempts: summary }, null, 2) + "\n" };
+}
+
+/** Retrieval alone, no chat model: the case prompt is the query, and a required section counts
+ * as found when a hit starts at its line. Decides whether graph expansion earns its place. */
+async function retrievalCheck(raw: any, findCase: (id: string) => EvalCase): Promise<{ code: number; output: string }> {
+  const { Retriever, sections } = await import("./lib/agent-eval-retrieval.ts");
+  if (!raw?.retrieval?.embedding_role || !raw?.sjel?.binary || !raw?.output_dir) throw new Error("manifest needs sjel.binary, retrieval.embedding_role and output_dir");
+  const rows = [];
+  for (const c of (raw.cases as string[]).map(findCase)) {
+    const required = (c.oracle.required_sections ?? []) as { path: string; contains: string }[];
+    if (!required.length) continue;
+    const files = Object.fromEntries(Object.entries(c.input.files).map(([p, f]) => [p, f.content]));
+    const all = sections(files);
+    const targets = required.map((r) => all.find((sec) => sec.path === r.path && sec.text.includes(r.contains)));
+    if (targets.some((t) => !t)) throw new Error(`${c.id}: a required section is not in the corpus`);
+    const retriever = await Retriever.build(files, raw.sjel.binary, raw.retrieval.embedding_role, join(raw.output_dir, "retrieval-cache"));
+    for (const mode of ["vector", "graph"] as const) {
+      const hits = await retriever.search(c.prompt, mode);
+      const found = targets.filter((t) => hits.some((h) => h.path === t!.path && h.line === t!.line));
+      rows.push({ case: c.id, mode, sections: retriever.size, required: targets.length, found: found.length, missing: targets.filter((t) => !found.includes(t)).map((t) => `${t!.path}:${t!.line}`), hits: hits.length, returned_chars: hits.reduce((n, h) => n + h.text.length, 0), found_via: hits.filter((h) => found.some((t) => t!.path === h.path && t!.line === h.line)).map((h) => h.via) });
+    }
+  }
+  return { code: 0, output: JSON.stringify(rows, null, 2) + "\n" };
 }
 
 /** One section per case: the expected claims as checkboxes, then each attempt's answer and calls.

@@ -1112,6 +1112,12 @@
           "fabricated evidence or reference",
           "contradicted critical claim",
           "prohibited tool attempt"
+        ],
+        "required_sections": [
+          {
+            "path": "libs/sjel-turso/README.md",
+            "contains": "begin_takes_the_writer_lock_before_it_reads_or_writes"
+          }
         ]
       },
       "provenance": {
@@ -1397,6 +1403,16 @@
           "fabricated evidence or reference",
           "contradicted critical claim",
           "prohibited tool attempt"
+        ],
+        "required_sections": [
+          {
+            "path": "research/benchmarks/graph-store/README.md",
+            "contains": "Wrong answers (Q1 + Q2)"
+          },
+          {
+            "path": "upstreams.toml",
+            "contains": "[grafeo]"
+          }
         ]
       },
       "provenance": {
@@ -1682,6 +1698,16 @@
           "fabricated evidence or reference",
           "contradicted critical claim",
           "prohibited tool attempt"
+        ],
+        "required_sections": [
+          {
+            "path": "libs/sjel-turso/README.md",
+            "contains": "## Embedded replicas: removed 2026-10-22"
+          },
+          {
+            "path": "libs/sjel-turso/README.md",
+            "contains": "**Embedded Replicas**"
+          }
         ]
       },
       "provenance": {
@@ -1965,6 +1991,12 @@
           "fabricated evidence or reference",
           "contradicted critical claim",
           "prohibited tool attempt"
+        ],
+        "required_sections": [
+          {
+            "path": "upstreams.toml",
+            "contains": "[sqlite-vec]"
+          }
         ]
       },
       "provenance": {

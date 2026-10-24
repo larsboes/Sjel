@@ -351,6 +351,17 @@ export class Broker {
     }
   }
 
+  /** Record a call to a tool the run adds beyond the case policy, such as retrieval. It shares
+   * the call budget and output limit, and appears in the transcript like any other call. */
+  record(tool: string, status: ToolResult["status"], content: string): ToolResult {
+    if (this.exhausted) throw new Error("call budget exhausted");
+    const result: ToolResult = { index: this.results.length, tool, status, content: content.length > MAX_TEXT ? content.slice(0, MAX_TEXT) + "\n[truncated]" : content };
+    if (this.reportSize + result.content.length > MAX_REPORT_TEXT) { result.status = "error"; result.content = "cumulative replay output limit exceeded"; }
+    this.reportSize += result.content.length;
+    this.results.push(result);
+    return result;
+  }
+
   /** The transcript and artifact state. Factual review stays pending. */
   report<S extends string>(answer: string, evidenceSource: S) {
     const { c, files, results, policyFailures } = this;

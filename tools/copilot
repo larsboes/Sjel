@@ -1,0 +1,20 @@
+#!/bin/bash
+# Sjel's GitHub Copilot CLI launcher.
+#
+# It no longer passes --deny-tool. Copilot persists no tool-deny setting, so the blocks on `rm`,
+# `git commit` and `git push` live in ~/.copilot/hooks/sjel-guard.sh, a command preToolUse hook
+# that Copilot loads for every session — including sessions started by typing `copilot` directly.
+# Two lists would have been one list and one stale list, and the stale one is the one that looks
+# like protection.
+#
+# What is left here is the warning: a session that lost the hook has no blocks at all, and this
+# launcher is the only place the owner is told before the agent runs something.
+set -u
+
+COPILOT_HOME_DIR="${COPILOT_HOME:-$HOME/.copilot}"
+if [ ! -f "$COPILOT_HOME_DIR/hooks/sjel-guard.json" ]; then
+  echo "tools/copilot: the Sjel guard hook is not installed — no rm/git commit/git push blocks." >&2
+  echo "              run: sjel copilot apply" >&2
+fi
+
+exec copilot "$@"

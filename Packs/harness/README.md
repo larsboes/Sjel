@@ -56,16 +56,32 @@ tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already o
 GitHub Copilot CLI settings are managed separately from Pack contents:
 
 ```bash
-sjel copilot apply                         # autopilot + assisted permissions + sandbox
-sjel copilot check                         # report settings drift
-tools/copilot                             # guarded launcher: blocks rm, git commit, git push
+sjel copilot apply                         # autopilot + assisted permissions + sandbox, and the guard hook
+sjel copilot check                         # report drift from the settings baseline and the guard
+sjel copilot apply --dry-run               # say what would change, write nothing
+tools/copilot                             # launcher: warns when the guard hook is missing, then execs copilot
 ```
 
 The baseline enables Copilot's sandbox, disables its bypass and keychain access, masks GitHub
 authentication through the sandbox proxy, keeps custom agents local, disables cross-session
-memory, and denies direct access to common Git credential files. Copilot does not persist
-`--deny-tool` rules in `settings.json`, so the three command blocks belong to `tools/copilot`;
-running the upstream `copilot` binary directly bypasses those launcher-only blocks.
+memory, and denies direct access to common Git credential files.
+
+Copilot persists no tool-deny setting — `--deny-tool` is a session flag — so the blocks on `rm`,
+`git commit` and `git push` live in `~/.copilot/hooks/sjel-guard.sh`, a command `preToolUse` hook
+that `sjel copilot apply` writes and `sjel copilot check` patrols. Copilot loads user hooks for
+every session, and a command `preToolUse` hook is fail-closed: a crash or a non-zero exit denies
+the tool call. Verified 2026-10-24 — `copilot -p '… rm -f /tmp/x' --allow-all`, run without the
+launcher, was denied by the hook and the file survived.
+
+Three limits, stated because each one is a place the floor is absent:
+
+- `tools/templates/copilot/hooks/sjel-guard.sh` matches a blocked command as the first word of a
+  shell segment. `xargs rm`, `find -delete`, `bash -c 'git push'` and git aliases are not matched.
+  It is a guard against the obvious command, not a sandbox.
+- A session that sets `disableAllHooks`, or a user who deletes the hook files, has no blocks.
+  `check` notices the deletion; it cannot notice the setting if nobody runs it.
+- The non-bypassable layer is a root-owned hook in `/etc/github-copilot/policy.d/`, which Sjel
+  does not install. That needs sudo and is a machine-wide decision, not a per-user one.
 
 It exists because no adapter ever asked whether its harness was installed. On 2026-09-07 this
 machine had three Packs materialized into `~/.agents/skills` for a Codex that is not installed,

@@ -18,6 +18,8 @@ use std::process::{Command, ExitCode, ExitStatus};
 mod app;
 mod audit;
 mod capability;
+mod copilot;
+mod credentials;
 mod distribution;
 mod doctor;
 mod feed_sweep;
@@ -31,7 +33,6 @@ mod pack_hook;
 mod packs;
 mod paths;
 mod persist;
-mod credentials;
 mod provider_login;
 mod registry;
 mod runargs;
@@ -87,7 +88,7 @@ fn main() -> ExitCode {
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
         "harnesses" => return harnesses::run(rest),
-        "packs-claude" | "packs-codex" | "packs-opencode" | "packs-pi" => {
+        "packs-claude" | "packs-codex" | "packs-opencode" | "packs-copilot" | "packs-pi" => {
             return packs::run(command, rest)
         }
         "pack-drift-hook" => return pack_hook::run(),
@@ -123,6 +124,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "app" => app::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.
         "doctor" => doctor::run(rest),
+        "copilot" => copilot::run(root, rest),
         // What this machine still needs, and what applying it would do (tools/sjel-cli/src/setup/).
         "setup" => setup::run(rest),
         // A read-only copy of this machine's data, for a device that is not here.
@@ -210,7 +212,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Harness adapters. All four are ported tools/ launchers now, so each keeps its own name and
+/// Harness adapters. Each is a ported tools/ launcher, so it keeps its own name and
 /// resolves its own destination; this only picks which one a `sjel pack` verb reaches.
 fn pack(root: &Path, args: &[String]) -> ExitCode {
     let command = args.first().map_or("", String::as_str);
@@ -222,6 +224,7 @@ fn pack(root: &Path, args: &[String]) -> ExitCode {
             "" | "opencode" => exec(adapter("packs-opencode").arg("list")),
             "claude" => exec(adapter("packs-claude").arg("status")),
             "codex" => exec(adapter("packs-codex").args(["status", "--all"])),
+            "copilot" => exec(adapter("packs-copilot").arg("list")),
             "pi" => exec(adapter("packs-pi").arg("list")),
             _ => fail(&format!("sjel: unknown harness '{harness}'")),
         },
@@ -230,6 +233,7 @@ fn pack(root: &Path, args: &[String]) -> ExitCode {
             "claude" => exec(adapter("packs-claude").arg(command).args(rest)),
             "codex" => exec(adapter("packs-codex").arg(command).args(rest)),
             "opencode" => exec(adapter("packs-opencode").arg(command).args(rest)),
+            "copilot" => exec(adapter("packs-copilot").arg(command).args(rest)),
             "pi" => exec(adapter("packs-pi").arg(command).args(rest)),
             _ => fail(&format!("sjel: unknown harness '{harness}'")),
         },

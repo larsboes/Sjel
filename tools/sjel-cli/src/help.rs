@@ -44,6 +44,7 @@ Operate capabilities:
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
   mcp register [harness]         Register that server with pi or Claude Code, then verify it answers
   claude [apply|check]           Write or check THIS device's Claude Code settings
+  copilot [apply|check]          Write or check THIS device's Copilot CLI settings and guard hook
 
 Manage Packs:
   pack list [harness]            List available Packs, optionally for one harness
@@ -51,6 +52,8 @@ Manage Packs:
   pack deploy <harness> <pack>...
   pack sync <harness> <pack|--all>
   pack remove <harness> <pack>...
+
+Supported harnesses: claude, codex, opencode, copilot, pi
 
 Run 'sjel help <command>' for focused help."#;
 

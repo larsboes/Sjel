@@ -1,0 +1,37 @@
+{
+  "defaultMode": "autopilot",
+  "defaultPermissionMode": "assisted",
+  "customAgents": {
+    "defaultLocalOnly": true
+  },
+  "memory": false,
+  "respectGitignore": true,
+  "sandbox": {
+    "enabled": true,
+    "addCurrentWorkingDirectory": true,
+    "allowDevToolAccess": false,
+    "allowBypass": false,
+    "auth": {
+      "git": true,
+      "gh": true
+    },
+    "sandboxMcpServers": true,
+    "sandboxLspServers": true,
+    "userPolicy": {
+      "network": {
+        "allowOutbound": true,
+        "allowLocalNetwork": true
+      },
+      "seatbelt": {
+        "keychainAccess": false
+      },
+      "filesystem": {
+        "deniedPaths": [
+          "~/.git-credentials",
+          "~/.config/git/credentials",
+          "~/.ssh"
+        ]
+      }
+    }
+  }
+}

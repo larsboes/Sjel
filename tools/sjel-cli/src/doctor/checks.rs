@@ -52,6 +52,7 @@ fn entries() -> Vec<Entry> {
         ),
         One("AI assistant integrations", integrations),
         One("Claude Code settings (sjel claude)", claude_settings),
+        One("Copilot guard hook (sjel copilot)", copilot_guard),
         One("Capabilities (enabled set)", enabled_set),
         One("Capabilities (external references)", external_refs),
         One(
@@ -673,6 +674,37 @@ fn jtext_value(v: &Json) -> String {
         jstr(Some(v))
     } else {
         String::new()
+    }
+}
+
+/// The Copilot guard hook is a security floor that lives in a file outside this repository, so
+/// nothing in a diff would notice it going missing. `sjel claude` has had a doctor row since the
+/// Claude floor moved out of managed policy; the Copilot floor replaced three launcher flags with
+/// one hook on 2026-10-24 and gets the same row.
+fn copilot_guard(ctx: &mut Ctx) {
+    let dir = std::env::var("COPILOT_HOME")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| format!("{}/.copilot", home()), |d| expand_home(&d));
+    let hooks = Path::new(&dir).join("hooks");
+    let script = hooks.join("sjel-guard.sh");
+    let config = hooks.join("sjel-guard.json");
+    if !config.exists() || !script.exists() {
+        ctx.warn(format!(
+            "Copilot guard hook is not installed in {} — `rm`, `git commit` and `git push` are unblocked; run: sjel copilot apply",
+            hooks.display()
+        ));
+        return;
+    }
+    let template = ctx.root.join("tools/templates/copilot/hooks/sjel-guard.sh");
+    match (std::fs::read(&template), std::fs::read(&script)) {
+        (Ok(expected), Ok(actual)) if expected != actual => ctx.warn(format!(
+            "Copilot guard hook differs from its template — run: sjel copilot check ({})",
+            script.display()
+        )),
+        (Ok(_), Ok(_)) => ctx.ok(format!("guard hook installed: {}", script.display())),
+        (Err(error), _) => ctx.warn(format!("cannot read {}: {error}", template.display())),
+        (_, Err(error)) => ctx.warn(format!("cannot read {}: {error}", script.display())),
     }
 }
 

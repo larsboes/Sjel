@@ -1,0 +1,12 @@
+#!/bin/bash
+# tools/packs-copilot — materialize Sjel Packs into GitHub Copilot CLI.
+# Launcher only; the verb surface lives in tools/sjel-cli/src/packs.rs.
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
+sjel_cli_exec packs-copilot "$@"

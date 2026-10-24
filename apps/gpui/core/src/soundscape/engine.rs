@@ -860,7 +860,13 @@ mod quality {
     }
 
     /// Half a minute per preset: no offset, no clipping, and a level that is where it was.
+    ///
+    /// Ignored by default: 28 s of audio per preset at two volumes is 20.8 s of an unoptimized
+    /// test run, where the other 288 core tests finish in under 2 s (measured 2026-10-24). Run it
+    /// before a soundscape change with
+    /// `cargo test -p sjel-gpui-core --release -- --ignored every_preset_stays_centred_and_steady`.
     #[test]
+    #[ignore = "slow in debug; run with --release --ignored before a soundscape change"]
     fn every_preset_stays_centred_and_steady() {
         for preset in PRESETS {
             for volume in [0.65f32, 1.0] {

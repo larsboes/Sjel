@@ -893,11 +893,32 @@ Not started. Each item is a work package for a later session.
    - `~/.cargo/registry`: 6.2 GB
    - `ios/host/build`: 484 MB
 
-   The app builds into `~/.cargo-target` (`CARGO_TARGET_DIR`), and the root workspace builds
-   into `./target`, so shared crates compile and sit on disk twice. Fix: one target directory
-   for every workspace, a prune of artifacts nobody has read in N days, and a `tools/doctor`
-   line that names the size against a threshold. 174 GiB was free on the same day, so this is
-   hygiene, not an emergency.
+   `tools/storage/storage` already measures all of this, and its policy protects what runs
+   (`target/release` holds the service binaries, `~/.cargo-target/release` holds `sjel-mcp`).
+   Use it. Do not add a second tool. 174 GiB was free on the same day, so this is hygiene, not
+   an emergency.
+
+   Done 2026-10-24:
+   - The GPUI workspace gets the root's debug-info trim (`apps/gpui/Cargo.toml`,
+     `[profile.dev]`). It never inherited it, so every GPUI dependency carried full debug info.
+     The saving is not measured yet. The first debug build after this rebuilds GPUI, and the
+     old artifacts stay in `~/.cargo-target/debug` until the debug-cache class prunes them.
+   - The stray `apps/gpui/target` (1.9 GB, which cargo no longer builds into) was reclaimed
+     with `storage reclaim --repo --target`.
+   - The soundscape's half-minute quality test is `#[ignore]`d: 20.8 s of every core test run.
+     It takes 2.4 s with `--release --ignored`.
+
+   Open:
+   - The root workspace is release-built twice: `./target/release` (12.2 GB, the services) and
+     `~/.cargo-target/release` (7.0 GB, `sjel-mcp` and every interactive build). Pick one
+     location. That touches every `service.toml` `command` and the `sjel-mcp` path, so it is one
+     session of its own.
+   - The overlay policy caps `rust-debug-cache` at 50 GB. Lowering it is the operator's call.
+   - `alias cargo='taskpolicy -b cargo'` (`~/.zshrc:50`) runs a build at about 3× the wall time
+     for about a fifth of the power (measured 2026-10-08). Its comment says agent shells do not
+     read the file, but agent sessions run with it. Decide whether agents keep it.
+   - Release profile: `strip`, and `lto = "thin"` only where a measurement shows the runtime
+     gain is worth the build time. The services are I/O-bound, so expect little.
 5. **Efficiency and simplicity.** Two known items:
    - Documents still fetches 7,154 rows on mount (§4, cursor paging).
    - The finder's server search uses `LIKE`, which folds ASCII case only (§3 item 1, FTS5).

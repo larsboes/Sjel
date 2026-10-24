@@ -2,9 +2,9 @@ use crate::{
     CredentialError, CredentialId, CredentialProvider, Presence, ProviderKind, ProviderReference,
     SecretValue,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::io::Write;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::{Command, Stdio};
 
 /// Redacted result from a subprocess. Standard error is intentionally discarded by provider
@@ -46,13 +46,13 @@ impl CommandRunner for SystemCommandRunner {
         args: &[&str],
         stdin: Option<&[u8]>,
     ) -> Result<CommandOutput, CredentialError> {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = (program, args, stdin);
             Err(CredentialError::UnsupportedPlatform)
         }
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let mut command = Command::new(program);
             command.args(args);
@@ -83,26 +83,51 @@ impl CommandRunner for SystemCommandRunner {
     }
 }
 
-/// macOS Keychain generic-password adapter.
+/// The OS keychain's generic-password adapter: the macOS Keychain through `security`, or on
+/// Linux the Secret Service (GNOME Keyring, KWallet) through `secret-tool`.
 ///
-/// Values are hex encoded into the `security -i` input stream. They do not appear in process
-/// arguments or shell history. Reads return the value only to the Rust caller; errors never
-/// include command output.
+/// Values are stored hex encoded and written through standard input. They do not appear in
+/// process arguments or shell history. Reads return the value only to the Rust caller; errors
+/// never include command output.
 pub struct KeychainProvider<R = SystemCommandRunner> {
     runner: R,
+    store: Store,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Store {
+    MacKeychain,
+    SecretService,
 }
 
 impl KeychainProvider<SystemCommandRunner> {
     pub fn system() -> Self {
         Self {
             runner: SystemCommandRunner,
+            store: if cfg!(target_os = "linux") {
+                Store::SecretService
+            } else {
+                Store::MacKeychain
+            },
         }
     }
 }
 
 impl<R> KeychainProvider<R> {
+    /// The macOS Keychain's commands, through `runner`.
     pub fn with_runner(runner: R) -> Self {
-        Self { runner }
+        Self {
+            runner,
+            store: Store::MacKeychain,
+        }
+    }
+
+    /// The Secret Service's commands, through `runner`.
+    pub fn secret_service_with_runner(runner: R) -> Self {
+        Self {
+            runner,
+            store: Store::SecretService,
+        }
     }
 
     fn location(
@@ -131,6 +156,24 @@ impl<R> KeychainProvider<R> {
     {
         let (service, account) = Self::location(id, reference)?;
         let encoded = zeroize::Zeroizing::new(encode_hex(value.expose_bytes()));
+        if self.store == Store::SecretService {
+            // `secret-tool store` always replaces, so a create checks first, as
+            // `add-generic-password` without `-U` does.
+            if !replace && self.lookup(&service, &account)?.is_some() {
+                return Err(CredentialError::ProviderOperation { operation: "write" });
+            }
+            let label = format!("--label={service}");
+            let output = self.runner.run(
+                "secret-tool",
+                &["store", &label, "service", &service, "account", &account],
+                Some(encoded.as_bytes()),
+            )?;
+            return if output.success {
+                Ok(())
+            } else {
+                Err(CredentialError::ProviderOperation { operation: "write" })
+            };
+        }
         let replace_flag = if replace { "-U " } else { "" };
         let command = zeroize::Zeroizing::new(format!(
             "add-generic-password {replace_flag}-s {service} -a {account} -w {}\n",
@@ -145,6 +188,24 @@ impl<R> KeychainProvider<R> {
             Err(CredentialError::ProviderOperation { operation: "write" })
         }
     }
+
+    /// The stored hex, if the Secret Service holds an item for this service and account.
+    fn lookup(
+        &self,
+        service: &str,
+        account: &str,
+    ) -> Result<Option<zeroize::Zeroizing<Vec<u8>>>, CredentialError>
+    where
+        R: CommandRunner,
+    {
+        let output = self.runner.run(
+            "secret-tool",
+            &["lookup", "service", service, "account", account],
+            None,
+        )?;
+        let stdout = zeroize::Zeroizing::new(output.stdout);
+        Ok((output.success && !stdout.is_empty()).then_some(stdout))
+    }
 }
 
 impl<R: CommandRunner> CredentialProvider for KeychainProvider<R> {
@@ -158,6 +219,12 @@ impl<R: CommandRunner> CredentialProvider for KeychainProvider<R> {
         reference: &ProviderReference,
     ) -> Result<Presence, CredentialError> {
         let (service, account) = Self::location(id, reference)?;
+        if self.store == Store::SecretService {
+            return Ok(match self.lookup(&service, &account)? {
+                Some(_) => Presence::Present,
+                None => Presence::Missing,
+            });
+        }
         let output = self.runner.run(
             "security",
             &["find-generic-password", "-s", &service, "-a", &account],
@@ -198,6 +265,15 @@ impl<R: CommandRunner> CredentialProvider for KeychainProvider<R> {
         reference: &ProviderReference,
     ) -> Result<SecretValue, CredentialError> {
         let (service, account) = Self::location(id, reference)?;
+        if self.store == Store::SecretService {
+            let stored = self
+                .lookup(&service, &account)?
+                .ok_or(CredentialError::NotFound)?;
+            let encoded = std::str::from_utf8(&stored)
+                .map_err(|_| CredentialError::InvalidSecretRepresentation)?
+                .trim();
+            return SecretValue::from_zeroizing(decode_hex(encoded)?);
+        }
         let output = self.runner.run(
             "security",
             &[
@@ -227,6 +303,24 @@ impl<R: CommandRunner> CredentialProvider for KeychainProvider<R> {
         reference: &ProviderReference,
     ) -> Result<(), CredentialError> {
         let (service, account) = Self::location(id, reference)?;
+        if self.store == Store::SecretService {
+            // `secret-tool clear` succeeds when nothing matched, so a missing item is found first.
+            if self.lookup(&service, &account)?.is_none() {
+                return Err(CredentialError::NotFound);
+            }
+            let output = self.runner.run(
+                "secret-tool",
+                &["clear", "service", &service, "account", &account],
+                None,
+            )?;
+            return if output.success {
+                Ok(())
+            } else {
+                Err(CredentialError::ProviderOperation {
+                    operation: "delete",
+                })
+            };
+        }
         let output = self.runner.run(
             "security",
             &["delete-generic-password", "-s", &service, "-a", &account],
@@ -431,5 +525,122 @@ mod tests {
             Err(CredentialError::InvalidSecretRepresentation)
         );
         assert_eq!(decode_hex("4A").unwrap().as_slice(), &[0x4a]);
+    }
+
+    #[test]
+    fn secret_service_writes_hex_through_stdin_after_checking_for_an_item() {
+        let runner = FakeRunner::default();
+        let provider = KeychainProvider::secret_service_with_runner(&runner);
+        let (id, _) = fixture();
+        let secret = SecretValue::new(b"sensitive-value".to_vec()).unwrap();
+
+        provider.create(&id, "Inbound auth", &secret).unwrap();
+
+        let calls = runner.calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, "secret-tool");
+        assert_eq!(calls[0].1[0], "lookup");
+        let (program, args, stdin) = &calls[1];
+        assert_eq!(program, "secret-tool");
+        assert_eq!(
+            args,
+            &[
+                "store",
+                "--label=com.sjel.credential.inbound-auth",
+                "service",
+                "com.sjel.credential.inbound-auth",
+                "account",
+                "inbound-auth",
+            ]
+        );
+        assert_eq!(
+            stdin.as_deref(),
+            Some(&b"73656e7369746976652d76616c7565"[..])
+        );
+        assert!(!args.join(" ").contains("sensitive-value"));
+    }
+
+    #[test]
+    fn secret_service_create_refuses_an_item_that_exists() {
+        let runner = FakeRunner::default();
+        *runner.response.lock().unwrap() = Some(CommandOutput {
+            success: true,
+            stdout: b"746f6b656e".to_vec(),
+        });
+        let provider = KeychainProvider::secret_service_with_runner(&runner);
+        let (id, _) = fixture();
+        let secret = SecretValue::new(b"new".to_vec()).unwrap();
+
+        assert_eq!(
+            provider.create(&id, "Inbound auth", &secret),
+            Err(CredentialError::ProviderOperation { operation: "write" })
+        );
+        assert_eq!(runner.calls.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn secret_service_reads_decode_hex() {
+        let runner = FakeRunner::default();
+        *runner.response.lock().unwrap() = Some(CommandOutput {
+            success: true,
+            stdout: b"746f6b656e".to_vec(),
+        });
+        let provider = KeychainProvider::secret_service_with_runner(&runner);
+        let (id, reference) = fixture();
+
+        assert_eq!(
+            provider.get(&id, &reference).unwrap().expose_bytes(),
+            b"token"
+        );
+    }
+
+    #[test]
+    fn secret_service_delete_of_a_missing_item_is_not_found_and_clears_nothing() {
+        let runner = FakeRunner::default();
+        *runner.response.lock().unwrap() = Some(CommandOutput {
+            success: false,
+            stdout: Vec::new(),
+        });
+        let provider = KeychainProvider::secret_service_with_runner(&runner);
+        let (id, reference) = fixture();
+
+        assert_eq!(
+            provider.delete(&id, &reference),
+            Err(CredentialError::NotFound)
+        );
+        let calls = runner.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1[0], "lookup");
+    }
+
+    /// Run with a Secret Service on the session bus:
+    /// `dbus-run-session -- sh -c 'echo | gnome-keyring-daemon --unlock; cargo test -- --ignored'`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "needs a running Secret Service"]
+    fn the_secret_service_round_trips_a_credential() {
+        let provider = KeychainProvider::system();
+        let id = CredentialId::parse("sjel-keychain-round-trip").unwrap();
+        let first = SecretValue::new(b"first".to_vec()).unwrap();
+        let second = SecretValue::new(b"second".to_vec()).unwrap();
+
+        let reference = provider.create(&id, "round trip", &first).unwrap();
+        assert_eq!(provider.status(&id, &reference).unwrap(), Presence::Present);
+        assert!(provider.create(&id, "round trip", &first).is_err());
+        assert_eq!(
+            provider.get(&id, &reference).unwrap().expose_bytes(),
+            b"first"
+        );
+        provider.update(&id, &reference, &second).unwrap();
+        assert_eq!(
+            provider.get(&id, &reference).unwrap().expose_bytes(),
+            b"second"
+        );
+        provider.delete(&id, &reference).unwrap();
+        assert_eq!(provider.status(&id, &reference).unwrap(), Presence::Missing);
+        assert_eq!(
+            provider.delete(&id, &reference),
+            Err(CredentialError::NotFound)
+        );
     }
 }

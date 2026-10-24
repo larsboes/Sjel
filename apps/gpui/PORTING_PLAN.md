@@ -989,9 +989,13 @@ Not started. Each item is a work package for a later session.
      `PdfError::Unsupported`, so Documents shows the extracted text. Not run on Linux yet, only
      checked. CI's Linux leg now checks the shell. The Windows shell leg reports without failing
      until its first green run.
-   - Still open for Linux and Windows: a keychain backend (`libs/sjel-credentials` answers
-     `UnsupportedPlatform` off macOS, so the app cannot save a key there), a PDF renderer, a
-     launch on a real desktop, and packaging.
+   - Done 2026-10-24: on Linux, `KeychainProvider::system()` stores credentials in the Secret
+     Service through `secret-tool`, with the same hex and the same service and account names as
+     the macOS Keychain. No caller changed. A real round trip against gnome-keyring passes in the
+     container (`the_secret_service_round_trips_a_credential`, ignored by default). A desktop
+     without `secret-tool` (package `libsecret-tools`) gets a failed `start`, not a saved key.
+   - Still open: a Windows keychain (no Windows CLI reads a stored credential, so this needs a
+     crate), a PDF renderer off macOS, a launch on a real Linux desktop, and packaging.
    - Android: the phone's offline core (`core/src/{store,sync,mirror}.rs`) is platform-free. The
      open work is a host like `ios/host`, discovery, and the platform calls behind item 2's
      traits. Checked 2026-10-24: the pinned `gpui-mobile` rev `c24a1308e1` already has an Android

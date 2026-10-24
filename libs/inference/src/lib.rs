@@ -208,6 +208,24 @@ pub struct Role {
     /// is simply not available on a machine that overrides its backend.
     #[serde(default)]
     pub on_backend: HashMap<String, BackendModel>,
+    /// The role to try when a request on THIS role fails for a reason a caller can prove
+    /// rather than judge: the transport failed, the answer was empty, or a tool call named
+    /// arguments the tool refused. A rung, not a failover pool -- the caller escalates once.
+    ///
+    /// It exists because two local models on one machine are not a cost choice but a
+    /// correctness one. Measured 2026-10-24: Apple Foundation Models on `foundation-models`
+    /// invented `calendar_entries{"date":…,"status":"ready"}` on three prompts out of three
+    /// and returned a bare 502 on one of them, while `Qwen3.5-4B-MLX-4bit` on oMLX called
+    /// `sjel_health` correctly on the same three. Sending everything to the strong rung spends
+    /// 4 extra seconds on plain chat; sending everything to the weak one answers Sjel questions
+    /// wrongly. Naming the ladder here keeps that a config fact, so the capability asks for
+    /// "assistant" and never learns which backend answered.
+    ///
+    /// Deliberately absent from cloud roles: reaching a second provider is a policy question
+    /// (`failover_priority`, the reviewed tier, the daily ledger), and [`Self::cloud_failover_roles`]
+    /// already owns it. A name that does not resolve, or that names this role, is ignored.
+    #[serde(default)]
+    pub escalates_to: Option<String>,
 }
 
 /// What a role is called on one specific backend.
@@ -325,6 +343,8 @@ pub struct ResolvedRole {
     /// `provided_by` and [`TRUSTED_PEERS_ENV`], so the environment is read in
     /// one place and a test can state the answer directly.
     pub trusted_peer: bool,
+    /// See the config field of the same name: the role to escalate to after a provable failure.
+    pub escalates_to: Option<String>,
 }
 
 fn model_ids_match(configured: &str, installed: &str) -> bool {
@@ -510,6 +530,20 @@ impl InferenceConfig {
         self.role_on(name, machine_backend.as_deref())
     }
 
+    /// The rung [`Self::role`] escalates to, already resolved, or `None` when the role names no
+    /// target or the name does not resolve here.
+    ///
+    /// One hop only, and never back to the role itself: a ladder that could chain would make
+    /// "which model answered" depend on how many attempts a failing request happened to make.
+    /// A caller escalates once and reports the model that answered.
+    pub fn escalation_for(&self, name: &str) -> Option<ResolvedRole> {
+        let target = self.roles.get(name)?.escalates_to.as_deref()?.trim();
+        if target.is_empty() || target == name {
+            return None;
+        }
+        self.role(target)
+    }
+
     /// [`Self::role`] with the machine override handed in instead of read from
     /// the environment. Separate because an env var is process-global while
     /// `cargo test` runs threads in parallel, so a test that set one would
@@ -581,6 +615,7 @@ impl InferenceConfig {
             query_prefix: query_prefix.to_string(),
             document_prefix: document_prefix.to_string(),
             trusted_peer,
+            escalates_to: role.escalates_to.clone(),
         })
     }
 
@@ -1469,6 +1504,7 @@ mod tests {
             chat_template_kwargs: None,
             request_overrides: None,
             trusted_peer,
+            escalates_to: None,
         }
     }
 
@@ -1558,7 +1594,13 @@ mod tests {
                          "ollama": { "model": "nomic-embed-text",
                                      "query_prefix": "search_query: ",
                                      "document_prefix": "search_document: " } } },
-        "reranking": { "backend": "omlx", "model": "bge-reranker-v2-m3-mlx" }
+        "reranking": { "backend": "omlx", "model": "bge-reranker-v2-m3-mlx" },
+        "assistant": { "backend": "omlx", "model": "Qwen3.5-4B-MLX-4bit",
+                       "max_input_tokens": 8192, "escalates_to": "assistant_strong" },
+        "assistant_strong": { "backend": "omlx", "model": "Qwen3.5-9B-MLX-4bit",
+                              "max_input_tokens": 8192 },
+        "self_referential": { "backend": "omlx", "model": "m", "escalates_to": "self_referential" },
+        "names_nothing": { "backend": "omlx", "model": "m", "escalates_to": "absent" }
       }
     }"#;
 
@@ -1631,6 +1673,30 @@ mod tests {
         assert_eq!(role.backend_name, "omlx");
         assert_eq!(role.backend.api, Api::OpenAi);
         assert_eq!(role.model, "multilingual-e5-base-mlx");
+    }
+
+    #[test]
+    fn a_role_escalates_one_hop_to_the_role_it_names() {
+        let config = config();
+        let strong = config
+            .escalation_for("assistant")
+            .expect("assistant names a rung");
+        assert_eq!(strong.model, "Qwen3.5-9B-MLX-4bit");
+        assert_eq!(
+            config.role("assistant").unwrap().escalates_to.as_deref(),
+            Some("assistant_strong")
+        );
+    }
+
+    #[test]
+    fn a_ladder_that_points_at_itself_or_nowhere_is_none() {
+        let config = config();
+        assert!(
+            config.escalation_for("self_referential").is_none(),
+            "a role that names itself would make the answer depend on how many attempts ran"
+        );
+        assert!(config.escalation_for("names_nothing").is_none());
+        assert!(config.escalation_for("reranking").is_none());
     }
 
     #[test]

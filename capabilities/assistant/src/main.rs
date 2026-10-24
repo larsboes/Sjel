@@ -13,6 +13,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+mod routing;
+
 const ROLE: &str = "assistant";
 const MAX_PROMPT_BYTES: usize = 32 * 1024;
 const MAX_REPLY_TOKENS: u32 = 1024;
@@ -297,7 +299,110 @@ fn ready_role() -> Option<sjel_inference::ResolvedRole> {
     sjel_inference::InferenceConfig::load(sjel_config::overlay_config).role(ROLE)
 }
 
-fn ask_role(
+/// The two local rungs Ask can answer on, as declared in the overlay's `inference.json`.
+///
+/// `assistant` is the entry point and names its own escalation through `escalates_to`, so this
+/// type carries no role names of its own: move the ladder in config and no code changes. A
+/// machine that declares one local role has a ladder of one, and that role keeps the tools.
+struct Ladder {
+    fast: sjel_inference::ResolvedRole,
+    strong: Option<sjel_inference::ResolvedRole>,
+}
+
+impl Ladder {
+    fn load() -> Option<Self> {
+        let config = sjel_inference::InferenceConfig::load(sjel_config::overlay_config);
+        let fast = config.role(ROLE).filter(role_is_local)?;
+        let strong = config.escalation_for(ROLE).filter(role_is_local);
+        Some(Self { fast, strong })
+    }
+
+    /// The role that answers `rung`, and whether it is offered the Sjel tools.
+    ///
+    /// The fast rung is offered none, by design: a model that cannot call a tool cannot invent
+    /// one, and inventing one is what the on-device rung was measured doing on 2026-10-24.
+    fn role_for(&self, rung: routing::Rung) -> (sjel_inference::ResolvedRole, bool) {
+        match (&self.strong, rung) {
+            (Some(_), routing::Rung::Fast) => (self.fast.clone(), false),
+            (Some(strong), routing::Rung::Strong) => (strong.clone(), true),
+            // No ladder declared: the one local role does every job and keeps the tools.
+            (None, _) => (self.fast.clone(), true),
+        }
+    }
+
+    fn can_escalate(&self, rung: routing::Rung) -> bool {
+        self.strong.is_some() && rung == routing::Rung::Fast
+    }
+
+    /// The tightest input ceiling across the rungs that can answer, so a prompt that fits the
+    /// first rung cannot be refused by the second one after it has already escalated.
+    fn tightest_input_limit(&self) -> Option<u32> {
+        let mut tightest: Option<u32> = None;
+        for role in std::iter::once(&self.fast).chain(self.strong.iter()) {
+            let limit = role.max_input_tokens?;
+            tightest = Some(tightest.map_or(limit, |current: u32| current.min(limit)));
+        }
+        tightest
+    }
+}
+
+/// Where one Ask request may be answered: one reviewed cloud role, or the local ladder.
+///
+/// An enum rather than an `Option` because the two paths are already different in three ways --
+/// tools, history, and the admission rules -- and a boolean that means "cloud, therefore no
+/// tools and no history" is the kind of flag every reader has to re-derive.
+enum Backend {
+    Cloud(Box<sjel_inference::ResolvedRole>),
+    Local(Box<Ladder>),
+}
+
+/// One rung's answer, with what the caller needs to decide whether to escalate.
+struct Answer {
+    text: String,
+    tools: Vec<String>,
+    /// Bytes of text already handed to the emitter. Non-zero means the answer cannot be taken
+    /// back, so an escalation would duplicate what the reader has already seen.
+    streamed: usize,
+}
+
+enum AskFailure {
+    Stopped,
+    Failed {
+        status: StatusCode,
+        message: String,
+        streamed: usize,
+    },
+}
+
+impl AskFailure {
+    fn into_pair(self) -> (StatusCode, String) {
+        match self {
+            Self::Stopped => (StatusCode::CONFLICT, "stopped by the user".into()),
+            Self::Failed {
+                status, message, ..
+            } => (status, message),
+        }
+    }
+
+    fn streamed(&self) -> usize {
+        match self {
+            Self::Stopped => 0,
+            Self::Failed { streamed, .. } => *streamed,
+        }
+    }
+}
+
+fn ask_backend(provider_role: Option<&str>, confirm_public_send: bool) -> Result<Backend, String> {
+    if provider_role.is_some() {
+        return ask_cloud_role(provider_role, confirm_public_send)
+            .map(|role| Backend::Cloud(Box::new(role)));
+    }
+    Ladder::load()
+        .map(|ladder| Backend::Local(Box::new(ladder)))
+        .ok_or_else(|| "the local assistant role is not configured".into())
+}
+
+fn ask_cloud_role(
     provider_role: Option<&str>,
     confirm_public_send: bool,
 ) -> Result<sjel_inference::ResolvedRole, String> {
@@ -400,27 +505,30 @@ async fn ask_providers() -> Json<Vec<CloudProviderOption>> {
 }
 
 async fn ready() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let role = ready_role().filter(role_is_local).ok_or_else(|| {
+    let ladder = Ladder::load().ok_or_else(|| {
         failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "the local assistant role is not configured",
         )
     })?;
-    let checked = role.clone();
+    let checked = ladder.fast.clone();
     tokio::task::spawn_blocking(move || checked.runtime_admission())
         .await
         .map_err(|error| failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .map_err(|reason| failure(StatusCode::CONFLICT, reason.to_string()))?;
-    if role.max_input_tokens.is_none() {
+    if ladder.fast.max_input_tokens.is_none() {
         return Err(failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "the assistant role must declare max_input_tokens",
         ));
     }
+    // The strong rung is reported but never required: a machine that declares no ladder answers
+    // every prompt on one role, and that is a supported deployment rather than a broken one.
     Ok(Json(json!({
         "status": "ready",
-        "model": role.model,
-        "max_input_bytes": role.max_input_tokens,
+        "model": ladder.fast.model,
+        "strong_model": ladder.strong.as_ref().map(|role| role.model.clone()),
+        "max_input_bytes": ladder.tightest_input_limit(),
     })))
 }
 
@@ -505,7 +613,11 @@ fn fits_role(
     prompt: &str,
     instructions: Option<&str>,
 ) -> bool {
-    let Some(limit) = role.max_input_tokens else {
+    fits_limit(role.max_input_tokens, prompt, instructions)
+}
+
+fn fits_limit(limit: Option<u32>, prompt: &str, instructions: Option<&str>) -> bool {
+    let Some(limit) = limit else {
         return false;
     };
     let input_bytes = prompt
@@ -607,12 +719,12 @@ async fn generate(
 }
 
 fn run_ask(
-    role: sjel_inference::ResolvedRole,
+    backend: Backend,
     shell_url: &str,
     request: AskRequest,
 ) -> Result<AskResponse, (StatusCode, String)> {
     run_ask_with_input(
-        role,
+        backend,
         shell_url,
         request,
         AgentInput::default(),
@@ -622,24 +734,107 @@ fn run_ask(
 }
 
 fn run_ask_with_input(
-    role: sjel_inference::ResolvedRole,
+    backend: Backend,
     shell_url: &str,
     request: AskRequest,
     input: AgentInput,
     stop: Arc<AtomicBool>,
     mut emit: impl FnMut(Value),
 ) -> Result<AskResponse, (StatusCode, String)> {
+    let ladder = match backend {
+        Backend::Cloud(role) => {
+            let answer = attempt(&role, false, shell_url, &request, input, stop, &mut emit)
+                .map_err(AskFailure::into_pair)?;
+            return Ok(AskResponse {
+                text: answer.text,
+                model: role.model,
+                source: "cloud",
+                tools: answer.tools,
+            });
+        }
+        Backend::Local(ladder) => ladder,
+    };
+
+    let mut rung = routing::route(&request.prompt, !request.history.is_empty());
+    let mut escalated = false;
+    loop {
+        let (role, offered_tools) = ladder.role_for(rung);
+        let outcome = attempt(
+            &role,
+            offered_tools,
+            shell_url,
+            &request,
+            input.clone(),
+            Arc::clone(&stop),
+            &mut emit,
+        );
+        match outcome {
+            Ok(answer) => {
+                // A refusal is the one failure that arrives as a successful answer. It is only
+                // escalatable while nothing has been streamed, because text already sent to a
+                // client cannot be recalled -- so the streaming route relies on `routing::route`
+                // deciding the rung up front, and this closes the case for the buffered route.
+                if !escalated
+                    && answer.streamed == 0
+                    && ladder.can_escalate(rung)
+                    && routing::refused(&answer.text)
+                {
+                    escalated = true;
+                    rung = routing::Rung::Strong;
+                    continue;
+                }
+                return Ok(AskResponse {
+                    text: answer.text,
+                    model: role.model,
+                    source: if escalated {
+                        "local-escalated"
+                    } else {
+                        "local"
+                    },
+                    tools: answer.tools,
+                });
+            }
+            Err(AskFailure::Stopped) => {
+                return Err((StatusCode::CONFLICT, "stopped by the user".into()))
+            }
+            Err(failure) => {
+                if !escalated && failure.streamed() == 0 && ladder.can_escalate(rung) {
+                    escalated = true;
+                    rung = routing::Rung::Strong;
+                    continue;
+                }
+                return Err(failure.into_pair());
+            }
+        }
+    }
+}
+
+/// One request to one role: the whole conversation is rebuilt, because a failed attempt leaves
+/// its own messages behind and the next rung must start from what the caller actually sent.
+fn attempt(
+    role: &sjel_inference::ResolvedRole,
+    offered_tools: bool,
+    shell_url: &str,
+    request: &AskRequest,
+    input: AgentInput,
+    stop: Arc<AtomicBool>,
+    emit: &mut impl FnMut(Value),
+) -> Result<Answer, AskFailure> {
     let cloud = role.is_cloud_endpoint();
+    let tools_enabled = offered_tools && !cloud;
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let instructions = if cloud {
         "You are Sjel Assistant. Answer only from the public prompt. You have no access to Sjel data or tools."
     } else {
         SYSTEM_INSTRUCTIONS
     };
-    let tools_instruction = if cloud {
-        ""
-    } else {
+    // The fast rung is told nothing about tools, because it is offered none. Telling a model
+    // about tools it does not have is how the on-device rung came to invent a calendar call for
+    // "reply with the single word: ready".
+    let tools_instruction = if tools_enabled {
         " Use the read-only Sjel tools to check live capabilities, calendar entries, projects, or trips before answering."
+    } else {
+        ""
     };
     let system = if cloud {
         instructions.to_owned()
@@ -657,7 +852,7 @@ fn run_ask_with_input(
     };
     let mut messages = Vec::with_capacity(request.history.len() + 2);
     messages.push(Message::System { content: system });
-    for turn in request.history {
+    for turn in &request.history {
         let content = turn.content.trim();
         if content.is_empty() {
             continue;
@@ -674,16 +869,20 @@ fn run_ask_with_input(
         }
     }
     messages.push(Message::User {
-        content: request.prompt,
+        content: request.prompt.clone(),
     });
 
-    let tools_for_agent = if cloud {
-        Vec::new()
-    } else {
+    let tools_for_agent = if tools_enabled {
         sjel_tools(shell_url)
+    } else {
+        Vec::new()
     };
-    let mut agent = Agent::new(role.clone(), tools_for_agent, [], stop)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut agent =
+        Agent::new(role.clone(), tools_for_agent, [], stop).map_err(|e| AskFailure::Failed {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: e.to_string(),
+            streamed: 0,
+        })?;
     agent.max_turns = MAX_AGENT_TURNS;
     agent.set_input_queue(input);
 
@@ -715,9 +914,17 @@ fn run_ask_with_input(
         agent.run(&mut messages, on_event)
     };
     result.map_err(|err| match err {
-        sjel_agent::AgentError::RequestRefused(reason) => (StatusCode::CONFLICT, reason),
-        sjel_agent::AgentError::Stopped => (StatusCode::CONFLICT, "stopped by the user".into()),
-        other => (StatusCode::BAD_GATEWAY, other.to_string()),
+        sjel_agent::AgentError::Stopped => AskFailure::Stopped,
+        sjel_agent::AgentError::RequestRefused(reason) => AskFailure::Failed {
+            status: StatusCode::CONFLICT,
+            message: reason,
+            streamed: streamed.len(),
+        },
+        other => AskFailure::Failed {
+            status: StatusCode::BAD_GATEWAY,
+            message: other.to_string(),
+            streamed: streamed.len(),
+        },
     })?;
 
     let text = messages
@@ -733,18 +940,16 @@ fn run_ask_with_input(
             let trimmed = streamed.trim();
             (!trimmed.is_empty()).then(|| trimmed.to_owned())
         })
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_GATEWAY,
-                "the model returned no answer".to_owned(),
-            )
+        .ok_or_else(|| AskFailure::Failed {
+            status: StatusCode::BAD_GATEWAY,
+            message: "the model returned no answer".to_owned(),
+            streamed: streamed.len(),
         })?;
 
-    Ok(AskResponse {
+    Ok(Answer {
         text,
-        model: role.model,
-        source: if cloud { "cloud" } else { "local" },
         tools,
+        streamed: streamed.len(),
     })
 }
 
@@ -762,7 +967,7 @@ async fn ask(
         request.instructions.as_deref(),
     )
     .map_err(|reason| failure(StatusCode::CONFLICT, reason))?;
-    let role = ask_role(
+    let backend = ask_backend(
         request.provider_role.as_deref(),
         request.confirm_public_send,
     )
@@ -774,11 +979,15 @@ async fn ask(
         };
         failure(status, reason)
     })?;
+    let input_limit = match &backend {
+        Backend::Cloud(role) => role.max_input_tokens,
+        Backend::Local(ladder) => ladder.tightest_input_limit(),
+    };
     let history_bytes: usize = request.history.iter().map(|t| t.content.len()).sum();
     let combined_len = prompt.len().saturating_add(history_bytes);
     if combined_len > MAX_PROMPT_BYTES
-        || !fits_role(
-            &role,
+        || !fits_limit(
+            input_limit,
             &"x".repeat(combined_len),
             request.instructions.as_deref(),
         )
@@ -796,7 +1005,7 @@ async fn ask(
         provider_role: request.provider_role,
         confirm_public_send: request.confirm_public_send,
     };
-    let response = tokio::task::spawn_blocking(move || run_ask(role, &shell_url, req))
+    let response = tokio::task::spawn_blocking(move || run_ask(backend, &shell_url, req))
         .await
         .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|(status, msg)| failure(status, msg))?;
@@ -817,7 +1026,7 @@ async fn ask_stream(
         request.instructions.as_deref(),
     )
     .map_err(|reason| failure(StatusCode::CONFLICT, reason))?;
-    let role = ask_role(
+    let backend = ask_backend(
         request.provider_role.as_deref(),
         request.confirm_public_send,
     )
@@ -829,11 +1038,15 @@ async fn ask_stream(
         };
         failure(status, reason)
     })?;
+    let input_limit = match &backend {
+        Backend::Cloud(role) => role.max_input_tokens,
+        Backend::Local(ladder) => ladder.tightest_input_limit(),
+    };
     let history_bytes: usize = request.history.iter().map(|turn| turn.content.len()).sum();
     let combined_len = prompt.len().saturating_add(history_bytes);
     if combined_len > MAX_PROMPT_BYTES
-        || !fits_role(
-            &role,
+        || !fits_limit(
+            input_limit,
             &"x".repeat(combined_len),
             request.instructions.as_deref(),
         )
@@ -892,7 +1105,7 @@ async fn ask_stream(
     tokio::spawn(async move {
         let worker_tx = events_tx.clone();
         let result = tokio::task::spawn_blocking(move || {
-            run_ask_with_input(role, &shell_url, request, input, stop, |event| {
+            run_ask_with_input(backend, &shell_url, request, input, stop, |event| {
                 if let Ok(encoded) = serde_json::to_string(&event) {
                     let _ = worker_tx.blocking_send(encoded);
                 }
@@ -1042,10 +1255,70 @@ async fn main() {
 mod tests {
     use super::*;
 
+    fn local_role(model: &str, limit: Option<u32>) -> sjel_inference::ResolvedRole {
+        let config: sjel_inference::InferenceConfig = format!(
+            r#"{{
+                "backends": {{ "local": {{ "api": "openai", "base_url": "http://127.0.0.1:11434/v1" }} }},
+                "roles": {{ "one": {{ "backend": "local", "model": "{model}" }} }}
+            }}"#
+        )
+        .parse()
+        .unwrap();
+        let mut role = config.role("one").unwrap();
+        role.max_input_tokens = limit;
+        role
+    }
+
+    #[test]
+    fn the_fast_rung_is_never_offered_a_tool() {
+        // The measured failure this encodes: the on-device rung invented a calendar call for
+        // "reply with the single word: ready". A rung with no tools cannot do that.
+        let ladder = Ladder {
+            fast: local_role("apple-foundationmodel", Some(8192)),
+            strong: Some(local_role("Qwen3.5-4B-MLX-4bit", Some(8192))),
+        };
+        let (fast, fast_tools) = ladder.role_for(routing::Rung::Fast);
+        assert_eq!(fast.model, "apple-foundationmodel");
+        assert!(!fast_tools, "the fast rung must not be offered tools");
+        let (strong, strong_tools) = ladder.role_for(routing::Rung::Strong);
+        assert_eq!(strong.model, "Qwen3.5-4B-MLX-4bit");
+        assert!(strong_tools);
+        assert!(ladder.can_escalate(routing::Rung::Fast));
+        assert!(!ladder.can_escalate(routing::Rung::Strong), "one hop only");
+    }
+
+    #[test]
+    fn a_single_role_deployment_keeps_the_tools_and_never_escalates() {
+        let ladder = Ladder {
+            fast: local_role("only-model", Some(8192)),
+            strong: None,
+        };
+        assert!(ladder.role_for(routing::Rung::Fast).1);
+        assert!(!ladder.can_escalate(routing::Rung::Fast));
+    }
+
+    #[test]
+    fn the_ladder_refuses_a_prompt_its_tightest_rung_cannot_hold() {
+        let ladder = Ladder {
+            fast: local_role("apple-foundationmodel", Some(8192)),
+            strong: Some(local_role("Qwen3.5-4B-MLX-4bit", Some(4096))),
+        };
+        assert_eq!(ladder.tightest_input_limit(), Some(4096));
+        let unbounded = Ladder {
+            fast: local_role("apple-foundationmodel", None),
+            strong: Some(local_role("Qwen3.5-4B-MLX-4bit", Some(4096))),
+        };
+        assert_eq!(
+            unbounded.tightest_input_limit(),
+            None,
+            "a rung with no declared ceiling must fail the check rather than widen it"
+        );
+    }
+
     #[test]
     fn cloud_role_selection_requires_public_consent_and_chat_role_name() {
-        assert!(ask_role(Some("cloud_assistant_example"), false).is_err());
-        assert!(ask_role(Some("cloud_embedding_example"), true).is_err());
+        assert!(ask_cloud_role(Some("cloud_assistant_example"), false).is_err());
+        assert!(ask_cloud_role(Some("cloud_embedding_example"), true).is_err());
     }
 
     #[test]
@@ -1354,10 +1627,13 @@ mod tests {
         )
         .parse()
         .unwrap();
-        let role = config.role("assistant").unwrap();
+        let ladder = Ladder {
+            fast: config.role("assistant").unwrap(),
+            strong: None,
+        };
         let mut activity = Vec::new();
         let reply = run_ask_with_input(
-            role,
+            Backend::Local(Box::new(ladder)),
             &format!("http://127.0.0.1:{shell_port}"),
             AskRequest {
                 prompt: "Is calendar up?".into(),

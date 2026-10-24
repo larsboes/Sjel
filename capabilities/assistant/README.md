@@ -22,10 +22,45 @@ its value as a conservative UTF-8 byte ceiling, and the dashboard uses that ceil
 fits. The shared example is in
 [`libs/inference/inference.config.example.json`](../../libs/inference/inference.config.example.json).
 
+## Two local rungs, and why
+
+A machine that runs two local models can name a ladder instead of one role: `escalates_to` on
+`assistant` names the strong rung, and nothing in the code knows either model's name.
+
+```json
+"assistant":        { "backend": "foundation-models", "model": "apple-foundationmodel",
+                      "max_input_tokens": 8192, "escalates_to": "assistant_strong" },
+"assistant_strong": { "backend": "omlx", "model": "Qwen3.5-4B-MLX-4bit",
+                      "max_input_tokens": 8192 }
+```
+
+Measured on 2026-10-24, same three prompts and same tools offered: the on-device rung invented
+`calendar_entries{"date": …, "status": "ready"}` for "reply with the single word: ready" and
+returned a bare `502` once in three, while the 4B answered correctly on all three at about four
+extra seconds. The ladder is therefore a correctness choice, not a cost one, and it is decided by
+a rule table rather than a model:
+
+- `capabilities/assistant/src/routing.rs` sends a prompt to the strong rung when it names Sjel
+  state, a calendar word, a weekday, or a project/trip noun, and when the conversation already has
+  history. Everything else starts fast.
+- **The fast rung is never offered a tool.** A model that cannot call one cannot invent one, which
+  removes the measured failure class instead of retrying it.
+- A fast-rung attempt that fails for a reason the caller can prove — transport error, empty reply,
+  or a refusal — is retried once on the strong rung, only while nothing has been streamed. A
+  streamed answer cannot be recalled, so the streaming route relies on the router deciding the rung
+  up front. The response's `source` is `local` or `local-escalated`, and `model` names the role
+  that actually answered.
+- A ladder refuses a prompt that does not fit its *tightest* rung, so an escalation cannot turn a
+  fitting prompt into a rejected one.
+
+Misrouting is a word in the router's vocabulary plus a line in its fixture table, never a prompt
+rewrite. A deployment that declares one role has a ladder of one and keeps the tools.
+
 ## Routes
 
 - `GET /health`: liveness only.
-- `GET /ready`: reports whether the local role is configured; does not return credentials.
+- `GET /ready`: reports whether the local role is configured, which model is the strong rung, and
+  the tightest input ceiling across the rungs; does not return credentials.
 - `GET /api/ask/providers`: lists configured cloud roles without endpoint URLs or credential paths.
 - `POST /api/generate`: `{ "prompt": "...", "instructions": "...", "max_tokens": 512 }`.
 - `POST /api/ask`: `{ "prompt": "...", "history": [{ "role": "user|assistant", "content": "..." }], "instructions": "..." }` — multi-turn session powered by [`libs/agent`](../../libs/agent) with read-only Sjel capability tools (`sjel_health`, `calendar_entries`, `projects_list`, `project_records`, `trips_plans`) and no `bash` or filesystem tools. Returns `{ "text", "model", "source", "tools" }`.

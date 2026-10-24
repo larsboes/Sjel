@@ -19,8 +19,8 @@ it is built.
 
 ## Track 1: GPUI and standalone iPhone
 
-- The route matrix and work packages are in `apps/gpui/PORTING_PLAN.md`. A concurrent session
-  created it on 2026-10-23 and it is not committed yet. It folds into this file after that.
+- The route matrix and work packages are in `apps/gpui/PORTING_PLAN.md`. It folds into this
+  file in Track 4.
 - Fix when it folds in: its matrix names `capabilities/context`, `capabilities/people` and
   `capabilities/travel`, and none of them exist (capability list, 2026-10-23).
 - Track 1 includes only storage work required to deliver the GPUI/iOS milestones. The broader
@@ -508,8 +508,23 @@ item in `ISA.md`.
 - **Sweep** (2026-10-23): remove every code comment, config comment and README paragraph that
   repeats a decision, a rule or a history that Git or the owner's code already holds. Shrink
   bloated sub-READMEs. Do it module by module, in the same pass as the restructure.
-- First change the rule that forbids it: "Do not run a separate sweep" in
-  `Packs/harness/skills/sjel/references/on-documentation.md`.
+- The rule now allows this sweep and covers config comments and plans
+  (`Packs/harness/skills/sjel/references/on-documentation.md`). AGENTS.md states it in two lines.
+- Baseline, tracked files, `git grep`:
+  - 609 comment lines in `*.rs`, `*.toml`, `*.sh` carry a date. 337 say "measured" or "decided".
+  - 3,143 of 8,862 TOML lines are comments. The largest: `profiles.toml`, `toolchain.toml`,
+    `osv-scanner-installed.toml`, `demo/demo.toml`, `Cargo.toml`, the `service.toml` files.
+  - "Axon" appears 804 times in 299 files.
+  - Over the 800-line limit: `capabilities/comms/README.md` (1,249), `PLAN.md` (977),
+    `apps/gpui/PORTING_PLAN.md` (947), `capabilities/calendar/README.md` (848).
+- Order:
+  1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise. It stops new
+     bloat while the sweep runs.
+  2. TOML first, because a key's comment is read on every visit. One line per key at most.
+  3. Plans: each shipped work package becomes one line with its commit. `PORTING_PLAN.md`
+     folds into this file.
+  4. Code comments and READMEs, module by module, in the same pass as the restructure.
+  5. "Axon" goes in the lines each pass touches. Whatever is left goes in one rename commit.
 - An example of what goes: `.gitignore:46` says "PLAN.md is gone".
 - The restructure scope is not decided. That decision comes on the day the track starts.
 

@@ -713,8 +713,7 @@ owning docs, then remove the entry. Git keeps history.
 
 [`PLAN.md`](PLAN.md) is the one ordered plan: it orders the tracks and links their ISA claims and
 issues, and it holds no task list of its own (decided 2026-10-23). It is not a source of truth.
-Code and tests own implemented behavior. Comments explain local invariants, not dated decisions.
-Shipped interfaces belong in the owner's technical manual and are verified by its doctor or
+Code and tests own implemented behavior. Shipped interfaces belong in the owner's technical manual and are verified by its doctor or
 self-test.
 
 ## Placement guide

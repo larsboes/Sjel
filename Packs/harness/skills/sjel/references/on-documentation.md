@@ -16,7 +16,8 @@ Keep each fact with its owner:
   why and a link to the manual.
 
 Do not create status documents, duplicate live counts, or a detached decision-log hierarchy.
-Git log owns history: no dates, PR numbers, or migration stories in code comments.
+Git log owns history: no dates, PR numbers, measurements, decisions, or migration stories in code
+comments or config comments. Put them in the commit message.
 
 Sjel planning lives in the repository. The Obsidian vault keeps only what cannot be public:
 private reasoning and vault law. When you move planning out of the vault, replace the vault copy
@@ -31,7 +32,18 @@ durable rule into the skill or `ISA.md` that owns it.
 - Internal comments: at most one or two lines, only for a non-obvious hardware, kernel, or
   concurrency invariant.
 - Prefer a short Mermaid or ASCII diagram in a module README for data flow or state.
-- When you edit a module, trim its narrative comments to these rules. Do not run a separate sweep.
+- When you edit a module, trim its narrative comments to these rules. An edit does not add
+  comment lines unless it adds a public boundary. The one planned sweep is `PLAN.md` Track 4.
+- Write Sjel, never Axon. Rename an old mention in the lines you touch.
+
+## Config comments
+
+- A TOML, YAML or JSON-with-comments key gets at most one comment line: what the value means or
+  its unit. Rationale goes in the owner README's `## Why this shape`, history in the commit.
+
+## Plans
+
+- A shipped work package shrinks to one line that names its commit. The commit holds the detail.
 - Dashboard routes in `dashboard/src/routes/` are thin orchestrators. Put boards, panels, cards,
   and sheets in `dashboard/src/lib/<domain>/<Component>.svelte`.
 For a new skill, keep `SKILL.md` as a direct router and put detailed branches one level under

@@ -1141,8 +1141,7 @@ impl Shell {
         Ok(())
     }
 
-    /// The two PATCHes an edited booking needs: its fields, then its day, which only the item
-    /// route moves (`set_item_day` in `capabilities/trips/src/server.rs`).
+    /// Fields, then the day: only the item route moves an item between days.
     pub async fn trip_booking_edit(
         &self,
         plan: &str,
@@ -1171,10 +1170,7 @@ impl Shell {
         Ok(())
     }
 
-    /// Reads the plan, applies `edit` to its stages as stored, and writes them back with the
-    /// revision it read. The capability answers 409 when another writer moved the plan in
-    /// between, instead of reverting their stages (`expected_updated_at` in
-    /// `capabilities/trips/src/store.rs`).
+    /// Read, edit, write back with the revision read, so a concurrent writer gets a 409.
     pub async fn trip_stages(
         &self,
         plan: &str,
@@ -1206,10 +1202,8 @@ impl Shell {
         Ok(())
     }
 
-    /// Calendar mirrors a trip's stages and booking deadlines when asked
-    /// (`/calendar/api/trip-plans/{id}/sync`); the dashboard asks after the same writes
-    /// (`syncTripToCalendar` in `dashboard/src/lib/api/travel.ts`). The trip write already
-    /// succeeded, so a calendar that is down is not an error.
+    /// Calendar mirrors stages and booking deadlines only when asked. Best effort: the trip write
+    /// already succeeded.
     async fn trip_calendar_sync(&self, plan: &str) {
         let Ok(mut url) = reqwest::Url::parse("http://localhost/calendar/api/trip-plans/") else {
             return;
@@ -3100,9 +3094,8 @@ fn refused(why: String) -> ShellError {
     ShellError::Refused(400, Some(why))
 }
 
-/// Appends `<timestamp>\t<path>` to `dashboard-fallbacks.tsv` beside `appearance.json`: every
-/// page GPUI still hands to the browser. The counts are the retirement gap list
-/// (`PORTING_PLAN.md` §1b). A failed write costs the record, never the navigation.
+/// Appends `<timestamp>\t<path>` to `dashboard-fallbacks.tsv`: each page still handed to the
+/// browser. A failed write loses the row, never the navigation.
 fn note_dashboard_fallback(next: &str) {
     use std::io::Write;
     let dir = match std::env::var("SJEL_CONFIG_DIR") {

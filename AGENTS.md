@@ -21,6 +21,8 @@ Always:
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never
   generate, expose, or change a secret without explicit authorization.
+- Keep comments and config comments short: no dates, measurements, decisions or history. The
+  commit message carries them. Rules: `Packs/harness/skills/sjel/references/on-documentation.md`.
 - Write a durable rule or decision into the repository: code, the skill that owns it, `ISA.md`, or
   this file. Never into agent memory. On this machine, the untracked `.claude/settings.json` sets
   `autoMemoryEnabled: false`.

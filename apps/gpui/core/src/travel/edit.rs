@@ -1,8 +1,5 @@
-//! What a trip form sends: the request bodies for `capabilities/trips`, checked before they leave.
-//!
-//! The capability validates title, destination count and date order (`validate_plan_fields` in
-//! `capabilities/trips/src/store.rs`) but not a date's shape, so a typed `24.10.` would be stored.
-//! The checks here are the ones a person can fix in the field they just typed.
+//! Request bodies for `capabilities/trips`, checked before they leave. The capability does not
+//! check a date's shape, so that check is here.
 use chrono::NaiveDate;
 use serde_json::{json, Map, Value};
 
@@ -29,9 +26,7 @@ pub const TRANSPORT_MODES: &[(&str, &str)] = &[
     ("bike", "Bike"),
 ];
 
-/// A typed place, with the id the dashboard's place field gives it
-/// (`dashboard/src/lib/travel/PlaceField.svelte`, `commitTypedPlace`), so a city typed in either
-/// client is the same place. Coordinates stay null: the places capability resolves them on read.
+/// A typed place. The id rule matches `commitTypedPlace` in the dashboard's `PlaceField.svelte`.
 pub fn typed_place(name: &str) -> Value {
     let name = name.trim();
     let mut slug = String::new();

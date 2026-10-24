@@ -59,9 +59,7 @@ sjel-gpui-core = { path = "core", features = ["test-support"] }
 unsafe_code = "deny"
 
 
-# The root workspace's debug-info trim (`Cargo.toml`, `[profile.dev]`, ratified 2026-10-11), which
-# this separate workspace never inherited: every GPUI dependency was built with full debug info.
-# A profile only applies in the workspace root, so it is repeated here rather than shared.
+# Same as the root `Cargo.toml` profile; a profile applies only at its own workspace root.
 [profile.dev]
 debug = "line-tables-only"
 

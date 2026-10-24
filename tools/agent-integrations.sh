@@ -83,6 +83,7 @@ harness_command() {
     opencode) echo "opencode" ;;
     codex)    echo "codex" ;;
     pi)       echo "pi" ;;
+    copilot)  echo "copilot" ;;
     *)        echo "" ;;
   esac
 }
@@ -93,6 +94,7 @@ harness_config_dir() {
     opencode) echo "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}" ;;
     codex)    echo "$HOME/.codex" ;;
     pi)       echo "$HOME/.pi" ;;
+    copilot)  echo "$HOME/.copilot" ;;
     *)        echo "" ;;
   esac
 }
@@ -107,10 +109,14 @@ harness_skill_root() {
     claude)   echo "$HOME/.claude/skills" ;;
     opencode) echo "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills" ;;
     codex)    echo "$HOME/.codex/skills" ;;
+    copilot)  echo "$HOME/.copilot/skills" ;;
     *)        echo "" ;;
   esac
 }
-HARNESSES="claude opencode codex pi"
+# copilot joined 2026-10-24: graphify's installer ships a `--platform copilot`, and copilot was
+# the one installed harness carrying neither integration. Its skill root is ~/.copilot/skills,
+# which is also where tools/harnesses deploys the Packs (registry.rs).
+HARNESSES="claude opencode codex pi copilot"
 # What this file records changed with the pin it used to hold (Q77, 2026-09-02): it is
 # the DATE the integration was last re-derived from upstream, not a version to compare
 # against. Under rolling versions "does the installed copy match the pin" has no answer --
@@ -405,12 +411,27 @@ interceptor_skill_names() {
   ls "$root/skills" 2>/dev/null
 }
 
-# interceptor adopts into Claude Code and Codex (~/.agents); those are its rows here.
+# interceptor adopts into Claude Code and Codex (~/.agents) through its own `skills` verb. The
+# two rows below it are OURS to place, because that verb accepts only claude/codex/agents: the
+# product still owns the content (a symlink to its installed skill root, never a copy), we only
+# create the link it refuses to. Recorded 2026-10-24, when opencode carried graphify and no
+# interceptor skills, and copilot carried neither integration at all.
 interceptor_harness_dir() {  # <harness>
   case "$1" in
-    claude) echo "$HOME/.claude" ;;
-    codex)  echo "$HOME/.agents" ;;
-    *)      echo "" ;;
+    claude)   echo "$HOME/.claude" ;;
+    codex)    echo "$HOME/.agents" ;;
+    opencode) echo "$HOME/.config/opencode" ;;
+    copilot)  echo "$HOME/.copilot" ;;
+    *)        echo "" ;;
+  esac
+}
+
+# The harnesses the product's own verb adopts into. Every other row in the table above is
+# linked here instead, by us.
+interceptor_self_adopting() {  # <harness> -> yes|no
+  case "$1" in
+    claude | codex) echo "yes" ;;
+    *)              echo "no" ;;
   esac
 }
 
@@ -451,9 +472,23 @@ interceptor_detect() {  # <harness> -> the shared 15-field row
     "$dir" "$skill" "$command_version" "$install_command"
 }
 
-interceptor_install() {  # <harness> — the product re-adopts its own skills
+interceptor_install() {  # <harness> — the product re-adopts its own skills, or we link them
   command -v interceptor >/dev/null 2>&1 || { echo "✗ interceptor CLI not found — install the product first" >&2; return 1; }
-  interceptor skills
+  if [ "$(interceptor_self_adopting "$1")" = "yes" ]; then
+    interceptor skills
+    return 0
+  fi
+  local dir root name total=0 linked=0
+  dir="$(interceptor_harness_dir "$1")"
+  root="$(interceptor_product_dir)"
+  [ -n "$dir" ] && [ -n "$root" ] || { echo "✗ interceptor product root or $1 skill root not found" >&2; return 1; }
+  mkdir -p "$dir/skills" || return 1
+  for name in $(interceptor_skill_names); do
+    total=$((total + 1))
+    ln -sfn "$root/skills/$name" "$dir/skills/$name" || { echo "  x failed to link $1 skill $name" >&2; return 1; }
+    linked=$((linked + 1))
+  done
+  echo "  linked $linked/$total skill(s) -> $dir/skills (the product's own root; its \`skills\` verb does not accept $1)"
 }
 
 interceptor_write_marker() {  # <harness>
@@ -470,7 +505,7 @@ interceptor_write_marker() {  # <harness>
 integration_harnesses() {
   case "$1" in
     graphify)   echo "$HARNESSES" ;;
-    interceptor) echo "claude codex" ;;
+    interceptor) echo "claude codex opencode copilot" ;;
   esac
 }
 

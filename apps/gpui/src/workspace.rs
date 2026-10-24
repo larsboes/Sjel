@@ -917,6 +917,10 @@ impl Workspace {
                 self.travel
                     .update(cx, |travel, cx| travel.open_route(route, cx));
             }
+            Target::Feed(tab) => {
+                self.go(Page::Feed, cx);
+                self.feed.update(cx, |feed, cx| feed.set_tab(tab, cx));
+            }
             Target::Ask(question) => {
                 self.go(Page::Ask, cx);
                 self.ask.update(cx, |ask, cx| ask.submit(question, cx));

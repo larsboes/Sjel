@@ -51,7 +51,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 |---|---|---|
 | `/travel/connections` | 817 | no page (connection search) |
 | `/feed/library` | 373 | no page |
-| `/feed/review` | 363 | no page |
+| `/feed/review` | 363 | ported: Feed's Review tab (Work Package 18) |
 | `/apps` | 217 | in `DESTINATIONS`, no `Page` (`Software` is `/software`) |
 | `/docs`, `/docs/[...slug]` | 211 | in `DESTINATIONS`, no `Page` |
 | `/panel/[name]` | 111 | no page |
@@ -59,7 +59,7 @@ live only in TypeScript, and nothing in the repository may need `dashboard/` to 
 | `/feed/[id]`, `/scout`, `/trips` | ≤ 18 each | not checked, probably redirects |
 
 **Writes that still go to the browser.** Travel cannot create a trip, a booking or a stage (§4).
-Inbox triage, the feed's review and library, editing a person, adding to the wishlist and
+Inbox triage, the feed's library, editing a person, adding to the wishlist and
 recategorizing a transaction stay on the web. Fare alerts live only in
 `dashboard/src/lib/travel/fare-alerts.ts`.
 
@@ -87,7 +87,8 @@ ports.
    `cut -f2 ~/.config/sjel/dashboard-fallbacks.tsv | sort | uniq -c | sort -rn`.
 2. **Travel authoring and connections.** The largest gap, and §4's highest priority. Authoring
    shipped on the Mac in Work Package 17. `/travel/connections` is next.
-3. **Feed review and library, then Inbox triage.** That finishes comms.
+3. **Feed review and library, then Inbox triage.** That finishes comms. Review shipped in Work
+   Package 18.
 4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
 5. **Delete `dashboard/`.** Then the 78 references, `matches_dashboard_nav`, ⌘D "Open in the
    dashboard", and the `sjel-status` static serve.
@@ -628,6 +629,26 @@ ports.
 - **Target Files**:
   - `apps/gpui/core/src/travel/{edit,details}.rs`, `apps/gpui/core/src/{travel,shell}.rs`
   - `apps/gpui/ui/src/travel/{forms,pages}.rs`, `apps/gpui/ui/src/travel.rs`
+
+### ✅ Work Package 18: the feed's review queue (§1b step 3, first of three)
+- **Status**: Shipped (2026-10-24). Mac only.
+- **Why no capability change**: comms already served `GET /comms/feed/quality` and
+  `POST /comms/feed/quality/refresh` (`capabilities/comms/src/server/main.rs`).
+- **Shipped**:
+  - `core/src/shell.rs`: `FeedQualityFlag`, `FeedQualityRefresh`, `feed_quality()` and
+    `refresh_feed_quality()`.
+  - `core/src/route.rs`: `FeedTab` is the Feed page's tab, and `sjel://feed/review` parses to
+    `Target::Feed(FeedTab::Review)` instead of the dashboard.
+  - `src/feed.rs`: a Review tab between Reading and Mail. One card per entry with its signals,
+    reason and evidence. Recompute asks comms to derive the flags again and says what it checked.
+    The title opens the entry in the reader; Original opens the source.
+- **Found**: 402 of the 412 stored flags are `retention` above the 90% ceiling, all at
+  `raw_chars=20000`. The ceiling fires on any source whose raw text is already clean, so the queue
+  is mostly noise. That is a rule in `capabilities/comms/src/quality.rs`, not in this page.
+- **Verified**: 1 new test in `feed::tests` and 1 new assertion in `route::tests`. Run against the
+  live comms queue through `SJEL_GPUI_OPEN=sjel://feed/review`: 405 entries draw with their signals.
+  Recompute not clicked, because it rewrites the stored flags.
+- **Target Files**: `apps/gpui/core/src/{shell,route}.rs`, `apps/gpui/src/{feed,workspace}.rs`
 
 ---
 

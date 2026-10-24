@@ -175,11 +175,21 @@ pub fn destination(href: &str) -> Option<Destination> {
     DESTINATIONS.iter().copied().find(|d| d.href == href)
 }
 
+/// The Feed page's tabs. Reading is the comms feed, Review is comms' computed quality queue
+/// (`/feed/review`), Mail is Gmail triage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FeedTab {
+    Reading,
+    Review,
+    Mail,
+}
+
 /// Where a link lands.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Native(Page),
     Travel(crate::travel::TravelRoute),
+    Feed(FeedTab),
     /// Open the native Ask session and submit this question in-session.
     Ask(String),
     /// A dashboard path, query included.
@@ -205,6 +215,9 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         if let Some(route) = crate::travel::TravelRoute::parse(&path) {
             return Some(Target::Travel(route));
         }
+    }
+    if path == "/feed/review" {
+        return Some(Target::Feed(FeedTab::Review));
     }
     if matches!(path_only, "/ask" | "/") && path.contains('?') {
         if let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1{path}")) {
@@ -283,6 +296,10 @@ mod tests {
         assert_eq!(
             parse_deep_link("sjel://map"),
             Some(Target::Travel(crate::travel::TravelRoute::Map))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://feed/review"),
+            Some(Target::Feed(FeedTab::Review))
         );
         assert_eq!(parse_deep_link("sjel://"), Some(Target::Native(Page::Home)));
         assert_eq!(

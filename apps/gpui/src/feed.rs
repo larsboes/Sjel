@@ -6,12 +6,14 @@
 //! (`dashboard/src/routes/feed/+page.svelte`, "Keyboard triage"), so the two surfaces agree.
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
     FontWeight, KeyBinding, SharedString, Window,
 };
-use sjel_gpui_core::shell::{self, FeedDetail, FeedEntry, FeedSurface, ShellError};
+use sjel_gpui_core::shell::{
+    self, FeedDetail, FeedEntry, FeedQualityFlag, FeedQualityRefresh, FeedSurface, ShellError,
+};
 
 use crate::data::{Remote, Repo};
 use crate::mail::Mail;
@@ -61,12 +63,7 @@ pub fn bind_keys(cx: &mut App) {
     ]);
 }
 
-/// Reading is the comms feed; Mail is Gmail triage (`crate::mail`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Tab {
-    Reading,
-    Mail,
-}
+pub use sjel_gpui_core::route::FeedTab as Tab;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
@@ -100,6 +97,11 @@ pub struct Feed {
     pub detail: Remote<FeedDetail>,
     /// The last write that failed, shown above the list until the next one.
     pub write_error: Option<ShellError>,
+    /// The stored quality flags, one row per signal.
+    pub review: Remote<Vec<FeedQualityFlag>>,
+    /// What the last explicit refresh checked; `None` until one ran this session.
+    pub review_refresh: Option<FeedQualityRefresh>,
+    pub refreshing: bool,
     focus: FocusHandle,
     focus_next: bool,
 }
@@ -118,6 +120,9 @@ impl Feed {
             reading: None,
             detail: Remote::default(),
             write_error: None,
+            review: Remote::default(),
+            review_refresh: None,
+            refreshing: false,
             focus: cx.focus_handle(),
             focus_next: true,
         }
@@ -139,6 +144,7 @@ impl Feed {
                 self.focus_next = true;
                 self.load(cx);
             }
+            Tab::Review => self.load_review(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.activate(cx)),
         }
     }
@@ -147,11 +153,12 @@ impl Feed {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         match self.tab {
             Tab::Reading => self.load(cx),
+            Tab::Review => self.load_review(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
         }
     }
 
-    fn set_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
+    pub fn set_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
         if self.tab != tab {
             self.tab = tab;
             self.activate(cx);
@@ -179,6 +186,68 @@ impl Feed {
             });
         })
         .detach();
+    }
+
+    fn load_review(&mut self, cx: &mut Context<Self>) {
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.review.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        self.review.loading = true;
+        cx.notify();
+        let work = shell::run(async move { shell.feed_quality().await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.review.settle(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Asks comms to recompute the flags, then reads the queue again.
+    fn refresh_review(&mut self, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else { return };
+        if self.refreshing {
+            return;
+        }
+        self.refreshing = true;
+        self.review.error = None;
+        cx.notify();
+        let work = shell::run(async move {
+            let refresh = shell.refresh_feed_quality().await?;
+            Ok((refresh, shell.feed_quality().await?))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.refreshing = false;
+                match result {
+                    Ok((refresh, flags)) => {
+                        view.review_refresh = Some(refresh);
+                        view.review.settle(Ok(flags));
+                    }
+                    Err(error) => view.review.error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Opens a flagged entry in the reader.
+    fn open_flagged(&mut self, id: String, cx: &mut Context<Self>) {
+        self.tab = Tab::Reading;
+        self.focus_next = true;
+        if self.rows.value.is_none() {
+            self.load(cx);
+        }
+        self.open(id, cx);
     }
 
     pub fn visible(&self) -> Vec<&FeedEntry> {
@@ -281,6 +350,11 @@ impl Feed {
             .flatten()
             .find(|e| e.id == id)
             .map(|e| e.status.as_str())
+            .or_else(|| {
+                let flags = self.review.value.as_ref()?;
+                let flag = flags.iter().find(|f| f.feed_id == id)?;
+                Some(flag.status.as_str())
+            })
     }
 
     fn open(&mut self, id: String, cx: &mut Context<Self>) {
@@ -382,7 +456,7 @@ impl Render for Feed {
         }
         let palette = self.palette.unwrap_or_else(Palette::dark);
         let reading = self.tab == Tab::Reading;
-        let body = if !reading {
+        let body = if self.tab == Tab::Mail {
             div()
                 .flex()
                 .flex_col()
@@ -390,13 +464,15 @@ impl Render for Feed {
                 .child(self.title_row(cx))
                 .child(self.mail.clone())
                 .into_any_element()
+        } else if self.tab == Tab::Review {
+            self.review_list(palette, cx)
         } else if self.reading.is_some() {
             self.reader(palette, cx)
         } else {
             self.list(palette, cx)
         };
         // Only the Reading tab carries the Feed keys, so s, u and ⇧O never act on an entry the
-        // Mail tab hides.
+        // other tabs hide.
         div()
             .when(reading, |el| el.key_context("Feed"))
             .track_focus(&self.focus)
@@ -561,7 +637,7 @@ impl Feed {
             .into_any_element()
     }
 
-    /// The page title with the Reading | Mail switch.
+    /// The page title with the Reading | Review | Mail switch.
     fn title_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let tab = |label: &'static str, tab: Tab, cx: &mut Context<Self>| {
             Button::new(SharedString::from(format!("feed-tab-{label}")))
@@ -582,6 +658,7 @@ impl Feed {
                     .child("Feed"),
             )
             .child(tab("Reading", Tab::Reading, cx))
+            .child(tab("Review", Tab::Review, cx))
             .child(tab("Mail", Tab::Mail, cx))
             .into_any_element()
     }
@@ -691,6 +768,186 @@ impl Feed {
     }
 }
 
+impl Feed {
+    /// Flags suggest a look; they never change a decision or start enrichment.
+    fn review_list(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let items = flagged(self.review.value.iter().flatten());
+        let head = div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .child(
+                div()
+                    .flex_1()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child(match items.len() {
+                        1 => "1 entry to inspect".to_owned(),
+                        n => format!("{n} entries to inspect"),
+                    }),
+            )
+            .child(
+                Button::new("feed-review-refresh")
+                    .small()
+                    .label(if self.refreshing {
+                        "Computing…"
+                    } else {
+                        "Recompute flags"
+                    })
+                    .disabled(self.refreshing)
+                    .on_click(cx.listener(|view, _, _, cx| view.refresh_review(cx))),
+            );
+        let mut list = div().flex().flex_col().gap_3();
+        if let Some(r) = &self.review_refresh {
+            list = list.child(muted(
+                &format!(
+                    "Checked {}; flagged {} entries with {} signals; provider calls {}.",
+                    r.reviewed, r.flagged_items, r.flag_count, r.provider_calls
+                ),
+                palette,
+            ));
+        }
+        if let Some(error) = &self.review.error {
+            list = list.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.red))
+                    .child(error.to_string()),
+            );
+        } else if self.review.value.is_none() && self.review.loading {
+            list = list.child(muted("Loading stored flags…", palette));
+        } else if items.is_empty() && !self.review.loading {
+            list = list.child(muted(
+                "No stored flags. Recompute, or the evidence is inside the thresholds.",
+                palette,
+            ));
+        }
+        for (i, flags) in items.into_iter().enumerate() {
+            let first = flags[0];
+            let id = first.feed_id.clone();
+            let url = first.url.clone();
+            let mut card = div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_3()
+                .rounded(px(8.))
+                .bg(rgba(palette.raised))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .id(("feed-review-title", i))
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_sm()
+                                .font_weight(FontWeight::MEDIUM)
+                                .cursor_pointer()
+                                .hover(move |style| style.text_color(rgb(palette.accent)))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.open_flagged(id.clone(), cx)
+                                }))
+                                .child(title(first.title.as_deref(), &first.url)),
+                        )
+                        .child(
+                            Button::new(("feed-review-original", i))
+                                .small()
+                                .ghost()
+                                .label("Original ↗")
+                                .on_click(move |_, _, cx| cx.open_url(&url)),
+                        ),
+                )
+                .child(muted(
+                    &format!(
+                        "{} · content {} · {}",
+                        first.status,
+                        first.content_status,
+                        first
+                            .derived_at
+                            .get(..16)
+                            .unwrap_or(&first.derived_at)
+                            .replace('T', " ")
+                    ),
+                    palette,
+                ));
+            for flag in flags {
+                card = card.child(
+                    div()
+                        .flex()
+                        .gap_3()
+                        .pt_2()
+                        .child(
+                            div()
+                                .w(px(120.))
+                                .flex_none()
+                                .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.accent))
+                                .child(signal_label(&flag.signal)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(div().text_sm().child(flag.reason.clone()))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(flag.evidence.clone()),
+                                ),
+                        ),
+                );
+            }
+            list = list.child(card);
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(self.title_row(cx))
+            .child(head)
+            .child(list)
+            .into_any_element()
+    }
+}
+
+/// The queue's rows grouped by entry, in the order comms returned the entries.
+fn flagged<'a>(flags: impl Iterator<Item = &'a FeedQualityFlag>) -> Vec<Vec<&'a FeedQualityFlag>> {
+    let mut items: Vec<Vec<&FeedQualityFlag>> = Vec::new();
+    for flag in flags {
+        match items
+            .iter_mut()
+            .find(|item| item[0].feed_id == flag.feed_id)
+        {
+            Some(item) => item.push(flag),
+            None => items.push(vec![flag]),
+        }
+    }
+    items
+}
+
+/// The dashboard's names for comms' signal keys (`capabilities/comms/src/quality.rs`).
+fn signal_label(signal: &str) -> String {
+    match signal {
+        "content_status" => "Content",
+        "extraction_path" => "Extraction",
+        "retention" => "Retention",
+        "boilerplate_leakage" => "Boilerplate",
+        "summary_attempts" => "Summary retries",
+        "ranking_basis" => "Ranking basis",
+        other => other,
+    }
+    .to_owned()
+}
+
 /// The entries `filter` and `stream` show, in the order the list draws them: newest day first,
 /// best score first within a day.
 fn in_view<'a>(
@@ -788,5 +1045,30 @@ mod tests {
         };
         assert_eq!(order(None), "cba");
         assert_eq!(order(Some("media")), "");
+    }
+
+    #[test]
+    fn flags_group_by_entry_in_arrival_order() {
+        let flag = |id: &str, signal: &str| FeedQualityFlag {
+            feed_id: id.into(),
+            title: None,
+            url: String::new(),
+            status: "new".into(),
+            content_status: "thin".into(),
+            signal: signal.into(),
+            reason: String::new(),
+            evidence: String::new(),
+            derived_at: String::new(),
+        };
+        let rows = [
+            flag("b", "retention"),
+            flag("a", "content_status"),
+            flag("b", "ranking_basis"),
+        ];
+        let grouped: Vec<(String, usize)> = flagged(rows.iter())
+            .iter()
+            .map(|item| (item[0].feed_id.clone(), item.len()))
+            .collect();
+        assert_eq!(grouped, [("b".into(), 2), ("a".into(), 1)]);
     }
 }

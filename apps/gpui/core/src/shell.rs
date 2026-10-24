@@ -743,6 +743,30 @@ pub struct FeedDetail {
     pub evaluation: Option<FeedEvaluation>,
 }
 
+/// One signal of `GET /comms/feed/quality`, comms' `QualityReviewRow`
+/// (`capabilities/comms/src/store.rs`). An entry with several signals comes back as several rows.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct FeedQualityFlag {
+    pub feed_id: String,
+    pub title: Option<String>,
+    pub url: String,
+    pub status: String,
+    pub content_status: String,
+    pub signal: String,
+    pub reason: String,
+    pub evidence: String,
+    pub derived_at: String,
+}
+
+/// What `POST /comms/feed/quality/refresh` checked (`server/content.rs`).
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct FeedQualityRefresh {
+    pub reviewed: usize,
+    pub flagged_items: usize,
+    pub flag_count: usize,
+    pub provider_calls: usize,
+}
+
 /// Where a keep, dismiss or open happened. Comms' ledger CHECK constraint
 /// (`capabilities/comms/src/store/migrations.rs`) holds the full list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2630,6 +2654,20 @@ impl Shell {
         )
         .await
         .map(drop)
+    }
+
+    /// The stored review queue: one row per signal, as the last refresh computed it.
+    pub async fn feed_quality(&self) -> ShellResult<Vec<FeedQualityFlag>> {
+        self.json(Method::GET, "/comms/feed/quality?limit=500", None, 10)
+            .await
+    }
+
+    /// Recomputes the queue from stored evidence. Comms checks at most 500 entries and calls no
+    /// provider, so this changes no feed decision.
+    pub async fn refresh_feed_quality(&self) -> ShellResult<FeedQualityRefresh> {
+        let body = serde_json::json!({"days": 3650});
+        self.json(Method::POST, "/comms/feed/quality/refresh", Some(body), 60)
+            .await
     }
 
     /// The capture inbox, newest first.

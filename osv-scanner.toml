@@ -14,6 +14,30 @@
 # deadline of its own, and nothing to do until an ecosystem moved. The exposure, the reason
 # it is accepted, and the date it stops being accepted all belong here, next to the entry
 # they describe.
+# SvelteKit, measured 2026-10-24. Both apps that depend on it are `@sveltejs/adapter-static`
+# bundles with `fallback: index.html`, and the dashboard states `export const prerender = false`
+# in `src/routes/+layout.ts`. Neither ships a server runtime: sjel-status serves the files, and
+# soundscape's bundle is served by its capability's own binary. The fix is Kit 3.0.0, a major
+# version, and the migration is SCOPED rather than unknown: probing it in a worktree on
+# 2026-10-24, the three mechanical steps (kit config into the `sveltekit()` vite plugin,
+# `tsconfig.json` extending `$app/tsconfig`, the now-implicit `$lib` alias declared by hand) left
+# 27 type errors in 11 files on the dashboard, before soundscape and before the build. So these
+# are dated, not dismissed, and the date is the revisit.
+[[IgnoredVulns]]
+id = "GHSA-27mw-82g8-phjj"
+ignoreUntil = 2027-01-01
+reason = "SvelteKit before 3.0.0, CVE-2026-114061, CVSS 2.3: a `setHeaders` cache-control value is inserted unescaped into a tag in a PRERENDERED page, so an attacker who can influence that value at prerender time can inject markup. Reach: nothing is prerendered here. `dashboard/src/routes/+layout.ts` sets `prerender = false`, both apps use adapter-static with an SPA fallback, and no route enumerates at build time -- there is no prerender pass for the value to land in. Ends when both apps run @sveltejs/kit >= 3.0.0."
+
+[[IgnoredVulns]]
+id = "GHSA-pfhg-q3qv-9q6r"
+ignoreUntil = 2027-01-01
+reason = "SvelteKit before 3.0.0, CVSS 4.7: URL redirection to an untrusted site through a server-side self-fetch fallback. Reach: needs a Kit server runtime to follow a redirect, and neither app has one -- adapter-static emits files, sjel-status hands them out, and the soundscape bundle is served by its capability. The dev server does run Kit's SSR path, so this is bounded to a development session on loopback. Ends when both apps run @sveltejs/kit >= 3.0.0."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0141"
+ignoreUntil = 2027-01-01
+reason = "bincode 2.0.1 is unmaintained (RustSec type INFO, no CVE, no affected function, no patched version: the team stopped development after a harassment campaign). Reach: `research/benchmarks/graph-store/Cargo.lock` only — a benchmark crate that is built by hand when someone re-measures the graph store, and that no capability links. Ends when that benchmark drops bincode or moves to a maintained fork; adopting one is the maintainer's call, not a patch here."
+
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
 ignoreUntil = 2026-11-01
@@ -33,8 +57,11 @@ reason = "Unmaintained ttf-parser, non-optional and runtime-reachable, via lopdf
 # which Tauri pulls in for Linux alone. The app ships for macOS and iOS: `cargo tree -i glib
 # --target aarch64-apple-darwin` and `--target aarch64-apple-ios` print nothing (2026-09-27), and
 # no CI job builds the app for Linux. A fix needs Tauri to move off GTK3 (gtk-rs 0.18 is its last
-# GTK3 release). This is the one exception here for a known vulnerability, and it holds only while
-# the app has no Linux build: adding one ends it, whatever the date says.
+# GTK3 release). This is one of three exceptions here for a KNOWN vulnerability -- the two
+# SvelteKit entries below are the others -- and each one is bound to a reach that was measured on
+# this machine rather than assumed. Accepting a vulnerability is not the same as accepting a
+# finding: where the code cannot be reached, the entry says which build makes it unreachable, and
+# the date is when the acceptance stops rather than when a fix is expected.
 [[IgnoredVulns]]
 id = "GHSA-wrw7-89jp-8q8g"
 ignoreUntil = 2026-12-01

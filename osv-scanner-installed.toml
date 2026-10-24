@@ -47,20 +47,20 @@
 # node-gyp, minimatch, make-fetch-happen, socks-proxy-agent. Nothing installs them
 # separately, so no command moves them: a newer npm is the only route, and there is none.
 # The reach is npm's own process. One of them has no fixed version at all.
+# Refreshed 2026-10-24: npm moved to 12.2.1 and its node-gyp pin re-resolved undici to 6.29.0,
+# which retired the three 6.28.0 entries that stood here (they had stopped applying, and this
+# pass runs at `--verbosity error`, so nothing announced that). The two ids below are what 6.29.0
+# actually trips. Reach is unchanged and was re-measured, not assumed:
+# `npm@12.2.1 > node-gyp@13.0.0 > undici@6.29.0` in `npm ls -g --all`.
 [[IgnoredVulns]]
-id = "GHSA-3wwx-pv8p-q78v"
+id = "GHSA-xjj6-f33q-929c"
 ignoreUntil = 2027-01-01
-reason = "undici 6.28.0 denial of service via an unhandled error in WebSocket permessage-deflate decompression, fixed in 6.28.1. Reach: `npm@12.2.0` (the latest release) > node-gyp > undici, in npm's own dependency tree. Nothing installs this copy separately, so the only fix is a newer npm, and 12.2.0 is current. Ends when npm ships an undici >= 6.28.1, which is npm's call and not this machine's."
+reason = "undici 6.29.0, fixed in 6.29.1: `fetch()` aborts the Node.js process when a server answers with more than five content codings and closes before the body. Reach: `npm@12.2.1` > node-gyp > undici, npm's own dependency tree, so what is exposed is a registry or tarball host's response to npm itself — the one undici path this machine actually exercises, which is why it is dated rather than dismissed. Nothing here installs that copy separately; the only fix is a newer node-gyp, which is npm's call. Ends when npm ships undici >= 6.29.1."
 
 [[IgnoredVulns]]
-id = "GHSA-r53p-7pc4-xj5r"
+id = "GHSA-4qv8-2p9j-2685"
 ignoreUntil = 2027-01-01
-reason = "undici 6.28.0 downstream response splitting via the retry interceptor, fixed in 6.28.1. Same reach and same end as GHSA-3wwx-pv8p-q78v: npm's own tree, through node-gyp."
-
-[[IgnoredVulns]]
-id = "GHSA-rfgv-xxqx-mfg5"
-ignoreUntil = 2027-01-01
-reason = "undici 6.28.0 denial of service via an unrequested WebSocket subprotocol, fixed in 6.28.1. Same reach and same end as GHSA-3wwx-pv8p-q78v. This third undici entry is the one worth revisiting first: it is the only one of the three that npm's registry traffic itself exercises."
+reason = "undici 6.29.0, fixed in 6.29.1: unbounded memory in the `EventSource` parser when a peer sends many tiny `data:` fields with no blank separator. Same reach and same end as GHSA-xjj6-f33q-929c, with one narrowing that matters: npm's registry traffic uses `fetch()`, not `EventSource`, so nothing npm does on this machine reaches the parser. Dated anyway because it rides the same pin, and the next npm move is what ends both."
 
 [[IgnoredVulns]]
 id = "GHSA-ch52-4w7c-c8xp"
@@ -195,6 +195,16 @@ reason = "Quadratic complexity in postcss-selector-parser's flat-selector parsin
 #
 # Nothing Sjel ships links these. Every chain below is inside tauri-cli's or xberg-cli's own
 # published lock, and the exposure is a request or a file one of those tools handles.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0386"
+ignoreUntil = 2027-01-01
+reason = "tokio 1.45.1 in `tauri-cli@2.12.4`'s published lock and 1.53.2 in `xberg-cli@1.3.10`'s, fixed in 1.51.6 and 1.53.3 respectively. `AsyncFd::new` and its siblings accepted any `T: AsRawFd` without proof of ownership. Reach: neither Sjel binary links tokio for that API — this is the build tool's own runtime, and closing it means borrowing a file descriptor the tool owns. Ends when either crate republishes against a fixed tokio."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0387"
+ignoreUntil = 2027-01-01
+reason = "crypto-bigint 0.5.5 in `tauri-cli@2.12.4`'s published lock, fixed in 0.7.6: subtraction, zero counting, division and Montgomery multiplication could take secret-dependent branches depending on compiler and CPU. Reach: build tool only, and the crate is used there for key and signature *encoding*, not for an operation whose timing an attacker on the other end of a network can sample. Ends when tauri-cli republishes against a fixed crypto-bigint."
+
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0338"
 ignoreUntil = 2027-01-01

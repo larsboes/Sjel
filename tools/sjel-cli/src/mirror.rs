@@ -27,16 +27,22 @@ const PHONE_SET: &[&str] = &[
     "calendar_entries",
     "calendar_rhythms",
     "entities_entities",
+    // The values are what make a person a contact card: emails, phones, birthday, last_contact,
+    // company, relation. Without them the phone draws 294 names and nothing else.
+    "entities_values",
     "entities_facts",
     "places_places",
     "places_person_places",
+    // One decision per person name (`capabilities/places/src/people.rs`), so a name on a place
+    // resolves to the same entity it does on the Mac.
+    "places_people",
 ];
 
 const HELP: &str = "\
 sjel mirror — a read-only copy of this machine's data, for a device that is not here.
 
   build [--all | --tables a,b,c] [--out <path>]
-      Build the copy. Defaults to the phone set (projects, calendar, entities, places) at
+      Build the copy. Defaults to the phone set (projects, calendar, contacts, places) at
       <overlay>/data/mirror/mirror.db. Copied inside one read transaction and renamed into place,
       so a reader never sees half a build. --all copies every table in the database.
 

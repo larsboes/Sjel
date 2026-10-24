@@ -2,6 +2,12 @@
 //!
 //! Parses and organizes entity records of kind `person` into structured contact profiles,
 //! initials, contact links, and custom properties.
+//!
+//! The field names are the registry's, not this module's: `capabilities/entities` writes the
+//! Google-managed keys `emails` and `phones` (plural, and an array of strings), so a parser that
+//! only looked for `email` and `phone` found neither and drew no contact row for anybody. Both
+//! spellings are accepted here because the registry has written both: the values table is text, and
+//! an import or an operator edit can have put either in it.
 
 use serde::{Deserialize, Serialize};
 
@@ -54,8 +60,8 @@ impl Person {
             };
 
             match key.to_ascii_lowercase().as_str() {
-                "email" | "mail" => email = Some(str_val),
-                "phone" | "mobile" | "tel" => phone = Some(str_val),
+                "email" | "emails" | "mail" => email = Some(str_val),
+                "phone" | "phones" | "mobile" | "tel" => phone = Some(str_val),
                 "company" | "org" | "organization" => company = Some(str_val),
                 "role" | "title" | "position" => role = Some(str_val),
                 "location" | "city" | "place" => location = Some(str_val),
@@ -128,6 +134,37 @@ pub fn filter_people<'a>(people: &'a [Person], query: &str) -> Vec<&'a Person> {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    /// The shape the registry actually writes: `emails` and `phones` as arrays, from
+    /// `capabilities/entities/src/google.rs`. Before this was the key set, every person's email and
+    /// phone were `None` and the contact card drew no row for either.
+    #[test]
+    fn the_registrys_own_field_names_reach_the_contact_card() {
+        let mut values = BTreeMap::new();
+        values.insert("emails".into(), serde_json::json!(["ada@example.com"]));
+        values.insert("phones".into(), serde_json::json!(["+44 20 7946 0958"]));
+        values.insert("company".into(), serde_json::json!("Analytical Engine Inc"));
+        values.insert("birthday".into(), serde_json::json!("1815-12-10"));
+
+        let record = EntityRecord {
+            id: "p1".into(),
+            kind: "person".into(),
+            name: "Ada Lovelace".into(),
+            note_ref: None,
+            revision: 3,
+            values,
+        };
+
+        let person = Person::from_record(&record);
+        assert_eq!(person.email.as_deref(), Some("ada@example.com"));
+        assert_eq!(person.phone.as_deref(), Some("+44 20 7946 0958"));
+        assert_eq!(person.company.as_deref(), Some("Analytical Engine Inc"));
+        // Named fields do not repeat as custom rows, and an unnamed one still gets one.
+        assert_eq!(
+            person.custom_fields,
+            vec![("birthday".to_string(), "1815-12-10".to_string())]
+        );
+    }
 
     #[test]
     fn initials_extraction() {

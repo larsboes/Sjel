@@ -8,6 +8,7 @@ pub mod data;
 pub mod doc_view;
 pub mod editor;
 pub mod nav;
+pub mod people;
 pub mod primitives;
 pub mod projects;
 pub mod tasks;

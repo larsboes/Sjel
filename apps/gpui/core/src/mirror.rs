@@ -13,15 +13,18 @@
 //! that only needs to read can ask the copy.
 //!
 //! The table set is the Mac's decision, not this module's: the manifest names what it holds
-//! (`projects_records`, `calendar_entries`, `calendar_rhythms`, `entities_*`, `places_*` today), and
-//! a read of a table the copy does not carry is an error the page can say out loud.
+//! (`projects_records`, `calendar_entries`, `calendar_rhythms`, `entities_entities` with
+//! `entities_values`, and `places_places` with `places_person_places` today), and a read of a table
+//! the copy does not carry answers empty rather than failing, so a page can say which copy it drew
+//! instead of blanking.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
-use crate::shell::CalendarEntry;
+use crate::places::{PersonLink, Place};
+use crate::shell::{CalendarEntry, EntityRecord};
 use crate::sync::{Host, Reply};
 
 /// The manifest, which is read first so a digest can be compared before a whole copy travels.
@@ -36,6 +39,12 @@ const COPY_FILE: &str = "mirror.db";
 const MANIFEST_FILE: &str = "manifest.json";
 /// Where the day's entries are read from in the copy (`capabilities/calendar/src/store.rs`).
 const ENTRIES: &str = "calendar_entries";
+/// The contact registry, and the values that make a person a contact card.
+const ENTITIES: &str = "entities_entities";
+const VALUES: &str = "entities_values";
+/// The places register and the links between a place and a person's name.
+const PLACES: &str = "places_places";
+const PERSON_PLACES: &str = "places_person_places";
 
 /// One table's contribution, as the Mac's manifest reports it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +128,31 @@ impl Refreshed {
                 format!("Copy fetched · built {}", manifest.built_label())
             }
         }
+    }
+}
+
+/// The copy's contact registry and places register, read once for one page.
+///
+/// One read and not three, because a person's card is a join: their own row, the values they carry,
+/// and the places the register links to their name. Three opens of one file could answer three
+/// different versions of it.
+#[derive(Clone, Debug, Default)]
+pub struct PeopleCopy {
+    /// Everyone of kind `person`, name order, with their values folded in.
+    pub people: Vec<EntityRecord>,
+    /// The places register, kind then name order.
+    pub places: Vec<Place>,
+    /// The links the operator has not dismissed, in name order.
+    pub links: Vec<PersonLink>,
+}
+
+impl PeopleCopy {
+    /// Why the list is empty, in the copy's own terms: an older copy simply does not hold these.
+    pub fn absence(&self, manifest: &Manifest) -> Option<String> {
+        if !manifest.holds(ENTITIES) {
+            return Some("This copy was built without the contact registry.".to_owned());
+        }
+        None
     }
 }
 
@@ -221,6 +255,122 @@ impl Mirror {
         }
         Ok(list)
     }
+
+    /// The contacts and the places register, as one answer ([`PeopleCopy`]).
+    ///
+    /// A copy the Mac built before these tables travelled answers empty lists rather than an error:
+    /// an older `sjel mirror build` is a real absence, and the page says which copy it drew. A copy
+    /// that holds the registry but not its values still answers the names, which is all an older
+    /// copy honestly knows.
+    pub async fn people(&self) -> Result<PeopleCopy, String> {
+        let mut copy = PeopleCopy::default();
+        let holds_entities = self.manifest.holds(ENTITIES);
+        let holds_places = self.manifest.holds(PLACES);
+        if !holds_entities && !holds_places {
+            return Ok(copy);
+        }
+        let db = libsql::Builder::new_local(&self.path)
+            .build()
+            .await
+            .map_err(|error| format!("Cannot open the copy: {error}"))?;
+        let conn = db
+            .connect()
+            .map_err(|error| format!("Cannot read the copy: {error}"))?;
+
+        if holds_entities {
+            // A left join, so somebody the operator added and has not filled in yet is still a row.
+            // Without `entities_values` there is nothing to join: the page draws names and says so.
+            let query = if self.manifest.holds(VALUES) {
+                "SELECT e.id, e.kind, e.name, e.note_ref, e.revision, v.key, v.value \
+                 FROM entities_entities e \
+                 LEFT JOIN entities_values v ON v.entity_id = e.id \
+                 WHERE e.kind = 'person' \
+                 ORDER BY e.name COLLATE NOCASE, v.key"
+            } else {
+                "SELECT e.id, e.kind, e.name, e.note_ref, e.revision, NULL, NULL \
+                 FROM entities_entities e \
+                 WHERE e.kind = 'person' \
+                 ORDER BY e.name COLLATE NOCASE"
+            };
+            let mut rows = conn
+                .query(query, ())
+                .await
+                .map_err(|error| format!("Cannot read the copy's contacts: {error}"))?;
+            while let Ok(Some(row)) = rows.next().await {
+                let id: String = row.get(0).unwrap_or_default();
+                let key: Option<String> = row.get(5).ok();
+                let value: Option<String> = row.get(6).ok();
+                // One row per value, so a person is as many rows as they have values: the record is
+                // created when the id changes and every later row adds to it.
+                if copy.people.last().is_none_or(|record| record.id != id) {
+                    copy.people.push(EntityRecord {
+                        id: id.clone(),
+                        kind: row.get(1).unwrap_or_else(|_| "person".to_owned()),
+                        name: row.get(2).unwrap_or_default(),
+                        note_ref: row.get(3).ok(),
+                        revision: row.get::<i64>(4).unwrap_or(0).clamp(0, u32::MAX as i64) as u32,
+                        values: Default::default(),
+                    });
+                }
+                if let (Some(key), Some(value)) = (key, value) {
+                    if let Some(record) = copy.people.last_mut() {
+                        record.values.insert(key, json_value(&value));
+                    }
+                }
+            }
+        }
+
+        if holds_places {
+            let mut rows = conn
+                .query(
+                    "SELECT id, name, kind, city, country_code, address, latitude, longitude \
+                     FROM places_places ORDER BY kind, name COLLATE NOCASE",
+                    (),
+                )
+                .await
+                .map_err(|error| format!("Cannot read the copy's places: {error}"))?;
+            while let Ok(Some(row)) = rows.next().await {
+                copy.places.push(Place {
+                    id: row.get(0).unwrap_or_default(),
+                    name: row.get(1).unwrap_or_default(),
+                    kind: row.get(2).unwrap_or_else(|_| "venue".to_owned()),
+                    city: row.get(3).ok(),
+                    country_code: row.get(4).ok(),
+                    address: row.get(5).ok(),
+                    latitude: row.get(6).ok(),
+                    longitude: row.get(7).ok(),
+                });
+            }
+
+            // A dismissed row is not a link: the operator already said that place does not belong
+            // to that person, and the register never offers it again.
+            if self.manifest.holds(PERSON_PLACES) {
+                let mut rows = conn
+                    .query(
+                        "SELECT person, place_id, state FROM places_person_places \
+                         WHERE state <> 'dismissed' ORDER BY person COLLATE NOCASE, state",
+                        (),
+                    )
+                    .await
+                    .map_err(|error| format!("Cannot read the copy's person links: {error}"))?;
+                while let Ok(Some(row)) = rows.next().await {
+                    copy.links.push(PersonLink {
+                        person: row.get(0).unwrap_or_default(),
+                        place_id: row.get(1).unwrap_or_default(),
+                        state: row.get(2).unwrap_or_else(|_| "proposed".to_owned()),
+                    });
+                }
+            }
+        }
+        Ok(copy)
+    }
+}
+
+/// One value as the registry stores it: the text of a JSON value (`capabilities/entities/src/store.rs`
+/// writes `value.to_string()`). A row that does not parse is kept as the text it is, so an
+/// unfamiliar value shows up in the card instead of vanishing from it.
+fn json_value(text: &str) -> serde_json::Value {
+    serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(text.to_owned()))
 }
 
 /// Fetches the Mac's manifest and, when its digest differs from the copy on disk, the copy too.
@@ -435,6 +585,150 @@ mod tests {
         drop(conn);
         drop(db);
         std::fs::read(&path).expect("read the copy")
+    }
+
+    #[test]
+    fn a_copy_answers_a_contact_card_and_the_places_it_links_to() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let dir = dir();
+            // A copy built by a Mac that holds the contact and place tables, in the Mac's own
+            // schema: values as JSON text, the person's name on the link and not their id.
+            let path = dir.join("built.db");
+            let db = libsql::Builder::new_local(&path)
+                .build()
+                .await
+                .expect("build a copy");
+            let conn = db.connect().expect("connect");
+            conn.execute_batch(
+                "CREATE TABLE entities_entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+                     name TEXT NOT NULL, note_ref TEXT, revision INTEGER NOT NULL,
+                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                 CREATE TABLE entities_values (entity_id TEXT NOT NULL, key TEXT NOT NULL,
+                     value TEXT NOT NULL, source TEXT NOT NULL, updated_at TEXT NOT NULL,
+                     PRIMARY KEY (entity_id, key));
+                 CREATE TABLE places_places (id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                     kind TEXT NOT NULL, address TEXT, city TEXT, country_code TEXT,
+                     latitude REAL, longitude REAL, source TEXT NOT NULL, external_ref TEXT,
+                     created_at TEXT NOT NULL);
+                 CREATE TABLE places_person_places (id TEXT PRIMARY KEY, person TEXT NOT NULL,
+                     place_id TEXT NOT NULL, date_start TEXT, date_end TEXT,
+                     confidence_bp INTEGER NOT NULL, source TEXT NOT NULL, state TEXT NOT NULL,
+                     created_at TEXT NOT NULL, reviewed_at TEXT);
+                 INSERT INTO entities_entities VALUES
+                     ('ent:1', 'person', 'Ada Lovelace', 'Atlas/People/Ada.md', 4,
+                      '2026-01-01', '2026-10-01'),
+                     ('ent:2', 'person', 'Alan Turing', NULL, 1, '2026-01-01', '2026-01-01');
+                 INSERT INTO entities_values VALUES
+                     ('ent:1', 'emails', '[\"ada@example.com\"]', 'google', '2026-10-01'),
+                     ('ent:1', 'phones', '[\"+44 20 7946 0958\"]', 'google', '2026-10-01'),
+                     ('ent:1', 'company', '\"Analytical Engine Inc\"', 'operator', '2026-10-01');
+                 INSERT INTO places_places VALUES
+                     ('pl:1', 'Konzerthaus', 'venue', 'Gendarmenmarkt 2', 'Berlin', 'DE',
+                      52.5138, 13.3922, 'operator', NULL, '2026-01-01'),
+                     ('pl:2', 'Zürich', 'city', NULL, 'Zürich', 'CH', NULL, NULL,
+                      'operator', NULL, '2026-01-01');
+                 INSERT INTO places_person_places VALUES
+                     ('pp:1', 'Ada Lovelace', 'pl:1', NULL, NULL, 9000, 'operator',
+                      'confirmed', '2026-01-01', NULL),
+                     ('pp:2', 'Alan Turing', 'pl:2', NULL, NULL, 4000, 'operator',
+                      'dismissed', '2026-01-01', NULL);",
+            )
+            .await
+            .expect("a copy with contacts");
+            drop(conn);
+            drop(db);
+            let bytes = std::fs::read(&path).expect("read the copy");
+            let mut manifest = manifest_for(&bytes);
+            manifest.tables = vec![
+                TableCopy {
+                    name: ENTITIES.to_owned(),
+                    rows: 2,
+                },
+                TableCopy {
+                    name: VALUES.to_owned(),
+                    rows: 3,
+                },
+                TableCopy {
+                    name: PLACES.to_owned(),
+                    rows: 2,
+                },
+                TableCopy {
+                    name: PERSON_PLACES.to_owned(),
+                    rows: 2,
+                },
+            ];
+            std::fs::write(
+                dir.join(MANIFEST_FILE),
+                serde_json::to_vec(&manifest).unwrap(),
+            )
+            .expect("manifest");
+            std::fs::write(dir.join(COPY_FILE), &bytes).expect("copy");
+
+            let mirror = Mirror::open(&dir).expect("the copy opens");
+            let copy = mirror.people().await.expect("read the contacts");
+            assert_eq!(copy.people.len(), 2, "one row per person, not per value");
+            let ada = copy
+                .people
+                .iter()
+                .find(|record| record.name == "Ada Lovelace")
+                .expect("Ada");
+            assert_eq!(ada.revision, 4);
+            assert_eq!(ada.note_ref.as_deref(), Some("Atlas/People/Ada.md"));
+            // The value is JSON text in the table and a value again here.
+            assert_eq!(ada.values["emails"], serde_json::json!(["ada@example.com"]));
+
+            let person = crate::people::Person::from_record(ada);
+            assert_eq!(person.initials, "AL");
+            assert_eq!(person.email.as_deref(), Some("ada@example.com"));
+            assert_eq!(person.phone.as_deref(), Some("+44 20 7946 0958"));
+            assert_eq!(person.company.as_deref(), Some("Analytical Engine Inc"));
+
+            // The dismissed link is not in the copy's answer at all.
+            assert_eq!(copy.links.len(), 1);
+            let places = crate::places::places_of(&copy.places, &copy.links, &person.name);
+            assert_eq!(
+                places
+                    .iter()
+                    .map(|place| place.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["Konzerthaus"]
+            );
+            assert_eq!(places[0].where_line(), "Berlin, DE");
+        });
+    }
+
+    #[test]
+    fn a_copy_without_the_contacts_answers_none_rather_than_failing() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let dir = dir();
+            let bytes = copy_bytes(&dir).await;
+            let manifest = manifest_for(&bytes);
+            std::fs::write(
+                dir.join(MANIFEST_FILE),
+                serde_json::to_vec(&manifest).unwrap(),
+            )
+            .expect("manifest");
+            std::fs::write(dir.join(COPY_FILE), &bytes).expect("copy");
+
+            let mirror = Mirror::open(&dir).expect("the copy opens");
+            let copy = mirror
+                .people()
+                .await
+                .expect("an older copy is not an error");
+            assert!(copy.people.is_empty());
+            assert!(copy.places.is_empty());
+            // Both absences are answers the page can say out loud.
+            assert!(!mirror.manifest().holds(ENTITIES));
+            assert!(copy.absence(mirror.manifest()).is_some());
+        });
     }
 
     fn manifest_for(bytes: &[u8]) -> Manifest {

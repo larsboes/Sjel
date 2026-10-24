@@ -35,6 +35,9 @@ qrcode = { version = "0.14", default-features = false }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net", "sync"] }
 libsql = { version = "0.10.0", default-features = false, features = ["core"] }
 sjel-config = { path = "../../../libs/sjel-config" }
+# `name_key`, the one rule for comparing a person's name with the register's rows
+# (src/places.rs). Shared rather than copied: places, trips and comms all key their decisions by it.
+sjel-links = { path = "../../../libs/links" }
 sjel-credentials = { path = "../../../libs/sjel-credentials" }
 zeroize = "=1.9.1"
 

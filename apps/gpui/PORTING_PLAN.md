@@ -22,7 +22,7 @@
 | 11 | `/inventory` | Household Assets | **Ported** | Native GPUI (`InventoryPage`) | Planned | `capabilities/inventory` |
 | 12 | `/wishlist` | Wishlist & Budgeting | **Ported** (Tab) | Native GPUI (`InventoryPage`) | Planned | `capabilities/inventory` |
 | 13 | `/interior` | Spatial Layouts & Rooms | **Ported** (Tab) | Native GPUI (`InventoryPage`) | Needs RoomPlan | `capabilities/inventory` |
-| 14 | `/people` | People & Contacts CRM | **Ported** | Native GPUI (`PeoplePage`) | Planned | `capabilities/people` |
+| 14 | `/people` | People & Contacts CRM | **Ported** | Native GPUI (`PeoplePage`) | Native GPUI Tab (`People` \| `Places`, off the copy) | `capabilities/people-registry`, `capabilities/entities`, `capabilities/places` |
 | 15 | `/software` | App Manager & Decisions | **Ported** | Native GPUI (`Software`) | Desktop Only | `capabilities/software` |
 | 16 | `/backup` | Backup Deep Inspection | **Ported** | Native GPUI (`BackupPage`) | Status Only | `capabilities/backup` |
 | 17 | `/capabilities`| Capability Manager | **Ported** | Native GPUI (`Capabilities`) | Status Only | Sjel Shell / Daemon |
@@ -111,7 +111,8 @@
 - **Next**: People and Places are a page away, because `places_*` and `entities_*` are already in
   the phone's table set. The pages that write need the replica's second domain, which is the same
   shape as `core/src/sync.rs` per capability.
-
+  *(Shipped in Work Package 9; the tables the page needed, `entities_values` and `places_people`,
+  were not in the set yet and were added there.)*
 ### ✅ Work Package 8: the calendar joins the replica, and the phone's tab writes
 - **Status**: Shipped (2026-10-23). The tab reads and writes the replica; the Mac's copy is the
   fallback until the first pull.
@@ -147,6 +148,51 @@
   - `apps/gpui/ios/src/lib.rs`
 - **Next**: the same shape per capability. Each remaining table set needs a feed and a table before
   its page can leave the copy, and the copy's table set shrinks as they move.
+
+### ✅ Work Package 9: People and Places off the copy
+- **Status**: Shipped (2026-10-23). One new tab, two registers, read-only over the Mac's copy.
+- **Shipped**:
+  - `tools/sjel-cli/src/mirror.rs` — the phone set gains `entities_values` (612 rows: phones,
+    emails, birthday, last_contact, company, relation) and `places_people` (the operator's decision
+    for a person's name), because a copy without them drew 294 names and no contact card.
+  - `apps/gpui/core/src/people.rs` — `Person::from_record` now accepts the keys the registry
+    actually writes. `capabilities/entities/src/google.rs` writes `emails` and `phones` (plural,
+    array of strings) while the parser looked for `email` and `phone`, so **every** contact card
+    was missing its email and phone, on the Mac too (`apps/gpui/src/people_view.rs`). Fixed in the
+    shared core, so both clients gained the rows.
+  - `apps/gpui/core/src/places.rs` (new) — `Place`, `PersonLink`, `places_of`, `people_at`,
+    `filter_places`, and the `name_key` join (re-used from `libs/links`, not copied). A dismissed
+    link is not a link.
+  - `apps/gpui/core/src/mirror.rs` — `Mirror::people` answers all three tables in one read
+    (`PeopleCopy`), a left join so a person with no values is still a row, values parsed out of the
+    JSON text the registry stores, and empty lists rather than an error on a copy that predates them.
+  - `apps/gpui/ui/src/people.rs` (new) — one tab with a `People` | `Places` switch, one search field
+    for both sides, initials rows at `Density::Mobile`, a contact card (email, phone, custom fields,
+    the linked places) and a place card (kind, where, coordinates, the names linked to it), with the
+    source line naming the copy and a Refresh that asks the host for a newer one.
+  - `apps/gpui/ios/src/lib.rs` — `Tab::People`, `SJEL_TAB=people`, and the same copy the Calendar
+    tab reads: one fetch feeds both. `SJEL_REGISTER=places` and `SJEL_PERSON=Ada` open the other
+    register and a card at launch, for the screenshots `run-sim` takes.
+- **Verified on a simulator** (`ios/run-sim`, seeded with the built copy): the People list (294
+  names, 11 with a company line), a person's card (both phone numbers, the birthday as a custom
+  row, "no places linked"), the Places list grouped by kind (253 rows) and a place's card (kind,
+  `Amsterdam, NL`, coordinates). Three defects found and fixed there: the card's back link sat
+  below the content where a long card would push it off screen (it is now at the top), the title
+  said "Person" where the card already carried the name (it now stays `People`), and the
+  `COORDINATES` label wrapped inside its column (`COORDS`, 92 px).
+- **Why read-only**: `places_person_places` holds the operator's review and the registry's writes
+  are `/api/people/decide`. A phone that cannot reach the Mac would offer controls that have to be
+  refused, so it offers none.
+- **Tests**: 7 new in core (1 `people`, 4 `places`, 2 `mirror`), 4 in `ui/src/people.rs`.
+- **Target Files**:
+  - `apps/gpui/core/src/{people,places,mirror}.rs`
+  - `apps/gpui/ui/src/people.rs`
+  - `apps/gpui/ios/src/lib.rs`
+  - `tools/sjel-cli/src/mirror.rs`
+- **Next**: the same shape per capability. Each remaining table set needs a feed and a table before
+  its page can leave the copy, and the copy's table set shrinks as they move. The contact registry's
+  writes (a note ref, a value, a link decision) are the replica's third domain when the tab stops
+  being read-only.
 
 ---
 
@@ -285,12 +331,14 @@ flowchart TD
 
 1. **Expanding iOS Tab Navigation**:
    - Current tabs: `Projects` (replica, read and write), `Calendar` (replica, read and write; the
-     Mac's copy until the first pull), `Travel`, `Settings`.
+     Mac's copy until the first pull), `People` (contacts and places, read-only over the copy),
+     `Travel`, `Settings`.
    - Add tabs:
      - `Today`: Daily context timeline, focus tasks with large tap target checkboxes.
      - `Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).
      - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7; a writing tab since Work
        Package 8, when the calendar joined the replica.
+     - ~~`People` / `Places`: two registers, one tab.~~ shipped in Work Package 9.
 
 2. **Autonomous Offline Store**:
    - Bundle `rusqlite` / `libsql` directly inside the iOS app sandbox.

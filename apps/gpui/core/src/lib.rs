@@ -18,6 +18,8 @@
 //! - [`sync`]: replaying that queue at the Mac and taking back what it changed.
 //! - [`mirror`]: the Mac's read-only copy of its data, fetched over the paired connection for
 //!   the pages the phone reads but does not write.
+//! - [`people`] and [`places`]: the contact registry and the places register, and the name the two
+//!   are joined by ([`places::name_key`], the same one `capabilities/places` keys its decisions by).
 
 pub mod accounts;
 pub mod area;
@@ -37,6 +39,7 @@ pub mod media;
 pub mod mirror;
 pub mod packs;
 pub mod people;
+pub mod places;
 pub mod research;
 pub mod route;
 pub mod search;

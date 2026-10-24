@@ -30,6 +30,7 @@ use sjel_gpui_core::mirror::{self, Mirror};
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
+use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, Palette,
@@ -51,6 +52,8 @@ pub enum Tab {
     Projects,
     /// The day's entries, read from the Mac's read-only copy of its data.
     Calendar,
+    /// The contacts and the places they have been, read from the same copy.
+    People,
     Travel,
     /// Pairing with a Mac: offered here, never required (research/offline-on-the-phone.md).
     Settings,
@@ -166,6 +169,10 @@ pub struct Capabilities {
     projects: Option<gpui::Entity<Projects>>,
     /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
     calendar: gpui::Entity<Calendar>,
+    /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
+    /// the registry's writes are the operator's, so this tab draws and never offers a control that
+    /// would have to be refused.
+    people: gpui::Entity<People>,
     /// The copy last opened, kept so a refresh that fails cannot blank a page that is readable.
     copy: Option<Arc<Mirror>>,
     /// True while a copy is being fetched, so one tap cannot start a second fetch.
@@ -232,6 +239,23 @@ impl Capabilities {
             CalendarEvent::Editing(open) => keyboard(*open),
         })
         .detach();
+        // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
+        // newer copy: there is nothing to sync, because nothing here writes.
+        let people = cx.new(|_| People::new(Density::Mobile));
+        // The register and the card a screenshot needs, for the same reason `SJEL_DAY` exists: a
+        // page a hand did not navigate to still has to be photographable (`launch_register`,
+        // `launch_person`).
+        people.update(cx, |people, cx| {
+            people.set_register(launch_register(), cx);
+            if let Some(name) = launch_person() {
+                people.open_named(&name, cx);
+            }
+        });
+        cx.subscribe(&people, |view, _, event, cx| match event {
+            PeopleEvent::Refresh => view.refresh_copy(cx),
+            PeopleEvent::Editing(open) => keyboard(*open),
+        })
+        .detach();
         let copy_events = events.clone();
         shell::spawn(async move {
             let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
@@ -249,7 +273,10 @@ impl Capabilities {
                                 Ok(copy) => {
                                     view.copy = Some(copy.clone());
                                     view.calendar.update(cx, |calendar, cx| {
-                                        calendar.set_copy(Some(copy), None, cx)
+                                        calendar.set_copy(Some(copy.clone()), None, cx)
+                                    });
+                                    view.people.update(cx, |people, cx| {
+                                        people.set_copy(Some(copy), None, cx)
                                     });
                                 }
                                 // A refresh that fails leaves the copy already on screen alone:
@@ -257,16 +284,18 @@ impl Capabilities {
                                 Err(error) => {
                                     if view.copy.is_none() {
                                         view.calendar.update(cx, |calendar, cx| {
-                                            calendar.set_copy(None, Some(error), cx)
+                                            calendar.set_copy(None, Some(error.clone()), cx)
+                                        });
+                                        view.people.update(cx, |people, cx| {
+                                            people.set_copy(None, Some(error), cx)
                                         });
                                     } else {
+                                        let note = format!("Could not fetch a newer copy: {error}");
                                         view.calendar.update(cx, |calendar, cx| {
-                                            calendar.set_note(
-                                                Some(format!(
-                                                    "Could not fetch a newer copy: {error}"
-                                                )),
-                                                cx,
-                                            )
+                                            calendar.set_note(Some(note.clone()), cx)
+                                        });
+                                        view.people.update(cx, |people, cx| {
+                                            people.set_note(Some(note), cx)
                                         });
                                     }
                                 }
@@ -430,6 +459,7 @@ impl Capabilities {
             travel: cx.new(|_| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile)),
             projects: None,
             calendar,
+            people,
             copy: None,
             copying: false,
             store_error: None,
@@ -651,6 +681,22 @@ async fn fetch_copy(client: Arc<DeviceClient>) -> Result<Arc<Mirror>, String> {
     Mirror::open(&dir).map(Arc::new)
 }
 
+/// `SJEL_REGISTER=places` opens the Places side of the People tab, and `SJEL_PERSON=Ada` opens the
+/// card of the first person whose name contains that text. Both exist so a screenshot can reach a
+/// page a hand did not navigate to, like `SJEL_DAY` and `SJEL_TAB`; a phone never sets either.
+fn launch_register() -> sjel_gpui_ui::people::Register {
+    match std::env::var("SJEL_REGISTER").unwrap_or_default().as_str() {
+        "places" => sjel_gpui_ui::people::Register::Places,
+        _ => sjel_gpui_ui::people::Register::People,
+    }
+}
+
+fn launch_person() -> Option<String> {
+    std::env::var("SJEL_PERSON")
+        .ok()
+        .filter(|name| !name.is_empty())
+}
+
 fn label() -> &'static str {
     if cfg!(target_abi = "sim") {
         "GPUI iOS Simulator"
@@ -675,6 +721,7 @@ fn launch_day() -> chrono::NaiveDate {
 fn launch_tab() -> Tab {
     match std::env::var("SJEL_TAB").unwrap_or_default().as_str() {
         "calendar" => Tab::Calendar,
+        "people" => Tab::People,
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
         _ => Tab::Projects,
@@ -694,10 +741,13 @@ impl Render for Capabilities {
         let is_mac = self.active_tab == Tab::Settings;
         let is_travel = self.active_tab == Tab::Travel;
         let is_calendar = self.active_tab == Tab::Calendar;
+        let is_people = self.active_tab == Tab::People;
         self.travel
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
         self.calendar
             .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
+        self.people
+            .update(cx, |people, cx| people.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
             projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
         }
@@ -718,7 +768,7 @@ impl Render for Capabilities {
                     .flex_1()
                     .min_h_0()
                     // Projects scrolls inside itself, so the page holds still around it.
-                    .when(is_mac || is_travel || is_calendar, |page| {
+                    .when(is_mac || is_travel || is_calendar || is_people, |page| {
                         page.overflow_y_scroll()
                     })
                     // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
@@ -1124,72 +1174,82 @@ impl Render for Capabilities {
                     })
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
-                    .when(!is_mac && !is_travel && !is_calendar, |page| {
-                        let pending = self.board.as_ref().map_or(0, Board::pending);
-                        page.when_some(self.store_error.clone(), |page, error| {
-                            page.child(div().text_sm().text_color(rgb(0xd70015)).child(error))
-                        })
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .py(px(2.))
-                                        .rounded_full()
-                                        .bg(if pending > 0 {
-                                            rgb(0xff9500)
-                                        } else {
-                                            rgb(0x248a3d)
-                                        })
-                                        .text_color(rgb(0xffffff))
-                                        .text_xs()
-                                        .child(if pending > 0 {
-                                            format!("{pending} queued for the Mac")
-                                        } else {
-                                            "Saved on this phone".into()
-                                        }),
-                                )
-                                .when(self.client.is_some(), |row| {
-                                    row.child(
+                    .when(is_people, |page| page.child(self.people.clone()))
+                    .when(
+                        !is_mac && !is_travel && !is_calendar && !is_people,
+                        |page| {
+                            let pending = self.board.as_ref().map_or(0, Board::pending);
+                            page.when_some(self.store_error.clone(), |page, error| {
+                                page.child(div().text_sm().text_color(rgb(0xd70015)).child(error))
+                            })
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
                                         div()
-                                            .px_3()
-                                            .py(px(6.))
-                                            .rounded(px(8.))
-                                            .bg(rgb(0xe5e7eb))
-                                            .text_color(if self.syncing {
-                                                rgb(0x8e8e93)
+                                            .px_2()
+                                            .py(px(2.))
+                                            .rounded_full()
+                                            .bg(if pending > 0 {
+                                                rgb(0xff9500)
                                             } else {
-                                                rgb(0x1c1c1e)
+                                                rgb(0x248a3d)
                                             })
+                                            .text_color(rgb(0xffffff))
                                             .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .child(if self.syncing { "Syncing…" } else { "Sync" })
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| view.maybe_sync(cx)),
-                                            ),
+                                            .child(if pending > 0 {
+                                                format!("{pending} queued for the Mac")
+                                            } else {
+                                                "Saved on this phone".into()
+                                            }),
                                     )
-                                }),
-                        )
-                        .when_some(self.synced.clone(), |page, synced| {
-                            page.child(div().text_xs().text_color(rgb(0x8e8e93)).child(synced))
-                        })
-                        .when_some(
-                            self.projects.clone(),
-                            |page, projects| {
-                                page.child(
-                                    div()
-                                        .flex_1()
-                                        .min_h_0()
-                                        .mb(px(keyboard_inset()))
-                                        .child(projects),
-                                )
-                            },
-                        )
-                    }),
+                                    .when(self.client.is_some(), |row| {
+                                        row.child(
+                                            div()
+                                                .px_3()
+                                                .py(px(6.))
+                                                .rounded(px(8.))
+                                                .bg(rgb(0xe5e7eb))
+                                                .text_color(if self.syncing {
+                                                    rgb(0x8e8e93)
+                                                } else {
+                                                    rgb(0x1c1c1e)
+                                                })
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .child(if self.syncing {
+                                                    "Syncing…"
+                                                } else {
+                                                    "Sync"
+                                                })
+                                                .on_mouse_down(
+                                                    MouseButton::Left,
+                                                    cx.listener(|view, _, _, cx| {
+                                                        view.maybe_sync(cx)
+                                                    }),
+                                                ),
+                                        )
+                                    }),
+                            )
+                            .when_some(self.synced.clone(), |page, synced| {
+                                page.child(div().text_xs().text_color(rgb(0x8e8e93)).child(synced))
+                            })
+                            .when_some(
+                                self.projects.clone(),
+                                |page, projects| {
+                                    page.child(
+                                        div()
+                                            .flex_1()
+                                            .min_h_0()
+                                            .mb(px(keyboard_inset()))
+                                            .child(projects),
+                                    )
+                                },
+                            )
+                        },
+                    ),
             )
             // Bottom Tab Bar
             .child({
@@ -1205,6 +1265,12 @@ impl Render for Capabilities {
                         id: "calendar",
                         label: "Calendar",
                         icon: "📅",
+                        badge: None,
+                    },
+                    NavItem {
+                        id: "people",
+                        label: "People",
+                        icon: "👤",
                         badge: None,
                     },
                     NavItem {
@@ -1224,6 +1290,7 @@ impl Render for Capabilities {
                     Tab::Settings => "settings",
                     Tab::Travel => "travel",
                     Tab::Calendar => "calendar",
+                    Tab::People => "people",
                     Tab::Projects => "projects",
                 };
                 let entity = cx.entity().clone();
@@ -1240,14 +1307,16 @@ impl Render for Capabilities {
                                 "settings" => Tab::Settings,
                                 "travel" => Tab::Travel,
                                 "calendar" => Tab::Calendar,
+                                "people" => Tab::People,
                                 _ => Tab::Projects,
                             };
                             if view.active_tab == Tab::Travel {
                                 view.travel.update(cx, |travel, cx| travel.activate(cx));
                             }
-                            // Opening the calendar with no copy asks for one, so a phone that was
-                            // paired here but never fetched does not have to know to tap Refresh.
-                            if view.active_tab == Tab::Calendar
+                            // Opening the calendar or the registers with no copy asks for one, so a
+                            // phone that was paired here but never fetched does not have to know to
+                            // tap Refresh.
+                            if (view.active_tab == Tab::Calendar || view.active_tab == Tab::People)
                                 && view.copy.is_none()
                                 && !view.copying
                             {

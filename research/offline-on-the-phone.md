@@ -81,6 +81,13 @@ Two facts the build taught that the plan did not anticipate:
   is the vault's growth rather than any single media column. (The first version of this entry said
   the opposite; it was inferred from rows-to-bytes and was wrong.)
 
+**The set grew once, 2026-10-23.** The phone's People tab needed two tables the set did not carry:
+`entities_values` (612 rows — phones, emails, birthday, last_contact, company, relation) and
+`places_people` (3 rows — the operator's decision for a person's name, which is what
+`places_person_places` joins on). Without them the copy held 294 names and no contact card. Measured
+after the change: **9 tables, 2,493 rows, 11,276,288 bytes** — the contact values cost 135 KB
+against a 375 MB source, so the phone set's size is still note bodies, not people.
+
 ## R1 on the device, 2026-10-21: `src-tauri/src/mirror.rs`
 
 The phone side is built, without UI. `mirror_sync` fetches the manifest, compares it with what the

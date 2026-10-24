@@ -312,10 +312,28 @@ asks the Mac to rebuild and refetches the copy. `places_*` and `entities_*` are 
 copy, so People and Places are a page away; the pages that write need a domain of their own, which is
 the shape the calendar just took.
 
-Both tabs ship on TestFlight (build 1363, internal group `Team`), the only distribution today. The
-touch check is `host/UITests/JoinTap.swift`. `SJEL_TAB=calendar` and `SJEL_DAY=2026-10-21` open a
-given tab and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not
-the first one without a hand on the screen.
+**People** is the third tab: the contact registry and the places register, one behind the other under
+a `People` | `Places` switch with one search field for both, read from the same copy the calendar
+reads — one fetch feeds both tabs. A person's row carries their initials and what they do; the card
+holds the email, the phone, whatever else the registry has on them, and the places the register links
+to their name. A place's card holds its kind and where it is, and the names linked to it, `confirmed`
+and `proposed` apart. The tab is read-only by intent: `places_person_places` is the operator's
+review, and the registry's writes are `/api/people/decide`, so a phone that cannot reach the Mac
+offers no control that would have to be refused.
+
+Two things this tab taught about the copy and the registry. The phone set did not carry
+`entities_values` (phones, emails, birthday, last_contact, company, relation) or `places_people` (the
+operator's decision for a person's name), so a page over it had 294 names and no contact card; both
+are in `PHONE_SET` now, and the copy is 2,493 rows in 11.3 MB instead of 1,878 in 11.1 MB. And
+`Person::from_record` looked for `email` and `phone` while `capabilities/entities` writes `emails`
+and `phones` as arrays, so no contact card on either client had ever shown an email or a phone
+number; the parser accepts both spellings now, which is a Mac fix as much as a phone one.
+
+All three tabs ship on TestFlight (build 1363, internal group `Team`), the only distribution today.
+The touch check is `host/UITests/JoinTap.swift`. `SJEL_TAB=calendar`, `SJEL_TAB=people`,
+`SJEL_REGISTER=places`, `SJEL_PERSON=Ada` and `SJEL_DAY=2026-10-21` open a given tab, register, card
+and day at launch, which is how `ios/run-sim` and a screenshot reach a page that is not the first one
+without a hand on the screen.
 
 ### Shipping it to TestFlight
 

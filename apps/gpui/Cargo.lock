@@ -6964,6 +6964,7 @@ dependencies = [
  "sha2 0.11.1",
  "sjel-config",
  "sjel-credentials",
+ "sjel-links",
  "tokio",
  "zeroize",
 ]
@@ -7006,6 +7007,15 @@ name = "sjel-http"
 version = "0.1.0"
 dependencies = [
  "reqwest 0.13.5",
+]
+
+[[package]]
+name = "sjel-links"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "sha2 0.11.1",
 ]
 
 [[package]]

@@ -21,6 +21,10 @@ import {
 	type DatalabMode,
 } from "./datalab-pdf-extract.ts";
 import { isGeminiApiAvailable } from "./gemini-api.ts";
+import {
+	extractPDFViaEndpoint,
+	isEndpointApiAvailable,
+} from "./endpoint-pdf-extract.ts";
 import { extractPDFViaGemini } from "./gemini-pdf-extract.ts";
 import { getWebSearchConfigPath } from "./utils.ts";
 
@@ -41,10 +45,11 @@ export interface PDFExtractOptions {
 	geminiTimeoutMs?: number;
 }
 
-export type PDFProvider = "auto" | "gemini" | "datalab" | "unpdf";
+export type PDFProvider = "auto" | "endpoint" | "gemini" | "datalab" | "unpdf";
 
 export const PDF_PROVIDER_VALUES = new Set<PDFProvider>([
 	"auto",
+	"endpoint",
 	"gemini",
 	"datalab",
 	"unpdf",
@@ -184,6 +189,32 @@ export async function extractPDFToMarkdown(
 	const urlTitle = extractTitleFromURL(url);
 	const provider = pdfConfig.provider;
 
+	if (provider === "auto" || provider === "endpoint") {
+		if (provider === "endpoint" && !isEndpointApiAvailable()) {
+			throw new Error(
+				'PDF provider "endpoint" requires a configured pdf.endpointUrl',
+			);
+		}
+		try {
+			if (isEndpointApiAvailable()) {
+				const result = await extractPDFViaEndpoint(buffer, {
+					maxPages: safeMaxPages,
+					...(signal ? { signal } : {}),
+				});
+				return writeMarkdownResult({
+					markdownBody: result.markdown,
+					title: urlTitle,
+					pages: result.pages ?? countPageMarkers(result.markdown),
+					outputDir,
+					filename,
+					url,
+				});
+			}
+		} catch (err) {
+			if (shouldRethrowExtractionError(err, signal)) throw err;
+		}
+	}
+
 	if (provider === "auto" || provider === "datalab") {
 		try {
 			if (isDatalabApiAvailable()) {
@@ -307,9 +338,12 @@ async function writeMarkdownResult(options: {
 	lines.push(`# ${options.title}`);
 	lines.push("");
 	lines.push(`> Source: ${options.url}`);
-	lines.push(
-		`> Pages: ${options.pages}${options.truncated ? ` (extracted first ${options.pagesToExtract})` : ""}`,
-	);
+	// Providers that report no page count omit the line rather than claim zero pages.
+	if (options.pages > 0) {
+		lines.push(
+			`> Pages: ${options.pages}${options.truncated ? ` (extracted first ${options.pagesToExtract})` : ""}`,
+		);
+	}
 	if (options.metaAuthor) lines.push(`> Author: ${options.metaAuthor}`);
 	lines.push("");
 	lines.push("---");

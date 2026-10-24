@@ -2,10 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { activityMonitor } from "./activity.ts";
 import type { ExtractedContent } from "./extract.ts";
 import { hasCredentialSource, redactCredential, resolveCredential } from "./credential-source.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { formatSearchResultsAsAnswer } from "./search-answer-formatting.ts";
+import { getWebSearchConfigPath, resolveProviderApiUrl, fetchWithCredentialRedirects } from "./utils.ts";
 
-const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
+const PERPLEXITY_SEARCH_URL = "https://api.perplexity.ai/search";
+const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
 const CONFIG_PATH = getWebSearchConfigPath();
+const SEARCH_TIMEOUT_MS = 30_000;
 
 const RATE_LIMIT = {
 	maxRequests: 10,
@@ -34,6 +37,7 @@ export interface SearchOptions {
 }
 
 interface WebSearchConfig {
+	perplexityBaseUrl?: unknown;
 	perplexityApiKey?: unknown;
 }
 
@@ -105,22 +109,20 @@ export function isPerplexityAvailable(): boolean {
 	});
 }
 
-/** Hard ceiling on kept citations, matching the `numResults` clamp. */
-const MAX_CITATIONS = 20;
-
-// Preserve citation numbering by keeping the prefix through the highest cited index, capped at 20.
-function citationsToKeep(answer: string, available: number, numResults: number): number {
-	let highestCited = 0;
-	for (const match of answer.matchAll(/\[(\d{1,3})\]/g)) {
-		highestCited = Math.max(highestCited, Number(match[1]));
-	}
-	return Math.min(available, MAX_CITATIONS, Math.max(numResults, highestCited));
+interface PerplexityRequestOptions {
+	activityQuery: string;
+	signal?: AbortSignal;
 }
 
-export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+async function postPerplexity(
+	url: string,
+	body: Record<string, unknown>,
+	options: PerplexityRequestOptions,
+): Promise<Record<string, unknown>> {
+	const apiUrl = resolveProviderApiUrl("perplexity", url, loadConfig().perplexityBaseUrl);
 	checkRateLimit();
 
-	const activityId = activityMonitor.logStart({ type: "api", query });
+	const activityId = activityMonitor.logStart({ type: "api", query: options.activityQuery });
 
 	activityMonitor.updateRateLimit({
 		used: requestTimestamps.length,
@@ -130,40 +132,28 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
 	});
 
 	const apiKey = await getApiKey(options.signal);
-	const numResults = typeof options.numResults === "number" && Number.isFinite(options.numResults)
-		? Math.max(1, Math.min(Math.floor(options.numResults), 20))
-		: 5;
 
-	const requestBody: Record<string, unknown> = {
-		model: "sonar",
-		messages: [{ role: "user", content: query }],
-		max_tokens: 1024,
-		return_related_questions: false,
-	};
-
-	if (options.recencyFilter) {
-		requestBody.search_recency_filter = options.recencyFilter;
-	}
-
-	if (options.domainFilter && options.domainFilter.length > 0) {
-		const validated = validateDomainFilter(options.domainFilter);
-		if (validated.length > 0) {
-			requestBody.search_domain_filter = validated;
-		}
-	}
+	// Reported as a timeout, not an abort: a raw TimeoutError reads as cancellation and would end the search.
+	const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+	const timedOut = () => timeout.aborted && !options.signal?.aborted;
+	const timeoutError = () => new Error("Perplexity API error 408: request timed out");
 
 	let response: Response;
 	try {
-		response = await fetch(PERPLEXITY_API_URL, {
+		response = await fetchWithCredentialRedirects(apiUrl, {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify(requestBody),
-			...(options.signal ? { signal: options.signal } : {}),
-		});
+			body: JSON.stringify(body),
+			signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
+		}, ["Authorization"]);
 	} catch (err) {
+		if (timedOut()) {
+			activityMonitor.logError(activityId, "request timed out");
+			throw timeoutError();
+		}
 		const message = err instanceof Error ? err.message : String(err);
 		const redactedMessage = redactCredential(message, apiKey);
 		if (redactedMessage.toLowerCase().includes("abort")) {
@@ -177,39 +167,76 @@ export async function searchWithPerplexity(query: string, options: SearchOptions
 		throw redactedError;
 	}
 
+	activityMonitor.logComplete(activityId, response.status);
+
 	if (!response.ok) {
-		activityMonitor.logComplete(activityId, response.status);
-		const errorText = redactCredential(await response.text(), apiKey);
+		let errorText: string;
+		try {
+			errorText = redactCredential(await response.text(), apiKey);
+		} catch (err) {
+			if (timedOut()) throw timeoutError();
+			throw err;
+		}
 		throw new Error(`Perplexity API error ${response.status}: ${errorText}`);
 	}
 
-	let data: Record<string, unknown>;
 	try {
-		data = await response.json();
+		return await response.json();
 	} catch (err) {
-		activityMonitor.logComplete(activityId, response.status);
+		if (timedOut()) throw timeoutError();
 		const message = err instanceof Error ? err.message : String(err);
 		throw new Error(`Perplexity API returned invalid JSON: ${message}`);
 	}
+}
 
-	const answer = (data.choices as Array<{ message?: { content?: string } }>)?.[0]?.message?.content || "";
-	const citations = Array.isArray(data.citations) ? data.citations : [];
+export async function searchWithPerplexity(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+	const numResults = typeof options.numResults === "number" && Number.isFinite(options.numResults)
+		? Math.max(1, Math.min(Math.floor(options.numResults), 20))
+		: 5;
 
-	const results: SearchResult[] = [];
-	const citationCount = citationsToKeep(answer, citations.length, numResults);
-	for (let i = 0; i < citationCount; i++) {
-		const citation = citations[i];
-		if (typeof citation === "string") {
-			results.push({ title: `Source ${i + 1}`, url: citation, snippet: "" });
-		} else if (citation && typeof citation === "object" && typeof citation.url === "string") {
-			results.push({
-				title: citation.title || `Source ${i + 1}`,
-				url: citation.url,
-				snippet: "",
-			});
+	const requestBody: Record<string, unknown> = {
+		query,
+		max_results: numResults,
+		search_type: "fast",
+		search_context_size: "medium",
+	};
+
+	if (options.recencyFilter) {
+		requestBody.search_recency_filter = options.recencyFilter;
+	}
+
+	if (options.domainFilter && options.domainFilter.length > 0) {
+		const validated = validateDomainFilter(options.domainFilter);
+		if (validated.length > 0) {
+			requestBody.search_domain_filter = validated;
 		}
 	}
 
-	activityMonitor.logComplete(activityId, response.status);
-	return { answer, results };
+	const data = await postPerplexity(PERPLEXITY_SEARCH_URL, requestBody, { activityQuery: query, signal: options.signal });
+
+	const results: SearchResult[] = [];
+	for (const entry of Array.isArray(data.results) ? data.results : []) {
+		if (!entry || typeof entry !== "object" || typeof entry.url !== "string" || !entry.url) continue;
+		results.push({
+			title: typeof entry.title === "string" && entry.title.trim() ? entry.title.trim() : `Source ${results.length + 1}`,
+			url: entry.url,
+			snippet: typeof entry.snippet === "string" ? entry.snippet.trim() : "",
+		});
+		if (results.length >= numResults) break;
+	}
+
+	return { answer: formatSearchResultsAsAnswer(results), results };
+}
+
+/** Asks Sonar for a prose answer. The Search API returns only ranked pages, so prompts that need prose use this. */
+export async function askPerplexity(prompt: string, options: { signal?: AbortSignal } = {}): Promise<string> {
+	const data = await postPerplexity(PERPLEXITY_CHAT_URL, {
+		model: "sonar",
+		messages: [{ role: "user", content: prompt }],
+		max_tokens: 1024,
+		return_related_questions: false,
+	}, { activityQuery: prompt, signal: options.signal });
+
+	const content = (data.choices as Array<{ message?: { content?: unknown } }> | undefined)?.[0]?.message?.content;
+	return typeof content === "string" ? content : "";
 }

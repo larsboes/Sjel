@@ -5,7 +5,7 @@ import { resolve, extname, basename, join, dirname } from "node:path";
 import { activityMonitor } from "./activity.ts";
 import { canAttachImages } from "./feature-config.ts";
 import { isGeminiWebAvailable, queryWithCookies } from "./gemini-web.ts";
-import { queryGeminiApiWithVideo, getApiKey, fetchGeminiApi, getVersionedApiBase, getUploadBase, redactGeminiApiResponse } from "./gemini-api.ts";
+import { queryGeminiApiWithVideo, getApiKey, fetchGeminiApi, getVersionedApiBase, getUploadBase, redactGeminiApiResponse, rewriteUploadUrlOrigin } from "./gemini-api.ts";
 import { extractHeadingTitle, type ExtractedContent, type ExtractOptions, type FrameResult } from "./extract.ts";
 import { readExecError, trimErrorText, mapFfmpegError, getWebSearchConfigPath } from "./utils.ts";
 
@@ -249,7 +249,7 @@ async function tryVideoGeminiWeb(
 		if (signal?.aborted) return null;
 
 		const text = await queryWithCookies(prompt, cookies, {
-			files: [info.absolutePath],
+			files: [{ path: info.absolutePath, mimeType: info.mimeType }],
 			...(model !== "gemini-3.6-flash" ? { model } : {}),
 			signal,
 			timeoutMs: 180000,
@@ -333,9 +333,13 @@ async function uploadToFilesApi(
 
 	const uploadUrl = initRes.headers.get("x-goog-upload-url");
 	if (!uploadUrl) throw new Error("No upload URL in response headers");
+	// Google returns a DIRECT upload URL, which would bypass the configured gateway
+	// (unlogged spend + the gateway VK sent to Google). Re-originate it at getApiHost();
+	// no-op when no gateway is configured, since that is already the Google origin.
+	const routedUploadUrl = rewriteUploadUrlOrigin(uploadUrl);
 
 	const fileData = await readFile(info.absolutePath);
-	const uploadRes = await fetchGeminiApi(uploadUrl, {
+	const uploadRes = await fetchGeminiApi(routedUploadUrl, {
 		method: "PUT",
 		headers: {
 			"Content-Length": String(info.sizeBytes),

@@ -3,7 +3,7 @@ import { activityMonitor } from "./activity.ts";
 import { normalizeDomain } from "./domain-filter-normalization.ts";
 import type { SearchOptions, SearchResponse, SearchResult } from "./perplexity.ts";
 import { hasCredentialSource, redactCredential, resolveCredential } from "./credential-source.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { getWebSearchConfigPath, resolveProviderApiUrl, fetchWithCredentialRedirects } from "./utils.ts";
 
 const MISTRAL_CONVERSATIONS_URL = "https://api.mistral.ai/v1/conversations";
 const CONFIG_PATH = getWebSearchConfigPath();
@@ -15,6 +15,7 @@ const MAX_RESULTS = 20;
 type MistralSearchTool = "web_search" | "web_search_premium";
 
 interface WebSearchConfig {
+	mistralSearchBaseUrl?: unknown;
 	mistralApiKey?: unknown;
 	mistralSearchModel?: unknown;
 	mistralSearchTool?: unknown;
@@ -222,7 +223,7 @@ export async function searchWithMistral(query: string, options: SearchOptions = 
 	const activityId = activityMonitor.logStart({ type: "api", query });
 
 	try {
-		const response = await fetch(MISTRAL_CONVERSATIONS_URL, {
+		const response = await fetchWithCredentialRedirects(resolveProviderApiUrl("mistralSearch", MISTRAL_CONVERSATIONS_URL, loadConfig().mistralSearchBaseUrl), {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
@@ -235,7 +236,7 @@ export async function searchWithMistral(query: string, options: SearchOptions = 
 				tools: [{ type: tool }],
 			}),
 			signal: requestSignal,
-		});
+		}, ["Authorization"]);
 
 		if (!response.ok) {
 			const errorText = redactCredential(await response.text(), apiKey);

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { abortable } from '../Packs/harness/pi-packages/pi-subagents/src/abortable';
 import { installExtensionToolScope, resumeAgent, runAgent } from '../Packs/harness/pi-packages/pi-subagents/src/agent-runner';
 import { resolveModel } from '../Packs/harness/pi-packages/pi-subagents/src/model-resolver';
-import { extractHtmlContent } from '../Packs/harness/pi-packages/pi-web-access/extract';
+import { extractContent } from '../Packs/harness/pi-packages/pi-web-access/extract';
 import { formatSearchResultsAsAnswer } from '../Packs/harness/pi-packages/pi-web-access/search-answer-formatting';
 import { findModelWithProviderRouting } from '../Packs/harness/pi-packages/pi-web-access/summary-model-scope';
 
@@ -66,7 +66,10 @@ describe('subagent cancellation and outcomes', () => {
     const fixture = resumedSession({ role: 'assistant', content: [], stopReason: 'stop' });
     const controller = new AbortController();
     controller.abort(new Error('Stopped by caller'));
-    await expect(resumeAgent(fixture.session, 'continue', { signal: controller.signal })).rejects.toThrow('Stopped by caller');
+    // 0.22.0 does not reject: it returns without prompting. The contract is the prompt, not
+    // the exception — a cancelled resume must not start one or leave a listener behind.
+    const result = await resumeAgent(fixture.session, 'continue', { signal: controller.signal });
+    expect(result).toBeDefined();
     expect(fixture.prompts()).toBe(0);
     expect(fixture.listeners.size).toBe(0);
   });
@@ -128,14 +131,21 @@ describe('subagent tool scope', () => {
       agent: { beforeToolCall: async () => ({ block: true, reason: 'Parent policy' }) },
       getAllTools: () => ['read', 'bash', 'fetch', 'write', 'late', 'Agent'].map(name => ({ name })),
       getActiveToolNames: () => active,
+      getToolDefinition: () => undefined,
       setActiveToolsByName: (names: string[]) => { active = names; },
       subscribe: (listener: typeof onTurn) => { onTurn = listener; return () => {}; },
     };
+    // 0.22.0 routes the same check through the child's nested-call gate as well, so that a
+    // delegated grandchild is refused the tools its parent never had.
+    const nestedCallGate = { allows: (_name: string) => true };
     installExtensionToolScope(session as unknown as Session, {
       loader: { getExtensions: () => ({ extensions: [{ path: '/extensions/search/index.ts', tools: extensionTools }] }) } as unknown as Parameters<typeof installExtensionToolScope>[1]['loader'],
       toolNames: ['read', 'bash'], disallowedSet: new Set(['bash', 'write']),
       extNames: new Set(['search']), narrowing: new Map([['search', new Set(['fetch'])]]), readmitToolNames: new Set(),
+      nestedCallGate: nestedCallGate as unknown as Parameters<typeof installExtensionToolScope>[1]['nestedCallGate'],
     });
+    expect(nestedCallGate.allows('fetch')).toBe(true);
+    expect(nestedCallGate.allows('bash')).toBe(false);
     expect(active).toEqual(['read', 'fetch']);
     extensionTools.set('late', {});
     onTurn?.({ type: 'turn_end' });
@@ -148,25 +158,46 @@ describe('subagent tool scope', () => {
   });
 });
 
+// 0.44.0 removed the exported `extractHtmlContent` and inlined the HTML pipeline in the private
+// `extractViaHttp`, so the contract is driven through `extractContent` with a stubbed `fetch`.
+// That is the seam a caller actually uses, and it exercises the real Readability path.
+async function extractWith(html: string, url: string): Promise<Awaited<ReturnType<typeof extractContent>>> {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
+  try {
+    return await extractContent(url);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 describe('web content and attribution', () => {
   test('retains short HTML content and resolves links against the final page URL', async () => {
-    const result = await extractHtmlContent('<html><head><title>Reference</title></head><body><article><h1>Short reference</h1><p>A useful explanation with a <a href="guide">guide</a> and a short body.</p></article></body></html>', 'https://example.org/redirect', undefined, 'https://example.org/docs/page');
+    const html = '<html><head><title>Reference</title></head><body><article><h1>Short reference</h1><p>A useful explanation with a <a href="guide">guide</a> and a short body.</p></article></body></html>';
+    const result = await extractWith(html, 'https://example.org/redirect');
     expect(result.url).toBe('https://example.org/redirect');
     expect(result.content).toContain('A useful explanation');
-    expect(result.content).toContain('https://example.org/docs/guide');
-    expect(result.error).toContain('incomplete');
+    // Upstream 0.44.0 leaves linkedom's baseURI at "about:blank", so a relative href stays
+    // relative; the local anchor to the fetched URL is what makes this absolute.
+    expect(result.content).toContain('https://example.org/guide');
+    // 0.44.0 changed the policy this used to assert: a short STATIC page that yielded text is
+    // complete, and only a blank extraction or a scripted placeholder is reported incomplete.
+    expect(result.error).toBeNull();
   });
 
   test('HTML base declarations resolve relative source links', async () => {
     const html = '<html><head><base href="https://docs.example.org/reference/"><title>Links</title></head><body><article><h1>Reference links</h1><p>This page links to the <a href="guide">complete guide</a> for its details.</p></article></body></html>';
-    const result = await extractHtmlContent(html, 'https://example.org/original');
+    const result = await extractWith(html, 'https://example.org/original');
     expect(result.content).toContain('https://docs.example.org/reference/guide');
   });
 
   test('local HTML extraction respects an already-cancelled request', async () => {
     const controller = new AbortController();
     controller.abort(new Error('Stop extraction'));
-    await expect(extractHtmlContent('<p>Unused</p>', 'https://example.org', controller.signal)).rejects.toThrow('Stop extraction');
+    // 0.44.0 reports cancellation in the result instead of rejecting.
+    const result = await extractContent('https://example.org/unused', controller.signal);
+    expect(result.error).toBe('Aborted');
+    expect(result.content).toBe('');
   });
 
   test('formats clickable sources without losing snippets or URL parameters', () => {

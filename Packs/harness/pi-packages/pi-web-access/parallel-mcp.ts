@@ -98,6 +98,8 @@ async function callParallelMcp(
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
 		"Accept": "application/json, text/event-stream",
+		// Parallel's free tier rate-limits the default "undici" User-Agent.
+		"User-Agent": "pi-web-access",
 	};
 	if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 

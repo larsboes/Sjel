@@ -70,6 +70,8 @@ interface RenderData {
 	reviewThreadsBounded?: boolean;
 	reviewThreadsUnavailable?: boolean;
 	fallbackNotes: string[];
+	/** Retrieval tool the hints may name: unset means the default name, null means retrieval is not registered. */
+	retrievalTool?: string | null;
 }
 
 let cachedConfig: GitHubPrIssueConfig | null = null;
@@ -424,20 +426,38 @@ function milestoneTitle(value: unknown): string {
 	return stringValue((value as Record<string, unknown>).title) || "none";
 }
 
-function truncateText(text: string, limit: number, label: string, appendix: string[]): string {
+// The appendix holds the only copy of what an inline bound cuts, so each fetched text appears once.
+function truncateText(text: string, limit: number, label: string, appendix: string[], tool: string | null): string {
 	if (text.length <= limit) return text;
-	appendix.push(`## Full ${label}\n\n${text}`);
-	return `${text.slice(0, limit)}\n\n[${label} truncated; use get_search_content findText or offset for the full text]`;
+	// Cut at a word boundary near the limit so a search for one word still matches.
+	const lastSpace = text.slice(0, limit + 1).search(/\s\S*$/);
+	const cut = lastSpace > limit * 0.8 ? lastSpace : limit;
+	appendix.push(`## ${label} (continued)\n\n${text.slice(cut)}`);
+	return `${text.slice(0, cut)}\n\n[${label} truncated; ${tool ? `the rest is stored under "${label} (continued)": use ${tool} findText or offset` : "use the gh escalation commands below for the rest"}]`;
 }
 
-function appendLimitedSection(lines: string[], title: string, items: string[], max: number, marker: string): void {
+function storeOmitted(appendix: string[], section: string, items: string[]): void {
+	if (items.length > 0) appendix.push(`## ${section} (continued)\n\n${items.join("\n")}`);
+}
+
+/** `atLeast` means more items exist than were fetched; only gh can return those. */
+function omissionMarker(section: string, noun: string, shown: number, fetched: number, atLeast: number | null, tool: string | null, gh = "the gh command below"): string | null {
+	const stored = fetched > shown && tool ? `${fetched - shown} more stored under "${section} (continued)": use ${tool} findText or offset` : "";
+	if (atLeast !== null) return `[${shown} ${noun} shown from at least ${atLeast}; ${stored ? `${stored}; for the rest ` : ""}use ${gh}]`;
+	if (fetched <= shown) return null;
+	return `[${shown} of ${fetched} ${noun} shown; ${stored ? `${stored}, or ${gh}` : `use ${gh}`}]`;
+}
+
+function appendLimitedSection(lines: string[], title: string, items: string[], max: number, marker: string, appendix: string[], tool: string | null): void {
 	lines.push(`## ${title}`);
 	if (items.length === 0) {
 		lines.push("none", "");
 		return;
 	}
 	lines.push(...items.slice(0, max));
-	if (items.length > max) lines.push(`[${max} of ${items.length} ${marker} shown; use get_search_content offset or the gh command below for more]`);
+	storeOmitted(appendix, title, items.slice(max));
+	const omitted = omissionMarker(title, marker, max, items.length, null, tool);
+	if (omitted) lines.push(omitted);
 	lines.push("");
 }
 
@@ -456,25 +476,19 @@ function anchorMatches(anchor: string | undefined, comment: Record<string, unkno
 	return anchor === `issuecomment-${id}` || anchor === `discussion_r${id}`;
 }
 
-function renderComments(comments: Record<string, unknown>[], anchor: string | undefined, appendix: string[]): string[] {
+function renderComments(comments: Record<string, unknown>[], anchor: string | undefined, appendix: string[], tool: string | null): string[] {
 	const forced = anchor ? comments.find(comment => anchorMatches(anchor, comment)) : undefined;
 	const selected = comments.slice(0, MAX_INLINE_COMMENTS);
 	if (forced && !selected.includes(forced)) selected.push(forced);
-	const lines = selected.map((comment) => {
+	const render = (comment: Record<string, unknown>, inline: boolean) => {
 		const body = stringValue(comment.body);
-		const label = `comment ${commentId(comment) || selected.indexOf(comment) + 1}`;
-		return `- ${authorLogin(comment.author ?? comment.user)} at ${stringValue(comment.createdAt) || stringValue(comment.created_at)}${forced === comment ? " [anchored]" : ""}:\n  ${truncateText(body, COMMENT_INLINE_CHARS, label, appendix).replace(/\n/g, "\n  ")}`;
-	});
+		const label = `comment ${commentId(comment) || comments.indexOf(comment) + 1}`;
+		const text = inline ? truncateText(body, COMMENT_INLINE_CHARS, label, appendix, tool) : body;
+		return `- ${authorLogin(comment.author ?? comment.user)} at ${stringValue(comment.createdAt) || stringValue(comment.created_at)}${forced === comment ? " [anchored]" : ""}:\n  ${text.replace(/\n/g, "\n  ")}`;
+	};
+	const lines = selected.map(comment => render(comment, true));
+	storeOmitted(appendix, "Conversation comments", comments.slice(MAX_INLINE_COMMENTS).filter(comment => comment !== forced).map(comment => render(comment, false)));
 	return lines;
-}
-
-function renderCommentMarker(comments: Record<string, unknown>[], renderedCount: number, total: unknown): string | null {
-	const knownTotal = numberValue(total);
-	if (knownTotal !== null && knownTotal > comments.length) {
-		return `[${renderedCount} comments shown from at least ${knownTotal}; use get_search_content findText or offset, or gh issue view -c]`;
-	}
-	if (comments.length > renderedCount) return `[${renderedCount} of ${comments.length} comments shown; use get_search_content findText or offset, or gh issue view -c]`;
-	return null;
 }
 
 function commentCountText(view: Record<string, unknown>): string {
@@ -492,7 +506,7 @@ function reviewThreadCountText(comments: Record<string, unknown>[], total: unkno
 	return String(comments.length || knownTotal || 0);
 }
 
-function renderChecks(value: unknown): string[] {
+function renderChecks(value: unknown, appendix: string[], tool: string | null): string[] {
 	const checks = objectArray(value);
 	if (checks.length === 0) return ["No check rollup data available."];
 	const rows = checks.map((check) => {
@@ -501,21 +515,23 @@ function renderChecks(value: unknown): string[] {
 		return `- ${name}: ${state}`;
 	});
 	const failing = rows.filter(row => !/(success|neutral|skipped|completed)$/i.test(row));
-	return [`Rollup: ${failing.length === 0 ? "no failing checks in shown data" : `${failing.length} non-passing checks in shown data`}`, ...rows.slice(0, MAX_INLINE_CHECKS), ...(rows.length > MAX_INLINE_CHECKS ? [`[${MAX_INLINE_CHECKS} of ${rows.length} checks shown]`] : [])];
+	storeOmitted(appendix, "Checks", rows.slice(MAX_INLINE_CHECKS));
+	const omitted = omissionMarker("Checks", "checks", MAX_INLINE_CHECKS, rows.length, null, tool);
+	return [`Rollup: ${failing.length === 0 ? "no failing checks in shown data" : `${failing.length} non-passing checks in shown data`}`, ...rows.slice(0, MAX_INLINE_CHECKS), ...(omitted ? [omitted] : [])];
 }
 
-function renderReviewVerdicts(value: unknown, appendix: string[]): string[] {
+function renderReviewVerdicts(value: unknown, appendix: string[], tool: string | null): string[] {
 	const latest = new Map<string, Record<string, unknown>>();
 	for (const review of objectArray(value)) latest.set(authorLogin(review.author ?? review.user), review);
 	return [...latest.entries()].map(([author, review]) => {
 		const state = stringValue(review.state) || "COMMENTED";
-		const body = truncateText(stringValue(review.body), 300, `review by ${author}`, appendix);
+		const body = truncateText(stringValue(review.body), 300, `review by ${author}`, appendix, tool);
 		return `- ${author}: ${state}${body ? ` — ${body.replace(/\n/g, " ")}` : ""}`;
 	});
 }
 
-function renderReviewVerdictsOrUnavailable(view: Record<string, unknown>, appendix: string[]): string[] {
-	const rendered = renderReviewVerdicts(view.reviews, appendix);
+function renderReviewVerdictsOrUnavailable(view: Record<string, unknown>, appendix: string[], tool: string | null): string[] {
+	const rendered = renderReviewVerdicts(view.reviews, appendix, tool);
 	if (rendered.length > 0) return rendered;
 	return view.reviewsUnavailable === true ? ["Unavailable in this GitHub fetch path; use gh for review verdicts."] : [];
 }
@@ -529,25 +545,15 @@ function renderFiles(value: unknown): string[] {
 	});
 }
 
-function appendFilesSection(lines: string[], view: Record<string, unknown>): void {
+function appendFilesSection(lines: string[], view: Record<string, unknown>, appendix: string[], tool: string | null): void {
 	lines.push("## Files");
 	const files = renderFiles(view.files);
-	if (files.length === 0) {
-		const total = numberValue(view.changedFiles);
-		if (total !== null && total > 0) {
-			lines.push(`[0 files shown from at least ${total}; use get_search_content offset or the gh command below for more]`, "");
-			return;
-		}
-		lines.push("none", "");
-		return;
-	}
-	lines.push(...files.slice(0, MAX_INLINE_FILES));
 	const total = numberValue(view.changedFiles);
-	if (total !== null && total > files.length) {
-		lines.push(`[${Math.min(files.length, MAX_INLINE_FILES)} files shown from at least ${total}; use get_search_content offset or the gh command below for more]`);
-	} else if (files.length > MAX_INLINE_FILES) {
-		lines.push(`[${MAX_INLINE_FILES} of ${files.length} files shown; use get_search_content offset or the gh command below for more]`);
-	}
+	const omitted = omissionMarker("Files", "files", Math.min(files.length, MAX_INLINE_FILES), files.length, total !== null && total > files.length ? total : null, tool);
+	if (files.length === 0 && !omitted) lines.push("none");
+	lines.push(...files.slice(0, MAX_INLINE_FILES));
+	storeOmitted(appendix, "Files", files.slice(MAX_INLINE_FILES));
+	if (omitted) lines.push(omitted);
 	lines.push("");
 }
 
@@ -575,31 +581,31 @@ function renderLinkedOrUnavailable(view: Record<string, unknown>, field: "closin
 	return view.linkedReferencesUnavailable === true ? ["Unavailable in this GitHub fetch path; use gh for linked references."] : [];
 }
 
-function renderReviewThreads(comments: Record<string, unknown>[], anchor: string | undefined, appendix: string[], total?: unknown, bounded?: boolean, unavailable?: boolean): string[] {
+function renderReviewThreads(comments: Record<string, unknown>[], anchor: string | undefined, appendix: string[], tool: string | null, total?: unknown, bounded?: boolean, unavailable?: boolean): string[] {
 	if (unavailable) return ["Unavailable in this GitHub fetch path; use gh for review thread comments."];
 	const forced = anchor ? comments.find(comment => anchorMatches(anchor, comment)) : undefined;
 	const selected = comments.slice(0, MAX_INLINE_REVIEW_THREADS);
 	if (forced && !selected.includes(forced)) selected.push(forced);
-	const lines = selected.map((comment) => {
+	const render = (comment: Record<string, unknown>, inline: boolean) => {
 		const path = stringValue(comment.path) || "unknown path";
 		const line = numberValue(comment.line) ?? numberValue(comment.original_line) ?? numberValue(comment.position) ?? "?";
-		const body = truncateText(stringValue(comment.body), COMMENT_INLINE_CHARS, `review thread comment ${commentId(comment) || selected.indexOf(comment) + 1}`, appendix);
+		const text = stringValue(comment.body);
+		const body = inline ? truncateText(text, COMMENT_INLINE_CHARS, `review thread comment ${commentId(comment) || comments.indexOf(comment) + 1}`, appendix, tool) : text;
 		return `- ${path}:${line} — ${authorLogin(comment.user ?? comment.author)}${forced === comment ? " [anchored]" : ""} (resolution state unknown):\n  ${body.replace(/\n/g, "\n  ")}`;
-	});
+	};
+	const lines = selected.map(comment => render(comment, true));
+	storeOmitted(appendix, "Review thread comments", comments.slice(MAX_INLINE_REVIEW_THREADS).filter(comment => comment !== forced).map(comment => render(comment, false)));
 	const knownTotal = numberValue(total);
-	if (bounded) {
-		lines.push(`[${selected.length} review thread comments shown from at least ${comments.length}; use get_search_content offset, or gh api repos/<owner>/<repo>/pulls/<number>/comments]`);
-	} else if (knownTotal !== null && knownTotal > comments.length) {
-		lines.push(`[${selected.length} review thread comments shown from at least ${knownTotal}; use get_search_content offset, or gh api repos/<owner>/<repo>/pulls/<number>/comments]`);
-	} else if (comments.length > selected.length) {
-		lines.push(`[${selected.length} of ${comments.length} review thread comments shown; use get_search_content offset, or gh api repos/<owner>/<repo>/pulls/<number>/comments]`);
-	}
+	const atLeast = bounded ? comments.length : knownTotal !== null && knownTotal > comments.length ? knownTotal : null;
+	const omitted = omissionMarker("Review thread comments", "review thread comments", selected.length, comments.length, atLeast, tool, "gh api repos/<owner>/<repo>/pulls/<number>/comments");
+	if (omitted) lines.push(omitted);
 	return lines;
 }
 
 export function renderGitHubPrIssue(data: RenderData): ExtractedContent {
 	const { view } = data;
 	const appendix: string[] = [];
+	const tool = data.retrievalTool === undefined ? "get_search_content" : data.retrievalTool;
 	const title = stringValue(view.title) || `${data.owner}/${data.repo}#${data.number}`;
 	const number = numberValue(view.number) ?? data.number;
 	const stateParts = [stringValue(view.state) || "unknown"];
@@ -628,44 +634,48 @@ export function renderGitHubPrIssue(data: RenderData): ExtractedContent {
 	lines.push("");
 
 	lines.push("## Body");
-	lines.push(truncateText(stringValue(view.body) || "(empty)", BODY_INLINE_CHARS, "body", appendix), "");
+	lines.push(truncateText(stringValue(view.body) || "(empty)", BODY_INLINE_CHARS, "body", appendix, tool), "");
 
 	if (data.kind === "pull") {
 		lines.push("## Checks");
-		lines.push(...renderChecks(view.statusCheckRollup), "");
-		appendLimitedSection(lines, "Review verdicts", renderReviewVerdictsOrUnavailable(view, appendix), MAX_INLINE_REVIEWS, "review verdicts");
-		appendLimitedSection(lines, "Linked references", renderLinkedOrUnavailable(view, "closingIssuesReferences", "closing"), 20, "linked references");
-		appendFilesSection(lines, view);
-		appendLimitedSection(lines, "Commits", renderCommitsOrUnavailable(view), MAX_INLINE_COMMITS, "commits");
+		lines.push(...renderChecks(view.statusCheckRollup, appendix, tool), "");
+		appendLimitedSection(lines, "Review verdicts", renderReviewVerdictsOrUnavailable(view, appendix, tool), MAX_INLINE_REVIEWS, "review verdicts", appendix, tool);
+		appendLimitedSection(lines, "Linked references", renderLinkedOrUnavailable(view, "closingIssuesReferences", "closing"), 20, "linked references", appendix, tool);
+		appendFilesSection(lines, view, appendix, tool);
+		appendLimitedSection(lines, "Commits", renderCommitsOrUnavailable(view), MAX_INLINE_COMMITS, "commits", appendix, tool);
 	} else {
-		appendLimitedSection(lines, "Closed by pull requests", renderLinkedOrUnavailable(view, "closedByPullRequestsReferences", "closedBy"), 20, "pull requests");
+		appendLimitedSection(lines, "Closed by pull requests", renderLinkedOrUnavailable(view, "closedByPullRequestsReferences", "closedBy"), 20, "pull requests", appendix, tool);
 	}
 	lines.push("## Conversation comments");
-	const commentLines = renderComments(objectArray(view.comments), data.anchor, appendix);
-	const commentMarker = renderCommentMarker(objectArray(view.comments), commentLines.length, view.commentsCount);
+	const comments = objectArray(view.comments);
+	const commentLines = renderComments(comments, data.anchor, appendix, tool);
+	const knownCommentTotal = numberValue(view.commentsCount);
+	const commentMarker = omissionMarker("Conversation comments", "comments", commentLines.length, comments.length, knownCommentTotal !== null && knownCommentTotal > comments.length ? knownCommentTotal : null, tool, "gh issue view -c");
 	if (commentMarker) commentLines.push(commentMarker);
 	if (view.anchorUnavailable === true && data.anchor?.startsWith("issuecomment-")) commentLines.push("[anchored comment unavailable for this issue or pull request]");
 	lines.push(...(commentLines.length > 0 ? commentLines : ["none"]), "");
 	if (data.kind === "pull") {
 		lines.push("## Review thread comments");
-		const threadLines = renderReviewThreads(data.reviewThreads, data.anchor, appendix, view.reviewCommentsCount, data.reviewThreadsBounded, data.reviewThreadsUnavailable);
+		const threadLines = renderReviewThreads(data.reviewThreads, data.anchor, appendix, tool, view.reviewCommentsCount, data.reviewThreadsBounded, data.reviewThreadsUnavailable);
 		if (view.anchorUnavailable === true && data.anchor?.startsWith("discussion_r")) threadLines.push("[anchored review thread comment unavailable for this pull request]");
 		lines.push(...(threadLines.length > 0 ? threadLines : ["none"]), "");
 	}
 	if (data.fallbackNotes.length > 0) {
 		lines.push("## Availability notes", ...data.fallbackNotes.map(note => `- ${note}`), "");
 	}
-	if (appendix.length > 0) lines.push("## Appendix", ...appendix, "");
 	const viewCommand = data.kind === "pull" ? `gh pr view ${data.number} --repo ${data.owner}/${data.repo}` : `gh issue view ${data.number} --repo ${data.owner}/${data.repo} -c`;
+	const diffCommand = data.kind === "pull" ? `gh pr diff ${data.number} --repo ${data.owner}/${data.repo}` : "";
 	lines.push("## Escalation commands");
 	lines.push(`- Full view: \`${viewCommand}\``);
-	if (data.kind === "pull") lines.push(`- Complete diff: \`gh pr diff ${data.number} --repo ${data.owner}/${data.repo}\``);
-	lines.push("- Stored full document: use `get_search_content` with `offset` or `findText`.");
+	if (diffCommand) lines.push(`- Complete diff: \`${diffCommand}\``);
+	if (tool) lines.push(`- Stored full document: use \`${tool}\` with \`offset\` or \`findText\`.`);
+	// Last, so a document cut at MAX_DOC_CHARS keeps everything above it.
+	if (appendix.length > 0) lines.push("", "## Appendix", "", appendix.join("\n\n"));
 	const content = lines.join("\n");
 	return {
 		url: data.url,
 		title: `${data.owner}/${data.repo} ${data.kind} #${data.number}: ${title}`,
-		content: content.length > MAX_DOC_CHARS ? `${content.slice(0, MAX_DOC_CHARS)}\n\n[GitHub document truncated at ${MAX_DOC_CHARS} chars; use the gh escalation commands for complete data]` : content,
+		content: content.length > MAX_DOC_CHARS ? `${content.slice(0, MAX_DOC_CHARS)}\n\n[GitHub document truncated at ${MAX_DOC_CHARS} chars; use \`${viewCommand}\`${diffCommand ? ` or \`${diffCommand}\`` : ""} for complete data]` : content,
 		error: null,
 	};
 }
@@ -676,6 +686,8 @@ export async function extractGitHubIssuePr(url: string, signal?: AbortSignal, op
 	if (!loadConfig().enabled) return null;
 	if (signal?.aborted) return { url, title: "", content: "", error: "Aborted" };
 
+	// Callers that report registered tools also report whether retrieval is registered.
+	const retrievalTool = options?.toolNames ? options.toolNames.getSearchContent ?? null : undefined;
 	const ghAvailable = await checkGhAvailable(signal);
 	if (signal?.aborted) return { url, title: "", content: "", error: "Aborted" };
 	if (ghAvailable) {
@@ -687,7 +699,7 @@ export async function extractGitHubIssuePr(url: string, signal?: AbortSignal, op
 			if (signal?.aborted) return { url, title: "", content: "", error: "Aborted" };
 			if (threads.anchorUnavailable) viewed.view.anchorUnavailable = true;
 			const notes = [...viewed.notes, ...(threads.note ? [threads.note] : [])];
-			return renderGitHubPrIssue({ url, owner: info.owner, repo: info.repo, kind: info.kind, number: info.number, anchor: info.anchor, view: viewed.view, reviewThreads: threads.comments, reviewThreadsBounded: threads.bounded, reviewThreadsUnavailable: threads.unavailable, fallbackNotes: notes });
+			return renderGitHubPrIssue({ url, owner: info.owner, repo: info.repo, kind: info.kind, number: info.number, anchor: info.anchor, view: viewed.view, reviewThreads: threads.comments, reviewThreadsBounded: threads.bounded, reviewThreadsUnavailable: threads.unavailable, fallbackNotes: notes, retrievalTool });
 		}
 	} else {
 		showGhHint();
@@ -695,6 +707,6 @@ export async function extractGitHubIssuePr(url: string, signal?: AbortSignal, op
 
 	const fallback = await restFallback(url, info, options, signal);
 	if (!fallback) return null;
-	if ("data" in fallback) return renderGitHubPrIssue(fallback.data);
+	if ("data" in fallback) return renderGitHubPrIssue({ ...fallback.data, retrievalTool });
 	return fallback;
 }

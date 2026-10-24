@@ -71,6 +71,10 @@ export async function searchWithDuckDuckGo(query: string, options: SearchOptions
 
 		const { parseHTML } = await import("linkedom");
 		const { document } = parseHTML(await response.text());
+		// The bot check answers 202 or a challenge page; "rate limited" makes routing classify it as quota.
+		if (response.status === 202 || document.querySelector(".anomaly-modal__box, #challenge-form")) {
+			throw new Error(`DuckDuckGo blocked the request with a bot check (HTTP ${response.status}, rate limited); use another search provider`);
+		}
 		const filters = normalizeDomainFilters(options.domainFilter);
 		const results: SearchResult[] = [];
 		let parseableResults = 0;
@@ -87,7 +91,7 @@ export async function searchWithDuckDuckGo(query: string, options: SearchOptions
 			results.push({ title, url: resultUrl, snippet });
 			if (results.length >= normalizeSearchResultCount(options.numResults)) break;
 		}
-		if (parseableResults === 0) {
+		if (parseableResults === 0 && !document.querySelector(".no-results__message")) {
 			throw new Error("DuckDuckGo returned no parseable results (invalid response)");
 		}
 

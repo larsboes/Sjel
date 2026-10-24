@@ -23,7 +23,7 @@ export interface DeclaredWebLink {
 }
 
 export function discoverDeclaredWebLinks(
-	document: Document,
+	document: Document | null,
 	linkHeader: string | null,
 	responseUrl: string,
 ): DeclaredWebLink[] {
@@ -41,7 +41,7 @@ export function discoverDeclaredWebLinks(
 		if (links.size >= MAX_DECLARED_LINKS) break;
 	}
 
-	if (links.size < MAX_DECLARED_LINKS) {
+	if (document && links.size < MAX_DECLARED_LINKS) {
 		const declaredBase = document.querySelector("base[href]")?.getAttribute("href");
 		const documentBase = resolveHttpUrl(declaredBase, responseUrl) ?? responseUrl;
 		for (const element of document.querySelectorAll("link[rel][href], a[rel][href]")) {
@@ -96,7 +96,7 @@ function declaredRelations(value: string | null | undefined): string[] {
 	)];
 }
 
-function resolveHttpUrl(value: string | null | undefined, baseUrl: string): string | null {
+export function resolveHttpUrl(value: string | null | undefined, baseUrl: string): string | null {
 	if (!value || value.length > MAX_DECLARED_URL_LENGTH) return null;
 	try {
 		const url = new URL(value, baseUrl);

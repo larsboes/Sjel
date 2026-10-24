@@ -68,6 +68,8 @@ export interface StoredSearchData {
 }
 
 const storedResults = new Map<string, StoredSearchData>();
+/** How many live sessions hold each result. Sessions forked from one history hold the same ids. */
+const resultHolders = new Map<string, number>();
 
 export function generateId(): string {
 	return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -455,11 +457,40 @@ export function deleteResult(id: string): boolean {
 			}
 		} catch {}
 	}
+	resultHolders.delete(id);
 	return storedResults.delete(id);
 }
 
 export function clearResults(): void {
 	storedResults.clear();
+	resultHolders.clear();
+}
+
+/** Record that one more live session holds each of these results. */
+export function holdResults(ids: Iterable<string>): void {
+	for (const id of ids) resultHolders.set(id, (resultHolders.get(id) ?? 0) + 1);
+}
+
+/** Release one session's hold on each result, and drop a result from memory once no live
+ * session holds it. Unlike deleteResult, the fetch cache files stay: the session journal
+ * still references them, and a later restore reads them back. */
+export function releaseResults(ids: Iterable<string>): void {
+	for (const id of ids) {
+		const holders = (resultHolders.get(id) ?? 0) - 1;
+		if (holders > 0) {
+			resultHolders.set(id, holders);
+			continue;
+		}
+		resultHolders.delete(id);
+		storedResults.delete(id);
+	}
+}
+
+/** Delete a result for one session that holds it. Other live sessions holding the same
+ * result keep it and its fetch cache file; the last holder deletes both. */
+export function deleteHeldResult(id: string): void {
+	if ((resultHolders.get(id) ?? 0) > 1) releaseResults([id]);
+	else deleteResult(id);
 }
 
 function isValidStoredData(data: unknown): data is StoredSearchData {
@@ -480,15 +511,33 @@ function isValidStoredData(data: unknown): data is StoredSearchData {
 
 export function restoreFromSession(ctx: ExtensionContext): void {
 	storedResults.clear();
+	loadSessionResults(ctx);
+}
+
+/** Add one session's stored results to memory, leaving other sessions' results in place,
+ * and return the results it loaded. A host that runs several sessions at once (one extension
+ * instance per session) restores each with this, holds their ids with holdResults, and
+ * releases them with releaseResults. */
+export function loadSessionResults(ctx: ExtensionContext): StoredSearchData[] {
 	const now = Date.now();
 	pruneExpiredFetchCache(now);
 
+	const loaded: StoredSearchData[] = [];
 	for (const entry of ctx.sessionManager.getBranch()) {
 		if (entry.type === "custom" && entry.customType === "web-search-results") {
 			const data = entry.data;
 			if (isValidStoredData(data) && now - data.timestamp < CACHE_TTL_MS) {
+				// Another live session may hold this result with its fetched content in memory;
+				// the journal copy only points at the disk cache, which can be pruned.
+				const live = storedResults.get(data.id);
+				if (live) {
+					loaded.push(live);
+					continue;
+				}
 				storedResults.set(data.id, data);
+				loaded.push(data);
 			}
 		}
 	}
+	return loaded;
 }

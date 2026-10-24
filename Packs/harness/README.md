@@ -196,8 +196,8 @@ What the port changed, and why:
 
 ### pi-subagents (vendored, not ported)
 
-[tintinweb/pi-subagents](https://github.com/tintinweb/pi-subagents), MIT, pinned `e955e29`
-(v0.19.0 plus one commit, 2026-09-16). Full grant text in this Pack's [`LICENSE`](LICENSE).
+[tintinweb/pi-subagents](https://github.com/tintinweb/pi-subagents), MIT, revision `v0.22.0`
+(2026-10-24; 0.19.0/`e955e29` was the previous pin). Full grant text in this Pack's [`LICENSE`](LICENSE).
 
 These are the three things in this pack that are somebody else's code, and this is why each is
 here rather than left to its own installer: pi has no subagent tool without pi-subagents,
@@ -209,7 +209,7 @@ manager and the web access every session uses.
 | Vendored | `pi-packages/pi-subagents/` — `src/`, `package.json`, `tsconfig.json`, `LICENSE` |
 | Not copied | `docs/`, `examples/`, `.github/`, `media/`, and the upstream README and CHANGELOG. `test/` was not copied either — the one file in it now is ours |
 | Not committed | `node_modules/` (installed in place), and upstream's own lockfile (the local `bun.lock` is committed) |
-| Local deltas | FOUR. (1) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `tsconfig.json` is upstream's, added to the vendored set so a customization can be typechecked before a restart. (2) `"overrides": { "undici": "^8.10.2" }` in `package.json`, added 2026-09-29 for GHSA-3wwx-pv8p-q78v / CVE-2026-85024: undici's WebSocket client kills the whole process on a malformed permessage-deflate block, fixed in 8.10.2. An update cannot reach it, because the vendored dev version of `@earendil-works/pi-coding-agent` pins `"undici": "8.9.0"` **exactly** — so the resolution sat one patch below the fix. `bun install` resolved the lockfile to 8.11.2 and `osv-scanner` reports no issues. (3) Host-provided `@sinclair/typebox` and `typebox` moved from runtime dependencies to `"*"` peers; the three pi peers also use `"*"`. This follows Pi 0.99's extension-loader contract and removes duplicate-module warnings. (4) `resolveModel` scopes a `provider/modelId` query to that provider, added 2026-10-03 with `test/model-resolver.test.ts` as its regression. OpenRouter publishes the upstream provider inside the model id, so its `anthropic/claude-haiku-4.5` normalizes to exactly the query `anthropic/claude-haiku-4-5`, scored 100 in the fuzzy pass, and beat every real candidate — which routed the built-in `Explore` agent's pin to a gateway the config never named, where the request was refused on that account's balance. An unreachable pin now falls through to the bare id on another provider (step 3, as documented) or reports itself unresolved (step 4), instead of silently choosing a different gateway. |
+| Local deltas | FOUR source files differ from upstream `v0.22.0`, plus packaging. (1) `src/model-resolver.ts` scopes a `provider/modelId` query to that provider, added 2026-10-03 with `test/model-resolver.test.ts` as its regression — upstream never took it. OpenRouter publishes the upstream provider inside the model id, so its `anthropic/claude-haiku-4.5` normalizes to exactly the query `anthropic/claude-haiku-4-5`, scored 100 in the fuzzy pass, and beat every real candidate — which routed the built-in `Explore` agent's pin to a gateway the config never named, where the request was refused on that account's balance. An unreachable pin now falls through to the bare id on another provider (step 3, as documented) or reports itself unresolved (step 4), instead of silently choosing a different gateway. (2) `src/agent-runner.ts` keeps two guards 0.22.0 dropped: `runAgent` throws on its signal before it consults the parent's system prompt or creates a session, and `finalTurnError` reports a provider `aborted` stop as a failure, leaving a caller-initiated stop to the manager's flag. (3) `src/abortable.ts` observes work already started when its caller stops waiting, so a later rejection is still handled. (4) One doc comment in `src/output-file.ts`: its POSIX path example became a placeholder so it stops reading as a workstation path to `tools/check-publication-hygiene.sh`. No behavioural change. `src/workflow/collisions.ts` needed nothing — 0.22.0 ships the lowercase `workflow` entry the old local patch added. Packaging: `"overrides": { "undici": "^8.12.3" }` (see the CVE note below), host-provided `@sinclair/typebox` and `typebox` kept as `"*"` peers rather than devDependencies with the three pi peers also `"*"`, and the three pi SDK devDependencies pinned to `1.4.0` — the version this machine runs — because their only job is `bun run typecheck`. `tsconfig.json` is ours, kept from the first vendoring so a customization can be typechecked before a restart. |
 
 | Owner | Sjel. Upstream is a source to re-read, not a dependency that updates itself — `pi update` does not touch a local-path package |
 
@@ -219,15 +219,13 @@ The file is Claude-native like every other agent source in the repo, but it is d
 
 That decision was prose until 2026-10-09, and prose does not stop a deploy: `tools/packs-claude sync harness` writes every unit a Pack carries, so running it to ship an edit to `harness-sync` also put `Explore.md` into `~/.claude/agents/harness/` — the exact harm above, done by the routine verb. It is now declared in `profiles.toml`'s `[unit_hold]` table as `claude = ["harness/agents/"]`: `deploy` and `sync` skip the unit and say why, and `tools/doctor` reports it as held back instead of warning that it is missing — and as a violation if it is ever deployed anyway. A held unit is never removed by `sync` either, so the override is reported rather than silently undone.
 
-**Known drift, measured 2026-10-01.** The pi SDK devDependencies here pin `0.84.2`, the version
-upstream developed against, while this machine runs Pi `1.0.0`. Raising them to `0.99.2` makes
-`bun run typecheck` fail in `src/mention-clone.ts` — `ExtensionContext` is no longer assignable to
-`ExtensionToolContext` (missing `tools`, `executeTool`, line 128) and `systemPrompt` is read-only
-(line 178). The pins were left where upstream put them rather than carrying a local patch into the
-mention-clone path; the drift is written down so the next person decides with the measurement in
-hand instead of rediscovering it. Editing the tree is allowed — this is a choice, not a rule.
-`e955e29` is upstream HEAD, so there is nothing newer to take either. The mention-clone path is the
-one that may feel this at runtime, since the second error is a property Pi now marks read-only.
+**Drift closed, measured 2026-10-24.** The pi SDK devDependencies used to pin `0.84.2`, the
+version upstream developed against, and raising them to `0.99.2` failed `bun run typecheck` in
+`src/mention-clone.ts` — `ExtensionContext` no longer assignable to `ExtensionToolContext`, and
+`systemPrompt` read-only. `v0.22.0` rewrote that path, so the pins now sit at `1.4.0` — the
+version this machine runs — and `bun run typecheck` passes with no local patch in the
+mention-clone path. The measurement above is kept because it is why the pins were left alone for
+three weeks, not because it still holds.
 
 This reverses, for these three packages, the convention every other Pack README states: that a
 third-party tool is "driven through its own install/update tooling, never vendored" (see
@@ -285,8 +283,8 @@ retain the measured differences below and improve the source here.
 
 | Project and purpose | Actual customization | Ownership decision |
 |---|---|---|
-| pi-subagents: Pi delegation, agent types and workflow UI | Against `e955e29`, 56 of 64 files match; 6 differ and 2 are local packaging files. Only `src/model-resolver.ts` changes runtime behavior; `src/output-file.ts` changes a comment. The remaining differences are checks, dependencies, formatting and a replacement regression-test file. | Keep and improve locally. Preserve provider-scoped resolution; investigate cancellation, results and tool-permission handling. Keep per-machine model choices outside the source. |
-| pi-web-access: Pi web search, fetch, PDFs and video | Against `72c6e67` (0.35.0), 83 of 86 files match. Only `.gitignore` and `package.json` differ; `bun.lock` is local. No TypeScript source differs. Upstream HEAD is 0.43.0. | Keep and improve locally. Review provider routing, extraction quality, source attribution and overlap with Interceptor/Defuddle. Keep credentials and machine defaults outside the source. |
+| pi-subagents: Pi delegation, agent types and workflow UI | Against `v0.22.0` (2026-10-24), 55 of 59 `src/` files match. Four differ: `model-resolver.ts` (provider scoping), `agent-runner.ts` (pre-flight abort, provider-abort failure), `abortable.ts` (observe already-started work), `output-file.ts` (a comment). `workflow/collisions.ts` now matches — upstream took the lowercase `workflow` entry. Packaging: `package.json`, plus this tree's `tsconfig.json`, `bun.lock` and `test/`. | Keep and improve locally. Preserve provider-scoped resolution and the two abort guards; investigate cancellation, results and tool-permission handling. Keep per-machine model choices outside the source. |
+| pi-web-access: Pi web search, fetch, PDFs and video | Against `v0.44.0` (2026-10-24), 88 of 92 root `*.ts` files match. Four differ, each restoring a contract 0.44.0 dropped: `summary-model-scope.ts` (enabled-scope filter), `search-answer-formatting.ts` (clickable source links), `extract.ts` + `declared-web-links.ts` (the `document.baseURI` anchor that makes attribute links absolute — measured: `[guide](guide)` without it). Plus `package.json`, `.gitignore`, `bun.lock` and this tree's `tsconfig.json`. | Keep and improve locally. Review provider routing, extraction quality, source attribution and overlap with Interceptor/Defuddle. Keep credentials and machine defaults outside the source. |
 | Anatomy: interactive physical SVG explainers | Against `e948829`, 141 of 144 files match. Changes are `SKILL.md`, eval assertions, and an extracted `references/examples.md`. Drawing code, examples and verification scripts match. Newer HEAD `1482e84` adds printing; those differences are upstream evolution. | Keep and adapt locally for Sjel and Obsidian output. Preserve the geometry kit, examples and checks; add local integration through a focused reference. |
 | human-voice within human-writing: prose linter and writing guidance | Of 17 copied script/data files present locally, 12 match `9bcba2f` and 5 differ. Changes add 14 patterns, flag a single em dash, remove inline suppressions, correct a reference path and annotate an import for Semgrep. The composed skill also draws from oberskills and design-tells. Current upstream reorganizes the linter extensively. | Keep the composed skill, linter and references in Sjel. Upgrade them locally and review upstream changes selectively; preserve existing behavior unless explicitly revised. |
 | vibecoded-design-tells within unslop: code/UI scanners and review guidance | All 4 mapped reference files match `f7c4aef`. Both scanners differ only in displayed reference paths. The skill combines the code and UI workflows and adds Sjel ownership boundaries. | Keep the combined skill, scanners and references in Sjel. Improve them locally; use upstream as a reviewed source of changes. |
@@ -327,23 +325,26 @@ cases when adopting changes.
 
 ### pi-web-access (vendored, detached)
 
-[nicobailon/pi-web-access](https://github.com/nicobailon/pi-web-access), MIT, revision `72c6e67`,
-version 0.35.0 (2026-10-01). Full grant text in this Pack's [`LICENSE`](LICENSE).
+[nicobailon/pi-web-access](https://github.com/nicobailon/pi-web-access), MIT, revision `v0.44.0`
+(2026-10-24; 0.35.0/`72c6e67` was the previous pin). Full grant text in this Pack's [`LICENSE`](LICENSE).
 
 The web search, page fetch, PDF extraction and video analysis every session uses, across roughly
-thirty provider adapters. It arrived here as `npm:pi-web-access`, an opaque version we could not
-patch when a provider changed shape. Re-vendored 2026-10-01 from 0.29.0 (`192ac18`); six releases
-landed in between, three of them on this machine's own defaults — OpenCode session headers without
-which `fetch_content` answer mode against `opencode-go` returns `400 MissingSessionID` (0.30.0,
-0.32.0), and `toolActivation: "auto"`, which stops turning web tools on from resending the
-conversation and missing the prompt cache on DeepSeek-class models (0.34.0).
+forty provider adapters. It arrived here as `npm:pi-web-access`, an opaque version we could not
+patch when a provider changed shape. Re-vendored 2026-10-24 from 0.35.0; nine releases landed in
+between. Two of them changed what this tree has to carry: 0.44.0 deleted the separate
+`opencode-session-headers.ts` and passes `sessionId` to pi-ai instead, so the OpenCode
+`400 MissingSessionID` workaround is now the SDK's (`fetch_content` answer mode against
+`opencode-go` is the call it protects), and the HTML pipeline moved inside the private
+`extractViaHttp`, taking the exported `extractHtmlContent` seam with it — which is why
+`tools/pi-local-adaptations.test.ts` now drives that contract through `extractContent` and a
+stubbed `fetch`.
 
 | | |
 |---|---|
-| Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources (81 files), `package.json`, `tsconfig.json`, `LICENSE` |
-| Not copied | `dist/` (the 996K precompiled bundle), `test/` (1.0M, 82 files), `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
+| Vendored | `pi-packages/pi-web-access/` — the root `*.ts` sources (92 files), `package.json`, `tsconfig.json`, `LICENSE` |
+| Not copied | `dist/` (the precompiled bundle the published package points at), `test/`, `scripts/`, `pi-web-fetch-demo.mp4`, `banner.png`, `CHANGELOG.md`, `README.md`, `SECURITY.md`, and the upstream lockfile |
 | Not committed | `node_modules/` (installed in place); the local `bun.lock` is committed |
-| Local deltas | FOUR, all in `package.json`. (1) `pi.extensions` is `["./index.ts"]`, not upstream's `["./dist"]`: since 0.30.0 the published package ships a precompiled bundle and points its manifest at it, while a source checkout loads the TypeScript directly — `prepublishOnly` rewrites the field to `./dist` and `postpublish` rewrites it back. This tree is a source checkout, so it keeps the source shape. (2) `"overrides": { "undici": "^8.11.2" }`, originally added 2026-09-29 for GHSA-3wwx-pv8p-q78v; upstream now depends on `^8.11.2` itself, but the vendored dev copy of `@earendil-works/pi-coding-agent` pins `undici` **exactly** (0.99.2 pins 8.10.2), so the override is what keeps one copy at 8.11.2. `osv-scanner scan --lockfile=bun.lock` reports no issues across 369 packages. (3) The three pi SDK devDependencies are pinned to `0.99.2` rather than `1.0.0`: the global 24h adoption hold in `~/.bunfig.toml` blocks 1.0.0 until 2026-10-02T19:15Z, and the point of the pin is to typecheck against the SDK we run. Bump it to 1.0.0 once the hold clears. (4) `typebox` stays a `"*"` peer with no devDependency, where upstream 0.35 lists `typebox@1.3.27` as one; adding it installs a second copy beside Pi's, which is what 0.32.0 changed to stop the duplicate-module startup warning. `tsconfig.json` is this tree's own, kept from the first vendoring so a customization can be typechecked before a restart |
+| Local deltas | FOUR source files plus packaging. (1) `summary-model-scope.ts` keeps the enabled-scope filter 0.44.0 dropped: `findModelWithProviderRouting` takes the scoped model list and refuses a registry fallback outside it, so a disabled first router cannot hide an enabled one. (2) `search-answer-formatting.ts` keeps clickable markdown source links (`Source: [title](<url>)`) where 0.44.0 emits a bare `Source: title (url)`, preserving the provider's URL verbatim. (3) `extract.ts` anchors linkedom's `document.baseURI` to the declared `<base>`, falling back to the URL the fetch ended at, before Readability runs. linkedom parses with `about:blank`, so without this a relative href in the article stays relative — measured before the patch: `[guide](guide)`. (4) `declared-web-links.ts` exports `resolveHttpUrl` for that anchor instead of copying it. Packaging, all in `package.json`: `pi.extensions` is `["./index.ts"]` rather than upstream's `["./dist"]`, because this is a source checkout and `prepublishOnly`/`postpublish` rewrite the field around publication; no `bin` and no `files`, since `bin` points into a `dist/` this tree does not build; `"overrides": { "undici": "^8.12.3" }` — upstream depends on `^8.11.2` itself, but the vendored dev copy of `@earendil-works/pi-coding-agent` pins `undici` **exactly**, so the override is what keeps one patched copy; the three pi SDK devDependencies pinned to `1.4.0`, the version this machine runs; and `typebox` stays a `"*"` peer with no devDependency, where upstream lists `typebox@1.3.27` as one — adding it installs a second copy beside Pi's, which is what 0.32.0 changed to stop the duplicate-module startup warning. `tsconfig.json` is this tree's own, kept from the first vendoring so a customization can be typechecked before a restart |
 | Owner | Sjel, **detached**: no `.git`, no remote. Materialized as a source checkout, not an installed package, so the vendored devDependencies exist only for `bun run typecheck` |
 
 ## Why this shape: the flip conditions

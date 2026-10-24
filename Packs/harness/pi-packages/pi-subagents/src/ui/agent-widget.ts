@@ -75,6 +75,8 @@ export interface AgentDetails {
   activity?: string;
   /** Current spinner frame index (for animated running indicator). */
   spinnerFrame?: number;
+  /** Show the ctrl+b hint on this running foreground call's row — one row per batch. */
+  backgroundHint?: boolean;
   /** Short label for the model the run used, e.g. "haiku 4.5". */
   modelName?: string;
   /** Notable config tags (e.g. ["thinking: high", "isolated"]). */

@@ -33,6 +33,7 @@ function buildProviderButtons(
 		{ value: "bocha", label: "Bocha", available: available.bocha },
 		{ value: "ollama", label: "Ollama", available: available.ollama },
 		{ value: "searxng", label: "SearXNG", available: available.searxng },
+		{ value: "degoog", label: "degoog", available: available.degoog },
 		{ value: "duckduckgo", label: "DuckDuckGo", available: available.duckduckgo },
 		{ value: "perplexity", label: "Perplexity", available: available.perplexity },
 		{ value: "gemini", label: "Gemini", available: available.gemini },
@@ -50,6 +51,10 @@ function buildProviderButtons(
 		{ value: "baizhi", label: "Baizhi", available: available.baizhi },
 		{ value: "zai", label: "Z.ai", available: available.zai },
 		{ value: "valyu", label: "Valyu", available: available.valyu },
+		{ value: "keenable", label: "Keenable", available: available.keenable },
+		{ value: "ceramic", label: "Ceramic", available: available.ceramic },
+		{ value: "linkup", label: "Linkup", available: available.linkup },
+		{ value: "deepseek", label: "DeepSeek", available: available.deepseek },
 	];
 
 	return providers
@@ -1476,7 +1481,7 @@ const SCRIPT = `(function() {
   var token = DATA.sessionToken;
   var timeoutSec = DATA.timeout;
   var queries = Array.isArray(DATA.queries) ? DATA.queries : [];
-  var providers = ["auto", "all", "openai", "exa", "brave", "parallel", "parallel-mcp", "tinyfish", "search1api", "searchinfinity", "querit", "tavily", "firecrawl", "jina", "serpdive", "kagi", "bocha", "ollama", "searxng", "duckduckgo", "perplexity", "gemini", "kimi", "anysearch", "xcrawl", "xai", "mistral", "brightdata", "serpbase", "serpapi", "serper", "serply", "valyu", "baizhi", "you", "zai"];
+  var providers = ["auto", "all", "openai", "exa", "brave", "parallel", "parallel-mcp", "tinyfish", "search1api", "searchinfinity", "querit", "tavily", "firecrawl", "jina", "serpdive", "kagi", "bocha", "ollama", "searxng", "degoog", "duckduckgo", "perplexity", "gemini", "kimi", "anysearch", "xcrawl", "xai", "mistral", "brightdata", "serpbase", "serpapi", "serper", "serply", "valyu", "baizhi", "you", "zai", "keenable", "ceramic", "deepseek", "linkup"];
   var availProviders = DATA.availableProviders && typeof DATA.availableProviders === "object" ? DATA.availableProviders : {};
   var workflow = "summary-review";
   var initialDefaultProvider = typeof DATA.defaultProvider === "string" ? DATA.defaultProvider : "exa";
@@ -1697,6 +1702,7 @@ const SCRIPT = `(function() {
     if (provider === "bocha") return "Bocha";
     if (provider === "ollama") return "Ollama";
     if (provider === "searxng") return "SearXNG";
+    if (provider === "degoog") return "degoog";
     if (provider === "duckduckgo") return "DuckDuckGo";
     if (provider === "perplexity") return "Perplexity";
     if (provider === "exa") return "Exa";
@@ -1715,6 +1721,10 @@ const SCRIPT = `(function() {
     if (provider === "baizhi") return "Baizhi";
     if (provider === "zai") return "Z.ai";
     if (provider === "valyu") return "Valyu";
+    if (provider === "keenable") return "Keenable";
+    if (provider === "ceramic") return "Ceramic";
+    if (provider === "linkup") return "Linkup";
+    if (provider === "deepseek") return "DeepSeek";
     return "Unknown";
   }
 

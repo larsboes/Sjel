@@ -5,7 +5,7 @@ import type { SearchOptions, SearchResponse } from "./perplexity.ts";
 import { formatSearchResultsAsAnswer } from "./search-answer-formatting.ts";
 import { normalizeSearchResultCount } from "./search-result-count-normalization.ts";
 import { hasCredentialSource, redactCredential, resolveCredential } from "./credential-source.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { getWebSearchConfigPath, resolveProviderApiUrl, fetchWithCredentialRedirects } from "./utils.ts";
 
 const XCRAWL_API_URL = "https://run.xcrawl.com/v1/serp";
 const CONFIG_PATH = getWebSearchConfigPath();
@@ -14,6 +14,7 @@ const CONFIG_PATH = getWebSearchConfigPath();
 const SEARCH_TIMEOUT_MS = 60_000;
 
 interface WebSearchConfig {
+	xcrawlBaseUrl?: unknown;
 	xcrawlApiKey?: unknown;
 }
 
@@ -173,7 +174,7 @@ export async function searchWithXCrawl(query: string, options: SearchOptions = {
 	let response: Response;
 
 	try {
-		response = await fetch(XCRAWL_API_URL, {
+		response = await fetchWithCredentialRedirects(resolveProviderApiUrl("xcrawl", XCRAWL_API_URL, loadConfig().xcrawlBaseUrl), {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
@@ -183,7 +184,7 @@ export async function searchWithXCrawl(query: string, options: SearchOptions = {
 			signal: options.signal
 				? AbortSignal.any([timeoutSignal, options.signal])
 				: timeoutSignal,
-		});
+		}, ["Authorization"]);
 	} catch (err) {
 		const message = errorMessage(err);
 		if (options.signal?.aborted) {

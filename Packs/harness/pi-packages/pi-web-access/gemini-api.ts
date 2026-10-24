@@ -92,6 +92,21 @@ export function getUploadBase(): string {
 	return `${getApiHost()}/upload/${API_VERSION}`;
 }
 
+/**
+ * Re-point a provider-returned URL at the configured API host (gateway), keeping
+ * path and query. No-op when host is unset (already the Google origin).
+ */
+export function rewriteUploadUrlOrigin(url: string): string {
+	try {
+		const parsed = new URL(url);
+		const base = getApiHost(); // may carry a path prefix (gateway passthrough route)
+		if (parsed.origin === new URL(base).origin) return url;
+		return `${base}${parsed.pathname}${parsed.search}`;
+	} catch {
+		return url;
+	}
+}
+
 function getLegacyCloudflareApiKey(): string | null {
 	return normalizeApiKey(process.env.CLOUDFLARE_API_KEY) ?? normalizeApiKey(loadConfig().cloudflareApiKey);
 }

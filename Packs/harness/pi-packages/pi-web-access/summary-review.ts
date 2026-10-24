@@ -1,7 +1,6 @@
 import type { ModelThinkingLevel, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { complete, Api, Message, Model } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { openCodeSessionHeaders } from "./opencode-session-headers.ts";
 import { findModelWithProviderRouting, isModelInScope, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";
 import type { QueryResultData } from "./storage.ts";
 
@@ -55,9 +54,19 @@ function summarizeQueryResult(result: QueryResultData): string {
 	}
 
 	lines.push("Sources:");
+	// Snippets are the only evidence when there is no answer, so they get a larger
+	// budget; uncapped, they would overrun the summary deadline.
+	const [perSource, perQuery] = result.answer?.trim() ? [200, 3_000] : [600, 12_000];
+	let budgetLeft = perQuery;
 	for (let i = 0; i < result.results.length; i++) {
 		const source = result.results[i];
 		lines.push(`${i + 1}. ${source.title} — ${source.url}`);
+		const text = (source.snippet ?? "").replace(/\s+/g, " ").trim();
+		const limit = Math.min(perSource, budgetLeft);
+		if (!text || limit <= 0) continue;
+		const snippet = text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
+		budgetLeft -= snippet.length;
+		lines.push(`   ${snippet}`);
 	}
 
 	return lines.join("\n");
@@ -233,9 +242,9 @@ async function resolveSummaryModelCandidates(
 		if (seen.has(value)) continue;
 		seen.add(value);
 
-		const model = findModelWithProviderRouting(ctx.modelRegistry, spec.provider, spec.id, ctx.scopedModels);
+		const model = findModelWithProviderRouting(ctx.modelRegistry, spec.provider, spec.id);
 		if (!model) {
-			errors.push(`Summary model not found or not enabled: ${value}`);
+			errors.push(`Summary model not found: ${value}`);
 			continue;
 		}
 		if (!isModelInScope(model, ctx.scopedModels)) {
@@ -306,7 +315,9 @@ export async function generateSummaryDraft(
 
 	const registry = ctx.modelRegistry as SummaryModelRegistry;
 	const customCompleteFn = completeFn !== undefined;
-	const usesRegistryComplete = !customCompleteFn && typeof registry.complete === "function";
+	// streamSimple is Pi's provider-neutral path and routes virtual models; complete() does not (#574).
+	const usesRegistryStreamSimple = !customCompleteFn && typeof registry.streamSimple === "function";
+	const usesRegistryComplete = !customCompleteFn && !usesRegistryStreamSimple && typeof registry.complete === "function";
 	let piAiCompat: typeof import("@earendil-works/pi-ai/compat") | undefined;
 
 	const generationStartedAt = Date.now();
@@ -359,10 +370,10 @@ export async function generateSummaryDraft(
 		let resolved: Awaited<ReturnType<typeof resolveSummaryModelCandidates>>;
 		try {
 			checkSummaryDeadline();
-			if (!customCompleteFn && !usesRegistryComplete) {
+			if (!customCompleteFn && !usesRegistryStreamSimple && !usesRegistryComplete) {
 				piAiCompat = await raceSummaryOperation(import("@earendil-works/pi-ai/compat"));
 			}
-			completeFn ??= usesRegistryComplete ? registry.complete!.bind(registry) as CompleteFunction : piAiCompat!.complete;
+			if (!usesRegistryStreamSimple) completeFn ??= usesRegistryComplete ? registry.complete!.bind(registry) as CompleteFunction : piAiCompat!.complete;
 			resolved = await raceSummaryOperation(resolveSummaryModelCandidates(ctx, modelOverride));
 		} catch (err) {
 			checkSummaryDeadline();
@@ -374,7 +385,9 @@ export async function generateSummaryDraft(
 		for (const { model, apiKey, headers, thinkingLevel } of resolved.candidates) {
 			const startedAt = Date.now();
 			try {
-				const sessionHeaders = openCodeSessionHeaders(model, ctx.sessionManager);
+				// sessionId lets pi-ai's OpenCode providers add x-opencode-session. cacheRetention "none" keeps this
+				// one-off call out of the session's prompt cache and Codex continuation, as Pi does for compaction.
+				const sessionId = ctx.sessionManager?.getSessionId?.();
 				const userMessage: Message = {
 					role: "user",
 					content: [{ type: "text", text: prompt }],
@@ -384,18 +397,26 @@ export async function generateSummaryDraft(
 				const enabledThinkingLevel = requestedThinkingLevel && requestedThinkingLevel !== "off"
 					? requestedThinkingLevel as ThinkingLevel
 					: undefined;
+				const simpleOptions = {
+					sessionId,
+					cacheRetention: "none" as const,
+					signal: completionSignal,
+					...(enabledThinkingLevel ? { reasoning: enabledThinkingLevel } : {}),
+				};
 				const completionOptions = {
-					...(usesRegistryComplete
-						? (sessionHeaders ? { transformHeaders: (requestHeaders: Record<string, string>) => ({ ...requestHeaders, ...sessionHeaders }) } : {})
-						: { apiKey, headers: sessionHeaders ? { ...headers, ...sessionHeaders } : headers }),
+					...(usesRegistryComplete ? {} : { apiKey, headers }),
+					sessionId,
+					cacheRetention: "none" as const,
 					signal: completionSignal,
 					...(requestedThinkingLevel ? { reasoning: requestedThinkingLevel } : {}),
 					...(enabledThinkingLevel ? { reasoningEffort: enabledThinkingLevel } : {}),
 				};
 				checkSummaryDeadline();
-				const completion = thinkingLevel !== undefined && !customCompleteFn && !usesRegistryComplete
-					? piAiCompat!.completeSimple(model, { messages: [userMessage] }, { apiKey, headers: sessionHeaders ? { ...headers, ...sessionHeaders } : headers, signal: completionSignal, ...(enabledThinkingLevel ? { reasoning: enabledThinkingLevel } : {}) })
-					: completeFn(model, { messages: [userMessage] }, completionOptions);
+				const completion = usesRegistryStreamSimple
+					? registry.streamSimple(model, { messages: [userMessage] }, simpleOptions).result()
+					: thinkingLevel !== undefined && !customCompleteFn && !usesRegistryComplete
+						? piAiCompat!.completeSimple(model, { messages: [userMessage] }, { apiKey, headers, ...simpleOptions })
+						: completeFn!(model, { messages: [userMessage] }, completionOptions);
 
 				const response = await raceSummaryOperation(Promise.resolve(completion));
 				if (response.stopReason === "aborted") {

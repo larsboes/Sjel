@@ -3,7 +3,7 @@ import { activityMonitor } from "./activity.ts";
 import { hasCredentialSource, redactCredential, resolveCredential } from "./credential-source.ts";
 import type { ExtractedContent, ExtractOptions } from "./extract.ts";
 import { validateRemoteUrl, type Lookup } from "./ssrf-protection.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { getWebSearchConfigPath, resolveProviderApiUrl } from "./utils.ts";
 
 const CONFIG_PATH = getWebSearchConfigPath();
 const BRIGHTDATA_REQUEST_URL = "https://api.brightdata.com/request";
@@ -22,6 +22,7 @@ export interface BrightDataExtractOptions extends Pick<ExtractOptions, "timeoutM
 }
 
 interface BrightDataConfig {
+	brightdataBaseUrl?: unknown;
 	brightdataApiKey?: unknown;
 	brightdataUnlockerZone?: unknown;
 }
@@ -215,7 +216,7 @@ async function brightDataRequest(
 	};
 	const activityId = activityMonitor.logStart({ type: "fetch", url });
 	try {
-		const response = await fetchBrightDataApi(BRIGHTDATA_REQUEST_URL, {
+		const response = await fetchBrightDataApi(resolveProviderApiUrl("brightdata", BRIGHTDATA_REQUEST_URL, loadConfig().brightdataBaseUrl), {
 			method: "POST",
 			headers,
 			body: JSON.stringify(unlockerBody(url, zone)),

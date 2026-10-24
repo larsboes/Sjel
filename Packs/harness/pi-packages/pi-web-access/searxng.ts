@@ -4,7 +4,7 @@ import { normalizeDomain } from "./domain-filter-normalization.ts";
 import { fetchRemoteUrl, loadSsrfConfig } from "./ssrf-protection.ts";
 import type { SearchOptions, SearchResult, SearchResponse } from "./perplexity.ts";
 import { normalizeSearchResultCount } from "./search-result-count-normalization.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { getWebSearchConfigPath, isLoopbackHostname } from "./utils.ts";
 
 const CONFIG_PATH = getWebSearchConfigPath();
 const SEARCH_TIMEOUT_MS = 30_000;
@@ -196,6 +196,7 @@ export async function searchWithSearXNG(query: string, options: SearchOptions = 
 				: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
 		}, {
 			...loadSsrfConfig(),
+			allowLoopback: isLoopbackHostname(url.hostname),
 			onRedirect: ({ from, to, init }) => from.origin === to.origin ? init : { ...init, headers: { Accept: "application/json" } },
 		});
 

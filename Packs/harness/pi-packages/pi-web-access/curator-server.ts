@@ -292,6 +292,7 @@ export function startCuratorServer(
 		if (provider === "bocha") return availableProviders.bocha;
 		if (provider === "ollama") return availableProviders.ollama;
 		if (provider === "searxng") return availableProviders.searxng;
+		if (provider === "degoog") return availableProviders.degoog;
 		if (provider === "duckduckgo") return availableProviders.duckduckgo;
 		if (provider === "perplexity") return availableProviders.perplexity;
 		if (provider === "exa") return availableProviders.exa;
@@ -309,6 +310,10 @@ export function startCuratorServer(
 		if (provider === "baizhi") return availableProviders.baizhi;
 		if (provider === "zai") return availableProviders.zai;
 		if (provider === "valyu") return availableProviders.valyu;
+		if (provider === "keenable") return availableProviders.keenable;
+		if (provider === "ceramic") return availableProviders.ceramic;
+		if (provider === "linkup") return availableProviders.linkup;
+		if (provider === "deepseek") return availableProviders.deepseek;
 		return false;
 	}
 

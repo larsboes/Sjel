@@ -184,8 +184,6 @@ that harness actually offered. A comparison is controlled only when both attempt
 same endpoint and model. Harness order alternates per repeat. C02 and R01 need `sandbox_python`
 and are refused live until that tool has a live boundary.
 
-Known gap: `sjel-agent` emits no token usage, so Sjel attempts record `usage: null`.
-
 [`tools/agent-eval-live.test.ts`](../../../tools/agent-eval-live.test.ts) drives both adapters
 against one scripted OpenAI-compatible endpoint, so it costs nothing. It checks that every
 request carried exactly the broker tools and the shared system prompt, that a path outside the

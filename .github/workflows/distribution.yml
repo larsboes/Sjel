@@ -67,7 +67,7 @@ jobs:
             --build "$BUILD_NUMBER" --out "$RUNNER_TEMP/sjel-dist"
           tar -C "$RUNNER_TEMP/sjel-dist" -czf "$RUNNER_TEMP/sjel-dist/Sjel-ios.xcarchive.tar.gz" Sjel.xcarchive
       - name: Retain preparation artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sjel-${{ inputs.kind }}-${{ runner.os }}-${{ runner.arch }}
           path: |

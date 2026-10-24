@@ -128,6 +128,7 @@ mod tests {
             chat_template_kwargs: None,
             request_overrides: None,
             trusted_peer: false,
+            escalates_to: None,
         };
         let error = read(Some(&role), &Document::image(b"pixels")).expect_err("gate not cleared");
         assert!(

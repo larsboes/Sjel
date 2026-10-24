@@ -880,6 +880,7 @@ mod repair_tests {
             chat_template_kwargs: None,
             request_overrides: None,
             trusted_peer: false,
+            escalates_to: None,
         }
     }
 

@@ -2267,6 +2267,7 @@ impl Shell {
     /// A single-use URL that logs the browser in and lands on `next`
     /// (`landing` in `capabilities/sjel-status/src/session.rs`).
     pub async fn dashboard_url(&self, next: &str) -> ShellResult<Url> {
+        note_dashboard_fallback(next);
         #[derive(Deserialize)]
         struct Ticket {
             open: String,
@@ -2996,6 +2997,33 @@ fn landing_url(base: &Url, open: &str, next: &str) -> Option<Url> {
     Some(url)
 }
 
+/// Appends `<timestamp>\t<path>` to `dashboard-fallbacks.tsv` beside `appearance.json`: every
+/// page GPUI still hands to the browser. The counts are the retirement gap list
+/// (`PORTING_PLAN.md` §1b). A failed write costs the record, never the navigation.
+fn note_dashboard_fallback(next: &str) {
+    use std::io::Write;
+    let dir = match std::env::var("SJEL_CONFIG_DIR") {
+        Ok(dir) => std::path::PathBuf::from(dir),
+        Err(_) => match std::env::var("HOME") {
+            Ok(home) => std::path::PathBuf::from(home).join(".config/sjel"),
+            Err(_) => return,
+        },
+    };
+    let line = fallback_line(chrono::Local::now().to_rfc3339(), next);
+    let _ = std::fs::create_dir_all(&dir).and_then(|()| {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("dashboard-fallbacks.tsv"))?
+            .write_all(line.as_bytes())
+    });
+}
+
+/// A tab or newline in a path would split the row, so both become spaces.
+fn fallback_line(at: String, next: &str) -> String {
+    format!("{at}\t{}\n", next.replace(['\t', '\n'], " "))
+}
+
 /// Two worker threads for every request. GPUI's executor does not provide Tokio's reactor,
 /// which reqwest needs. A token read through `/usr/bin/security` blocks its worker, so one
 /// read must not be able to stall an unrelated request.
@@ -3167,6 +3195,14 @@ mod tests {
         assert_eq!(
             Shell::new("http://127.0.0.1.evil:8082").err(),
             Some(ShellError::NotLoopback)
+        );
+    }
+
+    #[test]
+    fn a_fallback_is_one_row() {
+        assert_eq!(
+            fallback_line("2026-10-24T14:00:00+02:00".into(), "/feed/review?q=a\tb\nc"),
+            "2026-10-24T14:00:00+02:00\t/feed/review?q=a b c\n"
         );
     }
 

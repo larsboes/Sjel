@@ -35,6 +35,62 @@
 | 24 | `/research` | Local Models & Evals | **Ported** | Native GPUI (`ResearchPage`)| N/A | `research/`, `upstreams.toml`, `systems.toml` |
 | 25 | `/setup` | Node Setup & QR Pairing | **Ported** | Native GPUI (`SetupPage`) | Native Scanner | `capabilities/devices`, `capabilities/sjel-status` |
 
+The matrix lists 25 routes. `dashboard/src/routes` holds 36 pages, and §1b names the rest.
+
+---
+
+## 1b. What retiring the dashboard still takes (2026-10-24)
+
+The matrix counts pages. Retirement needs more: no link may fall back to the browser, no rule may
+live only in TypeScript, and nothing in the repository may need `dashboard/` to build or pass.
+
+**Pages the matrix does not track.** Every `sjel://` link to one of these lands on
+`Target::Dashboard` (`core/src/route.rs`) and opens the browser.
+
+| Route | Lines | In GPUI |
+|---|---|---|
+| `/travel/connections` | 817 | no page (connection search) |
+| `/feed/library` | 373 | no page |
+| `/feed/review` | 363 | no page |
+| `/apps` | 217 | in `DESTINATIONS`, no `Page` (`Software` is `/software`) |
+| `/docs`, `/docs/[...slug]` | 211 | in `DESTINATIONS`, no `Page` |
+| `/panel/[name]` | 111 | no page |
+| `/record` | 99 | no page (a record as its own page, after the row and the inspector) |
+| `/feed/[id]`, `/scout`, `/trips` | ≤ 18 each | not checked, probably redirects |
+
+**Writes that still go to the browser.** Travel cannot create a trip, a booking or a stage (§4).
+Inbox triage, the feed's review and library, editing a person, adding to the wishlist and
+recategorizing a transaction stay on the web. Fare alerts live only in
+`dashboard/src/lib/travel/fare-alerts.ts`.
+
+**Rules that live only in TypeScript.** `dashboard/vite/*.test.ts` tests about 40 modules in
+`dashboard/src/lib`. Some have no Rust owner: `finance-csv-mapping`, `finance-spending-review`,
+`merge-candidate`, `who-is-around`, `mail-model-proposal`, `fare-alerts`. Checked by name only, so
+some may already have a Rust twin. Each rule moves into a capability or `core` before its page
+ports.
+
+**Infrastructure.**
+- `dashboard/src-tauri` holds 5,433 lines (`sync.rs`, `mac_bridge.rs`, `mirror.rs`). `core` has
+  its own `sync.rs` and `mirror.rs`. Check that no device still runs the Tauri build, then delete it.
+- RoomPlan part 2 (§3 item 5) ports the Swift out of `plugins/roomplan`.
+- `sjel-status` serves `dashboard/dist` as the spine's shell (`dashboard/service.toml`). Decide
+  what that port serves after retirement.
+- `/api/top-processes` is Vite dev middleware and has no owner (Work Package 0).
+- 78 files in `tools/`, `capabilities/`, `libs/`, `Packs/` and `schemas/` name `dashboard/`.
+  `route.rs` `matches_dashboard_nav` reads `nav.ts`, and goes when `nav.ts` does.
+
+**Order.** UI polish (§4) does not block retirement. The write paths do.
+
+1. **Measure the fallbacks.** Every dashboard handoff appends one line to
+   `~/.config/sjel/dashboard-fallbacks.tsv` (`Shell::dashboard_url`). After a week of use, the
+   counts are the gap list, and they replace the estimates above. Read them with
+   `cut -f2 ~/.config/sjel/dashboard-fallbacks.tsv | sort | uniq -c | sort -rn`.
+2. **Travel authoring and connections.** The largest gap, and §4's highest priority.
+3. **Feed review and library, then Inbox triage.** That finishes comms.
+4. **The small pages:** `/record` (the inspector exists), `/docs`, `/apps`.
+5. **Delete `dashboard/`.** Then the 78 references, `matches_dashboard_nav`, ⌘D "Open in the
+   dashboard", and the `sjel-status` static serve.
+
 ---
 
 ## 2. In-Progress & Next Work Packages for Agent Sessions

@@ -1247,13 +1247,33 @@ pub fn resolve_profile_skills(
     Ok(out)
 }
 
+/// The unit keys a profile would actually deploy from one Pack: everything `deploy_pack` would
+/// install for that subset, minus the units a hold covers.
+///
+/// The hold half is what makes this comparable to a ledger. A held unit is never deployed and
+/// never recorded, so a check that compared the Pack's raw key list against the ledger would
+/// report a mismatch on every run and redeploy forever.
+fn profile_unit_keys(
+    config: &DeployConfig,
+    pack: &str,
+    subset: Option<&BTreeSet<String>>,
+) -> Result<BTreeSet<String>, String> {
+    let held = held_units(config)?;
+    Ok(pack_units(config, pack)?
+        .into_iter()
+        .filter(|u| subset.is_none_or(|s| !u.is_skill || s.contains(&u.key)))
+        .filter(|u| !hold_matches(&held, &format!("{pack}/{}", u.key)))
+        .map(|u| u.key)
+        .collect())
+}
+
 pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
         let target_packs: BTreeSet<String> = resolve_profile_packs(config, profile)?
             .into_iter()
             .collect();
         let subsets = resolve_profile_skills(config, profile)?;
-        let state = read_state(config)?;
+        let mut state = read_state(config)?;
         let mut messages = vec![format!(
             "Activating profile '{}' — {}",
             profile.name, profile.description
@@ -1262,6 +1282,26 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
         let current: Vec<String> = state.packs.keys().cloned().collect();
         let mut target: Vec<String> = target_packs.iter().cloned().collect();
         target.sort();
+
+        // A profile's skill subset used to reach a Pack only on its FIRST deploy: this verb
+        // compared destinations, never unit sets, so a harness that already carried the whole
+        // Pack kept every skill the profile stopped naming and kept missing the ones it added —
+        // and still reported "already current". Both directions are reconciled here.
+        let mut narrowed: Vec<(String, BTreeSet<String>)> = Vec::new();
+        for pack in &target {
+            let Some(record) = state.packs.get(pack) else {
+                continue;
+            };
+            let want = profile_unit_keys(
+                config,
+                pack,
+                subsets.get(pack).cloned().flatten().as_ref(),
+            )?;
+            let have: BTreeSet<String> = record.skills.keys().cloned().collect();
+            if want != have {
+                narrowed.push((pack.clone(), want));
+            }
+        }
 
         let to_remove: Vec<String> = current
             .iter()
@@ -1272,18 +1312,50 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
             .iter()
             .filter(|p| match state.packs.get(*p) {
                 None => true,
-                // Re-deploy if any owned destination is missing from disk.
-                Some(record) => record
-                    .skills
-                    .keys()
-                    .any(|k| !recorded_destination(config, p, k).exists()),
+                // Re-deploy if the Pack needs narrowing to this profile's subset, or if any
+                // owned destination is missing from disk.
+                Some(record) => {
+                    narrowed.iter().any(|(pack, _)| pack == *p)
+                        || record
+                            .skills
+                            .keys()
+                            .any(|k| !recorded_destination(config, p, k).exists())
+                }
             })
             .cloned()
             .collect();
 
-        if to_remove.is_empty() && to_deploy.is_empty() {
+        if to_remove.is_empty() && to_deploy.is_empty() && narrowed.is_empty() {
             messages.push("  → already current".to_owned());
             return Ok(messages);
+        }
+        if !narrowed.is_empty() {
+            messages.push(String::new());
+            messages.push(format!(
+                "Narrowing {} pack(s) to the profile's skills:",
+                narrowed.len()
+            ));
+            for (pack, want) in &narrowed {
+                let surplus: Vec<String> = state
+                    .packs
+                    .get(pack)
+                    .map(|r| {
+                        r.skills
+                            .keys()
+                            .filter(|k| !want.contains(*k))
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for unit_name in surplus {
+                    match remove_owned_unit(config, &mut state, pack, &unit_name) {
+                        Ok(line) => messages.push(format!("  {line}")),
+                        Err(e) => messages.push(format!("  ✗ {pack}/{unit_name}: {e}")),
+                    }
+                }
+            }
+            // `deploy_pack` below re-reads the ledger, so the removals have to reach disk first.
+            write_state(config, &state)?;
         }
         if !to_remove.is_empty() {
             messages.push(String::new());
@@ -1480,6 +1552,77 @@ mod tests {
     /// `writing/agents/` entry. The bug this closes: with that entry in place, claude dropped the
     /// tree and pi silently redeployed all eight files, and nothing reported the difference
     /// because a hold that matches nothing looks exactly like a hold that works.
+    /// A profile's `skills` map is a subset, and it has to hold on a harness that is already
+    /// deployed: `activate_profile` used to compare destinations only, so a Pack deployed whole
+    /// kept the skill the profile stopped naming — and kept missing one the profile added — while
+    /// still reporting "already current". Both directions are asserted here, and a held skill is
+    /// checked in the same fixture because a hold is the one unit a ledger must never hold.
+    #[test]
+    fn activating_a_profile_narrows_a_pack_that_is_already_deployed() {
+        let root = std::env::temp_dir().join(format!("sjel-harnesses-narrow-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        for name in ["alpha", "beta", "gamma"] {
+            fs::create_dir_all(pack.join("skills").join(name)).unwrap();
+            fs::write(
+                pack.join("skills").join(name).join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: does a thing\n---\n\nbody\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\", \"beta\", \"gamma\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[unit_hold]\nclaude = [\"demo/gamma\"]\n\n[[profile]]\nname = \"narrow\"\ndescription = \"one skill\"\npacks = [\"demo\"]\nskills = { demo = [\"alpha\"] }\n",
+        )
+        .unwrap();
+        let config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        deploy_pack(&config, "demo", None).unwrap();
+        assert!(config.destination.join("beta").exists());
+
+        let profile = read_profiles(&config)
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == "narrow")
+            .unwrap();
+        let messages = activate_profile(&config, &profile).unwrap();
+        assert!(
+            messages.iter().any(|m| m.contains("Narrowing 1 pack")),
+            "{messages:?}"
+        );
+        assert!(config.destination.join("alpha").exists(), "the named skill stays");
+        assert!(
+            !config.destination.join("beta").exists(),
+            "the skill the profile stopped naming must leave the destination"
+        );
+        let state = read_state(&config).unwrap();
+        assert_eq!(
+            state.packs["demo"].skills.keys().collect::<Vec<_>>(),
+            vec!["alpha"],
+            "the ledger must match the destination, or the next run reports a phantom drift"
+        );
+
+        // Re-activating the same profile is a no-op: the narrowing converged.
+        let messages = activate_profile(&config, &profile).unwrap();
+        assert!(messages.iter().any(|m| m.contains("already current")), "{messages:?}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn a_trailing_slash_hold_names_every_unit_under_it() {
         let held: BTreeSet<String> = [

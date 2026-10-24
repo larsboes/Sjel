@@ -55,27 +55,40 @@ pub fn host(url: Option<&str>) -> Option<String> {
     Some(host.strip_prefix("www.").map(str::to_owned).unwrap_or(host))
 }
 
+/// The tag the rules give an untagged capture: a link to a place the feed reads is `look`.
+///
+/// One function for both a capture the Mac answered with and one this device typed, so the preview
+/// on the phone and the triage on the Mac cannot disagree about a URL.
+pub fn suggested_tag(tag: Option<&str>, url: Option<&str>) -> Option<&'static str> {
+    if let Some(tag) = tag {
+        return TAGS.iter().find(|known| **known == tag).copied();
+    }
+    let host = host(url)?;
+    FEED_HOSTS
+        .iter()
+        .any(|f| host == *f || host.ends_with(&format!(".{f}")))
+        .then_some("look")
+}
+
+/// Where a capture with this tag and url can go. A text-only note without a tag stays in the inbox.
+pub fn route_for(tag: Option<&str>, url: Option<&str>) -> Option<Route> {
+    match suggested_tag(tag, url)? {
+        "buy" => Some(Route::Wishlist),
+        "look" | "learn" if url.is_some() => Some(Route::Feed),
+        "go" => Some(Route::Places),
+        _ => None,
+    }
+}
+
 impl Capture {
     /// The tag the rules give an untagged capture. A set tag always wins.
     pub fn suggested_tag(&self) -> Option<&str> {
-        if let Some(tag) = self.tag.as_deref() {
-            return Some(tag);
-        }
-        let host = host(self.url.as_deref())?;
-        FEED_HOSTS
-            .iter()
-            .any(|f| host == *f || host.ends_with(&format!(".{f}")))
-            .then_some("look")
+        suggested_tag(self.tag.as_deref(), self.url.as_deref())
     }
 
     /// Where the capture can go. A text-only note without a tag stays in the inbox.
     pub fn route(&self) -> Option<Route> {
-        match self.suggested_tag()? {
-            "buy" => Some(Route::Wishlist),
-            "look" | "learn" if self.url.is_some() => Some(Route::Feed),
-            "go" => Some(Route::Places),
-            _ => None,
-        }
+        route_for(self.tag.as_deref(), self.url.as_deref())
     }
 
     pub fn label(&self) -> String {
@@ -85,6 +98,79 @@ impl Capture {
             .or_else(|| host(self.url.as_deref()))
             .or_else(|| self.url.clone())
             .unwrap_or_default()
+    }
+}
+
+/// What one capture field typed, before it is anything on a Mac.
+///
+/// The phone has one line and no triage screen, so the parsing that the capability does on arrival
+/// is done here instead: `#buy` in the text sets the tag, a lone URL becomes the URL rather than the
+/// text, and the preview says where the Mac will put it. The Mac re-reads all of it — nothing here
+/// is trusted over the capability's own rules (`capabilities/comms/src/store/captures.rs`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Draft {
+    pub text: Option<String>,
+    pub url: Option<String>,
+    pub tag: Option<String>,
+}
+
+impl Draft {
+    /// Reads one typed line. `tag` is the chip the person pressed, and wins over a `#tag` in the
+    /// text, because the last thing they touched is the one they meant.
+    pub fn parse(input: &str, tag: Option<&str>) -> Result<Self, String> {
+        let mut text = Vec::new();
+        let mut hashtag = None;
+        for word in input.split_whitespace() {
+            match word.strip_prefix('#') {
+                Some(name)
+                    if hashtag.is_none() && TAGS.contains(&name.to_ascii_lowercase().as_str()) =>
+                {
+                    hashtag = Some(name.to_ascii_lowercase())
+                }
+                _ => text.push(word),
+            }
+        }
+        let text = text.join(" ");
+        if text.is_empty() {
+            return Err("Type what you want to keep, or paste a link.".to_owned());
+        }
+        // A line that is nothing but a link is a link: the capability stores both fields, and a
+        // capture whose text is its own URL reads twice in every list that shows both.
+        let (text, url) = match Url::parse(&text) {
+            Ok(url) if url.has_host() => (None, Some(text)),
+            _ => (Some(text), None),
+        };
+        let tag = tag
+            .map(str::to_owned)
+            .or(hashtag)
+            .filter(|tag| TAGS.contains(&tag.as_str()));
+        Ok(Self { text, url, tag })
+    }
+
+    /// What the row says.
+    pub fn label(&self) -> String {
+        self.text
+            .clone()
+            .filter(|text| !text.is_empty())
+            .or_else(|| host(self.url.as_deref()))
+            .or_else(|| self.url.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn suggested_tag(&self) -> Option<&'static str> {
+        suggested_tag(self.tag.as_deref(), self.url.as_deref())
+    }
+
+    pub fn route(&self) -> Option<Route> {
+        route_for(self.tag.as_deref(), self.url.as_deref())
+    }
+
+    /// One sentence for the field's preview: where this will land, or that it waits in the inbox.
+    pub fn preview(&self) -> String {
+        match self.route() {
+            Some(route) => route.label().to_owned(),
+            None => "Stays in the inbox".to_owned(),
+        }
     }
 }
 
@@ -191,6 +277,46 @@ mod tests {
             capture(None, Some("https://example.org"), None).route(),
             None
         );
+    }
+
+    #[test]
+    fn a_typed_line_becomes_a_draft() {
+        let bought = Draft::parse("Linen shirt 49,90 € #buy", None).expect("a draft");
+        assert_eq!(bought.text.as_deref(), Some("Linen shirt 49,90 €"));
+        assert_eq!(bought.tag.as_deref(), Some("buy"));
+        assert_eq!(bought.preview(), "To wishlist");
+        assert_eq!(bought.route(), Some(Route::Wishlist));
+
+        // A lone link is the url, not the text, and the host decides the route.
+        let link = Draft::parse("https://www.youtube.com/watch?v=x", None).expect("a draft");
+        assert_eq!(link.text, None);
+        assert_eq!(
+            link.url.as_deref(),
+            Some("https://www.youtube.com/watch?v=x")
+        );
+        assert_eq!(link.suggested_tag(), Some("look"));
+        assert_eq!(link.route(), Some(Route::Feed));
+
+        // The chip wins over a hashtag typed in the same line.
+        let chipped = Draft::parse("#look Lisbon", Some("go")).expect("a draft");
+        assert_eq!(chipped.tag.as_deref(), Some("go"));
+        assert_eq!(chipped.text.as_deref(), Some("Lisbon"));
+        assert_eq!(chipped.preview(), "To places");
+
+        // An unknown hashtag stays in the text, the way the capability keeps it.
+        let unknown = Draft::parse("#later call the plumber", None).expect("a draft");
+        assert_eq!(unknown.tag, None);
+        assert_eq!(unknown.text.as_deref(), Some("#later call the plumber"));
+        assert_eq!(unknown.preview(), "Stays in the inbox");
+    }
+
+    #[test]
+    fn an_empty_line_is_not_a_capture() {
+        assert!(Draft::parse("   ", None).is_err());
+        // A tag on its own is nothing to keep, which is also what the capability answers.
+        assert!(Draft::parse("#buy", None).is_err());
+        let kept = Draft::parse("#buy", None).unwrap_err();
+        assert!(kept.contains("Type what you want to keep"), "{kept}");
     }
 
     #[test]

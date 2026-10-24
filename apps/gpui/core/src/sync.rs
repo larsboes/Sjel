@@ -40,6 +40,8 @@ const RECORD_PROPERTY: &str = "/projects/api/record/property";
 const RECORD_REMOVE: &str = "/projects/api/record/remove";
 /// The calendar's entries: a create on the collection, a change and a delete by id, and a change
 /// feed that answers what moved since a cursor (`capabilities/calendar/src/server.rs`).
+const CAPTURES: &str = "/comms/captures";
+
 const ENTRIES: &str = "/calendar/api/entries";
 const ENTRY_CHANGES: &str = "/calendar/api/entries/changes";
 
@@ -171,7 +173,7 @@ impl Report {
         if self.removed > 0 {
             parts.push(format!("{} removed", self.removed));
         }
-        if self.refused.len() > 0 {
+        if !self.refused.is_empty() {
             parts.push(match self.refused.len() {
                 1 => format!("1 the Mac refused: {}", self.refused[0].reason),
                 n => format!("{n} the Mac refused"),
@@ -202,6 +204,7 @@ pub async fn run<H: Host>(store: &TursoStore, host: &H) -> Result<Report, String
     // inside a domain, and a calendar write the Mac refuses must not hold up a note.
     push(store, host, crate::store::DOMAIN_PROJECTS, &mut report).await?;
     push(store, host, crate::store::DOMAIN_CALENDAR, &mut report).await?;
+    push(store, host, crate::store::DOMAIN_CAPTURES, &mut report).await?;
     pull(store, host, &mut report).await?;
     pull_calendar(store, host, &mut report).await?;
     Ok(report)
@@ -299,6 +302,7 @@ async fn replay<H: Host>(
         "set_task_priority" => priority(store, host, report, &mutation.path, &payload).await,
         "set_task_due" => due(host, &mutation.path, &payload).await,
         "delete_record" => remove(store, host, report, &mutation.path).await,
+        "capture_new" => capture_new(store, host, report, &mutation.path, &payload).await,
         "calendar_save" => calendar_save(store, host, report, &mutation.path, &payload).await,
         "calendar_delete" => calendar_delete(host, &mutation.path).await,
         other => Err(format!("this app has no way to replay a {other}")),
@@ -680,6 +684,37 @@ async fn calendar_delete<H: Host>(host: &H, id: &str) -> Result<(), String> {
         return Ok(());
     }
     Err(reply.refused())
+}
+
+/// Sends one capture to the comms capability, which stores it and triages it there.
+///
+/// The phone mints nothing the Mac trusts: it posts text, url and tag, and the capability decides
+/// the id, the tag rule and where the capture goes. The local row keeps the Mac's id, so the page can
+/// say which captures have landed. A capture is never sent twice — it has no update path, because
+/// nothing on this phone edits one.
+async fn capture_new<H: Host>(
+    store: &TursoStore,
+    host: &H,
+    report: &mut Report,
+    local_id: &str,
+    payload: &Value,
+) -> Result<(), String> {
+    let reply = host
+        .send("POST", CAPTURES, Some(payload.to_string().as_bytes()))
+        .await?;
+    if !reply.ok() {
+        return Err(reply.refused());
+    }
+    let id = reply
+        .json()
+        .and_then(|body| body["id"].as_str().map(str::to_owned))
+        .ok_or_else(|| "the Mac stored the capture but did not say which".to_owned())?;
+    store
+        .rekey_capture(local_id, &id)
+        .await
+        .map_err(|e| e.to_string())?;
+    report.created += 1;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- calendar pull
@@ -1228,6 +1263,102 @@ mod tests {
                 store.refusals().await.unwrap().is_empty(),
                 "the band goes when the problem does"
             );
+        });
+    }
+
+    /// A capture typed with no Mac in reach goes into the replica, and the next sync posts it to the
+    /// comms capability, which answers with the id it stored it under.
+    #[test]
+    fn a_capture_typed_offline_reaches_the_mac() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            store
+                .save_capture(Some("Linen shirt 49,90 €"), None, Some("buy"))
+                .await
+                .expect("capture");
+            // Written here before anything is sent, which is the whole point of the field.
+            let held = store.captures().await.expect("captures");
+            assert_eq!(held.len(), 1);
+            assert!(!held[0].on_the_mac());
+            assert_eq!(held[0].label(), "Linen shirt 49,90 €");
+
+            let fake = Fake::default();
+            fake.on(
+                "POST",
+                CAPTURES,
+                201,
+                json!({
+                    "id": "9f2c1a7b3d4e5f60", "text": "Linen shirt 49,90 €", "url": Value::Null,
+                    "tag": "buy", "status": "new", "routed_to": Value::Null,
+                    "client": "GPUI iPhone", "created_at": "2026-10-24T07:00:00Z",
+                }),
+            );
+            for _ in 0..3 {
+                fake.on("GET", PROJECTS, 200, projects(&[]));
+            }
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.created, 1, "{report:?}");
+            assert!(report.refused.is_empty(), "{report:?}");
+            assert!(report.kept.is_empty(), "{report:?}");
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
+
+            // What the Mac was told: the fields, and no id of ours.
+            let sent = fake.bodies_to(CAPTURES);
+            assert_eq!(sent.len(), 1, "{sent:?}");
+            assert_eq!(sent[0]["text"], json!("Linen shirt 49,90 €"));
+            assert_eq!(sent[0]["tag"], json!("buy"));
+            assert_eq!(sent[0]["url"], Value::Null);
+
+            let landed = store.captures().await.expect("captures");
+            assert_eq!(
+                landed[0].remote_id.as_deref(),
+                Some("9f2c1a7b3d4e5f60"),
+                "the row keeps the Mac's id, so the page can say it landed"
+            );
+            assert_eq!(landed[0].label(), "Linen shirt 49,90 €");
+        });
+    }
+
+    /// A capture the Mac will not take is named like any other refused write, and stays here.
+    #[test]
+    fn a_capture_the_mac_refuses_is_kept_and_named() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = store
+                .save_capture(Some("Proper shoes"), None, Some("buy"))
+                .await
+                .expect("capture");
+            let fake = Fake::default();
+            fake.on(
+                "POST",
+                CAPTURES,
+                400,
+                json!({ "error": "unknown tag 'buy', expected one of: look, go, learn" }),
+            );
+            for _ in 0..3 {
+                fake.on("GET", PROJECTS, 200, projects(&[]));
+            }
+
+            let report = run(&store, &fake).await.expect("sync");
+            assert_eq!(report.refused.len(), 1, "{report:?}");
+            assert_eq!(
+                report.refused[0].path, id,
+                "named by the id it was queued under"
+            );
+            assert!(report.refused[0].reason.contains("unknown tag"));
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
+            let kept = store.captures().await.expect("captures");
+            assert!(!kept[0].on_the_mac(), "not taken, so not landed");
+            assert_eq!(kept[0].label(), "Proper shoes");
         });
     }
 

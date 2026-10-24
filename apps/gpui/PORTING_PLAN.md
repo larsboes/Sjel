@@ -14,7 +14,7 @@
 | 3 | `/calendar` | Calendar (Week/Month) | **Ported** | Native GPUI (`CalendarPage`) | Native GPUI Tab (the replica, writes included; the Mac's copy until the first pull) | `capabilities/calendar` |
 | 4 | `/projects` | Projects, Tasks & Notes | **Ported** | Native GPUI (`Projects`) | Native GPUI Tab | `capabilities/projects` |
 | 5 | `/documents` | Documents & PDF Reader | **Ported** | Native GPUI (`Documents`) | Planned Reader | `capabilities/documents` |
-| 6 | `/inbox` | Capture Inbox & Triage | **Partially Ported** | Native GPUI (`Inbox`) | Planned Tab | `capabilities/comms` |
+| 6 | `/inbox` | Capture Inbox & Triage | **Partially Ported** | Native GPUI (`Inbox`) | Native GPUI Tab (capture only: triage stays on the Mac) | `capabilities/comms` |
 | 7 | `/feed` | Comms Feed & Mail Triage | **Partially Ported** | Native GPUI (`Feed`, `Mail`) | Planned | `capabilities/comms` |
 | 8 | `/travel` | Trip Planner & Itinerary | **Partially Ported** | Native GPUI (`Travel`) | Native GPUI Tab | `capabilities/travel` |
 | 9 | `/map` | Interactive Travel Map | **Partially Ported** | Native GPUI (`Travel::Map`) | Native GPUI Map | `capabilities/travel` |
@@ -278,6 +278,56 @@
   - `apps/gpui/ios/src/lib.rs`
 - **Next**: `Inbox` — the fifth slot and the second write path — which can now queue offline.
 
+### ✅ Work Package 12: Inbox, the fifth slot
+- **Status**: Shipped (2026-10-24). The bar is five items and `Today | Inbox | Calendar | People |
+  Travel` is the shape `mobile_tab_bar` holds at its 64 px floor.
+- **Why**: a phone is a capture device first (`research/offline-on-the-phone.md`), and it had no
+  field for the thought in hand. It also had no second write path: only the calendar could write, so
+  the outbox had one consumer.
+- **Shipped**:
+  - `core/src/capture.rs` — `Draft`, one typed line read the way the capability reads it: `#buy` in
+    the text sets the tag (the chip wins over the hashtag, because the last thing touched is the one
+    meant), a lone link becomes the URL rather than the text, an unknown `#word` stays in the text,
+    and the preview says where it will land. `route_for`/`suggested_tag` are the one rule the Mac's
+    triage and the phone's preview share, lifted out of `Capture` so both call the same code.
+  - `core/src/store.rs` — the `captures` table and `DOMAIN_CAPTURES`: a capture is written here
+    first, its own id is `capture:local:<n>`, and `rekey_capture` keeps the Mac's id once it lands.
+  - `core/src/sync.rs` — a third push, `capture_new`: one `POST /comms/captures` carrying text, url
+    and tag, with the capability deciding the id, the tag rule and where the capture goes. Nothing
+    the phone minted is trusted, and a capture is never sent twice: it has no update path, because
+    nothing on the phone edits one.
+  - `ui/src/inbox.rs` (new) — the field, the four chips, the preview, `Keep`, and what was kept:
+    newest first, with `#tag`, the route ("To wishlist"), and the state — `On the Mac`, `Waiting for
+    the Mac`, or the Mac's refusal on the row it belongs to rather than in the projects band, which
+    names records and would have shown a capture's local id.
+  - `apps/gpui/ios/src/lib.rs` — `Tab::Inbox` in the fifth slot, the store handed to the page when it
+    opens, a reload after every sync, and `InboxEvent::Wrote` starting one.
+  - `apps/gpui/ios/host/UITests/InboxCapture.swift` (new) — taps `#buy` and `Keep`: a chip that takes
+    the tag and a card that says what is missing when the field is empty. Typing is deliberately not
+    driven from XCUITest, which waits for a keyboard the simulator may never raise; a check that
+    hangs is worse than one that covers less, and the keystroke path is covered by
+    `core::capture`'s and the store's tests.
+- **Not here**: triage. Routing a capture into a wishlist item, a feed source or a place is the
+  Mac's; the phone says where it will go and stops. Reading the Mac's own captures back is also not
+  here — the list is what this phone captured, which is the honest thing to draw without a pull.
+- **Verified on a simulator**: the empty card, a chip taken (`#buy` in accent), `Keep` with an empty
+  field answering "Type what you want to keep, or paste a link.", and two seeded captures drawn with
+  their tags, routes and states — `Linen shirt 49,90 €` `#buy` → To wishlist, waiting; `youtube.com`
+  `#look` → To feed, on the Mac — plus, with a seeded refusal, the Mac's reason wrapped inside the
+  row instead of running off the card.
+- **Tests**: 2 new in `capture` (a typed line becomes a draft; an empty line is not a capture), 2 in
+  `sync` (a capture typed offline reaches the Mac and keeps its id; a refused capture is kept and
+  named), 1 in `store` (queued once each, newest first, landed after a rekey) and 3 in
+  `ui/src/inbox.rs` (no store is empty and loaded; the count comes from the rows; the preview answers
+  the chip). core 276, ui 41, app 81.
+- **Target Files**:
+  - `apps/gpui/core/src/{capture,store,sync}.rs`
+  - `apps/gpui/ui/src/inbox.rs`
+  - `apps/gpui/ios/src/lib.rs`
+  - `apps/gpui/ios/host/UITests/InboxCapture.swift`
+- **Next**: reading the Mac's captures back (a pull, so the tab shows the whole inbox rather than this
+  phone's half of it), then the soundscape player, notifications and RoomPlan, in that order.
+
 ---
 
 ## 3. Next, before everything below (operator, 2026-10-23)
@@ -321,6 +371,7 @@ These come before the roadmap in section 4. The roadmap resumes when they are do
    replica through the outbox — because the calendar is the only write path today and a phone is a
    capture device first.
    - Done 2026-10-24: `Today` landed (Work Package 10), with `Projects` and `Settings` behind it.
+   - Done 2026-10-24: `Inbox` landed (Work Package 12), in the fifth slot.
    - Decided 2026-10-24: the bar becomes `Today | Inbox | Calendar | People | Travel`, and
      `Settings` moves behind Today's header, with a banner on Today while the phone holds no copy
      or no pairing. Travel keeps a slot because it is the one page with a full map and a phone is
@@ -428,14 +479,15 @@ flowchart TD
 ```
 
 1. **Expanding iOS Tab Navigation**:
-   - Current tabs: `Today` (the day off the copy, the tasks and projects off the replica),
-     `Calendar` (replica, read and write; the Mac's copy until the first pull), `People` (contacts
-     and places, read-only over the copy), `Travel`. `Projects` is the list a project row on Today
+   - Current tabs: `Today` (the day off the copy, the tasks and projects off the replica), `Inbox`
+     (capture into the replica, queued for the Mac), `Calendar` (replica, read and write; the Mac's
+     copy until the first pull), `People` (contacts and places, read-only over the copy), `Travel`. `Projects` is the list a project row on Today
      opens, and `Settings` — the pairing — is behind Today's gear.
    - Add tabs:
      - ~~`Today`: Daily context timeline, focus tasks with large tap target checkboxes.~~ shipped in
        Work Package 10, which is also where the bar lost `Projects` and `Settings`.
-     - `Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).
+     - ~~`Inbox`: Fast mobile capture field with tag selector (`#buy`, `#look`, `#go`, `#learn`).~~
+       shipped in Work Package 12, which is what the fifth slot was kept for.
      - ~~`Calendar`: Mobile-friendly day view.~~ shipped in Work Package 7; a writing tab since Work
        Package 8, when the calendar joined the replica.
      - ~~`People` / `Places`: two registers, one tab.~~ shipped in Work Package 9.

@@ -30,6 +30,7 @@ use sjel_gpui_core::mirror::{self, Mirror};
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
+use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
@@ -58,6 +59,8 @@ pub enum Tab {
     Calendar,
     /// The contacts and the places they have been, read from the same copy.
     People,
+    /// One field for whatever is in hand, kept on the phone first and queued for the Mac.
+    Inbox,
     Travel,
     /// Pairing with a Mac: offered here, never required (research/offline-on-the-phone.md).
     Settings,
@@ -176,6 +179,8 @@ pub struct Capabilities {
     today: gpui::Entity<Today>,
     /// The Calendar page over the Mac's read-only copy (`sjel_gpui_ui::calendar`).
     calendar: gpui::Entity<Calendar>,
+    /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
+    inbox: gpui::Entity<Inbox>,
     /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
     /// the registry's writes are the operator's, so this tab draws and never offers a control that
     /// would have to be refused.
@@ -297,6 +302,15 @@ impl Capabilities {
             PeopleEvent::Editing(open) => keyboard(*open),
         })
         .detach();
+        // The capture field writes the phone's own replica, so it needs nothing from the Mac: it is
+        // built empty and filled when the store opens.
+        let inbox = cx.new(|_| Inbox::new(Density::Mobile));
+        cx.subscribe(&inbox, |view, _, event, cx| match event {
+            // A capture landed in the queue: the Mac can have it now if this launch reached it.
+            InboxEvent::Wrote => view.maybe_sync(cx),
+            InboxEvent::Editing(open) => keyboard(*open),
+        })
+        .detach();
         let copy_events = events.clone();
         shell::spawn(async move {
             let _ = copy_events.unbounded_send(Event::Copy(open_copy()));
@@ -358,6 +372,9 @@ impl Capabilities {
                                     // The Calendar tab writes to the same store, and reads it as
                                     // soon as its change feed has been read once — until then the
                                     // Mac's copy keeps drawing the day (`ui/src/calendar.rs`).
+                                    view.inbox.update(cx, |inbox, cx| {
+                                        inbox.set_store(Some(store.clone()), cx)
+                                    });
                                     let repo = view.repo_for(store);
                                     view.calendar.update(cx, |calendar, cx| {
                                         calendar.set_store(Some(repo), cx)
@@ -370,10 +387,10 @@ impl Capabilities {
                             let records = board.records().to_vec();
                             let blocked = board.blocked().to_vec();
                             if let Some(projects) = &view.projects {
-                                projects.update(cx, |projects, cx| {
-                                    projects.set_blocked(blocked, cx)
-                                });
+                                projects
+                                    .update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                             }
+                            view.inbox.update(cx, |inbox, cx| inbox.load(cx));
                             view.today.update(cx, |today, cx| {
                                 today.set_records(records, cx);
                                 today.set_travel(board.pending(), view.client.is_some(), cx);
@@ -490,6 +507,8 @@ impl Capabilities {
                             }
                             // A pull lands entries too, and the ids a create answered with.
                             view.calendar.update(cx, |calendar, cx| calendar.load(cx));
+                            // A sync is what moves a capture from "waiting" to "on the Mac".
+                            view.inbox.update(cx, |inbox, cx| inbox.load(cx));
                             let (pending, paired) = (
                                 view.board.as_ref().map_or(0, Board::pending),
                                 view.client.is_some(),
@@ -506,10 +525,10 @@ impl Capabilities {
                                 .map(|board| board.blocked().to_vec())
                                 .unwrap_or_default();
                             if let Some(projects) = &view.projects {
-                                projects.update(cx, |projects, cx| {
-                                    projects.set_blocked(blocked, cx)
-                                });
+                                projects
+                                    .update(cx, |projects, cx| projects.set_blocked(blocked, cx));
                             }
+                            view.inbox.update(cx, |inbox, cx| inbox.load(cx));
                             view.today.update(cx, |today, cx| {
                                 today.set_records(records, cx);
                                 today.set_travel(pending, paired, cx);
@@ -551,6 +570,7 @@ impl Capabilities {
             projects: None,
             calendar,
             people,
+            inbox,
             today,
             copy: None,
             copying: false,
@@ -633,8 +653,9 @@ impl Capabilities {
                 if view.client.is_some() {
                     view.maybe_sync(cx);
                 } else {
-                    view.synced =
-                        Some("Not connected: pair with your Mac in Settings, then try again.".into());
+                    view.synced = Some(
+                        "Not connected: pair with your Mac in Settings, then try again.".into(),
+                    );
                     cx.notify();
                 }
             }
@@ -825,6 +846,7 @@ fn launch_tab() -> Tab {
         "projects" => Tab::Projects,
         "calendar" => Tab::Calendar,
         "people" => Tab::People,
+        "inbox" => Tab::Inbox,
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
         _ => Tab::Today,
@@ -851,6 +873,7 @@ impl Render for Capabilities {
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;
         let is_today = self.active_tab == Tab::Today;
+        let is_inbox = self.active_tab == Tab::Inbox;
         let is_travel = self.active_tab == Tab::Travel;
         let is_calendar = self.active_tab == Tab::Calendar;
         let is_people = self.active_tab == Tab::People;
@@ -862,6 +885,8 @@ impl Render for Capabilities {
             .update(cx, |people, cx| people.set_palette(palette, cx));
         self.today
             .update(cx, |today, cx| today.set_palette(palette, cx));
+        self.inbox
+            .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
         if let Some(projects) = &self.projects {
             projects.update(cx, |projects, cx| projects.set_palette(palette, cx));
         }
@@ -883,7 +908,7 @@ impl Render for Capabilities {
                     .min_h_0()
                     // Projects scrolls inside itself, so the page holds still around it.
                     .when(
-                        is_mac || is_today || is_travel || is_calendar || is_people,
+                        is_mac || is_today || is_inbox || is_travel || is_calendar || is_people,
                         |page| page.overflow_y_scroll(),
                     )
                     // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
@@ -1307,11 +1332,17 @@ impl Render for Capabilities {
                         )
                     })
                     .when(is_today, |page| page.child(self.today.clone()))
+                    .when(is_inbox, |page| page.child(self.inbox.clone()))
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
                     .when(is_people, |page| page.child(self.people.clone()))
                     .when(
-                        !is_mac && !is_today && !is_travel && !is_calendar && !is_people,
+                        !is_mac
+                            && !is_today
+                            && !is_inbox
+                            && !is_travel
+                            && !is_calendar
+                            && !is_people,
                         |page| {
                             let pending = self.board.as_ref().map_or(0, Board::pending);
                             page.when_some(self.store_error.clone(), |page, error| {
@@ -1400,6 +1431,12 @@ impl Render for Capabilities {
                         badge: if pending > 0 { Some(pending) } else { None },
                     },
                     NavItem {
+                        id: "inbox",
+                        label: "Inbox",
+                        icon: "✎",
+                        badge: None,
+                    },
+                    NavItem {
                         id: "calendar",
                         label: "Calendar",
                         icon: "📅",
@@ -1423,6 +1460,7 @@ impl Render for Capabilities {
                     // neither lights a tab of its own.
                     Tab::Settings | Tab::Today => "today",
                     Tab::Projects => "today",
+                    Tab::Inbox => "inbox",
                     Tab::Travel => "travel",
                     Tab::Calendar => "calendar",
                     Tab::People => "people",
@@ -1438,9 +1476,11 @@ impl Render for Capabilities {
                                 view.travel.update(cx, |travel, _| travel.deactivate());
                             }
                             view.active_tab = match id {
+                                "inbox" => Tab::Inbox,
                                 "travel" => Tab::Travel,
                                 "calendar" => Tab::Calendar,
                                 "people" => Tab::People,
+                                "inbox" => Tab::Inbox,
                                 _ => Tab::Today,
                             };
                             if view.active_tab == Tab::Travel {
@@ -1449,6 +1489,9 @@ impl Render for Capabilities {
                             // Opening the calendar or the registers with no copy asks for one, so a
                             // phone that was paired here but never fetched does not have to know to
                             // tap Refresh.
+                            if view.active_tab == Tab::Inbox {
+                                view.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                            }
                             if (view.active_tab == Tab::Today
                                 || view.active_tab == Tab::Calendar
                                 || view.active_tab == Tab::People)

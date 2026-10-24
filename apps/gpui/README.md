@@ -302,6 +302,13 @@ field, because gpui-mobile raises none on focus. A fresh install starts empty an
 nothing, so pairing later sends the Mac only what the person wrote. A store that cannot open says
 so on that page instead of falling back to memory.
 
+**Inbox** is the next tab: one field for whatever is in hand, four chips for the tags the comms
+capability knows, a line saying where the capture will land, and `Keep`. It writes the phone's own
+replica first and queues the capture for `POST /comms/captures`, so it works on a train; the list
+under the field says which captures have landed (`On the Mac`), which are waiting, and, when the Mac
+says no, its reason on the row it belongs to. Triage is not here — a wishlist item, a feed source or
+a place is the Mac's decision (`core/src/capture.rs` holds the rule both sides read).
+
 **Calendar** is the next tab, and it reads the same replica as Projects once the Mac's change feed
 has been read: `GET /calendar/api/entries/changes?since=` answers what moved, and only the cursor
 keeps the pull cheap. Until that first pull lands — a fresh install, or a phone that has not reached

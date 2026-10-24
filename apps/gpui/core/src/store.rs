@@ -86,6 +86,22 @@ CREATE TABLE IF NOT EXISTS _offline_mutations (
 /// The columns an existing mutation log from before the second domain does not have yet.
 const ADDED_MUTATION_COLUMNS: &[(&str, &str)] = &[("domain", "TEXT NOT NULL DEFAULT 'projects'")];
 
+/// The captures typed on this phone, and the Mac's answer once it took one.
+///
+/// A capture is the one record whose whole purpose is to survive being offline: it is written here
+/// first, and the queue carries it to `POST /comms/captures` later. `remote_id` is the Mac's id once
+/// it answered, which is also how the page knows a capture has landed without asking the Mac.
+const SCHEMA_CAPTURES: &str = r#"
+CREATE TABLE IF NOT EXISTS captures (
+    id TEXT PRIMARY KEY,
+    body TEXT,
+    url TEXT,
+    tag TEXT,
+    remote_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+"#;
+
 /// The writes the Mac refused, one row per record, so the reason outlives the launch that heard it.
 ///
 /// A refusal is not a lost write: the record and its queued mutation are both still here, and this
@@ -130,6 +146,11 @@ CREATE TABLE IF NOT EXISTS _replica_meta (
 /// The replica's name for one domain, used by the queue and by the pull cursors.
 pub const DOMAIN_PROJECTS: &str = "projects";
 pub const DOMAIN_CALENDAR: &str = "calendar";
+/// Captures typed on this phone. Its own domain because its replay is its own: a capture has no
+/// path and no record, it is one `POST` to the comms capability.
+pub const DOMAIN_CAPTURES: &str = "captures";
+/// The id a capture made on this phone carries until the Mac assigns one.
+pub const LOCAL_CAPTURE_ID_PREFIX: &str = "capture:local:";
 /// The key a change feed's cursor is kept under, per domain.
 const CURSOR_PREFIX: &str = "cursor:";
 /// The id prefix an entry made on this phone carries until the Mac assigns one. A write to such an
@@ -208,6 +229,9 @@ impl TursoStore {
         conn.execute_batch(SCHEMA_REFUSALS)
             .await
             .map_err(|e| StoreError::Libsql(format!("refusals schema init failed: {e}")))?;
+        conn.execute_batch(SCHEMA_CAPTURES)
+            .await
+            .map_err(|e| StoreError::Libsql(format!("captures schema init failed: {e}")))?;
         self.add_missing_columns(&conn).await?;
         self.add_missing_mutation_columns(&conn).await
     }
@@ -1031,6 +1055,87 @@ impl TursoStore {
     }
 
     /// Moves an entry, and any write queued for it, to the id the Mac assigned on create.
+    /// Writes one typed capture into the replica and queues it for the Mac.
+    ///
+    /// The row is here before the Mac hears anything, which is the point: a capture is what a person
+    /// types on a train, and a queue that lost it would be worse than no field at all. Answers the
+    /// row's id, which the page uses to draw it back.
+    pub async fn save_capture(
+        &self,
+        text: Option<&str>,
+        url: Option<&str>,
+        tag: Option<&str>,
+    ) -> StoreResult<String> {
+        let id = format!(
+            "{LOCAL_CAPTURE_ID_PREFIX}{}",
+            self.next_capture_seq().await?
+        );
+        let conn = self.connection().await?;
+        conn.execute(
+            "INSERT INTO captures (id, body, url, tag) VALUES (?1, ?2, ?3, ?4)",
+            libsql::params![id.clone(), text, url, tag],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("save capture failed: {e}")))?;
+        drop(conn);
+        let payload = serde_json::json!({ "text": text, "url": url, "tag": tag }).to_string();
+        self.queue_mutation(DOMAIN_CAPTURES, &id, "capture_new", &payload)
+            .await?;
+        Ok(id)
+    }
+
+    /// A counter for the local ids, so two captures typed in the same second cannot collide.
+    async fn next_capture_seq(&self) -> StoreResult<i64> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query("SELECT COUNT(*) FROM captures", ())
+            .await
+            .map_err(|e| StoreError::Libsql(format!("count captures failed: {e}")))?;
+        let count: i64 = match rows.next().await {
+            Ok(Some(row)) => row.get(0).unwrap_or(0),
+            _ => 0,
+        };
+        Ok(count + 1)
+    }
+
+    /// The captures this phone typed, newest first, with the Mac's id once it has one.
+    pub async fn captures(&self) -> StoreResult<Vec<LocalCapture>> {
+        let conn = self.connection().await?;
+        let mut rows = conn
+            .query(
+                "SELECT id, body, url, tag, remote_id, created_at FROM captures \
+                 ORDER BY created_at DESC, rowid DESC",
+                (),
+            )
+            .await
+            .map_err(|e| StoreError::Libsql(format!("read captures failed: {e}")))?;
+        let mut list = Vec::new();
+        while let Ok(Some(row)) = rows.next().await {
+            list.push(LocalCapture {
+                id: row.get(0).unwrap_or_default(),
+                text: row.get(1).ok(),
+                url: row.get(2).ok(),
+                tag: row.get(3).ok(),
+                remote_id: row.get(4).ok(),
+                created_at: row.get(5).unwrap_or_default(),
+            });
+        }
+        Ok(list)
+    }
+
+    /// Records the Mac's id for a capture it took, and moves the queue with it: the local id was a
+    /// placeholder, and a second write to it would create the capture twice.
+    pub async fn rekey_capture(&self, from: &str, to: &str) -> StoreResult<()> {
+        let conn = self.connection().await?;
+        conn.execute(
+            "UPDATE captures SET remote_id = ?1 WHERE id = ?2",
+            libsql::params![to, from],
+        )
+        .await
+        .map_err(|e| StoreError::Libsql(format!("rekey capture failed: {e}")))?;
+        Ok(())
+    }
+
     pub async fn rekey_calendar(&self, from: &str, to: &str) -> StoreResult<()> {
         if from == to {
             return Ok(());
@@ -1056,13 +1161,45 @@ impl TursoStore {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingMutation {
     pub id: i64,
-    /// Which capability the write belongs to ([`DOMAIN_PROJECTS`] or [`DOMAIN_CALENDAR`]).
+    /// Which capability the write belongs to ([`DOMAIN_PROJECTS`], [`DOMAIN_CALENDAR`] or
+    /// [`DOMAIN_CAPTURES`]).
     pub domain: String,
+    /// The record's path, or for a capture the id it was given here.
     pub path: String,
-    /// `save_record` or `set_task_done`, the two writes a phone makes.
+    /// `save_record`, `set_task_done`, `calendar_save` or `capture_new`.
     pub action: String,
     /// The JSON the write carried, as it was queued.
     pub payload: String,
+}
+
+/// One capture this phone typed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalCapture {
+    /// The id it was written under here.
+    pub id: String,
+    pub text: Option<String>,
+    pub url: Option<String>,
+    pub tag: Option<String>,
+    /// The Mac's id, once it took the capture.
+    pub remote_id: Option<String>,
+    pub created_at: String,
+}
+
+impl LocalCapture {
+    /// True when the Mac has it, so the page can say which of the two it is looking at.
+    pub fn on_the_mac(&self) -> bool {
+        self.remote_id.is_some()
+    }
+
+    /// What the row says: the typed text, else the link's host, else the link.
+    pub fn label(&self) -> String {
+        self.text
+            .clone()
+            .filter(|text| !text.is_empty())
+            .or_else(|| crate::capture::host(self.url.as_deref()))
+            .or_else(|| self.url.clone())
+            .unwrap_or_default()
+    }
 }
 
 /// What one local record knows about its copy on the Mac.
@@ -1084,6 +1221,42 @@ pub struct SyncState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Two captures typed a moment apart get different ids and read back newest first, because a
+    /// field that overwrites the first thought with the second is not an inbox.
+    #[test]
+    fn captures_are_queued_once_each_and_read_back_newest_first() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let first = store
+                .save_capture(Some("call the plumber"), None, None)
+                .await
+                .expect("first");
+            let second = store
+                .save_capture(None, Some("https://example.org/x"), Some("look"))
+                .await
+                .expect("second");
+            assert_ne!(first, second);
+
+            let rows = store.captures().await.expect("captures");
+            assert_eq!(rows.len(), 2);
+            assert_eq!(rows[0].id, second, "newest first");
+            assert_eq!(rows[0].label(), "example.org", "a link shows its host");
+            assert_eq!(rows[1].label(), "call the plumber");
+            assert!(!rows[0].on_the_mac());
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 2);
+
+            store.rekey_capture(&second, "mac-id").await.expect("rekey");
+            let rows = store.captures().await.expect("captures");
+            assert!(rows[0].on_the_mac(), "the Mac took this one");
+            assert_eq!(rows[0].remote_id.as_deref(), Some("mac-id"));
+            assert!(!rows[1].on_the_mac());
+        });
+    }
 
     #[test]
     fn in_memory_store_lifecycle() {

@@ -23,7 +23,9 @@ use std::sync::{mpsc, Arc};
 
 use futures::channel::oneshot;
 use gpui::RenderImage;
+#[cfg(target_os = "macos")]
 use objc2_core_foundation::{CFData, CFRetained, CGPoint, CGRect, CGSize};
+#[cfg(target_os = "macos")]
 use objc2_core_graphics::{
     CGBitmapContextCreate, CGBitmapContextGetBytesPerRow, CGBitmapContextGetData,
     CGBitmapContextGetHeight, CGBitmapInfo, CGColorSpace, CGContext, CGDataProvider,
@@ -33,11 +35,13 @@ use objc2_core_graphics::{
 /// The most one page may be drawn at. A PDF's media box is document-supplied data: a page claiming
 /// 100 000 points would otherwise ask for gigapixels of RAM. 64 MP is 256 MiB of BGRA, well past a
 /// 5 K display at 3× and far below anything that would exhaust this machine.
+#[cfg(target_os = "macos")]
 const MAX_PAGE_PIXELS: u64 = 64 * 1024 * 1024;
 
 /// Why a page could not be drawn. Every variant is shown to the reader rather than swallowed into
 /// an empty pane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub enum PdfError {
     /// The bytes are not a PDF Core Graphics can open.
     Unreadable,
@@ -47,6 +51,9 @@ pub enum PdfError {
     TooLarge,
     /// Core Graphics would not build a bitmap for this page.
     NoBitmap,
+    /// This platform has no PDF renderer.
+    #[cfg(not(target_os = "macos"))]
+    Unsupported,
 }
 
 impl std::fmt::Display for PdfError {
@@ -56,6 +63,8 @@ impl std::fmt::Display for PdfError {
             Self::NoSuchPage => "That page is not in this document.",
             Self::TooLarge => "This page is too large to draw here.",
             Self::NoBitmap => "This page could not be drawn.",
+            #[cfg(not(target_os = "macos"))]
+            Self::Unsupported => "PDF pages cannot be drawn on this platform yet.",
         })
     }
 }
@@ -81,11 +90,13 @@ impl PageImage {
 }
 
 /// An opened PDF, bound to the thread that opened it.
+#[cfg(target_os = "macos")]
 pub struct Pdf {
     document: CFRetained<CGPDFDocument>,
     pages: usize,
 }
 
+#[cfg(target_os = "macos")]
 impl Pdf {
     /// Open the original bytes. The bytes are copied into the document, so the caller may drop
     /// them; a document of several hundred pages holds no reference to the file on disk.
@@ -198,6 +209,26 @@ impl Pdf {
     }
 }
 
+/// Without Core Graphics every document is refused by name, and the reader shows its text.
+#[cfg(not(target_os = "macos"))]
+pub struct Pdf;
+
+#[cfg(not(target_os = "macos"))]
+impl Pdf {
+    pub fn open(_bytes: &[u8]) -> Result<Self, PdfError> {
+        Err(PdfError::Unsupported)
+    }
+
+    pub fn page_count(&self) -> usize {
+        0
+    }
+
+    pub fn render(&self, _index: usize, _width: u32) -> Result<PageImage, PdfError> {
+        Err(PdfError::Unsupported)
+    }
+}
+
+#[cfg(target_os = "macos")]
 /// A page's drawn size in points, with `/Rotate` applied.
 fn rotated_size(width: f64, height: f64, rotation: i32) -> (f64, f64) {
     if rotation.rem_euclid(180) == 90 {
@@ -207,6 +238,7 @@ fn rotated_size(width: f64, height: f64, rotation: i32) -> (f64, f64) {
     }
 }
 
+#[cfg(target_os = "macos")]
 /// The pixel size a page is drawn at for a requested width, refusing a page too large to hold.
 fn target_pixels(points_wide: f64, points_tall: f64, width: u32) -> Result<(u32, u32), PdfError> {
     if !(points_wide.is_finite() && points_tall.is_finite())
@@ -350,7 +382,7 @@ impl PageRenderer {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
 

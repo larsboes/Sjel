@@ -375,10 +375,8 @@ jobs:
 
   # The GPUI app is its own workspace (apps/gpui/Cargo.toml), so nothing above builds it. Each
   # platform checks natively: a cross check from one host needs every target's C toolchain
-  # (aws-lc-sys, libsql). Linux and Windows check the shared crates only, core and ui, because
-  # the desktop shell in apps/gpui/src is still Mac-only by placement (PORTING_PLAN.md §5b).
-  # Windows and Android have never been built; they report without failing the run until
-  # their first green check, then lose `experimental`.
+  # (aws-lc-sys, libsql). Linux also checks the desktop shell, apps/gpui/src. The Windows shell
+  # reports without failing the run until its first green check, then loses `experimental`.
   gpui-targets:
     name: gpui cargo check (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -396,15 +394,20 @@ jobs:
             os: ubuntu-latest
             experimental: false
             target: ""
-            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
+            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui -p sjel-gpui --all-targets
           - name: windows
+            os: windows-latest
+            experimental: false
+            target: ""
+            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
+          - name: windows shell
             os: windows-latest
             experimental: true
             target: ""
-            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
+            check: cargo check --locked -p sjel-gpui --all-targets
           - name: android
             os: ubuntu-latest
-            experimental: true
+            experimental: false
             target: aarch64-linux-android
             check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --target aarch64-linux-android
     defaults:
@@ -428,7 +431,7 @@ jobs:
         run: >
           sudo apt-get update && sudo apt-get install -y pkg-config clang libxkbcommon-dev
           libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev
-          libfontconfig-dev libfreetype-dev libssl-dev
+          libfontconfig-dev libfreetype-dev libssl-dev libasound2-dev
       - name: Add the target
         if: matrix.target != ''
         run: rustup target add ${{ matrix.target }}

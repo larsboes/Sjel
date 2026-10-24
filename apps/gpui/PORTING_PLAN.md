@@ -983,6 +983,15 @@ Not started. Each item is a work package for a later session.
    - Linux and Windows: GPUI has desktop backends. The open work is the keychain
      (`libs/sjel-credentials`), the native map (`native-maps` is macOS only, the raster map is
      not), and packaging.
+   - Done 2026-10-24: the Mac shell (`src/`) checks on Linux, in an OrbStack `rust:latest`
+     container with CI's packages plus `libasound2-dev`. `pdf_kit` was the only blocker: Core
+     Graphics is now gated to `Pdf` alone, and elsewhere `Pdf::open` answers
+     `PdfError::Unsupported`, so Documents shows the extracted text. Not run on Linux yet, only
+     checked. CI's Linux leg now checks the shell. The Windows shell leg reports without failing
+     until its first green run.
+   - Still open for Linux and Windows: a keychain backend (`libs/sjel-credentials` answers
+     `UnsupportedPlatform` off macOS, so the app cannot save a key there), a PDF renderer, a
+     launch on a real desktop, and packaging.
    - Android: the phone's offline core (`core/src/{store,sync,mirror}.rs`) is platform-free. The
      open work is a host like `ios/host`, discovery, and the platform calls behind item 2's
      traits. Checked 2026-10-24: the pinned `gpui-mobile` rev `c24a1308e1` already has an Android

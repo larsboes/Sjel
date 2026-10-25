@@ -35,5 +35,6 @@ manifests declare the capabilities and external systems they use. See the
   stay in the active overlay; secrets follow the [security boundary](security.md).
 
 Read [storage](storage.md) before changing a store, [security](security.md) before changing a
-listener or authentication policy, and [projects UI](projects-ui.md) for projects, figure embeds,
-and generative UI.
+listener or authentication policy, [data processing policy](data-processing-policy.md) before
+changing classification or model-provider gates, and [projects UI](projects-ui.md) for projects,
+figure embeds, and generative UI.

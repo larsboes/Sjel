@@ -1035,9 +1035,18 @@ Routes:
   On-the-go mode with a mail too long for the light window) retries hourly without a cap.
   Explicit replay starts another attempt immediately. `sjel capability mail events [replay]`
   wraps both routes.
+- A booking confirmation from a known sender is read without a model. One reader per sender
+  lives in `src/mail_events/tickets/` (Deutsche Bahn, Eurowings); a new sender is one file and
+  one line in `READERS`. A reader returns every leg with its date line as the grounding quote,
+  and a ticket with no travel date records `date_missing`. Other mail goes to the local model.
 - Event analysis sends a JSON Schema (`response_format: json_schema`). Without it Apple
   Foundation Models returns malformed JSON. A ticket leg carries `payload.city` (arrival) and
-  `payload.from_city` (departure), which Calendar uses to group a trip.
+  `payload.from_city` (departure), which Calendar uses to group a trip. An airport that serves
+  two cities names both (`Köln, Bonn`). A quote that dates the booking ("Tag der Buchung",
+  "booked on") never grounds an event date.
+- After a mail's proposals are written, comms asks Calendar to retire the mail's older
+  proposals (`POST /api/entries/external/retire`), because a model words a title, and so the
+  key, differently each run. A reader's answer retires; a model's empty answer does not.
 - `POST /triage/relevance/refresh` `{"limit":200}` → scores stored pending mail against
   TELOS through loopback-only local inference or the labelled lexical fallback; TELOS is read-only
 - `POST /triage/data-class/refresh` `{"limit":500}` → locally classifies stored pending mail

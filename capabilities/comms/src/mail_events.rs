@@ -308,6 +308,29 @@ fn next_day(date: &str) -> Option<String> {
     Some(format!("{:04}-01-01", year + 1))
 }
 
+/// A quote that dates the booking, not the event: "Tag der Buchung: 23.10.2026", "was booked on
+/// 24.10.2026". The date is in the mail, so grounding passes it, and a model reading a ticket
+/// with no travel date took it for the journey.
+fn is_booking_stamp(evidence: &str) -> bool {
+    let text = evidence.to_lowercase();
+    [
+        "buchung:",
+        "buchungsdatum",
+        "wie folgt gebucht",
+        "gebucht am",
+        "booked on",
+        "booking date",
+        "order date",
+        "bestelldatum",
+        "bestellt am",
+        "änderungsdatum",
+        "rechnungsdatum",
+        "invoice date",
+    ]
+    .iter()
+    .any(|marker| text.contains(marker))
+}
+
 /// One write to Calendar. `what` names the write in the error.
 fn calendar_write(
     cfg: &Config,
@@ -548,7 +571,10 @@ pub(crate) fn analyze_candidates(
             let Some(date) = event.date.as_deref() else {
                 continue;
             };
-            if grounding::date_grounding(&body, &event.evidence, date) == DateGrounding::Supported {
+            if !is_booking_stamp(&event.evidence)
+                && grounding::date_grounding(&body, &event.evidence, date)
+                    == DateGrounding::Supported
+            {
                 grounded.push((index, event));
             } else {
                 report.failed += 1;
@@ -622,6 +648,20 @@ pub(crate) fn analyze_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_booking_timestamp_is_not_an_event_date() {
+        assert!(is_booking_stamp("Tag der Buchung: 23.10.2026 12:33"));
+        assert!(is_booking_stamp(
+            "Am 04.10.2026 um 17:52 Uhr wurde der Auftrag mit der Auftragsnummer 1 wie folgt gebucht:"
+        ));
+        assert!(is_booking_stamp("was booked on 24.10.2026 at 16:58"));
+        assert!(!is_booking_stamp("25.10.2026 21:14"));
+        assert!(!is_booking_stamp("Termin gebucht für 12.11.2026 10:00"));
+        assert!(!is_booking_stamp(
+            "Konzertabend: 23.08.2026, Einlass ab 19 Uhr"
+        ));
+    }
 
     fn item() -> TriageItem {
         TriageItem {

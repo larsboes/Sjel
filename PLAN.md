@@ -12,7 +12,7 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 | Area | Phone today | Next | Plan |
 |---|---|---|---|
 | The Sjel agent | Sessions, prompts, steering, approvals and stop on the right edge. Not tested on a device. | Tiers and command policy, then live validation | [`agent.md`](docs/plans/agent.md) |
-| Other agents (Claude Code, Codex, Pi) | Nothing | A native terminal: PTY sessions on the Mac in `capabilities/agent`, one terminal view for Mac and phone | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
+| Other agents (Claude Code, Codex, Pi) | Terminal on the Mac behind Face ID, opens a login shell. Not tested on a device. | Live validation, then a preset and directory picker | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
 | Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Documents | Nothing (reader planned) | The native reader, offline, from the hash-verified original (#245) | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Mail | Nothing (Feed is Mac-only) | Read and triage mail on the phone | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
@@ -20,7 +20,7 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 
 Order inside Priority 1:
 
-1. The terminal and the agent's tiers and command policy.
+1. The agent's tiers and command policy.
 2. Live validation of the agent and the terminal on a phone.
 3. Documents and Mail on the phone, then the new tab bar.
 4. Travel and Calendar UI.

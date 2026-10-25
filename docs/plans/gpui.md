@@ -232,11 +232,6 @@ reads People or Finance records. It uses source, planted fixtures and synthetic 
 | 26 | Inventory and wishlist create, edit with the read revision, state changes. Inventory stays the only writer. | Both views refresh without restart. A stale edit is refused and the entry reloads. State history and layout impact preview stay separate work. |
 | 27 | Low-fare alerts on the iPhone: rule in `core/src/travel.rs`, unseen `sparpreis-low:` notes through the local notification host, ten-minute throttle, works from saved trips offline | A new low notifies once. A repeat check does not. It works offline. |
 
-**Build blocker (2026-10-25).** The desktop release build fails in concurrent Inventory work:
-`apps/gpui/ui/src/inventory.rs` does not compile on `NewInventoryWish`, `WishForm.state` and
-`inventory_create_wish`. Do not touch it from another task. Run `sjel app update desktop` after
-its owner finishes.
-
 ## 5. Finder and right edge
 
 - **Finder (⌘K).** One input for search or a prompt. Modes are `Auto | Ask | Search | Agent`.

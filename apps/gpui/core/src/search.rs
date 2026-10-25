@@ -14,16 +14,20 @@ pub enum Mode {
     Auto,
     Ask,
     Search,
+    /// Start a run instead of answering. Never what *Auto* decides: a run edits files and asks
+    /// for permission, and that must not be what Enter does by accident.
+    Agent,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 3] = [Mode::Auto, Mode::Ask, Mode::Search];
+    pub const ALL: [Mode; 4] = [Mode::Auto, Mode::Ask, Mode::Search, Mode::Agent];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Auto => "Auto",
             Self::Ask => "Ask",
             Self::Search => "Search",
+            Self::Agent => "Agent",
         }
     }
 
@@ -32,11 +36,12 @@ impl Mode {
         match self {
             Self::Auto => Self::Ask,
             Self::Ask => Self::Search,
-            Self::Search => Self::Auto,
+            Self::Search => Self::Agent,
+            Self::Agent => Self::Auto,
         }
     }
 
-    /// What a text resolves to in this mode: never `Auto`.
+    /// What a text resolves to in this mode: never `Auto`, and never `Agent` from `Auto`.
     pub fn resolve(self, text: &str) -> Mode {
         match self {
             Self::Auto => intent(text),
@@ -251,7 +256,11 @@ mod tests {
         assert_eq!(Mode::Search.resolve("what is this?"), Mode::Search);
         assert_eq!(Mode::Ask.resolve("anna"), Mode::Ask);
         assert_eq!(Mode::Auto.resolve("anna"), Mode::Search);
-        assert_eq!(Mode::Auto.next().next().next(), Mode::Auto);
+        assert_eq!(
+            Mode::Auto.next().next().next().next(),
+            Mode::Auto,
+            "the four-mode cycle returns to Auto"
+        );
     }
 
     #[test]

@@ -199,6 +199,34 @@ pub fn execute_rebuild(repo_root: &Path) -> Result<String, String> {
     }
 }
 
+/// Rebuilds and restarts the local shell outside its own authenticated API.
+pub fn restart_local_shell(repo_root: &Path) -> Result<(), String> {
+    let runner = repo_root.join("tools/service-runner.sh");
+    if !runner.is_file() {
+        return Err(format!("Service runner not found at {}", runner.display()));
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let path_env = format!(
+        "{}/.local/bin:{}/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        home, home
+    );
+    let output = Command::new(runner)
+        .args(["restart", "sjel-status"])
+        .current_dir(repo_root)
+        .env("PATH", path_env)
+        .output()
+        .map_err(|error| format!("Could not start the Sjel service runner: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    Err(if detail.is_empty() {
+        "The Sjel service runner could not restart the local shell.".into()
+    } else {
+        detail
+    })
+}
+
 /// The header's update control: a small pill that opens a popover with the newest commits,
 /// Rebuild, and a link to Settings › Updates. The caller shows it only when commits are waiting.
 pub fn header_pill(

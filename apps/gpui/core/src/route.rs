@@ -1,8 +1,8 @@
 //! Destinations shared with the web dashboard, and `sjel://` deep links.
 //!
 //! `DESTINATIONS` mirrors `PRIMARY_NAV` and `UTILITY_NAV` in `dashboard/src/lib/nav.ts`; the
-//! `matches_dashboard_nav` test fails when the two drift. A destination with a native page opens
-//! here; every other one opens the dashboard at the same path.
+//! `matches_dashboard_nav` test fails when the two drift. Native pages and recognized deep links
+//! open here; other destinations open the dashboard at the same path.
 
 /// A page this app draws itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,8 +11,6 @@ pub enum Page {
     Context,
     Capabilities,
     Projects,
-    /// Multi-turn capability session (`sjel://ask?q=…`).
-    Ask,
     /// This Mac's own numbers: temperature, power, disk, updates and the agent's reach
     /// (`sjel://systems`). Named after the dashboard page that retires when this covers it.
     Systems,
@@ -46,16 +44,21 @@ pub enum Page {
     Research,
     /// Node setup, machine probes, and device pairing (`sjel://setup`).
     Setup,
+    /// Capability sites exposed by the local service registry (`sjel://apps`).
+    Apps,
+    /// The tracked repository documentation (`sjel://docs`).
+    Docs,
+    /// A typed capability record opened from a related-record link.
+    Record,
 }
 
 impl Page {
-    pub const ALL: [Page; 24] = [
+    pub const ALL: [Page; 25] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
         Page::Systems,
         Page::Projects,
-        Page::Ask,
         Page::Travel,
         Page::Feed,
         Page::Inbox,
@@ -74,6 +77,8 @@ impl Page {
         Page::Research,
         Page::Setup,
         Page::Settings,
+        Page::Apps,
+        Page::Docs,
     ];
 
     pub fn href(self) -> &'static str {
@@ -82,7 +87,6 @@ impl Page {
             Self::Context => "/context",
             Self::Capabilities => "/capabilities",
             Self::Projects => "/projects",
-            Self::Ask => "/ask",
             Self::Travel => "/travel",
             Self::Feed => "/feed",
             Self::Inbox => "/inbox",
@@ -102,12 +106,15 @@ impl Page {
             Self::Research => "/research",
             Self::Setup => "/setup",
             Self::Settings => "/settings",
+            Self::Apps => "/apps",
+            Self::Docs => "/docs",
+            Self::Record => "/record",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Ask => "Ask",
+            Self::Travel => "Location",
             Self::Settings => "Settings",
             Self::Software => "Software",
             Self::Import => "Import",
@@ -116,6 +123,9 @@ impl Page {
             Self::SelfModel => "Self-model",
             Self::Cv => "CV",
             Self::Media => "Media",
+            Self::Apps => "Apps",
+            Self::Docs => "Docs",
+            Self::Record => "Record",
             _ => destination(self.href()).map_or("", |d| d.label),
         }
     }
@@ -183,6 +193,7 @@ pub enum FeedTab {
     Review,
     Library,
     Mail,
+    Discover,
 }
 
 /// Where a link lands.
@@ -191,16 +202,26 @@ pub enum Target {
     Native(Page),
     Travel(crate::travel::TravelRoute),
     Feed(FeedTab),
-    /// Open the native Ask session and submit this question in-session.
+    /// A comms entry opened from its canonical `/feed/<sha256>` link.
+    FeedEntry(String),
+    /// A mail item opened from `/feed/<id>?source=mail`.
+    MailEntry(String),
+    /// A calendar item opened from `/feed/<id>?source=calendar`.
+    CalendarEntry(String),
+    /// A repository document slug under `/docs`.
+    Docs(String),
+    /// A typed record id under `/record?id=…`.
+    Record(String),
+    /// Open the finder, and ask this question in the one Ask session when it is not empty.
     Ask(String),
     /// A dashboard path, query included.
     Dashboard(String),
 }
 
 /// `sjel://calendar/2026-10-15` → the dashboard path `/calendar/2026-10-15`. `sjel://` and
-/// `sjel://home` are Home. `sjel://ask?q=…` (or `sjel://?ask=…`) opens the native Ask session
-/// with the prompt. Travel also recognizes its trip subpages. Other subpaths and queries go to
-/// the dashboard, which owns those details.
+/// `sjel://home` are Home. `sjel://ask` opens the finder; `sjel://ask?q=…` (or `sjel://?ask=…`)
+/// also asks the prompt. Travel also recognizes its trip subpages. Standalone capability panel
+/// links open the native Apps registry; unsupported subpaths and queries go to the dashboard.
 pub fn parse_deep_link(url: &str) -> Option<Target> {
     let rest = url.strip_prefix("sjel://")?.trim_end_matches('/');
     let path = match rest {
@@ -212,28 +233,99 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     if path_only.contains("..") || path.chars().any(char::is_whitespace) {
         return None;
     }
+    if path_only
+        .strip_prefix("/panel/")
+        .is_some_and(|name| !name.is_empty() && !name.contains('/'))
+    {
+        return Some(Target::Native(Page::Apps));
+    }
+    if path_only == "/docs" {
+        return Some(Target::Native(Page::Docs));
+    }
+    if let Some(slug) = path_only.strip_prefix("/docs/") {
+        let slug = match slug {
+            "README" | "index" => "index",
+            slug => slug,
+        };
+        return Some(Target::Docs(slug.to_owned()));
+    }
+    if path_only == "/record" {
+        let id = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
+            .ok()?
+            .query_pairs()
+            .find(|(key, _)| key == "id")
+            .map(|(_, value)| value.into_owned())?;
+        return Some(Target::Record(id));
+    }
     if path != "/travel" {
         if let Some(route) = crate::travel::TravelRoute::parse(&path) {
             return Some(Target::Travel(route));
         }
     }
+    if path_only.starts_with("/feed/") {
+        let source = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
+            .ok()?
+            .query_pairs()
+            .find(|(key, _)| key == "source")
+            .map(|(_, value)| value.into_owned());
+        let id = path_only.strip_prefix("/feed/")?;
+        match source.as_deref() {
+            Some("mail")
+                if !id.is_empty()
+                    && id.len() <= 128
+                    && id.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+                    }) =>
+            {
+                return Some(Target::MailEntry(id.to_owned()));
+            }
+            Some("calendar")
+                if !id.is_empty()
+                    && id.len() <= 128
+                    && id.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':')
+                    }) =>
+            {
+                return Some(Target::CalendarEntry(id.to_owned()));
+            }
+            None | Some("feed")
+                if id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+            {
+                return Some(Target::FeedEntry(id.to_owned()));
+            }
+            _ => {}
+        }
+    }
     match path.as_str() {
+        "/trips" => return Some(Target::Native(Page::Travel)),
+        "/scout" => return Some(Target::Feed(FeedTab::Discover)),
         "/feed/review" => return Some(Target::Feed(FeedTab::Review)),
         "/feed/library" => return Some(Target::Feed(FeedTab::Library)),
         _ => {}
     }
-    if matches!(path_only, "/ask" | "/") && path.contains('?') {
-        if let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1{path}")) {
-            if let Some((_, q)) = parsed
-                .query_pairs()
-                .find(|(k, _)| matches!(k.as_ref(), "q" | "ask"))
-            {
-                let question = q.trim();
-                if !question.is_empty() {
-                    return Some(Target::Ask(question.to_owned()));
-                }
-                return Some(Target::Native(Page::Ask));
-            }
+    if path_only == "/feed" {
+        let view = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
+            .ok()?
+            .query_pairs()
+            .find(|(key, _)| key == "view")
+            .map(|(_, value)| value.into_owned());
+        match view.as_deref() {
+            Some("discover") => return Some(Target::Feed(FeedTab::Discover)),
+            Some("mail") => return Some(Target::Feed(FeedTab::Mail)),
+            _ => {}
+        }
+    }
+    if matches!(path_only, "/ask" | "/") {
+        let question = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
+            .ok()
+            .and_then(|parsed| {
+                parsed
+                    .query_pairs()
+                    .find(|(k, _)| matches!(k.as_ref(), "q" | "ask"))
+                    .map(|(_, q)| q.trim().to_owned())
+            });
+        if path_only == "/ask" || question.is_some() {
+            return Some(Target::Ask(question.unwrap_or_default()));
         }
     }
     Some(
@@ -308,6 +400,31 @@ mod tests {
             parse_deep_link("sjel://feed/library"),
             Some(Target::Feed(FeedTab::Library))
         );
+        assert_eq!(
+            parse_deep_link("sjel://trips"),
+            Some(Target::Native(Page::Travel))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://scout"),
+            Some(Target::Feed(FeedTab::Discover))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://feed?view=discover"),
+            Some(Target::Feed(FeedTab::Discover))
+        );
+        let feed_id = "a".repeat(64);
+        assert_eq!(
+            parse_deep_link(&format!("sjel://feed/{feed_id}")),
+            Some(Target::FeedEntry(feed_id.clone()))
+        );
+        assert_eq!(
+            parse_deep_link(&format!("sjel://feed/{feed_id}?source=mail")),
+            Some(Target::MailEntry(feed_id.clone()))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://feed/cal:entry:ab12?source=calendar"),
+            Some(Target::CalendarEntry("cal:entry:ab12".into()))
+        );
         assert_eq!(parse_deep_link("sjel://"), Some(Target::Native(Page::Home)));
         assert_eq!(
             parse_deep_link("sjel://home"),
@@ -328,6 +445,10 @@ mod tests {
         assert_eq!(
             parse_deep_link("sjel://?ask=calendar%20today"),
             Some(Target::Ask("calendar today".into()))
+        );
+        assert_eq!(
+            parse_deep_link("sjel://ask"),
+            Some(Target::Ask(String::new()))
         );
         assert_eq!(parse_deep_link("sjel://../etc"), None);
         assert_eq!(parse_deep_link("https://calendar"), None);

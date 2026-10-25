@@ -16,9 +16,10 @@ use std::sync::Arc;
 
 use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, EventEmitter, MouseButton, Render,
-    SharedString, Subscription, Window,
+    ScrollHandle, SharedString, Subscription, Window,
 };
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use sjel_gpui_core::mirror::{Mirror, PeopleCopy};
 use sjel_gpui_core::people::{self, Person};
@@ -69,6 +70,7 @@ pub struct People {
     loading: bool,
     palette: Palette,
     density: Density,
+    scroll: ScrollHandle,
     /// Bumped per read, so a slow answer for a copy the person has left cannot replace the rows on
     /// screen.
     generation: u64,
@@ -96,6 +98,7 @@ impl People {
             loading: false,
             palette: Palette::dark(),
             density,
+            scroll: ScrollHandle::new(),
             generation: 0,
         }
     }
@@ -926,6 +929,8 @@ impl Render for People {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
+                    .track_scroll(&self.scroll)
+                    .vertical_scrollbar(&self.scroll)
                     .child(body),
             )
     }
@@ -951,6 +956,7 @@ mod tests {
             note_ref: None,
             revision: 1,
             values: map,
+            facts: Vec::new(),
         }
     }
 

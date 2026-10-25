@@ -20,12 +20,16 @@
 
 use std::sync::Mutex;
 
-use sjel_gpui_core::notify::{Plan, Reminder};
+use sjel_gpui_core::{
+    notify::{Plan, Reminder},
+    travel::FareAlert,
+};
 
 /// The list last handed to the host, so a rebuild that changes nothing does not ask the notification
 /// centre to replace sixty requests it already holds. A fresh process starts empty, so the first
 /// rebuild after a launch always goes out.
 static LAST: Mutex<Vec<Reminder>> = Mutex::new(Vec::new());
+static LAST_FARE_ALERTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Whether the system will deliver what is asked for.
 ///
@@ -156,8 +160,33 @@ pub fn apply(plan: &Plan) {
     let _ = plan;
 }
 
+/// Delivers newly observed low-fare notes through the same local notification centre.
+pub fn deliver_fare_alerts(alerts: &[FareAlert]) {
+    let ids: Vec<String> = alerts.iter().map(|alert| alert.id.clone()).collect();
+    if let Ok(mut last) = LAST_FARE_ALERTS.lock() {
+        if *last == ids {
+            return;
+        }
+        *last = ids;
+    }
+    #[cfg(target_os = "ios")]
+    if let Ok(json) = serde_json::to_string(&FareAlertsBody { alerts }) {
+        #[allow(unsafe_code)]
+        // SAFETY: the C string outlives this call; the host decodes it into owned Swift values.
+        unsafe {
+            let text = std::ffi::CString::new(json).unwrap_or_default();
+            sjel_ios_fare_alerts(text.as_ptr());
+        }
+    }
+    #[cfg(not(target_os = "ios"))]
+    let _ = alerts;
+}
+
 /// Takes every request away: what turning reminders off means.
 pub fn clear() {
+    if let Ok(mut last) = LAST.lock() {
+        last.clear();
+    }
     #[cfg(target_os = "ios")]
     #[allow(unsafe_code)] // One call into the host, which links this symbol by name.
     // SAFETY: it takes no arguments and keeps nothing from this call.
@@ -209,11 +238,17 @@ struct Body<'a> {
     reminders: &'a [Reminder],
 }
 
+#[derive(serde::Serialize)]
+struct FareAlertsBody<'a> {
+    alerts: &'a [FareAlert],
+}
+
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // Declaring the host's symbols is unsafe; the host owns their definitions.
 unsafe extern "C" {
     fn sjel_ios_notifications_authorize();
     fn sjel_ios_notifications_schedule(json: *const std::ffi::c_char);
+    fn sjel_ios_fare_alerts(json: *const std::ffi::c_char);
     fn sjel_ios_notifications_clear();
     fn sjel_ios_notifications_report();
     fn sjel_ios_notifications_ready();

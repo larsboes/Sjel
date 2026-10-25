@@ -4,8 +4,8 @@
 //! dashboard destinations -- as search results, next to the projects, tasks and notes the Mac's
 //! database already holds. The same input also asks: in *Auto* the words decide
 //! (`sjel_gpui_core::search::intent`), the decision is printed beside the input, and ⌘↩ goes the
-//! other way. A question is answered inline through the app's one `Ask` session, so ⌘2 shows the
-//! same conversation with its history.
+//! other way. A question is answered in place through the app's one `Ask` session, and the whole
+//! conversation shows above the results while the text is a question. There is no Ask page.
 //!
 //! Decided 2026-10-23 (`PORTING_PLAN.md`, section 3): an overlay first; the docked right panel
 //! comes with the adaptive UI. Server search (`/api/search`) is the next step and appends below
@@ -16,6 +16,7 @@
 
 use std::time::{Duration, Instant};
 
+use futures::StreamExt;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, EventEmitter,
@@ -23,7 +24,8 @@ use gpui_kit::{
 };
 use sjel_gpui_core::search::{self, Mode};
 
-use crate::ask::Ask;
+use crate::agent_run::{AgentRun, Pending, Row};
+use crate::ask::{Ask, Model};
 use crate::data::Repo;
 use crate::route::Page;
 use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
@@ -68,8 +70,7 @@ pub struct Hit {
 
 pub enum FinderEvent {
     Open(Open),
-    /// Show the whole conversation on the Ask page.
-    ContinueInAsk,
+    AgentStarted,
     Closed,
 }
 
@@ -93,8 +94,12 @@ pub struct Finder {
     /// Set when the arrow keys moved the cursor: a result picked by hand is what Enter opens,
     /// whatever the words look like.
     picked: bool,
-    /// True once a question was sent from here: the answer shows until the next text is typed.
+    /// True once a question was sent from here: the conversation shows until it is cleared.
     asked: bool,
+    /// The agent panel: its session, its rows, and the call waiting on an answer.
+    agent: AgentRun,
+    agent_scroll: gpui::ScrollHandle,
+    thread_scroll: gpui::ScrollHandle,
     open: bool,
     focus_next: bool,
     focus: FocusHandle,
@@ -105,8 +110,13 @@ impl EventEmitter<FinderEvent> for Finder {}
 
 impl Finder {
     pub fn new(repo: Repo, ask: Entity<Ask>, commands: Vec<Hit>, cx: &mut Context<Self>) -> Self {
-        // The answer streams into the Ask session; the finder redraws with it.
-        let observe = cx.observe(&ask, |_, _, cx| cx.notify());
+        // The answer streams into the Ask session; the finder redraws with it and follows it down.
+        let observe = cx.observe(&ask, |view: &mut Self, ask, cx| {
+            if ask.read(cx).loading {
+                view.thread_scroll.scroll_to_bottom();
+            }
+            cx.notify();
+        });
         Self {
             repo,
             ask,
@@ -122,6 +132,9 @@ impl Finder {
             cursor: 0,
             picked: false,
             asked: false,
+            agent: AgentRun::default(),
+            agent_scroll: gpui::ScrollHandle::new(),
+            thread_scroll: gpui::ScrollHandle::new(),
             open: false,
             focus_next: false,
             focus: cx.focus_handle(),
@@ -141,6 +154,7 @@ impl Finder {
         // A finder opens empty: the last text was for the last errand. The last answer stays,
         // so reopening shows what came back while it was closed.
         self.query.clear();
+        self.ask.update(cx, |ask, cx| ask.discover_providers(cx));
         if self
             .records_at
             .is_none_or(|at| at.elapsed() > RECORDS_FRESH)
@@ -156,6 +170,20 @@ impl Finder {
         }
         self.open = false;
         cx.emit(FinderEvent::Closed);
+        cx.notify();
+    }
+
+    /// Open the finder and ask `question` in the session. An empty question only opens it.
+    pub fn ask(&mut self, question: String, cx: &mut Context<Self>) {
+        if !self.open {
+            self.open(cx);
+        }
+        if question.trim().is_empty() {
+            return;
+        }
+        self.ask.update(cx, |ask, cx| ask.submit(question, cx));
+        self.asked = true;
+        self.thread_scroll.scroll_to_bottom();
         cx.notify();
     }
 
@@ -270,7 +298,8 @@ impl Finder {
             Some((input, _)) => input.clone(),
             None => {
                 let input = cx.new(|cx| {
-                    InputState::new(window, cx).placeholder("Search Sjel, or ask it something…")
+                    InputState::new(window, cx)
+                        .placeholder("Search Sjel, ask it something, or start a task…")
                 });
                 let subscription = cx.subscribe_in(
                     &input,
@@ -280,9 +309,6 @@ impl Finder {
                             view.query = input.read(cx).value().to_string();
                             view.cursor = 0;
                             view.picked = false;
-                            if !view.query.trim().is_empty() {
-                                view.asked = false;
-                            }
                             view.search_server_soon(cx);
                             cx.notify();
                         }
@@ -318,6 +344,18 @@ impl Finder {
         if text.is_empty() && self.asked {
             return;
         }
+        // Agent is never what Enter does in Auto: it starts a run that edits files.
+        if self.resolved() == Mode::Agent && !self.picked {
+            if text.is_empty() {
+                return;
+            }
+            if self.agent.running {
+                self.agent_steer(text, window, cx);
+            } else {
+                self.agent_send(text, window, cx);
+            }
+            return;
+        }
         let mut ask = self.resolved() == Mode::Ask && !self.picked;
         if other_way {
             ask = !ask;
@@ -332,6 +370,7 @@ impl Finder {
             }
             self.ask.update(cx, |ask, cx| ask.submit(text, cx));
             self.asked = true;
+            self.thread_scroll.scroll_to_bottom();
             self.query.clear();
             if let Some((input, _)) = &self.input {
                 input.update(cx, |input, cx| input.set_value("", window, cx));
@@ -343,6 +382,714 @@ impl Finder {
             self.close(cx);
             cx.emit(FinderEvent::Open(open));
         }
+    }
+
+    /// Starts a run, or continues the session this panel is attached to.
+    ///
+    /// The whole chain — create the session if there is none, send the prompt, attach the stream
+    /// — runs in one future on the HTTP runtime, so a slow capability cannot leave the panel with
+    /// a session and no stream.
+    fn agent_send(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        let repo = self.repo.clone();
+        let existing = self.agent.id().map(str::to_owned);
+        self.query.clear();
+        if let Some((input, _)) = &self.input {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.agent.error = None;
+        self.agent.running = true;
+        cx.emit(FinderEvent::AgentStarted);
+        self.agent_scroll.scroll_to_bottom();
+        cx.notify();
+
+        let work = shell::run(async move {
+            let shell = repo.shell()?;
+            let session = match existing {
+                Some(id) => shell
+                    .agent_sessions()
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .find(|session| session.id == id)
+                    .unwrap_or(sjel_gpui_core::agent::Session {
+                        id,
+                        ..Default::default()
+                    }),
+                None => shell.agent_create(None).await?,
+            };
+            shell.agent_prompt(&session.id, &text).await?;
+            let stream = shell.agent_stream(&session.id, 0).await?;
+            Ok::<_, shell::ShellError>((session, stream))
+        });
+
+        cx.spawn(async move |this, cx| {
+            let Some(Ok((session, stream))) = work.await else {
+                let _ = this.update(cx, |view, cx| {
+                    view.agent.running = false;
+                    view.agent.error = Some(
+                        "Sjel is not reachable, or the agent capability is not running.".into(),
+                    );
+                    cx.notify();
+                });
+                return;
+            };
+            let follow_session = session.clone();
+            let _ = this.update(cx, |view, cx| {
+                let first = view.agent.session.is_none();
+                if first {
+                    view.agent.session = Some(session.clone());
+                }
+                view.agent.sessions.retain(|listed| listed.id != session.id);
+                view.agent.sessions.insert(0, session);
+                view.agent.running = true;
+                view.agent_follow(follow_session, stream, 0, cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn agent_refresh_sessions(&mut self, cx: &mut Context<Self>) {
+        if self.agent.sessions_loading {
+            return;
+        }
+        self.agent.sessions_loading = true;
+        let repo = self.repo.clone();
+        let work = shell::run(async move { repo.shell()?.agent_sessions().await });
+        cx.spawn(async move |this, cx| {
+            let Some(result) = work.await else { return };
+            let _ = this.update(cx, |view, cx| {
+                view.agent.sessions_loading = false;
+                if let Ok(sessions) = result {
+                    view.agent.sessions = sessions;
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn agent_follow(
+        &mut self,
+        session: sjel_gpui_core::agent::Session,
+        mut stream: futures::channel::mpsc::UnboundedReceiver<sjel_gpui_core::agent::Event>,
+        mut cursor: u64,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        cx.spawn(async move |this, cx| {
+            let mut reconnects = 0;
+            loop {
+                let mut truncated = false;
+                while let Some(event) = stream.next().await {
+                    if event.kind == "truncated" {
+                        cursor = event.first_seq.saturating_sub(1);
+                        truncated = true;
+                        break;
+                    }
+                    cursor = cursor.max(event.seq);
+                    let terminal = event.terminal();
+                    let applied = this
+                        .update(cx, |view, cx| {
+                            if view.agent.id() != Some(session.id.as_str()) {
+                                return false;
+                            }
+                            view.agent.apply(event);
+                            view.agent_scroll.scroll_to_bottom();
+                            if terminal {
+                                view.agent.running = false;
+                            }
+                            cx.notify();
+                            !terminal
+                        })
+                        .unwrap_or(false);
+                    if !applied {
+                        return;
+                    }
+                }
+
+                if truncated {
+                    let repo = repo.clone();
+                    let session_id = session.id.clone();
+                    let work = shell::run(async move {
+                        let shell = repo.shell()?;
+                        let turns = shell.agent_transcript(&session_id).await?;
+                        let stream = shell.agent_stream(&session_id, cursor).await?;
+                        Ok::<_, shell::ShellError>((turns, stream))
+                    });
+                    let Some(Ok((turns, resumed))) = work.await else {
+                        let _ = this.update(cx, |view, cx| {
+                            view.agent.running = false;
+                            view.agent.error = Some(
+                                "Could not reload the agent transcript after stream truncation."
+                                    .into(),
+                            );
+                            cx.notify();
+                        });
+                        return;
+                    };
+                    let mut turns = turns;
+                    if cursor == 0
+                        && session.active
+                        && turns
+                            .last()
+                            .is_some_and(|turn| turn.role.as_str() == "user")
+                    {
+                        turns.pop();
+                    }
+                    let restored = this
+                        .update(cx, |view, cx| {
+                            if view.agent.id() != Some(session.id.as_str()) {
+                                return false;
+                            }
+                            view.agent.restore(session.clone(), turns);
+                            view.agent.last_seq = cursor;
+                            view.agent
+                                .rows
+                                .push(Row::Notice("Transcript reloaded; stream resumed.".into()));
+                            view.agent_scroll.scroll_to_bottom();
+                            cx.notify();
+                            true
+                        })
+                        .unwrap_or(false);
+                    if !restored {
+                        return;
+                    }
+                    stream = resumed;
+                    reconnects = 0;
+                    continue;
+                }
+
+                reconnects += 1;
+                if reconnects >= 5 {
+                    let _ = this.update(cx, |view, cx| {
+                        if view.agent.id() == Some(session.id.as_str()) {
+                            view.agent.running = false;
+                            view.agent.error = Some(
+                                "Agent stream disconnected. Reopen the session to reconnect."
+                                    .into(),
+                            );
+                            cx.notify();
+                        }
+                    });
+                    return;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                let repo = repo.clone();
+                let session_id = session.id.clone();
+                let work =
+                    shell::run(
+                        async move { repo.shell()?.agent_stream(&session_id, cursor).await },
+                    );
+                match work.await {
+                    Some(Ok(resumed)) => stream = resumed,
+                    _ => continue,
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn agent_open_session(
+        &mut self,
+        session: sjel_gpui_core::agent::Session,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        let session_for_read = session.clone();
+        let already_attached = self.agent.id() == Some(session.id.as_str());
+        let cursor = if already_attached {
+            self.agent.last_seq
+        } else {
+            0
+        };
+        let work = shell::run(async move {
+            let shell = repo.shell()?;
+            let mut turns = if already_attached {
+                Vec::new()
+            } else {
+                shell.agent_transcript(&session.id).await?
+            };
+            if session.active
+                && turns
+                    .last()
+                    .is_some_and(|turn| turn.role.as_str() == "user")
+            {
+                turns.pop();
+            }
+            let stream = if session.active {
+                Some(shell.agent_stream(&session.id, cursor).await?)
+            } else {
+                None
+            };
+            Ok::<_, shell::ShellError>((turns, stream))
+        });
+        cx.spawn(async move |this, cx| {
+            let Some(Ok((turns, stream))) = work.await else {
+                return;
+            };
+            let _ = this.update(cx, |view, cx| {
+                if !already_attached {
+                    view.agent.restore(session_for_read.clone(), turns);
+                }
+                cx.notify();
+            });
+            if let Some(stream) = stream {
+                let _ = this.update(cx, |view, cx| {
+                    view.agent_follow(session_for_read.clone(), stream, cursor, cx);
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// A message while a run is active steers it instead of starting a second one.
+    fn agent_steer(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.agent.id().map(str::to_owned) else {
+            return;
+        };
+        let repo = self.repo.clone();
+        self.query.clear();
+        if let Some((input, _)) = &self.input {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.agent.rows.push(Row::Prompt(text.clone()));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let answer = shell::run(async move {
+                let shell = repo.shell()?;
+                shell.agent_steer(&id, &text).await
+            })
+            .await;
+            if !matches!(answer, Some(Ok(()))) {
+                let _ = this.update(cx, |view, cx| {
+                    view.agent.error = Some("The message was not queued.".into());
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// The owner's answer to the call that is waiting.
+    fn agent_decide(&mut self, allow: bool, for_session: bool, cx: &mut Context<Self>) {
+        let (Some(pending), Some(id)) = (
+            self.agent.pending.clone(),
+            self.agent.id().map(str::to_owned),
+        ) else {
+            return;
+        };
+        let repo = self.repo.clone();
+        cx.spawn(async move |this, cx| {
+            let answer = shell::run(async move {
+                let shell = repo.shell()?;
+                shell
+                    .agent_approve(&id, &pending.approval, allow, for_session)
+                    .await
+            })
+            .await;
+            let _ = this.update(cx, |view, cx| {
+                match answer {
+                    Some(Ok(())) => {
+                        // The `approved` or `denied` event clears the card; this only makes the
+                        // panel respond now rather than on the next frame of the stream.
+                        view.agent.pending = None;
+                        if allow {
+                            view.agent.rows.push(Row::Decided {
+                                name: pending.name,
+                                allowed: true,
+                                for_session,
+                            });
+                        }
+                    }
+                    _ => {
+                        view.agent.error = Some("The decision did not reach the agent.".into());
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn agent_stop(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.agent.id().map(str::to_owned) else {
+            return;
+        };
+        let repo = self.repo.clone();
+        cx.spawn(async move |this, cx| {
+            let _ = shell::run(async move {
+                let shell = repo.shell()?;
+                shell.agent_stop(&id).await
+            })
+            .await;
+            let _ = this.update(cx, |view, cx| {
+                view.agent.running = false;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// One transcript row. No listeners, so it can be built while the panel borrows the view.
+    fn agent_row(row: Row, palette: Palette) -> gpui::AnyElement {
+        match row {
+            Row::Prompt(text) => div()
+                .px_4()
+                .pt_2()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(text)
+                .into_any_element(),
+            Row::Answer(text) => div().px_4().py_1().text_sm().child(text).into_any_element(),
+            Row::Tool {
+                name,
+                arguments,
+                result,
+                ..
+            } => {
+                let detail = sjel_gpui_core::agent::tool_summary(&name, &arguments);
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .px_4()
+                    .py_1()
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .items_center()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_xs()
+                                    .text_color(rgb(palette.accent))
+                                    .child("▸"),
+                            )
+                            .child(div().flex_none().text_xs().child(name))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(detail),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .text_xs()
+                                    .text_color(rgb(match &result {
+                                        None => palette.muted,
+                                        Some(_) => palette.green,
+                                    }))
+                                    .child(if result.is_some() { "done" } else { "running" }),
+                            ),
+                    )
+                    .when_some(result, |card, result| {
+                        card.child(
+                            div()
+                                .ml_4()
+                                .pl_3()
+                                .border_l_1()
+                                .border_color(rgba(palette.border))
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(first_lines(&result, 6)),
+                        )
+                    })
+                    .into_any_element()
+            }
+            Row::Decided {
+                name,
+                allowed,
+                for_session,
+            } => div()
+                .px_4()
+                .py_1()
+                .text_xs()
+                .text_color(rgb(if allowed { palette.green } else { palette.red }))
+                .child(format!(
+                    "{} {name}{}",
+                    if allowed { "allowed" } else { "denied" },
+                    if for_session { " for this session" } else { "" }
+                ))
+                .into_any_element(),
+            Row::Notice(text) => div()
+                .px_4()
+                .py_1()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(text)
+                .into_any_element(),
+        }
+    }
+
+    /// The call the run is waiting on: what it is, what it changes, and the three answers.
+    fn agent_card(pending: Pending, palette: Palette, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let mono = ".AppleSystemUIFontMonospaced";
+        let diff = pending.diff.clone().map(|text| {
+            div()
+                .id("finder-agent-diff")
+                .flex()
+                .flex_col()
+                .max_h(px(180.))
+                .overflow_y_scroll()
+                .children(text.lines().take(60).map(|line| {
+                    // The sign stays in the line: colour alone is not a diff a reader can parse.
+                    let colour = if line.starts_with("+ ") {
+                        palette.green
+                    } else if line.starts_with("- ") {
+                        palette.red
+                    } else {
+                        palette.muted
+                    };
+                    div()
+                        .font_family(mono)
+                        .text_xs()
+                        .text_color(rgb(colour))
+                        .child(line.to_owned())
+                }))
+        });
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .mx_3()
+            .my_2()
+            .p_3()
+            .rounded(px(8.))
+            .bg(rgba(palette.raised))
+            .border_1()
+            .border_color(rgba(palette.accent))
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .text_xs()
+                    .child(
+                        div()
+                            .text_color(rgb(palette.accent))
+                            .child("needs your answer"),
+                    )
+                    .child(
+                        div()
+                            .text_color(rgb(palette.muted))
+                            .child(pending.name.clone()),
+                    ),
+            )
+            .child(
+                div()
+                    .font_family(mono)
+                    .text_xs()
+                    .child(pending.preview.clone()),
+            )
+            .children(diff)
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .pt_1()
+                    .text_xs()
+                    .child(
+                        div()
+                            .id("agent-allow")
+                            .cursor_pointer()
+                            .text_color(rgb(palette.green))
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.agent_decide(true, false, cx);
+                            }))
+                            .child("allow once"),
+                    )
+                    .child(
+                        div()
+                            .id("agent-allow-session")
+                            .cursor_pointer()
+                            .text_color(rgb(palette.green))
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.agent_decide(true, true, cx);
+                            }))
+                            .child("allow for session"),
+                    )
+                    .child(
+                        div()
+                            .id("agent-deny")
+                            .cursor_pointer()
+                            .text_color(rgb(palette.red))
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.agent_decide(false, false, cx);
+                            }))
+                            .child("deny"),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// The agent's half of the panel: what it is attached to, the transcript, and the answer.
+    pub(crate) fn agent_panel_body(
+        &mut self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
+        let sessions = self.agent.sessions.clone();
+        let sessions_loading = self.agent.sessions_loading;
+        let session_shelf = div()
+            .flex()
+            .flex_col()
+            .border_b_1()
+            .border_color(rgba(palette.border))
+            .when(sessions_loading, |shelf| {
+                shelf.child(
+                    div()
+                        .px_4()
+                        .py_2()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("Loading sessions…"),
+                )
+            })
+            .children(sessions.into_iter().take(5).map(|session| {
+                let selected = self.agent.id() == Some(session.id.as_str());
+                let label = session
+                    .title
+                    .clone()
+                    .filter(|title| !title.trim().is_empty())
+                    .unwrap_or_else(|| session.root_name());
+                let detail = format!(
+                    "{} · {} turn(s){}",
+                    session.root_name(),
+                    session.turns,
+                    if session.active { " · running" } else { "" }
+                );
+                div()
+                    .id(SharedString::from(format!("agent-session-{}", session.id)))
+                    .px_4()
+                    .py_2()
+                    .cursor_pointer()
+                    .when(selected, |row| row.bg(rgba(palette.raised)))
+                    .hover(move |row| row.bg(rgba(palette.raised)))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.agent_open_session(session.clone(), cx);
+                    }))
+                    .child(div().text_sm().truncate().child(label))
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
+            }));
+        let rows: Vec<gpui::AnyElement> = self
+            .agent
+            .rows
+            .iter()
+            .cloned()
+            .map(|row| Self::agent_row(row, palette))
+            .collect();
+        let card = self
+            .agent
+            .pending
+            .clone()
+            .map(|pending| Self::agent_card(pending, palette, cx));
+        let error = self.agent.error.clone();
+        let status = self.agent.status();
+        let running = self.agent.running;
+        let attached = self.agent.session.is_some();
+        let empty = rows.is_empty() && self.agent.pending.is_none();
+
+        let stop = running.then(|| {
+            div()
+                .id("agent-stop")
+                .cursor_pointer()
+                .hover(move |link| link.text_color(rgb(palette.text)))
+                .on_click(cx.listener(|view, _, _, cx| view.agent_stop(cx)))
+                .child("stop")
+                .into_any_element()
+        });
+        let fresh = (attached && !self.agent.busy()).then(|| {
+            div()
+                .id("agent-new")
+                .cursor_pointer()
+                .hover(move |link| link.text_color(rgb(palette.text)))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.agent.clear();
+                    view.mode = Mode::Agent;
+                    view.open(cx);
+                    view.agent_refresh_sessions(cx);
+                    cx.notify();
+                }))
+                .child("new session")
+                .into_any_element()
+        });
+
+        div()
+            .flex()
+            .flex_col()
+            .child(session_shelf)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_4()
+                    .py(px(6.))
+                    .border_b_1()
+                    .border_color(rgba(palette.border))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(match &self.agent.session {
+                        Some(session) => {
+                            format!("{} · {}", session.root, session.plugins.join(", "))
+                        }
+                        None => "a new session in the Sjel checkout".to_owned(),
+                    }),
+            )
+            .child(
+                div()
+                    .id("finder-agent")
+                    .flex()
+                    .flex_col()
+                    .max_h(px(360.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.agent_scroll)
+                    .when(empty, |panel| {
+                        panel.child(
+                            div()
+                                .px_4()
+                                .py_3()
+                                .text_sm()
+                                .text_color(rgb(palette.muted))
+                                .child(
+                                    "Describe a task. The agent reads, runs and edits in this \
+                                     checkout, and every command and write asks you first.",
+                                ),
+                        )
+                    })
+                    .children(rows),
+            )
+            .children(card)
+            .when_some(error, |panel, error| {
+                panel.child(
+                    div()
+                        .px_4()
+                        .py_2()
+                        .text_sm()
+                        .text_color(rgb(palette.red))
+                        .child(error),
+                )
+            })
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .px_4()
+                    .py(px(6.))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(status)
+                    .child(div().flex_1())
+                    .children(stop)
+                    .children(fresh),
+            )
+            .into_any_element()
     }
 
     fn step(&mut self, by: isize, cx: &mut Context<Self>) {
@@ -357,6 +1104,21 @@ impl Finder {
         self.picked = true;
         cx.notify();
     }
+}
+
+/// The first `count` lines of a tool result, with a count when there is more.
+fn first_lines(text: &str, count: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut shown: String = lines
+        .iter()
+        .take(count)
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    if lines.len() > count {
+        shown.push_str(&format!("\n… {} more line(s)", lines.len() - count));
+    }
+    shown
 }
 
 /// A server row as a result. Its link is opened through the deep-link parser, so the server can
@@ -453,13 +1215,18 @@ impl Render for Finder {
         let palette = Palette::for_appearance(window.appearance());
         let input = self.ensure_input(window, cx);
         let resolved = self.resolved();
-        let exchange = self
-            .asked
-            .then(|| self.ask.read(cx).latest())
-            .flatten()
-            .filter(|_| self.query.trim().is_empty());
-        // Under an answer the page list is noise; typing again brings results back.
-        let hits: Vec<Hit> = if exchange.is_some() {
+        let typing = !self.query.trim().is_empty();
+        let agent_mode = resolved == Mode::Agent;
+        // The conversation shows while the text is empty or is itself a question; a search
+        // typed under it gets the panel to itself.
+        let thread = if self.asked && !agent_mode && (!typing || resolved == Mode::Ask) {
+            self.ask.read(cx).exchanges()
+        } else {
+            Vec::new()
+        };
+        let threaded = !thread.is_empty();
+        // Under a conversation the page list is noise; typing brings results back.
+        let hits: Vec<Hit> = if agent_mode || (threaded && !typing) {
             Vec::new()
         } else {
             self.hits().into_iter().cloned().collect()
@@ -489,6 +1256,9 @@ impl Render for Finder {
                     view.mode = mode;
                     view.focus_next = true;
                     view.search_server_soon(cx);
+                    if mode == Mode::Agent {
+                        view.agent_refresh_sessions(cx);
+                    }
                     cx.notify();
                 }))
                 .child(mode.label())
@@ -553,7 +1323,7 @@ impl Render for Finder {
             }));
 
         // Nothing found says so, and says what Enter does instead of leaving an empty box.
-        let empty = (nothing && exchange.is_none() && !self.query.trim().is_empty()).then(|| {
+        let empty = (nothing && !threaded && typing && !agent_mode).then(|| {
             let next = if self.searching.is_some() {
                 "Searching Sjel…"
             } else if self.mode == Mode::Search {
@@ -569,63 +1339,157 @@ impl Render for Finder {
                 .child(next)
         });
 
-        let answer = exchange.map(|exchange| {
-            let status = if exchange.loading {
-                if exchange.tools.is_empty() {
-                    "working…".to_owned()
-                } else {
-                    format!("working · {}", exchange.tools.join(", "))
-                }
-            } else if exchange.tools.is_empty() {
-                String::new()
-            } else {
-                format!("used {}", exchange.tools.join(", "))
-            };
+        let (can_stop, loading, model) = {
+            let ask = self.ask.read(cx);
+            (ask.can_stop(), ask.loading, ask.model())
+        };
+        let link = move |id: &'static str| {
             div()
-                .id("finder-answer")
+                .id(id)
+                .cursor_pointer()
+                .hover(move |link| link.text_color(rgb(palette.text)))
+        };
+        let thread = threaded.then(|| {
+            div()
                 .flex()
                 .flex_col()
-                .gap_2()
-                .px_4()
-                .py_3()
-                .max_h(px(360.))
-                .overflow_y_scroll()
                 .border_b_1()
                 .border_color(rgba(palette.border))
                 .child(
                     div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(exchange.prompt),
+                        .id("finder-thread")
+                        .flex()
+                        .flex_col()
+                        .max_h(px(360.))
+                        .overflow_y_scroll()
+                        .track_scroll(&self.thread_scroll)
+                        .children(thread.into_iter().map(|exchange| {
+                            let status = match (exchange.loading, exchange.tools.is_empty()) {
+                                (true, true) => "working…".to_owned(),
+                                (true, false) => format!("working · {}", exchange.tools.join(", ")),
+                                (false, true) => String::new(),
+                                (false, false) => format!("used {}", exchange.tools.join(", ")),
+                            };
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .px_4()
+                                .py_2()
+                                .when(!exchange.prompt.is_empty(), |card| {
+                                    card.child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .child(exchange.prompt),
+                                    )
+                                })
+                                .when(!exchange.answer.is_empty(), |card| {
+                                    card.child(div().text_sm().child(exchange.answer))
+                                })
+                                .when_some(exchange.error, |card, error| {
+                                    card.child(
+                                        div().text_sm().text_color(rgb(palette.red)).child(error),
+                                    )
+                                })
+                                .when(!status.is_empty() || exchange.meta.is_some(), |card| {
+                                    card.child(
+                                        div()
+                                            .flex()
+                                            .gap_2()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .child(status)
+                                            .child(div().flex_1())
+                                            .children(exchange.meta),
+                                    )
+                                })
+                        })),
                 )
-                .when(!exchange.answer.is_empty(), |card| {
-                    card.child(div().text_sm().child(exchange.answer))
-                })
-                .when_some(exchange.error, |card, error| {
-                    card.child(div().text_sm().text_color(rgb(palette.red)).child(error))
-                })
                 .child(
                     div()
                         .flex()
-                        .items_center()
-                        .gap_2()
+                        .justify_end()
+                        .gap_3()
+                        .px_4()
+                        .py(px(6.))
                         .text_xs()
                         .text_color(rgb(palette.muted))
-                        .child(status)
-                        .child(div().flex_1())
-                        .child(
-                            div()
-                                .id("finder-continue")
-                                .cursor_pointer()
-                                .hover(move |link| link.text_color(rgb(palette.text)))
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.close(cx);
-                                    cx.emit(FinderEvent::ContinueInAsk);
-                                }))
-                                .child("whole conversation · ⌘2"),
-                        ),
+                        .when(can_stop, |row| {
+                            row.child(
+                                link("finder-stop")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.ask.update(cx, |ask, cx| ask.stop(cx));
+                                    }))
+                                    .child("stop"),
+                            )
+                        })
+                        .when(!loading, |row| {
+                            row.child(
+                                link("finder-new")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.ask.update(cx, |ask, cx| ask.clear(cx));
+                                        view.asked = false;
+                                        view.focus_next = true;
+                                        cx.notify();
+                                    }))
+                                    .child("new conversation"),
+                            )
+                        }),
                 )
         });
+
+        // Where the next question goes. Cloud gets the current prompt only, once it is marked
+        // public (c0); the session refuses to send it before that.
+        let model = match model {
+            Model::Local { error } => link("finder-model")
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    let retry = error.is_some();
+                    view.ask.update(cx, |ask, cx| {
+                        if retry {
+                            ask.retry_providers(cx);
+                        } else {
+                            ask.next_model(cx);
+                        }
+                    });
+                }))
+                .child("local model")
+                .into_any_element(),
+            Model::Cloud { label, confirmed } => div()
+                .flex()
+                .gap_2()
+                .child(
+                    link("finder-model")
+                        .text_color(rgb(palette.accent))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.ask.update(cx, |ask, cx| ask.next_model(cx));
+                        }))
+                        .child(label),
+                )
+                .child(
+                    link("finder-public")
+                        .text_color(rgb(if confirmed {
+                            palette.green
+                        } else {
+                            palette.red
+                        }))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.ask.update(cx, |ask, cx| ask.toggle_public(cx));
+                        }))
+                        .child(if confirmed {
+                            "public c0 ✓"
+                        } else {
+                            "mark public c0"
+                        }),
+                )
+                .into_any_element(),
+        };
+
+        let hint = if agent_mode {
+            "↩ start or steer · run stays in the right panel"
+        } else {
+            "↩ open or ask"
+        };
 
         let panel = div()
             .key_context("Finder")
@@ -635,6 +1499,9 @@ impl Render for Finder {
             .on_action(cx.listener(|view, _: &NextMode, _, cx| {
                 view.mode = view.mode.next();
                 view.search_server_soon(cx);
+                if view.mode == Mode::Agent {
+                    view.agent_refresh_sessions(cx);
+                }
                 cx.notify();
             }))
             .on_action(cx.listener(|view, _: &Close, _, cx| view.close(cx)))
@@ -646,7 +1513,7 @@ impl Render for Finder {
             .flex_col()
             .rounded(px(12.))
             .overflow_hidden()
-            .bg(rgb(palette.panel()))
+            .bg(rgba(palette.panel()))
             .border_1()
             .border_color(rgba(palette.border))
             .shadow(vec![gpui_kit::BoxShadow::new(
@@ -668,16 +1535,18 @@ impl Render for Finder {
                     .children(decision)
                     .child(modes),
             )
-            .children(answer)
+            .children(thread)
             .children(empty)
-            .child(
-                // Sized to its rows: two results make a short panel, not a tall empty one.
-                div()
-                    .id("finder-list")
-                    .max_h(px(420.))
-                    .overflow_y_scroll()
-                    .child(list),
-            )
+            .when(!agent_mode, |panel| {
+                panel.child(
+                    // Sized to its rows: two results make a short panel, not a tall empty one.
+                    div()
+                        .id("finder-list")
+                        .max_h(px(420.))
+                        .overflow_y_scroll()
+                        .child(list),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -695,10 +1564,12 @@ impl Render for Finder {
                                 .child("searching Sjel…"),
                         )
                     })
-                    .child("↩ open or ask")
+                    .child(hint)
                     .child("⌘↩ the other way")
                     .child("⌘/ mode")
-                    .child("esc close"),
+                    .child("esc close")
+                    .child(div().flex_1())
+                    .child(model),
             );
 
         div()

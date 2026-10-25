@@ -7,6 +7,8 @@ pub struct Item {
     pub id: String,
     pub item_type: String,
     pub day: Option<String>,
+    #[serde(default)]
+    pub external_id: String,
     pub title: String,
     #[serde(default)]
     pub payload: serde_json::Value,
@@ -120,6 +122,7 @@ mod tests {
             id: "item_1".into(),
             item_type: "stay".into(),
             day: None,
+            external_id: "stay:1".into(),
             title: "Stay".into(),
             payload,
         }

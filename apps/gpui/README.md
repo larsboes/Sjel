@@ -1,22 +1,33 @@
 # Sjel GPUI
 
+Docs Mermaid fences use [`mermaid-rs-renderer`](https://github.com/1jehuang/mermaid-rs-renderer) to produce SVG that GPUI draws natively. The dependency and adoption rationale are recorded in [`upstreams.toml`](../../upstreams.toml).
+
 A native desktop surface for Sjel. It is intentionally outside the production Cargo workspace: it
 does not change Sjel's shipping UI, capability processes, or production dependency lockfiles.
 
-The app has twenty-four pages in nine areas. The sidebar lists the areas and ⌘1–⌘9 open them, each
-at the tab it showed last, so ⌘9 returns to Packs if Packs was the last Sjel page; the header
+The app has twenty-three pages in eight areas. The sidebar lists the areas and ⌘1–⌘8 open them,
+each at the tab it showed last, so ⌘8 returns to Packs if Packs was the last Sjel page; the header
 carries the open area's tabs and switches between them without a read. **Today** (⌘1) is Home and
 Today as one page: what needs you now (agent writes that wait for approval, kept-running
 capabilities that do not answer — and nothing at all when nothing does), the urgent and overdue
 tasks, then the day's timeline of events, tasks and spending, which steps a day with ← and →.
-Everything about Sjel itself sits under **Sjel** (⌘9), **Capabilities** first: every capability
+Everything about Sjel itself sits under **Sjel** (⌘8), **Capabilities** first: every capability
 with start and stop, then the agent's recent writes. **Projects**
 lists projects, tasks and notes, draws tasks as a table with due and priority edited in place, and
 edits a note as blocks (`ui/src/projects.rs`, `ui/src/editor.rs`, `core/src/blocks.rs`). The
 iPhone uses the same page. **Ask** streams the model's answer and
 read-only tool activity into the transcript; the composer steers an active run at its next model
-step. Its API keys panel uses a masked input and stores keys directly in the OS keychain; the
-keys never go through the Ask service or the conversation.
+step. Provider API keys are managed centrally in Settings → Accounts & keys, stored in the OS
+keychain, and never sent through the Ask service or conversation.
+
+**Settings** groups appearance, connection and sync, Accounts & keys, Features, updates, and
+shortcuts. Its searchable contents rail can be hidden. The Feature Manager's package, lifecycle,
+and local recommendation contract lives in [the architecture guide](../../docs/architecture/feature-manager.md).
+Settings can browse the official feature catalogue, inspect package requirements and data access,
+and install a confirmed package when the placed runtime and release are compatible. Local Ask
+signals can recommend a feature, with a visible reason and a dismiss option. Installed features
+remain disabled until enabled in Capabilities. Uninstall removes receipt-owned files and retains
+capability data.
 
 **Feed** triages the comms feed of the last 30 days: New, Kept and Dismissed, with a News or
 Media filter, newest day first and the best-ranked entry first within a day. The keys are the
@@ -322,17 +333,20 @@ wrong.
 **Activity** is the second seat, behind the list button in Today's header: what this phone is doing, in
 its own words — the Mac's answer, the last sync, the queue, and the reminders the notification centre
 holds. It is where an agent's steps will stream once a phone client has an Ask turn to stream, which is
-the plan's own point about Sjel working in view (`PORTING_PLAN.md` §3 item 2).
+the plan's own point about Sjel working in view (`docs/plans/gpui.md` §4).
 
-**Reminders** are the phone's own lock screen, local only: no push registration, no device token and no
-server that would need one (`core/src/notify.rs`, `ios/src/notify.rs`, `ios/host/Notifications.swift`).
-The card at the top of Settings carries one switch, the lead time (`At start`, `10 min`, `1 hour`) and
+**Local alerts** use the phone's own notification centre: no push registration, no device token and no
+server that would need one (`core/src/notify.rs`, `core/src/travel.rs`, `ios/src/notify.rs`,
+`ios/host/Notifications.swift`). The card at the top of Settings carries one switch for calendar and
+task reminders and low-fare alerts, the lead time (`At start`, `10 min`, `1 hour`) and
 the notification centre's own answer — the count and the next moment come from
 `getPendingNotificationRequests` and `nextTriggerDate()`, so the line cannot claim more than iOS holds.
 What earns a reminder: a timed entry at its lead, an all-day entry at 08:00 on the day it covers, an
 open task at 09:00 on its due date; an entry whose commitment is `possible` blocks nothing and earns
-nothing. The permission is asked when the switch is turned on and never at launch, because iOS offers
-that prompt once; a refusal says where to change it and offers the way there. The rule is rebuilt when
+nothing. A new `sparpreis-low:` note in an upcoming trip is announced once when the app opens or
+returns to the foreground; the note ID is kept on-device, and saved trip details let the check run
+without the Mac. The permission is asked when the switch is turned on and never at launch, because iOS
+offers that prompt once; a refusal says where to change it and offers the way there. The rule is rebuilt when
 the replica opens, after a write, after a pull, and when the scene becomes active — a phone in a pocket
 crosses days without the app running. The switch and the lead live in `notifications.json`; what is
 scheduled is never read from a file. A tap opens the day it announced on the Calendar tab.
@@ -510,8 +524,12 @@ search (`core/src/search.rs`). The decision shows beside the input, ⌘↩ goes 
 switches between Auto, Ask and Search. An arrow key picks a result, and Enter opens a picked result
 whatever the words look like. In Auto, a search that finds nothing is asked instead.
 
-A question is answered in place, through the same Ask session as ⌘2, so the Ask page shows the whole
-conversation.
+A question is answered in place, and Ask has no page of its own. The conversation stays above
+the results while the input is empty or holds a follow-up question. Typing a search hides it, and
+*new conversation* clears it. The footer shows where the next question goes: *local model*, or a
+cloud role. A cloud role receives the current prompt only, after *mark public c0* is clicked for
+that send. Provider keys are in Settings, under *Accounts & keys*. ⇧⌘A, `g a` and `sjel://ask`
+open the finder too; `sjel://ask?q=…` also asks.
 
 Local results show on every keystroke. When typing pauses for 180 ms, the shell's
 `GET /api/sjel-status/search` adds what the app does not hold: calendar events, people, documents,
@@ -524,7 +542,7 @@ matches, the finder says what Enter will do instead.
 | Key | Action |
 |---|---|
 | ⌘K | The finder: search, or ask (see below) |
-| ⌘1 … ⌘9 | Today, Ask, Inbox, Calendar, Projects, Documents, Travel, Life, Sjel — each at its last tab |
+| ⌘1 … ⌘8 | Today, Inbox, Calendar, Projects, Documents, Travel, Life, Sjel — each at its last tab |
 | ⌘⌥↑ / ⌘⌥↓ | The area above or below in the sidebar |
 | ⌘⇧[ / ⌘⇧] (also ⌃⇥, ⌘⌥←/→) | The tab before or after the open area's |
 | `g` + a letter | A page by chord: `g x` Systems, `g k` Packs, `g y` CV, `g ,` Settings |

@@ -33,7 +33,11 @@ pub struct Session {
 impl Session {
     /// The first prompt, on one line, or the root when the session has none yet.
     pub fn label(&self) -> String {
-        match self.title.as_deref().filter(|title| !title.trim().is_empty()) {
+        match self
+            .title
+            .as_deref()
+            .filter(|title| !title.trim().is_empty())
+        {
             Some(title) => title.to_owned(),
             None => self.root.clone(),
         }
@@ -60,6 +64,9 @@ pub struct Event {
     /// Position in the run's log. A reconnect asks for everything after the last one seen.
     #[serde(default)]
     pub seq: u64,
+    /// The oldest retained event when a stream reports that its cursor fell behind the log.
+    #[serde(default)]
+    pub first_seq: u64,
     #[serde(rename = "type", default)]
     pub kind: String,
     #[serde(default)]
@@ -100,8 +107,7 @@ impl Event {
 
     /// A tool call the operator has to answer before it runs.
     pub fn needs_approval(&self) -> Option<&str> {
-        (self.kind == "needs_approval" && !self.approval.is_empty())
-            .then(|| self.approval.as_str())
+        (self.kind == "needs_approval" && !self.approval.is_empty()).then(|| self.approval.as_str())
     }
 }
 
@@ -133,7 +139,12 @@ impl Shell {
             sessions: Vec<Session>,
         }
         let listed: Listed = self
-            .json(reqwest::Method::GET, &format!("{BASE}/api/agent/sessions"), None, 10)
+            .json(
+                reqwest::Method::GET,
+                &format!("{BASE}/api/agent/sessions"),
+                None,
+                10,
+            )
             .await?;
         Ok(listed.sessions)
     }
@@ -191,8 +202,11 @@ impl Shell {
                     // A `truncated` frame carries a body this client has no use for: the events
                     // the reader asked for are gone, and it re-reads the transcript instead.
                     if frame.event == "truncated" {
+                        let details =
+                            serde_json::from_str::<Event>(&frame.data).unwrap_or_default();
                         let _ = to.unbounded_send(Event {
                             kind: "truncated".into(),
+                            first_seq: details.first_seq,
                             ..Event::default()
                         });
                         return;
@@ -375,7 +389,10 @@ mod tests {
     #[test]
     fn a_frame_arrives_whole_or_not_at_all() {
         let mut buffer = b"data: {\"type\":\"text\"}".to_vec();
-        assert!(next_frame(&mut buffer).is_none(), "half an event is not an event");
+        assert!(
+            next_frame(&mut buffer).is_none(),
+            "half an event is not an event"
+        );
         buffer.extend_from_slice(b"\n\n");
         let frame = next_frame(&mut buffer).unwrap();
         assert_eq!(frame.event, "message");
@@ -443,7 +460,10 @@ mod tests {
             "cargo test --lib"
         );
         assert_eq!(
-            tool_summary("edit", r#"{"path":"src/finder.rs","old_text":"a","new_text":"b"}"#),
+            tool_summary(
+                "edit",
+                r#"{"path":"src/finder.rs","old_text":"a","new_text":"b"}"#
+            ),
             "src/finder.rs"
         );
         assert_eq!(tool_summary("graph_unit", r#"{"name":"agent"}"#), "agent");

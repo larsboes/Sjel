@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{device::DeviceClient, shell::Shell};
+use crate::{device::DeviceClient, record::CapabilityLinks, shell::Shell};
 
 pub mod connections;
 mod details;
@@ -116,6 +116,52 @@ pub struct Snapshot {
     pub plans: Vec<Plan>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct FareAlert {
+    pub id: String,
+    pub title: String,
+}
+
+pub fn upcoming(plan: &Plan, today: &str) -> bool {
+    let Ok(today) = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d") else {
+        return false;
+    };
+    chrono::NaiveDate::parse_from_str(&plan.date_end, "%Y-%m-%d")
+        .or_else(|_| chrono::NaiveDate::parse_from_str(&plan.date_start, "%Y-%m-%d"))
+        .is_ok_and(|last_day| last_day >= today)
+}
+
+/// New low-fare notes in upcoming trip details that this device has not announced.
+pub fn unseen_fare_lows(
+    details: &[Details],
+    seen: &std::collections::HashSet<String>,
+    today: &str,
+) -> Vec<FareAlert> {
+    let mut emitted = std::collections::HashSet::new();
+    details
+        .iter()
+        .filter(|trip| upcoming(&trip.plan, today))
+        .flat_map(|trip| trip.items.iter())
+        .filter_map(|item| {
+            if item.item_type != "note"
+                || !item.external_id.starts_with("sparpreis-low:")
+                || seen.contains(&item.external_id)
+                || !emitted.insert(item.external_id.clone())
+            {
+                return None;
+            }
+            Some(FareAlert {
+                id: item.external_id.clone(),
+                title: if item.title.is_empty() {
+                    "A fare fell to a new low".to_owned()
+                } else {
+                    item.title.clone()
+                },
+            })
+        })
+        .collect()
+}
+
 #[derive(Clone)]
 pub enum Source {
     Shell(Arc<Shell>),
@@ -141,6 +187,178 @@ impl Source {
         }
         Ok(details)
     }
+
+    /// Calendar entries owned by Calendar and visible during the trip window.
+    pub async fn calendar(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<Vec<crate::shell::CalendarEntry>, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .calendar(from, to)
+                .await
+                .map_err(|error| error.to_string()),
+            Self::Device(client) => client.get(&calendar_entries_path(from, to)?).await,
+        }
+    }
+
+    /// Calendar events grouped with this trip's destinations and date window.
+    pub async fn related_calendar_events(
+        &self,
+        plan: &Plan,
+    ) -> Result<Vec<crate::shell::CalendarEntry>, String> {
+        let (from, to) = calendar_context_window(plan)
+            .ok_or("This trip has invalid dates, so Calendar events cannot be matched.")?;
+        let drafts = self.calendar_trip_drafts(&from, &to).await?;
+        let places = destination_names(plan);
+        let linked_ids: std::collections::HashSet<String> = drafts
+            .drafts
+            .into_iter()
+            .filter(|draft| {
+                let draft_place = draft.place.to_lowercase();
+                places.iter().any(|place| {
+                    draft_place == *place
+                        || draft_place.contains(place)
+                        || place.contains(&draft_place)
+                })
+            })
+            .flat_map(|draft| draft.entry_ids)
+            .collect();
+        if linked_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let entries = self.calendar(&from, &to).await?;
+        Ok(related_calendar_events(&linked_ids, entries))
+    }
+
+    /// Reads Calendar's exact references to one trip's entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the plan id is invalid or Calendar cannot answer.
+    pub async fn calendar_plan_links(&self, plan_id: &str) -> Result<CapabilityLinks, String> {
+        details_path(plan_id)?;
+        match self {
+            Self::Shell(shell) => shell
+                .capability_links("calendar", plan_id)
+                .await
+                .map_err(|error| error.to_string()),
+            Self::Device(client) => client.get(&calendar_plan_links_path(plan_id)?).await,
+        }
+    }
+
+    pub async fn calendar_trip_drafts(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<crate::calendar::TripDrafts, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .calendar_trip_drafts(from, to)
+                .await
+                .map_err(|error| error.to_string()),
+            Self::Device(client) => client.get(&trip_drafts_path(from, to)?).await,
+        }
+    }
+
+    pub async fn materialize_calendar_trip(
+        &self,
+        entry_ids: &[String],
+        title: &str,
+    ) -> Result<crate::calendar::TripMaterialization, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .calendar_materialize_trip(entry_ids, title)
+                .await
+                .map_err(|error| error.to_string()),
+            Self::Device(_) => Err("Trip suggestions can only be adopted on the Mac.".into()),
+        }
+    }
+}
+
+fn calendar_entries_path(from: &str, to: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse("http://localhost/calendar/api/entries")
+        .map_err(|error| error.to_string())?;
+    url.query_pairs_mut()
+        .append_pair("from", from)
+        .append_pair("to", to);
+    let mut path = url.path().to_owned();
+    if let Some(query) = url.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+    Ok(path)
+}
+
+fn calendar_plan_links_path(plan_id: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse("http://localhost/calendar/api/links")
+        .map_err(|error| error.to_string())?;
+    url.query_pairs_mut().append_pair("to", plan_id);
+    let mut path = url.path().to_owned();
+    if let Some(query) = url.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+    Ok(path)
+}
+
+fn destination_names(plan: &Plan) -> Vec<String> {
+    let mut places: Vec<String> = plan
+        .destinations
+        .iter()
+        .chain(plan.stages.iter().map(|stage| &stage.destination))
+        .flat_map(|place| place.name.split(',').map(str::trim))
+        .filter(|name| name.chars().count() >= 3)
+        .map(str::to_lowercase)
+        .collect();
+    places.sort();
+    places.dedup();
+    places
+}
+
+fn calendar_context_window(plan: &Plan) -> Option<(String, String)> {
+    let start = chrono::NaiveDate::parse_from_str(&plan.date_start, "%Y-%m-%d").ok()?;
+    let last = chrono::NaiveDate::parse_from_str(&plan.date_end, "%Y-%m-%d").ok()?;
+    if start > last {
+        return None;
+    }
+    Some((
+        (start - chrono::Duration::days(5))
+            .format("%Y-%m-%d")
+            .to_string(),
+        (last + chrono::Duration::days(6))
+            .format("%Y-%m-%d")
+            .to_string(),
+    ))
+}
+
+/// Calendar stays the event owner. Only events in Calendar's own destination/time clusters join.
+pub fn related_calendar_events(
+    linked_ids: &std::collections::HashSet<String>,
+    entries: Vec<crate::shell::CalendarEntry>,
+) -> Vec<crate::shell::CalendarEntry> {
+    let mut events: Vec<_> = entries
+        .into_iter()
+        .filter(|entry| entry.kind == "event" && linked_ids.contains(&entry.id))
+        .collect();
+    events.sort_by(|a, b| a.starts_at.cmp(&b.starts_at).then(a.title.cmp(&b.title)));
+    events
+}
+
+fn trip_drafts_path(from: &str, to: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse("http://localhost/calendar/api/trip-drafts")
+        .map_err(|error| error.to_string())?;
+    url.query_pairs_mut()
+        .append_pair("from", from)
+        .append_pair("to", to)
+        .append_pair("max_gap_days", "5");
+    let mut path = url.path().to_owned();
+    if let Some(query) = url.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+    Ok(path)
 }
 
 pub(crate) fn details_path(id: &str) -> Result<String, String> {

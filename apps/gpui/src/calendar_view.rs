@@ -1,13 +1,13 @@
 //! The Calendar page: a month grid or a week of day columns over the calendar capability, the
 //! selected day's entries beside it, and a form for a new entry.
 //!
-//! Grid and entry rules live in `sjel_gpui_core::calendar`. Contexts, rhythms, free-day
-//! feasibility, Google import and export, and trip drafts stay in the dashboard for now.
+//! Grid and entry rules live in `sjel_gpui_core::calendar`; mail-backed event proposals are
+//! reviewed here before they become planned entries.
 
 use chrono::{Datelike, Duration, Local, Months, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
     FontWeight, KeyBinding, SharedString, Subscription, Window,
@@ -105,6 +105,11 @@ pub struct CalendarPage {
     pub entries: Remote<Vec<CalendarEntry>>,
     /// The `[from, to)` window `entries` answers.
     loaded: Option<(String, String)>,
+    proposals: Remote<Vec<CalendarEntry>>,
+    proposals_window: Option<(String, String)>,
+    reviewing_proposals: bool,
+    proposal_action: Option<String>,
+    proposal_confirm_remove: Option<String>,
     pub selected_entry: Option<String>,
     confirm_delete: Option<String>,
     form: Option<Form>,
@@ -122,6 +127,11 @@ impl CalendarPage {
             day: Local::now().date_naive(),
             entries: Remote::default(),
             loaded: None,
+            proposals: Remote::default(),
+            proposals_window: None,
+            reviewing_proposals: false,
+            proposal_action: None,
+            proposal_confirm_remove: None,
             selected_entry: None,
             confirm_delete: None,
             form: None,
@@ -142,6 +152,7 @@ impl CalendarPage {
         self.focus_next = true;
         self.loaded = None;
         self.load(cx);
+        self.load_proposals(cx, true);
     }
 
     fn dates(&self) -> Vec<NaiveDate> {
@@ -189,6 +200,236 @@ impl CalendarPage {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.loaded = None;
         self.load(cx);
+        if self.reviewing_proposals {
+            self.load_proposals(cx, true);
+        }
+    }
+
+    fn load_proposals(&mut self, cx: &mut Context<Self>, force: bool) {
+        if self.proposals.loading {
+            return;
+        }
+        let from = Local::now().date_naive();
+        let to = from + Duration::days(90);
+        let window = (
+            from.format("%Y-%m-%d").to_string(),
+            to.format("%Y-%m-%d").to_string(),
+        );
+        if !force && self.proposals_window.as_ref() == Some(&window) {
+            return;
+        }
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.proposals.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        self.proposals_window = Some(window.clone());
+        self.proposals.loading = true;
+        let (from, to) = window.clone();
+        let work = shell::run(async move { shell.calendar_proposals(&from, &to).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.proposals_window.as_ref() == Some(&window) {
+                    view.proposals.settle(result);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn review_proposal(&mut self, id: String, remove: bool, cx: &mut Context<Self>) {
+        if remove && self.proposal_confirm_remove.as_deref() != Some(id.as_str()) {
+            self.proposal_confirm_remove = Some(id);
+            cx.notify();
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.proposal_action = Some(id.clone());
+        self.proposal_confirm_remove = None;
+        self.write_error = None;
+        let entry_id = id.clone();
+        let work = shell::run(async move {
+            if remove {
+                shell.delete_calendar_entry(&entry_id).await.map(|()| None)
+            } else {
+                shell
+                    .update_calendar_entry(
+                        &entry_id,
+                        serde_json::json!({ "kind": "event", "commitment": "planned" }),
+                    )
+                    .await
+                    .map(Some)
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.proposal_action = None;
+                match result {
+                    Ok(_) => {
+                        if let Some(proposals) = view.proposals.value.as_mut() {
+                            proposals.retain(|entry| entry.id != id);
+                        }
+                        view.proposals_window = None;
+                        view.load_proposals(cx, true);
+                        view.refresh(cx);
+                    }
+                    Err(error) => view.write_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn toggle_proposals(&mut self, cx: &mut Context<Self>) {
+        self.reviewing_proposals = !self.reviewing_proposals;
+        self.proposal_confirm_remove = None;
+        if self.reviewing_proposals {
+            self.load_proposals(cx, false);
+        }
+        cx.notify();
+    }
+
+    fn proposal_panel(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let proposals = self.proposals.value.as_deref().unwrap_or_default();
+        let mut panel = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .rounded(px(8.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Detected event proposals"),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("Mail event dates appear here as possible entries. Add a proposal to put it on your Calendar."),
+            );
+
+        if let Some(error) = &self.proposals.error {
+            panel = panel.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.red))
+                    .child(error.to_string()),
+            );
+        }
+        if self.proposals.loading && self.proposals.value.is_none() {
+            return panel
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("Loading proposals…"),
+                )
+                .into_any_element();
+        }
+        if proposals.is_empty() && self.proposals.error.is_none() {
+            return panel
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("Nothing pending in the next 90 days."),
+                )
+                .into_any_element();
+        }
+
+        for entry in proposals {
+            let id = entry.id.clone();
+            let remove_id = id.clone();
+            let confirming = self.proposal_confirm_remove.as_deref() == Some(id.as_str());
+            let busy = self.proposal_action.as_deref() == Some(id.as_str());
+            let when = if entry.all_day {
+                format!(
+                    "{} · all day",
+                    entry.starts_at.get(..10).unwrap_or(&entry.starts_at)
+                )
+            } else {
+                format!(
+                    "{}–{}",
+                    entry.starts_at.get(..16).unwrap_or(&entry.starts_at),
+                    entry.ends_at.get(11..16).unwrap_or("")
+                )
+            };
+            panel =
+                panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .py_3()
+                        .border_t_1()
+                        .border_color(rgba(palette.border))
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(entry.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!(
+                                    "{}{} · {}",
+                                    when,
+                                    entry
+                                        .location
+                                        .as_ref()
+                                        .map(|place| format!(" · {place}"))
+                                        .unwrap_or_default(),
+                                    entry.source
+                                )),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap_2()
+                                .child(
+                                    Button::new(SharedString::from(format!("proposal-add-{id}")))
+                                        .small()
+                                        .label(if busy { "Adding…" } else { "Add to Calendar" })
+                                        .disabled(self.proposal_action.is_some())
+                                        .on_click(cx.listener(move |page, _, _, cx| {
+                                            page.review_proposal(id.clone(), false, cx)
+                                        })),
+                                )
+                                .child(
+                                    Button::new(SharedString::from(format!(
+                                        "proposal-remove-{remove_id}"
+                                    )))
+                                    .small()
+                                    .ghost()
+                                    .label(if confirming {
+                                        "Confirm remove"
+                                    } else {
+                                        "Remove"
+                                    })
+                                    .disabled(self.proposal_action.is_some())
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        page.review_proposal(remove_id.clone(), true, cx)
+                                    })),
+                                ),
+                        ),
+                );
+        }
+        panel.into_any_element()
     }
 
     fn select(&mut self, day: NaiveDate, cx: &mut Context<Self>) {
@@ -464,20 +705,58 @@ impl Render for CalendarPage {
             .child(view_button("Month", View::Month, cx))
             .child(view_button("Week", View::Week, cx))
             .child(
+                Button::new("calendar-proposal-review")
+                    .small()
+                    .ghost()
+                    .label(if self.reviewing_proposals {
+                        "Back to calendar".to_owned()
+                    } else {
+                        format!(
+                            "Review detected events · {}",
+                            self.proposals.value.as_ref().map_or(0, Vec::len)
+                        )
+                    })
+                    .on_click(cx.listener(|page, _, _, cx| page.toggle_proposals(cx))),
+            )
+            .child(
                 Button::new("calendar-new")
                     .small()
                     .label("New entry · N")
                     .on_click(cx.listener(|page, _, window, cx| page.open_form(window, cx))),
             );
 
-        let entries = self.entries.value.clone().unwrap_or_default();
-        let grid = match self.view {
-            View::Month => self.month(&dates, &entries, today, palette, cx),
-            View::Week => self.week(&dates, &entries, today, palette, cx),
-        };
-        let side = match self.form.is_some() {
-            true => self.form_panel(palette, cx),
-            false => self.day_panel(palette, cx),
+        let content = if self.reviewing_proposals {
+            self.proposal_panel(palette, cx)
+        } else {
+            let entries = self.entries.value.clone().unwrap_or_default();
+            let grid = match self.view {
+                View::Month => self.month(&dates, &entries, today, palette, cx),
+                View::Week => self.week(&dates, &entries, today, palette, cx),
+            };
+            let side = match self.form.is_some() {
+                true => self.form_panel(palette, cx),
+                false => self.day_panel(palette, cx),
+            };
+            div()
+                .flex()
+                .gap_4()
+                .flex_1()
+                .min_h_0()
+                .child(div().flex_1().min_w_0().child(grid))
+                .child(
+                    div()
+                        .id("calendar-side-panel")
+                        .w(px(330.))
+                        .flex_none()
+                        .p_4()
+                        .rounded(px(8.))
+                        .bg(rgba(palette.surface))
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .overflow_y_scroll()
+                        .child(side),
+                )
+                .into_any_element()
         };
 
         div()
@@ -518,27 +797,7 @@ impl Render for CalendarPage {
                         .child(format!("Not saved: {error}")),
                 )
             })
-            .child(
-                div()
-                    .flex()
-                    .gap_4()
-                    .flex_1()
-                    .min_h_0()
-                    .child(div().flex_1().min_w_0().child(grid))
-                    .child(
-                        div()
-                            .id("calendar-side-panel")
-                            .w(px(330.))
-                            .flex_none()
-                            .p_4()
-                            .rounded(px(8.))
-                            .bg(rgba(palette.surface))
-                            .border_1()
-                            .border_color(rgba(palette.border))
-                            .overflow_y_scroll()
-                            .child(side),
-                    ),
-            )
+            .child(content)
             .child(
                 div()
                     .flex()

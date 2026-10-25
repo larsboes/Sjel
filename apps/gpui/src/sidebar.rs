@@ -13,7 +13,7 @@ use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
 use crate::theme::{tint, Palette};
-use crate::workspace::{OpenArea, OpenPalette, OpenSettings, ToggleSoundscapePanel, Workspace};
+use crate::workspace::{OpenPalette, OpenSettings, ToggleSoundscapePanel, Workspace};
 
 /// The column the sidebar occupies, and the gap the glass panel leaves to the window edge.
 pub const WIDTH: f32 = 208.;
@@ -37,7 +37,7 @@ pub fn render(
         .pb_4()
         .when(!glass, |sidebar| {
             sidebar
-                .bg(rgba(palette.raised))
+                .bg(rgba(palette.sidebar_surface))
                 .border_r_1()
                 .border_color(rgba(palette.border))
         })
@@ -50,7 +50,7 @@ pub fn render(
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .children(nav(view, palette, window, cx)),
+                .children(nav(view, palette, cx)),
         )
         .child(soundscape(view, palette, window, cx))
         .child(palette_hint(palette, window))
@@ -58,20 +58,13 @@ pub fn render(
         .child(footer(view, palette))
 }
 
-/// One row per area, with the ⌘ number that opens it and, when the area is not on the tab it
-/// opens on, the tab it will return to. Settings sits at the bottom instead, beside Search.
-fn nav(
-    view: &Workspace,
-    palette: Palette,
-    window: &mut Window,
-    cx: &mut Context<Workspace>,
-) -> Vec<AnyElement> {
+/// One row per area and, when it is away from its default tab, the tab it will return to.
+fn nav(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> Vec<AnyElement> {
     Area::ALL
         .into_iter()
         .map(|area| {
             let selected = Area::of(view.page) == Some(area);
             let tab = view.tabs.current(area);
-            let shortcut = Kbd::binding_for_action(&OpenArea(area), None, window);
             div()
                 .id(area.label())
                 .flex()
@@ -80,7 +73,10 @@ fn nav(
                 .px_3()
                 .py(px(5.))
                 .rounded(px(7.))
-                .when(selected, |row| row.bg(rgba(palette.raised)))
+                .when(selected, |row| {
+                    row.bg(rgba(tint(palette.accent, 0x18)))
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                })
                 .text_color(rgb(if selected {
                     palette.text
                 } else {
@@ -89,15 +85,8 @@ fn nav(
                 .cursor_pointer()
                 .hover(move |style| style.bg(rgba(palette.raised)).text_color(rgb(palette.text)))
                 .on_click(cx.listener(move |view, _, _, cx| view.open_area(area, cx)))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(area.label())
-                        .children(shortcut.map(|kbd| kbd.appearance(false))),
-                )
-                // The tab ⌘9 returns to, shown only when it differs from the open one.
+                .child(div().flex().items_center().child(area.label()))
+                // The tab the area key returns to, shown only when it differs from the open one.
                 .when(
                     area.has_tabs() && tab != area.default_page() && !selected,
                     |row| {

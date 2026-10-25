@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
+    AnyElement, Context, Entity, SharedString, Subscription, Window, div, prelude::*, px, rgb, rgba,
 };
 use gpui_kit::component::button::ButtonVariants;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -13,8 +13,8 @@ use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
     shell::{self, Shell, ShellError},
     travel::{
-        edit::{BookingDraft, StageDraft, StageEdit, TripDraft, STAGE_STATUSES, TRANSPORT_MODES},
         Item, Source, Stage, TravelRoute, TripSection,
+        edit::{BookingDraft, STAGE_STATUSES, StageDraft, StageEdit, TRANSPORT_MODES, TripDraft},
     },
 };
 
@@ -22,7 +22,7 @@ use super::Travel;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum FormKind {
-    Trip,
+    Trip(Option<String>),
     /// `None` adds a booking; `Some(item id)` edits that one.
     Booking(Option<String>),
     /// `None` adds a stage at the end; `Some(stage id)` edits that one.
@@ -48,6 +48,7 @@ impl Form {
 /// What a finished write asks the page to read again.
 enum Saved {
     Trip(String),
+    Deleted(String),
     Details,
 }
 
@@ -73,7 +74,7 @@ impl Travel {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let (labels, values, mode, status): (Vec<(&'static str, &'static str)>, Vec<String>, _, _) =
             match &kind {
-                FormKind::Trip => (
+                FormKind::Trip(destination) => (
                     vec![
                         ("Title", "Hamburg in November"),
                         ("From", "Bonn"),
@@ -84,7 +85,7 @@ impl Travel {
                     vec![
                         String::new(),
                         String::new(),
-                        String::new(),
+                        destination.clone().unwrap_or_default(),
                         today.clone(),
                         today,
                     ],
@@ -223,7 +224,7 @@ impl Travel {
         let plan = self.selected.clone().unwrap_or_default();
         let v = |i| form.value(i, cx);
         let work: Result<_, String> = match form.kind.clone() {
-            FormKind::Trip => TripDraft {
+            FormKind::Trip(_) => TripDraft {
                 title: v(0),
                 origin: v(1),
                 destinations: v(2),
@@ -286,7 +287,7 @@ impl Travel {
         self.write(shell, work, window, cx);
     }
 
-    /// Removes a booking or a stage. The first press asks; the second removes.
+    /// Removes a trip, booking or stage. The first press asks; the second removes.
     pub(super) fn remove(&mut self, target: Remove, window: &mut Window, cx: &mut Context<Self>) {
         let Some(shell) = self.writer() else {
             return;
@@ -299,9 +300,10 @@ impl Travel {
         }
         self.confirm_remove = None;
         let plan = self.selected.clone().unwrap_or_default();
-        let work = match target {
-            Remove::Item(item) => Work::RemoveItem(plan, item),
-            Remove::Stage(stage) => Work::Stages(plan, StageEdit::Remove(stage)),
+        let work = match &target {
+            Remove::Plan(plan) => Work::DeletePlan(plan.clone()),
+            Remove::Item(item) => Work::RemoveItem(plan, item.clone()),
+            Remove::Stage(stage) => Work::Stages(plan, StageEdit::Remove(stage.clone())),
         };
         self.write(shell, work, window, cx);
     }
@@ -313,6 +315,10 @@ impl Travel {
                     .trip_create(body)
                     .await
                     .map(|plan| Saved::Trip(plan.id)),
+                Work::DeletePlan(plan) => shell
+                    .trip_plan_delete(&plan)
+                    .await
+                    .map(|()| Saved::Deleted(plan)),
                 Work::AddBooking(plan, body) => shell
                     .trip_booking_add(&plan, body)
                     .await
@@ -348,6 +354,11 @@ impl Travel {
                                 },
                                 cx,
                             ),
+                            Saved::Deleted(id) => {
+                                view.details.remove(&id);
+                                view.selected = None;
+                                view.open_route(TravelRoute::Trips, cx);
+                            }
                             Saved::Details => {
                                 view.refresh(cx);
                                 if let Some(id) = view.selected.clone() {
@@ -376,11 +387,12 @@ impl Travel {
         let form = self.form.as_ref().filter(|form| &form.kind == kind)?;
         let palette = self.palette;
         let title = match &form.kind {
-            FormKind::Trip => "New trip",
-            FormKind::Booking(None) => "Add a booking",
-            FormKind::Booking(Some(_)) => "Edit booking",
-            FormKind::Stage(None) => "Add a stage",
-            FormKind::Stage(Some(_)) => "Edit stage",
+            FormKind::Trip(Some(destination)) => format!("Plan a trip to {destination}"),
+            FormKind::Trip(None) => "New trip".to_owned(),
+            FormKind::Booking(None) => "Add a booking".to_owned(),
+            FormKind::Booking(Some(_)) => "Edit booking".to_owned(),
+            FormKind::Stage(None) => "Add a stage".to_owned(),
+            FormKind::Stage(Some(_)) => "Edit stage".to_owned(),
         };
         let mut card = div()
             .flex()
@@ -424,7 +436,7 @@ impl Travel {
                     cx,
                 ));
         }
-        if matches!(form.kind, FormKind::Trip) {
+        if matches!(&form.kind, FormKind::Trip(_)) {
             card = card.child(
                 div()
                     .text_xs()
@@ -496,11 +508,19 @@ impl Travel {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.writer()?;
-        let open = self.form.as_ref().is_some_and(|form| form.kind == kind);
+        let open = self.form.as_ref().is_some_and(|form| {
+            form.kind == kind
+                || (matches!(&kind, FormKind::Trip(_))
+                    && matches!(&form.kind, FormKind::Trip(_)))
+        });
+        let button = self.button(id).label(label).disabled(open);
+        let button = if matches!(&kind, FormKind::Trip(None)) {
+            button.primary()
+        } else {
+            button
+        };
         Some(
-            self.button(id)
-                .label(label)
-                .disabled(open)
+            button
                 .on_click(
                     cx.listener(move |view, _, window, cx| {
                         view.open_form(kind.clone(), window, cx)
@@ -508,6 +528,14 @@ impl Travel {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The trip form is shown below the map when opened from a location row or marker.
+    pub(super) fn active_trip_form_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let kind = self.form.as_ref()?.kind.clone();
+        matches!(&kind, FormKind::Trip(_))
+            .then(|| self.form_card(&kind, cx))
+            .flatten()
     }
 
     /// `Remove`, then `Remove — press again` on the same row.
@@ -519,14 +547,14 @@ impl Travel {
         self.writer()?;
         let key = target.key();
         let armed = self.confirm_remove.as_deref() == Some(key.as_str());
+        let (label, armed_label) = match &target {
+            Remove::Plan(_) => ("Delete trip", "Press again to delete trip"),
+            _ => ("Remove", "Press again to remove"),
+        };
         Some(
             self.button(SharedString::from(format!("remove-{key}")))
                 .ghost()
-                .label(if armed {
-                    "Press again to remove"
-                } else {
-                    "Remove"
-                })
+                .label(if armed { armed_label } else { label })
                 .on_click(
                     cx.listener(move |view, _, window, cx| view.remove(target.clone(), window, cx)),
                 )
@@ -537,6 +565,7 @@ impl Travel {
 
 #[derive(Clone, Debug)]
 pub(super) enum Remove {
+    Plan(String),
     Item(String),
     Stage(String),
 }
@@ -544,6 +573,7 @@ pub(super) enum Remove {
 impl Remove {
     fn key(&self) -> String {
         match self {
+            Self::Plan(id) => format!("plan-{id}"),
             Self::Item(id) => format!("item-{id}"),
             Self::Stage(id) => format!("stage-{id}"),
         }
@@ -552,6 +582,7 @@ impl Remove {
 
 enum Work {
     Trip(serde_json::Value),
+    DeletePlan(String),
     AddBooking(String, serde_json::Value),
     EditBooking(String, String, serde_json::Value, Option<String>),
     RemoveItem(String, String),

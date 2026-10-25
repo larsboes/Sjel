@@ -334,6 +334,10 @@ mod tests {
             currency: "EUR".into(),
             source_id: None,
             trip_id: None,
+            purpose: None,
+            shared_cents: 0,
+            cash_amount_cents: 0,
+            reimbursement_for: None,
         }];
 
         let context = ContextDay::build(day, &entries, &[], &txs);

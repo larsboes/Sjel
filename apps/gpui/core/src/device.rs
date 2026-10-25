@@ -219,13 +219,20 @@ pub async fn claim(qr: &PairingQr, label: &str, public_key: &str) -> Result<Node
 pub struct DeviceClient {
     node: Node,
     client: reqwest::Client,
+    stream_client: reqwest::Client,
     sign: Signer,
 }
 
 impl DeviceClient {
     pub fn new(node: Node, sign: Signer) -> Result<Self, String> {
         let client = pinned_client(&node.pin)?;
-        Ok(Self { node, client, sign })
+        let stream_client = pinned_stream_client(&node.pin)?;
+        Ok(Self {
+            node,
+            client,
+            stream_client,
+            sign,
+        })
     }
 
     pub fn node(&self) -> &Node {
@@ -238,6 +245,51 @@ impl DeviceClient {
         decode(status, &body)
     }
 
+    /// A signed GET for a non-JSON capability asset, such as a USDZ archive.
+    pub async fn get_bytes(&self, shell_path: &str) -> Result<Vec<u8>, String> {
+        let (status, body) = self.signed(Method::GET, shell_path, &[]).await?;
+        if (200..300).contains(&status) {
+            Ok(body)
+        } else {
+            let error = crate::shell::error_text(&body);
+            Err(error.unwrap_or_else(|| format!("The Mac refused the request ({status}).")))
+        }
+    }
+
+    /// A signed event stream from the paired Mac. Its total body has no timeout: callers stop it
+    /// when the run's terminal event arrives or when they detach from the view.
+    pub async fn streaming_get(&self, shell_path: &str) -> Result<reqwest::Response, String> {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "the clock is before 1970".to_string())?
+            .as_secs() as i64;
+        let sign = self.sign.clone();
+        let headers = device_auth::signed_headers(
+            &self.node.device_id,
+            timestamp,
+            Method::GET.as_str(),
+            shell_path,
+            &[],
+            |message| sign(message),
+        )?;
+        let mut request = self
+            .stream_client
+            .get(format!("{}{shell_path}", self.node.base));
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|error| format!("The Mac did not answer: {error}"))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("The Mac refused the stream ({status}): {body}"));
+        }
+        Ok(response)
+    }
+
     /// A signed POST to `shell_path` with `body`.
     pub async fn post<T: DeserializeOwned>(
         &self,
@@ -245,6 +297,16 @@ impl DeviceClient {
         body: &[u8],
     ) -> Result<T, String> {
         let (status, body) = self.signed(Method::POST, shell_path, body).await?;
+        decode(status, &body)
+    }
+
+    /// A signed PUT to `shell_path` with `body`.
+    pub async fn put<T: DeserializeOwned>(
+        &self,
+        shell_path: &str,
+        body: &[u8],
+    ) -> Result<T, String> {
+        let (status, body) = self.signed(Method::PUT, shell_path, body).await?;
         decode(status, &body)
     }
 
@@ -301,11 +363,26 @@ impl DeviceClient {
 
 /// A client that trusts exactly the certificate with this SHA-256, and talks only to a local host.
 fn pinned_client(pin: &str) -> Result<reqwest::Client, String> {
+    pinned_client_with_timeout(pin, Some(TIMEOUT))
+}
+
+fn pinned_stream_client(pin: &str) -> Result<reqwest::Client, String> {
+    pinned_client_with_timeout(pin, None)
+}
+
+fn pinned_client_with_timeout(
+    pin: &str,
+    timeout: Option<Duration>,
+) -> Result<reqwest::Client, String> {
     let tls = device_auth::pinned_tls(device_auth::decode_pin(pin)?)?;
-    reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .tls_backend_preconfigured(tls)
-        .timeout(TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(reqwest::redirect::Policy::none());
+    let builder = match timeout {
+        Some(timeout) => builder.timeout(timeout),
+        None => builder,
+    };
+    builder
         .build()
         .map_err(|error| format!("TLS client: {error}"))
 }

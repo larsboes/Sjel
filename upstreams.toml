@@ -415,6 +415,13 @@ license = "MIT"
 summary = "Diagram renderer that the dashboard uses to draw the Mermaid source summaries produce"
 why = "renders the Mermaid source libs/summarize produces for a content item. Adopted rather than built: a diagram renderer is a solved problem and the alternative was emitting SVG by hand. Loaded by dynamic import inside one Svelte lifecycle wrapper, the same shape as maplibre-gl-js above, so the bundle is code-split onto the reader route instead of every page. `startOnLoad` is off and rendering is an explicit call, because the reader owns when a diagram appears; nothing is fetched at runtime, which is what keeps the dashboard's no-CDN rule intact"
 
+[mermaid-rs-renderer]
+url = "https://github.com/1jehuang/mermaid-rs-renderer"
+verdict = "adopt"
+license = "MIT"
+summary = "Native Rust Mermaid parser and SVG renderer used by GPUI Docs"
+why = "renders Mermaid fences in the native GPUI documentation reader as SVG consumed by GPUI's built-in SVG element. Adopted rather than translating a second diagram language or invoking a browser at runtime; the dashboard keeps its separate Mermaid.js consumer until retirement. Rendering remains local and uses the app palette."
+
 [vega]
 url = "https://github.com/vega/vega"
 verdict = "adopt"

@@ -22,8 +22,67 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .flex_col()
         .gap_8()
         .children(needs_you(view, palette, cx))
+        .children(next_trip(view, palette, cx))
+        .child(location(view, palette, cx))
         .child(focus_tasks(view, palette, cx))
         .child(today(view, palette, cx))
+}
+
+/// The trip that matters now, above the map: the nearest saved plan or Calendar draft.
+fn next_trip(
+    view: &Workspace,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> Option<AnyElement> {
+    let (trip, plan_id) = view
+        .travel
+        .update(cx, |travel, cx| travel.home_next_trip(palette, cx))?;
+    let mut body = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_2()
+        .child(trip);
+    if let Some(id) = plan_id {
+        body = body.child(
+            Button::new("home-open-trip")
+                .ghost()
+                .label("Open trip")
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    let route = sjel_gpui_core::travel::TravelRoute::Trip {
+                        id: id.clone(),
+                        section: sjel_gpui_core::travel::TripSection::Overview,
+                    };
+                    view.travel
+                        .update(cx, |travel, cx| travel.open_route(route, cx));
+                    view.go(Page::Travel, cx);
+                })),
+        );
+    }
+    Some(section("Next trip", body.into_any_element(), palette).into_any_element())
+}
+
+fn location(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
+    let map = view
+        .travel
+        .update(cx, |travel, cx| travel.home_map(palette, cx));
+    section(
+        "Location",
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(map)
+            .child(
+                Button::new("open-location")
+                    .ghost()
+                    .label("Open Location")
+                    .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
+            )
+            .into_any_element(),
+        palette,
+    )
+    .into_any_element()
 }
 
 /// The day on screen: the date, its three counts, and the timeline, from the Today view.

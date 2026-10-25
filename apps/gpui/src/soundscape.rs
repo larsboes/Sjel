@@ -647,7 +647,7 @@ impl Render for Soundscape {
             .w(px(WIDTH))
             .flex()
             .flex_col()
-            .bg(rgb(palette.panel()))
+            .bg(rgba(palette.panel()))
             .border_l_1()
             .border_color(rgba(palette.border))
             // A page on white and a panel on near-white are one rectangle without this: the shadow

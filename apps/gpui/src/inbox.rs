@@ -6,8 +6,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    FontWeight, KeyBinding, SharedString, Subscription, Window,
+    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, EventEmitter,
+    FocusHandle, FontWeight, KeyBinding, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::capture::{self, Capture, TAGS};
 use sjel_gpui_core::shell::{self, ShellError};
@@ -33,6 +33,8 @@ actions!(
         CycleTag,
         /// Open the capture's link in the browser.
         OpenLink,
+        /// Prepare a YouTube capture in ytalbum.
+        OpenYtAlbum,
         /// Type a new capture.
         NewCapture,
         /// Edit the capture's text.
@@ -41,6 +43,12 @@ actions!(
         Restore,
     ]
 );
+
+pub enum InboxEvent {
+    OpenYtAlbum(String),
+}
+
+impl EventEmitter<InboxEvent> for Inbox {}
 
 pub fn bind_keys(cx: &mut App) {
     // The "CaptureList" context sits on the list only, so these letters never fire while the
@@ -55,6 +63,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("d", Dismiss, Some("CaptureList")),
         KeyBinding::new("t", CycleTag, Some("CaptureList")),
         KeyBinding::new("o", OpenLink, Some("CaptureList")),
+        KeyBinding::new("y", OpenYtAlbum, Some("CaptureList")),
         KeyBinding::new("n", NewCapture, Some("CaptureList")),
         KeyBinding::new("enter", EditText, Some("CaptureList")),
         KeyBinding::new("u", Restore, Some("CaptureList")),
@@ -396,6 +405,16 @@ impl Inbox {
         }
     }
 
+    fn on_open_ytalbum(&mut self, _: &OpenYtAlbum, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(url) = self
+            .selected()
+            .and_then(|c| c.url)
+            .filter(|url| is_youtube_url(url))
+        {
+            cx.emit(InboxEvent::OpenYtAlbum(url));
+        }
+    }
+
     fn on_edit_text(&mut self, _: &EditText, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(capture) = self.selected() {
             self.edit_text(&capture, window, cx);
@@ -435,7 +454,7 @@ impl Render for Inbox {
                     .child("Inbox"),
             )
             .child(muted(
-                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · n new",
+                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · y ytalbum · n new",
                 palette,
             ))
             .child(div().flex_1())
@@ -485,6 +504,7 @@ impl Render for Inbox {
             .on_action(cx.listener(Self::on_dismiss))
             .on_action(cx.listener(Self::on_cycle_tag))
             .on_action(cx.listener(Self::on_open_link))
+            .on_action(cx.listener(Self::on_open_ytalbum))
             .on_action(cx.listener(Self::on_new_capture))
             .on_action(cx.listener(Self::on_edit_text))
             .on_action(cx.listener(Self::on_restore))
@@ -561,6 +581,18 @@ impl Inbox {
 
         let mut actions = div().flex().items_center().gap_1();
         if is_new {
+            if capture.url.as_deref().is_some_and(is_youtube_url) {
+                let url = capture.url.clone().unwrap_or_default();
+                actions = actions.child(
+                    Button::new(SharedString::from(format!("inbox-ytalbum-{i}")))
+                        .small()
+                        .label("Open ytalbum")
+                        .disabled(busy)
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(InboxEvent::OpenYtAlbum(url.clone()))
+                        })),
+                );
+            }
             if let Some(to) = route {
                 let capture = capture.clone();
                 actions = actions.child(
@@ -690,6 +722,12 @@ impl Inbox {
             .children(tags)
             .into_any_element()
     }
+}
+
+fn is_youtube_url(url: &str) -> bool {
+    capture::host(Some(url)).is_some_and(|host| {
+        host == "youtu.be" || host == "youtube.com" || host.ends_with(".youtube.com")
+    })
 }
 
 /// The captures `filter` shows, newest first.

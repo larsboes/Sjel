@@ -6,6 +6,7 @@
 //! dashboard's (`dashboard/src/lib/calendar/types.ts`); this module owns them now.
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
+use serde::Deserialize;
 
 use crate::shell::CalendarEntry;
 
@@ -25,6 +26,44 @@ pub const KINDS: [(&str, &str, u32); 8] = [
     ("travel_ok", "Travel possible", 0x16a34a),
 ];
 pub const FALLBACK_COLOR: u32 = 0x64748b;
+
+/// A journey candidate recomputed from dated Calendar entries. It remains evidence until the
+/// operator chooses to create a Trips plan.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct TripDraft {
+    pub place: String,
+    pub starts_on: String,
+    /// Exclusive end, like Calendar's own date windows.
+    pub ends_before: String,
+    pub entry_ids: Vec<String>,
+    pub titles: Vec<String>,
+    pub commitment: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct TripDrafts {
+    pub from: String,
+    pub to: String,
+    pub max_gap_days: i64,
+    pub home: Option<String>,
+    pub drafts: Vec<TripDraft>,
+    pub unclustered: Vec<UnclusteredTripEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct UnclusteredTripEntry {
+    pub entry_id: String,
+    pub title: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct TripMaterialization {
+    pub plan_id: String,
+    pub created: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
 
 /// How binding an entry is: `possible` blocks nothing, `planned` soft-blocks, `committed`
 /// blocks the day.
@@ -129,6 +168,75 @@ pub fn time_label(entry: &CalendarEntry, day: NaiveDate) -> String {
         (false, true) => format!("until {}", end.format("%H:%M")),
         (false, false) => "all day".into(),
     }
+}
+
+/// Fields shown by the native edit form. Its all-day end is inclusive; the capability stores it
+/// exclusive.
+pub struct EntryEdit<'a> {
+    pub title: &'a str,
+    pub kind: &'a str,
+    pub commitment: &'a str,
+    pub all_day: bool,
+    pub start_date: &'a str,
+    pub end_date: &'a str,
+    pub start_time: &'a str,
+    pub end_time: &'a str,
+    pub location: &'a str,
+    pub notes: &'a str,
+}
+
+/// Build the Calendar PATCH body from an edit form.
+pub fn entry_edit_patch(edit: &EntryEdit<'_>) -> Result<serde_json::Value, &'static str> {
+    let title = edit.title.trim();
+    if title.is_empty() {
+        return Err("Give the entry a title.");
+    }
+    let start = NaiveDate::parse_from_str(edit.start_date.trim(), DAY)
+        .map_err(|_| "Enter a valid start date (YYYY-MM-DD).")?;
+    let end = NaiveDate::parse_from_str(edit.end_date.trim(), DAY)
+        .map_err(|_| "Enter a valid end date (YYYY-MM-DD).")?;
+    if edit.all_day {
+        if end < start {
+            return Err("The end date must be on or after the start date.");
+        }
+        let exclusive_end = end
+            .checked_add_signed(Duration::days(1))
+            .ok_or("The end date is out of range.")?;
+        return Ok(serde_json::json!({
+            "title": title,
+            "kind": edit.kind,
+            "commitment": edit.commitment,
+            "all_day": true,
+            "starts_at": start.format(DAY).to_string(),
+            "ends_at": exclusive_end.format(DAY).to_string(),
+            "location": optional_text(edit.location),
+            "notes": optional_text(edit.notes),
+        }));
+    }
+    let start_time = NaiveTime::parse_from_str(edit.start_time.trim(), "%H:%M")
+        .map_err(|_| "Start time must use HH:MM.")?;
+    let end_time = NaiveTime::parse_from_str(edit.end_time.trim(), "%H:%M")
+        .map_err(|_| "End time must use HH:MM.")?;
+    let starts_at = start.and_time(start_time);
+    let ends_at = end.and_time(end_time);
+    if ends_at <= starts_at {
+        return Err("The end must be after the start.");
+    }
+    Ok(serde_json::json!({
+        "title": title,
+        "kind": edit.kind,
+        "commitment": edit.commitment,
+        "all_day": false,
+        "starts_at": starts_at.format(TIME).to_string(),
+        "ends_at": ends_at.format(TIME).to_string(),
+        "location": optional_text(edit.location),
+        "notes": optional_text(edit.notes),
+    }))
+}
+
+fn optional_text(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 /// What a new-entry form produces, checked before it reaches the capability.

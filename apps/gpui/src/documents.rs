@@ -1,7 +1,7 @@
 //! Native Documents library and reader for the GPUI desktop surface.
 //!
 //! The list is metadata only. Opening a record reads its locally extracted text and its
-//! hash-verified original, and draws the original's pages through `crate::pdf_kit`. Proposal
+//! hash-verified stored PDF, and draws that record's pages through `crate::pdf_kit`. Proposal
 //! reviews and regenerations go through the Documents API; filing remains a separate explicit
 //! `PATCH /api/documents/{id}` action.
 
@@ -17,9 +17,10 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{
-    self, DocumentDetail, DocumentSummary, DuplicateCandidate, DuplicateCandidateKind,
-    DuplicateCandidatePage, DuplicateDecision, DuplicateDecisionAction, DuplicatePageRange,
-    ProposalEvidenceSource, ProposalOutcome, ProposalReview, ProposalSource, ShellError,
+    self, DocumentDetail, DocumentSplitChildInput, DocumentSplitRequest, DocumentSummary,
+    DuplicateCandidate, DuplicateCandidateKind, DuplicateCandidatePage, DuplicateDecision,
+    DuplicateDecisionAction, DuplicatePageRange, ProposalEvidenceSource, ProposalOutcome,
+    ProposalReview, ProposalSource, ShellError,
 };
 
 use crate::data::{Remote, Repo};
@@ -41,15 +42,92 @@ pub enum Filter {
     Inbox,
     Filed,
     All,
+    NeedsReview,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Grouping {
+    #[default]
+    None,
+    Category,
+    Project,
+    Year,
+    Status,
+    Workflow,
+}
+
+impl Grouping {
+    fn next(self) -> Self {
+        match self {
+            Self::None => Self::Category,
+            Self::Category => Self::Project,
+            Self::Project => Self::Year,
+            Self::Year => Self::Status,
+            Self::Status => Self::Workflow,
+            Self::Workflow => Self::None,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::None => "No groups",
+            Self::Category => "Group: category",
+            Self::Project => "Group: project",
+            Self::Year => "Group: year",
+            Self::Status => "Group: status",
+            Self::Workflow => "Group: workflow",
+        }
+    }
 }
 
 impl Filter {
-    fn matches(self, status: &str) -> bool {
+    fn matches(self, row: &DocumentSummary) -> bool {
         match self {
-            Self::Inbox => status == "inbox",
-            Self::Filed => status == "filed",
-            Self::All => status != "archived",
+            Self::Inbox => row.status == "inbox",
+            Self::Filed => row.status == "filed",
+            Self::All => row.status != "archived",
+            Self::NeedsReview => {
+                row.status == "inbox"
+                    && matches!(
+                        row.workflow_stage.as_str(),
+                        "analyze" | "review_split" | "review_enrichment" | "file" | ""
+                    )
+            }
         }
+    }
+}
+
+fn grouping_key(row: &DocumentSummary, grouping: Grouping) -> String {
+    match grouping {
+        Grouping::None => String::new(),
+        Grouping::Category => row.category.clone().unwrap_or_else(|| "Unfiled".into()),
+        Grouping::Project => row.project.clone().unwrap_or_else(|| "No project".into()),
+        Grouping::Year => row
+            .imported_at
+            .get(..4)
+            .filter(|year| year.bytes().all(|byte| byte.is_ascii_digit()))
+            .unwrap_or("Unknown year")
+            .to_owned(),
+        Grouping::Status => match row.status.as_str() {
+            "inbox" => "Inbox".into(),
+            "filed" => "Filed".into(),
+            "archived" => "Archived".into(),
+            status => status.to_owned(),
+        },
+        Grouping::Workflow => workflow_label(&row.workflow_stage).into(),
+    }
+}
+
+fn workflow_label(stage: &str) -> &'static str {
+    match stage {
+        "analyze" => "Needs analysis",
+        "review_split" => "Review split",
+        "split" => "Split into children",
+        "review_enrichment" => "Review enrichment",
+        "file" => "Ready to file",
+        "filed" => "Filed",
+        "archived" => "Archived",
+        _ => "Needs review",
     }
 }
 
@@ -92,6 +170,8 @@ struct Reader {
     bytes: Option<Arc<Vec<u8>>>,
     pages: usize,
     page: usize,
+    first_page: usize,
+    last_page: Option<usize>,
     zoom: Zoom,
     /// Keyed by page and drawn width, so toggling zoom back reuses what was already drawn.
     drawn: BTreeMap<(usize, u32), Arc<RenderImage>>,
@@ -111,8 +191,13 @@ impl Reader {
         if self.pages == 0 {
             return false;
         }
-        let last = self.pages - 1;
-        let next = (self.page as isize + by).clamp(0, last as isize) as usize;
+        let first = self.first_page.min(self.pages - 1);
+        let last = self
+            .last_page
+            .unwrap_or(self.pages - 1)
+            .min(self.pages - 1)
+            .max(first);
+        let next = (self.page as isize + by).clamp(first as isize, last as isize) as usize;
         if next == self.page {
             return false;
         }
@@ -150,6 +235,10 @@ pub struct Documents {
     pub detail: Remote<DocumentDetail>,
     pub filter: Filter,
     pub search_query: String,
+    grouping: Grouping,
+    category_filter: Option<String>,
+    search_revision: u64,
+    search_applied: bool,
     search_input: Option<(Entity<InputState>, Subscription)>,
     sort_by_name: bool,
     selected: Option<String>,
@@ -176,6 +265,8 @@ pub struct Documents {
     proposal_error: Option<String>,
     proposal_notice: Option<String>,
     show_proposal_history: bool,
+    workflow_busy: Option<String>,
+    workflow_error: Option<String>,
 }
 
 impl Documents {
@@ -192,6 +283,10 @@ impl Documents {
             detail: Remote::default(),
             filter: Filter::Inbox,
             search_query: String::new(),
+            grouping: Grouping::None,
+            category_filter: None,
+            search_revision: 0,
+            search_applied: false,
             search_input: None,
             sort_by_name: false,
             selected: None,
@@ -215,6 +310,8 @@ impl Documents {
             proposal_error: None,
             proposal_notice: None,
             show_proposal_history: false,
+            workflow_busy: None,
+            workflow_error: None,
         }
     }
 
@@ -813,7 +910,7 @@ impl Documents {
                     )
                     .child(div().flex_1())
                     .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                        "Decisions are metadata only; all source records and PDFs remain intact.",
+                        "Source records stay intact; approved page splits are stored as child PDFs in Sjel.",
                     )),
             );
         } else {
@@ -1008,6 +1105,8 @@ impl Documents {
             self.detail = Remote::default();
             self.reader.clear();
             self.proposal_busy = None;
+            self.workflow_busy = None;
+            self.workflow_error = None;
             self.proposal_error = None;
             self.proposal_notice = None;
             self.show_proposal_history = false;
@@ -1022,7 +1121,7 @@ impl Documents {
         };
         let mut filtered: Vec<_> =
             rows.iter()
-                .filter(|row| self.filter.matches(&row.status))
+                .filter(|row| self.filter.matches(row))
                 .filter(|row| {
                     self.search_query.is_empty()
                         || row.filename.to_lowercase().contains(&self.search_query)
@@ -1062,6 +1161,9 @@ impl Documents {
         let (Some(bytes), Some(detail)) = (&self.reader.bytes, self.detail.value.as_ref()) else {
             return;
         };
+        if detail.document.parent_id.is_some() {
+            return;
+        }
         let dir = std::env::temp_dir().join("sjel-documents");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join(&detail.document.filename);
@@ -1078,6 +1180,10 @@ impl Documents {
         self.selected = Some(id.clone());
         self.detail = Remote::new_loading();
         self.reader.clear();
+        self.split_ranges.clear();
+        self.split_input = None;
+        self.workflow_busy = None;
+        self.workflow_error = None;
         self.proposal_busy = None;
         self.proposal_error = None;
         self.proposal_notice = None;
@@ -1091,6 +1197,17 @@ impl Documents {
             let _ = this.update(cx, |view, cx| {
                 if view.selected.as_deref() == Some(expected.as_str()) {
                     view.detail.settle(result);
+                    if let Some(detail) = &view.detail.value {
+                        if let Some(range) = detail.document.page_range {
+                            view.reader.first_page = 0;
+                            view.reader.last_page = Some(
+                                usize::try_from(range.last.saturating_sub(range.first))
+                                    .unwrap_or_default(),
+                            );
+                            view.reader.page = 0;
+                        }
+                    }
+                    view.request_page(cx);
                     cx.notify();
                 }
             });
@@ -1155,7 +1272,22 @@ impl Documents {
                 match result {
                     Ok(pages) => {
                         view.reader.pages = pages;
-                        view.reader.page = 0;
+                        if let Some(range) = view
+                            .detail
+                            .value
+                            .as_ref()
+                            .and_then(|detail| detail.document.page_range)
+                        {
+                            view.reader.first_page = 0;
+                            view.reader.last_page = Some(
+                                usize::try_from(range.last.saturating_sub(range.first))
+                                    .unwrap_or_default(),
+                            );
+                        } else {
+                            view.reader.first_page = 0;
+                            view.reader.last_page = None;
+                        }
+                        view.reader.page = view.reader.first_page.min(pages.saturating_sub(1));
                     }
                     Err(error) => {
                         view.reader.error = Some(error.to_string());
@@ -1271,14 +1403,19 @@ impl Documents {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search documents…"));
-        let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                view.search_query = input.read(cx).value().trim().to_lowercase();
-                view.visible = ROW_BATCH;
-                cx.notify();
-            }
-        });
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Search all document text…"));
+        let subscription =
+            cx.subscribe_in(&input, window, |view, input, event, _, cx| match event {
+                InputEvent::Change => {
+                    view.search_query = input.read(cx).value().trim().to_lowercase();
+                    view.search_applied = false;
+                    view.visible = ROW_BATCH;
+                    cx.notify();
+                }
+                InputEvent::PressEnter { .. } => view.search_documents(cx),
+                _ => {}
+            });
         self.search_input = Some((input.clone(), subscription));
         input
     }
@@ -1307,9 +1444,11 @@ impl Documents {
         let expected_document_id = document_id.clone();
         let expected_proposal_id = proposal_id.clone();
         let work = shell::run(async move {
-            shell
+            let reviewed = shell
                 .review_document_proposal(&document_id, &proposal_id, outcome)
-                .await
+                .await?;
+            let refreshed = shell.document_detail(&document_id).await;
+            Ok((reviewed, refreshed))
         });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
@@ -1317,7 +1456,7 @@ impl Documents {
                 if view.selected.as_deref() == Some(expected_document_id.as_str()) {
                     view.proposal_busy = None;
                     match result {
-                        Ok(updated) => {
+                        Ok((updated, refreshed)) => {
                             if let Some(detail) = &mut view.detail.value {
                                 if let Some(record) = detail
                                     .proposals
@@ -1325,6 +1464,24 @@ impl Documents {
                                     .find(|record| record.id == expected_proposal_id)
                                 {
                                     *record = updated;
+                                }
+                            }
+                            match refreshed {
+                                Ok(detail) => {
+                                    if let Some(rows) = &mut view.rows.value {
+                                        if let Some(row) = rows
+                                            .iter_mut()
+                                            .find(|row| row.id == detail.document.id)
+                                        {
+                                            *row = detail.document.clone();
+                                        }
+                                    }
+                                    view.detail.settle(Ok(detail));
+                                }
+                                Err(error) => {
+                                    view.proposal_error = Some(format!(
+                                        "Review was recorded, but the workflow status did not refresh: {error}"
+                                    ));
                                 }
                             }
                             view.proposal_notice =
@@ -1356,20 +1513,104 @@ impl Documents {
         self.proposal_error = None;
         self.proposal_notice = None;
         let expected_document_id = document_id.clone();
-        let work =
-            shell::run(async move { shell.regenerate_document_proposals(&document_id).await });
+        let work = shell::run(async move {
+            let generated = shell.regenerate_document_proposals(&document_id).await?;
+            let refreshed = shell.document_detail(&document_id).await;
+            Ok((generated, refreshed))
+        });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
                 if view.selected.as_deref() == Some(expected_document_id.as_str()) {
                     view.proposal_busy = None;
                     match result {
-                        Ok(mut generated) => {
+                        Ok((mut generated, refreshed)) => {
                             if let Some(detail) = &mut view.detail.value {
                                 detail.proposals.append(&mut generated);
                             }
+                            match refreshed {
+                                Ok(detail) => {
+                                    if let Some(rows) = &mut view.rows.value {
+                                        if let Some(row) = rows
+                                            .iter_mut()
+                                            .find(|row| row.id == detail.document.id)
+                                        {
+                                            *row = detail.document.clone();
+                                        }
+                                    }
+                                    view.detail.settle(Ok(detail));
+                                }
+                                Err(error) => {
+                                    view.proposal_error = Some(format!(
+                                        "New proposals were saved, but the workflow status did not refresh: {error}"
+                                    ));
+                                }
+                            }
                             view.proposal_notice = Some(
                                 "New rule run saved; earlier proposals and reviews remain.".into(),
+                            );
+                        }
+                        Err(error) => view.proposal_error = Some(error.to_string()),
+                    }
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn generate_model_proposal(&mut self, cx: &mut Context<Self>) {
+        if self.proposal_busy.is_some() {
+            return;
+        }
+        let Some(document_id) = self
+            .detail
+            .value
+            .as_ref()
+            .map(|detail| detail.document.id.clone())
+        else {
+            return;
+        };
+        let Ok(shell) = self.repo.shell() else { return };
+        self.proposal_busy = Some("model".into());
+        self.proposal_error = None;
+        self.proposal_notice = None;
+        let expected_document_id = document_id.clone();
+        let work = shell::run(async move {
+            let generated = shell.generate_document_model_proposal(&document_id).await?;
+            let refreshed = shell.document_detail(&document_id).await;
+            Ok((generated, refreshed))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.selected.as_deref() == Some(expected_document_id.as_str()) {
+                    view.proposal_busy = None;
+                    match result {
+                        Ok((mut generated, refreshed)) => {
+                            if let Some(detail) = &mut view.detail.value {
+                                detail.proposals.append(&mut generated);
+                            }
+                            match refreshed {
+                                Ok(detail) => {
+                                    if let Some(rows) = &mut view.rows.value {
+                                        if let Some(row) = rows
+                                            .iter_mut()
+                                            .find(|row| row.id == detail.document.id)
+                                        {
+                                            *row = detail.document.clone();
+                                        }
+                                    }
+                                    view.detail.settle(Ok(detail));
+                                }
+                                Err(error) => {
+                                    view.proposal_error = Some(format!(
+                                        "The model proposal was saved, but the workflow status did not refresh: {error}"
+                                    ));
+                                }
+                            }
+                            view.proposal_notice = Some(
+                                "Local model proposal saved for review; filing remains separate.".into(),
                             );
                         }
                         Err(error) => view.proposal_error = Some(error.to_string()),
@@ -1423,6 +1664,250 @@ impl Documents {
         cx.notify();
     }
 
+    fn search_documents(&mut self, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else { return };
+        let query = self.search_query.trim().to_owned();
+        self.search_revision = self.search_revision.wrapping_add(1);
+        let revision = self.search_revision;
+        self.rows.loading = true;
+        self.rows.error = None;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let work = shell::run(async move { shell.documents_search_stream(&query, tx).await });
+        cx.spawn(async move |this, cx| {
+            let mut received = false;
+            while let Some(batch) = rx.recv().await {
+                let first_batch = !received;
+                received = true;
+                let _ = this.update(cx, |view, cx| {
+                    if view.search_revision != revision {
+                        return;
+                    }
+                    if first_batch {
+                        view.rows.value = Some(batch);
+                    } else if let Some(rows) = &mut view.rows.value {
+                        rows.extend(batch);
+                    } else {
+                        view.rows.value = Some(batch);
+                    }
+                    cx.notify();
+                });
+            }
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.search_revision != revision {
+                    return;
+                }
+                view.rows.loading = false;
+                match result {
+                    Ok(_) => {
+                        if !received {
+                            view.rows.value = Some(Vec::new());
+                        }
+                        view.search_applied = true;
+                    }
+                    Err(error) => view.rows.error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn analyze_selected_document(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        if self.workflow_busy.is_some() {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.workflow_busy = Some("analyze".into());
+        self.workflow_error = None;
+        cx.notify();
+        let expected = id.clone();
+        let work = shell::run(async move { shell.analyze_document(&id).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.selected.as_deref() != Some(expected.as_str()) {
+                    return;
+                }
+                view.workflow_busy = None;
+                match result {
+                    Ok(detail) => {
+                        if let Some(rows) = &mut view.rows.value {
+                            if let Some(row) =
+                                rows.iter_mut().find(|row| row.id == detail.document.id)
+                            {
+                                *row = detail.document.clone();
+                            }
+                        }
+                        view.detail.settle(Ok(detail));
+                    }
+                    Err(error) => view.workflow_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn split_selected_document(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        if self.workflow_busy.is_some() {
+            return;
+        }
+        let Some(detail) = self.detail.value.as_ref() else {
+            return;
+        };
+        if detail.document.parent_id.is_some() || detail.document.page_count < 2 {
+            return;
+        }
+        let page_count = detail.document.page_count;
+        let filename = detail.document.filename.clone();
+        let ranges = match parse_page_ranges(&self.split_ranges) {
+            Ok(ranges) => ranges,
+            Err(error) => {
+                self.workflow_error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
+        let stem = std::path::Path::new(&filename)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("Document");
+        let request = DocumentSplitRequest {
+            page_count: u32::try_from(page_count).unwrap_or(u32::MAX),
+            children: ranges
+                .into_iter()
+                .map(|range| DocumentSplitChildInput {
+                    first: range.first,
+                    last: range.last,
+                    filename: format!("{stem} pages {}-{}.pdf", range.first, range.last),
+                })
+                .collect(),
+        };
+        let Ok(shell) = self.repo.shell() else { return };
+        self.workflow_busy = Some("split".into());
+        self.workflow_error = None;
+        cx.notify();
+        let expected = id.clone();
+        let refresh_id = id.clone();
+        let work = shell::run(async move {
+            let children = shell.split_document(&id, &request).await?;
+            let parent = shell.document_detail(&refresh_id).await;
+            Ok((children, parent))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.selected.as_deref() != Some(expected.as_str()) {
+                    return;
+                }
+                view.workflow_busy = None;
+                match result {
+                    Ok((children, parent)) => {
+                        if let Some(detail) = &mut view.detail.value {
+                            detail.document.workflow_stage = "split".into();
+                            for child in &children {
+                                if !detail
+                                    .children
+                                    .iter()
+                                    .any(|existing| existing.id == child.id)
+                                {
+                                    detail.children.push(child.clone());
+                                }
+                            }
+                        }
+                        if let Some(rows) = &mut view.rows.value {
+                            for child in children {
+                                if !rows.iter().any(|existing| existing.id == child.id) {
+                                    rows.push(child);
+                                }
+                            }
+                        }
+                        match parent {
+                            Ok(detail) => {
+                                if let Some(rows) = &mut view.rows.value {
+                                    if let Some(row) = rows
+                                        .iter_mut()
+                                        .find(|row| row.id == detail.document.id)
+                                    {
+                                        *row = detail.document.clone();
+                                    }
+                                }
+                                view.detail.settle(Ok(detail));
+                            }
+                            Err(error) => {
+                                view.workflow_error = Some(format!(
+                                    "Split was saved, but the parent workflow status did not refresh: {error}"
+                                ));
+                            }
+                        }
+                    }
+                    Err(error) => view.workflow_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn use_split_suggestions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(detail) = self.detail.value.as_ref() else {
+            return;
+        };
+        let Some(suggestion) = detail.split_suggestions.as_ref() else {
+            return;
+        };
+        if suggestion.ranges.is_empty() {
+            return;
+        }
+        let value = suggestion
+            .ranges
+            .iter()
+            .map(|range| format!("{}-{}", range.first, range.last))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.split_ranges = value.clone();
+        if let Some((input, _)) = &self.split_input {
+            input.update(cx, |input, cx| input.set_value(value, window, cx));
+        }
+        cx.notify();
+    }
+
+    fn cycle_grouping(&mut self, cx: &mut Context<Self>) {
+        self.grouping = self.grouping.next();
+        self.visible = ROW_BATCH;
+        self.list_scroll = gpui::ScrollHandle::new();
+        cx.notify();
+    }
+
+    fn cycle_category_filter(&mut self, cx: &mut Context<Self>) {
+        let rows = self.rows.value.as_deref().unwrap_or_default();
+        let categories: Vec<_> = rows
+            .iter()
+            .filter_map(|row| row.category.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let next = match self.category_filter.as_deref() {
+            None => Some(String::new()),
+            Some("") => categories.first().cloned(),
+            Some(current) => categories
+                .iter()
+                .position(|category| category == current)
+                .and_then(|index| categories.get(index + 1).cloned()),
+        };
+        self.category_filter = next;
+        self.visible = ROW_BATCH;
+        self.list_scroll = gpui::ScrollHandle::new();
+        cx.notify();
+    }
+
     fn show_more(&mut self, cx: &mut Context<Self>) {
         self.visible += ROW_BATCH;
         cx.notify();
@@ -1472,14 +1957,24 @@ impl Render for Documents {
         let inbox = rows.iter().filter(|d| d.status == "inbox").count();
         let filed = rows.iter().filter(|d| d.status == "filed").count();
         let active = rows.iter().filter(|d| d.status != "archived").count();
+        let next = rows
+            .iter()
+            .filter(|row| Filter::NeedsReview.matches(row))
+            .count();
         let selected = self.selected.clone();
         // With a document open the list keeps a column beside the reader. That column is too
         // narrow for four columns and a search box, so the view drops what it cannot show rather
         // than squeezing every column into nothing.
         let narrow = selected.is_some();
+        let category_label = match self.category_filter.as_deref() {
+            None => "Category: all".to_owned(),
+            Some("") => "Category: unfiled".to_owned(),
+            Some(category) => format!("Category: {category}"),
+        };
 
         let mut table = div().flex().flex_col().gap_1();
         let search = self.search_field(window, cx);
+        let split_input = self.split_range_field(window, cx);
         table = table.child(
             div()
                 .flex()
@@ -1507,9 +2002,42 @@ impl Render for Documents {
                     palette,
                     cx.listener(|view, _, _, cx| view.set_filter(Filter::All, cx)),
                 ))
+                .child(filter_pill(
+                    "Needs review",
+                    next,
+                    self.filter == Filter::NeedsReview,
+                    palette,
+                    cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
+                ))
+                .child(
+                    Button::new("documents-category-filter")
+                        .small()
+                        .label(category_label)
+                        .on_click(cx.listener(|view, _, _, cx| view.cycle_category_filter(cx))),
+                )
+                .child(
+                    Button::new("documents-grouping")
+                        .small()
+                        .label(self.grouping.label())
+                        .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
+                )
                 .child(div().flex_1())
                 .when(!narrow, |bar| {
-                    bar.child(div().w(px(220.)).child(Input::new(&search).small()))
+                    bar.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(div().w(px(220.)).child(Input::new(&search).small()))
+                            .child(
+                                Button::new("documents-search-text")
+                                    .small()
+                                    .label("Search")
+                                    .on_click(
+                                        cx.listener(|view, _, _, cx| view.search_documents(cx)),
+                                    ),
+                            ),
+                    )
                 })
                 .when(!narrow, |bar| {
                     bar.child(
@@ -1538,7 +2066,19 @@ impl Render for Documents {
                 ),
         );
         if narrow {
-            table = table.child(div().w_full().mb_2().child(Input::new(&search).small()));
+            table = table.child(
+                div()
+                    .flex()
+                    .gap_1()
+                    .mb_2()
+                    .child(div().flex_1().child(Input::new(&search).small()))
+                    .child(
+                        Button::new("documents-search-text-narrow")
+                            .small()
+                            .label("Search")
+                            .on_click(cx.listener(|view, _, _, cx| view.search_documents(cx))),
+                    ),
+            );
         }
         table = table.child(
             div()
@@ -1578,9 +2118,14 @@ impl Render for Documents {
         }
         let mut filtered: Vec<_> =
             rows.iter()
-                .filter(|row| self.filter.matches(&row.status))
+                .filter(|row| self.filter.matches(row))
+                .filter(|row| match self.category_filter.as_deref() {
+                    None => true,
+                    Some(category) => row.category.as_deref().unwrap_or("") == category,
+                })
                 .filter(|row| {
-                    self.search_query.is_empty()
+                    self.search_applied
+                        || self.search_query.is_empty()
                         || row.filename.to_lowercase().contains(&self.search_query)
                         || row
                             .extracted_title
@@ -1594,7 +2139,21 @@ impl Render for Documents {
                         })
                 })
                 .collect();
-        if self.sort_by_name {
+        if self.grouping != Grouping::None {
+            filtered.sort_by(|left, right| {
+                grouping_key(left, self.grouping)
+                    .cmp(&grouping_key(right, self.grouping))
+                    .then_with(|| {
+                        if self.sort_by_name {
+                            left.filename
+                                .to_lowercase()
+                                .cmp(&right.filename.to_lowercase())
+                        } else {
+                            right.imported_at.cmp(&left.imported_at)
+                        }
+                    })
+            });
+        } else if self.sort_by_name {
             filtered.sort_by_key(|row| row.filename.to_lowercase());
         }
         if filtered.is_empty() && !self.rows.loading {
@@ -1608,7 +2167,34 @@ impl Render for Documents {
         }
         let in_view = filtered.len();
         let shown = in_view.min(self.visible);
+        let mut previous_group: Option<String> = None;
+        let mut group_counts = BTreeMap::new();
+        if self.grouping != Grouping::None {
+            for row in &filtered {
+                *group_counts
+                    .entry(grouping_key(row, self.grouping))
+                    .or_insert(0usize) += 1;
+            }
+        }
         for (i, row) in filtered.into_iter().take(self.visible).enumerate() {
+            let group = (self.grouping != Grouping::None).then(|| grouping_key(row, self.grouping));
+            if let Some(group) = group
+                .as_ref()
+                .filter(|group| previous_group.as_ref() != Some(group))
+            {
+                let count = group_counts.get(group).copied().unwrap_or(0);
+                table = table.child(
+                    div()
+                        .pt_3()
+                        .pb_1()
+                        .px_3()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.muted))
+                        .child(format!("{group} · {count}")),
+                );
+                previous_group = Some(group.clone());
+            }
             let id = row.id.clone();
             let chosen = selected.as_deref() == Some(row.id.as_str());
             let category = row
@@ -1617,6 +2203,7 @@ impl Render for Documents {
                 .or(row.suggested_category.as_deref())
                 .unwrap_or("—");
             let date = row.imported_at.get(..10).unwrap_or("—").to_owned();
+            let workflow = workflow_label(&row.workflow_stage);
             table = table.child(
                 div()
                     .id(("document-row", i))
@@ -1639,9 +2226,31 @@ impl Render for Documents {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .truncate()
-                            .text_sm()
-                            .child(row.filename.clone()),
+                            .flex()
+                            .flex_col()
+                            .child(div().truncate().text_sm().child(row.filename.clone()))
+                            .when(row.status == "inbox", |column| {
+                                column.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(workflow),
+                                )
+                            })
+                            .when(!row.matched_pages.is_empty(), |column| {
+                                let pages = row
+                                    .matched_pages
+                                    .iter()
+                                    .map(u32::to_string)
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                column.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("Matches on page {pages}")),
+                                )
+                            }),
                     )
                     .when(!narrow, |cells| {
                         cells.child(
@@ -1702,12 +2311,36 @@ impl Render for Documents {
                 .value
                 .as_ref()
                 .and_then(|detail| detail.document.suggested_category.clone());
+            let can_open_externally = self
+                .detail
+                .value
+                .as_ref()
+                .is_some_and(|detail| detail.document.parent_id.is_none());
+            let page_label = if pages == 0 {
+                "Page —".to_owned()
+            } else if let Some(range) = self
+                .detail
+                .value
+                .as_ref()
+                .and_then(|detail| detail.document.page_range)
+            {
+                let source_page = range
+                    .first
+                    .saturating_add(u32::try_from(page).unwrap_or(u32::MAX));
+                format!(
+                    "Source page {source_page} · child {}-{}",
+                    range.first, range.last
+                )
+            } else {
+                format!("Page {} of {}", page + 1, pages)
+            };
             let detail: AnyElement = match (&self.detail.value, &self.detail.error) {
                 (Some(detail), _) => div()
                     .flex()
                     .flex_col()
                     .gap_2()
                     .child(detail_panel(detail, palette))
+                    .child(workflow_panel(self, detail, &split_input, palette, cx))
                     .child(proposal_panel(self, detail, palette, cx))
                     .into_any_element(),
                 (_, Some(error)) => div()
@@ -1764,11 +2397,7 @@ impl Render for Documents {
                                 .min_w(px(80.))
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
-                                .child(if pages == 0 {
-                                    "Page —".to_owned()
-                                } else {
-                                    format!("Page {} of {}", page + 1, pages)
-                                }),
+                                .child(page_label),
                         )
                         .child(
                             Button::new("document-zoom")
@@ -1786,12 +2415,14 @@ impl Render for Documents {
                                     view.show_text(!reading_text, cx);
                                 })),
                         )
-                        .child(
-                            Button::new("document-open-external")
-                                .small()
-                                .label("Open in Preview")
-                                .on_click(cx.listener(|view, _, _, _| view.open_externally())),
-                        )
+                        .when(can_open_externally, |bar| {
+                            bar.child(
+                                Button::new("document-open-external")
+                                    .small()
+                                    .label("Open in Preview")
+                                    .on_click(cx.listener(|view, _, _, _| view.open_externally())),
+                            )
+                        })
                         .child(div().flex_1())
                         .when_some(suggestion, |bar, category| {
                             bar.child(
@@ -2152,7 +2783,25 @@ fn proposal_panel(
                         })
                         .disabled(busy)
                         .on_click(cx.listener(|view, _, _, cx| view.regenerate_proposals(cx))),
+                )
+                .child(
+                    Button::new("document-model-proposal")
+                        .small()
+                        .ghost()
+                        .label(if view.proposal_busy.as_deref() == Some("model") {
+                            "Asking local model…"
+                        } else {
+                            "Ask local model"
+                        })
+                        .disabled(busy)
+                        .on_click(cx.listener(|view, _, _, cx| view.generate_model_proposal(cx))),
                 ),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("A local model can suggest a category and exact text evidence. Review it before filing."),
         )
         .child(
             div()
@@ -2358,6 +3007,215 @@ fn proposal_panel(
         .into_any_element()
 }
 
+fn workflow_panel(
+    view: &Documents,
+    detail: &DocumentDetail,
+    split_input: &Entity<InputState>,
+    palette: Palette,
+    cx: &mut Context<Documents>,
+) -> AnyElement {
+    let document = &detail.document;
+    let is_pdf = document.media_type == "application/pdf";
+    let is_original = document.parent_id.is_none();
+    let mut panel = div().flex().flex_col().gap_1();
+
+    if is_pdf {
+        let analyzing = view.workflow_busy.as_deref() == Some("analyze");
+        panel = panel.child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    Button::new("document-analyze-pages")
+                        .small()
+                        .label(if analyzing {
+                            "Analyzing locally…"
+                        } else if document.page_count == 0 {
+                            "Analyze pages locally"
+                        } else {
+                            "Refresh page analysis"
+                        })
+                        .on_click(cx.listener(|view, _, _, cx| view.analyze_selected_document(cx))),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!("{} analyzed page(s)", document.page_count)),
+                ),
+        );
+
+        if let Some(suggestion) = detail.split_suggestions.as_ref() {
+            if suggestion.boundaries.is_empty() {
+                if let Some(reason) = suggestion.abstention.as_ref() {
+                    panel = panel.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("No automatic cut: {reason}")),
+                    );
+                }
+            } else {
+                let cuts = suggestion
+                    .boundaries
+                    .iter()
+                    .map(|boundary| boundary.before_page.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                panel = panel.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!("Page-one markers suggest cuts before pages {cuts}. Review each page before splitting.")),
+                );
+                for boundary in &suggestion.boundaries {
+                    panel = panel.child(div().text_xs().text_color(rgb(palette.muted)).child(
+                        format!(
+                            "Page {} · {} · {}",
+                            boundary.before_page, boundary.marker, boundary.quote
+                        ),
+                    ));
+                }
+            }
+        }
+
+        if is_original && document.page_count > 1 {
+            let splitting = view.workflow_busy.as_deref() == Some("split");
+            panel = panel.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .mt(px(2.))
+                    .child(div().w(px(220.)).child(Input::new(split_input).small()))
+                    .child(
+                        Button::new("document-create-split")
+                            .small()
+                            .label(if splitting {
+                                "Creating children…"
+                            } else {
+                                "Split into records"
+                            })
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.split_selected_document(cx)),
+                            ),
+                    )
+                    .when_else(
+                        detail
+                            .split_suggestions
+                            .as_ref()
+                            .is_some_and(|suggestion| !suggestion.ranges.is_empty()),
+                        |row| {
+                            row.child(
+                                Button::new("document-use-split-suggestions")
+                                    .small()
+                                    .ghost()
+                                    .label("Use page-marker suggestion")
+                                    .on_click(cx.listener(|view, _, window, cx| {
+                                        view.use_split_suggestions(window, cx)
+                                    })),
+                            )
+                        },
+                        |row| row,
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Use every page once, e.g. 1-2,3-5. Original stays intact."),
+                    ),
+            );
+        }
+
+        if !detail.children.is_empty() {
+            panel = panel.child(
+                div()
+                    .mt(px(3.))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("Child records · independent PDFs linked to the source"),
+            );
+            for child in &detail.children {
+                let id = child.id.clone();
+                let label = child.page_range.map_or_else(
+                    || child.filename.clone(),
+                    |range| format!("Pages {}-{} · {}", range.first, range.last, child.filename),
+                );
+                panel = panel.child(
+                    Button::new(format!("document-child-{}", &child.id[..12]))
+                        .small()
+                        .label(label)
+                        .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx))),
+                );
+            }
+        }
+
+        if !detail.pages.is_empty() {
+            panel = panel.child(
+                div()
+                    .mt(px(3.))
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child("Page evidence"),
+            );
+            for page in &detail.pages {
+                let preview = page
+                    .text
+                    .split_whitespace()
+                    .take(28)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let provenance = page.failure.as_ref().map_or_else(
+                    || format!("{} · {} chars", page.engine, page.text.chars().count()),
+                    |failure| format!("{} · extraction issue: {failure}", page.engine),
+                );
+                panel = panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .rounded(px(4.))
+                        .px_2()
+                        .py(px(2.))
+                        .bg(rgba(palette.raised))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("Page {} · {provenance}", page.page_number)),
+                        )
+                        .child(div().text_xs().child(preview)),
+                );
+            }
+        }
+    }
+
+    if let Some(error) = &view.workflow_error {
+        panel = panel.child(
+            div()
+                .text_xs()
+                .text_color(rgb(palette.red))
+                .child(error.clone()),
+        );
+    }
+    if is_pdf && !is_original {
+        panel = panel.child(
+            div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(format!(
+                    "Child of {} · pages {}-{}",
+                    document.parent_id.as_deref().unwrap_or("unknown"),
+                    document.page_range.map_or(0, |range| range.first),
+                    document.page_range.map_or(0, |range| range.last)
+                )),
+        );
+    }
+    panel.into_any_element()
+}
+
 fn detail_panel(detail: &DocumentDetail, palette: Palette) -> AnyElement {
     let doc = &detail.document;
     let has_distinct_title = doc
@@ -2435,16 +3293,46 @@ fn detail_panel(detail: &DocumentDetail, palette: Palette) -> AnyElement {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_page_ranges, Filter, Reader, Zoom};
+    use super::{parse_page_ranges, workflow_label, Filter, Reader, Zoom};
+    use crate::shell::DocumentSummary;
 
     #[test]
     fn filters_match_document_statuses() {
-        assert!(Filter::Inbox.matches("inbox"));
-        assert!(!Filter::Inbox.matches("filed"));
-        assert!(Filter::Filed.matches("filed"));
-        assert!(!Filter::Filed.matches("inbox"));
-        assert!(Filter::All.matches("filed"));
-        assert!(!Filter::All.matches("archived"));
+        let mut row = DocumentSummary {
+            id: "id".into(),
+            filename: "document.pdf".into(),
+            media_type: "application/pdf".into(),
+            byte_len: 1,
+            imported_at: String::new(),
+            status: "inbox".into(),
+            category: None,
+            project: None,
+            extracted_title: None,
+            extractor: None,
+            extracted_chars: 0,
+            suggested_category: None,
+            suggestion_reason: None,
+            data_class: "c2".into(),
+            page_count: 0,
+            parent_id: None,
+            page_range: None,
+            matched_pages: Vec::new(),
+            workflow_stage: "analyze".into(),
+        };
+        assert!(Filter::Inbox.matches(&row));
+        assert!(!Filter::Filed.matches(&row));
+        assert!(Filter::All.matches(&row));
+        assert!(Filter::NeedsReview.matches(&row));
+        row.workflow_stage.clear();
+        assert_eq!(workflow_label(&row.workflow_stage), "Needs review");
+        assert!(Filter::NeedsReview.matches(&row));
+        row.workflow_stage = "split".into();
+        assert!(!Filter::NeedsReview.matches(&row));
+        row.status = "filed".into();
+        assert!(Filter::Filed.matches(&row));
+        assert!(Filter::All.matches(&row));
+        row.status = "archived".into();
+        assert!(!Filter::All.matches(&row));
     }
 
     #[test]

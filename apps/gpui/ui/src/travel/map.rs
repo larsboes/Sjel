@@ -9,12 +9,13 @@
 //! - **Positions are pure functions of the camera.** `Tile::place`, `zoom_about` and the
 //!   vector-frame offset in `map` all read from the camera and nothing else, so a frame can be
 //!   drawn mid-gesture without any extra state to keep in step.
-use super::Travel;
+use super::forms::FormKind;
+use super::{LocationMarker, Travel};
 use futures::future::{AbortHandle, Abortable};
-use futures::{stream, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, stream};
 use gpui::{
-    canvas, div, img, point, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton,
-    PathBuilder, StyledImage,
+    AnyElement, Context, MouseButton, PathBuilder, StyledImage, canvas, div, img, point,
+    prelude::*, px, rgb, rgba,
 };
 use gpui_kit::component::button::{Button, ButtonVariants};
 use sjel_gpui_core::{
@@ -44,55 +45,81 @@ impl Travel {
             .items_center()
             .justify_between()
             .gap_2();
-        #[cfg(all(feature = "native-maps", target_os = "macos"))]
-        {
+        if matches!(self.route, TravelRoute::Map) {
             actions = actions
-                .child(div().text_xs().text_color(rgb(self.palette.muted)).child(
-                    if self.vector_enabled {
-                        "Vector map · OpenFreeMap"
-                    } else {
-                        "Raster map · OpenStreetMap"
-                    },
+                .children(self.form_button(
+                    "location-plan-trip",
+                    "Plan a trip",
+                    FormKind::Trip(None),
+                    cx,
                 ))
                 .child(
-                    self.button("map-renderer")
+                    self.button("map-options-toggle")
                         .ghost()
-                        .label(if self.vector_enabled {
-                            "Use raster map"
+                        .label(if self.map_options_open {
+                            "Hide map options"
                         } else {
-                            "Use vector map"
+                            "Map options"
                         })
                         .on_click(cx.listener(|view, _, _, cx| {
-                            view.deactivate();
-                            view.vector_enabled = !view.vector_enabled;
-                            view.map_error = None;
-                            view.load_map(cx);
+                            view.map_options_open = !view.map_options_open;
                             cx.notify();
                         })),
                 );
         }
-        if !self.uses_vector_map() {
-            actions = actions.child(
-                self.button("map-connection")
-                    .ghost()
-                    .label(if self.online {
-                        "Online tiles"
-                    } else {
-                        "Cached only"
-                    })
-                    .tooltip(if self.online {
-                        "Switch to cached tiles only"
-                    } else {
-                        "Allow online map tiles"
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.online = !view.online;
-                        view.load_map(cx);
-                        cx.notify();
-                    })),
-            );
-        }
         page = page.child(actions);
+        if self.map_options_open && matches!(self.route, TravelRoute::Map) {
+            let mut options = div().flex().flex_wrap().items_center().gap_2();
+            #[cfg(all(feature = "native-maps", target_os = "macos"))]
+            {
+                options = options
+                    .child(div().text_xs().text_color(rgb(self.palette.muted)).child(
+                        if self.vector_enabled {
+                            "Vector map · OpenFreeMap"
+                        } else {
+                            "Raster map · OpenStreetMap"
+                        },
+                    ))
+                    .child(
+                        self.button("map-renderer")
+                            .ghost()
+                            .label(if self.vector_enabled {
+                                "Use raster map"
+                            } else {
+                                "Use vector map"
+                            })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.deactivate();
+                                view.vector_enabled = !view.vector_enabled;
+                                view.map_error = None;
+                                view.load_map(cx);
+                                cx.notify();
+                            })),
+                    );
+            }
+            if !self.uses_vector_map() {
+                options = options.child(
+                    self.button("map-connection")
+                        .ghost()
+                        .label(if self.online {
+                            "Online tiles"
+                        } else {
+                            "Cached only"
+                        })
+                        .tooltip(if self.online {
+                            "Switch to cached tiles only"
+                        } else {
+                            "Allow online map tiles"
+                        })
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.online = !view.online;
+                            view.load_map(cx);
+                            cx.notify();
+                        })),
+                );
+            }
+            page = page.child(options);
+        }
         let map = self.map(cx);
         let stops = self.map_stops(cx);
         if self.density.is_mobile() {
@@ -107,6 +134,9 @@ impl Travel {
                     .child(div().flex_1().min_w_0().child(map))
                     .child(stops),
             );
+        }
+        if matches!(self.route, TravelRoute::Map) {
+            page = page.children(self.active_trip_form_card(cx));
         }
         if self
             .current()
@@ -137,10 +167,28 @@ impl Travel {
     }
 
     fn map_stops(&self, cx: &mut Context<Self>) -> AnyElement {
-        let places: Vec<_> = self
-            .current()
-            .map(|plan| plan.places().cloned().collect())
-            .unwrap_or_default();
+        let markers: Vec<LocationMarker> = if matches!(self.route, TravelRoute::Map) {
+            self.location_markers()
+        } else {
+            self.current()
+                .map(|plan| {
+                    plan.places()
+                        .map(|place| LocationMarker {
+                            plan_id: plan.id.clone(),
+                            place: place.clone(),
+                            from: plan.date_start.clone(),
+                            to: plan.date_end.clone(),
+                            label: format!(
+                                "{} · {}–{}",
+                                plan.title, plan.date_start, plan.date_end
+                            ),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let places: Vec<_> = markers.iter().map(|marker| marker.place.clone()).collect();
+        let overview = matches!(self.route, TravelRoute::Map);
         let mut panel = div()
             .flex()
             .flex_col()
@@ -159,65 +207,266 @@ impl Travel {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_sm().child("Stops"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .child(if overview {
+                                if self.selected_stop.is_some() {
+                                    "Selected place"
+                                } else {
+                                    "Up next"
+                                }
+                            } else {
+                                "Stops"
+                            }),
+                    )
                     .child(
                         div()
                             .text_xs()
                             .text_color(rgb(self.palette.muted))
-                            .child(places.len().to_string()),
+                            .child(if overview {
+                                format!("{} locations", places.len())
+                            } else {
+                                places.len().to_string()
+                            }),
                     ),
             );
-        if let Some(stop) = &self.selected_stop {
-            panel = panel.child(
-                div()
+        if overview && self.selected_stop.is_none() {
+            if let Some(marker) = markers.first() {
+                let id = marker.plan_id.clone();
+                let place = marker.place.clone();
+                let mut next = div()
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .py_1()
+                    .py_2()
                     .border_b_1()
                     .border_color(rgba(self.palette.border))
-                    .child(div().text_sm().child(stop.name.clone()))
-                    .when_some(stop.address.clone(), |panel, address| {
-                        panel.child(
+                    .child(div().text_base().child(place.name.clone()))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(self.palette.muted))
+                            .child(marker.label.clone()),
+                    )
+                    .child(
+                        self.button("location-open-next-trip")
+                            .primary()
+                            .label("Open trip")
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.open_route(
+                                    TravelRoute::Trip {
+                                        id: id.clone(),
+                                        section: TripSection::Overview,
+                                    },
+                                    cx,
+                                )
+                            })),
+                    );
+                if place.coordinate().is_some() {
+                    next = next.child(
+                        self.button("location-show-next")
+                            .ghost()
+                            .label("Show on map")
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.show_location(place.clone(), cx)
+                            })),
+                    );
+                }
+                panel = panel.child(next);
+            }
+        }
+        if let Some(stop) = &self.selected_stop {
+            let mut detail = div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .py_1()
+                .border_b_1()
+                .border_color(rgba(self.palette.border))
+                .child(div().text_sm().child(stop.name.clone()))
+                .when_some(stop.address.clone(), |panel, address| {
+                    panel.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(self.palette.muted))
+                            .child(address),
+                    )
+                })
+                .when_some(stop.coordinate(), |panel, at| {
+                    panel
+                        .child(
                             div()
                                 .text_xs()
                                 .text_color(rgb(self.palette.muted))
-                                .child(address),
+                                .child(format!("{:.5}, {:.5}", at.latitude, at.longitude)),
                         )
-                    })
-                    .when_some(stop.coordinate(), |panel, at| {
-                        panel
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(self.palette.muted))
-                                    .child(format!("{:.5}, {:.5}", at.latitude, at.longitude)),
-                            )
-                            .child(
-                                self.button("open-stop-map")
-                                    .label("Open in OpenStreetMap")
-                                    .on_click(move |_, _, cx| {
-                                        cx.open_url(&format!(
-                                            "https://www.openstreetmap.org/?mlat={}&mlon={}#map=16/{}/{}",
-                                            at.latitude, at.longitude, at.latitude, at.longitude
-                                        ))
-                                    }),
-                            )
-                    }),
-            );
+                        .child(
+                            self.button("open-stop-map")
+                                .label("Open in OpenStreetMap")
+                                .on_click(move |_, _, cx| {
+                                    cx.open_url(&format!(
+                                        "https://www.openstreetmap.org/?mlat={}&mlon={}#map=16/{}/{}",
+                                        at.latitude, at.longitude, at.latitude, at.longitude
+                                    ))
+                                }),
+                        )
+                });
+            let mut linked = std::collections::HashSet::new();
+            for (index, marker) in markers
+                .iter()
+                .filter(|marker| {
+                    marker.place.name == stop.name && marker.place.coordinate() == stop.coordinate()
+                })
+                .filter(|marker| linked.insert(marker.plan_id.as_str()))
+                .enumerate()
+            {
+                let id = marker.plan_id.clone();
+                detail = detail.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(self.palette.muted))
+                                .child(marker.label.clone()),
+                        )
+                        .child(
+                            self.button(gpui::SharedString::from(format!(
+                                "map-open-trip-{index}"
+                            )))
+                                .primary()
+                                .label("Open trip")
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.open_route(
+                                        TravelRoute::Trip {
+                                            id: id.clone(),
+                                            section: TripSection::Overview,
+                                        },
+                                        cx,
+                                    )
+                                })),
+                        ),
+                );
+            }
+            if matches!(self.route, TravelRoute::Map) {
+                detail = detail.children(self.form_button(
+                    "map-plan-trip-here",
+                    "Plan a trip here",
+                    FormKind::Trip(Some(stop.name.clone())),
+                    cx,
+                ));
+            }
+            panel = panel.child(detail);
         }
         if places.is_empty() {
             panel = panel.child(
                 div()
                     .text_xs()
                     .text_color(rgb(self.palette.muted))
-                    .child("No saved stops for this trip."),
+                    .child(if matches!(self.route, TravelRoute::Map) {
+                        "No current or upcoming trip locations yet. Plan a trip or review a Calendar suggestion to add one."
+                    } else {
+                        "No saved stops for this trip."
+                    }),
             );
         }
-        for (index, place) in places.iter().enumerate() {
-            panel = panel.child(self.place_row(index, place, cx));
+        if overview && markers.len() > 1 {
+            panel = panel.child(
+                self.button("toggle-all-locations")
+                    .ghost()
+                    .label(if self.show_all_locations {
+                        "Hide all locations".into()
+                    } else {
+                        format!("Show all {} locations", markers.len())
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.show_all_locations = !view.show_all_locations;
+                        cx.notify();
+                    })),
+            );
+        }
+        if !overview || self.show_all_locations {
+            for (index, marker) in markers.iter().enumerate() {
+                panel = if overview {
+                    panel.child(self.location_row(index, marker, cx))
+                } else {
+                    panel.child(self.place_row(index, &marker.place, cx))
+                };
+            }
         }
         panel.into_any_element()
+    }
+
+    fn location_row(
+        &self,
+        index: usize,
+        marker: &LocationMarker,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let place = marker.place.clone();
+        let can_show_on_map = place.coordinate().is_some();
+        let map_place = place.clone();
+        let plan_id = marker.plan_id.clone();
+        let open_trip_id = plan_id.clone();
+        let row = div()
+            .flex()
+            .flex_col()
+            .gap_0()
+            .py_2()
+            .border_b_1()
+            .border_color(rgba(self.palette.border))
+            .child(
+                self.button(gpui::SharedString::from(format!("location-map-{index}")))
+                    .ghost()
+                    .label(place.name.clone())
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if can_show_on_map {
+                            view.show_location(map_place.clone(), cx);
+                        } else {
+                            view.open_route(
+                                TravelRoute::Trip {
+                                    id: plan_id.clone(),
+                                    section: TripSection::Overview,
+                                },
+                                cx,
+                            );
+                        }
+                    })),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(self.palette.muted))
+                    .child(marker.label.clone()),
+            )
+            .child(
+                self.button(gpui::SharedString::from(format!("location-open-trip-{index}")))
+                    .ghost()
+                    .label("Open trip")
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.open_route(
+                            TravelRoute::Trip {
+                                id: open_trip_id.clone(),
+                                section: TripSection::Overview,
+                            },
+                            cx,
+                        )
+                    })),
+            );
+        row.into_any_element()
+    }
+
+    fn show_location(&mut self, place: travel::Place, cx: &mut Context<Self>) {
+        self.center = place.coordinate();
+        self.selected_stop = Some(place);
+        self.fit_pending = false;
+        self.zoom = 13.;
+        self.load_map(cx);
+        cx.notify();
     }
 
     /// Requests what the current camera needs, now.
@@ -511,7 +760,15 @@ impl Travel {
             .id("trip-map")
             .relative()
             .w_full()
-            .h(px(if self.density.is_mobile() { 320. } else { 440. }))
+            .h(px(if self.compact_map {
+                260.
+            } else if matches!(self.route, TravelRoute::Map) {
+                if self.density.is_mobile() { 440. } else { 600. }
+            } else if self.density.is_mobile() {
+                320.
+            } else {
+                440.
+            }))
             .flex_none()
             .overflow_hidden()
             .rounded(px(8.))
@@ -657,10 +914,13 @@ impl Travel {
                     }
                 }
             }
-            let connections = self
-                .current()
-                .map(|plan| plan.connections())
-                .unwrap_or_default();
+            let connections = if matches!(self.route, TravelRoute::Map) {
+                Vec::new()
+            } else {
+                self.current()
+                    .map(|plan| plan.connections())
+                    .unwrap_or_default()
+            };
             let zoom = self.zoom;
             map = map.child(
                 canvas(
@@ -688,10 +948,28 @@ impl Travel {
                 .absolute()
                 .size_full(),
             );
-            if let Some(plan) = self.current() {
+            let markers: Vec<_> = if matches!(self.route, TravelRoute::Map) {
+                self.location_markers()
+            } else {
+                self.current()
+                    .map(|plan| {
+                        plan.places()
+                            .map(|place| super::LocationMarker {
+                                plan_id: plan.id.clone(),
+                                place: place.clone(),
+                                from: plan.date_start.clone(),
+                                to: plan.date_end.clone(),
+                                label: plan.title.clone(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            if !markers.is_empty() {
                 let (cx_world, cy_world) = center.world_at(self.zoom);
                 let world_size = 256. * 2_f64.powf(self.zoom);
-                for (index, place) in plan.places().enumerate() {
+                for (index, marker) in markers.iter().enumerate() {
+                    let place = &marker.place;
                     let Some(at) = place.coordinate() else {
                         continue;
                     };
@@ -704,6 +982,22 @@ impl Travel {
                     let selected = self.selected_stop.as_ref().is_some_and(|stop| {
                         stop.name == place.name && stop.coordinate() == place.coordinate()
                     });
+                    let companions = self
+                        .presence
+                        .get(&super::presence_key(at, &marker.from, &marker.to))
+                        .map(|p| p.known_companions);
+                    let label = if matches!(self.route, TravelRoute::Map) {
+                        format!(
+                            "{} · {}{}",
+                            marker.label,
+                            place.name,
+                            companions
+                                .map(|n| format!(" · {n} known companions in these dates"))
+                                .unwrap_or_default()
+                        )
+                    } else {
+                        place.name.clone()
+                    };
                     map = map.child(
                         div()
                             .absolute()
@@ -715,7 +1009,7 @@ impl Travel {
                             .child(
                                 self.button(gpui::SharedString::from(format!("map-stop-{index}")))
                                     .label((index + 1).to_string())
-                                    .tooltip(place.name.clone())
+                                    .tooltip(label.clone())
                                     .when(selected, |button| button.primary())
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         view.selected_stop = Some(marker_place.clone());
@@ -728,7 +1022,7 @@ impl Travel {
                                     .px_1()
                                     .bg(rgb(0xffffff))
                                     .text_color(rgb(0x222222))
-                                    .child(place.name.clone()),
+                                    .child(label),
                             ),
                     );
                 }
@@ -918,8 +1212,8 @@ mod tests {
     use super::*;
     use crate::Density;
     use gpui::{
-        point, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
-        VisualTestContext,
+        Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+        VisualTestContext, point,
     };
     use std::cell::RefCell;
     use std::rc::Rc;

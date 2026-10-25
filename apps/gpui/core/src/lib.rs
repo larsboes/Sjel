@@ -49,6 +49,7 @@ pub mod people;
 pub mod places;
 pub mod research;
 pub mod route;
+pub mod scouting;
 pub mod record;
 pub mod search;
 pub mod self_model;

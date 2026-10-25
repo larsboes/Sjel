@@ -3,6 +3,7 @@
 //! Shared across macOS desktop and iOS mobile clients.
 
 pub mod backup;
+pub mod apps;
 pub mod block_menu;
 pub mod calendar;
 pub mod cv;
@@ -11,6 +12,7 @@ pub mod doc_view;
 pub mod editor;
 pub mod finance;
 pub mod inbox;
+pub mod interior;
 pub mod inventory;
 pub mod mail;
 pub mod media;
@@ -20,6 +22,7 @@ pub mod people;
 pub mod primitives;
 pub mod projects;
 pub mod research;
+pub mod record;
 pub mod self_view;
 pub mod setup;
 pub mod sidebar;

@@ -6,7 +6,7 @@
 //!
 //! Drawing lives in `finder.rs`, because every approval button is a listener on that view.
 
-use sjel_gpui_core::agent::{Event, Session};
+use sjel_gpui_core::agent::{Event, Session, Turn};
 
 /// One line of the transcript.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -56,6 +56,9 @@ pub struct AgentRun {
     pub last_seq: u64,
     /// True once the stream reported that events this panel never saw are gone.
     pub truncated: bool,
+    /// Sessions available from the capability, newest first.
+    pub sessions: Vec<Session>,
+    pub sessions_loading: bool,
 }
 
 impl AgentRun {
@@ -71,6 +74,36 @@ impl AgentRun {
 
     pub fn clear(&mut self) {
         *self = Self::default();
+    }
+
+    /// Restores a stored conversation for the session shelf.
+    pub fn restore(&mut self, session: Session, turns: Vec<Turn>) {
+        let sessions = std::mem::take(&mut self.sessions);
+        let sessions_loading = self.sessions_loading;
+        self.clear();
+        self.sessions = sessions;
+        self.sessions_loading = sessions_loading;
+        self.running = session.active;
+        self.session = Some(session);
+        for turn in turns {
+            match turn.role.as_str() {
+                "user" => self
+                    .rows
+                    .push(Row::Prompt(turn.content.unwrap_or_default())),
+                "assistant" => {
+                    if let Some(content) = turn.content.filter(|content| !content.is_empty()) {
+                        self.rows.push(Row::Answer(content));
+                    }
+                }
+                "tool" => self.rows.push(Row::Tool {
+                    name: "tool".into(),
+                    call_id: turn.tool_call_id.unwrap_or_default(),
+                    arguments: String::new(),
+                    result: turn.content,
+                }),
+                _ => {}
+            }
+        }
     }
 
     /// One event from the stream.
@@ -166,8 +199,10 @@ impl AgentRun {
                 self.error = Some(event.message);
             }
             "truncated" => {
-                self.truncated = true;
+                // The stream ends after this frame, so nothing here can show the run as live.
                 self.running = false;
+                self.truncated = true;
+                self.last_seq = event.first_seq.saturating_sub(1);
                 // The card may be for a call that was already answered while this panel was
                 // away. Clearing it beats offering an Allow for something that already ran.
                 self.pending = None;
@@ -176,7 +211,8 @@ impl AgentRun {
                 ));
             }
             other => {
-                self.rows.push(Row::Notice(format!("unhandled event: {other}")));
+                self.rows
+                    .push(Row::Notice(format!("unhandled event: {other}")));
             }
         }
     }
@@ -376,6 +412,8 @@ mod tests {
     fn an_unknown_event_is_named_rather_than_dropped_in_silence() {
         let mut run = AgentRun::default();
         run.apply(event("something-new"));
-        assert!(matches!(run.rows.last(), Some(Row::Notice(text)) if text.contains("something-new")));
+        assert!(
+            matches!(run.rows.last(), Some(Row::Notice(text)) if text.contains("something-new"))
+        );
     }
 }

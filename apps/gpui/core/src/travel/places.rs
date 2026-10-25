@@ -16,10 +16,20 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{cache_dir, Coordinate, Place, Source};
+use super::{Coordinate, Place, Source, cache_dir};
 use crate::shell::{self, ShellError};
 
 const FILE: &str = "places.json";
+
+/// Name-free companion overlap for one coordinate and trip window, as returned by Places.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct Presence {
+    pub radius_km: u32,
+    pub from: String,
+    pub to: String,
+    pub known_companions: usize,
+    pub overlap_days: u32,
+}
 
 /// One resolved coordinate, as stored. Plain floats so a cache written by an older build
 /// still reads, and validated again by [`Coordinate::new`] on the way out.
@@ -247,13 +257,15 @@ mod tests {
     #[test]
     fn an_answer_without_a_place_or_coordinate_is_no_coordinate() {
         assert!(coordinate(Reply { place: None }).is_none());
-        assert!(coordinate(Reply {
-            place: Some(Point {
-                latitude: None,
-                longitude: None
+        assert!(
+            coordinate(Reply {
+                place: Some(Point {
+                    latitude: None,
+                    longitude: None
+                })
             })
-        })
-        .is_none());
+            .is_none()
+        );
         assert_eq!(
             coordinate(Reply {
                 place: Some(Point {

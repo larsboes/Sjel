@@ -131,7 +131,6 @@ impl Workspace {
                 .collect(),
             Page::Projects
             | Page::Context
-            | Page::Ask
             | Page::Travel
             | Page::Feed
             | Page::Inbox
@@ -150,6 +149,9 @@ impl Workspace {
             | Page::Media
             | Page::Research
             | Page::Setup
+            | Page::Apps
+            | Page::Docs
+            | Page::Record
             | Page::Settings => Vec::new(),
         }
     }

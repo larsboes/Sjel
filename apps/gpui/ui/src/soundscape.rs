@@ -433,7 +433,7 @@ impl Render for Soundscape {
             .gap_3()
             .p_4()
             .pt(px(12.))
-            .bg(rgb(palette.panel()))
+            .bg(rgba(palette.panel()))
             .text_color(rgb(palette.text))
             .overflow_y_scroll()
             .child(self.transport(palette, cx))

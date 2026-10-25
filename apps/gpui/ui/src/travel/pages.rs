@@ -1,12 +1,105 @@
 //! Travel's trip library and the four subpages of an opened trip.
 use super::forms::{FormKind, Remove};
-use super::Travel;
-use gpui::{div, prelude::*, rgb, rgba, AnyElement, ClipboardItem, Context};
-use gpui_kit::component::button::ButtonVariants;
+use super::{Travel, trip_draft_key};
+use gpui::{AnyElement, ClipboardItem, Context, SharedString, div, prelude::*, px, rgb, rgba};
 use gpui_kit::component::Disableable;
-use sjel_gpui_core::travel::{Item, Place, TravelRoute, TripSection};
+use gpui_kit::component::button::ButtonVariants;
+use sjel_gpui_core::{
+    shell::CalendarEntry,
+    travel::{Item, Place, TravelRoute, TripSection},
+};
 
 impl Travel {
+    /// The nearest trip that has not ended: a saved plan, or a Calendar draft that is not a
+    /// plan yet, with the plan's id so Home can open it. `None` when there is neither, so
+    /// Home spends no height on it.
+    pub fn home_next_trip(
+        &mut self,
+        palette: crate::Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<(AnyElement, Option<String>)> {
+        self.set_palette(palette, cx);
+        if !self.loaded && !self.loading {
+            self.refresh(cx);
+        }
+        self.load_trip_drafts(cx, false);
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let plan = self
+            .plans
+            .iter()
+            .filter(|plan| plan.date_end >= today && plan.status != "cancelled")
+            .min_by(|a, b| a.date_start.cmp(&b.date_start))
+            .cloned();
+        let draft = self.trip_drafts.as_ref().and_then(|drafts| {
+            drafts
+                .drafts
+                .iter()
+                .filter(|draft| !self.trip_draft_results.contains_key(&trip_draft_key(draft)))
+                .min_by(|a, b| a.starts_on.cmp(&b.starts_on))
+                .cloned()
+        });
+        let show_draft = match (&plan, &draft) {
+            (Some(plan), Some(draft)) => draft.starts_on < plan.date_start,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        let days_until = |start: &str| {
+            chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+                .ok()
+                .map(|day| (day - chrono::Local::now().date_naive()).num_days())
+        };
+        let when = |start: &str| match days_until(start) {
+            Some(days) if days <= 0 => "now".to_string(),
+            Some(1) => "tomorrow".to_string(),
+            Some(days) => format!("in {days} days"),
+            None => start.to_string(),
+        };
+        let line = |title: String, detail: String| {
+            div()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(div().text_sm().font_weight(gpui::FontWeight::MEDIUM).child(title))
+                .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
+        };
+        if show_draft {
+            let draft = draft?;
+            let busy = self.trip_draft_action.is_some();
+            let detail = format!(
+                "{} · {} · found in Calendar, not a trip yet",
+                draft.starts_on,
+                when(&draft.starts_on)
+            );
+            return Some((
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(line(draft.place.clone(), detail))
+                    .child(
+                        self.button("home-create-trip")
+                            .primary()
+                            .label(if busy { "Creating trip…" } else { "Create trip" })
+                            .disabled(busy || self.writer().is_none())
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.materialize_trip_draft(draft.clone(), cx)
+                            })),
+                    )
+                    .into_any_element(),
+                None,
+            ));
+        }
+        let plan = plan?;
+        let detail = format!(
+            "{} – {} · {}",
+            plan.date_start,
+            plan.date_end,
+            when(&plan.date_start)
+        );
+        Some((line(plan.title.clone(), detail).into_any_element(), Some(plan.id)))
+    }
+
     pub(super) fn render_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let mut page = div()
@@ -26,7 +119,7 @@ impl Travel {
                     .child(
                         self.button("back-to-trips")
                             .ghost()
-                            .label("← Trips")
+                            .label("← Location overview")
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.open_route(TravelRoute::Trips, cx)
                             })),
@@ -96,6 +189,18 @@ impl Travel {
                 );
             }
             return page.child(self.trip_library(cx)).into_any_element();
+        }
+        if matches!(self.route, TravelRoute::Map) {
+            return page
+                .child(div().text_xl().child("Location overview"))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("Current and upcoming trip locations"),
+                )
+                .child(self.map_page(cx))
+                .into_any_element();
         }
         if let Some(slot) = self.selected.as_ref().and_then(|id| self.details.get(id)) {
             page = page
@@ -178,6 +283,14 @@ impl Travel {
             .flex_col()
             .gap_3()
             .child(
+                self.button("open-location-map")
+                    .label("Explore locations on map")
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.open_route(TravelRoute::Map, cx)
+                    })),
+            )
+            .child(self.trip_suggestions(cx))
+            .child(
                 div().child(
                     self.button("open-connections")
                         .label("Find a connection")
@@ -186,8 +299,8 @@ impl Travel {
                         })),
                 ),
             )
-            .children(self.form_button("new-trip", "New trip", FormKind::Trip, cx))
-            .children(self.form_card(&FormKind::Trip, cx));
+            .children(self.form_button("new-trip", "New trip", FormKind::Trip(None), cx))
+            .children(self.form_card(&FormKind::Trip(None), cx));
         if self.loaded && self.plans.is_empty() {
             list = list.child(if self.writer().is_some() {
                 "No trips yet."
@@ -216,42 +329,48 @@ impl Travel {
                 previous = Some(past);
             }
             let id = plan.id.clone();
+            let open_id = id.clone();
+            let trip = div()
+                .flex_col()
+                .gap_1()
+                .pb_3()
+                .border_b_1()
+                .border_color(rgba(palette.border))
+                .child(
+                    self.button(gpui::SharedString::from(format!("trip-{}", plan.id)))
+                        .ghost()
+                        .label(plan.title.clone())
+                        .on_click(
+                            cx.listener(move |view, _, _, cx| view.select(open_id.clone(), cx)),
+                        ),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!(
+                            "{} – {} · {}",
+                            plan.date_start,
+                            plan.date_end,
+                            plan.status.replace('_', " ")
+                        )),
+                )
+                .child(
+                    div().text_sm().child(
+                        plan.destinations
+                            .iter()
+                            .map(|p| p.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" → "),
+                    ),
+                );
             list = list.child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
-                    .pb_3()
-                    .border_b_1()
-                    .border_color(rgba(palette.border))
-                    .child(
-                        self.button(gpui::SharedString::from(format!("trip-{}", plan.id)))
-                            .ghost()
-                            .label(plan.title.clone())
-                            .on_click(
-                                cx.listener(move |view, _, _, cx| view.select(id.clone(), cx)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{} – {} · {}",
-                                plan.date_start,
-                                plan.date_end,
-                                plan.status.replace('_', " ")
-                            )),
-                    )
-                    .child(
-                        div().text_sm().child(
-                            plan.destinations
-                                .iter()
-                                .map(|p| p.name.as_str())
-                                .collect::<Vec<_>>()
-                                .join(" → "),
-                        ),
-                    ),
+                    .items_start()
+                    .gap_2()
+                    .child(trip.flex_1().min_w_0())
+                    .children(self.remove_button(Remove::Plan(id), cx)),
             );
         }
         let past = self.plans.iter().filter(|p| p.date_end < today).count();
@@ -270,6 +389,208 @@ impl Travel {
             );
         }
         list.into_any_element()
+    }
+
+    fn trip_suggestions(&self, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let mut panel = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.surface))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("Trip suggestions from Calendar"),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("Calendar groups dated events, including events found in mail, by destination. Review the dates and place before creating a trip."),
+            );
+
+        if let Some(error) = &self.trip_drafts_error {
+            panel = panel.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.amber))
+                    .child(error.clone()),
+            );
+        } else if self.trip_drafts_loading && self.trip_drafts.is_none() {
+            panel = panel.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child("Checking the next 180 days…"),
+            );
+        } else if let Some(drafts) = &self.trip_drafts {
+            if drafts.drafts.is_empty() {
+                panel = panel.child(div().text_sm().text_color(rgb(palette.muted)).child(
+                    if drafts.unclustered.is_empty() {
+                        "No trip suggestions yet. Dated events found in mail appear here after Calendar reviews them."
+                    } else {
+                        "No events are grouped into a trip yet. Some events lack a place or are at home."
+                    },
+                ));
+            }
+            for draft in &drafts.drafts {
+                let key = trip_draft_key(draft);
+                let title = format!("{} — {}", draft.place, draft.starts_on);
+                let end = chrono::NaiveDate::parse_from_str(&draft.ends_before, "%Y-%m-%d")
+                    .ok()
+                    .map(|day| {
+                        (day - chrono::Duration::days(1))
+                            .format("%b %-d")
+                            .to_string()
+                    })
+                    .unwrap_or_else(|| draft.ends_before.clone());
+                let dates = format!("{} – {}", draft.starts_on, end);
+                let materialized = self.trip_draft_results.get(&key);
+                let busy = self.trip_draft_action.as_deref() == Some(key.as_str());
+                panel = panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .py_2()
+                        .border_t_1()
+                        .border_color(rgba(palette.border))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .child(draft.place.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py(px(2.))
+                                        .rounded(px(5.))
+                                        .bg(rgba(palette.raised))
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(match draft.commitment.as_str() {
+                                            "committed" => "Committed",
+                                            "planned" => "Planned",
+                                            _ => "Possible",
+                                        }),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("{dates} · {} events", draft.titles.len())),
+                        )
+                        .children(draft.titles.iter().map(|event| {
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("• {event}"))
+                        }))
+                        .child(if let Some(result) = materialized {
+                            let id = result.plan_id.clone();
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(div().text_xs().text_color(rgb(palette.accent)).child(
+                                    if result.created {
+                                        "Trip created"
+                                    } else {
+                                        "Already linked to a trip"
+                                    },
+                                ))
+                                .child(
+                                    self.button(SharedString::from(format!(
+                                        "open-draft-trip-{id}"
+                                    )))
+                                    .ghost()
+                                    .label("Open trip")
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.open_route(
+                                            TravelRoute::Trip {
+                                                id: id.clone(),
+                                                section: TripSection::Overview,
+                                            },
+                                            cx,
+                                        )
+                                    })),
+                                )
+                                .into_any_element()
+                        } else if self.writer().is_some() {
+                            let draft = draft.clone();
+                            div()
+                                .child(
+                                    self.button(SharedString::from(format!(
+                                        "create-draft-trip-{key}"
+                                    )))
+                                    .primary()
+                                    .label(if busy {
+                                        "Creating trip…".to_owned()
+                                    } else {
+                                        format!("Create {title}")
+                                    })
+                                    .disabled(self.trip_draft_action.is_some())
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.materialize_trip_draft(draft.clone(), cx)
+                                    })),
+                                )
+                                .into_any_element()
+                        } else {
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child("Connect to your Mac to create this trip.")
+                                .into_any_element()
+                        }),
+                );
+            }
+            if !drafts.unclustered.is_empty() {
+                panel = panel.child(
+                    div()
+                        .pt_2()
+                        .border_t_1()
+                        .border_color(rgba(palette.border))
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!(
+                            "{} event{} need review before they can shape a trip:",
+                            drafts.unclustered.len(),
+                            if drafts.unclustered.len() == 1 { "" } else { "s" }
+                        )),
+                );
+                for entry in drafts.unclustered.iter().take(8) {
+                    panel = panel.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .py_1()
+                            .child(div().text_xs().child(entry.title.clone()))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(entry.reason.clone()),
+                            ),
+                    );
+                }
+            }
+        }
+        panel.into_any_element()
     }
 
     fn overview(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -300,10 +621,124 @@ impl Travel {
                         cx.listener(|view, _, _, cx| view.open_section(TripSection::Map, cx)),
                     )),
             );
+        page = page.child(self.trip_calendar_timeline());
+        page = page.children(self.related_calendar_events());
         for (i, place) in plan.places().enumerate() {
             page = page.child(self.place_row(i, place, cx));
         }
         page.into_any_element()
+    }
+
+    fn related_calendar_events(&self) -> Option<AnyElement> {
+        let palette = self.palette;
+        let id = self.selected.as_ref()?;
+        let slot = self.details.get(id)?;
+        if !slot.calendar_events_loaded
+            || slot.calendar_events_loading
+            || slot.calendar_events_error.is_some()
+        {
+            return None;
+        }
+        let linked_ids: std::collections::HashSet<_> = slot
+            .calendar_links
+            .iter()
+            .filter(|link| link.via == "trip materialization")
+            .map(|link| link.id.as_str())
+            .collect();
+        let events: Vec<_> = slot
+            .calendar_events
+            .iter()
+            .filter(|event| !linked_ids.contains(event.id.as_str()))
+            .collect();
+        if events.is_empty() {
+            return None;
+        }
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.surface))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("Other Calendar events nearby"),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("Calendar grouped these with this destination and travel window, but they are not linked to the trip."),
+            );
+        for event in events {
+            section = section.child(calendar_event_row(event, palette));
+        }
+        Some(section.into_any_element())
+    }
+
+    fn trip_calendar_timeline(&self) -> AnyElement {
+        let palette = self.palette;
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.surface))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child("Trip timeline"),
+            );
+        let Some(id) = self.selected.as_ref() else {
+            return section.into_any_element();
+        };
+        let Some(slot) = self.details.get(id) else {
+            return section
+                .child(div().text_sm().text_color(rgb(palette.muted)).child("Loading trip events…"))
+                .into_any_element();
+        };
+        if !slot.calendar_links_loaded || slot.calendar_links_loading {
+            section = section.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child("Loading trip events…"),
+            );
+        } else if let Some(error) = &slot.calendar_links_error {
+            section = section.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.amber))
+                    .child(format!("Trip events could not load: {error}")),
+            );
+        } else {
+            let events: Vec<_> = slot
+                .calendar_links
+                .iter()
+                .filter(|link| link.via == "trip materialization")
+                .collect();
+            if events.is_empty() {
+                section = section.child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("No mail or Calendar events are linked to this trip."),
+                );
+            } else {
+                for event in events {
+                    section = section.child(calendar_link_row(event, palette));
+                }
+            }
+        }
+        section.into_any_element()
     }
 
     pub(super) fn place_row(
@@ -514,4 +949,75 @@ impl Travel {
         row.child(actions.children(self.remove_button(Remove::Item(item.id.clone()), cx)))
             .into_any_element()
     }
+}
+
+fn calendar_event_row(event: &CalendarEntry, palette: crate::Palette) -> AnyElement {
+    let when = if event.all_day {
+        format!("{} · all day", event.starts_at.get(..10).unwrap_or(&event.starts_at))
+    } else if let Some((day, time)) = event.starts_at.split_once('T') {
+        format!("{day} · {}", time.get(..5).unwrap_or(time))
+    } else {
+        event.starts_at.clone()
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .py_2()
+        .border_t_1()
+        .border_color(rgba(palette.border))
+        .child(div().text_xs().text_color(rgb(palette.muted)).child(when))
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .child(event.title.clone()),
+        )
+        .when_some(event.location.clone(), |row, location| {
+            row.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(location),
+            )
+        })
+        .when_some(event.notes.clone(), |row, notes| {
+            row.child(div().text_sm().child(notes))
+        })
+        .into_any_element()
+}
+
+fn calendar_link_row(link: &sjel_gpui_core::record::Link, palette: crate::Palette) -> AnyElement {
+    let when = link
+        .at
+        .as_deref()
+        .map(|at| {
+            at.split_once('T')
+                .map(|(day, time)| format!("{day} · {}", time.get(..5).unwrap_or(time)))
+                .unwrap_or_else(|| at.to_owned())
+        })
+        .unwrap_or_else(|| "Date unavailable".into());
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .py_2()
+        .border_t_1()
+        .border_color(rgba(palette.border))
+        .child(div().text_xs().text_color(rgb(palette.muted)).child(when))
+        .child(
+            div()
+                .text_sm()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .child(link.title.clone()),
+        )
+        .when_some(link.meta.clone(), |row, location| {
+            row.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(location),
+            )
+        })
+        .into_any_element()
 }

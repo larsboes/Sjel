@@ -24,6 +24,8 @@ pub struct Inline {
     pub text: String,
     /// Ranges in `text`.
     pub marks: Vec<(Range<usize>, Mark)>,
+    /// Link targets paired with the displayed character ranges they cover.
+    pub links: Vec<(Range<usize>, String)>,
     /// The source offset of each byte of `text`, then the source length.
     source: Vec<usize>,
 }
@@ -78,8 +80,12 @@ fn parse(src: &str, base: usize, flow: bool, out: &mut Inline) {
             at += 1 + rest[1..].len() - rest[1..].trim_start_matches([' ', '\t']).len();
             continue;
         }
-        if let Some((inner, end, mark)) = span(src, at, rest) {
+        if let Some((inner, end, mark, target)) = span(src, at, rest) {
+            let shown = out.text.len();
             out.wrap(src, inner, base, mark);
+            if let Some(target) = target {
+                out.links.push((shown..out.text.len(), target));
+            }
             at = end;
             continue;
         }
@@ -89,7 +95,7 @@ fn parse(src: &str, base: usize, flow: bool, out: &mut Inline) {
 }
 
 /// A span opening at `at`: its inner range, the offset after it, and its mark.
-fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark)> {
+fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark, Option<String>)> {
     let closed = |open: &str, close: &str| -> Option<(Range<usize>, usize)> {
         let start = at + open.len();
         let len = src[start..].find(close)?;
@@ -97,21 +103,26 @@ fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark)>
     };
     if rest.starts_with('`') {
         let (inner, end) = closed("`", "`")?;
-        return Some((inner, end, Mark::Code));
+        return Some((inner, end, Mark::Code, None));
     }
     if rest.starts_with("[[") {
         let (inner, end) = closed("[[", "]]")?;
         // `[[target|alias]]` shows the alias.
+        let target_end = src[inner.clone()]
+            .find('|')
+            .map_or(inner.end, |bar| inner.start + bar);
+        let target = src[inner.start..target_end].to_owned();
         let shown = match src[inner.clone()].find('|') {
             Some(bar) => inner.start + bar + 1..inner.end,
             None => inner,
         };
-        return Some((shown, end, Mark::Link));
+        return Some((shown, end, Mark::Link, Some(target)));
     }
     if rest.starts_with('[') {
         let (label, close) = closed("[", "](")?;
         let url_end = src[close..].find(')')?;
-        return Some((label, close + url_end + 1, Mark::Link));
+        let target = src[close..close + url_end].trim().to_owned();
+        return Some((label, close + url_end + 1, Mark::Link, Some(target)));
     }
     for (marker, mark) in [
         ("**", Mark::Bold),
@@ -121,7 +132,7 @@ fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark)>
     ] {
         if rest.starts_with(marker) {
             if let Some((inner, end)) = closed(marker, marker) {
-                return Some((inner, end, mark));
+                return Some((inner, end, mark, None));
             }
         }
     }
@@ -139,7 +150,7 @@ fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark)>
             continue;
         }
         if let Some((inner, end)) = closed(marker, marker) {
-            return Some((inner, end, Mark::Italic));
+            return Some((inner, end, Mark::Italic, None));
         }
     }
     None

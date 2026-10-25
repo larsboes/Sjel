@@ -2,6 +2,53 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InventoryState {
+    Owned,
+    Wanted,
+    Gone,
+}
+
+impl InventoryState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Owned => "owned",
+            Self::Wanted => "wanted",
+            Self::Gone => "gone",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct NewInventoryItem {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub state: InventoryState,
+    pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_cents: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct InventoryStateChange {
+    pub id: String,
+    pub state: InventoryState,
+    pub changed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct InventoryItemWrite {
+    pub id: String,
+    pub ok: bool,
+    pub revision: i64,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct InventoryItem {
     pub id: String,

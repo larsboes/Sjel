@@ -36,6 +36,15 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 cx.entity(),
             ))
         });
+    let shell_recovery = view.health.error.as_ref().map(|_| {
+        Button::new("restart-shell")
+            .small()
+            .ghost()
+            .label("Restart shell")
+            .loading(view.busy.contains("sjel-status-recovery"))
+            .tooltip("Rebuild and restart the local Sjel shell with the current configuration")
+            .on_click(cx.listener(|view, _, window, cx| view.restart_shell(window, cx)))
+    });
     div()
         .flex()
         .flex_col()
@@ -79,6 +88,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                         .items_center()
                         .gap_1()
                         .children(update_pill)
+                        .children(shell_recovery)
                         .children(checked.map(|label| {
                             div()
                                 .text_xs()
@@ -152,8 +162,7 @@ fn subtitle(view: &Workspace) -> SharedString {
         }
         Page::Capabilities => view.endpoint(),
         Page::Projects => "Projects, tasks and notes, in one place".into(),
-        Page::Ask => "Multi-turn capability session · ⌥Space from any app".into(),
-        Page::Travel => "Trips, itinerary stops and maps".into(),
+        Page::Travel => "Where you are, where you’re going, and where you’ll stay".into(),
         Page::Feed => "What the collectors brought in, ranked for you".into(),
         Page::Inbox => "Captured, not sorted yet".into(),
         Page::Calendar => "Your days, from the calendar capability".into(),
@@ -165,6 +174,9 @@ fn subtitle(view: &Workspace) -> SharedString {
             "Household inventory, wishlist budget, and interior spatial layout".into()
         }
         Page::Software => "Apps on this Mac: size, last used, and what to keep".into(),
+        Page::Apps => "Standalone interfaces exposed by running capabilities".into(),
+        Page::Docs => "Architecture, capability contracts, and operating guides".into(),
+        Page::Record => "A record and the Sjel data connected to it".into(),
         Page::Import => "Bring a folder into Sjel, each file to its owner".into(),
         Page::Systems => {
             "This Mac now: temperature, power, disk, updates and the agent's reach".into()

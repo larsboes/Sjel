@@ -4,9 +4,11 @@
 //! What the window is made of lives beside it: `sidebar` draws the column and `header` the title
 //! row, each reading this view and calling back into it.
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use futures::StreamExt;
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Theme, WindowExt};
@@ -24,18 +26,21 @@ use crate::documents::Documents;
 use crate::feed::Feed;
 use crate::finance_view::FinancePage;
 use crate::finder::{Finder, FinderEvent, Hit, Open};
-use crate::inbox::Inbox;
+use crate::inbox::{Inbox, InboxEvent};
 use crate::inventory_view::InventoryPage;
 use crate::people_view::PeoplePage;
 use crate::projects::Projects;
 use crate::route::{self, Page, Target};
 use crate::selection::{Item, Selection};
 use crate::shell::{
-    self, AgentView, Backups, GlobalTask, NodeHealth, ShellError, Snapshot, SoundscapeState,
+    self, AgentView, AvailableFeature, Backups, GlobalTask, InstalledFeature, NodeHealth,
+    ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{AppearanceSettings, GlassStyle, Palette};
+use crate::ytalbum::{YtAlbum, YtAlbumEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
+use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
 
 actions!(
     sjel,
@@ -93,7 +98,7 @@ actions!(
 #[action(namespace = sjel, no_json)]
 pub struct GoTo(pub Page);
 
-/// Open an area at the tab it showed last. ⌘1–⌘9, the sidebar rows and the Go menu use it.
+/// Open an area at the tab it showed last. ⌘1–⌘8, the sidebar rows and the Go menu use it.
 #[derive(Clone, PartialEq, gpui::Action)]
 #[action(namespace = sjel, no_json)]
 pub struct OpenArea(pub Area);
@@ -222,7 +227,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("g t", GoTo(Page::Context), Some("Workspace")),
         KeyBinding::new("g m", GoTo(Page::Capabilities), Some("Workspace")),
         KeyBinding::new("g p", GoTo(Page::Projects), Some("Workspace")),
-        KeyBinding::new("g a", GoTo(Page::Ask), Some("Workspace")),
+        KeyBinding::new("g a", OpenPalette, Some("Workspace")),
         KeyBinding::new("g v", GoTo(Page::Travel), Some("Workspace")),
         KeyBinding::new("g e", GoTo(Page::Feed), Some("Workspace")),
         KeyBinding::new("g n", GoTo(Page::Inbox), Some("Workspace")),
@@ -259,7 +264,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("shift-cmd-c", GoTo(Page::Calendar), None),
         KeyBinding::new("shift-cmd-t", GoTo(Page::Travel), None),
         KeyBinding::new("shift-cmd-k", GoTo(Page::Projects), None),
-        KeyBinding::new("shift-cmd-a", GoTo(Page::Ask), None),
+        KeyBinding::new("shift-cmd-a", OpenPalette, None),
         KeyBinding::new("shift-cmd-e", GoTo(Page::Feed), None),
         KeyBinding::new("shift-cmd-n", GoTo(Page::Inbox), None),
         KeyBinding::new("shift-cmd-h", GoTo(Page::Home), None),
@@ -272,11 +277,18 @@ const POLL: Duration = Duration::from_secs(10);
 
 pub struct Workspace {
     pub page: Page,
-    /// The tab each area shows, so ⌘1–⌘9 return to where you left an area.
+    /// The tab each area shows, so ⌘1–⌘8 return to where you left an area.
     pub tabs: Tabs,
     repo: Repo,
     pub health: Remote<NodeHealth>,
     pub agent: Remote<AgentView>,
+    pub installed_features: Remote<Vec<InstalledFeature>>,
+    pub available_features: Remote<Vec<AvailableFeature>>,
+    pub settings_feature_detail: Option<String>,
+    pub feature_uninstall_confirmation: Option<String>,
+    pub feature_install_confirmation: Option<String>,
+    pub feature_manager_message: Option<String>,
+    pub dismissed_feature_recommendations: BTreeSet<String>,
     pub focus_tasks: Remote<Vec<GlobalTask>>,
     pub soundscape: Remote<SoundscapeState>,
     pub backups: Remote<Backups>,
@@ -287,6 +299,8 @@ pub struct Workspace {
     pub documents: Entity<Documents>,
     pub feed: Entity<Feed>,
     pub inbox: Entity<Inbox>,
+    ytalbum_page: Option<(Entity<YtAlbum>, Subscription)>,
+    _inbox_events: Subscription,
     pub calendar_page: Entity<CalendarPage>,
     pub context_page: Entity<ContextPage>,
     pub finance_page: Entity<FinancePage>,
@@ -294,6 +308,9 @@ pub struct Workspace {
     pub backup_page: Entity<BackupPage>,
     pub inventory_page: Entity<InventoryPage>,
     pub software: Entity<crate::software::Software>,
+    pub apps_page: Entity<crate::apps::AppsPage>,
+    pub docs_page: Entity<crate::docs::DocsPage>,
+    pub record_page: Entity<crate::record::RecordPage>,
     pub import: Entity<crate::import::ImportPage>,
     pub systems: Entity<crate::systems::SystemsPage>,
     pub packs: Entity<crate::packs_view::PacksPage>,
@@ -310,6 +327,13 @@ pub struct Workspace {
     pub appearance_settings: AppearanceSettings,
     /// The section Settings shows.
     pub settings_section: crate::settings::Section,
+    pub settings_feature_view: crate::settings::FeatureView,
+    /// Search within Settings and show or hide its contents rail.
+    pub settings_query: String,
+    /// A shortcut group selected from the Settings contents rail.
+    pub settings_shortcut_group: Option<&'static str>,
+    pub settings_toc_visible: bool,
+    pub settings_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
     pub update_info: Option<crate::update::UpdateInfo>,
     pub rebuild_state: crate::update::RebuildState,
     focus: FocusHandle,
@@ -321,6 +345,8 @@ pub struct Workspace {
     /// lives in an app global, so the view may as well too. `None` until something opens it, which is
     /// what keeps a fresh window from paying for a panel nobody is looking at.
     pub soundscape_panel: Option<Entity<crate::soundscape::Soundscape>>,
+    /// The docked right edge. Its state is shared with the phone and stored in `sidebar.json`.
+    pub right_panel: Sidebar,
     /// One input for a search or a prompt (⌘K), drawn over the whole window.
     pub finder: Entity<Finder>,
     _finder: Subscription,
@@ -354,6 +380,7 @@ impl Workspace {
         let documents = cx.new(|_| Documents::new(repo.clone()));
         let feed = cx.new(|cx| Feed::new(repo.clone(), cx));
         let inbox = cx.new(|cx| Inbox::new(repo.clone(), cx));
+        let inbox_events = cx.subscribe_in(&inbox, window, Self::on_inbox);
         let calendar_page = cx.new(|cx| CalendarPage::new(repo.clone(), cx));
         let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
         let finance_page = cx.new(|cx| FinancePage::new(repo.clone(), cx));
@@ -361,6 +388,9 @@ impl Workspace {
         let backup_page = cx.new(|cx| BackupPage::new(repo.clone(), cx));
         let inventory_page = cx.new(|cx| InventoryPage::new(repo.clone(), cx));
         let software = cx.new(|_| crate::software::Software::new(repo.clone()));
+        let apps_page = cx.new(|_| crate::apps::AppsPage::new(repo.clone()));
+        let docs_page = cx.new(|_| crate::docs::DocsPage::new());
+        let record_page = cx.new(|_| crate::record::RecordPage::new(repo.clone()));
         let import = cx.new(|_| crate::import::ImportPage::new(repo.clone()));
         let systems = cx.new(|_| crate::systems::SystemsPage::new(repo.clone()));
         let packs = cx.new(|_| crate::packs_view::PacksPage::new(repo.clone()));
@@ -375,15 +405,75 @@ impl Workspace {
             cx.new(|cx| Finder::new(repo, ask, finder_commands(), cx))
         };
         let finder_events = cx.subscribe_in(&finder, window, Self::on_finder);
+        let settings_search = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Search settings, accounts, features, shortcuts")
+        });
+        let settings_search_events = cx.subscribe_in(
+            &settings_search,
+            window,
+            |view, input, event, window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    view.settings_query = input.read(cx).value().to_string();
+                    view.settings_shortcut_group = None;
+                    view.settings_feature_detail = None;
+                    view.feature_install_confirmation = None;
+                    view.feature_uninstall_confirmation = None;
+                    let catalogue_has_match =
+                        view.available_features
+                            .value
+                            .as_ref()
+                            .is_some_and(|packages| {
+                                crate::settings::catalogue_matches(packages, &view.settings_query)
+                            });
+                    if !view.settings_query.trim().is_empty() {
+                        view.settings_section = crate::settings::search_section(
+                            &view.settings_query,
+                            catalogue_has_match,
+                        )
+                        .unwrap_or(crate::settings::Section::Shortcuts);
+                        if view.settings_section == crate::settings::Section::Accounts {
+                            let search_query = view.settings_query.clone();
+                            view.accounts.update(cx, move |accounts, cx| {
+                                if let Some(provider) =
+                                    crate::settings::provider_for_search(&search_query)
+                                {
+                                    accounts.select_key_provider(provider, window, cx);
+                                }
+                                accounts.refresh_if_missing(cx);
+                            });
+                        }
+                        if view.settings_section == crate::settings::Section::Features {
+                            if let Some(feature_view) =
+                                crate::settings::feature_view_for_search(&view.settings_query)
+                            {
+                                view.settings_feature_view = feature_view;
+                            } else if catalogue_has_match {
+                                view.settings_feature_view = crate::settings::FeatureView::Explore;
+                            }
+                        }
+                    }
+                    cx.notify();
+                }
+            },
+        );
         let mut workspace = Self {
             page: Page::Home,
             tabs: Tabs::default(),
             repo,
             health: Remote::default(),
             agent: Remote::default(),
+            installed_features: Remote::default(),
+            available_features: Remote::default(),
+            settings_feature_detail: None,
+            feature_uninstall_confirmation: None,
+            feature_install_confirmation: None,
+            feature_manager_message: None,
+            dismissed_feature_recommendations: crate::settings::load_recommendation_dismissals(),
             focus_tasks: Remote::default(),
             soundscape: Remote::default(),
             soundscape_panel: None,
+            right_panel: Sidebar::load(),
             finder,
             _finder: finder_events,
             backups: Remote::default(),
@@ -394,6 +484,8 @@ impl Workspace {
             documents,
             feed,
             inbox,
+            ytalbum_page: None,
+            _inbox_events: inbox_events,
             calendar_page,
             context_page,
             finance_page,
@@ -401,6 +493,9 @@ impl Workspace {
             backup_page,
             inventory_page,
             software,
+            apps_page,
+            docs_page,
+            record_page,
             import,
             systems,
             packs,
@@ -416,6 +511,11 @@ impl Workspace {
             refocus: false,
             appearance_settings,
             settings_section: crate::settings::Section::default(),
+            settings_feature_view: crate::settings::FeatureView::default(),
+            settings_query: String::new(),
+            settings_shortcut_group: None,
+            settings_toc_visible: true,
+            settings_search: Some((settings_search, settings_search_events)),
             update_info: None,
             rebuild_state: crate::update::RebuildState::Idle,
             _appearance: Some(appearance),
@@ -468,8 +568,12 @@ impl Workspace {
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
         // Today was its own page and is part of Home now; its old shortcuts and links land here.
         let page = area::canonical(page);
+        if page != Page::Settings {
+            self.feature_install_confirmation = None;
+            self.feature_uninstall_confirmation = None;
+        }
         self.tabs.visit(page);
-        // Going somewhere is what the finder was for, whichever key did it (⌘2 included).
+        // Going somewhere is what the finder was for, whichever key did it.
         if self.finder.read(cx).is_open() {
             self.finder.update(cx, |finder, cx| finder.close(cx));
         }
@@ -490,14 +594,14 @@ impl Workspace {
             if page == Page::Projects {
                 self.projects
                     .update(cx, |projects, cx| projects.load_projects(cx));
-            } else if page == Page::Ask {
-                self.ask.update(cx, |ask, cx| ask.focus_input(cx));
             } else if page == Page::Travel {
                 self.travel.update(cx, |travel, cx| travel.activate(cx));
             } else if page == Page::Backup {
                 self.backup_page.update(cx, |b, cx| b.activate(cx));
             } else if page == Page::Software {
                 self.software.update(cx, |software, cx| software.load(cx));
+            } else if page == Page::Apps {
+                self.apps_page.update(cx, |apps, cx| apps.load(cx));
             } else if page == Page::Import {
                 self.import.update(cx, |import, cx| import.load(cx));
             } else if page == Page::Systems {
@@ -857,6 +961,46 @@ impl Workspace {
         );
     }
 
+    /// Restarts the local shell through the installed checkout's supervisor, even when the shell
+    /// itself refuses the current credential.
+    pub fn restart_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        const BUSY_KEY: &str = "sjel-status-recovery";
+        if !self.busy.start(BUSY_KEY) {
+            return;
+        }
+        let Some(root) = crate::update::find_repo_root() else {
+            self.busy.finish(BUSY_KEY);
+            window.push_notification(
+                Notification::error("Could not locate the Sjel checkout to restart its shell."),
+                cx,
+            );
+            cx.notify();
+            return;
+        };
+        cx.notify();
+        let work = cx
+            .background_executor()
+            .spawn(async move { crate::update::restart_local_shell(&root) });
+        cx.spawn_in(window, async move |weak, cx| {
+            let result = work.await;
+            let _ = weak.update_in(cx, |view, window, cx| {
+                view.busy.finish(BUSY_KEY);
+                match result {
+                    Ok(()) => {
+                        window.push_notification(
+                            Notification::success("Sjel shell restarted. Reconnecting…"),
+                            cx,
+                        );
+                        view.refresh(cx);
+                    }
+                    Err(error) => window.push_notification(Notification::error(error), cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Starts a backup of every capability with a contract. Each run is accepted and returns;
     /// the poll shows them finish. Runs of different capabilities may overlap by design.
     pub fn back_up_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -921,10 +1065,31 @@ impl Workspace {
                 self.go(Page::Feed, cx);
                 self.feed.update(cx, |feed, cx| feed.set_tab(tab, cx));
             }
-            Target::Ask(question) => {
-                self.go(Page::Ask, cx);
-                self.ask.update(cx, |ask, cx| ask.submit(question, cx));
+            Target::FeedEntry(id) => {
+                self.go(Page::Feed, cx);
+                self.feed.update(cx, |feed, cx| feed.open_entry(id, cx));
             }
+            Target::MailEntry(id) => {
+                self.go(Page::Feed, cx);
+                self.feed
+                    .update(cx, |feed, cx| feed.open_mail_entry(id, cx));
+            }
+            Target::CalendarEntry(id) => {
+                self.go(Page::Feed, cx);
+                self.feed
+                    .update(cx, |feed, cx| feed.open_calendar_entry(id, cx));
+            }
+            Target::Docs(slug) => {
+                self.go(Page::Docs, cx);
+                self.docs_page.update(cx, |docs, cx| docs.open(slug, cx));
+            }
+            Target::Record(id) => {
+                self.go(Page::Record, cx);
+                self.record_page.update(cx, |page, cx| page.open(id, cx));
+            }
+            Target::Ask(question) => self
+                .finder
+                .update(cx, |finder, cx| finder.ask(question, cx)),
             Target::Dashboard(path) => self.open_dashboard(path, window, cx),
         }
     }
@@ -943,11 +1108,14 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         match event {
+            FinderEvent::AgentStarted => {
+                self.right_panel.open_on(Seat::Agent);
+                cx.notify();
+            }
             FinderEvent::Closed => {
                 self.refocus = true;
                 cx.notify();
             }
-            FinderEvent::ContinueInAsk => self.go(Page::Ask, cx),
             FinderEvent::Open(open) => match open.clone() {
                 Open::Page(Page::Settings) => self.go(Page::Settings, cx),
                 Open::Page(page) => self.go(page, cx),
@@ -966,6 +1134,40 @@ impl Workspace {
                     });
                 }
             },
+        }
+    }
+
+    fn on_inbox(
+        &mut self,
+        _: &Entity<Inbox>,
+        event: &InboxEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            InboxEvent::OpenYtAlbum(url) => {
+                let repo = self.repo.clone();
+                let page = cx.new(|cx| YtAlbum::new(repo, url, window, cx));
+                let events = cx.subscribe_in(&page, window, Self::on_ytalbum);
+                page.update(cx, |view, cx| view.probe(window, cx));
+                self.ytalbum_page = Some((page, events));
+                cx.notify();
+            }
+        }
+    }
+
+    fn on_ytalbum(
+        &mut self,
+        _: &Entity<YtAlbum>,
+        event: &YtAlbumEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            YtAlbumEvent::Close => {
+                self.ytalbum_page = None;
+                cx.notify();
+            }
         }
     }
 
@@ -1073,6 +1275,9 @@ impl Workspace {
     ) {
         if let Some(section) = section {
             self.settings_section = section;
+            if section == crate::settings::Section::Shortcuts {
+                self.settings_shortcut_group = None;
+            }
         }
         if section == Some(crate::settings::Section::Updates) && self.update_info.is_none() {
             self.check_updates(cx);
@@ -1081,7 +1286,188 @@ impl Workspace {
             self.accounts
                 .update(cx, |accounts, cx| accounts.refresh(cx));
         }
+        if self.available_features.first_load() || self.available_features.age_of_value() > 600 {
+            self.refresh_feature_catalogue(cx);
+        }
+        if section.unwrap_or(self.settings_section) == crate::settings::Section::Features {
+            self.refresh_installed_features(cx);
+        }
         self.go(Page::Settings, cx);
+    }
+
+    pub fn refresh_installed_features(&mut self, cx: &mut Context<Self>) {
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.installed_features.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        if !self.installed_features.begin() {
+            return;
+        }
+        cx.notify();
+        let work = shell::run(async move { shell.installed_features().await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.installed_features.settle(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn refresh_feature_catalogue(&mut self, cx: &mut Context<Self>) {
+        if !self.available_features.begin() {
+            return;
+        }
+        cx.notify();
+        let work = shell::run(async { sjel_gpui_core::shell::feature_catalogue().await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.available_features.settle(result);
+                let catalogue_has_match =
+                    view.available_features
+                        .value
+                        .as_ref()
+                        .is_some_and(|packages| {
+                            crate::settings::catalogue_matches(packages, &view.settings_query)
+                        });
+                if let Some(section) =
+                    crate::settings::search_section(&view.settings_query, catalogue_has_match)
+                {
+                    view.settings_section = section;
+                    if section == crate::settings::Section::Features {
+                        if let Some(feature_view) =
+                            crate::settings::feature_view_for_search(&view.settings_query)
+                        {
+                            view.settings_feature_view = feature_view;
+                        } else if catalogue_has_match {
+                            view.settings_feature_view = crate::settings::FeatureView::Explore;
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn request_feature_uninstall(&mut self, name: String, cx: &mut Context<Self>) {
+        self.feature_uninstall_confirmation = Some(name);
+        self.feature_manager_message = None;
+        cx.notify();
+    }
+
+    pub fn dismiss_feature_recommendation(
+        &mut self,
+        feature: String,
+        topic: String,
+        cx: &mut Context<Self>,
+    ) {
+        let key = format!("{feature}::{topic}");
+        self.dismissed_feature_recommendations.insert(key);
+        self.feature_manager_message = None;
+        if let Err(error) =
+            crate::settings::save_recommendation_dismissals(&self.dismissed_feature_recommendations)
+        {
+            self.feature_manager_message = Some(format!("Could not save this preference: {error}"));
+        }
+        cx.notify();
+    }
+
+    pub fn request_feature_install(&mut self, name: String, cx: &mut Context<Self>) {
+        self.feature_install_confirmation = Some(name);
+        self.feature_manager_message = None;
+        cx.notify();
+    }
+
+    pub fn cancel_feature_install(&mut self, cx: &mut Context<Self>) {
+        self.feature_install_confirmation = None;
+        cx.notify();
+    }
+
+    pub fn install_feature(
+        &mut self,
+        name: String,
+        version: String,
+        sha256: String,
+        cx: &mut Context<Self>,
+    ) {
+        let key = format!("package-install:{name}");
+        if !self.busy.start(&key) {
+            return;
+        }
+        self.feature_install_confirmation = None;
+        self.feature_manager_message = None;
+        cx.notify();
+        let work = shell::run(async move {
+            sjel_gpui_core::shell::install_feature(&name, &version, &sha256).await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.busy.finish(&key);
+                match result {
+                    Ok(()) => {
+                        view.feature_manager_message = Some(
+                            "Feature installed. It is ready to enable in Capabilities.".into(),
+                        );
+                        view.installed_features = Remote::default();
+                        view.refresh_installed_features(cx);
+                        view.available_features = Remote::default();
+                        view.refresh_feature_catalogue(cx);
+                    }
+                    Err(error) => view.feature_manager_message = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn cancel_feature_uninstall(&mut self, cx: &mut Context<Self>) {
+        self.feature_uninstall_confirmation = None;
+        cx.notify();
+    }
+
+    pub fn uninstall_feature(&mut self, name: String, cx: &mut Context<Self>) {
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.feature_manager_message = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        let key = format!("package-uninstall:{name}");
+        if !self.busy.start(&key) {
+            return;
+        }
+        self.feature_uninstall_confirmation = None;
+        self.feature_manager_message = None;
+        cx.notify();
+        let work = shell::run(async move { shell.uninstall_feature(&name).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.busy.finish(&key);
+                match result {
+                    Ok(()) => {
+                        view.feature_manager_message =
+                            Some("Feature removed. Its capability data was retained.".into());
+                        view.installed_features = Remote::default();
+                        view.refresh_installed_features(cx);
+                    }
+                    Err(error) => view.feature_manager_message = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Saves `next` and applies it. A theme mode is forced on the window, so the native glass and
@@ -1230,6 +1616,10 @@ impl Workspace {
                 self.documents
                     .update(cx, |docs, cx| docs.focus_search(window, cx));
             }
+            Page::Docs => {
+                self.docs_page
+                    .update(cx, |docs, cx| docs.focus_search(window, cx));
+            }
             Page::Finance => {
                 self.finance_page
                     .update(cx, |fin, cx| fin.focus_search(window, cx));
@@ -1371,8 +1761,56 @@ impl Render for Workspace {
             .appearance_settings
             .apply_to_palette(base_palette, is_dark);
         let tint = palette.window_tint;
+        let sidebar_tint = palette.sidebar_surface;
         let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
-        let glass = self.attach_glass(window, tint, glass_requested);
+        let glass = self.attach_glass(window, sidebar_tint, glass_requested);
+        let right_panel = if self.right_panel.is_open() {
+            let seat = self.right_panel.seat();
+            let body = match seat {
+                Seat::Agent => self
+                    .finder
+                    .update(cx, |finder, cx| finder.agent_panel_body(palette, cx)),
+                Seat::Soundscape => div()
+                    .p_4()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child("Soundscape controls remain available with ⌘0")
+                    .into_any_element(),
+                Seat::Activity => div()
+                    .p_4()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child("Phone activity is shown on the paired iPhone.")
+                    .into_any_element(),
+            };
+            let entity = cx.entity().clone();
+            let on_seat = {
+                let entity = entity.clone();
+                move |seat: Seat, _: &mut Window, app: &mut App| {
+                    entity.update(app, |view, cx| {
+                        view.right_panel.choose(seat);
+                        cx.notify();
+                    });
+                }
+            };
+            let on_close = move |_: &mut Window, app: &mut App| {
+                entity.update(app, |view, cx| {
+                    view.right_panel.close();
+                    cx.notify();
+                });
+            };
+            Some(
+                div()
+                    .w(px(390.))
+                    .flex_none()
+                    .h_full()
+                    .border_l_1()
+                    .border_color(rgba(palette.border))
+                    .child(sidebar_frame(palette, seat, body, on_seat, on_close)),
+            )
+        } else {
+            None
+        };
         // An open finder holds the keys: a page change behind it must not take them back, or the
         // finder opened right after a navigation could not be closed with escape.
         if std::mem::take(&mut self.refocus) && !self.finder.read(cx).is_open() {
@@ -1387,6 +1825,9 @@ impl Render for Workspace {
                 self.backup_page.clone().into_any_element()
             }
             Page::Software => self.software.clone().into_any_element(),
+            Page::Apps => self.apps_page.clone().into_any_element(),
+            Page::Docs => self.docs_page.clone().into_any_element(),
+            Page::Record => self.record_page.clone().into_any_element(),
             Page::Import => self.import.clone().into_any_element(),
             Page::Systems => self.systems.clone().into_any_element(),
             Page::Packs => self.packs.clone().into_any_element(),
@@ -1406,9 +1847,14 @@ impl Render for Workspace {
                 self.feed.clone().into_any_element()
             }
             Page::Inbox => {
-                self.inbox
-                    .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
-                self.inbox.clone().into_any_element()
+                if let Some((ytalbum, _)) = &self.ytalbum_page {
+                    ytalbum.update(cx, |view, cx| view.set_palette(palette, cx));
+                    ytalbum.clone().into_any_element()
+                } else {
+                    self.inbox
+                        .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
+                    self.inbox.clone().into_any_element()
+                }
             }
             Page::Calendar => {
                 self.calendar_page
@@ -1432,10 +1878,11 @@ impl Render for Workspace {
                 self.inventory_page.clone().into_any_element()
             }
             Page::Projects => self.projects.clone().into_any_element(),
-            Page::Ask => self.ask.clone().into_any_element(),
             Page::Travel => {
-                self.travel
-                    .update(cx, |travel, cx| travel.set_palette(palette, cx));
+                self.travel.update(cx, |travel, cx| {
+                    travel.set_palette(palette, cx);
+                    travel.set_compact_map(false);
+                });
                 self.travel.clone().into_any_element()
             }
             Page::Settings => crate::settings::render(self, palette, window, cx).into_any_element(),
@@ -1490,12 +1937,11 @@ impl Render for Workspace {
                 div()
                     .id("frame")
                     .track_focus(&self.focus)
-                    // Projects and Ask type into their fields, so J, K and Enter must reach them.
+                    // These pages type into their fields, so J, K and Enter must reach them.
                     .when(
                         !matches!(
                             self.page,
                             Page::Projects
-                                | Page::Ask
                                 | Page::Travel
                                 | Page::Feed
                                 | Page::Inbox
@@ -1575,7 +2021,8 @@ impl Render for Workspace {
                             // The soundscape panel slides over the page and not the navigation: a
                             // player that covers the way out of the page is a window again.
                             .children(self.soundscape_panel.clone()),
-                    ),
+                    )
+                    .children(right_panel),
             )
             // Over the whole window, navigation included: it is where you go next from.
             .child(self.finder.clone())
@@ -1732,7 +2179,9 @@ mod tests {
         });
         cx.run_until_parked();
         cx.simulate_keystrokes("j");
-        inbox.read_with(cx, |inbox, _| assert_eq!(inbox.cursor.as_deref(), Some("a")));
+        inbox.read_with(cx, |inbox, _| {
+            assert_eq!(inbox.cursor.as_deref(), Some("a"))
+        });
         cx.simulate_keystrokes("enter");
         cx.simulate_input(" jed");
         inbox.read_with(cx, |inbox, cx| {
@@ -1758,9 +2207,6 @@ mod tests {
             cx.update(|_, cx| finder.read(cx).is_open()),
             "the answer shows in place"
         );
-        view.read_with(cx, |view, _| {
-            assert_ne!(view.page, Page::Ask, "no page change")
-        });
 
         cx.simulate_input("packs");
         cx.simulate_keystrokes("cmd-enter");
@@ -1840,12 +2286,12 @@ mod tests {
     #[gpui::test]
     fn an_area_returns_to_the_tab_it_showed_last(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
-        cx.simulate_keystrokes("cmd-9");
+        cx.simulate_keystrokes("cmd-8");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Capabilities));
         view.update(cx, |view, cx| view.go(Page::Packs, cx));
         cx.simulate_keystrokes("cmd-1");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
-        cx.simulate_keystrokes("cmd-9");
+        cx.simulate_keystrokes("cmd-8");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
     }
 
@@ -1943,11 +2389,11 @@ mod tests {
         cx.simulate_keystrokes("ctrl-tab");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Inbox));
         // An area with one tab keeps it: stepping never leaves the area.
-        view.update(cx, |view, cx| view.go(Page::Ask, cx));
+        view.update(cx, |view, cx| view.go(Page::Calendar, cx));
         cx.simulate_keystrokes("shift-cmd-]");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Ask));
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Calendar));
         // Life opens on People, and stepping back from it wraps to its last tab.
-        cx.simulate_keystrokes("cmd-8");
+        cx.simulate_keystrokes("cmd-7");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::People));
         cx.simulate_keystrokes("cmd-alt-left");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Cv));
@@ -1958,7 +2404,7 @@ mod tests {
         let (view, cx) = open(cx);
         view.update(cx, |view, cx| view.go(Page::Home, cx));
         cx.simulate_keystrokes("cmd-alt-down");
-        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Ask));
+        view.read_with(cx, |view, _| assert_eq!(view.page, Page::Inbox));
         cx.simulate_keystrokes("cmd-alt-up");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
         // Up from the first area wraps to the last one.

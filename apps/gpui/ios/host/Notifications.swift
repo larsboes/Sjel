@@ -73,7 +73,9 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
     let center = UNUserNotificationCenter.current()
     let keep = Set(body.reminders.map(\.id))
     center.getPendingNotificationRequests { pending in
-      let stale = pending.map(\.identifier).filter { !keep.contains($0) }
+      let stale = pending.map(\.identifier).filter {
+        ($0.hasPrefix("cal:") || $0.hasPrefix("task:")) && !keep.contains($0)
+      }
       if !stale.isEmpty {
         center.removePendingNotificationRequests(withIdentifiers: stale)
       }
@@ -96,6 +98,27 @@ final class Reminders: NSObject, UNUserNotificationCenterDelegate {
         center.add(request) { _ in group.leave() }
       }
       group.notify(queue: .main) { self.report() }
+    }
+  }
+
+  /// Delivers low-fare notes found while the app is open or returns to the foreground.
+  func deliverFareAlerts(_ json: String) {
+    struct Body: Decodable { let alerts: [Alert] }
+    struct Alert: Decodable { let id: String; let title: String }
+    guard let data = json.data(using: .utf8),
+      let body = try? JSONDecoder().decode(Body.self, from: data)
+    else { return }
+    let center = UNUserNotificationCenter.current()
+    for alert in body.alerts {
+      let content = UNMutableNotificationContent()
+      content.title = "New low fare"
+      content.body = alert.title
+      content.sound = .default
+      content.userInfo = ["id": alert.id]
+      let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+      let request = UNNotificationRequest(
+        identifier: "fare-low:\(alert.id)", content: content, trigger: trigger)
+      center.add(request)
     }
   }
 
@@ -205,6 +228,13 @@ public func sjelIOSNotificationsAuthorize() {
 public func sjelIOSNotificationsSchedule(_ json: UnsafePointer<CChar>?) {
   guard let json else { return }
   Reminders.shared.schedule(String(cString: json))
+}
+
+/// `ios/src/notify.rs` delivers low-fare notes found on an upcoming trip.
+@_cdecl("sjel_ios_fare_alerts")
+public func sjelIOSFareAlerts(_ json: UnsafePointer<CChar>?) {
+  guard let json else { return }
+  Reminders.shared.deliverFareAlerts(String(cString: json))
 }
 
 /// `ios/src/notify.rs` takes every request away: reminders were turned off.

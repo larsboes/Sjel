@@ -1,5 +1,5 @@
-//! The areas the app is organised into: nine top-level places, each holding one or more pages
-//! as tabs. The sidebar lists areas (⌘1–⌘9), the header lists the open area's tabs.
+//! The areas the app is organised into: eight top-level places, each holding one or more pages
+//! as tabs. The sidebar lists areas (⌘1–⌘8), the header lists the open area's tabs.
 //!
 //! An area answers "where am I", a page answers "what am I looking at". Pages that answer the
 //! same question share an area instead of competing for a sidebar row: Home and Today are one
@@ -11,7 +11,6 @@ use crate::route::Page;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Area {
     Today,
-    Ask,
     Inbox,
     Calendar,
     Projects,
@@ -23,9 +22,8 @@ pub enum Area {
 
 impl Area {
     /// Sidebar order, which is also the ⌘ number order.
-    pub const ALL: [Area; 9] = [
+    pub const ALL: [Area; 8] = [
         Area::Today,
-        Area::Ask,
         Area::Inbox,
         Area::Calendar,
         Area::Projects,
@@ -38,12 +36,11 @@ impl Area {
     pub fn label(self) -> &'static str {
         match self {
             Self::Today => "Today",
-            Self::Ask => "Ask",
             Self::Inbox => "Inbox",
             Self::Calendar => "Calendar",
             Self::Projects => "Projects",
             Self::Documents => "Documents",
-            Self::Travel => "Travel",
+            Self::Travel => "Location",
             Self::Life => "Life",
             Self::Sjel => "Sjel",
         }
@@ -54,15 +51,15 @@ impl Area {
     pub fn pages(self) -> &'static [Page] {
         match self {
             Self::Today => &[Page::Home],
-            Self::Ask => &[Page::Ask],
             Self::Inbox => &[Page::Inbox, Page::Feed],
             Self::Calendar => &[Page::Calendar],
             Self::Projects => &[Page::Projects],
-            Self::Documents => &[Page::Documents, Page::Media, Page::Import],
+            Self::Documents => &[Page::Documents, Page::Media, Page::Import, Page::Docs],
             Self::Travel => &[Page::Travel],
             Self::Life => &[Page::People, Page::Finance, Page::Inventory, Page::Cv],
             Self::Sjel => &[
                 Page::Capabilities,
+                Page::Apps,
                 Page::Systems,
                 Page::Packs,
                 Page::SelfModel,
@@ -117,10 +114,10 @@ pub fn canonical(page: Page) -> Page {
     }
 }
 
-/// Which tab each area shows. An area remembers the tab last opened in it, so ⌘9 returns to
+/// Which tab each area shows. An area remembers the tab last opened in it, so ⌘8 returns to
 /// Packs if Packs was the last Sjel page, and the header never forgets where you were.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Tabs([Page; 9]);
+pub struct Tabs([Page; Area::ALL.len()]);
 
 impl Default for Tabs {
     fn default() -> Self {
@@ -162,8 +159,8 @@ mod tests {
     }
 
     #[test]
-    fn nine_areas_fit_the_number_keys() {
-        assert_eq!(Area::ALL.len(), 9);
+    fn the_areas_fit_the_number_keys() {
+        assert!(Area::ALL.len() <= 9);
     }
 
     #[test]
@@ -177,15 +174,15 @@ mod tests {
         assert_eq!(Area::Sjel.step_tab(Page::Capabilities, -1), Page::Software);
         assert_eq!(Area::Sjel.step_tab(Page::Software, 1), Page::Capabilities);
         assert_eq!(Area::Inbox.step_tab(Page::Inbox, 1), Page::Feed);
-        assert_eq!(Area::Ask.step_tab(Page::Ask, 1), Page::Ask);
-        assert_eq!(Area::Life.step_tab(Page::Ask, 1), Page::People);
+        assert_eq!(Area::Calendar.step_tab(Page::Calendar, 1), Page::Calendar);
+        assert_eq!(Area::Life.step_tab(Page::Inbox, 1), Page::People);
     }
 
     #[test]
     fn areas_wrap_in_sidebar_order() {
         assert_eq!(Area::Today.step(-1), Area::Sjel);
         assert_eq!(Area::Sjel.step(1), Area::Today);
-        assert_eq!(Area::Today.step(1), Area::Ask);
+        assert_eq!(Area::Today.step(1), Area::Inbox);
     }
 
     #[test]

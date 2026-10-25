@@ -9,6 +9,8 @@ use gpui_kit::WindowAppearance;
 pub struct Palette {
     pub window_tint: u32,
     pub surface: u32,
+    pub sidebar_surface: u32,
+    pub panel_surface: u32,
     pub raised: u32,
     pub border: u32,
     pub text: u32,
@@ -29,16 +31,9 @@ pub const fn tint(tone: u32, alpha: u8) -> u32 {
 }
 
 impl Palette {
-    /// The colour a surface that covers something is painted in: the window tint with its alpha
-    /// forced to opaque.
-    ///
-    /// The tint is translucent on purpose, so the desktop shows through the window. A panel that
-    /// slides *over* the page cannot be: its own labels would be read against whatever it hides,
-    /// which is how the soundscape drawer first shipped -- the page's header row came through the
-    /// drawn field and the preset name sat on top of it. Deriving it from `window_tint` keeps the
-    /// tone and the appearance settings in one place, and only the transparency goes.
+    /// The right-side panel's tinted surface and independent opacity.
     pub fn panel(&self) -> u32 {
-        (self.window_tint & 0xffff_ff00) | 0xff
+        self.panel_surface
     }
 
     pub fn for_appearance(appearance: WindowAppearance) -> Self {
@@ -46,6 +41,8 @@ impl Palette {
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self {
                 window_tint: 0xf3f5f9a8,
                 surface: 0xfffffff0,
+                sidebar_surface: 0xffffffff,
+                panel_surface: 0xf3f5f9ff,
                 raised: 0x1118270b,
                 border: 0x20273524,
                 text: 0x1c1c1e,
@@ -58,6 +55,8 @@ impl Palette {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self {
                 window_tint: 0x10131ae0,
                 surface: 0x252a3499,
+                sidebar_surface: 0x252a34ff,
+                panel_surface: 0x10131aff,
                 raised: 0xffffff18,
                 border: 0xffffff26,
                 text: 0xf5f6f8,
@@ -158,25 +157,31 @@ impl Density {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum WindowOpacity {
     Opaque,
+    MostlyOpaque,
     #[default]
     Balanced,
     Translucent,
+    SoftGlass,
     UltraGlass,
 }
 
 impl WindowOpacity {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 6] = [
         Self::Opaque,
+        Self::MostlyOpaque,
         Self::Balanced,
         Self::Translucent,
+        Self::SoftGlass,
         Self::UltraGlass,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Opaque => "Opaque (100%)",
-            Self::Balanced => "Balanced (75%)",
-            Self::Translucent => "Translucent (50%)",
+            Self::MostlyOpaque => "Mostly opaque (85%)",
+            Self::Balanced => "Balanced (70%)",
+            Self::Translucent => "Translucent (55%)",
+            Self::SoftGlass => "Soft glass (40%)",
             Self::UltraGlass => "Ultra Glass (25%)",
         }
     }
@@ -184,17 +189,21 @@ impl WindowOpacity {
     pub fn short_label(self) -> &'static str {
         match self {
             Self::Opaque => "100%",
-            Self::Balanced => "75%",
-            Self::Translucent => "50%",
+            Self::MostlyOpaque => "85%",
+            Self::Balanced => "70%",
+            Self::Translucent => "55%",
+            Self::SoftGlass => "40%",
             Self::UltraGlass => "25%",
         }
     }
 
-    pub fn alpha(self, default_alpha: u8) -> u8 {
+    pub fn alpha(self) -> u8 {
         match self {
             Self::Opaque => 0xff,
-            Self::Balanced => default_alpha,
-            Self::Translucent => 0x80,
+            Self::MostlyOpaque => 0xd9,
+            Self::Balanced => 0xb3,
+            Self::Translucent => 0x8c,
+            Self::SoftGlass => 0x66,
             Self::UltraGlass => 0x40,
         }
     }
@@ -382,9 +391,14 @@ impl ThemeMode {
 }
 
 /// User-controlled appearance preferences for background, transparency, glass, accent and density.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct AppearanceSettings {
     pub opacity: WindowOpacity,
+    #[serde(default = "default_sidebar_opacity")]
+    pub sidebar_opacity: WindowOpacity,
+    #[serde(default = "default_panel_opacity")]
+    pub panel_opacity: WindowOpacity,
     pub tone: BackgroundTone,
     pub glass: GlassStyle,
     pub accent: AccentColor,
@@ -392,11 +406,25 @@ pub struct AppearanceSettings {
     pub density: Density,
 }
 
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            opacity: WindowOpacity::default(),
+            sidebar_opacity: default_sidebar_opacity(),
+            panel_opacity: default_panel_opacity(),
+            tone: BackgroundTone::default(),
+            glass: GlassStyle::default(),
+            accent: AccentColor::default(),
+            theme_mode: ThemeMode::default(),
+            density: Density::default(),
+        }
+    }
+}
+
 impl AppearanceSettings {
     /// Applies user settings over a base appearance palette.
     pub fn apply_to_palette(&self, mut palette: Palette, dark: bool) -> Palette {
-        let base_alpha = (palette.window_tint & 0xff) as u8;
-        let final_alpha = self.opacity.alpha(base_alpha);
+        let final_alpha = self.opacity.alpha();
 
         let rgb = if let Some(tone_rgb) = self.tone.tint_rgb(dark) {
             tone_rgb
@@ -405,6 +433,8 @@ impl AppearanceSettings {
         };
 
         palette.window_tint = (rgb << 8) | (final_alpha as u32);
+        palette.sidebar_surface = with_alpha(palette.sidebar_surface, self.sidebar_opacity.alpha());
+        palette.panel_surface = with_alpha(palette.surface, self.panel_opacity.alpha());
         palette.accent = self.accent.color_rgb(dark);
         palette
     }
@@ -456,6 +486,18 @@ impl AppearanceSettings {
         std::fs::write(&path, json).map_err(|e| format!("Write error to {:?}: {}", path, e))?;
         Ok(())
     }
+}
+
+fn default_sidebar_opacity() -> WindowOpacity {
+    WindowOpacity::Balanced
+}
+
+fn default_panel_opacity() -> WindowOpacity {
+    WindowOpacity::Opaque
+}
+
+const fn with_alpha(color: u32, alpha: u8) -> u32 {
+    (color & 0xffff_ff00) | alpha as u32
 }
 
 /// What the soundscape drawer remembers between launches.
@@ -533,6 +575,10 @@ pub struct NotifyPrefs {
     pub enabled: bool,
     /// A [`sjel_gpui_core::notify::Lead`] key: `at_start`, `ten` or `hour`.
     pub lead: String,
+    #[serde(default)]
+    pub seen_fare_alert_ids: Vec<String>,
+    #[serde(default)]
+    pub fare_alerts_last_check_ms: i64,
 }
 
 impl Default for NotifyPrefs {
@@ -542,6 +588,8 @@ impl Default for NotifyPrefs {
             // has spent its only prompt before the person knew what it was for.
             enabled: false,
             lead: sjel_gpui_core::notify::Lead::default().key().to_owned(),
+            seen_fare_alert_ids: Vec::new(),
+            fare_alerts_last_check_ms: 0,
         }
     }
 }
@@ -569,6 +617,22 @@ impl NotifyPrefs {
 
     pub fn set_lead(&mut self, lead: sjel_gpui_core::notify::Lead) {
         self.lead = lead.key().to_owned();
+    }
+
+    pub fn mark_fare_alerts_seen(&mut self, ids: &[String]) {
+        for id in ids {
+            if !self.seen_fare_alert_ids.contains(id) {
+                self.seen_fare_alert_ids.push(id.clone());
+            }
+        }
+    }
+
+    pub fn begin_fare_alert_check(&mut self, now_ms: i64) -> bool {
+        if now_ms.saturating_sub(self.fare_alerts_last_check_ms) < 600_000 {
+            return false;
+        }
+        self.fare_alerts_last_check_ms = now_ms;
+        true
     }
 
     pub fn load() -> Self {
@@ -602,7 +666,7 @@ impl NotifyPrefs {
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SidebarPrefs {
     pub open: bool,
-    /// A [`crate::sidebar::Seat`] key: `soundscape` or `activity`.
+    /// A [`crate::sidebar::Seat`] key: `soundscape`, `activity` or `agent`.
     pub seat: String,
 }
 
@@ -705,6 +769,8 @@ mod tests {
         let prefs = NotifyPrefs {
             enabled: true,
             lead: "hour".to_owned(),
+            seen_fare_alert_ids: Vec::new(),
+            fare_alerts_last_check_ms: 0,
         };
         let json = serde_json::to_string(&prefs).expect("serialize");
         assert_eq!(
@@ -723,6 +789,8 @@ mod tests {
         let stale = NotifyPrefs {
             enabled: true,
             lead: "fifteen".to_owned(),
+            seen_fare_alert_ids: Vec::new(),
+            fare_alerts_last_check_ms: 0,
         };
         assert_eq!(
             stale.lead(),
@@ -812,6 +880,8 @@ mod tests {
     fn settings_serialization_roundtrip() {
         let original = AppearanceSettings {
             opacity: WindowOpacity::Translucent,
+            sidebar_opacity: WindowOpacity::Balanced,
+            panel_opacity: WindowOpacity::Balanced,
             tone: BackgroundTone::WarmAmber,
             glass: GlassStyle::Flat,
             accent: AccentColor::Emerald,

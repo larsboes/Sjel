@@ -17,6 +17,7 @@ targets:
       - path: Discovery.swift
       - path: Notifications.swift
       - path: PairScanner.swift
+      - path: RoomCapture.swift
       - path: Assets.xcassets
       - path: PrivacyInfo.xcprivacy
     info:
@@ -37,10 +38,8 @@ targets:
         # The service type the Mac advertises and Discovery.swift browses.
         NSBonjourServices:
           - _sjel._tcp
-        # PairScanner.swift reads the Mac's pairing code with the camera. The camera is the point:
-        # one scan carries the address, the certificate pin and a one-time code, so nothing about
-        # the pairing is compared by eye.
-        NSCameraUsageDescription: Sjel scans the pairing code on your Mac's Setup page.
+        # The camera scans a pairing code and captures room layouts with RoomPlan.
+        NSCameraUsageDescription: Sjel scans pairing codes and captures room layouts.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -72,6 +71,9 @@ targets:
           - "-framework AVFoundation"
           - "-framework CoreMedia"
           - "-framework WebKit"
+          - "-framework RoomPlan"
+          - "-framework QuickLook"
+          - "-framework RealityKit"
   # A touch check, not a feature test: GPUI paints every pixel, so only a real tap proves that
   # UIKit's touch reaches the view (`UITests/JoinTap.swift`). ios/run-sim --tap runs it.
   SjelIOSUITests:

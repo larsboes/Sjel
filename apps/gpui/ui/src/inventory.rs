@@ -1,22 +1,100 @@
 //! Household inventory, asset catalog, wishlist budget, and interior spatial layout.
 
 use std::collections::BTreeSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
     KeyBinding, Render, Subscription, Window, WindowAppearance,
 };
 
 use crate::data::{Remote, Repo};
-use sjel_gpui_core::shell::{self, ShellError};
+use crate::interior::RoomPlanHistory;
 use crate::theme::{tint, Palette};
+use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
     filter_inventory, format_cents, format_dimensions, group_of, InteriorLayoutSummary,
-    InventoryItem, InventoryRow, InventoryWishlist,
+    InventoryItem, InventoryRow, InventoryState, InventoryWishlist, NewInventoryItem,
 };
+use sjel_gpui_core::shell::{self, ShellError};
+
+#[cfg(target_os = "macos")]
+fn cache_preview_roomplan(revision_id: &str, draft_json: &str, asset_bytes: Vec<u8>) {
+    let revision_id = revision_id.to_owned();
+    let draft_json = draft_json.to_owned();
+    std::thread::spawn(move || {
+        if revision_id.is_empty()
+            || !revision_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return;
+        }
+        let Ok(home) = std::env::var("HOME") else {
+            return;
+        };
+        let root =
+            std::path::PathBuf::from(home).join("Library/Application Support/dev.sjel/roomplan");
+        let directory = root.join(&revision_id);
+        let asset = directory.join("parametric.usdz");
+        if directory.exists() {
+            let existing_draft = std::fs::read(directory.join("draft.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+            if existing_draft
+                .as_ref()
+                .and_then(|draft| draft.get("draft_id"))
+                .and_then(serde_json::Value::as_str)
+                != Some(revision_id.as_str())
+                || std::fs::read(&asset).ok().as_deref() != Some(asset_bytes.as_slice())
+            {
+                return;
+            }
+            let draft_path = directory.join("draft.json");
+            let draft_temp = directory.join(".draft.json.tmp");
+            if std::fs::write(&draft_temp, draft_json).is_err()
+                || std::fs::rename(&draft_temp, &draft_path).is_err()
+            {
+                let _ = std::fs::remove_file(draft_temp);
+                return;
+            }
+        } else {
+            if serde_json::from_str::<serde_json::Value>(&draft_json)
+                .ok()
+                .and_then(|draft| {
+                    draft
+                        .get("draft_id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .as_deref()
+                != Some(revision_id.as_str())
+            {
+                return;
+            }
+            let staging = root.join(format!(".{}.{}.tmp", revision_id, std::process::id()));
+            if std::fs::create_dir_all(&root).is_err()
+                || std::fs::create_dir(&staging).is_err()
+                || std::fs::write(staging.join("draft.json"), draft_json).is_err()
+                || std::fs::write(staging.join("parametric.usdz"), asset_bytes).is_err()
+            {
+                let _ = std::fs::remove_dir_all(&staging);
+                return;
+            }
+            if std::fs::rename(&staging, &directory).is_err() {
+                let _ = std::fs::remove_dir_all(&staging);
+                return;
+            }
+        }
+        let _ = std::process::Command::new("/usr/bin/qlmanage")
+            .args(["-p"])
+            .arg(asset)
+            .spawn();
+    });
+}
 
 actions!(
     inventory,
@@ -51,6 +129,42 @@ pub enum InventoryTab {
     Interior,
 }
 
+struct WishForm {
+    fields: Vec<(String, Entity<InputState>)>,
+    kind: String,
+    state: InventoryState,
+    error: Option<String>,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl WishForm {
+    fn value(&self, key: &str, cx: &App) -> String {
+        self.fields
+            .iter()
+            .find(|(field, _)| field == key)
+            .map(|(_, input)| input.read(cx).value().to_string())
+            .unwrap_or_default()
+    }
+}
+
+struct InventoryEditForm {
+    item: InventoryItem,
+    fields: Vec<(String, String, Entity<InputState>)>,
+    error: Option<String>,
+    saving: bool,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl InventoryEditForm {
+    fn value(&self, key: &str, cx: &App) -> String {
+        self.fields
+            .iter()
+            .find(|(field, _, _)| field == key)
+            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .unwrap_or_default()
+    }
+}
+
 pub struct InventoryPage {
     repo: Repo,
     palette: Option<Palette>,
@@ -58,14 +172,28 @@ pub struct InventoryPage {
     pub rows: Remote<Vec<InventoryRow>>,
     pub wishlist: Remote<InventoryWishlist>,
     pub layouts: Remote<Vec<InteriorLayoutSummary>>,
+    roomplan_history: Entity<RoomPlanHistory>,
     pub search_query: String,
     pub selected_category: Option<String>,
     search_input: Option<(Entity<InputState>, Subscription)>,
+    wish_form: Option<WishForm>,
+    edit_form: Option<InventoryEditForm>,
+    wish_busy: Option<String>,
+    wish_notice: Option<String>,
+    wish_error: Option<String>,
+    confirm_remove_wish: Option<String>,
     focus: FocusHandle,
 }
 
 impl InventoryPage {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
+        let source = repo.shell().ok().map(RoomPlanSource::Shell);
+        let roomplan_history = cx.new(|cx| {
+            let mut history = RoomPlanHistory::new(source, cx);
+            #[cfg(target_os = "macos")]
+            history.set_cache_preview_handler(Some(cache_preview_roomplan));
+            history
+        });
         Self {
             repo,
             palette: None,
@@ -73,9 +201,16 @@ impl InventoryPage {
             rows: Remote::default(),
             wishlist: Remote::default(),
             layouts: Remote::default(),
+            roomplan_history,
             search_query: String::new(),
             selected_category: None,
             search_input: None,
+            wish_form: None,
+            edit_form: None,
+            wish_busy: None,
+            wish_notice: None,
+            wish_error: None,
+            confirm_remove_wish: None,
             focus: cx.focus_handle(),
         }
     }
@@ -85,6 +220,8 @@ impl InventoryPage {
             self.palette = Some(palette);
             cx.notify();
         }
+        self.roomplan_history
+            .update(cx, |history, cx| history.set_palette(palette, cx));
     }
 
     pub fn activate(&mut self, cx: &mut Context<Self>) {
@@ -98,6 +235,10 @@ impl InventoryPage {
     pub fn set_tab(&mut self, tab: InventoryTab, cx: &mut Context<Self>) {
         if self.tab != tab {
             self.tab = tab;
+            if tab == InventoryTab::Interior {
+                self.roomplan_history
+                    .update(cx, |history, cx| history.refresh(cx));
+            }
             cx.notify();
         }
     }
@@ -147,6 +288,9 @@ impl InventoryPage {
             });
         })
         .detach();
+
+        self.roomplan_history
+            .update(cx, |history, cx| history.refresh(cx));
     }
 
     fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
@@ -170,6 +314,399 @@ impl InventoryPage {
         }
         let field = self.search_field(window, cx);
         field.update(cx, |input, cx| input.focus(window, cx));
+    }
+
+    fn open_wish_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.wish_form.is_some() {
+            self.wish_form = None;
+            cx.notify();
+            return;
+        }
+        self.edit_form = None;
+        let definitions = [
+            ("label", "What do you want?", "Item or need"),
+            ("price", "Estimated price", "39,90"),
+            ("category", "Category", "Furniture, clothes…"),
+            ("link", "Product link", "https://…"),
+        ];
+        let mut fields = Vec::new();
+        let mut subscriptions = Vec::new();
+        for (key, label, placeholder) in definitions {
+            let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+            subscriptions.push(cx.subscribe_in(&input, window, |page, _, event, _, cx| {
+                if matches!(event, InputEvent::PressEnter { .. }) {
+                    page.create_wish(cx);
+                }
+            }));
+            fields.push((format!("{key} · {label}"), input));
+        }
+        if let Some((_, input)) = fields.first() {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
+        self.wish_form = Some(WishForm {
+            fields,
+            kind: "piece".to_owned(),
+            state: if self.tab == InventoryTab::Wishlist {
+                InventoryState::Wanted
+            } else {
+                InventoryState::Owned
+            },
+            error: None,
+            _subscriptions: subscriptions,
+        });
+        self.wish_notice = None;
+        self.wish_error = None;
+        cx.notify();
+    }
+
+    fn create_wish(&mut self, cx: &mut Context<Self>) {
+        let (Some(shell), Some(form)) = (self.repo.shell().ok(), self.wish_form.as_ref()) else {
+            return;
+        };
+        if self.wish_busy.is_some() {
+            return;
+        }
+        let label = form
+            .value("label · What do you want?", cx)
+            .trim()
+            .to_owned();
+        if label.is_empty() {
+            if let Some(form) = self.wish_form.as_mut() {
+                form.error = Some("Give the wish a name.".to_owned());
+            }
+            cx.notify();
+            return;
+        }
+        let price_text = form.value("price · Estimated price", cx);
+        let price_cents = if price_text.trim().is_empty() {
+            None
+        } else {
+            match sjel_gpui_core::capture::cents_from(&price_text) {
+                Some(cents) if cents >= 0 => Some(cents),
+                _ => {
+                    if let Some(form) = self.wish_form.as_mut() {
+                        form.error = Some("Enter a price like 39,90.".to_owned());
+                    }
+                    cx.notify();
+                    return;
+                }
+            }
+        };
+        let category = nonempty(form.value("category · Category", cx));
+        let link = nonempty(form.value("link · Product link", cx));
+        let slug = sjel_gpui_core::capture::slug(&label);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let wish = NewInventoryItem {
+            id: format!("{slug}-{timestamp}"),
+            kind: form.kind.clone(),
+            label,
+            state: form.state,
+            note: "Created in GPUI Inventory".to_owned(),
+            price_cents,
+            category,
+            link,
+        };
+        self.wish_busy = Some("new".to_owned());
+        self.wish_notice = None;
+        self.wish_error = None;
+        if let Some(form) = self.wish_form.as_mut() {
+            form.error = None;
+        }
+        let created_state = wish.state;
+        let work = shell::run(async move { shell.inventory_create_item(&wish).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.wish_busy = None;
+                match result {
+                    Ok(()) => {
+                        page.wish_form = None;
+                        page.wish_notice = Some(match created_state {
+                            InventoryState::Owned => "Added to inventory.".to_owned(),
+                            InventoryState::Wanted => "Added to the wishlist.".to_owned(),
+                            InventoryState::Gone => "Added as a gone item.".to_owned(),
+                        });
+                        page.load(cx);
+                    }
+                    Err(error) => {
+                        if let Some(form) = page.wish_form.as_mut() {
+                            form.error = Some(error.to_string());
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn set_wish_state(&mut self, id: String, state: InventoryState, cx: &mut Context<Self>) {
+        if self.wish_busy.is_some() {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else {
+            return;
+        };
+        self.wish_busy = Some(id.clone());
+        self.wish_notice = None;
+        self.wish_error = None;
+        self.confirm_remove_wish = None;
+        let write_id = id.clone();
+        let note = match state {
+            InventoryState::Owned => "Marked bought in GPUI Wishlist",
+            InventoryState::Gone => "Removed from GPUI Wishlist",
+            InventoryState::Wanted => "Restored from GPUI Wishlist",
+        };
+        let work = shell::run(async move {
+            shell
+                .inventory_set_state(&write_id, state, Some(note))
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.wish_busy = None;
+                match result {
+                    Ok(_) => {
+                        page.wish_notice = Some(match state {
+                            InventoryState::Owned => "Marked as bought.".to_owned(),
+                            InventoryState::Gone => "Removed from the open wishlist.".to_owned(),
+                            InventoryState::Wanted => "Restored to the wishlist.".to_owned(),
+                        });
+                        page.load(cx);
+                    }
+                    Err(error) => page.wish_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn open_item_edit(&mut self, item: InventoryItem, window: &mut Window, cx: &mut Context<Self>) {
+        self.wish_form = None;
+        let definitions = [
+            ("label", "Name", item.label.clone(), "Item name".to_owned()),
+            (
+                "price_cents",
+                "Price",
+                item.price_cents
+                    .map(|cents| format!("{:.2}", cents as f64 / 100.))
+                    .unwrap_or_default(),
+                "39,90".to_owned(),
+            ),
+            (
+                "category",
+                "Category",
+                item.category.clone().unwrap_or_default(),
+                "Category".to_owned(),
+            ),
+            (
+                "priority",
+                "Priority",
+                item.priority.clone().unwrap_or_default(),
+                "required, recommended…".to_owned(),
+            ),
+            (
+                "width",
+                "Width cm",
+                item.width
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+                "cm".to_owned(),
+            ),
+            (
+                "depth",
+                "Depth cm",
+                item.depth
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+                "cm".to_owned(),
+            ),
+            (
+                "height",
+                "Height cm",
+                item.height
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+                "cm".to_owned(),
+            ),
+            (
+                "size",
+                "Size",
+                item.size.clone().unwrap_or_default(),
+                "M".to_owned(),
+            ),
+            (
+                "color",
+                "Colour",
+                item.color.clone().unwrap_or_default(),
+                "Colour".to_owned(),
+            ),
+            (
+                "link",
+                "Product link",
+                item.link.clone().unwrap_or_default(),
+                "https://…".to_owned(),
+            ),
+            (
+                "notes",
+                "Note",
+                item.notes.clone().unwrap_or_default(),
+                "Optional note".to_owned(),
+            ),
+        ];
+        let mut fields = Vec::new();
+        let mut subscriptions = Vec::new();
+        for (key, label, value, placeholder) in definitions {
+            let input = cx.new(|cx| {
+                let mut input = InputState::new(window, cx).placeholder(placeholder);
+                input.set_value(value, window, cx);
+                input
+            });
+            subscriptions.push(
+                cx.subscribe_in(&input, window, |page, _, event, window, cx| {
+                    if matches!(event, InputEvent::PressEnter { .. }) {
+                        page.save_item_edit(window, cx);
+                    }
+                }),
+            );
+            fields.push((key.to_owned(), label.to_owned(), input));
+        }
+        if let Some((_, _, input)) = fields.first() {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
+        self.edit_form = Some(InventoryEditForm {
+            item,
+            fields,
+            error: None,
+            saving: false,
+            _subscriptions: subscriptions,
+        });
+        self.wish_notice = None;
+        self.wish_error = None;
+        cx.notify();
+    }
+
+    fn save_item_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Ok(shell), Some(form)) = (self.repo.shell(), self.edit_form.as_ref()) else {
+            return;
+        };
+        if form.saving {
+            return;
+        }
+        let id = form.item.id.clone();
+        let revision = form.item.revision;
+        let label = form.value("label", cx).trim().to_owned();
+        if label.is_empty() {
+            if let Some(form) = self.edit_form.as_mut() {
+                form.error = Some("Give the entry a name.".to_owned());
+            }
+            cx.notify();
+            return;
+        }
+        let price_text = form.value("price_cents", cx);
+        let price = if price_text.trim().is_empty() {
+            serde_json::Value::Null
+        } else {
+            match sjel_gpui_core::capture::cents_from(&price_text) {
+                Some(cents) if cents >= 0 => serde_json::json!(cents),
+                _ => {
+                    if let Some(form) = self.edit_form.as_mut() {
+                        form.error = Some("Enter a price like 39,90 or leave it blank.".to_owned());
+                    }
+                    cx.notify();
+                    return;
+                }
+            }
+        };
+        let dimension = |key: &str| -> Result<serde_json::Value, String> {
+            let text = form.value(key, cx);
+            if text.trim().is_empty() {
+                Ok(serde_json::Value::Null)
+            } else {
+                text.trim()
+                    .parse::<i32>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .map_or_else(
+                        || {
+                            Err("Dimensions must be positive whole centimeters, or blank."
+                                .to_owned())
+                        },
+                        |value| Ok(serde_json::json!(value)),
+                    )
+            }
+        };
+        let (width, depth, height) =
+            match (dimension("width"), dimension("depth"), dimension("height")) {
+                (Ok(width), Ok(depth), Ok(height)) => (width, depth, height),
+                (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
+                    if let Some(form) = self.edit_form.as_mut() {
+                        form.error = Some(error);
+                    }
+                    cx.notify();
+                    return;
+                }
+            };
+        let optional = |key: &str| {
+            nonempty(form.value(key, cx))
+                .map_or(serde_json::Value::Null, |value| serde_json::json!(value))
+        };
+        let patch = serde_json::json!({
+            "label": label,
+            "price_cents": price,
+            "category": optional("category"),
+            "priority": optional("priority"),
+            "width": width,
+            "depth": depth,
+            "height": height,
+            "size": optional("size"),
+            "color": optional("color"),
+            "link": optional("link"),
+            "notes": optional("notes"),
+        });
+        if let Some(form) = self.edit_form.as_mut() {
+            form.saving = true;
+            form.error = None;
+        }
+        self.wish_error = None;
+        let work =
+            shell::run(async move { shell.inventory_patch_item(&id, revision, patch).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                match result {
+                    Ok(_) => {
+                        page.edit_form = None;
+                        page.wish_notice = Some("Saved inventory changes.".to_owned());
+                        page.load(cx);
+                    }
+                    Err(error @ ShellError::Refused(409, _)) => {
+                        page.edit_form = None;
+                        page.wish_error = Some(format!(
+                            "This entry changed elsewhere. Fresh values were loaded; reopen it before saving again. {error}"
+                        ));
+                        page.load(cx);
+                    }
+                    Err(error) => {
+                        if let Some(form) = page.edit_form.as_mut() {
+                            form.saving = false;
+                            form.error = Some(error.to_string());
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        let _ = window;
+        cx.notify();
     }
 
     fn render_header_bar(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -282,7 +819,7 @@ impl InventoryPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(all_rows) = &self.rows.value else {
+        let Some(all_rows) = self.rows.value.clone() else {
             return div()
                 .p_6()
                 .text_sm()
@@ -316,10 +853,36 @@ impl InventoryPage {
 
         let search_field = self.search_field(window, cx);
 
-        div()
+        let mut content = div()
             .flex()
             .flex_col()
             .gap_4()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("Inventory"),
+                    )
+                    .child(
+                        Button::new("inventory-new-entry")
+                            .small()
+                            .primary()
+                            .label(if self.wish_form.is_some() {
+                                "Cancel"
+                            } else {
+                                "+ New entry"
+                            })
+                            .disabled(self.wish_busy.as_deref() == Some("new"))
+                            .on_click(
+                                cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
+                            ),
+                    ),
+            )
             .child(
                 // Stat Cards
                 div()
@@ -381,7 +944,22 @@ impl InventoryPage {
                                     }))
                             })),
                     ),
-            )
+            );
+        if let Some(form) = self.render_wish_form(palette, cx) {
+            content = content.child(form);
+        }
+        if let Some(form) = self.render_inventory_edit_form(palette, cx) {
+            content = content.child(form);
+        }
+        if let Some(error) = &self.wish_error {
+            content = content.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(error.clone()),
+            );
+        }
+        content
             .child(if filtered.is_empty() {
                 div()
                     .p_8()
@@ -393,7 +971,7 @@ impl InventoryPage {
             } else {
                 let mut cards = Vec::new();
                 for r in &filtered {
-                    cards.push(self.render_item_card(&r.item, palette));
+                    cards.push(self.render_item_card(&r.item, palette, cx));
                 }
                 div()
                     .flex()
@@ -429,9 +1007,15 @@ impl InventoryPage {
             .into_any_element()
     }
 
-    fn render_item_card(&self, item: &InventoryItem, palette: Palette) -> AnyElement {
+    fn render_item_card(
+        &self,
+        item: &InventoryItem,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let dim = format_dimensions(item.width, item.depth, item.height);
         let price = format_cents(item.price_cents);
+        let item = item.clone();
 
         div()
             .p_3p5()
@@ -466,7 +1050,7 @@ impl InventoryPage {
                                     .text_xs()
                                     .bg(rgba(tint(palette.accent, 0x20)))
                                     .text_color(rgb(palette.accent))
-                                    .child(group_of(item)),
+                                    .child(group_of(&item)),
                             )
                             .children(if !item.kind.is_empty() && item.kind != "piece" {
                                 Some(
@@ -521,13 +1105,166 @@ impl InventoryPage {
                         }
                     } else {
                         None
-                    }),
+                    })
+                    .child(
+                        Button::new(format!("inventory-edit-{}", item.id))
+                            .small()
+                            .ghost()
+                            .label("Edit")
+                            .on_click(cx.listener(move |page, _, window, cx| {
+                                page.open_item_edit(item.clone(), window, cx)
+                            })),
+                    ),
             )
             .into_any_element()
     }
 
-    fn render_wishlist_view(&self, palette: Palette, _cx: &mut Context<Self>) -> AnyElement {
-        let Some(wishlist) = &self.wishlist.value else {
+    fn render_wish_form(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let form = self.wish_form.as_ref()?;
+        let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
+        for (key, input) in &form.fields {
+            let (field, label) = key.split_once(" · ").unwrap_or((key, key));
+            fields = fields.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(label.to_owned()),
+                    )
+                    .child(Input::new(input).small())
+                    .id(format!("wishlist-new-{field}")),
+            );
+        }
+        let kind = form.kind.clone();
+        let state = form.state;
+        let saving = self.wish_busy.as_deref() == Some("new");
+        let mut card = div()
+            .p_4()
+            .rounded_lg()
+            .bg(rgba(tint(palette.raised, 0x30)))
+            .border_1()
+            .border_color(rgba(tint(palette.border, 0x25)))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(if self.tab == InventoryTab::Wishlist {
+                        "New wishlist entry"
+                    } else {
+                        "New inventory entry"
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        Button::new("wishlist-kind-piece")
+                            .small()
+                            .label("Product")
+                            .when(kind == "piece", |button| button.primary())
+                            .when(kind != "piece", |button| button.ghost())
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                if let Some(form) = page.wish_form.as_mut() {
+                                    form.kind = "piece".to_owned();
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("wishlist-kind-slot")
+                            .small()
+                            .label("Flat need")
+                            .when(kind == "slot", |button| button.primary())
+                            .when(kind != "slot", |button| button.ghost())
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                if let Some(form) = page.wish_form.as_mut() {
+                                    form.kind = "slot".to_owned();
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .when(self.tab == InventoryTab::Owned, |row| {
+                        row.child(
+                            Button::new("inventory-new-owned")
+                                .small()
+                                .label("Owned")
+                                .when(state == InventoryState::Owned, |button| button.primary())
+                                .when(state != InventoryState::Owned, |button| button.ghost())
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    if let Some(form) = page.wish_form.as_mut() {
+                                        form.state = InventoryState::Owned;
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("inventory-new-wanted")
+                                .small()
+                                .label("Wanted")
+                                .when(state == InventoryState::Wanted, |button| button.primary())
+                                .when(state != InventoryState::Wanted, |button| button.ghost())
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    if let Some(form) = page.wish_form.as_mut() {
+                                        form.state = InventoryState::Wanted;
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                    }),
+            )
+            .child(fields);
+        if let Some(error) = &form.error {
+            card = card.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(error.clone()),
+            );
+        }
+        Some(
+            card.child(
+                div()
+                    .flex()
+                    .justify_end()
+                    .gap_2()
+                    .child(
+                        Button::new("wishlist-create-cancel")
+                            .small()
+                            .ghost()
+                            .label("Cancel")
+                            .disabled(saving)
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.wish_form = None;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("wishlist-create-save")
+                            .small()
+                            .primary()
+                            .label(if saving {
+                                "Adding…"
+                            } else {
+                                "Add to wishlist"
+                            })
+                            .disabled(saving)
+                            .on_click(cx.listener(|page, _, _, cx| page.create_wish(cx))),
+                    ),
+            )
+            .into_any_element(),
+        )
+    }
+
+    fn render_wishlist_view(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let Some(wishlist) = self.wishlist.value.clone() else {
             return div()
                 .p_6()
                 .text_sm()
@@ -539,10 +1276,56 @@ impl InventoryPage {
         let low = format_cents(Some(wishlist.total_low_cents));
         let high = format_cents(Some(wishlist.total_high_cents));
 
-        div()
-            .flex()
-            .flex_col()
-            .gap_4()
+        let mut content = div().flex().flex_col().gap_4().child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_lg()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("Wishlist"),
+                )
+                .child(
+                    Button::new("wishlist-new")
+                        .small()
+                        .primary()
+                        .label(if self.wish_form.is_some() {
+                            "Cancel"
+                        } else {
+                            "+ Add wish"
+                        })
+                        .disabled(self.wish_busy.as_deref() == Some("new"))
+                        .on_click(
+                            cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
+                        ),
+                ),
+        );
+        if let Some(form) = self.render_wish_form(palette, cx) {
+            content = content.child(form);
+        }
+        if let Some(notice) = &self.wish_notice {
+            content = content.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(notice.clone()),
+            );
+        }
+        if let Some(error) = &self.wish_error {
+            content = content.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(error.clone()),
+            );
+        }
+        content
+            .when_some(
+                self.render_inventory_edit_form(palette, cx),
+                |content, form| content.child(form),
+            )
             .child(
                 // Budget banner
                 div()
@@ -621,7 +1404,7 @@ impl InventoryPage {
             } else {
                 let mut cards = Vec::new();
                 for item in &wishlist.items {
-                    cards.push(self.render_wish_item(item, palette));
+                    cards.push(self.render_wish_item(item, palette, cx));
                 }
                 div()
                     .flex()
@@ -633,7 +1416,94 @@ impl InventoryPage {
             .into_any_element()
     }
 
-    fn render_wish_item(&self, item: &InventoryItem, palette: Palette) -> AnyElement {
+    fn render_inventory_edit_form(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let form = self.edit_form.as_ref()?;
+        let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
+        for (key, label, input) in &form.fields {
+            fields = fields.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(label.clone()),
+                    )
+                    .child(Input::new(input).small())
+                    .id(format!("inventory-edit-{key}")),
+            );
+        }
+        if let Some(error) = &form.error {
+            fields = fields.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(error.clone()),
+            );
+        }
+        let saving = form.saving;
+        Some(
+            div()
+                .p_4()
+                .rounded_lg()
+                .bg(rgba(tint(palette.raised, 0x30)))
+                .border_1()
+                .border_color(rgba(tint(palette.border, 0x25)))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child(format!("Edit {}", form.item.label)),
+                        )
+                        .child(
+                            Button::new("inventory-edit-cancel")
+                                .small()
+                                .ghost()
+                                .label("Cancel")
+                                .disabled(saving)
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.edit_form = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(fields)
+                .child(
+                    div().flex().justify_end().child(
+                        Button::new("inventory-edit-save")
+                            .small()
+                            .primary()
+                            .label(if saving { "Saving…" } else { "Save changes" })
+                            .disabled(saving)
+                            .on_click(
+                                cx.listener(|page, _, window, cx| page.save_item_edit(window, cx)),
+                            ),
+                    ),
+                )
+                .into_any_element(),
+        )
+    }
+
+    fn render_wish_item(
+        &self,
+        item: &InventoryItem,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let cost_range = if let Some(price) = item.price_cents {
             format_cents(Some(price))
         } else if item.cost_min_cents.is_some() || item.cost_max_cents.is_some() {
@@ -648,6 +1518,12 @@ impl InventoryPage {
 
         let dim = format_dimensions(item.width, item.depth, item.height);
 
+        let id = item.id.clone();
+        let bought_id = id.clone();
+        let edit_item = item.clone();
+        let remove_id = id.clone();
+        let busy = self.wish_busy.as_deref() == Some(id.as_str());
+        let confirming_remove = self.confirm_remove_wish.as_deref() == Some(id.as_str());
         div()
             .p_3p5()
             .rounded_lg()
@@ -707,43 +1583,132 @@ impl InventoryPage {
             )
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.text))
-                    .child(cost_range),
+                    .flex()
+                    .flex_col()
+                    .items_end()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.text))
+                            .child(cost_range),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new(format!("wishlist-edit-{id}"))
+                                    .small()
+                                    .ghost()
+                                    .label("Edit")
+                                    .on_click(cx.listener(move |page, _, window, cx| {
+                                        page.open_item_edit(edit_item.clone(), window, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new(format!("wishlist-bought-{id}"))
+                                    .small()
+                                    .primary()
+                                    .label(if busy { "Saving…" } else { "Mark bought" })
+                                    .disabled(self.wish_busy.is_some())
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        page.set_wish_state(
+                                            bought_id.clone(),
+                                            InventoryState::Owned,
+                                            cx,
+                                        )
+                                    })),
+                            )
+                            .child(
+                                Button::new(format!("wishlist-remove-{id}"))
+                                    .small()
+                                    .ghost()
+                                    .label(if confirming_remove {
+                                        "Confirm removal"
+                                    } else {
+                                        "No longer wanted"
+                                    })
+                                    .disabled(self.wish_busy.is_some())
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        if page.confirm_remove_wish.as_deref()
+                                            == Some(remove_id.as_str())
+                                        {
+                                            page.set_wish_state(
+                                                remove_id.clone(),
+                                                InventoryState::Gone,
+                                                cx,
+                                            );
+                                        } else {
+                                            page.confirm_remove_wish = Some(remove_id.clone());
+                                            cx.notify();
+                                        }
+                                    })),
+                            )
+                            .when(confirming_remove, |row| {
+                                row.child(
+                                    Button::new(format!("wishlist-remove-cancel-{id}"))
+                                        .small()
+                                        .ghost()
+                                        .label("Cancel")
+                                        .on_click(cx.listener(move |page, _, _, cx| {
+                                            page.confirm_remove_wish = None;
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    ),
             )
             .into_any_element()
     }
 
-    fn render_interior_view(&self, palette: Palette, _cx: &mut Context<Self>) -> AnyElement {
-        let Some(layouts) = &self.layouts.value else {
-            return div()
-                .p_6()
+    fn render_interior_view(&self, palette: Palette) -> AnyElement {
+        let layouts = match self.layouts.value.as_ref() {
+            None if self.layouts.loading => div()
+                .p_4()
                 .text_sm()
                 .text_color(rgb(palette.muted))
                 .child("Loading interior layouts…")
-                .into_any_element();
-        };
-
-        if layouts.is_empty() {
-            return div()
-                .p_6()
+                .into_any_element(),
+            None => div()
+                .p_4()
                 .text_sm()
                 .text_color(rgb(palette.muted))
-                .child("No interior layouts found.")
-                .into_any_element();
-        }
-
-        let mut cards = Vec::new();
-        for l in layouts {
-            cards.push(self.render_layout_card(l, palette));
-        }
+                .child("Interior layouts are unavailable.")
+                .into_any_element(),
+            Some(layouts) if layouts.is_empty() => div()
+                .p_4()
+                .text_sm()
+                .text_color(rgb(palette.muted))
+                .child("No interior layouts found yet.")
+                .into_any_element(),
+            Some(layouts) => {
+                let cards = layouts
+                    .iter()
+                    .map(|layout| self.render_layout_card(layout, palette))
+                    .collect::<Vec<_>>();
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .children(cards)
+                    .into_any_element()
+            }
+        };
 
         div()
             .flex()
             .flex_col()
-            .gap_3()
-            .children(cards)
+            .gap_4()
+            .child(self.roomplan_history.clone())
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child("Layouts"),
+            )
+            .child(layouts)
             .into_any_element()
     }
 
@@ -822,6 +1787,8 @@ impl Render for InventoryPage {
         let palette = self
             .palette
             .unwrap_or_else(|| Palette::for_appearance(WindowAppearance::Dark));
+        self.roomplan_history
+            .update(cx, |history, cx| history.set_palette(palette, cx));
 
         div()
             .id("inventory-page")
@@ -858,10 +1825,15 @@ impl Render for InventoryPage {
                     .child(match self.tab {
                         InventoryTab::Owned => self.render_owned_view(palette, window, cx),
                         InventoryTab::Wishlist => self.render_wishlist_view(palette, cx),
-                        InventoryTab::Interior => self.render_interior_view(palette, cx),
+                        InventoryTab::Interior => self.render_interior_view(palette),
                     }),
             )
     }
+}
+
+fn nonempty(value: String) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 #[cfg(test)]

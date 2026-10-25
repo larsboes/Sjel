@@ -310,6 +310,8 @@ impl Mirror {
                         note_ref: row.get(3).ok(),
                         revision: row.get::<i64>(4).unwrap_or(0).clamp(0, u32::MAX as i64) as u32,
                         values: Default::default(),
+                        // The copy holds no facts table; the Mac serves them live.
+                        facts: Vec::new(),
                     });
                 }
                 if let (Some(key), Some(value)) = (key, value) {

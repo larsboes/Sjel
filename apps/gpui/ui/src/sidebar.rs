@@ -11,9 +11,7 @@
 //! a phone has no width to dock beside a page; the same frame docks on a Mac, which is why the
 //! decision belongs here rather than in either host.
 //!
-//! The seats are the ones that exist today: the soundscape (`crate::soundscape`) and the phone's own
-//! activity. The agent's step stream is not a third seat yet — it lands in the activity seat when a
-//! client has an Ask turn to stream, and this frame is what it will be drawn in.
+//! The shared seats are soundscape and activity; the desktop adds the agent run as a third seat.
 
 use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, MouseButton, SharedString, Window,
@@ -33,15 +31,18 @@ pub enum Seat {
     Soundscape,
     /// What this phone is doing: the Mac's answer, the queue, the reminders it holds.
     Activity,
+    /// A run the owner can watch while moving between pages.
+    Agent,
 }
 
 impl Seat {
-    pub const ALL: [Seat; 2] = [Seat::Soundscape, Seat::Activity];
+    pub const ALL: [Seat; 3] = [Seat::Soundscape, Seat::Activity, Seat::Agent];
 
     pub fn key(self) -> &'static str {
         match self {
             Self::Soundscape => "soundscape",
             Self::Activity => "activity",
+            Self::Agent => "agent",
         }
     }
 
@@ -54,6 +55,7 @@ impl Seat {
         match self {
             Self::Soundscape => "Sound",
             Self::Activity => "Activity",
+            Self::Agent => "Agent",
         }
     }
 
@@ -62,6 +64,7 @@ impl Seat {
         match self {
             Self::Soundscape => "SOUNDSCAPE",
             Self::Activity => "ACTIVITY",
+            Self::Agent => "AGENT",
         }
     }
 }
@@ -173,7 +176,7 @@ pub fn sidebar_frame(
         .size_full()
         .flex()
         .flex_col()
-        .bg(rgb(palette.panel()))
+        .bg(rgba(palette.panel()))
         .text_color(rgb(palette.text))
         .child(
             div()

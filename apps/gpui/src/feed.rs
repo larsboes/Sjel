@@ -5,19 +5,24 @@
 //! that records the ledger row with them. The keys are the dashboard's
 //! (`dashboard/src/routes/feed/+page.svelte`, "Keyboard triage"), so the two surfaces agree.
 
+use chrono::{Duration, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    FontWeight, KeyBinding, SharedString, Subscription, Window,
+    FontWeight, KeyBinding, ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
-    self, FeedDetail, FeedEntry, FeedQualityFlag, FeedQualityRefresh, FeedSurface, ShellError,
+    self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
+    FeedContentDetail, FeedDetail, FeedEntry, FeedQualityFlag, FeedQualityRefresh, FeedSurface,
+    ShellError,
 };
 
 use crate::data::{Remote, Repo};
 use crate::mail::Mail;
+use crate::scout::ScoutingPage;
 use crate::theme::Palette;
 use sjel_gpui_ui::filter_pill;
 
@@ -79,6 +84,22 @@ pub enum Filter {
     Dismissed,
 }
 
+struct CalendarEditForm {
+    id: String,
+    title: Entity<InputState>,
+    start_date: Entity<InputState>,
+    end_date: Entity<InputState>,
+    start_time: Entity<InputState>,
+    end_time: Entity<InputState>,
+    location: Entity<InputState>,
+    notes: Entity<InputState>,
+    all_day: bool,
+    kind: String,
+    commitment: String,
+    saving: bool,
+    error: Option<String>,
+}
+
 impl Filter {
     fn status(self) -> &'static str {
         match self {
@@ -93,6 +114,7 @@ pub struct Feed {
     repo: Repo,
     pub tab: Tab,
     pub mail: Entity<Mail>,
+    pub discover: Entity<ScoutingPage>,
     palette: Option<Palette>,
     pub rows: Remote<Vec<FeedEntry>>,
     pub filter: Filter,
@@ -101,7 +123,21 @@ pub struct Feed {
     pub cursor: Option<String>,
     /// The entry the reader shows; `None` shows the list.
     pub reading: Option<String>,
+    content_source: Option<&'static str>,
     pub detail: Remote<FeedDetail>,
+    pub content_detail: Remote<FeedContentDetail>,
+    calendar_exports: Remote<Vec<CalendarGoogleExportOptIn>>,
+    calendar_export_report: Remote<CalendarGoogleExportReport>,
+    calendar_export_busy: bool,
+    calendar_export_error: Option<ShellError>,
+    calendar_export_confirm: bool,
+    calendar_edit: Option<CalendarEditForm>,
+    cloud_preview: Remote<CloudDerivativePreview>,
+    cloud_preview_busy: bool,
+    cloud_approval_busy: bool,
+    cloud_preview_error: Option<ShellError>,
+    cloud_preview_scroll: ScrollHandle,
+    cloud_generation: u64,
     /// The last write that failed, shown above the list until the next one.
     pub write_error: Option<ShellError>,
     /// The stored quality flags, one row per signal.
@@ -125,6 +161,7 @@ impl Feed {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
         Self {
             mail: cx.new(|cx| Mail::new(repo.clone(), cx)),
+            discover: cx.new(|_| ScoutingPage::new(repo.clone())),
             repo,
             tab: Tab::Reading,
             palette: None,
@@ -133,7 +170,21 @@ impl Feed {
             stream: None,
             cursor: None,
             reading: None,
+            content_source: None,
             detail: Remote::default(),
+            content_detail: Remote::default(),
+            calendar_exports: Remote::default(),
+            calendar_export_report: Remote::default(),
+            calendar_export_busy: false,
+            calendar_export_error: None,
+            calendar_export_confirm: false,
+            calendar_edit: None,
+            cloud_preview: Remote::default(),
+            cloud_preview_busy: false,
+            cloud_approval_busy: false,
+            cloud_preview_error: None,
+            cloud_preview_scroll: ScrollHandle::new(),
+            cloud_generation: 0,
             write_error: None,
             review: Remote::default(),
             review_refresh: None,
@@ -156,6 +207,8 @@ impl Feed {
         }
         self.mail
             .update(cx, |mail, cx| mail.set_palette(palette, cx));
+        self.discover
+            .update(cx, |page, cx| page.set_palette(palette, cx));
     }
 
     /// Called when the page opens: read the open tab again and give it the keys.
@@ -168,6 +221,7 @@ impl Feed {
             Tab::Review => self.load_review(cx),
             Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.activate(cx)),
+            Tab::Discover => self.discover.update(cx, |page, cx| page.load(cx)),
         }
     }
 
@@ -178,15 +232,91 @@ impl Feed {
             Tab::Review => self.load_review(cx),
             Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
+            Tab::Discover => self.discover.update(cx, |page, cx| page.load(cx)),
         }
     }
 
     pub fn set_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
         if self.tab != tab {
             self.tab = tab;
+            if tab == Tab::Discover {
+                self.reading = None;
+                self.cursor = None;
+            }
             self.activate(cx);
             cx.notify();
         }
+    }
+
+    /// Open a comms feed entry from a deep link, without a preceding list selection.
+    pub fn open_entry(&mut self, id: String, cx: &mut Context<Self>) {
+        self.tab = Tab::Reading;
+        self.content_source = None;
+        self.open(id, cx);
+    }
+
+    /// Open a mail item from its shared content URL, without loading the live mail list.
+    pub fn open_mail_entry(&mut self, id: String, cx: &mut Context<Self>) {
+        self.open_content_entry(id, "mail", cx);
+    }
+
+    /// Open a calendar item from its shared content URL.
+    pub fn open_calendar_entry(&mut self, id: String, cx: &mut Context<Self>) {
+        self.open_content_entry(id, "calendar", cx);
+    }
+
+    fn open_content_entry(&mut self, id: String, source: &'static str, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else { return };
+        self.tab = Tab::Reading;
+        self.content_source = Some(source);
+        self.cursor = Some(id.clone());
+        self.reading = Some(id.clone());
+        self.detail = Remote::default();
+        self.content_detail = Remote::new_loading();
+        self.calendar_exports = if source == "calendar" {
+            Remote::new_loading()
+        } else {
+            Remote::default()
+        };
+        self.calendar_export_report = Remote::default();
+        self.calendar_export_confirm = false;
+        self.calendar_export_error = None;
+        self.calendar_edit = None;
+        self.cloud_preview = Remote::default();
+        self.cloud_preview_busy = false;
+        self.cloud_approval_busy = false;
+        self.cloud_preview_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        self.focus_next = true;
+        cx.notify();
+
+        let expected = id.clone();
+        let work = shell::run(async move {
+            let content = shell.content_item_detail(source, &id).await;
+            let exports = if source == "calendar" {
+                shell.calendar_google_exports().await
+            } else {
+                Ok(Vec::new())
+            };
+            (content, exports)
+        });
+        cx.spawn(async move |this, cx| {
+            let (content, exports) = work
+                .await
+                .unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
+            let _ = this.update(cx, |view, cx| {
+                if view.content_source == Some(source)
+                    && view.reading.as_deref() == Some(expected.as_str())
+                {
+                    view.content_detail.settle(content);
+                    if source == "calendar" {
+                        view.calendar_exports.settle(exports);
+                    }
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
@@ -418,23 +548,42 @@ impl Feed {
     }
 
     fn open(&mut self, id: String, cx: &mut Context<Self>) {
+        self.content_source = None;
+        self.calendar_edit = None;
+        self.cloud_preview = Remote::default();
+        self.cloud_preview_busy = false;
+        self.cloud_approval_busy = false;
+        self.cloud_preview_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        self.calendar_exports = Remote::default();
+        self.calendar_export_report = Remote::default();
+        self.calendar_export_confirm = false;
+        self.calendar_export_error = None;
         let Ok(shell) = self.repo.shell() else { return };
         let first = self.status_of(&id) == Some("new");
         self.cursor = Some(id.clone());
         self.reading = Some(id.clone());
         self.detail = Remote::new_loading();
+        self.content_detail = Remote::new_loading();
         cx.notify();
         let expected = id.clone();
         let work = shell::run(async move {
             // Telemetry for the ranking model; a failed write never stops the reader.
             let _ = shell.record_feed_open(&id, first).await;
-            shell.feed_detail(&id).await
+            let (detail, content) = futures::join!(
+                shell.feed_detail(&id),
+                shell.content_item_detail("feed", &id),
+            );
+            (detail, content)
         });
         cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let (detail, content) = work
+                .await
+                .unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
             let _ = this.update(cx, |view, cx| {
                 if view.reading.as_deref() == Some(expected.as_str()) {
-                    view.detail.settle(result);
+                    view.detail.settle(detail);
+                    view.content_detail.settle(content);
                     cx.notify();
                 }
             });
@@ -453,6 +602,7 @@ impl Feed {
         self.entry(id)
             .map(|e| e.url.clone())
             .or_else(|| self.detail.value.as_ref().map(|d| d.url.clone()))
+            .or_else(|| self.content_detail.value.as_ref().map(|d| d.url.clone()))
     }
 
     fn on_next(&mut self, _: &Next, _: &mut Window, cx: &mut Context<Self>) {
@@ -468,6 +618,9 @@ impl Feed {
     }
 
     fn on_keep(&mut self, _: &Keep, _: &mut Window, cx: &mut Context<Self>) {
+        if self.content_source.is_some() {
+            return;
+        }
         if let Some(id) = self.target() {
             let next = if self.status_of(&id) == Some("keeper") {
                 "new"
@@ -479,12 +632,18 @@ impl Feed {
     }
 
     fn on_dismiss(&mut self, _: &Dismiss, _: &mut Window, cx: &mut Context<Self>) {
+        if self.content_source.is_some() {
+            return;
+        }
         if let Some(id) = self.target() {
             self.decide(id, "dismissed", cx);
         }
     }
 
     fn on_undo(&mut self, _: &Undo, _: &mut Window, cx: &mut Context<Self>) {
+        if self.content_source.is_some() {
+            return;
+        }
         if let Some(id) = self.target() {
             self.decide(id, "new", cx);
         }
@@ -499,12 +658,357 @@ impl Feed {
     }
 
     fn on_open_original(&mut self, _: &OpenOriginal, _: &mut Window, cx: &mut Context<Self>) {
+        if self.content_source == Some("calendar") {
+            cx.open_url("sjel://calendar");
+            return;
+        }
         if let Some(url) = self.target().and_then(|id| self.url_of(&id)) {
             cx.open_url(&url);
         }
     }
 
+    fn set_calendar_export(&mut self, id: String, opted_in: bool, cx: &mut Context<Self>) {
+        if self.calendar_export_busy || self.content_source != Some("calendar") {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.calendar_export_busy = true;
+        self.calendar_export_error = None;
+        self.calendar_export_report = Remote::default();
+        self.calendar_export_confirm = false;
+        cx.notify();
+
+        let request_id = id.clone();
+        let work = shell::run(async move {
+            if opted_in {
+                shell.calendar_google_opt_in(&request_id).await.map(Some)
+            } else {
+                shell
+                    .calendar_google_opt_out(&request_id)
+                    .await
+                    .map(|()| None)
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.calendar_export_busy = false;
+                match result {
+                    Ok(Some(entry)) => {
+                        if let Some(entries) = view.calendar_exports.value.as_mut() {
+                            entries.retain(|current| current.entry_id != id);
+                            entries.push(entry);
+                        }
+                    }
+                    Ok(None) => {
+                        if let Some(entries) = view.calendar_exports.value.as_mut() {
+                            entries.retain(|entry| entry.entry_id != id);
+                        }
+                    }
+                    Err(error) => view.calendar_export_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn preview_calendar_export(&mut self, cx: &mut Context<Self>) {
+        if self.calendar_export_busy
+            || self.content_source != Some("calendar")
+            || self
+                .calendar_exports
+                .value
+                .as_ref()
+                .is_none_or(Vec::is_empty)
+        {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.calendar_export_busy = true;
+        self.calendar_export_error = None;
+        self.calendar_export_report = Remote::new_loading();
+        self.calendar_export_confirm = false;
+        cx.notify();
+
+        let work = shell::run(async move { shell.calendar_google_export(true).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.calendar_export_busy = false;
+                view.calendar_export_report.settle(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn run_calendar_export(&mut self, cx: &mut Context<Self>) {
+        let has_preview = self
+            .calendar_export_report
+            .value
+            .as_ref()
+            .is_some_and(|report| report.dry_run && !report.pushed.is_empty());
+        if self.calendar_export_busy
+            || !has_preview
+            || !self.calendar_export_confirm
+            || self.content_source != Some("calendar")
+        {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.calendar_export_busy = true;
+        self.calendar_export_error = None;
+        self.calendar_export_confirm = false;
+        let work = shell::run(async move {
+            let report = shell.calendar_google_export(false).await;
+            let exports = if report.is_ok() {
+                Some(shell.calendar_google_exports().await)
+            } else {
+                None
+            };
+            (report, exports)
+        });
+        cx.spawn(async move |this, cx| {
+            let (report, exports) = work.await.unwrap_or((Err(ShellError::Unreachable), None));
+            let _ = this.update(cx, |view, cx| {
+                view.calendar_export_busy = false;
+                view.calendar_export_report.settle(report);
+                if let Some(exports) = exports {
+                    view.calendar_exports.settle(exports);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn request_calendar_export(&mut self, cx: &mut Context<Self>) {
+        let has_preview = self
+            .calendar_export_report
+            .value
+            .as_ref()
+            .is_some_and(|report| report.dry_run && !report.pushed.is_empty());
+        if !self.calendar_export_busy && has_preview && self.content_source == Some("calendar") {
+            self.calendar_export_confirm = true;
+            cx.notify();
+        }
+    }
+
+    fn prepare_cloud_preview(&mut self, cx: &mut Context<Self>) {
+        let source = self.content_source.unwrap_or("feed");
+        if !matches!(source, "feed" | "mail") {
+            return;
+        }
+        let Some(id) = self.reading.clone() else {
+            return;
+        };
+        if self.cloud_preview_busy || self.cloud_approval_busy {
+            return;
+        }
+        let Ok(shell) = self.repo.shell() else { return };
+        self.cloud_preview_busy = true;
+        self.cloud_preview_error = None;
+        self.cloud_preview = Remote::new_loading();
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        let generation = self.cloud_generation;
+        cx.notify();
+
+        let expected_source = source;
+        let expected_id = id.clone();
+        let work = shell::run(async move { shell.content_cloud_preview(source, &id).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.cloud_generation != generation
+                    || view.content_source.unwrap_or("feed") != expected_source
+                    || view.reading.as_deref() != Some(expected_id.as_str())
+                {
+                    return;
+                }
+                view.cloud_preview_busy = false;
+                view.cloud_preview.settle(result);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn approve_cloud_preview(&mut self, cx: &mut Context<Self>) {
+        if self.cloud_preview_busy || self.cloud_approval_busy {
+            return;
+        }
+        let Some(preview) = self.cloud_preview.value.as_ref() else {
+            return;
+        };
+        let source = preview.source.clone();
+        let id = preview.id.clone();
+        let hash = preview.preview_hash.clone();
+        let expected_source = source.clone();
+        let expected_id = id.clone();
+        let Ok(shell) = self.repo.shell() else { return };
+        self.cloud_approval_busy = true;
+        self.cloud_preview_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        let generation = self.cloud_generation;
+        cx.notify();
+
+        let work =
+            shell::run(async move { shell.content_cloud_approve(&source, &id, &hash).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.cloud_generation != generation {
+                    return;
+                }
+                view.cloud_approval_busy = false;
+                match result {
+                    Ok(state)
+                        if view.content_source.unwrap_or("feed") == expected_source
+                            && view.reading.as_deref() == Some(expected_id.as_str()) =>
+                    {
+                        if let Some(item) = view.content_detail.value.as_mut() {
+                            item.cloud_processing = state;
+                        }
+                        view.cloud_preview = Remote::default();
+                    }
+                    Ok(_) => {}
+                    Err(error) => view.cloud_preview_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn close_cloud_preview(&mut self, cx: &mut Context<Self>) {
+        if self.cloud_approval_busy {
+            return;
+        }
+        self.cloud_preview = Remote::default();
+        self.cloud_preview_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        cx.notify();
+    }
+
+    fn open_calendar_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(item) = self.content_detail.value.as_ref() else {
+            return;
+        };
+        let Some(calendar) = item.calendar.as_ref() else {
+            return;
+        };
+        let make_input = |value: String,
+                          placeholder: &'static str,
+                          window: &mut Window,
+                          cx: &mut Context<Self>| {
+            cx.new(|cx| {
+                let mut input = InputState::new(window, cx).placeholder(placeholder);
+                input.set_value(value, window, cx);
+                input
+            })
+        };
+        let start_date = date_part(&calendar.starts_at);
+        let raw_end_date = date_part(&calendar.ends_at);
+        let end_date = if calendar.all_day {
+            NaiveDate::parse_from_str(&raw_end_date, "%Y-%m-%d")
+                .ok()
+                .and_then(|date| date.checked_sub_signed(Duration::days(1)))
+                .map(|date| date.format("%Y-%m-%d").to_string())
+                .unwrap_or(raw_end_date)
+        } else {
+            raw_end_date
+        };
+        let value = |value: Option<&str>| value.unwrap_or_default().to_owned();
+        self.calendar_edit = Some(CalendarEditForm {
+            id: item.id.clone(),
+            title: make_input(item.title.clone().unwrap_or_default(), "Title", window, cx),
+            start_date: make_input(start_date, "Start date · YYYY-MM-DD", window, cx),
+            end_date: make_input(end_date, "End date · YYYY-MM-DD", window, cx),
+            start_time: make_input(time_part(&calendar.starts_at), "Start · HH:MM", window, cx),
+            end_time: make_input(time_part(&calendar.ends_at), "End · HH:MM", window, cx),
+            location: make_input(value(calendar.location.as_deref()), "Location", window, cx),
+            notes: make_input(value(item.content.as_deref()), "Notes", window, cx),
+            all_day: calendar.all_day,
+            kind: item.kind.clone(),
+            commitment: calendar.commitment.clone(),
+            saving: false,
+            error: None,
+        });
+        cx.notify();
+    }
+
+    fn save_calendar_edit(&mut self, cx: &mut Context<Self>) {
+        let Some(form) = self.calendar_edit.as_mut() else {
+            return;
+        };
+        if form.saving {
+            return;
+        }
+        let title = form.title.read(cx).value().to_string();
+        let start_date = form.start_date.read(cx).value().to_string();
+        let end_date = form.end_date.read(cx).value().to_string();
+        let start_time = form.start_time.read(cx).value().to_string();
+        let end_time = form.end_time.read(cx).value().to_string();
+        let location = form.location.read(cx).value().to_string();
+        let notes = form.notes.read(cx).value().to_string();
+        let patch =
+            sjel_gpui_core::calendar::entry_edit_patch(&sjel_gpui_core::calendar::EntryEdit {
+                title: &title,
+                kind: &form.kind,
+                commitment: &form.commitment,
+                all_day: form.all_day,
+                start_date: &start_date,
+                end_date: &end_date,
+                start_time: &start_time,
+                end_time: &end_time,
+                location: &location,
+                notes: &notes,
+            });
+        let patch = match patch {
+            Ok(patch) => patch,
+            Err(error) => {
+                form.error = Some(error.to_owned());
+                cx.notify();
+                return;
+            }
+        };
+        let id = form.id.clone();
+        let Ok(shell) = self.repo.shell() else { return };
+        form.saving = true;
+        form.error = None;
+        let request_id = id.clone();
+        let work = shell::run(async move { shell.update_calendar_entry(&request_id, patch).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| match result {
+                Ok(_) => view.open_content_entry(id, "calendar", cx),
+                Err(error) => {
+                    if let Some(form) = view.calendar_edit.as_mut() {
+                        form.saving = false;
+                        form.error = Some(error.to_string());
+                    }
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     fn on_back(&mut self, _: &Back, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(source) = self.content_source {
+            self.reading = None;
+            self.cursor = None;
+            self.content_source = None;
+            if source == "mail" {
+                self.tab = Tab::Mail;
+                self.mail.update(cx, |mail, cx| mail.activate(cx));
+            }
+            cx.notify();
+            return;
+        }
         // Escape closes the reader first, then clears the cursor.
         if self.reading.take().is_some() || self.cursor.take().is_some() {
             cx.notify();
@@ -521,7 +1025,7 @@ impl Render for Feed {
         // The reader draws over Reading, Review and Library, and Escape returns to the tab that
         // opened it. Only then, or on the Reading list, do the Feed keys act: elsewhere they would
         // move a cursor nobody sees.
-        let reading = self.tab != Tab::Mail && (self.tab == Tab::Reading || self.reading.is_some());
+        let reading = self.tab == Tab::Reading || (self.tab != Tab::Mail && self.reading.is_some());
         let body = if self.tab == Tab::Mail {
             div()
                 .flex()
@@ -530,8 +1034,16 @@ impl Render for Feed {
                 .child(self.title_row(cx))
                 .child(self.mail.clone())
                 .into_any_element()
+        } else if self.tab == Tab::Discover {
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(self.title_row(cx))
+                .child(div().flex_1().min_h_0().child(self.discover.clone()))
+                .into_any_element()
         } else if self.reading.is_some() {
-            self.reader(palette, cx)
+            self.reader(palette, window, cx)
         } else if self.tab == Tab::Review {
             self.review_list(palette, cx)
         } else if self.tab == Tab::Library {
@@ -703,7 +1215,7 @@ impl Feed {
             .into_any_element()
     }
 
-    /// The page title with the Reading | Review | Library | Mail switch.
+    /// The page title and the native Feed task switch.
     fn title_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let tab = |label: &'static str, tab: Tab, cx: &mut Context<Self>| {
             Button::new(SharedString::from(format!("feed-tab-{label}")))
@@ -726,11 +1238,15 @@ impl Feed {
             .child(tab("Reading", Tab::Reading, cx))
             .child(tab("Review", Tab::Review, cx))
             .child(tab("Library", Tab::Library, cx))
+            .child(tab("Discover", Tab::Discover, cx))
             .child(tab("Mail", Tab::Mail, cx))
             .into_any_element()
     }
 
-    fn reader(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn reader(&self, palette: Palette, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(source) = self.content_source {
+            return self.source_reader(source, palette, window, cx);
+        }
         let back = Button::new("feed-back")
             .small()
             .ghost()
@@ -796,7 +1312,18 @@ impl Feed {
                 .filter(|t| !t.trim().is_empty())
                 .map(|body| section(label, body.clone(), palette))
         };
-        div()
+        let content_detail = self.content_detail.value.as_ref();
+        let digest = content_detail
+            .and_then(|content| content.digest.as_ref())
+            .and_then(|digest| digest.text.as_deref())
+            .filter(|text| !text.trim().is_empty())
+            .filter(|text| detail.summary.as_deref() != Some(*text))
+            .filter(|text| detail.transcript.as_deref() != Some(*text));
+        let source_content = content_detail
+            .and_then(|content| content.content.as_deref())
+            .filter(|text| !text.trim().is_empty())
+            .filter(|text| detail.transcript.as_deref() != Some(*text));
+        let mut reader = div()
             .flex()
             .flex_col()
             .gap_4()
@@ -822,7 +1349,17 @@ impl Feed {
             ))
             .when_some(why, |el, why| el.child(section("WHY THIS", why, palette)))
             .children(text("SUMMARY", &detail.summary))
+            .when_some(digest, |el, digest| {
+                el.child(section("LOCAL DIGEST", digest.to_owned(), palette))
+            })
             .children(text("TRANSCRIPT", &detail.transcript))
+            .when_some(source_content, |el, body| {
+                let label = content_detail
+                    .map(|content| content.content_label.as_str())
+                    .filter(|label| !label.trim().is_empty())
+                    .unwrap_or("SOURCE CONTENT");
+                el.child(section(label, body.to_owned(), palette))
+            })
             .when(
                 detail.summary.is_none() && detail.transcript.is_none(),
                 |el| {
@@ -834,8 +1371,680 @@ impl Feed {
                         palette,
                     ))
                 },
+            );
+        if let Some(content) = content_detail {
+            reader = reader.child(self.cloud_processing_panel(content, palette, cx));
+        }
+        reader.into_any_element()
+    }
+
+    fn source_reader(
+        &self,
+        source: &str,
+        palette: Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mail = source == "mail";
+        let back = Button::new("source-content-back")
+            .small()
+            .ghost()
+            .label(if mail { "← Mail" } else { "← Feed" })
+            .on_click(cx.listener(|view, _, window, cx| view.on_back(&Back, window, cx)));
+        let Some(item) = self.content_detail.value.as_ref() else {
+            let state = match &self.content_detail.error {
+                Some(error) => div()
+                    .text_sm()
+                    .text_color(rgb(palette.red))
+                    .child(error.to_string()),
+                None => muted("Opening source item…", palette),
+            };
+            return div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(back)
+                .child(state)
+                .into_any_element();
+        };
+
+        let open = Button::new("source-content-original")
+            .small()
+            .label(if mail {
+                "Open in Gmail ↗"
+            } else {
+                "Open in Calendar ↗"
+            })
+            .on_click(
+                cx.listener(|view, _, window, cx| view.on_open_original(&OpenOriginal, window, cx)),
+            );
+        let edit = (!mail).then(|| {
+            Button::new("calendar-edit")
+                .small()
+                .label(if self.calendar_edit.is_some() {
+                    "Editing…"
+                } else {
+                    "Edit"
+                })
+                .disabled(self.calendar_edit.as_ref().is_some_and(|form| form.saving))
+                .on_click(cx.listener(|view, _, window, cx| {
+                    if view.calendar_edit.is_some() {
+                        view.calendar_edit = None;
+                        cx.notify();
+                    } else {
+                        view.open_calendar_edit(window, cx);
+                    }
+                }))
+        });
+        let actions = div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(back)
+            .child(div().flex_1())
+            .children(edit)
+            .child(open);
+        let mut reader = div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .max_w(px(760.))
+            .child(actions)
+            .child(
+                div()
+                    .text_2xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(title(item.title.as_deref(), &item.url)),
+            );
+
+        if let Some(editor) = self.calendar_edit_panel(palette, window, cx) {
+            reader = reader.child(editor);
+        }
+
+        let metadata = [
+            Some(item.kind.as_str()),
+            item.author.as_deref(),
+            (!item.day.is_empty()).then_some(item.day.as_str()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ");
+        if !metadata.is_empty() {
+            reader = reader.child(muted(&metadata, palette));
+        }
+        if let Some(calendar) = item.calendar.as_ref() {
+            let when = if calendar.all_day {
+                format!(
+                    "All day · {} through the day before {}",
+                    calendar.starts_at, calendar.ends_at
+                )
+            } else {
+                format!("{} – {}", calendar.starts_at, calendar.ends_at)
+            };
+            reader = reader.child(section("WHEN", when, palette));
+            if let Some(location) = calendar
+                .location
+                .as_deref()
+                .filter(|location| !location.trim().is_empty())
+            {
+                reader = reader.child(section("LOCATION", location.to_owned(), palette));
+            }
+            if !calendar.commitment.is_empty() {
+                reader = reader.child(section("COMMITMENT", calendar.commitment.clone(), palette));
+            }
+            let export_blocked = if calendar.entry_source == "google" {
+                Some("Google entries cannot be exported back to Google.")
+            } else if calendar.rhythm_id.is_some() {
+                Some("Rhythm instances cannot be exported individually.")
+            } else {
+                None
+            };
+            let exported = self
+                .calendar_exports
+                .value
+                .as_ref()
+                .is_some_and(|entries| entries.iter().any(|entry| entry.entry_id == item.id));
+            let export_id = item.id.clone();
+            let export_button = Button::new("calendar-google-export-opt-in")
+                .small()
+                .when(exported, |button| button.ghost())
+                .when(!exported, |button| button.primary())
+                .label(if self.calendar_export_busy {
+                    "Saving…"
+                } else if exported {
+                    "Remove Google export opt-in"
+                } else {
+                    "Allow Google export"
+                })
+                .disabled(
+                    self.calendar_export_busy
+                        || export_blocked.is_some()
+                        || self.calendar_exports.value.is_none(),
+                )
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.set_calendar_export(export_id.clone(), !exported, cx)
+                }));
+            let can_preview = self
+                .calendar_exports
+                .value
+                .as_ref()
+                .is_some_and(|entries| !entries.is_empty());
+            let preview_button = Button::new("calendar-google-export-preview")
+                .small()
+                .ghost()
+                .label(if self.calendar_export_report.loading {
+                    "Building preview…"
+                } else {
+                    "Preview approved exports"
+                })
+                .disabled(self.calendar_export_busy || !can_preview)
+                .on_click(cx.listener(|view, _, _, cx| view.preview_calendar_export(cx)));
+            reader = reader.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(export_button)
+                    .child(preview_button),
+            );
+            if let Some(report) = self.calendar_export_report.value.as_ref() {
+                reader = reader.child(
+                    div()
+                        .p_3()
+                        .rounded(px(6.))
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .bg(rgba(palette.raised))
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(if report.dry_run {
+                            format!("{} approved entries would be sent", report.pushed.len())
+                        } else {
+                            format!("Export finished: {} created, {} updated", report.inserted, report.patched)
+                        }))
+                        .children(report.pushed.iter().map(|entry| {
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("{} · {}", entry.title, entry.operation))
+                        }))
+                        .children(report.skipped.iter().map(|entry| {
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.amber))
+                                .child(format!("Skipped · {}", entry.reason))
+                        }))
+                        .when(report.dry_run && report.pushed.is_empty(), |panel| {
+                            panel.child(muted("No approved entries are ready to send.", palette))
+                        })
+                        .when(
+                            report.dry_run
+                                && !self.calendar_export_confirm
+                                && !report.pushed.is_empty(),
+                            |panel| {
+                            panel.child(
+                                Button::new("calendar-google-export-run")
+                                    .small()
+                                    .primary()
+                                    .label(if self.calendar_export_busy {
+                                        "Sending…".to_owned()
+                                    } else {
+                                        format!("Send {} approved entries to Google", report.pushed.len())
+                                    })
+                                    .disabled(self.calendar_export_busy)
+                                    .on_click(cx.listener(|view, _, _, cx| view.request_calendar_export(cx))),
+                            )
+                        })
+                        .when(
+                            report.dry_run
+                                && self.calendar_export_confirm
+                                && !report.pushed.is_empty(),
+                            |panel| {
+                                panel.child(muted(
+                                    "This sends only the entries individually approved for Google.",
+                                    palette,
+                                ))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .gap_2()
+                                        .child(
+                                            Button::new("calendar-google-export-cancel")
+                                                .small()
+                                                .ghost()
+                                                .label("Cancel")
+                                                .on_click(cx.listener(|view, _, _, cx| {
+                                                    view.calendar_export_confirm = false;
+                                                    cx.notify();
+                                                })),
+                                        )
+                                        .child(
+                                            Button::new("calendar-google-export-confirm")
+                                                .small()
+                                                .primary()
+                                                .label(format!("Confirm send · {} entries", report.pushed.len()))
+                                                .disabled(self.calendar_export_busy)
+                                                .on_click(cx.listener(|view, _, _, cx| {
+                                                    view.run_calendar_export(cx)
+                                                })),
+                                        ),
+                                )
+                            },
+                        ),
+                );
+            }
+            if let Some(reason) = export_blocked {
+                reader = reader.child(muted(reason, palette));
+            }
+            if let Some(error) = self
+                .calendar_export_error
+                .as_ref()
+                .or(self.calendar_exports.error.as_ref())
+                .or(self.calendar_export_report.error.as_ref())
+            {
+                reader = reader.child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.red))
+                        .child(format!("Google Calendar action failed: {error}")),
+                );
+            }
+        }
+        if let Some(summary) = item
+            .summary
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+        {
+            reader = reader.child(section("SUMMARY", summary.to_owned(), palette));
+        }
+        if let Some(digest) = item
+            .digest
+            .as_ref()
+            .and_then(|digest| digest.text.as_deref())
+            .filter(|text| !text.trim().is_empty())
+        {
+            reader = reader.child(section("LOCAL DIGEST", digest.to_owned(), palette));
+        }
+        if matches!(source, "feed" | "mail") {
+            reader = reader.child(self.cloud_processing_panel(item, palette, cx));
+        }
+        if let Some(content) = item
+            .content
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+        {
+            let label = if item.content_label.trim().is_empty() {
+                if mail {
+                    "MAIL PREVIEW"
+                } else {
+                    "NOTES"
+                }
+            } else {
+                item.content_label.as_str()
+            };
+            reader = reader.child(section(label, content.to_owned(), palette));
+        } else if item.content_status == "none" {
+            reader = reader.child(muted(
+                if mail {
+                    "Sjel holds no mail text for this item. Open it in Gmail."
+                } else {
+                    "This calendar entry has no notes."
+                },
+                palette,
+            ));
+        }
+        reader.into_any_element()
+    }
+
+    fn cloud_processing_panel(
+        &self,
+        item: &FeedContentDetail,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let status = match item.cloud_processing.status.as_str() {
+            "staged" => "Staged locally",
+            "stale" => "Review again",
+            _ => "Not prepared",
+        };
+        let preview_button = Button::new("feed-cloud-preview")
+            .small()
+            .label(if self.cloud_preview_busy {
+                "Preparing locally…"
+            } else if item.cloud_processing.status == "staged" {
+                "Review a fresh copy"
+            } else {
+                "Preview cloud-ready copy"
+            })
+            .disabled(self.cloud_preview_busy || self.cloud_approval_busy)
+            .on_click(cx.listener(|view, _, _, cx| view.prepare_cloud_preview(cx)));
+        let mut panel = div()
+            .p_3()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.raised))
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Cloud processing"),
+                    )
+                    .child(muted(status, palette)),
             )
-            .into_any_element()
+            .child(muted(
+                "Build a bounded copy locally and inspect it before staging approval.",
+                palette,
+            ))
+            .child(preview_button);
+
+        if let Some(error) = self
+            .cloud_preview_error
+            .as_ref()
+            .or(self.cloud_preview.error.as_ref())
+        {
+            panel = panel.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.red))
+                    .child(format!("Cloud preview failed: {error}")),
+            );
+        }
+
+        if let Some(preview) = self.cloud_preview.value.as_ref() {
+            let can_approve = preview.approval_required && preview.provider_calls == 0;
+            let mut review = div()
+                .mt_2()
+                .p_3()
+                .rounded(px(6.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child("Review the cloud-ready copy"),
+                )
+                .child(muted(
+                    &format!(
+                        "{} source → {} derivative · {} redactions · {} · {}",
+                        preview.original_data_class,
+                        preview.derivative_data_class,
+                        preview.redaction_count,
+                        if preview.truncated {
+                            "bounded at 16,000 characters"
+                        } else {
+                            "complete bounded document"
+                        },
+                        preview.entity_detection
+                    ),
+                    palette,
+                ));
+            if let Some(receipt) = preview.redaction_receipt.as_deref() {
+                review = review.child(section("REDACTION RECEIPT", receipt.to_owned(), palette));
+            }
+            if !preview.redactions.is_empty() {
+                review = review
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("Detected locally"),
+                    )
+                    .children(preview.redactions.iter().map(|finding| {
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!(
+                                "{} {} × {}",
+                                finding.marker, finding.entity_type, finding.count
+                            ))
+                    }));
+            }
+            review = review.child(
+                div()
+                    .id("feed-cloud-preview-document")
+                    .max_h(px(260.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.cloud_preview_scroll)
+                    .vertical_scrollbar(&self.cloud_preview_scroll)
+                    .p_2()
+                    .rounded(px(4.))
+                    .bg(rgba(palette.surface))
+                    .child(
+                        div()
+                            .text_xs()
+                            .line_height(px(18.))
+                            .child(preview.document.clone()),
+                    ),
+            );
+            if !preview.limitations.is_empty() {
+                review = review
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("Review limits"),
+                    )
+                    .children(preview.limitations.iter().map(|limitation| {
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("• {limitation}"))
+                    }));
+            }
+            review = review
+                .child(muted(
+                    &format!("This stores the exact reviewed copy locally. Provider calls: {}.", preview.provider_calls),
+                    palette,
+                ))
+                .when(!can_approve, |el| {
+                    el.child(muted(
+                        "This preview cannot be approved because it does not meet the local approval contract.",
+                        palette,
+                    ))
+                })
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("feed-cloud-preview-cancel")
+                                .small()
+                                .ghost()
+                                .label("Cancel")
+                                .disabled(self.cloud_approval_busy)
+                                .on_click(cx.listener(|view, _, _, cx| view.close_cloud_preview(cx))),
+                        )
+                        .child(
+                            Button::new("feed-cloud-preview-approve")
+                                .small()
+                                .primary()
+                                .label(if self.cloud_approval_busy {
+                                    "Staging…"
+                                } else {
+                                    "Approve cloud-ready copy"
+                                })
+                                .disabled(!can_approve || self.cloud_approval_busy)
+                                .on_click(cx.listener(|view, _, _, cx| view.approve_cloud_preview(cx))),
+                        ),
+                );
+            panel = panel.child(review);
+        } else if self.cloud_preview.loading {
+            panel = panel.child(muted("Building a local preview…", palette));
+        }
+        panel.into_any_element()
+    }
+
+    fn calendar_edit_panel(
+        &self,
+        palette: Palette,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let form = self.calendar_edit.as_ref()?;
+        let mut fields = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(Input::new(&form.title).small())
+            .child(
+                Button::new("calendar-edit-all-day")
+                    .xsmall()
+                    .label(if form.all_day { "All day" } else { "Timed" })
+                    .when(form.all_day, |button| button.primary())
+                    .when(!form.all_day, |button| button.ghost())
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        if let Some(form) = view.calendar_edit.as_mut() {
+                            form.all_day = !form.all_day;
+                        }
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(div().flex_1().child(Input::new(&form.start_date).small()))
+                    .child(div().flex_1().child(Input::new(&form.end_date).small())),
+            );
+        if !form.all_day {
+            fields = fields.child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .child(div().flex_1().child(Input::new(&form.start_time).small()))
+                    .child(div().flex_1().child(Input::new(&form.end_time).small())),
+            );
+        }
+        fields =
+            fields
+                .child(Input::new(&form.location).small())
+                .child(Input::new(&form.notes).small())
+                .child(div().text_xs().text_color(rgb(palette.muted)).child("KIND"))
+                .child(
+                    div().flex().flex_wrap().gap_1().children(
+                        sjel_gpui_core::calendar::KINDS
+                            .iter()
+                            .map(|(key, label, _)| {
+                                let selected = form.kind == *key;
+                                Button::new(SharedString::from(format!("feed-calendar-kind-{key}")))
+                                    .xsmall()
+                                    .label(*label)
+                                    .when(selected, |button| button.primary())
+                                    .when(!selected, |button| button.ghost())
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        if let Some(form) = view.calendar_edit.as_mut() {
+                                            form.kind = (*key).to_owned();
+                                        }
+                                        cx.notify();
+                                    }))
+                            }),
+                    ),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child("COMMITMENT"),
+                )
+                .child(
+                    div().flex().gap_1().children(
+                        sjel_gpui_core::calendar::COMMITMENTS
+                            .iter()
+                            .map(|(key, label)| {
+                                let selected = form.commitment == *key;
+                                Button::new(SharedString::from(format!(
+                                    "feed-calendar-commitment-{key}"
+                                )))
+                                .xsmall()
+                                .label(*label)
+                                .when(selected, |button| button.primary())
+                                .when(!selected, |button| button.ghost())
+                                .on_click(cx.listener(
+                                    move |view, _, _, cx| {
+                                        if let Some(form) = view.calendar_edit.as_mut() {
+                                            form.commitment = (*key).to_owned();
+                                        }
+                                        cx.notify();
+                                    },
+                                ))
+                            }),
+                    ),
+                );
+        if let Some(error) = &form.error {
+            fields = fields.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(error.clone()),
+            );
+        }
+        Some(
+            div()
+                .p_3()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.raised))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child("Edit calendar entry"),
+                )
+                .child(fields)
+                .child(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .gap_2()
+                        .child(
+                            Button::new("feed-calendar-cancel-edit")
+                                .small()
+                                .ghost()
+                                .label("Cancel")
+                                .disabled(form.saving)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.calendar_edit = None;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("feed-calendar-save-edit")
+                                .small()
+                                .primary()
+                                .label(if form.saving {
+                                    "Saving…"
+                                } else {
+                                    "Save changes"
+                                })
+                                .disabled(form.saving)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.save_calendar_edit(cx)),
+                                ),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 }
 
@@ -1283,6 +2492,14 @@ fn meta(entry: &FeedEntry) -> String {
     parts.join(" · ")
 }
 
+fn date_part(value: &str) -> String {
+    value.get(..10).unwrap_or_default().to_owned()
+}
+
+fn time_part(value: &str) -> String {
+    value.get(11..16).unwrap_or("09:00").to_owned()
+}
+
 fn muted(text: &str, palette: Palette) -> gpui_kit::Div {
     div()
         .text_sm()
@@ -1290,7 +2507,7 @@ fn muted(text: &str, palette: Palette) -> gpui_kit::Div {
         .child(text.to_owned())
 }
 
-fn section(label: &'static str, body: String, palette: Palette) -> gpui_kit::Div {
+fn section(label: &str, body: String, palette: Palette) -> gpui_kit::Div {
     div()
         .flex()
         .flex_col()
@@ -1300,7 +2517,7 @@ fn section(label: &'static str, body: String, palette: Palette) -> gpui_kit::Div
                 .text_xs()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(rgb(palette.muted))
-                .child(label),
+                .child(label.to_owned()),
         )
         .child(div().text_sm().line_height(px(22.)).child(body))
 }

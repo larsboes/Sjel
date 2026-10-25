@@ -714,6 +714,669 @@ pub fn compare(scan: &Scan, model: &Model) -> Diff {
     diff(scan, &model.room)
 }
 
+#[derive(Clone, Copy)]
+struct WallAnchor {
+    center: [f64; 2],
+    length: f64,
+    angle: f64,
+}
+
+#[derive(Clone, Copy)]
+struct Alignment {
+    angle: f64,
+    translation: [f64; 2],
+    wall_matches: usize,
+    rms_error: f64,
+    ambiguous: bool,
+}
+
+fn wall_anchors(scan: &Scan) -> Vec<WallAnchor> {
+    scan.surfaces()
+        .filter(|element| element.category == "Wall")
+        .filter_map(|element| {
+            let transform = &element.transform;
+            let axis_length = transform[0].hypot(transform[2]);
+            if !axis_length.is_finite() || axis_length < 1e-6 {
+                return None;
+            }
+            Some(WallAnchor {
+                center: [transform[12], transform[14]],
+                length: element.dimensions_m[0],
+                angle: transform[2].atan2(transform[0]),
+            })
+        })
+        .collect()
+}
+
+#[derive(Clone)]
+struct ModelOpeningAnchor {
+    category: String,
+    center: [f64; 2],
+    width: f64,
+    angle: f64,
+}
+
+#[derive(Clone, Copy)]
+struct FlatAlignment {
+    angle: f64,
+    translation: [f64; 2],
+    matching_walls: usize,
+    matching_openings: usize,
+    error_m: f64,
+    ambiguous: bool,
+}
+
+fn room_wall_anchors(room: &Room) -> Vec<WallAnchor> {
+    room.walls
+        .values()
+        .filter_map(|wall| {
+            let dx = (wall.to[0] - wall.from[0]) as f64 / 100.0;
+            let dy = (wall.to[1] - wall.from[1]) as f64 / 100.0;
+            let length = dx.hypot(dy);
+            (length > 0.05).then_some(WallAnchor {
+                center: [
+                    (wall.from[0] + wall.to[0]) as f64 / 200.0,
+                    (wall.from[1] + wall.to[1]) as f64 / 200.0,
+                ],
+                length,
+                angle: dy.atan2(dx),
+            })
+        })
+        .collect()
+}
+
+fn scan_wall_runs(scan: &Scan) -> Vec<WallAnchor> {
+    let mut remaining = wall_anchors(scan);
+    let mut runs = Vec::new();
+    while let Some(first) = remaining.pop() {
+        let angle = first.angle;
+        let (sin, cos) = angle.sin_cos();
+        let direction = [cos, sin];
+        let normal = [-sin, cos];
+        let mut group = vec![first];
+        loop {
+            let (group_start, group_end) =
+                group
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(start, end), part| {
+                        let along = part.center[0] * direction[0] + part.center[1] * direction[1];
+                        (
+                            start.min(along - part.length / 2.0),
+                            end.max(along + part.length / 2.0),
+                        )
+                    });
+            let next = remaining.iter().position(|part| {
+                if wall_axis_distance(angle, part.angle) > 0.08 {
+                    return false;
+                }
+                let across = (part.center[0] - first.center[0]) * normal[0]
+                    + (part.center[1] - first.center[1]) * normal[1];
+                if across.abs() > 0.14 {
+                    return false;
+                }
+                let along = part.center[0] * direction[0] + part.center[1] * direction[1];
+                let start = along - part.length / 2.0;
+                let end = along + part.length / 2.0;
+                start <= group_end + 1.4 && end >= group_start - 1.4
+            });
+            let Some(index) = next else {
+                break;
+            };
+            group.push(remaining.swap_remove(index));
+        }
+        let (start, end, offset, weight) = group.iter().fold(
+            (f64::INFINITY, f64::NEG_INFINITY, 0.0, 0.0),
+            |(start, end, offset, weight), part| {
+                let along = part.center[0] * direction[0] + part.center[1] * direction[1];
+                let part_weight = part.length.max(0.01);
+                (
+                    start.min(along - part.length / 2.0),
+                    end.max(along + part.length / 2.0),
+                    offset
+                        + (part.center[0] * normal[0] + part.center[1] * normal[1]) * part_weight,
+                    weight + part_weight,
+                )
+            },
+        );
+        let along = (start + end) / 2.0;
+        let across = offset / weight.max(0.01);
+        runs.push(WallAnchor {
+            center: [
+                direction[0] * along + normal[0] * across,
+                direction[1] * along + normal[1] * across,
+            ],
+            length: end - start,
+            angle,
+        });
+    }
+    runs
+}
+
+fn room_opening_anchors(room: &Room) -> Vec<ModelOpeningAnchor> {
+    room.openings
+        .iter()
+        .filter_map(|opening| {
+            let wall = room.walls.get(&opening.wall)?;
+            let (from, to) = room.opening_span(opening)?;
+            Some(ModelOpeningAnchor {
+                category: opening.kind.clone().unwrap_or_default(),
+                center: [
+                    (from[0] + to[0]) as f64 / 200.0,
+                    (from[1] + to[1]) as f64 / 200.0,
+                ],
+                width: opening.width as f64 / 100.0,
+                angle: ((wall.to[1] - wall.from[1]) as f64)
+                    .atan2((wall.to[0] - wall.from[0]) as f64),
+            })
+        })
+        .collect()
+}
+
+fn opening_families_match(scan_category: &str, model_category: &str) -> bool {
+    if scan_category.starts_with("Window") {
+        model_category.starts_with("window")
+    } else if scan_category.starts_with("Door") || scan_category.starts_with("Opening") {
+        model_category.starts_with("door") || model_category.starts_with("glass_door")
+    } else {
+        false
+    }
+}
+
+fn transform_point(alignment: FlatAlignment, point: [f64; 2]) -> [f64; 2] {
+    let (sin, cos) = alignment.angle.sin_cos();
+    [
+        cos * point[0] - sin * point[1] + alignment.translation[0],
+        sin * point[0] + cos * point[1] + alignment.translation[1],
+    ]
+}
+
+fn score_flat_alignment(
+    candidate: FlatAlignment,
+    scan_walls: &[WallAnchor],
+    model_walls: &[WallAnchor],
+    scan_openings: &[&Element],
+    model_openings: &[ModelOpeningAnchor],
+) -> FlatAlignment {
+    let mut used_walls = Vec::new();
+    let mut residuals = Vec::new();
+    for scan_wall in scan_walls {
+        let center = transform_point(candidate, scan_wall.center);
+        let angle = candidate.angle + scan_wall.angle;
+        let best = model_walls
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !used_walls.contains(index))
+            .filter_map(|(index, model_wall)| {
+                let model = *model_wall;
+                let angle_error = wall_axis_distance(angle, model.angle);
+                let length_error = (scan_wall.length - model.length).abs();
+                let center_error = (center[0] - model.center[0]).hypot(center[1] - model.center[1]);
+                (angle_error <= 0.18 && length_error <= 0.35 && center_error <= 0.35).then_some((
+                    index,
+                    center_error.hypot(length_error),
+                    center_error.hypot(length_error),
+                ))
+            })
+            .min_by(|left, right| left.1.total_cmp(&right.1));
+        if let Some((index, _, error)) = best {
+            used_walls.push(index);
+            residuals.push(error);
+        }
+    }
+
+    let mut used_openings = Vec::new();
+    for opening in scan_openings {
+        let position = opening.position_m();
+        let center = transform_point(candidate, [position[0], position[2]]);
+        let angle = candidate.angle + opening.transform[2].atan2(opening.transform[0]);
+        let best = model_openings
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !used_openings.contains(index))
+            .filter_map(|(index, model)| {
+                if !opening_families_match(&opening.category, &model.category) {
+                    return None;
+                }
+                let center_error = (center[0] - model.center[0]).hypot(center[1] - model.center[1]);
+                let width_error = (opening.dimensions_m[0] - model.width).abs();
+                let angle_error = wall_axis_distance(angle, model.angle);
+                (center_error <= 0.35 && width_error <= 0.30 && angle_error <= 0.25).then_some((
+                    index,
+                    center_error.hypot(width_error),
+                    center_error.hypot(width_error),
+                ))
+            })
+            .min_by(|left, right| left.1.total_cmp(&right.1));
+        if let Some((index, _, error)) = best {
+            used_openings.push(index);
+            residuals.push(error);
+        }
+    }
+    let error_m = if residuals.is_empty() {
+        f64::INFINITY
+    } else {
+        (residuals.iter().map(|error| error.powi(2)).sum::<f64>() / residuals.len() as f64).sqrt()
+    };
+    FlatAlignment {
+        matching_walls: used_walls.len(),
+        matching_openings: used_openings.len(),
+        error_m,
+        ..candidate
+    }
+}
+
+fn align_scan_to_flat(scan: &Scan, room: &Room) -> Option<FlatAlignment> {
+    let scan_walls = scan_wall_runs(scan);
+    let model_walls = room_wall_anchors(room);
+    let scan_openings = scan.openings().collect::<Vec<_>>();
+    let model_openings = room_opening_anchors(room);
+    let mut hypotheses = Vec::new();
+
+    for scan_wall in &scan_walls {
+        for model_wall in &model_walls {
+            if (scan_wall.length - model_wall.length).abs() > 0.35 {
+                continue;
+            }
+            for direction in [-1.0, 1.0] {
+                let angle = model_wall.angle - scan_wall.angle
+                    + if direction < 0.0 {
+                        std::f64::consts::PI
+                    } else {
+                        0.0
+                    };
+                let (sin, cos) = angle.sin_cos();
+                let rotated = [
+                    cos * scan_wall.center[0] - sin * scan_wall.center[1],
+                    sin * scan_wall.center[0] + cos * scan_wall.center[1],
+                ];
+                hypotheses.push(FlatAlignment {
+                    angle,
+                    translation: [
+                        model_wall.center[0] - rotated[0],
+                        model_wall.center[1] - rotated[1],
+                    ],
+                    matching_walls: 0,
+                    matching_openings: 0,
+                    error_m: f64::INFINITY,
+                    ambiguous: false,
+                });
+            }
+        }
+    }
+    for scan_opening in &scan_openings {
+        for model_opening in &model_openings {
+            if !opening_families_match(&scan_opening.category, &model_opening.category)
+                || (scan_opening.dimensions_m[0] - model_opening.width).abs() > 0.30
+            {
+                continue;
+            }
+            for direction in [-1.0, 1.0] {
+                let angle = model_opening.angle
+                    - scan_opening.transform[2].atan2(scan_opening.transform[0])
+                    + if direction < 0.0 {
+                        std::f64::consts::PI
+                    } else {
+                        0.0
+                    };
+                let (sin, cos) = angle.sin_cos();
+                let position = scan_opening.position_m();
+                let rotated = [
+                    cos * position[0] - sin * position[2],
+                    sin * position[0] + cos * position[2],
+                ];
+                hypotheses.push(FlatAlignment {
+                    angle,
+                    translation: [
+                        model_opening.center[0] - rotated[0],
+                        model_opening.center[1] - rotated[1],
+                    ],
+                    matching_walls: 0,
+                    matching_openings: 0,
+                    error_m: f64::INFINITY,
+                    ambiguous: false,
+                });
+            }
+        }
+    }
+
+    let mut candidates = hypotheses
+        .into_iter()
+        .map(|candidate| {
+            score_flat_alignment(
+                candidate,
+                &scan_walls,
+                &model_walls,
+                &scan_openings,
+                &model_openings,
+            )
+        })
+        .filter(|candidate| {
+            candidate.matching_walls >= 2
+                || (candidate.matching_walls >= 1 && candidate.matching_openings >= 1)
+                || candidate.matching_openings >= 2
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .matching_walls
+            .cmp(&left.matching_walls)
+            .then_with(|| right.matching_openings.cmp(&left.matching_openings))
+            .then_with(|| left.error_m.total_cmp(&right.error_m))
+    });
+    let best = *candidates.first()?;
+    let ambiguous = candidates.iter().skip(1).any(|candidate| {
+        candidate.matching_walls == best.matching_walls
+            && candidate.matching_openings == best.matching_openings
+            && candidate.error_m <= best.error_m + 0.04
+            && (wall_axis_distance(candidate.angle, best.angle) > 0.12
+                || (candidate.translation[0] - best.translation[0])
+                    .hypot(candidate.translation[1] - best.translation[1])
+                    > 0.20)
+    });
+    Some(FlatAlignment { ambiguous, ..best })
+}
+
+/// Estimates capture coordinates in the measured flat frame; uncertain fits withhold the transform.
+pub fn flat_alignment(scan: &Scan, room: &Room) -> serde_json::Value {
+    let Some(alignment) = align_scan_to_flat(scan, room) else {
+        return serde_json::json!({
+            "status": "uncertain",
+            "matching_walls": 0,
+            "matching_openings": 0,
+            "error_m": null,
+            "ambiguous": false,
+            "reason": "The scan does not contain enough matching wall or opening anchors."
+        });
+    };
+    let status = if alignment.error_m <= 0.15 && !alignment.ambiguous {
+        "aligned"
+    } else {
+        "uncertain"
+    };
+    let mut report = serde_json::json!({
+        "status": status,
+        "matching_walls": alignment.matching_walls,
+        "matching_openings": alignment.matching_openings,
+        "error_m": alignment.error_m,
+        "ambiguous": alignment.ambiguous,
+        "coordinates": "room.toml centimetres; origin at inner north-west; x east, y south",
+        "reason": if status == "aligned" { "" } else if alignment.ambiguous { "Several scan-to-flat transforms fit equally well; placement coordinates were withheld." } else { "Scan-to-flat anchor error is too high; placement coordinates were withheld." }
+    });
+    if status == "aligned" {
+        report["rotation_rad"] = serde_json::json!(alignment.angle);
+        report["translation_m"] = serde_json::json!(alignment.translation);
+    }
+    report
+}
+
+/// Maps a scanned object's centre and orientation into a reviewed flat-plan placement.
+pub fn flat_position_proposal(
+    scan: &Scan,
+    room: &Room,
+    observation_id: &str,
+    width_cm: i32,
+    depth_cm: i32,
+) -> Option<serde_json::Value> {
+    if width_cm <= 0 || depth_cm <= 0 {
+        return None;
+    }
+    let alignment = align_scan_to_flat(scan, room)?;
+    if alignment.error_m > 0.15 || alignment.ambiguous {
+        return None;
+    }
+    let object = scan.objects().find(|object| object.id == observation_id)?;
+    let position = object.position_m();
+    let center = transform_point(alignment, [position[0], position[2]]);
+    let angle = alignment.angle + object.transform[2].atan2(object.transform[0]);
+    let rot = ((angle.to_degrees() / 90.0).round() as i32 * 90).rem_euclid(360);
+    let (placed_width, placed_depth) = if rot.rem_euclid(180) == 90 {
+        (depth_cm, width_cm)
+    } else {
+        (width_cm, depth_cm)
+    };
+    Some(serde_json::json!({
+        "x": (center[0] * 100.0 - placed_width as f64 / 2.0).round() as i32,
+        "y": (center[1] * 100.0 - placed_depth as f64 / 2.0).round() as i32,
+        "rot": rot,
+        "center_x_cm": (center[0] * 100.0).round() as i32,
+        "center_y_cm": (center[1] * 100.0).round() as i32,
+        "observed_width_cm": (object.dimensions_m[0] * 100.0).round() as i32,
+        "observed_depth_cm": (object.dimensions_m[2] * 100.0).round() as i32,
+        "alignment_error_m": alignment.error_m
+    }))
+}
+
+fn angular_distance(left: f64, right: f64) -> f64 {
+    let difference = (left - right).rem_euclid(std::f64::consts::TAU);
+    difference.min(std::f64::consts::TAU - difference)
+}
+
+fn wall_axis_distance(left: f64, right: f64) -> f64 {
+    let difference = angular_distance(left, right);
+    difference.min((std::f64::consts::PI - difference).abs())
+}
+
+fn align_scans(before: &Scan, after: &Scan) -> Option<Alignment> {
+    let before_walls = wall_anchors(before);
+    let after_walls = wall_anchors(after);
+    let mut hypotheses = Vec::new();
+    for before_wall in &before_walls {
+        for after_wall in &after_walls {
+            if (before_wall.length - after_wall.length).abs() > 0.18 {
+                continue;
+            }
+            for direction in [-1.0, 1.0] {
+                let angle = before_wall.angle - after_wall.angle
+                    + if direction < 0.0 {
+                        std::f64::consts::PI
+                    } else {
+                        0.0
+                    };
+                let (sin, cos) = angle.sin_cos();
+                let rotated = [
+                    cos * after_wall.center[0] - sin * after_wall.center[1],
+                    sin * after_wall.center[0] + cos * after_wall.center[1],
+                ];
+                hypotheses.push(Alignment {
+                    angle,
+                    translation: [
+                        before_wall.center[0] - rotated[0],
+                        before_wall.center[1] - rotated[1],
+                    ],
+                    wall_matches: 0,
+                    rms_error: f64::INFINITY,
+                    ambiguous: false,
+                });
+            }
+        }
+    }
+
+    for candidate in &mut hypotheses {
+        let (sin, cos) = candidate.angle.sin_cos();
+        let mut used_before = Vec::new();
+        let mut residuals = Vec::new();
+        for after_wall in &after_walls {
+            let rotated = [
+                cos * after_wall.center[0] - sin * after_wall.center[1] + candidate.translation[0],
+                sin * after_wall.center[0] + cos * after_wall.center[1] + candidate.translation[1],
+            ];
+            let best = before_walls
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !used_before.contains(index))
+                .filter_map(|(index, before_wall)| {
+                    let distance = (before_wall.center[0] - rotated[0])
+                        .hypot(before_wall.center[1] - rotated[1]);
+                    let length_delta = (before_wall.length - after_wall.length).abs();
+                    let axis_delta =
+                        wall_axis_distance(before_wall.angle, after_wall.angle + candidate.angle);
+                    (distance <= 0.22 && length_delta <= 0.18 && axis_delta <= 0.20)
+                        .then_some((index, distance))
+                })
+                .min_by(|left, right| left.1.total_cmp(&right.1));
+            if let Some((index, distance)) = best {
+                used_before.push(index);
+                residuals.push(distance);
+            }
+        }
+        candidate.wall_matches = residuals.len();
+        candidate.rms_error = if residuals.is_empty() {
+            f64::INFINITY
+        } else {
+            (residuals.iter().map(|error| error * error).sum::<f64>() / residuals.len() as f64)
+                .sqrt()
+        };
+    }
+    hypotheses.retain(|candidate| candidate.wall_matches >= 2);
+    hypotheses.sort_by(|left, right| {
+        right
+            .wall_matches
+            .cmp(&left.wall_matches)
+            .then_with(|| left.rms_error.total_cmp(&right.rms_error))
+    });
+    let best = *hypotheses.first()?;
+    let ambiguous = hypotheses.iter().skip(1).any(|candidate| {
+        candidate.wall_matches == best.wall_matches
+            && candidate.rms_error <= best.rms_error + 0.03
+            && (angular_distance(candidate.angle, best.angle) > 0.087
+                || (candidate.translation[0] - best.translation[0])
+                    .hypot(candidate.translation[1] - best.translation[1])
+                    > 0.10)
+    });
+    Some(Alignment { ambiguous, ..best })
+}
+
+/// Compare two captures without assigning furniture identity or writing placement state.
+/// Wall geometry supplies a best-effort 2D rigid alignment; every furniture pairing remains a
+/// suggestion that a person must confirm because RoomPlan IDs are capture-local.
+pub fn reconcile(before: &Scan, after: &Scan) -> serde_json::Value {
+    let Some(alignment) = align_scans(before, after) else {
+        return serde_json::json!({
+            "alignment": {
+                "status": "uncertain",
+                "matching_walls": 0,
+                "error_m": null,
+                "reason": "At least two matching wall anchors are needed to align these scans."
+            },
+            "matches": [],
+            "unmatched_before": before.objects().map(|item| item.id.clone()).collect::<Vec<_>>(),
+            "unmatched_after": after.objects().map(|item| item.id.clone()).collect::<Vec<_>>(),
+            "human_confirmation_required": true
+        });
+    };
+
+    let before_wall_count = before_walls_count(before);
+    let after_wall_count = after_walls_count(after);
+    let status = if alignment.rms_error <= 0.15 && !alignment.ambiguous {
+        "aligned"
+    } else {
+        "uncertain"
+    };
+    let (sin, cos) = alignment.angle.sin_cos();
+    let before_objects = before.objects().collect::<Vec<_>>();
+    let after_objects = after.objects().collect::<Vec<_>>();
+    let mut matches = Vec::new();
+    let mut used_before = Vec::new();
+    if status == "aligned" {
+        for after_item in &after_objects {
+            let position = after_item.position_m();
+            let aligned = [
+                cos * position[0] - sin * position[2] + alignment.translation[0],
+                sin * position[0] + cos * position[2] + alignment.translation[1],
+            ];
+            let mut candidates = before_objects
+                .iter()
+                .enumerate()
+                .filter(|(index, before_item)| {
+                    !used_before.contains(index)
+                        && category_family(&before_item.category)
+                            == category_family(&after_item.category)
+                        && dimensions_close(before_item, after_item)
+                })
+                .filter_map(|(index, before_item)| {
+                    let old = before_item.position_m();
+                    let distance = (old[0] - aligned[0]).hypot(old[2] - aligned[1]);
+                    (distance <= 3.0).then_some((index, before_item, distance))
+                })
+                .collect::<Vec<_>>();
+            candidates.sort_by(|left, right| left.2.total_cmp(&right.2));
+            if let Some((index, before_item, distance)) = candidates.first().copied() {
+                used_before.push(index);
+                matches.push(serde_json::json!({
+                    "before_observation_id": before_item.id,
+                    "after_observation_id": after_item.id,
+                    "category": after_item.category,
+                    "distance_m": distance,
+                    "suggestion": if distance <= 0.15 { "possible_same_position" } else { "possible_movement" },
+                    "identity": "unconfirmed_candidate",
+                    "human_confirmation_required": true,
+                    "competing_candidates": candidates.iter().skip(1).filter(|candidate| candidate.2 - distance < 0.15).count()
+                }));
+            }
+        }
+    }
+    let unmatched_before = before_objects
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !used_before.contains(index))
+        .map(|(_, item)| item.id.clone())
+        .collect::<Vec<_>>();
+    let matched_after = matches
+        .iter()
+        .filter_map(|entry| entry["after_observation_id"].as_str())
+        .collect::<Vec<_>>();
+    let unmatched_after = after_objects
+        .iter()
+        .filter(|item| !matched_after.contains(&item.id.as_str()))
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "alignment": {
+            "status": status,
+            "matching_walls": alignment.wall_matches,
+            "before_wall_anchors": before_wall_count,
+            "after_wall_anchors": after_wall_count,
+            "error_m": alignment.rms_error,
+            "rotation_rad": alignment.angle,
+            "translation_m": alignment.translation,
+            "ambiguous": alignment.ambiguous,
+            "reason": if status == "aligned" { "" } else if alignment.ambiguous { "Several wall alignments fit equally well; object suggestions were withheld." } else { "Wall alignment error is too high; object suggestions were withheld." }
+        },
+        "matches": matches,
+        "unmatched_before": unmatched_before,
+        "unmatched_after": unmatched_after,
+        "unmatched_are_observations_not_confirmed_additions_or_removals": true,
+        "human_confirmation_required": true
+    })
+}
+
+fn before_walls_count(scan: &Scan) -> usize {
+    wall_anchors(scan).len()
+}
+
+fn after_walls_count(scan: &Scan) -> usize {
+    wall_anchors(scan).len()
+}
+
+fn category_family(category: &str) -> String {
+    category
+        .split('(')
+        .next()
+        .unwrap_or(category)
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn dimensions_close(left: &Element, right: &Element) -> bool {
+    let mut left_horizontal = [left.dimensions_m[0], left.dimensions_m[2]];
+    let mut right_horizontal = [right.dimensions_m[0], right.dimensions_m[2]];
+    left_horizontal.sort_by(f64::total_cmp);
+    right_horizontal.sort_by(f64::total_cmp);
+    (left.dimensions_m[1] - right.dimensions_m[1]).abs() <= 0.20
+        && (left_horizontal[0] - right_horizontal[0]).abs() <= 0.20
+        && (left_horizontal[1] - right_horizontal[1]).abs() <= 0.20
+}
+
 /// The comparison as one document, for the CLI (`interior roomplan --json`), for the endpoint that
 /// takes a capture from the phone, and for anything after them.
 ///

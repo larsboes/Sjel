@@ -27,6 +27,7 @@
       starting = false;
     }
   }
+
 </script>
 
 {#if !capability}

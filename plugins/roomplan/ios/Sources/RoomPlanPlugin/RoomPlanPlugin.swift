@@ -256,6 +256,10 @@ private enum RoomPlanPluginError: LocalizedError {
 }
 
 final class RoomPlanPlugin: Plugin, RoomCaptureSessionDelegate, QLPreviewControllerDataSource {
+  private let migrationExportQueue = DispatchQueue(
+    label: "sjel.roomplan.migration-export",
+    qos: .utility
+  )
   private var webView: WKWebView?
   private var previewItem: RoomPlanPreviewItem?
   private var captureView: RoomCaptureView?
@@ -268,6 +272,7 @@ final class RoomPlanPlugin: Plugin, RoomCaptureSessionDelegate, QLPreviewControl
 
   override func load(webview: WKWebView) {
     self.webView = webview
+    scheduleMigrationExport()
   }
 
   @objc public func isAvailable(_ invoke: Invoke) {
@@ -623,6 +628,7 @@ final class RoomPlanPlugin: Plugin, RoomCaptureSessionDelegate, QLPreviewControl
     } else {
       try json.write(to: currentDraftURL(), options: [.atomic])
     }
+    scheduleMigrationExport()
     try await MainActor.run {
       self.isCapturing = false
       self.tearDownCaptureView()
@@ -714,6 +720,70 @@ final class RoomPlanPlugin: Plugin, RoomCaptureSessionDelegate, QLPreviewControl
     let directory = try roomPlanDirectory().appendingPathComponent(draftID, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
+  }
+
+  private func scheduleMigrationExport() {
+    migrationExportQueue.async { [weak self] in
+      guard let self else { return }
+      do {
+        try self.stageLegacyRoomPlanCaptures()
+      } catch {
+        NSLog("RoomPlan: local migration export failed: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  private func stageLegacyRoomPlanCaptures() throws {
+    let fileManager = FileManager.default
+    let source = try roomPlanDirectory()
+    let documents = try fileManager.url(
+      for: .documentDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    let destination = documents.appendingPathComponent(
+      "RoomPlan-GPUI-Migration",
+      isDirectory: true
+    )
+    try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+    let ready = destination.appendingPathComponent(".ready")
+    try? fileManager.removeItem(at: ready)
+
+    let directories = try fileManager.contentsOfDirectory(
+      at: source,
+      includingPropertiesForKeys: [.isDirectoryKey],
+      options: [.skipsHiddenFiles]
+    )
+    for capture in directories where
+      (try? capture.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+      let draft = capture.appendingPathComponent("draft.json")
+      let asset = capture.appendingPathComponent("parametric.usdz")
+      let draftID = capture.lastPathComponent
+      guard fileManager.fileExists(atPath: draft.path),
+            fileManager.fileExists(atPath: asset.path),
+            !draftID.isEmpty,
+            draftID.utf8.allSatisfy({
+              ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) ||
+                ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95
+            }) else {
+        continue
+      }
+      let target = destination.appendingPathComponent(draftID, isDirectory: true)
+      guard !fileManager.fileExists(atPath: target.path) else { continue }
+      let staging = destination.appendingPathComponent(
+        ".\(draftID).staging-\(UUID().uuidString)",
+        isDirectory: true
+      )
+      do {
+        try fileManager.copyItem(at: capture, to: staging)
+        try fileManager.moveItem(at: staging, to: target)
+      } catch {
+        try? fileManager.removeItem(at: staging)
+        throw error
+      }
+    }
+    try Data("ready".utf8).write(to: ready, options: [.atomic])
   }
 
   private func map(_ room: CapturedRoom) -> CapturedRoomPayload {

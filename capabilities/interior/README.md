@@ -30,7 +30,7 @@ from here.
 
 ## A capture arrives from the phone
 
-`POST /api/roomplan/captures` is the one write on the RoomPlan surface. The phone scans a room with
+`POST /api/roomplan/captures` stores an immutable RoomPlan capture. The phone scans a room with
 `RoomCaptureSession` and posts two things: the `roomplan-capture/v1` draft its native layer built
 (`libs/roomplan-contract`, which had no reader on this side until this endpoint) and the parametric
 USDZ as base64 — base64 because the shell proxies JSON and a paired device posts JSON, so a second
@@ -38,16 +38,43 @@ content type would need a second path through both.
 
 Three things happen in that order, and the order is the design: the draft is validated against the
 contract, the flat's own model is loaded (a capture for a flat this Mac does not know is refused
-before anything is written), then the file is written to `<assets_root>/captures/<flat>/<draft id>/`
-with the draft beside it as `observation.json` and read back through `roomplan::read_usdz`. The
-capture is named by the phone's draft id, so a re-post replaces it instead of stacking a second copy
-beside it, and a file the reader cannot parse is removed rather than left to become the "newest
-capture" that `/api/roomplan/reference` and the dashboard would then draw.
+before anything is written), then the USDZ length and SHA-256 are checked against the draft. The
+file is staged under `<assets_root>/captures/<flat>/<draft id>/` with the draft as both
+`draft.json` and `observation.json`, then read through `roomplan::read_usdz` before the directory is
+published. An exact retry is a no-op. Reusing an ID with different draft or USDZ bytes returns a
+conflict. A malformed USDZ is removed from staging and cannot become the newest capture.
+
+The phone keeps every scan in its RoomPlan app-support archive. Each entry has a local pending or
+synced receipt; a failed upload stays pending for a later retry. Older `current.json` scans are
+imported into the archive as pending entries, so the Mac can acknowledge them idempotently.
 
 The answer carries the comparison — the same document `interior roomplan --json` prints, from
 `roomplan::comparison_json`, with the draft id where the CLI puts a path. The comparison is computed
 from the file this Mac now holds, never from the numbers the phone sent: a phone that lied about its
 walls would otherwise have its numbers reviewed instead of its walls.
+
+`POST /api/roomplan/reconcile` compares two stored revisions by ID. It estimates a 2D rigid alignment
+from wall anchors and reports the residual error. When the wall fit is ambiguous or too noisy, it
+withholds furniture suggestions. Otherwise it pairs only observations with similar categories and
+dimensions, then labels each pair as an unconfirmed candidate. RoomPlan IDs remain capture-local;
+the reconciliation endpoint never identifies an inventory item or changes a placement. It does not
+claim that an unmatched observation is a real addition or removal.
+
+`GET /api/roomplan/spaces` lists stable room identities, their member revisions and confirmed object
+links. `POST /api/roomplan/spaces` starts a named room history from a stored scan; another scan joins
+through `POST /api/roomplan/spaces/{space_id}/revisions`. `PUT /api/roomplan/spaces/{space_id}/links`
+records a user-confirmed relation between one observation in one revision and an owned inventory
+item. Adding a later scan stores its pairwise wall alignment report. A reviewed placement change can
+then use `PUT /api/roomplan/spaces/{space_id}/placements/{item_id}` with the scan and observation
+IDs plus the expected placement revision. The capability verifies the confirmed link, owned state,
+layout constraints and revision, then appends the accepted position and solver verdict to
+`interior_placement_history`. `GET /api/placements/{flat}/{item}/history` returns that audit trail.
+Unreviewed scan matches do not move items. Before committing, GPUI calls
+`POST /api/roomplan/propose-placement`. That read-only endpoint verifies the same confirmed link and
+owned item, aligns wall runs and openings against the measured `room.toml` frame, and estimates the
+item's flat-plan position from its scanned centre, orientation and inventory footprint. It returns
+no estimate when anchors are ambiguous, noisy or insufficient. The user can inspect or edit the
+estimate; the placement endpoint still runs the layout solver before writing it.
 
 ## Where the data lives
 
@@ -60,6 +87,8 @@ private overlay, found through `SJEL_PERSONAL_ROOT`. Without it the capability s
 | `<overlay>/data/interior/flats/<id>/rules.toml` | walkway widths, named thresholds, light corridor, house rules |
 | `<overlay>/data/interior/flats/<id>/layouts/*.toml` | the arrangements under discussion; archived ones in `layouts/archiv/` |
 | `interior_placement` in the shared store | where pieces really stand, one row per piece |
+| `interior_placement_history` in the shared store | append-only, versioned placement changes with scan provenance and solver verdict |
+| `interior_roomplan_space*` in the shared store | stable room IDs, scan membership, saved alignments and confirmed scan-object links |
 | `inventory_*` in the shared store | the items, owned by `capabilities/inventory` and read through its crate |
 | `assets_root` in `<overlay>/config/interior.json` | photos and RoomPlan captures, served on request only |
 

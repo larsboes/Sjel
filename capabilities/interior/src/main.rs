@@ -1266,6 +1266,8 @@ fn placements_show(model: &Model, argv: &[String]) -> i32 {
                 x,
                 y,
                 rot,
+                revision: 0,
+                since: String::new(),
             }) {
                 eprintln!("{}", red(&format!("not written: {e}")));
                 return 2;

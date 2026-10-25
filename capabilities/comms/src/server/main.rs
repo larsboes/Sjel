@@ -618,7 +618,6 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/triage/{id}/gmail"),
             ("POST", "/triage/{id}/gmail-job"),
             ("POST", "/triage/bulk"),
-            ("POST", "/triage/events/replay"),
             ("POST", "/content/{source}/{id}/cloud-approval"),
             ("POST", "/content/cloud-jobs/{job_id}/run"),
             ("POST", "/ingest"),

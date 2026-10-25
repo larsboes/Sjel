@@ -40,6 +40,7 @@ use crate::theme::{AppearanceSettings, GlassStyle, Palette};
 use crate::ytalbum::{YtAlbum, YtAlbumEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
+use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
 use sjel_gpui_ui::terminal::TerminalView;
 
@@ -1139,47 +1140,29 @@ impl Workspace {
             }
         }
         let palette = Palette::for_appearance(window.appearance());
-        let repo = self.repo.clone();
-        let Ok(shell) = repo.shell() else {
+        let Ok(shell) = self.repo.shell() else {
             return;
         };
+        let host = Host::Shell(shell);
+        let opener = host.clone();
         let work = shell::run(async move {
-            // A shell someone already started is the one they want back; a fourth empty prompt is
-            // not. The list is the only way to find one, because the routes keep no index here.
-            if let Ok(listed) = shell.terminals().await {
-                if let Some(peer) = listed.into_iter().find(|peer| peer.alive) {
-                    return Some(peer);
-                }
-            }
-            let id = shell
-                .terminal_open("shell", None, TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
+            opener
+                .attach_or_open(TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
                 .await
-                .ok()?;
-            // `POST /terminals` answers the id alone, so the row that names the shell comes from
-            // the list. Without it the view still works: the first frame is the terminal's own.
-            shell
-                .terminals()
-                .await
-                .ok()
-                .and_then(|listed| listed.into_iter().find(|peer| peer.id == id))
-                .or_else(|| {
-                    Some(sjel_gpui_core::terminal::Terminal {
-                        id,
-                        preset: "shell".into(),
-                        title: "shell".into(),
-                        alive: true,
-                        ..Default::default()
-                    })
-                })
         });
         cx.spawn(async move |weak, cx| {
-            let peer = match work.await.flatten() {
-                Some(peer) => peer,
-                None => {
+            let peer = match work.await {
+                Some(Ok(peer)) => peer,
+                failed => {
+                    let why = failed.and_then(Result::err).unwrap_or_default();
                     let _ = weak.update(cx, |workspace, cx| {
                         workspace.terminal_note = Some(
-                            "The terminal did not open. Check that the agent capability is running."
-                                .into(),
+                            format!(
+                                "The terminal did not open. Check that the agent capability is running. {why}"
+                            )
+                            .trim_end()
+                            .to_owned()
+                            .into(),
                         );
                         cx.notify();
                     });
@@ -1188,7 +1171,7 @@ impl Workspace {
             };
             let _ = weak.update(cx, |workspace, cx| {
                 let entity = cx.new(|cx| {
-                    TerminalView::new(peer, repo, 0, TERMINAL_COLS, TERMINAL_ROWS, palette, cx)
+                    TerminalView::new(peer, host, 0, TERMINAL_COLS, TERMINAL_ROWS, palette, cx)
                 });
                 entity.update(cx, |view, cx| view.attach(cx));
                 workspace.terminal = Some(entity);

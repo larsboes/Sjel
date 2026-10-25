@@ -8,11 +8,15 @@
 //!
 //! Nothing here draws. `ui/src/terminal.rs` owns the grid, its colours and the keys.
 
+use std::sync::Arc;
+
 use base64::Engine as _;
 use futures::channel::mpsc::{unbounded, UnboundedReceiver};
+use reqwest::Method;
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::device::DeviceClient;
 use crate::shell::{spawn, Shell, ShellResult};
 
 /// The path prefix the shell proxies to the capability.
@@ -157,28 +161,7 @@ impl Shell {
                 STREAM_TIMEOUT,
             )
             .await?;
-        let (to, channel) = unbounded();
-        spawn(async move {
-            let mut response = response;
-            let mut buffer = Vec::new();
-            loop {
-                let chunk = match response.chunk().await {
-                    Ok(Some(chunk)) => chunk,
-                    Ok(None) | Err(_) => break,
-                };
-                buffer.extend_from_slice(&chunk);
-                while let Some(frame) = crate::agent::next_frame(&mut buffer) {
-                    let Some(update) = update_from(&frame.event, &frame.data) else {
-                        continue;
-                    };
-                    let ended = !matches!(update, Update::Output { .. });
-                    if to.unbounded_send(update).is_err() || ended {
-                        return;
-                    }
-                }
-            }
-        });
-        Ok(channel)
+        Ok(frames(response))
     }
 
     /// Writes bytes to the pty, as if typed.
@@ -219,6 +202,175 @@ impl Shell {
         .await
         .map(|_| ())
     }
+}
+
+/// The Mac a terminal view talks to: its own shell on the Mac, or the paired listener from the
+/// phone. Both reach the same capability routes, so the rules above them are written once.
+#[derive(Clone)]
+pub enum Host {
+    Shell(Arc<Shell>),
+    Device(Arc<DeviceClient>),
+}
+
+impl Host {
+    pub async fn terminals(&self) -> Result<Vec<Terminal>, String> {
+        match self {
+            Self::Shell(shell) => shell.terminals().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&format!("{BASE}/api/agent/terminals")).await,
+        }
+    }
+
+    pub async fn open(
+        &self,
+        preset: &str,
+        cwd: Option<&str>,
+        cols: u16,
+        rows: u16,
+    ) -> Result<String, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .terminal_open(preset, cwd, cols, rows)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let mut body = json!({ "preset": preset, "cols": cols, "rows": rows });
+                if let Some(cwd) = cwd.filter(|cwd| !cwd.trim().is_empty()) {
+                    body["cwd"] = json!(cwd);
+                }
+                let opened: Opened = client
+                    .post(
+                        &format!("{BASE}/api/agent/terminals"),
+                        body.to_string().as_bytes(),
+                    )
+                    .await?;
+                Ok(opened.id)
+            }
+        }
+    }
+
+    /// The newest terminal still running, or a new login shell sized `cols` by `rows`.
+    ///
+    /// A shell someone already started is the one they want back; a fourth empty prompt is not.
+    /// The list is the only way to find one, because the routes keep no index.
+    pub async fn attach_or_open(&self, cols: u16, rows: u16) -> Result<Terminal, String> {
+        if let Ok(listed) = self.terminals().await {
+            if let Some(peer) = listed.into_iter().find(|peer| peer.alive) {
+                return Ok(peer);
+            }
+        }
+        let id = self.open("shell", None, cols, rows).await?;
+        // `POST /terminals` answers the id alone, so the row that names the shell comes from the
+        // list. Without it the view still works: the first frame is the terminal's own.
+        let listed = self.terminals().await.unwrap_or_default();
+        Ok(listed
+            .into_iter()
+            .find(|peer| peer.id == id)
+            .unwrap_or_else(|| Terminal {
+                id,
+                preset: "shell".into(),
+                title: "shell".into(),
+                alive: true,
+                ..Default::default()
+            }))
+    }
+
+    pub async fn stream(&self, id: &str, from: u64) -> Result<UnboundedReceiver<Update>, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .terminal_stream(id, from)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client
+                .streaming_get(&format!(
+                    "{BASE}/api/agent/terminals/{id}/stream?from={from}"
+                ))
+                .await
+                .map(frames),
+        }
+    }
+
+    pub async fn input(&self, id: &str, data: &[u8]) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell
+                .terminal_input(id, data)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                if data.len() > MAX_INPUT_BYTES {
+                    return Err(format!("input is at most {MAX_INPUT_BYTES} bytes"));
+                }
+                let body =
+                    json!({ "data": base64::engine::general_purpose::STANDARD.encode(data) });
+                client
+                    .send(
+                        Method::POST,
+                        &format!("{BASE}/api/agent/terminals/{id}/input"),
+                        body.to_string().as_bytes(),
+                    )
+                    .await
+            }
+        }
+    }
+
+    pub async fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell
+                .terminal_resize(id, cols, rows)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = json!({ "cols": cols, "rows": rows });
+                client
+                    .send(
+                        Method::POST,
+                        &format!("{BASE}/api/agent/terminals/{id}/resize"),
+                        body.to_string().as_bytes(),
+                    )
+                    .await
+            }
+        }
+    }
+
+    pub async fn close(&self, id: &str) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell.terminal_close(id).await.map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                client
+                    .send(
+                        Method::DELETE,
+                        &format!("{BASE}/api/agent/terminals/{id}"),
+                        &[],
+                    )
+                    .await
+            }
+        }
+    }
+}
+
+/// Reads a stream's frames into updates until the program ends or the connection closes.
+fn frames(response: reqwest::Response) -> UnboundedReceiver<Update> {
+    let (to, channel) = unbounded();
+    spawn(async move {
+        let mut response = response;
+        let mut buffer = Vec::new();
+        loop {
+            let chunk = match response.chunk().await {
+                Ok(Some(chunk)) => chunk,
+                Ok(None) | Err(_) => break,
+            };
+            buffer.extend_from_slice(&chunk);
+            while let Some(frame) = crate::agent::next_frame(&mut buffer) {
+                let Some(update) = update_from(&frame.event, &frame.data) else {
+                    continue;
+                };
+                let ended = !matches!(update, Update::Output { .. });
+                if to.unbounded_send(update).is_err() || ended {
+                    return;
+                }
+            }
+        }
+    });
+    channel
 }
 
 /// One frame as the client's own vocabulary, or `None` for a name this client does not know.

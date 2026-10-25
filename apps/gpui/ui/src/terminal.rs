@@ -20,8 +20,6 @@
 //! parser keeps history for scrolling back, but a client that drew history would have to agree with
 //! the Mac about offsets. This draws the visible screen, which both screens can always agree on.
 
-use std::sync::Arc;
-
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
@@ -36,9 +34,8 @@ use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 
-use sjel_gpui_core::data::Repo;
-use sjel_gpui_core::shell::{self, ShellError};
-use sjel_gpui_core::terminal::{Position, Terminal as Peer, Update};
+use sjel_gpui_core::shell;
+use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update};
 
 use crate::theme::Palette;
 
@@ -403,10 +400,13 @@ fn control_bytes(key: &str) -> Option<Vec<u8>> {
     Some(vec![byte])
 }
 
+/// What a request says when the runtime dropped it before the Mac answered.
+const UNANSWERED: &str = "The Mac did not answer.";
+
 /// One terminal: the peer's row, the grid it is drawn from, and where the reader has read to.
 pub struct TerminalView {
     peer: Peer,
-    repo: Repo,
+    host: Host,
     screen: Screen,
     position: Position,
     focus: FocusHandle,
@@ -420,7 +420,7 @@ impl TerminalView {
     /// A view of a terminal the capability already holds, attached from byte `from`.
     pub fn new(
         peer: Peer,
-        repo: Repo,
+        host: Host,
         from: u64,
         cols: usize,
         rows: usize,
@@ -432,7 +432,7 @@ impl TerminalView {
         screen.scroll(0);
         Self {
             screen,
-            repo,
+            host,
             position: Position::new(from),
             focus: cx.focus_handle(),
             problem: None,
@@ -488,22 +488,20 @@ impl TerminalView {
     /// byte the Mac still holds, and the next stream is asked from there. Every other ending —
     /// `exit`, or a channel that closes — stops here.
     pub fn attach(&mut self, cx: &mut Context<Self>) {
-        let Ok(shell) = self.repo.shell() else {
-            return;
-        };
+        let host = self.host.clone();
         let id = self.peer.id.clone();
         cx.spawn(async move |weak, cx| loop {
             let Ok(from) = weak.read_with(cx, |view, _| view.position()) else {
                 return;
             };
-            let stream = Arc::clone(&shell);
+            let stream = host.clone();
             let name = id.clone();
-            let work = shell::run(async move { stream.terminal_stream(&name, from).await });
-            let mut receiver = match work.await.unwrap_or(Err(ShellError::Unreachable)) {
+            let work = shell::run(async move { stream.stream(&name, from).await });
+            let mut receiver = match work.await.unwrap_or_else(|| Err(UNANSWERED.into())) {
                 Ok(receiver) => receiver,
                 Err(error) => {
                     let _ = weak.update(cx, |view, cx| {
-                        view.problem = Some(error.to_string().into());
+                        view.problem = Some(error.into());
                         cx.notify();
                     });
                     return;
@@ -542,15 +540,13 @@ impl TerminalView {
         if bytes.is_empty() || !self.peer.alive {
             return;
         }
-        let Ok(shell) = self.repo.shell() else {
-            return;
-        };
+        let host = self.host.clone();
         let id = self.peer.id.clone();
-        let work = shell::run(async move { shell.terminal_input(&id, &bytes).await });
+        let work = shell::run(async move { host.input(&id, &bytes).await });
         cx.spawn(async move |weak, cx| {
-            if let Err(error) = work.await.unwrap_or(Err(ShellError::Unreachable)) {
+            if let Err(error) = work.await.unwrap_or_else(|| Err(UNANSWERED.into())) {
                 let _ = weak.update(cx, |view, cx| {
-                    view.problem = Some(error.to_string().into());
+                    view.problem = Some(error.into());
                     cx.notify();
                 });
             }
@@ -564,14 +560,11 @@ impl TerminalView {
             return;
         }
         self.screen.resize(cols, rows);
-        let Ok(shell) = self.repo.shell() else {
-            cx.notify();
-            return;
-        };
+        let host = self.host.clone();
         let id = self.peer.id.clone();
         let cols = self.screen.cols() as u16;
         let rows = self.screen.rows() as u16;
-        let work = shell::run(async move { shell.terminal_resize(&id, cols, rows).await });
+        let work = shell::run(async move { host.resize(&id, cols, rows).await });
         cx.spawn(async move |_weak, _cx| {
             // A resize the Mac refuses leaves the program wrapping at the old width. Nothing here
             // can fix that, and a card in the middle of typing would be worse than the wrap.
@@ -583,17 +576,15 @@ impl TerminalView {
 
     /// End the program on the Mac.
     pub fn close(&mut self, cx: &mut Context<Self>) {
-        let Ok(shell) = self.repo.shell() else {
-            return;
-        };
         self.closing = true;
+        let host = self.host.clone();
         let id = self.peer.id.clone();
-        let work = shell::run(async move { shell.terminal_close(&id).await });
+        let work = shell::run(async move { host.close(&id).await });
         cx.spawn(async move |weak, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let result = work.await.unwrap_or_else(|| Err(UNANSWERED.into()));
             let _ = weak.update(cx, |view, cx| {
                 if let Err(error) = result {
-                    view.problem = Some(error.to_string().into());
+                    view.problem = Some(error.into());
                 }
                 view.closing = false;
                 cx.notify();

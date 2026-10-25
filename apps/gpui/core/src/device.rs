@@ -248,12 +248,13 @@ impl DeviceClient {
     /// A signed GET for a non-JSON capability asset, such as a USDZ archive.
     pub async fn get_bytes(&self, shell_path: &str) -> Result<Vec<u8>, String> {
         let (status, body) = self.signed(Method::GET, shell_path, &[]).await?;
-        if (200..300).contains(&status) {
-            Ok(body)
-        } else {
-            let error = crate::shell::error_text(&body);
-            Err(error.unwrap_or_else(|| format!("The Mac refused the request ({status}).")))
-        }
+        accepted(status, body)
+    }
+
+    /// A signed request whose answer has no body to read, such as `204 No Content`.
+    pub async fn send(&self, method: Method, shell_path: &str, body: &[u8]) -> Result<(), String> {
+        let (status, body) = self.signed(method, shell_path, body).await?;
+        accepted(status, body).map(|_| ())
     }
 
     /// A signed event stream from the paired Mac. Its total body has no timeout: callers stop it
@@ -397,6 +398,14 @@ async fn read<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, Str
     decode(status, &body)
 }
 
+fn accepted(status: u16, body: Vec<u8>) -> Result<Vec<u8>, String> {
+    if (200..300).contains(&status) {
+        return Ok(body);
+    }
+    let error = crate::shell::error_text(&body);
+    Err(error.unwrap_or_else(|| format!("The Mac refused the request ({status}).")))
+}
+
 fn decode<T: DeserializeOwned>(status: u16, body: &[u8]) -> Result<T, String> {
     if (200..300).contains(&status) {
         return serde_json::from_slice(body)
@@ -460,5 +469,16 @@ mod tests {
         assert!(parse_pairing_qr(&qr("lars-mac", 0, &pin)).is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 70000, &pin)).is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 8443, &"AB".repeat(32))).is_err());
+    }
+
+    #[test]
+    fn an_answer_with_no_body_is_accepted_and_a_refusal_keeps_its_reason() {
+        // `204 No Content` is what the terminal's input, resize and DELETE routes answer.
+        assert_eq!(accepted(204, Vec::new()), Ok(Vec::new()));
+        assert!(decode::<serde_json::Value>(204, &[]).is_err());
+        assert_eq!(
+            accepted(404, br#"{"error":"no such terminal"}"#.to_vec()),
+            Err("no such terminal".to_string())
+        );
     }
 }

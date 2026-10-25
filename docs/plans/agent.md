@@ -57,21 +57,71 @@ tier (A4).
 
 Decided 2026-10-25. Every `bash` call and every write gets one of three classes.
 
-| Class | Behavior | Examples |
+| Class | Behavior |
+|---|---|
+| Block | Refused. The user can allow one call from a separate card that names the matched rule. A session grant is never possible. |
+| Ask | The approval card, as today. A session grant is possible, keyed by tool and exact arguments. |
+| Allow | Runs without a card. Logged like every call. |
+
+### How a command is classified
+
+1. **Split.** Lex the command with shell quoting rules. Split it into simple commands at `;`,
+   `&&`, `||`, `|`, `&` and newlines. A subshell `( … )` or a group `{ … }` is classified by its
+   contents.
+2. **Unwrap.** Before a rule matches, strip the wrappers that run another command: `env [VAR=x]…`,
+   `command`, `builtin`, `exec`, `nice`, `nohup`, `time`, `timeout <n>`, a leading backslash
+   (`
+m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh -c` and
+   `zsh -c` strings recursively. `xargs <cmd>` and `find … -exec <cmd>` are classified as `<cmd>`
+   with unknown arguments.
+3. **Opaque input.** A command whose program name comes from a substitution (`$(…)`, backticks,
+   `$VAR`), `eval`, `source` of a file the session did not read, or a here-document fed to a shell
+   is at least Ask. If the opaque part reaches a Block program name, it is Block.
+4. **Paths.** Resolve every path argument and every redirect target (`>`, `>>`, `2>`, `tee`)
+   against the working directory, with `~` and `..` expanded and symlinks followed. A write
+   target outside the tier scope (§2) is Block.
+5. **Strictest wins.** The class of a compound command is the strictest class of its parts.
+6. **Unknown is Ask.** A program with no rule is Ask, never Allow.
+7. **Log.** Every decision is written to the call log with its class and the rule ID.
+
+### Rules
+
+| ID | Class | Matches |
 |---|---|---|
-| Block | Refused. The user can allow one call from a separate, explicit card. A session grant is never possible. | `rm -rf`, `git push --force`, `git reset --hard`, `git clean -fd`, `sudo`, `curl … \| sh`, `dd`, `diskutil`, `chmod -R`, `launchctl`, a write outside the tier scope, a secret path (the existing guard) |
-| Ask | The approval card, as today. A session grant is possible. | File writes and edits, `git commit`, `git push`, package installs, network commands, any command the classifier does not know |
-| Allow | Runs without a card | Read-only tools, `ls`, `rg`, `cat`, `git status`, `git diff`, `git log`, `cargo check`, `cargo test` |
+| B1 | Block | `rm` with `-r`, `-R`, `--recursive` or `-f`, or any `rm` whose target is the tier root, `$HOME`, `/`, or outside the tier scope. `find … -delete`. |
+| B2 | Block | Discarding uncommitted work or history: `git reset --hard`, `git clean` with `-f`, `git checkout -- <path>` and `git restore` on the worktree, `git push` with `-f` or `--force`, `git push --delete`, `git branch -D`, `git tag -d`, `git filter-repo`, `git reflog expire`. |
+| B3 | Block | Privilege: `sudo`, `su`, `doas`, `osascript` with `administrator privileges`. |
+| B4 | Block | Download and run: a pipe or process substitution into `sh`, `bash`, `zsh`, `python`, `node` or `ruby` (`curl … \| sh`, `bash <(curl …)`). |
+| B5 | Block | Disks and system state: `dd`, `mkfs*`, `diskutil`, `fdisk`, `shred`, `csrutil`, `spctl`, `nvram`, `launchctl`, `systemctl`, `crontab -r`, `defaults write`, `chmod -R`, `chown -R`. |
+| B6 | Block | Secrets: the existing guard (`libs/agent/src/ext/guard.rs`), plus `security find-*-password -w` and `security delete-*`. |
+| B7 | Block | Irreversible publishing: `cargo publish`, `npm publish`, `bun publish`, `gh release create`, `gh repo delete`. |
+| A1 | Ask | Any write or edit through the `write` and `edit` tools inside the tier scope. |
+| A2 | Ask | Git changes that keep history: `git commit`, `git push` (no force), `git merge`, `git rebase`, `git cherry-pick`, `git stash`, `git tag`, `git branch` (create), `git switch -c`. |
+| A3 | Ask | Package changes: `brew`, `npm`, `bun`, `pip`, `uv`, `cargo install` and `cargo add`, `rustup`. |
+| A4 | Ask | Network: `curl`, `wget`, `ssh`, `scp`, `rsync` to a remote, `gh` write subcommands (`pr create`, `issue create`, `pr merge`). |
+| A5 | Ask | Processes and containers: `kill`, `pkill`, `killall`, `docker` and `orb` run commands, `open`. |
+| A6 | Ask | Opaque input (step 3) and every program without a rule (step 6). |
+| R1 | Allow | Reading: `ls`, `cat`, `head`, `tail`, `wc`, `rg`, `grep`, `find` without `-delete` or `-exec`, `fd`, `tree`, `stat`, `file`, `du`, `df`, `pwd`, `echo`, `which`, `date`, `env` with no command. |
+| R2 | Allow | Git reads: `git status`, `diff`, `log`, `show`, `blame`, `rev-parse`, `ls-files`, `grep`, `branch` (list), `remote -v`. |
+| R3 | Allow | Build and test: `cargo check`, `test`, `clippy`, `build`, `fmt --check`, `bun test`, `tools/doctor`, and `sjel` read verbs (`help`, `search`, `context`, `status`). |
 
-Rules for the classifier:
+A redirect that writes inside the tier scope turns an R rule into A1.
 
-1. Static rules in Rust first. A compound command (`&&`, `;`, `|`, `$(…)`, subshells) gets the
-   strictest class of its parts.
-2. An unknown command is Ask, never Allow.
-3. A local small model may classify unknown commands later, only after a measurement shows it
-   lowers the prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is
-   the prior art in the Pi setup.
-4. Every decision goes to the call log with its class and the rule that matched.
+### Where it lives and how it is tested
+
+- `libs/agent/src/ext/policy.rs`: the classifier, so the CLI and the capability share one rule
+  set. `capabilities/agent/src/gate.rs` reads the class: Allow skips the card, Ask shows it, and
+  Block shows the separate card with the rule ID.
+- `libs/agent/tests/policy_cases.toml`: at least one case per rule ID, plus evasion cases that
+  must never be Allow: `r''m -rf x`, `
+m -rf x`, `env rm -rf x`, `command rm -rf x`,
+  `$(echo rm) -rf x`, `bash -c "rm -rf ~"`, `echo x | xargs rm -rf`, `find . -exec rm -rf {} +`,
+  `ls; rm -rf x`, and `cat x > ../outside`.
+- Done when every case passes, the gate shows the rule ID on each card, and one week of real use
+  gives a prompt rate (below).
+
+A local small model may classify A6 commands later, only after a measurement shows it lowers the
+prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
 **Measures for the policy.**
 
@@ -88,9 +138,6 @@ Rules for the classifier:
 `libs/agent/src/ext/guard.rs` makes for secret paths. A command can write outside the root
 without naming the path. The hard boundary for `project` and `account` is decision A1 in §10.
 
-**Placement, proposed.** The classifier goes in `libs/agent`, so the CLI and the capability use
-one rule set. The capability's `ApprovalGate` reads the class: Allow skips the card, Ask shows it,
-Block shows the separate card.
 
 ## 4. Plugins and the Pi port
 
@@ -128,17 +175,8 @@ The SSH path is the fallback, not a first step.
 
 Steps:
 
-1. **PTY sessions on the Mac.** `capabilities/agent` holds the PTYs (A5) and serves them through the
-   paired-device listener, with the same signed `DeviceClient` requests as the agent. Output
-   streams in frames with a sequence number, like the agent event stream. Input goes up as
-   requests. The PTY lives on the Mac, so a dropped phone connection does not stop a running
-   Claude Code. The phone reattaches and replays the scrollback.
-2. **One terminal view for Mac and phone.** A VT parser and grid (candidate: `alacritty_terminal`,
-   which Zed's GPUI terminal uses, after an `upstreams.toml` review). A phone key row with Esc,
-   Tab, Ctrl and arrows. A session list. Presets that start `claude`, `codex`, `pi`, `sjel-agent`
-   or a plain shell in a chosen folder. Zed's GPUI terminal is the reference to read first. Check
-   its licence against Sjel's AGPL-3.0 in the `upstreams.toml` review.
-
+1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below.
+2. **One terminal view for Mac and phone**, specified below.
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the
    connection, and [Blink Shell](https://github.com/blinksh/blink) (GPL-3.0) on the phone with a
@@ -148,11 +186,83 @@ Why not an SSH client in the app: it needs its own key on the phone and its own 
 Mac. The paired-device listener already authenticates the phone, and PTYs held on the Mac give
 reattach without tmux.
 
-**Security.** A terminal is a full shell with the user account's rights. The command policy in §3
-cannot apply to interactive keystrokes. Proposed controls: the tailnet and the device signature
-(as today), Face ID before a terminal opens on the phone, the capability bound to loopback behind
-the paired listener, an idle timeout, and one audit line per session start and end. Keystrokes and
-output are not logged.
+### Routes
+
+Same transport as the agent's session stream: JSON requests, and Server-Sent Events for output.
+The phone signs every request with `DeviceClient` through the paired listener.
+
+| Method and path | Body or query | Answer |
+|---|---|---|
+| `POST /api/agent/terminals` | `{preset, cwd, cols, rows}` | `{id}` |
+| `GET /api/agent/terminals` | | `[{id, preset, cwd, title, started_at, last_output_at, alive, exit_code, clients}]` |
+| `GET /api/agent/terminals/{id}/stream?from=<offset>` | | SSE, events below |
+| `POST /api/agent/terminals/{id}/input` | `{data}`: base64 bytes, at most 64 KiB | `204` |
+| `POST /api/agent/terminals/{id}/resize` | `{cols, rows}` | `204`. The last resize wins. |
+| `DELETE /api/agent/terminals/{id}` | | `204` after SIGHUP to the process group, SIGKILL after 5 s |
+
+SSE events:
+
+- `output`: `{offset, data}`. `offset` is the byte position of `data` in the terminal's output,
+  and `data` is base64.
+- `truncated`: `{first_offset}`. The requested `from` is older than the scrollback. The client
+  clears its grid and reads again from `first_offset`.
+- `exit`: `{code}`. The stream ends after it.
+
+Every route declares its request schema (`schema_of::<T>()`), as `tools/check-route-schemas.sh`
+requires.
+
+### Behavior
+
+- **Presets.** `shell` runs the user's login shell (`$SHELL -l`). `claude`, `codex`, `pi` and
+  `sjel-agent` run that program inside the login shell, so `PATH` matches an interactive
+  terminal. The commands live in `<overlay>/config/agent.toml` under `[terminal.presets]`,
+  because install paths are machine facts. `cwd` must be an existing directory under `$HOME`.
+- **Environment.** `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` from the user's
+  environment. The PTY never inherits the capability's own secrets or tokens.
+- **Scrollback.** A 2 MiB ring of raw output per terminal, held in memory. A client that
+  reattaches reads from its last offset. A restart of the capability ends every terminal.
+- **Limits.** At most 8 terminals. A terminal with no attached client and no output for 12 hours
+  is closed like a `DELETE`. These are starting values.
+- **Several clients.** The Mac and the phone can attach to the same terminal at once. Both see the
+  same output, and either can type.
+
+### Security
+
+A terminal is a full shell with the user account's rights. The command policy in §3 cannot apply
+to interactive keystrokes, so access is the control.
+
+- The agent token never reaches these routes. `capabilities/agent` does not call
+  `InboundAuth::admit_agents`, so the token answers 401 (`libs/sjel-server/src/agent.rs`). A test
+  asserts this for every terminal route, so a later change cannot open a shell to an agent.
+- The capability stays on `Reach::Loopback`. The phone reaches it only through the paired
+  listener and a device signature.
+- The phone asks for Face ID (`LocalAuthentication`) before it opens or reattaches a terminal,
+  once per foreground session of the app.
+- One audit line per terminal start and end in `<overlay>/data/agent/terminals.jsonl`:
+  `{at, id, preset, cwd, client, event, exit_code}`. No input and no output is logged.
+
+### Client
+
+- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Reconnect resumes from the
+  last offset.
+- `apps/gpui/ui/src/terminal.rs`: the view. `alacritty_terminal` (Apache-2.0) parses the stream
+  into a grid, and GPUI draws the grid. Zed's GPUI terminal is the reference to read first. Check
+  its licence against Sjel's AGPL-3.0 before reusing code. `portable-pty` on the Mac side and
+  `alacritty_terminal` each need an `upstreams.toml` row first.
+- Phone: the Agent tab lists agent sessions and terminals. A key row above the keyboard carries
+  Esc, Tab, Ctrl, arrows, `|`, `~` and `/`. Selection copies to the clipboard. Pinch changes the
+  font size. Mac: a terminal opens from the finder (`sjel://terminal`) or in the right edge.
+
+### Done when
+
+1. On the Mac, the `shell` preset runs `ls`, a resize redraws `htop` correctly, and scrollback
+   reaches the first line.
+2. On the phone, the `claude` preset starts in `~/Developer/Sjel` and accepts a prompt. After the
+   phone is locked for 2 minutes, reopening the app reattaches and replays the missed output.
+3. The Mac and the phone attached to one terminal show the same output.
+4. A request with the agent token to each terminal route answers 401 (test).
+5. `DELETE` ends the process group, and the audit file holds a start and an end line with no
+   input or output.
 
 ## 7. Live validation
 

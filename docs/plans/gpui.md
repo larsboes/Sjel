@@ -55,13 +55,88 @@ terminals. Inbox capture moves to a button on Today and to a share extension. Do
 open from Today, from the finder, and from links in mail and trips. The change is one line in
 `ui/src/nav.rs`.
 
-| Area | Today | Next |
-|---|---|---|
-| Documents | Mac only. The page is still in `src/` because it uses PDFKit through `pdf_kit`. | Move the page into `ui/` behind a PDF trait (PDFKit exists on iOS). Render the hash-verified original offline at fit width ([#245](https://github.com/larsboes/Sjel/issues/245)). Then reviewable proposals ([#247](https://github.com/larsboes/Sjel/issues/247)) and durable duplicate and split decisions ([#246](https://github.com/larsboes/Sjel/issues/246)). |
-| Mail | Mac only. The Mail page is already in `ui/`. Feed still needs Documents for attachments. | A phone tab over the shared page: read, triage, open an attachment in the reader. Offline reads from the phone's copy. |
-| Calendar | Tab, reads and writes the replica | A 24-hour time grid with a now line. Move an event by 15 or 30 minutes. A sync status mark for Google and iCloud. |
-| Travel | Tab with trips and the native map. Authoring is Mac only. | Itinerary timeline, map polish and the offline-ready mark (§7). Fare alerts verified on a device (Work Package 27). Trip edits on the phone. |
-| Capture | Inbox tab with the outbox | A share extension in the phone app. The listener admits only requests signed with a paired device's key, and an iOS Shortcut cannot sign, so a shared-token endpoint is not an option. |
+| Area | Today |
+|---|---|
+| Documents | Mac only. The page is still in `src/` because it uses PDFKit through `pdf_kit`. |
+| Mail | Mac only. The Mail page is in `ui/` (`ui/src/mail.rs`). Every write goes through `POST /comms/triage/bulk`. |
+| Calendar | Tab, reads and writes the replica |
+| Travel | Tab with trips and the native map. Saved trip details answer when the Mac is away. Authoring is Mac only. |
+| Capture | Inbox tab with the outbox |
+
+### What may live on the phone
+
+`sjel mirror build` deliberately leaves comms, documents and finance out of the phone's copy
+(`tools/sjel-cli/src/mirror.rs`, `PHONE_SET`). Mail and documents on the phone follow three rules,
+proposed 2026-10-25:
+
+1. **Online first.** Mail and documents are read live from the Mac through the signed device
+   client.
+2. **Offline only what the user chose.** A document the user marks "keep offline", and a mail the
+   user opened, are kept in the app sandbox with iOS Data Protection
+   (`NSFileProtectionComplete`). Nothing else from comms or documents is copied.
+3. **No second writer.** Triage on the phone writes through the same `POST /comms/triage/bulk`
+   route. Without a connection the action waits in the outbox and is shown as pending.
+
+### Documents
+
+1. Move the page into `ui/` behind a `PdfRenderer` trait in the shell. PDFKit implements it on
+   macOS and iOS.
+2. The phone lists documents from `GET /api/documents` with cursor paging (§7), and opens the
+   hash-verified original at fit width with pinch zoom.
+3. "Keep offline" stores the original and its metadata on the phone (rule 2).
+4. Then [#245](https://github.com/larsboes/Sjel/issues/245) (filing and side-by-side compare),
+   [#247](https://github.com/larsboes/Sjel/issues/247) (reviewable proposals) and
+   [#246](https://github.com/larsboes/Sjel/issues/246) (durable duplicate and split decisions).
+
+Done when a real multi-page PDF opens at fit width on the phone, a kept document opens with the
+Mac unreachable, and the original's SHA-256 on the phone equals the library's.
+
+### Mail
+
+1. A phone tab over the shared Mail page in a compact density: the proposals grouped by category,
+   one row per mail with sender, subject and age.
+2. Opening a row shows the mail's text and its attachments. An attachment opens in the document
+   reader.
+3. Swipe actions map to the existing `MailAction`s: archive, trash, dismiss, waiting. Archive,
+   trash and a class-raising category ask first, as on the Mac (`MailAction::confirmation`).
+4. Offline: opened mails stay readable (rule 2), and an action waits in the outbox (rule 3).
+
+Done when the phone triages ten mails with the Mac reachable and the Mac shows the same state, an
+action taken offline applies once on reconnect, and an attachment opens in the reader.
+
+### Calendar
+
+1. A day view with a 24-hour time grid and a now line. The week view stays as it is.
+2. Long-press and drag moves an event in 15-minute steps. The write goes through the replica, the
+   same path as the New form.
+3. A status mark shows the last successful Google and iCloud sync, and an error if one failed.
+
+Done when a moved event shows the new time on the Mac after the next sync, and the mark matches
+the Mac's last sync time.
+
+### Travel
+
+1. **Itinerary timeline.** One card per day. Each stage shows its mode, times and the connection
+   time to the next stage. A tap copies the booking code.
+2. **Map.** Category pins for stays, stations, airports and places. A tap opens a card with the
+   stop's name, address, date, and "Open in Apple Maps". A "fit trip" control.
+3. **Offline-ready mark.** Shown per trip when its details, its booking PDFs (kept under rule 2)
+   and the map tiles for its bounds at zoom 10–15 are on the phone.
+4. **Fare alerts.** Work Package 27, verified on a device.
+5. **Edits on the phone.** Trip fields and bookings, through the Trips routes the Mac uses.
+
+Done when an upcoming trip shows the offline-ready mark, then opens with its timeline, map and
+booking PDFs in airplane mode.
+
+### Capture
+
+A share extension in the phone app sends a link, text or a file to Inbox. The listener admits only
+requests signed with a paired device's key, and an iOS Shortcut cannot sign, so a shared-token
+endpoint is not an option. The extension signs with the app's device key through a shared
+keychain group.
+
+Done when sharing a link from Safari with the Mac away puts it in the outbox, and it reaches the
+Mac's Inbox once on reconnect.
 
 **Open in the trip model.** A stage names a destination and a date, an item names a day, and a
 plan's status is draft, saved or archived. Nothing says "this part is undecided, here are the
@@ -200,12 +275,8 @@ its owner finishes.
 Polish does not block retirement. The write paths do. The phone priority areas are in §2. Order
 inside this list is by use.
 
-- **Travel and map** (highest). Edit a trip's own fields. A day-by-day itinerary timeline with
-  mode icons, connection times and a copy button for the booking code. Map pins with category
-  glyphs, tap-to-inspect cards, curved stage lines, "fit trip". A fare-alert strip on upcoming
-  trips. An "offline ready" mark per trip that covers items, booking PDFs and map tiles.
-- **Documents.** Cursor paging instead of 7,154 rows on mount. Page thumbnails, text search in
-  the rendered PDF, drag and drop from Finder into import.
+- **Documents.** Cursor paging instead of 7,154 rows on mount (needed by §2). Page thumbnails,
+  text search in the rendered PDF, drag and drop from Finder into import.
 - **Finance.** A six-month spending and income chart. A keyboard category picker.
 - **People.** Interaction history: notes that mention the person, with dates.
 - **Inventory.** State history and layout impact preview (from Work Package 26).

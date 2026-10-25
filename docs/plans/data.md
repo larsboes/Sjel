@@ -68,6 +68,15 @@ the GPUI Settings tab. No new client, page or CLI verb set.
   only record of that model was a backend field that no tool read.
 - Owner: `capabilities/settings`, read and probe first, writes later. It reads `inference.json`
   through `libs/inference` and re-implements none of it.
+- **What works today.** Settings › Accounts stores a provider key in the OS keychain as
+  `inference-<provider>` (`apps/gpui/core/src/shell.rs`, `store_provider_key`), for OpenAI,
+  DeepSeek, OpenCode Go, NVIDIA NIM and Gemini. A backend names that item with
+  `api_key_credential_id`. `libs/inference` and `tools/model-check` resolve a key through one
+  function, `backend_api_key`: keychain first, then a key file. `tools/model-check --role <role>
+  --probe` sends one request to one role. Checked 2026-10-25: the `deepseek` and `gemini` backends
+  answer from their keychain items alone.
+- **Next.** The settings section shows key presence only. It should show, per backend, whether its
+  model answers, and offer the one-role probe as a button.
 - Shows, in order: each backend with its model, whether the model answers, and whether its key is
   present. Each role with its backend and model. Then the tool-level selection no role names
   (`config/graphify.env`).
@@ -119,7 +128,3 @@ Open items that belong to one capability and to no priority yet.
   per-trip route answers 200 with five zeros for an untagged trip.
 - **Backup kinds.** A target kind counts as verified only when its own restore passes. Only the
   local kind is rehearsed. iCloud and ssh are unproven.
-- **host-patch.** The daily run exits 1 on RUSTSEC-2026-0381, -0382 and -0383 inside the
-  Cargo.lock that `tauri-cli 2.12.3` and `xberg-cli 1.3.10` publish. Accept each in
-  `osv-scanner-installed.toml` with its reach and an end date, or upgrade when the maintainers
-  republish. Deleting Tauri removes one of the two.

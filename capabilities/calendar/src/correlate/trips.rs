@@ -48,11 +48,12 @@ pub(super) fn place_of(entry: &Entry) -> Option<String> {
         .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|city| !city.is_empty());
+    // Older mail proposals stored a model's JSON null as the string "null".
     let fallback = entry
         .location
         .as_deref()
         .map(str::trim)
-        .filter(|l| !l.is_empty());
+        .filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("null"));
     city.or(fallback).map(|place| place.to_string())
 }
 

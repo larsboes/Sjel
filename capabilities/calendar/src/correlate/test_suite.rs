@@ -756,6 +756,15 @@ mod cluster_tests {
     }
 
     #[test]
+    fn a_null_string_location_is_no_place() {
+        let mut entry = event("a", "x", "2026-08-12", "2026-08-12", Commitment::Possible);
+        entry.payload = json!({});
+        entry.location = Some("null".into());
+        let out = cluster_trips(&[entry], 5, None).unwrap();
+        assert!(out.unclustered[0].reason.contains("no place"));
+    }
+
+    #[test]
     fn home_is_not_a_trip_and_says_so() {
         let entries = [event(
             "a",

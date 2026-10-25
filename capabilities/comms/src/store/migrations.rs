@@ -71,9 +71,30 @@ impl Store {
     /// Order is load-bearing: a batch executes top to bottom, so a referenced table
     /// is declared before the table that references it.
     fn run_migration(conn: &Connection, prefix: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // The scan receipts are recomputable, so a table created under an older
+        // failure-code list is dropped and declared again below.
+        let scans: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                params![format!("{prefix}_mail_event_scans")],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if scans.is_some_and(|sql| !sql.contains("'policy_deferred'")) {
+            conn.execute_batch(&format!("DROP TABLE {prefix}_mail_event_scans;"))?;
+        }
         conn.execute_batch(&format!(
             "
             {triage_items}
+
+            CREATE TABLE IF NOT EXISTS {prefix}_mail_event_scans (
+                triage_id TEXT PRIMARY KEY REFERENCES {prefix}_triage_items(id) ON DELETE CASCADE,
+                candidate INTEGER NOT NULL CHECK (candidate IN (0,1)),
+                state TEXT NOT NULL CHECK (state IN ('not_candidate','refused','no_event','proposed','deferred','failed')),
+                failure_code TEXT CHECK (failure_code IS NULL OR failure_code IN ('mail_unavailable','local_model_unavailable','over_window','invalid_output','date_not_grounded','date_missing','truncated','calendar_write_failed','runtime_busy','unconfigured','http_error','model_error','policy_deferred','capacity_aborted','empty_response','timeout','skipped_short','remote_refused')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                attempted_at TEXT NOT NULL DEFAULT ({now})
+            );
 
             {feed_items}
 

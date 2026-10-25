@@ -1024,6 +1024,20 @@ Routes:
   the verbatim metadata of mail
   that names a vault-known person, and its counts look exactly like a pass that found nobody. The
   unattended schedule logs the same line
+- `POST /triage/events/replay` `{"ids":["..."]}` → reruns up to 20 explicitly selected messages
+  through local event analysis, including rows whose stored subject and snippet were redacted.
+  The selection is an operator action; `c3` remains refused and event dates still require a
+  quote grounded in the fetched message body. The response contains counts, selected IDs and safe
+  outcome codes only.
+- `GET /triage/events/status?ids=...,...` → reads up to 20 safe per-message states and failure
+  codes from the local scan receipt table; it never returns mail content. Failures retry after
+  increasing 30-minute intervals and stop after five attempts. A deferred scan (busy model, or
+  On-the-go mode with a mail too long for the light window) retries hourly without a cap.
+  Explicit replay starts another attempt immediately. `sjel capability mail events [replay]`
+  wraps both routes.
+- Event analysis sends a JSON Schema (`response_format: json_schema`). Without it Apple
+  Foundation Models returns malformed JSON. A ticket leg carries `payload.city` (arrival) and
+  `payload.from_city` (departure), which Calendar uses to group a trip.
 - `POST /triage/relevance/refresh` `{"limit":200}` → scores stored pending mail against
   TELOS through loopback-only local inference or the labelled lexical fallback; TELOS is read-only
 - `POST /triage/data-class/refresh` `{"limit":500}` → locally classifies stored pending mail

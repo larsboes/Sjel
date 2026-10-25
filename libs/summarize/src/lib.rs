@@ -619,6 +619,30 @@ pub fn digest(target: Option<&Target>, text: &str, directive: &Directive, reach:
 /// `quiet::rung` returns only when `fits_window` said yes, and
 /// `mail_model::tests::ask_is_only_reached_through_a_light_rung` pins it.
 pub fn ask(target: Option<&Target>, prompt: &str, reply_tokens: u32, reach: Reach) -> Outcome {
+    ask_with(target, prompt, reply_tokens, reach, None)
+}
+
+/// [`ask`] with a JSON Schema the server must constrain its answer to
+/// (OpenAI `response_format: json_schema`). Apple Foundation Models only emits
+/// well-formed JSON under it, and drops nullable fields, so a schema for it
+/// should use plain strings with `""` for absent.
+pub fn ask_structured(
+    target: Option<&Target>,
+    prompt: &str,
+    reply_tokens: u32,
+    reach: Reach,
+    schema: &serde_json::Value,
+) -> Outcome {
+    ask_with(target, prompt, reply_tokens, reach, Some(schema))
+}
+
+fn ask_with(
+    target: Option<&Target>,
+    prompt: &str,
+    reply_tokens: u32,
+    reach: Reach,
+    schema: Option<&serde_json::Value>,
+) -> Outcome {
     // Same reason `digest` refuses an empty source: a model asked about nothing
     // answers with confident invention, and the answer would be stored.
     if prompt.trim().is_empty() {
@@ -630,7 +654,7 @@ pub fn ask(target: Option<&Target>, prompt: &str, reply_tokens: u32, reach: Reac
     if !reach.admits(target) {
         return Outcome::RemoteRefused;
     }
-    complete(target, prompt, reply_tokens)
+    complete_with(target, prompt, reply_tokens, schema)
 }
 
 /// The diagram headers a renderer can actually draw. A model asked for "a
@@ -769,6 +793,15 @@ fn runtime_admission(target: &Target, prompt: &str, reply_tokens: u32) -> Result
 /// One OpenAI-compatible chat completion. The only place in this lib that
 /// speaks HTTP.
 pub(crate) fn complete(target: &Target, prompt: &str, max_tokens: u32) -> Outcome {
+    complete_with(target, prompt, max_tokens, None)
+}
+
+fn complete_with(
+    target: &Target,
+    prompt: &str,
+    max_tokens: u32,
+    schema: Option<&serde_json::Value>,
+) -> Outcome {
     if let Err(reason) = runtime_admission(target, prompt, max_tokens) {
         return Outcome::PolicyDeferred(reason);
     }
@@ -791,12 +824,19 @@ pub(crate) fn complete(target: &Target, prompt: &str, max_tokens: u32) -> Outcom
         Ok(client) => client,
         Err(error) => return Outcome::HttpError(error.to_string()),
     };
-    let mut request = http.post(&target.endpoint).json(&serde_json::json!({
+    let mut body = serde_json::json!({
         "model": target.model,
         "messages": [{ "role": "user", "content": prompt }],
         "max_tokens": max_tokens,
         "stream": false,
-    }));
+    });
+    if let Some(schema) = schema {
+        body["response_format"] = serde_json::json!({
+            "type": "json_schema",
+            "json_schema": { "name": "answer", "strict": true, "schema": schema },
+        });
+    }
+    let mut request = http.post(&target.endpoint).json(&body);
     if let Some(key) = &target.api_key {
         request = request.bearer_auth(key);
     }

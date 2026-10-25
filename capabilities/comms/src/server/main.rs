@@ -229,6 +229,16 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r("POST", "/triage/sweep", "Pull one Gmail page; locally propose grounded calendar events and paid-receipt Finance candidates."),
     r(
+        "POST",
+        "/triage/events/replay",
+        "Replay up to 20 selected mail IDs through local grounded event analysis.",
+    ),
+    r(
+        "GET",
+        "/triage/events/status",
+        "Read safe per-message event scan states for up to 20 selected mail IDs.",
+    ),
+    r(
         "GET",
         "/triage/sweep/status",
         "Freshness and failure state of the scheduled inbox sweep.",
@@ -409,6 +419,7 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route(sjel_server::LEGACY_FRESHNESS_PATH, get(freshness_handler))
         .route("/triage", get(triage_handler))
         .route("/triage/sweep/status", get(triage_sweep_status_handler))
+        .route("/triage/events/status", get(triage_events_status_handler))
         .route(
             "/triage/classify/report",
             get(triage_classify_report_handler),
@@ -440,6 +451,7 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route("/feed/{id}/status", post(feed_status_handler))
         .route("/feed/{id}/data-class", post(feed_data_class_handler))
         .route("/triage/sweep", post(triage_sweep_handler))
+        .route("/triage/events/replay", post(triage_events_replay_handler))
         .route("/triage/relevance/refresh", post(triage_relevance_handler))
         .route("/triage/redact", post(triage_redact_handler))
         .route(
@@ -606,6 +618,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/triage/{id}/gmail"),
             ("POST", "/triage/{id}/gmail-job"),
             ("POST", "/triage/bulk"),
+            ("POST", "/triage/events/replay"),
             ("POST", "/content/{source}/{id}/cloud-approval"),
             ("POST", "/content/cloud-jobs/{job_id}/run"),
             ("POST", "/ingest"),

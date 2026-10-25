@@ -350,7 +350,7 @@ pub(super) async fn digest_handler(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(json!({ "error": format!("could not read the request body: {error}") })),
-                )
+                );
             }
         }
     };

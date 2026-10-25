@@ -173,7 +173,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
     let mut grouped: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
     let mut total = 0usize;
     let mut persisted_new = 0usize;
-    let mut fetched_ids = Vec::new();
+    let mut event_candidate_ids = Vec::new();
     let mut redacted = 0usize;
 
     for stub in &stubs {
@@ -185,9 +185,11 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
             }
         };
         let id = meta.id.clone();
-        fetched_ids.push(id.clone());
         let from = meta.from_addr.clone().unwrap_or_default();
         let intake = intake::from_thread(meta, &cfg.rules);
+        if intake.event_candidate {
+            event_candidate_ids.push(id.clone());
+        }
         total += 1;
         redacted += usize::from(intake.redaction_count() > 0);
 
@@ -219,8 +221,9 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
 
     let should_scan_events = store.is_some();
     drop(store);
-    let events = should_scan_events
-        .then(|| mail_events::analyze_batch(&runtime_status(), cfg, &fetched_ids));
+    let events = should_scan_events.then(|| {
+        mail_events::analyze_sweep_candidates(&runtime_status(), cfg, &event_candidate_ids)
+    });
 
     println!("total: {total} threads across {} streams", grouped.len());
     if redacted > 0 {

@@ -339,7 +339,11 @@ fn spawn_inbox_sweep(
 
                 match run_inbox_sweep(&cfg, max_threads, None) {
                     Ok(mut outcome) => {
-                        outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.new_ids);
+                        outcome.events = mail_events::analyze_sweep_candidates(
+                            &runtime,
+                            &cfg,
+                            &outcome.event_candidate_ids,
+                        );
                         outcome.receipts =
                             mail_receipts::analyze_batch(&runtime, &cfg, &outcome.new_ids);
                         outcome.tasks = comms::task_links::link_recent(&cfg);

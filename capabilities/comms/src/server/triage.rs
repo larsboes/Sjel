@@ -84,6 +84,16 @@ pub(super) struct TriageSweepBody {
     cursor: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(super) struct EventReplayBody {
+    ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct EventStatusQuery {
+    ids: String,
+}
+
 /// The people registry's state, as a receipt reports it.
 ///
 /// One function because two receipts state it — the manual refresh and the
@@ -122,6 +132,8 @@ pub(super) struct SweepOutcome {
     fetched_ids: Vec<String>,
     #[serde(skip)]
     pub(super) new_ids: Vec<String>,
+    #[serde(skip)]
+    pub(super) event_candidate_ids: Vec<String>,
     next_cursor: Option<String>,
 }
 
@@ -151,6 +163,7 @@ pub(super) fn run_inbox_sweep(
         tasks: comms::task_links::LinkReport::default(),
         fetched_ids: Vec::with_capacity(page.threads.len()),
         new_ids: Vec::new(),
+        event_candidate_ids: Vec::new(),
         next_cursor: page.next_page_token.clone(),
     };
     for stub in &page.threads {
@@ -170,6 +183,9 @@ pub(super) fn run_inbox_sweep(
         // eligibility query reads it, and no later pass can re-derive it:
         // `rules::classify` reads `List-Unsubscribe`, which no column holds.
         let id = intake.item.id.clone();
+        if intake.event_candidate {
+            outcome.event_candidate_ids.push(id.clone());
+        }
         if store
             .upsert_triage_with_rules(&intake.item, &intake.verdict())
             .map_err(|error| error.to_string())?
@@ -181,6 +197,61 @@ pub(super) fn run_inbox_sweep(
         outcome.fetched += 1;
     }
     Ok(outcome)
+}
+
+pub(super) async fn triage_events_replay_handler(
+    Json(body): Json<EventReplayBody>,
+) -> HttpResponse {
+    let mut ids = body.ids;
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() || ids.len() > 20 || ids.iter().any(|id| id.trim().is_empty()) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "ids must contain 1 to 20 non-empty mail IDs",
+        );
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
+        let cfg = Config::load();
+        Ok::<_, String>(mail_events::analyze_selected(&runtime, &cfg, &ids, true))
+    })
+    .await;
+    match result {
+        Ok(Ok(report)) => (StatusCode::OK, Json(json!({"events":report}))),
+        _ => error_response(StatusCode::INTERNAL_SERVER_ERROR, "event replay failed"),
+    }
+}
+
+pub(super) async fn triage_events_status_handler(
+    Query(query): Query<EventStatusQuery>,
+) -> HttpResponse {
+    let ids = query
+        .ids
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if ids.is_empty() || ids.len() > 20 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "ids must contain 1 to 20 comma-separated mail IDs",
+        );
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        let cfg = Config::load();
+        let store = Store::open(&cfg.database_path).map_err(|_| ())?;
+        store.mail_event_scans(&ids).map_err(|_| ())
+    })
+    .await;
+    match result {
+        Ok(Ok(scans)) => (StatusCode::OK, Json(json!({"scans":scans}))),
+        _ => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "event status unavailable",
+        ),
+    }
 }
 
 /// Which bucket a failure falls in, for the stored state. Deliberately lossy:
@@ -211,7 +282,8 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
         let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
         let cfg = Config::load();
         let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
-        outcome.events = mail_events::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
+        outcome.events =
+            mail_events::analyze_sweep_candidates(&runtime, &cfg, &outcome.event_candidate_ids);
         outcome.receipts = mail_receipts::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);
         outcome.tasks = comms::task_links::link_recent(&cfg);
         let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;

@@ -85,6 +85,9 @@ fn classify_mail_against(
 #[derive(Debug, Clone)]
 pub struct Intake {
     pub item: TriageItem,
+    /// Safe boolean computed from transient pre-redaction metadata. Never store the
+    /// matching text: this signal only admits likely travel/event mail to local analysis.
+    pub event_candidate: bool,
     pub redactions: Vec<RedactionFinding>,
     /// Which deterministic rung decided this thread's stream. Carried out of
     /// `rules::classify` because it cannot be re-derived from the stored row:
@@ -156,6 +159,11 @@ fn from_thread_against(
         meta.snippet.as_deref().unwrap_or_default(),
         is_known_person,
     );
+    let event_candidate = crate::mail_events::is_candidate_metadata(
+        &from,
+        &subject,
+        meta.snippet.as_deref().unwrap_or_default(),
+    );
 
     let mut redactions = Vec::new();
     let (subject, snippet) = if content_item::redact_before_persistence(&classification.value) {
@@ -168,6 +176,7 @@ fn from_thread_against(
     };
 
     Intake {
+        event_candidate,
         item: TriageItem {
             id: meta.id,
             // The sender survives redaction deliberately. It is the one field a
@@ -308,6 +317,31 @@ mod tests {
         );
         assert!(intake.redactions.is_empty());
         assert!(intake.audit_digest().is_none());
+    }
+
+    #[test]
+    fn event_candidate_survives_metadata_redaction_without_retaining_its_signal() {
+        let knows_alice = |token: &str| token.trim_matches(',') == "Alice";
+        let intake = from_thread_against(
+            meta(
+                "Fw: OpenAI DevDay Exchange alice@example.com",
+                "Alice registered",
+            ),
+            &[],
+            knows_alice,
+        );
+        assert_eq!(intake.item.data_class, "c2");
+        assert_ne!(
+            intake.item.subject.as_deref(),
+            Some("Fw: OpenAI DevDay Exchange alice@example.com")
+        );
+        assert!(!intake
+            .item
+            .subject
+            .as_deref()
+            .unwrap()
+            .contains("alice@example.com"));
+        assert!(intake.event_candidate);
     }
 
     /// Q27's named-person rule, against a registry this test owns rather than

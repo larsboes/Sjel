@@ -265,7 +265,11 @@ impl NewEntry {
                             payload
                                 .get("analysis_schema_version")
                                 .and_then(Value::as_str),
-                            Some("cloud-content-analysis-v1" | "local-mail-event-analysis-v1")
+                            Some(
+                                "cloud-content-analysis-v1"
+                                    | "local-mail-event-analysis-v1"
+                                    | "local-mail-event-analysis-v2"
+                            )
                         )
                         && payload
                             .get("importance_rationale")
@@ -294,7 +298,12 @@ impl NewEntry {
                                 .and_then(Value::as_str),
                             origin.get("job_id"),
                         ) {
-                            (Some("local-mail-event-analysis-v1"), Some(Value::Null)) => true,
+                            (
+                                Some(
+                                    "local-mail-event-analysis-v1" | "local-mail-event-analysis-v2",
+                                ),
+                                Some(Value::Null),
+                            ) => true,
                             (Some("cloud-content-analysis-v1"), Some(Value::String(value))) => {
                                 !value.trim().is_empty()
                             }
@@ -307,11 +316,15 @@ impl NewEntry {
                                     .and_then(Value::as_str),
                                 origin.get("field").and_then(Value::as_str),
                             ),
-                            (Some("local-mail-event-analysis-v1"), Some("mail_events"))
-                                | (
-                                    Some("cloud-content-analysis-v1"),
-                                    Some("important_dates" | "action_items")
-                                )
+                            (
+                                Some(
+                                    "local-mail-event-analysis-v1" | "local-mail-event-analysis-v2"
+                                ),
+                                Some("mail_events"),
+                            ) | (
+                                Some("cloud-content-analysis-v1"),
+                                Some("important_dates" | "action_items")
+                            )
                         )
                         && origin
                             .get("index")

@@ -155,6 +155,7 @@ pub fn cluster_trips(
     home: Option<&str>,
 ) -> Result<TripDrafts, String> {
     let mut by_place: std::collections::BTreeMap<String, Vec<&Entry>> = Default::default();
+    let mut returns = std::collections::HashSet::new();
     let mut unclustered = Vec::new();
 
     for entry in entries {
@@ -176,6 +177,7 @@ pub fn cluster_trips(
                 // A ticket home from somewhere else ends the trip there.
                 let place = match (home, from_city_of(entry)) {
                     (Some(home), Some(from)) if is_home(&place, home) && !is_home(from, home) => {
+                        returns.insert(entry.id.as_str());
                         from.to_string()
                     }
                     _ => place,
@@ -201,9 +203,9 @@ pub fn cluster_trips(
 
         for entry in members {
             let (start, end) = entry_days(entry)?;
-            let ticket = from_city_of(entry).is_some()
-                || run.last().is_some_and(|last| from_city_of(last).is_some());
-            let gap = if ticket {
+            // Only a return leg home bridges the long gap. Two outward tickets to one
+            // city are two journeys.
+            let gap = if returns.contains(entry.id.as_str()) {
                 max_gap_days.max(TICKET_GAP_DAYS)
             } else {
                 max_gap_days

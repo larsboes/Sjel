@@ -756,6 +756,21 @@ mod cluster_tests {
     }
 
     #[test]
+    fn two_outward_tickets_to_one_city_are_two_journeys() {
+        let leg = |id: &str, from: &str, day: &str| {
+            let mut entry = event(id, "Berlin", day, day, Commitment::Possible);
+            entry.payload = json!({ "city": "Berlin", "from_city": from });
+            entry
+        };
+        let entries = [
+            leg("a", "Nürnberg", "2026-10-08"),
+            leg("b", "Example City", "2026-10-26"),
+        ];
+        let out = cluster_trips(&entries, 5, Some("Example City")).unwrap();
+        assert!(out.drafts.is_empty(), "{:?}", out.drafts);
+    }
+
+    #[test]
     fn a_null_string_location_is_no_place() {
         let mut entry = event("a", "x", "2026-08-12", "2026-08-12", Commitment::Possible);
         entry.payload = json!({});

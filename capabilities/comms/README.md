@@ -1036,9 +1036,13 @@ Routes:
   Explicit replay starts another attempt immediately. `sjel capability mail events [replay]`
   wraps both routes.
 - A booking confirmation from a known sender is read without a model. One reader per sender
-  lives in `src/mail_events/tickets/` (Deutsche Bahn, Eurowings); a new sender is one file and
-  one line in `READERS`. A reader returns every leg with its date line as the grounding quote,
-  and a ticket with no travel date records `date_missing`. Other mail goes to the local model.
+  lives in `src/mail_events/tickets/` (Deutsche Bahn, Eurowings, Booking.com); a new sender is
+  one file and one line in `READERS`. A reader returns every leg with its date line as the
+  grounding quote, and a ticket with no travel date records `date_missing`. A Booking.com stay
+  runs from check-in to check-out, and a Booking.com mail that names no stay has no events.
+  Other mail goes to the local model. A reader records `payload.booking_key`, the SHA-256 of
+  sender and booking reference, never the reference. The proposal is keyed on it, so a
+  confirmation and its receipt write one entry.
 - Event analysis sends a JSON Schema (`response_format: json_schema`). Without it Apple
   Foundation Models returns malformed JSON. A ticket leg carries `payload.city` (arrival) and
   `payload.from_city` (departure), which Calendar uses to group a trip. An airport that serves

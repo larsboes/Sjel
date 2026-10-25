@@ -2,13 +2,20 @@
 //! line, the flight number, then `Abflug`, the time, `Uhr`, the airport, and `Ankunft`, the time,
 //! `Uhr`, the airport. Times are local.
 
-use super::{airport_city, iso_date, leg, Event};
+use super::{airport_city, booking_key, iso_date, leg, Event};
 
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Eurowings") {
         return None;
     }
     let lines: Vec<&str> = body.lines().map(str::trim).collect();
+    // The reference is the line after "Booking Confirmation".
+    let key = lines
+        .iter()
+        .position(|l| *l == "Booking Confirmation")
+        .and_then(|at| lines.get(at + 1))
+        .filter(|reference| !reference.is_empty())
+        .map(|reference| booking_key("eurowings.com", reference));
     let mut events = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         if *line != "Flug:" {
@@ -19,13 +26,16 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
         };
         let from = airport_after(&lines[i..], "Abflug")?;
         let to = airport_after(&lines[i..], "Ankunft")?;
-        events.push(leg(
-            from,
-            to,
-            airport_city(from),
-            airport_city(to),
-            Some(date_line),
-        ));
+        events.push(Event {
+            booking_key: key.clone(),
+            ..leg(
+                from,
+                to,
+                airport_city(from),
+                airport_city(to),
+                Some(date_line),
+            )
+        });
     }
     (!events.is_empty()).then_some(events)
 }

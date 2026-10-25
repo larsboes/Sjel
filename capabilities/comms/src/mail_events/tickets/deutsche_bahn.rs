@@ -4,7 +4,7 @@
 //! an optional `dd.mm.yyyy hh:mm` line, then `nach|to`, the station and its optional date.
 //! A booking without a fixed train (Flexpreis) has no date lines.
 
-use super::{iso_date, leg, Event};
+use super::{booking_key, iso_date, leg, Event};
 
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Deutsche Bahn") {
@@ -14,6 +14,15 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     let start = lines
         .iter()
         .position(|l| *l == "Leistungen" || *l == "Services")?;
+    // "Auftragsnummer 230843307334" / "order number 628236251080".
+    let key = lines.iter().find_map(|l| {
+        let (_, rest) = l
+            .split_once("Auftragsnummer ")
+            .or_else(|| l.split_once("order number "))?;
+        rest.split_whitespace()
+            .next()
+            .map(|reference| booking_key("deutschebahn.com", reference))
+    });
     let block = &lines[start + 1..];
     let mut events = Vec::new();
     let mut i = 0;
@@ -27,13 +36,16 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
             return None;
         }
         let (to, to_date, next) = stop(block, next + 1)?;
-        events.push(leg(
-            from,
-            to,
-            city_of_station(from),
-            city_of_station(to),
-            from_date.or(to_date),
-        ));
+        events.push(Event {
+            booking_key: key.clone(),
+            ..leg(
+                from,
+                to,
+                city_of_station(from),
+                city_of_station(to),
+                from_date.or(to_date),
+            )
+        });
         i = next;
     }
     (!events.is_empty()).then_some(events)

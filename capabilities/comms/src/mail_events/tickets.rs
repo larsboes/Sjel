@@ -6,6 +6,7 @@
 
 use super::Event;
 
+mod booking_com;
 mod deutsche_bahn;
 mod eurowings;
 
@@ -13,7 +14,7 @@ mod eurowings;
 type Reader = fn(&str) -> Option<Vec<Event>>;
 
 /// Every reader. A new sender is one file and one line here.
-const READERS: &[Reader] = &[deutsche_bahn::legs, eurowings::legs];
+const READERS: &[Reader] = &[deutsche_bahn::legs, eurowings::legs, booking_com::legs];
 
 /// The legs of the first reader that recognises `body`. A leg without a date is kept with
 /// `date: None`, so the caller records `date_missing` instead of asking the model to guess.
@@ -45,7 +46,54 @@ fn leg(from: &str, to: &str, from_city: String, city: String, date_line: Option<
         city: Some(city),
         from_city: Some(from_city),
         evidence,
+        end_date: None,
+        booking_key: None,
     }
+}
+
+/// SHA-256 of `sender` and `reference`, so a booking is recognised again without its reference
+/// being stored.
+fn booking_key(sender: &str, reference: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(format!("{sender}\0{}", reference.trim()).as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+const MONTHS: [&str; 12] = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+];
+
+/// `Thursday, 15 October 2026 (15:00 - 20:00)` or `Thursday, October 8, 2026 (from 3:00 PM)`
+/// as `2026-10-15`: an English date, day and month in either order, anything in brackets ignored.
+fn iso_date_english(text: &str) -> Option<String> {
+    let text = text.split('(').next()?;
+    let words: Vec<&str> = text
+        .split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|w| !w.is_empty())
+        .collect();
+    let month = words.iter().find_map(|w| {
+        MONTHS
+            .iter()
+            .position(|m| m.eq_ignore_ascii_case(w))
+            .map(|i| i + 1)
+    })?;
+    let numbers: Vec<u32> = words.iter().filter_map(|w| w.parse().ok()).collect();
+    let year = numbers.iter().find(|n| **n >= 1000)?;
+    let day = numbers.iter().find(|n| (1..=31).contains(*n))?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
 }
 
 /// Airports by the name a confirmation prints, and the cities they serve. An airport that serves
@@ -74,6 +122,15 @@ mod tests {
         );
         assert_eq!(iso_date("Tag der Buchung: 23.10.2026"), None);
         assert_eq!(iso_date("5.1.2026"), None);
+    }
+
+    #[test]
+    fn an_english_date_reads_in_either_order() {
+        let uk = "Thursday, 15 October 2026 (15:00 - 20:00)";
+        let us = "Thursday, October 8, 2026 (from 3:00 PM)";
+        assert_eq!(iso_date_english(uk).as_deref(), Some("2026-10-15"));
+        assert_eq!(iso_date_english(us).as_deref(), Some("2026-10-08"));
+        assert_eq!(iso_date_english("sometime soon"), None);
     }
 
     #[test]

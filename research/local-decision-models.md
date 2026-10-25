@@ -138,6 +138,28 @@ multi-turn agent loop. Candidates are Gemma (E2B/E4B), IBM Granite, Apple's Foun
 and efficient CLM-style scorers. Pi and Sjel are compared on DeepSeek V4.1 Flash through the
 DeepSeek API instead ([benchmark contract](benchmarks/agent-harness/README.md#comparison-contract-before-launching-runs)).
 
+### CLM retired (decided 2026-10-25)
+
+CLM leaves this candidate list and its local checkpoint is gone: the 4.5 GB MLX port and its
+380 MB venv were deleted. Three facts closed it.
+
+- **No smaller CLM was ever published.** The authors released one checkpoint, `CLM-v0.1-8B`, plus
+  a DeepSWE verifier head for the same encoder. Every one of the 21 community repos under that id
+  is a re-quantisation of that model, and the 4-bit port already on this machine (4.41 GB) is the
+  smallest of them; the `outq2` variants are larger at 4.70 and 8.30 GB. The heads read
+  Qwen3-8B's last-token-pooled 4096-wide embeddings, so another encoder means retrained heads, not
+  a different download.
+- **It lost its own comparison.** 40/48 category suggestions without evidence spans against Apple
+  Foundation Models' 45/48 with bounded evidence proposals, and `document_classification` already
+  runs on that framework for zero model bytes.
+- **8B contradicts the decision above.** Even the 4-bit port is the largest set of model weights on
+  this Mac, for a job the 4B rule reserves for small single-call scorers.
+
+The adapter, the corpora, the item-level results and the parity record stay; only the weights went.
+The re-open recipe and its rebuild block are in
+[`capabilities/documents/README.md`](../capabilities/documents/README.md#experimental-clm-loopback-adapter--trial-closed-weights-removed),
+and the adapter refuses to start with the weights absent rather than downloading them.
+
 Two observations led to it:
 
 - **The Mac cannot carry it.** During a Qwen3.5-4B agent run on 2026-10-24, this 24 GiB M4 Pro

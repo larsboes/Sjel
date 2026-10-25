@@ -131,6 +131,18 @@ impl Sidebar {
         self.open_on(seat);
     }
 
+    /// The docked width. A drag sets it on every move and saves once, when the drag ends.
+    pub fn width(&self) -> f32 {
+        self.prefs.width
+    }
+
+    pub fn set_width(&mut self, width: f32, save: bool) {
+        self.prefs.width = width;
+        if save {
+            let _ = self.prefs.save();
+        }
+    }
+
     /// Puts the edge away and remembers that, keeping the seat for the next time it opens.
     pub fn close(&mut self) {
         if !self.prefs.open {
@@ -284,6 +296,7 @@ mod tests {
         let stale = Sidebar::with_prefs(SidebarPrefs {
             open: true,
             seat: "roomplan".to_owned(),
+            ..SidebarPrefs::default()
         });
         assert_eq!(stale.seat(), Seat::Soundscape);
         assert!(stale.is_open(), "an unknown seat is not a closed edge");

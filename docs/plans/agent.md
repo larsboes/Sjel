@@ -268,8 +268,11 @@ to interactive keystrokes, so access is the control.
   look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
   key row can share; the wheel moves through the parser's history; the cursor is the inverted
   cell.
-- Mac: `⌘K › Terminal` or `sjel://terminal` opens the right edge on `Seat::Terminal`, and ends a
-  finished shell by offering a new one rather than a dead grid. Built.
+- Mac: `⌘K › Terminal` or `sjel://terminal` opens the right edge on `Seat::Terminal`, focused, and
+  ends a finished shell by offering a new one rather than a dead grid. The grid measures itself
+  and resizes the pty; the edge's left border drags its width, kept in `sidebar.json`. The page's
+  single-key bindings use `Workspace && !Terminal`, so Enter, J, K, G and Esc reach the program.
+  Built.
 - Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
   passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
   The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits

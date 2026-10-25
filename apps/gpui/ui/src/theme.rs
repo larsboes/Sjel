@@ -668,6 +668,13 @@ pub struct SidebarPrefs {
     pub open: bool,
     /// A [`crate::sidebar::Seat`] key: `soundscape`, `activity` or `agent`.
     pub seat: String,
+    /// The docked edge's width in points on a Mac, as the person last dragged it.
+    #[serde(default = "default_sidebar_width")]
+    pub width: f32,
+}
+
+fn default_sidebar_width() -> f32 {
+    390.
 }
 
 impl Default for SidebarPrefs {
@@ -676,6 +683,7 @@ impl Default for SidebarPrefs {
             // A phone that opens a panel by itself covers its own page before the person asked.
             open: false,
             seat: crate::sidebar::Seat::default().key().to_owned(),
+            width: default_sidebar_width(),
         }
     }
 }
@@ -751,6 +759,7 @@ mod tests {
         let prefs = SidebarPrefs {
             open: true,
             seat: "activity".to_owned(),
+            width: 520.,
         };
         let json = serde_json::to_string(&prefs).expect("serialize");
         assert_eq!(

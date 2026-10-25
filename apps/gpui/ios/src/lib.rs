@@ -57,9 +57,7 @@ const HEALTH: &str = "/api/sjel-status/health";
 /// How often a waiting join asks whether the owner decided. A request expires after ten minutes
 /// (`capabilities/devices/README.md`), so the wait ends there at the latest.
 const JOIN_POLL: Duration = Duration::from_secs(2);
-/// The pty size the phone asks for: the Mac edge's 48 columns, and the rows left above the
-/// software keyboard.
-// ponytail: fixed size; measure the grid and resize when the keyboard opens if 28 rows is wrong.
+/// The size a new terminal starts at, before the grid measures itself and resizes the pty.
 const TERMINAL_COLS: usize = 48;
 const TERMINAL_ROWS: usize = 28;
 #[cfg(target_os = "ios")]

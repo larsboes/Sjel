@@ -14,7 +14,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Theme, WindowExt};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, KeyBinding,
-    SharedString, Subscription, Window, WindowAppearance,
+    MouseButton, MouseMoveEvent, SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
@@ -100,8 +100,11 @@ actions!(
 #[action(namespace = sjel, no_json)]
 pub struct GoTo(pub Page);
 
-/// The columns and lines the right edge's terminal asks the pty for. The edge is 390 points wide,
-/// a monospace cell is about 7.2, and the grid is padded inside the seat's frame.
+/// The narrowest the right edge can be dragged, and what it always leaves for the page beside it.
+const EDGE_MIN_WIDTH: f32 = 320.;
+const EDGE_PAGE_MIN_WIDTH: f32 = 480.;
+
+/// The size a new terminal starts at, before the grid measures itself and resizes the pty.
 const TERMINAL_COLS: usize = 48;
 const TERMINAL_ROWS: usize = 44;
 
@@ -187,6 +190,10 @@ pub fn page_title(page: Page) -> String {
     }
 }
 
+/// Where the page's single-key navigation applies: the page frame, but not a terminal in the right
+/// edge, which needs Enter, J, K and every other key for the program it runs.
+const PAGE_KEYS: &str = "Workspace && !Terminal";
+
 /// Workspace key bindings. Navigation keys bind to the "Workspace" context, which only the page
 /// frame carries, so they stay quiet while the palette's query field has focus.
 pub fn bind_keys(cx: &mut App) {
@@ -201,7 +208,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-d", OpenInDashboard, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
-        KeyBinding::new("escape", ClearSelection, None),
+        KeyBinding::new("escape", ClearSelection, Some("!Terminal")),
         // Tabs inside the open area, the way Safari and Xcode step tabs
         KeyBinding::new("cmd-alt-right", NextPage, None),
         KeyBinding::new("shift-cmd-]", NextPage, None),
@@ -222,49 +229,49 @@ pub fn bind_keys(cx: &mut App) {
         // The slot after the nine areas: the player is the one thing every area shares.
         KeyBinding::new("cmd-0", ToggleSoundscapePanel, None),
         // Workspace scoped navigation & selection
-        KeyBinding::new("/", FocusSearch, Some("Workspace")),
-        KeyBinding::new("j", SelectNext, Some("Workspace")),
-        KeyBinding::new("down", SelectNext, Some("Workspace")),
-        KeyBinding::new("k", SelectPrevious, Some("Workspace")),
-        KeyBinding::new("up", SelectPrevious, Some("Workspace")),
-        KeyBinding::new("enter", RunPrimary, Some("Workspace")),
-        KeyBinding::new("space", RunPrimary, Some("Workspace")),
-        KeyBinding::new("cmd-backspace", RunSecondary, Some("Workspace")),
-        KeyBinding::new("[", DocPrevPage, Some("Workspace")),
-        KeyBinding::new("left", DocPrevPage, Some("Workspace")),
-        KeyBinding::new("pageup", DocPrevPage, Some("Workspace")),
-        KeyBinding::new("]", DocNextPage, Some("Workspace")),
-        KeyBinding::new("right", DocNextPage, Some("Workspace")),
-        KeyBinding::new("pagedown", DocNextPage, Some("Workspace")),
-        KeyBinding::new("z", DocToggleZoom, Some("Workspace")),
-        KeyBinding::new("cmd-=", DocToggleZoom, Some("Workspace")),
-        KeyBinding::new("cmd-+", DocToggleZoom, Some("Workspace")),
+        KeyBinding::new("/", FocusSearch, Some(PAGE_KEYS)),
+        KeyBinding::new("j", SelectNext, Some(PAGE_KEYS)),
+        KeyBinding::new("down", SelectNext, Some(PAGE_KEYS)),
+        KeyBinding::new("k", SelectPrevious, Some(PAGE_KEYS)),
+        KeyBinding::new("up", SelectPrevious, Some(PAGE_KEYS)),
+        KeyBinding::new("enter", RunPrimary, Some(PAGE_KEYS)),
+        KeyBinding::new("space", RunPrimary, Some(PAGE_KEYS)),
+        KeyBinding::new("cmd-backspace", RunSecondary, Some(PAGE_KEYS)),
+        KeyBinding::new("[", DocPrevPage, Some(PAGE_KEYS)),
+        KeyBinding::new("left", DocPrevPage, Some(PAGE_KEYS)),
+        KeyBinding::new("pageup", DocPrevPage, Some(PAGE_KEYS)),
+        KeyBinding::new("]", DocNextPage, Some(PAGE_KEYS)),
+        KeyBinding::new("right", DocNextPage, Some(PAGE_KEYS)),
+        KeyBinding::new("pagedown", DocNextPage, Some(PAGE_KEYS)),
+        KeyBinding::new("z", DocToggleZoom, Some(PAGE_KEYS)),
+        KeyBinding::new("cmd-=", DocToggleZoom, Some(PAGE_KEYS)),
+        KeyBinding::new("cmd-+", DocToggleZoom, Some(PAGE_KEYS)),
         // Vim chords for fast page jumps
-        KeyBinding::new("g h", GoTo(Page::Home), Some("Workspace")),
-        KeyBinding::new("g o", GoTo(Page::Context), Some("Workspace")),
-        KeyBinding::new("g t", GoTo(Page::Context), Some("Workspace")),
-        KeyBinding::new("g m", GoTo(Page::Capabilities), Some("Workspace")),
-        KeyBinding::new("g p", GoTo(Page::Projects), Some("Workspace")),
-        KeyBinding::new("g a", OpenPalette, Some("Workspace")),
-        KeyBinding::new("g v", GoTo(Page::Travel), Some("Workspace")),
-        KeyBinding::new("g e", GoTo(Page::Feed), Some("Workspace")),
-        KeyBinding::new("g n", GoTo(Page::Inbox), Some("Workspace")),
-        KeyBinding::new("g c", GoTo(Page::Calendar), Some("Workspace")),
-        KeyBinding::new("g d", GoTo(Page::Documents), Some("Workspace")),
-        KeyBinding::new("g b", GoTo(Page::Backup), Some("Workspace")),
-        KeyBinding::new("g f", GoTo(Page::Finance), Some("Workspace")),
-        KeyBinding::new("g r", GoTo(Page::People), Some("Workspace")),
-        KeyBinding::new("g i", GoTo(Page::Inventory), Some("Workspace")),
-        KeyBinding::new("g s", GoTo(Page::Software), Some("Workspace")),
-        KeyBinding::new("g u", GoTo(Page::Import), Some("Workspace")),
-        KeyBinding::new("g x", GoTo(Page::Systems), Some("Workspace")),
-        KeyBinding::new("g k", GoTo(Page::Packs), Some("Workspace")),
-        KeyBinding::new("g l", GoTo(Page::SelfModel), Some("Workspace")),
-        KeyBinding::new("g y", GoTo(Page::Cv), Some("Workspace")),
-        KeyBinding::new("g w", GoTo(Page::Media), Some("Workspace")),
-        KeyBinding::new("g z", GoTo(Page::Research), Some("Workspace")),
-        KeyBinding::new("g 0", GoTo(Page::Setup), Some("Workspace")),
-        KeyBinding::new("g ,", GoTo(Page::Settings), Some("Workspace")),
+        KeyBinding::new("g h", GoTo(Page::Home), Some(PAGE_KEYS)),
+        KeyBinding::new("g o", GoTo(Page::Context), Some(PAGE_KEYS)),
+        KeyBinding::new("g t", GoTo(Page::Context), Some(PAGE_KEYS)),
+        KeyBinding::new("g m", GoTo(Page::Capabilities), Some(PAGE_KEYS)),
+        KeyBinding::new("g p", GoTo(Page::Projects), Some(PAGE_KEYS)),
+        KeyBinding::new("g a", OpenPalette, Some(PAGE_KEYS)),
+        KeyBinding::new("g v", GoTo(Page::Travel), Some(PAGE_KEYS)),
+        KeyBinding::new("g e", GoTo(Page::Feed), Some(PAGE_KEYS)),
+        KeyBinding::new("g n", GoTo(Page::Inbox), Some(PAGE_KEYS)),
+        KeyBinding::new("g c", GoTo(Page::Calendar), Some(PAGE_KEYS)),
+        KeyBinding::new("g d", GoTo(Page::Documents), Some(PAGE_KEYS)),
+        KeyBinding::new("g b", GoTo(Page::Backup), Some(PAGE_KEYS)),
+        KeyBinding::new("g f", GoTo(Page::Finance), Some(PAGE_KEYS)),
+        KeyBinding::new("g r", GoTo(Page::People), Some(PAGE_KEYS)),
+        KeyBinding::new("g i", GoTo(Page::Inventory), Some(PAGE_KEYS)),
+        KeyBinding::new("g s", GoTo(Page::Software), Some(PAGE_KEYS)),
+        KeyBinding::new("g u", GoTo(Page::Import), Some(PAGE_KEYS)),
+        KeyBinding::new("g x", GoTo(Page::Systems), Some(PAGE_KEYS)),
+        KeyBinding::new("g k", GoTo(Page::Packs), Some(PAGE_KEYS)),
+        KeyBinding::new("g l", GoTo(Page::SelfModel), Some(PAGE_KEYS)),
+        KeyBinding::new("g y", GoTo(Page::Cv), Some(PAGE_KEYS)),
+        KeyBinding::new("g w", GoTo(Page::Media), Some(PAGE_KEYS)),
+        KeyBinding::new("g z", GoTo(Page::Research), Some(PAGE_KEYS)),
+        KeyBinding::new("g 0", GoTo(Page::Setup), Some(PAGE_KEYS)),
+        KeyBinding::new("g ,", GoTo(Page::Settings), Some(PAGE_KEYS)),
     ]);
     cx.bind_keys(
         Area::ALL
@@ -367,6 +374,8 @@ pub struct Workspace {
     pub soundscape_panel: Option<Entity<crate::soundscape::Soundscape>>,
     /// The docked right edge. Its state is shared with the phone and stored in `sidebar.json`.
     pub right_panel: Sidebar,
+    /// True while the edge's left border is being dragged.
+    resizing_edge: bool,
     /// The terminal seat, built the first time it is asked for and kept afterwards: closing the
     /// drawer does not end the shell, so reopening it shows the screen as it is now.
     pub terminal: Option<Entity<TerminalView>>,
@@ -499,6 +508,7 @@ impl Workspace {
             soundscape: Remote::default(),
             soundscape_panel: None,
             right_panel: Sidebar::load(),
+            resizing_edge: false,
             terminal: None,
             terminal_note: None,
             finder,
@@ -1135,7 +1145,6 @@ impl Workspace {
         cx.notify();
         if let Some(terminal) = &self.terminal {
             if terminal.read(cx).peer().alive {
-                terminal.update(cx, |view, cx| view.resize(TERMINAL_COLS, TERMINAL_ROWS, cx));
                 return;
             }
         }
@@ -1150,7 +1159,7 @@ impl Workspace {
                 .attach_or_open(TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
                 .await
         });
-        cx.spawn(async move |weak, cx| {
+        cx.spawn_in(window, async move |weak, cx| {
             let peer = match work.await {
                 Some(Ok(peer)) => peer,
                 failed => {
@@ -1169,11 +1178,13 @@ impl Workspace {
                     return;
                 }
             };
-            let _ = weak.update(cx, |workspace, cx| {
+            let _ = weak.update_in(cx, |workspace, window, cx| {
                 let entity = cx.new(|cx| {
                     TerminalView::new(peer, host, 0, TERMINAL_COLS, TERMINAL_ROWS, palette, cx)
                 });
                 entity.update(cx, |view, cx| view.attach(cx));
+                // The terminal was asked for, so it takes the keys without a click first.
+                window.focus(&gpui::Focusable::focus_handle(&entity, cx), cx);
                 workspace.terminal = Some(entity);
                 cx.notify();
             });
@@ -1901,12 +1912,31 @@ impl Render for Workspace {
             };
             Some(
                 div()
-                    .w(px(390.))
+                    .relative()
+                    .w(px(self.right_panel.width()))
                     .flex_none()
                     .h_full()
                     .border_l_1()
                     .border_color(rgba(palette.border))
-                    .child(sidebar_frame(palette, seat, body, on_seat, on_close)),
+                    .child(sidebar_frame(palette, seat, body, on_seat, on_close))
+                    .child(
+                        // The left border is the handle: dragging it moves the edge.
+                        div()
+                            .id("edge-resize")
+                            .absolute()
+                            .top_0()
+                            .left(px(-3.))
+                            .w(px(6.))
+                            .h_full()
+                            .cursor_col_resize()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|view, _, _, cx| {
+                                    view.resizing_edge = true;
+                                    cx.stop_propagation();
+                                }),
+                            ),
+                    ),
             )
         } else {
             None
@@ -2030,6 +2060,28 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_toggle_soundscape_panel))
             .on_action(cx.listener(Self::on_check_for_updates))
             .on_action(cx.listener(Self::on_rebuild_app))
+            .on_mouse_move(cx.listener(|view, event: &MouseMoveEvent, window, cx| {
+                if !view.resizing_edge {
+                    return;
+                }
+                let window_width = f32::from(window.viewport_size().width);
+                let width = (window_width - f32::from(event.position.x)).clamp(
+                    EDGE_MIN_WIDTH,
+                    (window_width - EDGE_PAGE_MIN_WIDTH).max(EDGE_MIN_WIDTH),
+                );
+                view.right_panel.set_width(width, false);
+                cx.notify();
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|view, _, _, _| {
+                    if view.resizing_edge {
+                        view.resizing_edge = false;
+                        let width = view.right_panel.width();
+                        view.right_panel.set_width(width, true);
+                    }
+                }),
+            )
             .size_full()
             .when(!glass, |root| root.bg(rgba(tint)))
             .text_color(rgb(palette.text))
@@ -2267,6 +2319,39 @@ mod tests {
                 view.terminal.is_none(),
                 "a terminal was built without a capability to hold it"
             );
+        });
+    }
+
+    /// The page's single-key navigation must not take a key the program in the terminal needs.
+    #[gpui::test]
+    fn keys_typed_in_the_terminal_do_not_drive_the_page(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        let terminal = view.update_in(cx, |view, window, cx| {
+            let shell = std::sync::Arc::new(
+                sjel_gpui_core::shell::Shell::new("http://127.0.0.1:9")
+                    .expect("a loopback endpoint"),
+            );
+            let peer = sjel_gpui_core::terminal::Terminal {
+                id: "t1".into(),
+                alive: true,
+                ..Default::default()
+            };
+            let palette = Palette::for_appearance(window.appearance());
+            let terminal =
+                cx.new(|cx| TerminalView::new(peer, Host::Shell(shell), 0, 48, 44, palette, cx));
+            view.terminal = Some(terminal.clone());
+            view.right_panel.open_on(Seat::Terminal);
+            cx.notify();
+            terminal
+        });
+        cx.run_until_parked();
+        view.update_in(cx, |_, window, cx| {
+            window.focus(&gpui::Focusable::focus_handle(&terminal, cx), cx);
+        });
+        cx.simulate_keystrokes("j j enter escape");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.selection.cursor, None, "j moved the page's selection");
+            assert_eq!(view.right_panel.seat(), Seat::Terminal);
         });
     }
 

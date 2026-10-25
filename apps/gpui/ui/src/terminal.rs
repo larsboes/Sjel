@@ -23,8 +23,9 @@
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
-    div, px, rgb, rgba, AnyElement, Context, EventEmitter, FocusHandle, FontWeight, KeyDownEvent,
-    Keystroke, MouseButton, Render, ScrollDelta, ScrollWheelEvent, SharedString, Window,
+    canvas, div, font, px, rgb, rgba, AnyElement, Context, EventEmitter, FocusHandle, FontWeight,
+    KeyDownEvent, Keystroke, MouseButton, Render, ScrollDelta, ScrollWheelEvent, SharedString,
+    Window,
 };
 use gpui_kit::component::ActiveTheme;
 
@@ -35,7 +36,7 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 
 use sjel_gpui_core::shell;
-use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update};
+use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update, MAX_INPUT_BYTES};
 
 use crate::theme::Palette;
 
@@ -422,9 +423,18 @@ pub struct TerminalView {
     closing: bool,
     /// A phone's view: the key row sits above the grid, and a tap asks for the keyboard.
     touch: bool,
+    /// Bytes typed while a write is in flight. One write at a time keeps keystrokes in order.
+    outgoing: Vec<u8>,
+    sending: bool,
 }
 
 impl EventEmitter<TerminalEvent> for TerminalView {}
+
+impl gpui::Focusable for TerminalView {
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus.clone()
+    }
+}
 
 impl TerminalView {
     /// A view of a terminal the capability already holds, attached from byte `from`.
@@ -449,6 +459,8 @@ impl TerminalView {
             palette,
             closing: false,
             touch: false,
+            outgoing: Vec::new(),
+            sending: false,
             peer,
         }
     }
@@ -557,15 +569,40 @@ impl TerminalView {
         if bytes.is_empty() || !self.peer.alive {
             return;
         }
+        self.outgoing.extend_from_slice(&bytes);
+        if self.sending {
+            return;
+        }
+        self.sending = true;
         let host = self.host.clone();
         let id = self.peer.id.clone();
-        let work = shell::run(async move { host.input(&id, &bytes).await });
-        cx.spawn(async move |weak, cx| {
+        // Concurrent writes can reach the pty out of order, so one task drains the queue: what
+        // was typed during a write goes out as the next write.
+        cx.spawn(async move |weak, cx| loop {
+            let Ok(batch) = weak.update(cx, |view, _| {
+                let take = view.outgoing.len().min(MAX_INPUT_BYTES);
+                let batch: Vec<u8> = view.outgoing.drain(..take).collect();
+                if batch.is_empty() {
+                    view.sending = false;
+                }
+                batch
+            }) else {
+                return;
+            };
+            if batch.is_empty() {
+                return;
+            }
+            let host = host.clone();
+            let id = id.clone();
+            let work = shell::run(async move { host.input(&id, &batch).await });
             if let Err(error) = work.await.unwrap_or_else(|| Err(UNANSWERED.into())) {
                 let _ = weak.update(cx, |view, cx| {
+                    view.outgoing.clear();
+                    view.sending = false;
                     view.problem = Some(error.into());
                     cx.notify();
                 });
+                return;
             }
         })
         .detach();
@@ -764,6 +801,8 @@ impl Render for TerminalView {
             .child(
                 div()
                     .id("terminal-grid")
+                    .key_context("Terminal")
+                    .relative()
                     .flex_1()
                     .overflow_y_scroll()
                     .track_focus(&self.focus)
@@ -796,6 +835,7 @@ impl Render for TerminalView {
                             view.scroll_by(lines, cx);
                         }
                     }))
+                    .child(fit(cx.entity(), mono.clone()))
                     .child(
                         div()
                             .flex()
@@ -814,6 +854,34 @@ impl Render for TerminalView {
             )
             .into_any_element()
     }
+}
+
+/// Measures the grid each frame and resizes the pty to the cells that fit, so a wider edge or a
+/// taller window gets more columns and rows instead of a fixed 48 × 44.
+fn fit(view: gpui::Entity<TerminalView>, mono: SharedString) -> impl IntoElement {
+    canvas(
+        move |bounds, window, app| {
+            let size = px(FONT_SIZE);
+            let font_id = window.text_system().resolve_font(&font(mono));
+            let cell = window
+                .text_system()
+                .advance(font_id, size, 'm')
+                .map(|advance| advance.width)
+                .unwrap_or(px(CELL_WIDTH));
+            // The grid's padding is `p_2` on each side.
+            let inner = bounds.size - gpui::size(px(16.), px(16.));
+            let cols = (inner.width / cell).floor().max(1.) as usize;
+            let rows = (inner.height / px(FONT_SIZE * LINE_HEIGHT)).floor().max(1.) as usize;
+            app.defer(move |app| {
+                view.update(app, |view, cx| view.resize(cols, rows, cx));
+            });
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
 }
 
 /// One line's runs as elements, with the cursor's cell drawn inverted where it sits.

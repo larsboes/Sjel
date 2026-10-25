@@ -33,6 +33,7 @@ pub mod lan;
 pub mod origin;
 /// Signed browser sessions: minted by the shell, verified by every capability.
 pub mod session;
+mod stderr_stamp;
 /// The identity `tailscale serve` proves, for the caller that cannot hold a secret.
 pub mod tailnet;
 
@@ -44,6 +45,7 @@ pub use auth::{
     LEGACY_HEADERS, PAIRING_CLAIM_PATH, SESSION_COOKIE, SESSION_OPEN_PATH,
 };
 pub use session::{session_cookie_header, SignedSessions, SESSION_TTL_SECONDS};
+pub use stderr_stamp::stamp_stderr;
 
 // Re-exported so a server binary that depends only on sjel-server still gets the
 // port contract.
@@ -140,6 +142,7 @@ pub async fn serve_unix(
 ) {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 
+    stamp_stderr();
     if let Some(parent) = path.parent() {
         if let Err(error) = std::fs::create_dir_all(parent) {
             eprintln!("{name}: cannot create Unix socket directory: {error}");
@@ -189,6 +192,7 @@ pub async fn serve_unix(
 /// backtrace: the runner captures stderr, and "cannot bind" with the address is
 /// the whole diagnosis.
 pub async fn serve(name: &str, reach: Reach, port: u16, router: axum::Router, auth: InboundAuth) {
+    stamp_stderr();
     let addr = match bind_addr_for(reach, port, &auth) {
         Ok(addr) => addr,
         Err(refusal) => {

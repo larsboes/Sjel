@@ -15,13 +15,10 @@ covers it.
   On-the-go mode deferred a model call. Workaround: read the defer reason from
   `/tmp/sjel-<cap>.err`. Smallest change: send the agent token, or add a read-only agent route
   for the runtime mode.
-- **Timestamps in capability logs.** `/tmp/sjel-comms.err` lines such as `Inbox sweep: … 3 event
-  failure(s)` have no time, so a failure cannot be matched to the mail that arrived then.
-  Smallest change: the runner prefixes each stderr line with a UTC time, or `sjel_server` logs
-  through one timestamped helper.
-- **Approval round trips for replays.** Each agent replay of mail event analysis needs one owner
-  approval, and a debug loop needs several. Smallest change: an approval that covers one route and
-  one id set for a short time window.
+- **Timestamps in script service logs.** A Rust service stamps its own stderr from
+  `sjel_server::serve` on (`libs/sjel-server/src/stderr_stamp.rs`). A `process` service that is a
+  script or container still writes lines without a time to `/tmp/sjel-<cap>.err`. Smallest
+  change: the runner pipes those through the same stamp.
 - **Inference role probe.** To test what the light model returns for a fixed prompt, the agent
   wrote a `curl` call against the backend port and could not reach oMLX without its key. Smallest
   change: `sjel inference probe <role> <prompt-file>`, which uses the configured key and never

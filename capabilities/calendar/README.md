@@ -192,7 +192,8 @@ content-analysis results still require a separate click per candidate; newly swe
 mail may create its bounded proposals automatically after local extraction. Calendar stores each
 with `source = comms`, `commitment = possible`, and a stable external id, so retries update rather
 than duplicate and the proposal blocks no time. Dated actions use the neutral `deadline` kind;
-extracted mail event dates use `event`.
+extracted mail event dates use `event`. A comms proposal is all-day and spans at most 31 days,
+so a hotel stay runs from check-in to check-out.
 
 The payload follows
 [`calendar-proposal-provenance-v1`](../../schemas/calendar-proposal-provenance.schema.json): it

@@ -30,6 +30,9 @@ pub const KNOWN_KINDS: &[&str] = &[
 // carries `Commitment::Possible`; the same neutrality falls out of the matrix
 // instead of a named special case.
 
+/// The longest comms proposal: a month-long stay.
+const MAX_COMMS_DAYS: i64 = 31;
+
 /// How binding an entry is. Orthogonal to `kind`: a holiday can be an idea or
 /// a booked flight, and an event can be a bookmark or a paid ticket. `kind`
 /// says what it is; this says whether it is happening.
@@ -232,8 +235,11 @@ impl NewEntry {
             if self.commitment != Commitment::Possible {
                 return Err("Comms contributions must remain possible until reviewed".into());
             }
-            if !self.all_day || end_day != start_day + 1 {
-                return Err("Comms contributions must be one-day all-day proposals".into());
+            // A stay runs check-in to check-out; the cap keeps a misread date from blocking a year.
+            if !self.all_day || end_day - start_day > MAX_COMMS_DAYS {
+                return Err(format!(
+                    "Comms contributions must be all-day proposals of at most {MAX_COMMS_DAYS} days"
+                ));
             }
             if !matches!(self.kind.as_str(), "event" | "deadline") {
                 return Err("Comms proposals must be an event or deadline".into());
@@ -630,6 +636,11 @@ mod tests {
             "evidence": null
         });
         assert!(proposal.validate().is_ok());
+        proposal.ends_at = "2026-08-13".into();
+        assert!(proposal.validate().is_ok(), "a three-night stay");
+        proposal.ends_at = "2026-09-20".into();
+        assert!(proposal.validate().is_err(), "longer than a month");
+        proposal.ends_at = "2026-08-11".into();
 
         proposal.payload["origin"]["job_id"] = Value::Null;
         proposal.payload["origin"]["field"] = Value::String("mail_events".into());

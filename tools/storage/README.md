@@ -140,6 +140,56 @@ whole Data volume and this covers one tree; `--root /System/Volumes/Data` is the
 scope that figure does. It exits 0 whatever it finds, because "here is where your space went" is
 not the alarm exit 1 carries.
 
+## Installed software, and what the machine says about its use
+
+`installed` answers a question neither of the other read verbs can: is any of this still used.
+`report` knows a path's size and `discover` knows which paths the policy does not name, and
+neither has any memory of who touched a file. On 2026-10-25 that question was asked with a shell
+loop over `mdls`: this machine's 36 app bundles came to 14.6 GB of a 294 GB disk, while four Rust
+build classes held 108 GB. A tool that ranks by size alone invites deleting the wrong thing.
+
+It walks `/Applications` and `~/Applications`, measures each bundle with the same `du` a policy
+class uses, reads `CFBundleIdentifier` with `defaults` and `kMDItemLastUsedDate` with `mdls`, and
+then attributes the `~/Library` directories that belong to each bundle: `Application Support`,
+`Containers`, `Group Containers` and `Caches`.
+
+Three states, and only one of them is a use:
+
+| State | Meaning | What it is not |
+|---|---|---|
+| `last used <date> (Nd)` | Spotlight recorded a use. | |
+| `never` | Spotlight indexed the bundle and holds nothing. | Not "unused". An app launched through a helper, a Safari extension, or a second login leaves no record. |
+| `unknown` | `mdls` failed, is missing, or printed nothing. | Not `never`. The same rule `inuse.rs` follows for `lsof`: a reading that did not happen is never the reading that licenses deletion. |
+
+`--idle DAYS` (default 90) is the threshold those states are read against. A quarter, because the
+two apps this machine would have flagged at 30 days were a music app and a game launcher in
+ordinary use.
+
+Two heuristics decide what belongs to what, and both say so rather than asserting:
+
+- **Matching.** A bundle id is decisive. Failing that the names are compared with punctuation
+  stripped, in both directions, because `Application Support/Google` is `Google Chrome`'s and
+  `HUAQ24HBR6.dev.orbstack` is `OrbStack`'s — OrbStack's bundle id is `dev.kdrag0n.MacVirt`, so a
+  bundle-id-only rule reported 6 GB of its data as orphaned. One directory goes to the strongest
+  match and to one app only.
+- **Leftovers.** An unmatched directory is not automatically an app that was removed. `com.apple.*`
+  is the OS's, a dotless name under `Caches` is a tool's (`brew cleanup`, `go clean -cache`), and a
+  dotless name under `Application Support` carries no evidence either way — Apple's own
+  `AddressBook` and `CloudDocs` live in that shape. Only a reverse-DNS name that matches no
+  installed bundle is reported as an orphan. The rest are counted, separately, so dropping them
+  from the list is visible rather than silent.
+
+The package sources are measured, not counted from a catalogue: Homebrew's own `brew leaves`
+decides what a dependency is (this machine: 146 formulae, 45 leaves, so 101 are pulled in and
+`brew autoremove` is the verb), and npm, uv, rustup and the Cargo registry are measured where
+they install. A tool that is not here is reported `absent`; one that ran and did not answer is
+`unverified`. Neither is a zero.
+
+Read-only. `installed` exits 0 whenever the machine answered, because "some of this looks idle"
+is advice, not the threshold contract exit 1 carries. It is not served as an HTTP route: the walk
+measures about 30 s on this machine, the same reason `report --where` stays off that surface, and
+the route that would serve it needs the cached snapshot `storage-history` already has for `report`.
+
 ## Growth, which a report cannot show
 
 `report` is a point and "is it growing" is a slope, so this crate measures, prints and exits

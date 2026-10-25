@@ -4,11 +4,12 @@
 //! me", which `df` structurally cannot: the 46 GB that started this was 215 individually
 //! unremarkable 230 MB cache blocks, invisible to every per-file view.
 //!
-//! Four verbs, and the split is the contract. `report` and `discover` read; `reclaim` is the
-//! only thing that removes; `target` answers PRD §9's R6 for this checkout. `report`,
-//! `discover` and `reclaim` read the overlay's `config/storage-policy.toml`, so the core
-//! names no path on this machine (CONTRIBUTING.md#public-core-and-private-overlays).
-//! `target` works on a clone with no overlay, which is when someone most needs the disk back.
+//! Five verbs, and the split is the contract. `report`, `discover` and `installed` read;
+//! `reclaim` is the only thing that removes; `target` answers PRD §9's R6 for this checkout.
+//! `report`, `discover`, `installed` and `reclaim` read the overlay's
+//! `config/storage-policy.toml`, so the core names no path on this machine
+//! (CONTRIBUTING.md#public-core-and-private-overlays). `target` works on a clone with no
+//! overlay, which is when someone most needs the disk back.
 //!
 //! Exit codes, which `tools/host-watch`, `tools/doctor` and any hook depend on:
 //!
@@ -21,6 +22,7 @@ mod checkout;
 mod classes;
 mod discover;
 mod guard;
+mod installed;
 mod inuse;
 mod measure;
 mod policy;
@@ -54,6 +56,11 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
                                    the largest directories under PATH (default $HOME) that
                                    no policy path names — where `unattributed` lives.
                                    `--root /System/Volumes/Data` covers the whole volume
+  sjel-storage installed [--idle DAYS] [--top N] [--root PATH] [--json]
+                                   every app bundle with its size, when Spotlight last saw
+                                   it used, and the ~/Library data it owns — plus the
+                                   package managers and toolchains, and the leftover data
+                                   whose app is gone. Reads only: nothing is removed
   sjel-storage -h                  this help
 
 Policy: <overlay>/config/storage-policy.toml — see schemas/storage-policy.toml.example.
@@ -151,6 +158,18 @@ fn main() -> ExitCode {
         "discover" => number("--top", 20).and_then(|top| {
             number("--depth", 2).and_then(|depth| cmd_discover(json, top, depth, value("--root")))
         }),
+        "installed" => {
+            let idle = match value("--idle") {
+                None => Ok(installed::DEFAULT_IDLE_DAYS),
+                Some(v) => v
+                    .parse::<i64>()
+                    .map_err(|_| format!("--idle needs a whole number of days, got '{v}'")),
+            };
+            idle.and_then(|idle_days| {
+                number("--top", 15)
+                    .and_then(|top| cmd_installed(json, top, idle_days, value("--root")))
+            })
+        }
         other => Err(format!("unknown command '{other}'\n\n{HELP}")),
     };
 
@@ -944,5 +963,40 @@ fn cmd_discover(json: bool, top: usize, depth: usize, root: Option<String>) -> R
     );
     print_walk(&walk, &home);
     println!("\n  What is reclaimable is `sjel storage report`. This ranks what no policy names.");
+    Ok(EXIT_OK)
+}
+
+/// Installed software, sized, with whatever this machine will say about its use.
+///
+/// `/Applications` is the default root because it is the one every macOS install has; a
+/// home-local `~/Applications` is added when it exists, because an app installed there is
+/// just as installed and would otherwise be the one thing the verb could not see. This verb
+/// reads and removes nothing, so its exit code is 0 whenever the machine answered at all —
+/// "something looks idle" is advice, not the threshold contract `report`'s exit 1 carries.
+fn cmd_installed(
+    json: bool,
+    top: usize,
+    idle_days: i64,
+    root: Option<String>,
+) -> Result<u8, String> {
+    let mut roots = vec![root.unwrap_or_else(|| "/Applications".to_string())];
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            let user_apps = Path::new(&home).join("Applications");
+            if user_apps.is_dir() {
+                roots.push(user_apps.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    let inventory = installed::measure(roots, idle_days);
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&inventory.to_json()).map_err(|e| e.to_string())?
+        );
+        return Ok(EXIT_OK);
+    }
+    installed::print(&inventory, top);
     Ok(EXIT_OK)
 }

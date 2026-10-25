@@ -11,8 +11,9 @@ Discover Sjel:
                                  What this machine still needs, and what applying it would do
   context with [capability]      Emit bounded current operating context
   context on [unit-or-path]      Emit bounded current repository context
-  storage <report|discover|reclaim|target>
-                                 What is filling this disk, and what is safe to reclaim
+  storage <report|discover|installed|reclaim|target>
+                                 What is filling this disk, what is installed and looks
+                                 unused, and what is safe to reclaim
   update [--json|--offline]      Software installed outside this checkout, and what is stale
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]
@@ -27,6 +28,8 @@ Check a change before pushing it:
 Operate capabilities:
   distribution verify <archive> --sha256 <digest>  Verify a release capability package without installing
   distribution install-package <archive> --sha256 <digest>  Install into a packaged runtime; do not start
+  distribution list --json  List installed feature receipts and package file integrity
+  distribution uninstall-package <name> --preserve-data  Stop, disable and remove receipt-owned files; keep data
   runtime status                 Runtime mode, power and On-the-go exceptions
   provider list|login|logout     Manage model-provider sign-ins in the OS keychain
   credentials list|connect|…     Connect the Google grants capabilities declare, into the keychain

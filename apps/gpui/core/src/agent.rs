@@ -296,9 +296,9 @@ impl Shell {
 }
 
 /// One server-sent event: its `event:` name (default `message`) and its joined `data:` lines.
-struct Frame {
-    event: String,
-    data: String,
+pub(crate) struct Frame {
+    pub(crate) event: String,
+    pub(crate) data: String,
 }
 
 /// Reads one event out of `buffer`, when a blank line has arrived.
@@ -306,7 +306,7 @@ struct Frame {
 /// The double newline is the delimiter: a chunk boundary can fall anywhere, so nothing is returned
 /// until the event that ends it is complete. Comments (`: keep-alive`) carry no data and are
 /// dropped — that is what keeps a stream that waits for an approval from looking dead.
-fn next_frame(buffer: &mut Vec<u8>) -> Option<Frame> {
+pub(crate) fn next_frame(buffer: &mut Vec<u8>) -> Option<Frame> {
     let mut cursor = 0;
     let mut event = String::from("message");
     let mut data = String::new();

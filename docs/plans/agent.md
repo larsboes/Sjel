@@ -179,7 +179,9 @@ Steps:
    (`833c571d`): `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in
    `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
    left from this step is the client's half: nothing draws a terminal yet.
-2. **One terminal view for Mac and phone**, specified below. Not started.
+2. **One terminal view for Mac and phone**, specified below. Partly: `ui/src/terminal.rs` draws
+   and types, and `core/src/terminal.rs` carries the wire, but nothing mounts the view — no finder
+   entry, no right-edge seat, no phone tab, and no Face ID gate before a reattach.
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the
    connection, and [Blink Shell](https://github.com/blinksh/blink) (GPL-3.0) on the phone with a
@@ -253,16 +255,21 @@ to interactive keystrokes, so access is the control.
 
 ### Client
 
-- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Reconnect resumes from the
-  last offset.
-- `apps/gpui/ui/src/terminal.rs`: the view. `alacritty_terminal` (Apache-2.0) parses the stream
-  into a grid, and GPUI draws the grid. Zed's GPUI terminal is the reference to read first. Check
-  its licence against Sjel's AGPL-3.0 before reusing code. `alacritty_terminal` still needs an
-  `upstreams.toml` row; `portable-pty` has one, and its `why` records what it does not do: signal a
-  process group, set the environment, or parse any output.
+- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Built: the list row, open, the
+  stream with a resume offset, input, resize, close, and [`Position`], which is what stops a
+  replayed frame from being drawn twice and what moves the reader to `first_offset` after
+  `truncated`.
+- `apps/gpui/ui/src/terminal.rs`: the view. Built: `alacritty_terminal` 0.26 (Apache-2.0, the
+  licence check this plan asked for; its `upstreams.toml` row records the dependency cost and what
+  it does not do) parses the stream into a grid, and GPUI draws it as runs of cells that share a
+  look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
+  key row can share; the wheel moves through the parser's history; the cursor is the inverted
+  cell. Not built: nothing mounts the view yet.
 - Phone: the Agent tab lists agent sessions and terminals. A key row above the keyboard carries
   Esc, Tab, Ctrl, arrows, `|`, `~` and `/`. Selection copies to the clipboard. Pinch changes the
-  font size. Mac: a terminal opens from the finder (`sjel://terminal`) or in the right edge.
+  font size. Mac: a terminal opens from the finder (`sjel://terminal`) or in the right edge. None of
+  this is wired: `TerminalView` is constructed by nobody, and the Face ID gate before a reattach is
+  still owed.
 
 ### Done when
 
@@ -271,9 +278,9 @@ to interactive keystrokes, so access is the control.
    kernel; `htop` and a full scrollback pass are untested.
 2. On the phone, the `claude` preset starts in `~/Developer/Sjel` and accepts a prompt. After the
    phone is locked for 2 minutes, reopening the app reattaches and replays the missed output. Open:
-   no client exists yet.
-3. The Mac and the phone attached to one terminal show the same output. Open: no client exists
-   yet.
+   the client exists but no window mounts it.
+3. The Mac and the phone attached to one terminal show the same output. Open: no window mounts a
+   terminal, so two cannot attach to one yet.
 4. A request with the agent token to each terminal route answers 401 (test). Met, for every route
    in the manifest.
 5. `DELETE` ends the process group, and the audit file holds a start and an end line with no

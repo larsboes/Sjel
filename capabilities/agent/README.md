@@ -149,11 +149,12 @@ approval card, including `write` and `edit` diffs. The docked desktop seat keeps
 after the finder closes. The paired iPhone can create or select sessions, prompt or steer, follow
 and resume streams, inspect and answer approvals, and stop runs through its signed device client.
 
-The terminal exists on the server side only: pty sessions, the routes, the ring, the resize, the
-group kill and the audit are built and tested (`src/terminal.rs`), and a Mac shell was driven
-through them end to end. No client draws one yet — `apps/gpui/core/src/terminal.rs` (the wire
-client) and `apps/gpui/ui/src/terminal.rs` (the view, `alacritty_terminal` for the grid) are the
-next step in `docs/plans/agent.md` §6.
+The terminal is built on both sides and wired on neither: pty sessions, the routes, the ring, the
+resize, the group kill and the audit here (`src/terminal.rs`), a Mac shell driven through them end
+to end, and the app's half in `apps/gpui/core/src/terminal.rs` (the wire client, with the resume
+offset) and `apps/gpui/ui/src/terminal.rs` (the view, `alacritty_terminal` for the grid, keys as pty
+bytes). No window mounts the view yet, so a terminal is opened with `sjel capability call` rather
+than from the app: `docs/plans/agent.md` §6 lists what the wiring still owes.
 
 The join between the agent UI and the capability is not tested: each part has its own tests, and a
 run has never been driven end to end through the capability. `docs/plans/agent.md` (Live
@@ -161,7 +162,8 @@ validation) lists what to do in which order, and what a session picking it up ne
 
 ## What is not built
 
-- **A terminal client.** The Mac view and the phone view, and the Face ID gate before reattaching.
+- **A mounted terminal.** The view and the client exist; the finder entry, the right-edge seat, the
+  phone tab with its key row, and the Face ID gate before a reattach do not.
 - **Live integration validation.** Work Package 22 still needs a real desktop run and paired-phone
   checks for start, follow, reconnect, transcript recovery, approval from both clients, deny, stop,
   and re-pair. A host-target compile is not evidence that the phone flow works on-device.

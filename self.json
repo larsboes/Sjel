@@ -2569,6 +2569,10 @@
       "verdict": "watch"
     },
     {
+      "name": "alacritty-terminal",
+      "verdict": "adopt"
+    },
+    {
       "name": "anatomy",
       "verdict": "adopt"
     },

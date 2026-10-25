@@ -2,8 +2,8 @@
 //!
 //! Shared across macOS desktop and iOS mobile clients.
 
-pub mod backup;
 pub mod apps;
+pub mod backup;
 pub mod block_menu;
 pub mod calendar;
 pub mod cv;
@@ -21,8 +21,8 @@ pub mod packs;
 pub mod people;
 pub mod primitives;
 pub mod projects;
-pub mod research;
 pub mod record;
+pub mod research;
 pub mod self_view;
 pub mod setup;
 pub mod sidebar;
@@ -30,6 +30,7 @@ pub mod software;
 pub mod soundscape;
 pub mod systems;
 pub mod tasks;
+pub mod terminal;
 pub mod theme;
 pub mod today;
 pub mod travel;

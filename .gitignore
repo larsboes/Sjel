@@ -43,7 +43,7 @@ graphify-out/
 # upstreams.toml's [graphify] entry deliberately excludes from Sjel, so shipping it
 # would have bound a public clone to exactly the uncontrolled version that entry
 # argues against. The graphify *instruction* is project doctrine and stays in
-# CLAUDE.md and AGENTS.md; the binary path enforcing it is machine state.
+# AGENTS.md. The binary path enforcing it is machine state.
 # Only these two files: a project skill or agent under .claude/ is worth tracking and
 # should still surface in `git status` rather than vanishing into an ignored directory.
 .claude/settings.json

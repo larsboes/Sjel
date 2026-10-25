@@ -6,6 +6,7 @@ commits. For operations, run `sjel help` or `sjel search <task>` before you brow
 
 Shared documentation and planning rules live in [CONTRIBUTING.md](CONTRIBUTING.md#documentation).
 Keep this file as the bootstrap. Link to the owning rule instead of duplicating it here.
+Every harness reads this file, Claude Code included. Do not add a `CLAUDE.md` beside it.
 
 Before editing:
 

@@ -754,8 +754,7 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 | `upstreams.toml` | every external project: url, verdict, license, why |
 | `README.md` | human-facing architecture and durable repository doctrine |
 | `docs/` | technical documentation hierarchy: architecture, capabilities, and operations manuals |
-| `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill |
-| `CLAUDE.md` | Claude Code adapter; imports `AGENTS.md` and adds no second doctrine |
+| `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill. Every harness, Claude Code included, reads it. There is no `CLAUDE.md`. |
 | `ARCHITECTURE.md` | generated snapshot of capabilities/Packs/upstreams/systems — never hand-edited, see `tools/generate-architecture.sh`. State mounts are machine-local and deliberately absent; `tools/doctor` reports those |
 | `capabilities/<name>/` | one dir per capability: curated README + its code as it lands; optional `ui/` panel served over its own HTTP surface |
 | `dashboard/` | the spine's shell — discovers installed capabilities via their manifests and mounts their panels (installer, doctor UI, service dashboards); owns no domain, no data |

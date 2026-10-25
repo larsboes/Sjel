@@ -77,7 +77,7 @@ add(join(root, "AGENTS.md"), "project-level, every session in this project");
 add(join(root, ".claude", "CLAUDE.md"), "project-level, every session in this project");
 const memoryDir = join(home, ".claude", "projects", root.replace(/\//g, "-"), "memory");
 add(join(memoryDir, "MEMORY.md"), "memory index, injected every session");
-if (!entries.length) warnings.push("nothing found: no CLAUDE.md at the user or project level");
+if (!entries.length) warnings.push("nothing found: no CLAUDE.md or AGENTS.md at the user or project level");
 
 // Sections, so a trim can target a part rather than a file.
 const sections: Section[] = [];

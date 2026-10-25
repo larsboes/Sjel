@@ -82,6 +82,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "Idempotent provider contribution. Requires source + external_id.",
     ),
     r(
+        "POST",
+        "/api/entries/external/retire",
+        "Delete a provider's possible proposals from one origin item, except the external_ids in keep. Entries in a trip stay.",
+    ),
+    r(
         "GET",
         "/api/content/{source}/{id}",
         "The entry as content-item-v2. :source is always 'calendar'.",
@@ -485,6 +490,45 @@ async fn upsert_external_entry(
     .await
     {
         Ok(Ok(entry)) => response(StatusCode::OK, EntryListItem::one(entry)),
+        Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
+        Err(error) => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({ "error": error.to_string() }),
+        ),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct RetireBody {
+    source: String,
+    origin_item_id: String,
+    /// The external ids the provider proposes now. Everything else from the item goes.
+    keep: Vec<String>,
+}
+
+/// A provider that re-reads one item names what it still proposes. Its keys depend on what it
+/// read (a model's title), so a re-read under a new key would otherwise leave the old one beside it.
+async fn retire_external_proposals(
+    State(state): State<AppState>,
+    Json(body): Json<RetireBody>,
+) -> ApiResponse {
+    if body.source.trim().is_empty() || body.origin_item_id.trim().is_empty() {
+        return response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "source and origin_item_id are required" }),
+        );
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        CalendarStore::open(&database_path)
+            .and_then(|store| {
+                store.retire_external_proposals(&body.source, &body.origin_item_id, &body.keep)
+            })
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(retired)) => response(StatusCode::OK, json!({ "retired": retired })),
         Ok(Err(error)) => response(StatusCode::BAD_REQUEST, json!({ "error": error })),
         Err(error) => response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1722,6 +1766,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/google/drafts", get(list_google_drafts))
         .route("/api/proposals", get(list_external_proposals))
         .route("/api/entries/external", put(upsert_external_entry))
+        .route(
+            "/api/entries/external/retire",
+            post(retire_external_proposals),
+        )
         .route(
             "/api/entries/{id}",
             get(get_entry).patch(update_entry).delete(delete_entry),

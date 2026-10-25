@@ -572,6 +572,39 @@ impl CalendarStore {
         Ok(Some(entry))
     }
 
+    /// Deletes what `source` proposed from one origin item and no longer proposes: every entry
+    /// with that `payload.origin.item_id` whose `external_id` is not in `keep`. Only `possible`
+    /// entries outside a trip go: an entry in a trip is the operator's.
+    /// Returns the deleted ids.
+    pub fn retire_external_proposals(
+        &self,
+        source: &str,
+        origin_item_id: &str,
+        keep: &[String],
+    ) -> StoreResult<Vec<String>> {
+        let stale: Vec<(String, Option<String>)> = self.conn()?.query_all(
+            &format!(
+                "SELECT id, external_id FROM {prefix}_entries \
+                 WHERE source = ?1 AND json_extract(payload, '$.origin.item_id') = ?2 \
+                   AND commitment = 'possible' \
+                   AND id NOT IN (SELECT entry_id FROM {prefix}_trip_materializations)",
+                prefix = self.prefix
+            ),
+            params![source, origin_item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let mut retired = Vec::new();
+        for (id, external_id) in stale {
+            if external_id.is_some_and(|e| keep.contains(&e)) {
+                continue;
+            }
+            if self.delete_entry(&id)? {
+                retired.push(id);
+            }
+        }
+        Ok(retired)
+    }
+
     pub fn delete_entry(&self, id: &str) -> StoreResult<bool> {
         let mut conn = self.conn()?;
         let tx = sjel_store::write_transaction(&mut conn)?;
@@ -1726,6 +1759,49 @@ mod db_tests {
 
         assert_eq!(store.forget_trip_materialization("plan-1").unwrap(), 1);
         assert!(store.trip_plan_for(&entry.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_reanalysed_mail_retires_only_its_own_stale_possible_proposals() {
+        let store = open_test_store("retire");
+        let proposal = |title: &str, external: &str, item: &str| {
+            let mut entry = an_entry(title, "2026-10-08", "event");
+            entry.source = "comms".into();
+            entry.all_day = true;
+            entry.starts_at = "2026-10-08".into();
+            entry.ends_at = "2026-10-09".into();
+            entry.external_id = Some(external.into());
+            entry.payload = serde_json::json!({
+                "schema_version": "calendar-proposal-provenance-v1",
+                "origin": { "capability": "comms", "source": "mail", "item_id": item,
+                            "job_id": null, "field": "mail_events", "index": 0 },
+                "data_class": "c2",
+                "analysis_schema_version": "local-mail-event-analysis-v2",
+                "importance": "medium",
+                "importance_rationale": "Extracted locally.",
+            });
+            store.upsert_external_entry(&entry).unwrap()
+        };
+        let kept = proposal("Bonn Hbf → Stuttgart Hbf", "mail-event:new", "mail-1");
+        let stale = proposal("Zugfahrt", "mail-event:old", "mail-1");
+        let in_trip = proposal("Hotel", "mail-event:trip", "mail-1");
+        let other_mail = proposal("Concert", "mail-event:other", "mail-2");
+        store
+            .record_trip_materialization(std::slice::from_ref(&in_trip.id), "plan-1")
+            .unwrap();
+
+        let retired = store
+            .retire_external_proposals("comms", "mail-1", &["mail-event:new".to_string()])
+            .unwrap();
+        assert_eq!(retired, vec![stale.id.clone()]);
+        for kept in [&kept, &in_trip, &other_mail] {
+            assert!(
+                store.get_entry(&kept.id).unwrap().is_some(),
+                "{}",
+                kept.title
+            );
+        }
+        assert!(store.get_entry(&stale.id).unwrap().is_none());
     }
 
     /// Contexts end inclusively -- they describe a human horizon, not a schedulable

@@ -3,7 +3,7 @@ use super::*;
 #[cfg(test)]
 use events::{comparable_title, normalize_instant};
 #[cfg(test)]
-use trips::{city_of, is_home, without_postal_code};
+use trips::{city_of, is_home, is_online, without_postal_code};
 
 #[cfg(test)]
 mod tests {
@@ -819,6 +819,41 @@ mod cluster_tests {
         assert!(out.drafts.is_empty(), "your own city is not a journey");
         assert_eq!(out.unclustered.len(), 2);
         assert!(out.unclustered.iter().all(|e| e.reason.contains("home")));
+    }
+
+    /// Three online talks in one week were a trip to "Virtual". An online event has no place.
+    #[test]
+    fn online_events_are_no_trip() {
+        let entries = [
+            event(
+                "a",
+                "Virtual",
+                "2026-10-13",
+                "2026-10-14",
+                Commitment::Possible,
+            ),
+            event(
+                "b",
+                "Virtual",
+                "2026-10-14",
+                "2026-10-15",
+                Commitment::Possible,
+            ),
+            event(
+                "c",
+                "Online und live über CareerFairy",
+                "2026-10-15",
+                "2026-10-16",
+                Commitment::Possible,
+            ),
+        ];
+        let out = cluster_trips(&entries, 5, None).unwrap();
+        assert!(out.drafts.is_empty(), "{:?}", out.drafts);
+        assert!(out
+            .unclustered
+            .iter()
+            .all(|e| e.reason.contains("no place")));
+        assert!(!is_online("Virtuoso Hall, Wien"));
     }
 
     /// The failure that would cost something: cancelling a real trip because

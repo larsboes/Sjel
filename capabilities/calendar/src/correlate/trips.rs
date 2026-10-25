@@ -54,7 +54,21 @@ pub(super) fn place_of(entry: &Entry) -> Option<String> {
         .as_deref()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("null"));
-    city.or(fallback).map(|place| place.to_string())
+    city.or(fallback)
+        .filter(|place| !is_online(place))
+        .map(|place| place.to_string())
+}
+
+/// `Virtual`, `Online und live über CareerFairy`, `online via Microsoft Teams`: an event you
+/// attend from wherever you are. It has no place, so three of them are not a trip to "Virtual".
+pub(super) fn is_online(place: &str) -> bool {
+    let first = place
+        .split(|c: char| !c.is_alphanumeric())
+        .next()
+        .unwrap_or_default();
+    ["online", "virtual"]
+        .iter()
+        .any(|word| first.eq_ignore_ascii_case(word))
 }
 
 /// The departure city of a ticket leg, as Comms records it in `payload.from_city`.

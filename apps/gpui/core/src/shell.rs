@@ -3509,6 +3509,84 @@ impl Shell {
             .await
     }
 
+    /// The wish groups, each with its members and what they cost.
+    pub async fn inventory_wish_groups(&self) -> ShellResult<Vec<crate::inventory::WishGroup>> {
+        let envelope: crate::inventory::WishGroups = self
+            .json(Method::GET, "/inventory/api/wish-groups", None, 10)
+            .await?;
+        Ok(envelope.wish_groups)
+    }
+
+    /// Creates a wish group, or retitles the one that already has this id.
+    pub async fn inventory_save_wish_group(
+        &self,
+        id: &str,
+        title: &str,
+        constraint_text: &str,
+    ) -> ShellResult<()> {
+        if id.trim().is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("A wish group id is required.".into()),
+            ));
+        }
+        self.send(
+            Method::POST,
+            "/inventory/api/wish-groups",
+            Some(serde_json::json!({
+                "id": id,
+                "title": title,
+                "constraint_text": constraint_text,
+            })),
+            10,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// Replaces a group's members with exactly these item ids.
+    pub async fn inventory_set_wish_group_items(
+        &self,
+        id: &str,
+        item_ids: &[String],
+    ) -> ShellResult<()> {
+        if id.trim().is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("A wish group id is required.".into()),
+            ));
+        }
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["inventory", "api", "wish-groups", id, "items"]);
+        self.send(
+            Method::PUT,
+            url.path(),
+            Some(serde_json::json!({ "item_ids": item_ids })),
+            10,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// Deletes a wish group and its memberships. The wishes themselves stay.
+    pub async fn inventory_delete_wish_group(&self, id: &str) -> ShellResult<()> {
+        if id.trim().is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("A wish group id is required.".into()),
+            ));
+        }
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["inventory", "api", "wish-groups", id]);
+        self.send(Method::DELETE, url.path(), None, 10)
+            .await
+            .map(drop)
+    }
+
     /// Creates an inventory entry through the inventory capability.
     pub async fn inventory_create_item(
         &self,

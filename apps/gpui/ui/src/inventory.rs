@@ -16,8 +16,9 @@ use crate::interior::RoomPlanHistory;
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
-    filter_inventory, format_cents, format_dimensions, group_of, InteriorLayoutSummary,
-    InventoryItem, InventoryRow, InventoryState, InventoryWishlist, NewInventoryItem,
+    budget_of, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
+    wishlist_view, InteriorLayoutSummary, InventoryItem, InventoryRow, InventoryState,
+    InventoryWishlist, NewInventoryItem, WishGroup,
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
@@ -155,6 +156,23 @@ struct InventoryEditForm {
     _subscriptions: Vec<Subscription>,
 }
 
+/// The two fields a wish group is made of. Its members are chosen on the wishes themselves.
+struct GroupForm {
+    fields: Vec<(String, String, Entity<InputState>)>,
+    error: Option<String>,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl GroupForm {
+    fn value(&self, key: &str, cx: &App) -> String {
+        self.fields
+            .iter()
+            .find(|(field, _, _)| field == key)
+            .map(|(_, _, input)| input.read(cx).value().to_string())
+            .unwrap_or_default()
+    }
+}
+
 impl InventoryEditForm {
     fn value(&self, key: &str, cx: &App) -> String {
         self.fields
@@ -171,12 +189,21 @@ pub struct InventoryPage {
     pub tab: InventoryTab,
     pub rows: Remote<Vec<InventoryRow>>,
     pub wishlist: Remote<InventoryWishlist>,
+    pub wish_groups: Remote<Vec<WishGroup>>,
     pub layouts: Remote<Vec<InteriorLayoutSummary>>,
     roomplan_history: Entity<RoomPlanHistory>,
     pub search_query: String,
     pub selected_category: Option<String>,
+    /// The wish group the wishlist is narrowed to, by id. None shows every open wish.
+    pub selected_group: Option<String>,
     search_input: Option<(Entity<InputState>, Subscription)>,
     wish_form: Option<WishForm>,
+    group_form: Option<GroupForm>,
+    /// The wish whose group picker is open, by id.
+    group_menu: Option<String>,
+    /// The group a write is in flight for, so one press cannot make two.
+    group_busy: Option<String>,
+    confirm_remove_group: Option<String>,
     edit_form: Option<InventoryEditForm>,
     wish_busy: Option<String>,
     wish_notice: Option<String>,
@@ -200,12 +227,18 @@ impl InventoryPage {
             tab: InventoryTab::Owned,
             rows: Remote::default(),
             wishlist: Remote::default(),
+            wish_groups: Remote::default(),
             layouts: Remote::default(),
             roomplan_history,
             search_query: String::new(),
             selected_category: None,
+            selected_group: None,
             search_input: None,
             wish_form: None,
+            group_form: None,
+            group_menu: None,
+            group_busy: None,
+            confirm_remove_group: None,
             edit_form: None,
             wish_busy: None,
             wish_notice: None,
@@ -250,6 +283,7 @@ impl InventoryPage {
 
         self.rows.loading = true;
         self.wishlist.loading = true;
+        self.wish_groups.loading = true;
         self.layouts.loading = true;
         cx.notify();
 
@@ -277,7 +311,28 @@ impl InventoryPage {
         })
         .detach();
 
-        // 3. Fetch Interior Layouts
+        // 3. Fetch Wish Groups
+        let s_g = shell.clone();
+        let g_work = shell::run(async move { s_g.inventory_wish_groups().await });
+        cx.spawn(async move |this, cx| {
+            let res = g_work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.wish_groups.settle(res);
+                // A group that is no longer on the list would narrow the wishlist to nothing.
+                let known = page.wish_groups.value.as_ref().is_some_and(|groups| {
+                    page.selected_group
+                        .as_deref()
+                        .is_some_and(|id| groups.iter().any(|group| group.id == id))
+                });
+                if !known {
+                    page.selected_group = None;
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+
+        // 4. Fetch Interior Layouts
         let s_l = shell.clone();
         let l_work = shell::run(async move { s_l.interior_layouts().await });
         cx.spawn(async move |this, cx| {
@@ -309,11 +364,188 @@ impl InventoryPage {
     }
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.tab != InventoryTab::Owned {
+        // The Interior tab draws no search field, so a focus there would land nowhere.
+        if self.tab == InventoryTab::Interior {
             self.set_tab(InventoryTab::Owned, cx);
         }
         let field = self.search_field(window, cx);
         field.update(cx, |input, cx| input.focus(window, cx));
+    }
+
+    fn open_group_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.group_form.is_some() {
+            self.group_form = None;
+            cx.notify();
+            return;
+        }
+        let definitions = [
+            ("title", "Title", "Bad", "What the group is called"),
+            (
+                "constraint",
+                "Constraint",
+                "",
+                "What bounds it, e.g. one month's surplus",
+            ),
+        ];
+        let mut fields = Vec::new();
+        let mut subscriptions = Vec::new();
+        for (key, label, value, placeholder) in definitions {
+            let input = cx.new(|cx| {
+                let mut input = InputState::new(window, cx).placeholder(placeholder);
+                input.set_value(value, window, cx);
+                input
+            });
+            subscriptions.push(
+                cx.subscribe_in(&input, window, |page, _, event, window, cx| {
+                    if matches!(event, InputEvent::PressEnter { .. }) {
+                        page.create_group(window, cx);
+                    }
+                }),
+            );
+            fields.push((key.to_owned(), label.to_owned(), input));
+        }
+        if let Some((_, _, input)) = fields.first() {
+            input.update(cx, |input, cx| input.focus(window, cx));
+        }
+        self.group_form = Some(GroupForm {
+            fields,
+            error: None,
+            _subscriptions: subscriptions,
+        });
+        self.wish_notice = None;
+        self.wish_error = None;
+        cx.notify();
+    }
+
+    fn create_group(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Ok(shell), Some(form)) = (self.repo.shell(), self.group_form.as_ref()) else {
+            return;
+        };
+        if self.group_busy.is_some() {
+            return;
+        }
+        let title = form.value("title", cx).trim().to_owned();
+        if title.is_empty() {
+            if let Some(form) = self.group_form.as_mut() {
+                form.error = Some("Give the group a name.".to_owned());
+            }
+            cx.notify();
+            return;
+        }
+        let constraint_text = form.value("constraint", cx).trim().to_owned();
+        let id = sjel_gpui_core::capture::slug(&title);
+        let write_id = id.clone();
+        let write_title = title.clone();
+        let write_constraint = constraint_text.clone();
+        self.group_busy = Some(id.clone());
+        self.wish_error = None;
+        let work = shell::run(async move {
+            shell
+                .inventory_save_wish_group(&write_id, &write_title, &write_constraint)
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.group_busy = None;
+                match result {
+                    Ok(()) => {
+                        page.group_form = None;
+                        page.selected_group = Some(id.clone());
+                        page.wish_notice = Some(format!("Group \"{title}\" created."));
+                        page.load(cx);
+                    }
+                    Err(error) => {
+                        if let Some(form) = page.group_form.as_mut() {
+                            form.error = Some(error.to_string());
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        let _ = window;
+        cx.notify();
+    }
+
+    /// Adds a wish to a group, or takes it out again. The capability replaces the whole membership,
+    /// so the list is rebuilt from the group as it was last read.
+    fn toggle_group_member(&mut self, group: WishGroup, item_id: String, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else {
+            return;
+        };
+        if self.group_busy.is_some() {
+            return;
+        }
+        let joining = !group.contains(&item_id);
+        let mut ids = group.item_ids();
+        if joining {
+            ids.push(item_id.clone());
+        } else {
+            ids.retain(|id| id != &item_id);
+        }
+        self.group_busy = Some(group.id.clone());
+        self.wish_error = None;
+        let group_id = group.id.clone();
+        let group_title = group.title.clone();
+        let work =
+            shell::run(async move { shell.inventory_set_wish_group_items(&group_id, &ids).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.group_busy = None;
+                match result {
+                    Ok(()) => {
+                        page.wish_notice = Some(if joining {
+                            format!("Added to \"{group_title}\".")
+                        } else {
+                            format!("Removed from \"{group_title}\".")
+                        });
+                        page.load(cx);
+                    }
+                    Err(error) => page.wish_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Takes a group off the list. Its wishes stay in the wishlist.
+    fn remove_group(&mut self, id: String, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else {
+            return;
+        };
+        if self.group_busy.is_some() {
+            return;
+        }
+        self.group_busy = Some(id.clone());
+        self.confirm_remove_group = None;
+        self.wish_error = None;
+        let write_id = id.clone();
+        let work = shell::run(async move { shell.inventory_delete_wish_group(&write_id).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.group_busy = None;
+                match result {
+                    Ok(()) => {
+                        if page.selected_group.as_deref() == Some(id.as_str()) {
+                            page.selected_group = None;
+                        }
+                        page.wish_notice =
+                            Some("Group removed. Its wishes stay on the list.".to_owned());
+                        page.load(cx);
+                    }
+                    Err(error) => page.wish_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
     }
 
     fn open_wish_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1263,7 +1495,12 @@ impl InventoryPage {
         )
     }
 
-    fn render_wishlist_view(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn render_wishlist_view(
+        &mut self,
+        palette: Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(wishlist) = self.wishlist.value.clone() else {
             return div()
                 .p_6()
@@ -1273,35 +1510,181 @@ impl InventoryPage {
                 .into_any_element();
         };
 
-        let low = format_cents(Some(wishlist.total_low_cents));
-        let high = format_cents(Some(wishlist.total_high_cents));
+        let groups = self.wish_groups.value.clone().unwrap_or_default();
+        // A group that has just been deleted would narrow the list to nothing, so the selection is
+        // resolved against the groups that exist.
+        let group = self
+            .selected_group
+            .as_deref()
+            .and_then(|id| groups.iter().find(|group| group.id == id))
+            .cloned();
+        let shown = wishlist_view(&wishlist.items, group.as_ref(), &self.search_query);
+        let filtered = group.is_some() || !self.search_query.trim().is_empty();
 
-        let mut content = div().flex().flex_col().gap_4().child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_lg()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("Wishlist"),
-                )
-                .child(
-                    Button::new("wishlist-new")
-                        .small()
-                        .primary()
-                        .label(if self.wish_form.is_some() {
-                            "Cancel"
-                        } else {
-                            "+ Add wish"
-                        })
-                        .disabled(self.wish_busy.as_deref() == Some("new"))
-                        .on_click(
-                            cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
-                        ),
-                ),
+        // The banner describes what the list shows. When a group or a search narrows it, the range
+        // of the whole wishlist stays visible underneath instead of disappearing.
+        let budget = budget_of(shown.iter().copied());
+        let whole = budget_of(wishlist.items.iter());
+        let range = format!(
+            "{} – {}",
+            format_cents(Some(budget.low_cents)),
+            format_cents(Some(budget.high_cents))
         );
+        let label = match &group {
+            Some(group) => format!("{} · {} open", group.title, shown.len()),
+            None if filtered => format!(
+                "Matching wishes · {} of {}",
+                shown.len(),
+                wishlist.items.len()
+            ),
+            None => "Estimated Total Budget Range".to_owned(),
+        };
+        let whole_line = filtered.then(|| {
+            format!(
+                "All {} open: {} – {}",
+                wishlist.items.len(),
+                format_cents(Some(whole.low_cents)),
+                format_cents(Some(whole.high_cents))
+            )
+        });
+        let months = wishlist
+            .monthly_balance
+            .as_ref()
+            .and_then(|balance| months_to_pay(budget.low_cents, balance));
+        let search_field = self.search_field(window, cx);
+        let group_busy = self.group_busy.is_some();
+
+        let mut content = div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("Wishlist"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new("wishlist-new-group")
+                                    .small()
+                                    .ghost()
+                                    .label(if self.group_form.is_some() {
+                                        "Cancel"
+                                    } else {
+                                        "+ New group"
+                                    })
+                                    .disabled(group_busy)
+                                    .on_click(cx.listener(|page, _, window, cx| {
+                                        page.open_group_form(window, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new("wishlist-new")
+                                    .small()
+                                    .primary()
+                                    .label(if self.wish_form.is_some() {
+                                        "Cancel"
+                                    } else {
+                                        "+ Add wish"
+                                    })
+                                    .disabled(self.wish_busy.as_deref() == Some("new"))
+                                    .on_click(cx.listener(|page, _, window, cx| {
+                                        page.open_wish_form(window, cx)
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_4()
+                    .child(div().w(px(280.)).child(Input::new(&search_field).small()))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                Button::new("group-all")
+                                    .small()
+                                    .label(format!("All ({})", wishlist.items.len()))
+                                    .when(group.is_none(), |b| b.primary())
+                                    .when(group.is_some(), |b| b.ghost())
+                                    .on_click(cx.listener(|page, _, _, cx| {
+                                        page.selected_group = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .children(groups.iter().map(|candidate| {
+                                let active =
+                                    group.as_ref().is_some_and(|group| group.id == candidate.id);
+                                let id = candidate.id.clone();
+                                Button::new(format!("group-{}", candidate.id))
+                                    .small()
+                                    .label(format!(
+                                        "{} ({})",
+                                        candidate.title, candidate.items_count
+                                    ))
+                                    .when(active, |b| b.primary())
+                                    .when(!active, |b| b.ghost())
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        page.selected_group =
+                                            if active { None } else { Some(id.clone()) };
+                                        cx.notify();
+                                    }))
+                            })),
+                    ),
+            );
+        if let Some(form) = self.render_group_form(palette, cx) {
+            content = content.child(form);
+        }
+        if let Some(group) = &group {
+            let mut row = div().flex().items_center().justify_between().gap_3().child(
+                div()
+                    .flex_1()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(if group.constraint_text.trim().is_empty() {
+                        "No constraint set.".to_owned()
+                    } else {
+                        group.constraint_text.clone()
+                    }),
+            );
+            let id = group.id.clone();
+            let confirming = self.confirm_remove_group.as_deref() == Some(id.as_str());
+            row = row.child(
+                Button::new(format!("group-remove-{id}"))
+                    .small()
+                    .ghost()
+                    .label(if confirming {
+                        "Confirm removal"
+                    } else {
+                        "Remove group"
+                    })
+                    .disabled(group_busy)
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        if page.confirm_remove_group.as_deref() == Some(id.as_str()) {
+                            page.remove_group(id.clone(), cx);
+                        } else {
+                            page.confirm_remove_group = Some(id.clone());
+                            cx.notify();
+                        }
+                    })),
+            );
+            content = content.child(row);
+        }
         if let Some(form) = self.render_wish_form(palette, cx) {
             content = content.child(form);
         }
@@ -1346,28 +1729,30 @@ impl InventoryPage {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(palette.muted))
-                                    .child("Estimated Total Budget Range"),
+                                    .child(label),
                             )
                             .child(
                                 div()
                                     .text_xl()
                                     .font_weight(gpui::FontWeight::BOLD)
                                     .text_color(rgb(palette.accent))
-                                    .child(format!("{low} – {high}")),
+                                    .child(range),
                             )
-                            .children(if wishlist.unpriced_count > 0 {
-                                Some(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.amber))
-                                        .child(format!(
-                                            "{} unpriced items (budget is a floor)",
-                                            wishlist.unpriced_count
-                                        )),
-                                )
-                            } else {
-                                None
-                            }),
+                            .children((budget.unpriced > 0).then(|| {
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.amber))
+                                    .child(format!(
+                                        "{} unpriced items (budget is a floor)",
+                                        budget.unpriced
+                                    ))
+                            }))
+                            .children(whole_line.map(|line| {
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(line)
+                            })),
                     )
                     .children(wishlist.monthly_balance.as_ref().map(|b| {
                         div()
@@ -1384,7 +1769,7 @@ impl InventoryPage {
                                         format_cents(Some(b.median_cents))
                                     )),
                             )
-                            .children(wishlist.months_to_pay.map(|m| {
+                            .children(months.map(|m| {
                                 div()
                                     .text_sm()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -1393,18 +1778,28 @@ impl InventoryPage {
                             }))
                     })),
             )
-            .child(if wishlist.items.is_empty() {
+            .child(if shown.is_empty() {
                 div()
                     .p_8()
                     .text_center()
                     .text_sm()
                     .text_color(rgb(palette.muted))
-                    .child("No open wishlist items.")
+                    .child(match (&group, filtered) {
+                        (Some(group), _) if wishlist.items.is_empty() => {
+                            "No open wishlist items.".to_owned()
+                        }
+                        (Some(group), _) => format!(
+                            "Nothing from the open wishlist is in \"{}\" yet. Pick Group on a wish to add it.",
+                            group.title
+                        ),
+                        (None, true) => "No wish matches the search.".to_owned(),
+                        (None, false) => "No open wishlist items.".to_owned(),
+                    })
                     .into_any_element()
             } else {
                 let mut cards = Vec::new();
-                for item in &wishlist.items {
-                    cards.push(self.render_wish_item(item, palette, cx));
+                for item in &shown {
+                    cards.push(self.render_wish_item(item, &groups, palette, cx));
                 }
                 div()
                     .flex()
@@ -1414,6 +1809,73 @@ impl InventoryPage {
                     .into_any_element()
             })
             .into_any_element()
+    }
+
+    fn render_group_form(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let form = self.group_form.as_ref()?;
+        let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
+        for (key, label, input) in &form.fields {
+            fields = fields.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(label.clone()),
+                    )
+                    .child(Input::new(input).small())
+                    .id(format!("group-{key}")),
+            );
+        }
+        Some(
+            div()
+                .p_4()
+                .rounded_lg()
+                .bg(rgba(tint(palette.raised, 0x30)))
+                .border_1()
+                .border_color(rgba(tint(palette.border, 0x25)))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("New wish group"),
+                )
+                .child(fields)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Button::new("group-create-save")
+                                .small()
+                                .primary()
+                                .label("Create group")
+                                .on_click(
+                                    cx.listener(|page, _, window, cx| {
+                                        page.create_group(window, cx)
+                                    }),
+                                ),
+                        )
+                        .child(
+                            Button::new("group-create-cancel")
+                                .small()
+                                .ghost()
+                                .label("Cancel")
+                                .on_click(cx.listener(|page, _, _, cx| {
+                                    page.group_form = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 
     fn render_inventory_edit_form(
@@ -1501,6 +1963,7 @@ impl InventoryPage {
     fn render_wish_item(
         &self,
         item: &InventoryItem,
+        groups: &[WishGroup],
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -1519,147 +1982,214 @@ impl InventoryPage {
         let dim = format_dimensions(item.width, item.depth, item.height);
 
         let id = item.id.clone();
+        let group_id = id.clone();
         let bought_id = id.clone();
         let edit_item = item.clone();
         let remove_id = id.clone();
         let busy = self.wish_busy.as_deref() == Some(id.as_str());
         let confirming_remove = self.confirm_remove_wish.as_deref() == Some(id.as_str());
-        div()
+        let picker_open = self.group_menu.as_deref() == Some(id.as_str());
+        let mut card = div()
             .p_3p5()
             .rounded_lg()
             .bg(rgba(tint(palette.raised, 0x30)))
             .border_1()
             .border_color(rgba(tint(palette.border, 0x25)))
             .flex()
-            .items_center()
-            .justify_between()
+            .flex_col()
+            .gap_3()
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
+                    .items_center()
+                    .justify_between()
                     .child(
                         div()
                             .flex()
-                            .items_center()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .child(item.label.clone()),
+                                    )
+                                    .children(item.priority.as_ref().map(|pri| {
+                                        let color = match pri.as_str() {
+                                            "required" | "decided" => palette.red,
+                                            "recommended" => palette.amber,
+                                            _ => palette.accent,
+                                        };
+                                        div()
+                                            .px_2()
+                                            .py_0p5()
+                                            .rounded_full()
+                                            .text_xs()
+                                            .bg(rgba(tint(color, 0x20)))
+                                            .text_color(rgb(color))
+                                            .child(pri.clone())
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!("Target Dim: {dim}"))
+                                    .children(if !item.replaces.is_empty() {
+                                        Some(format!("Replaces: {}", item.replaces.join(", ")))
+                                    } else {
+                                        None
+                                    })
+                                    .children(item.notes.as_ref().map(|n| format!("Note: {n}"))),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_end()
                             .gap_2()
                             .child(
                                 div()
                                     .text_sm()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .child(item.label.clone()),
+                                    .text_color(rgb(palette.text))
+                                    .child(cost_range),
                             )
-                            .children(item.priority.as_ref().map(|pri| {
-                                let color = match pri.as_str() {
-                                    "required" | "decided" => palette.red,
-                                    "recommended" => palette.amber,
-                                    _ => palette.accent,
-                                };
+                            .child(
                                 div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .text_xs()
-                                    .bg(rgba(tint(color, 0x20)))
-                                    .text_color(rgb(color))
-                                    .child(pri.clone())
-                            })),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_3()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!("Target Dim: {dim}"))
-                            .children(if !item.replaces.is_empty() {
-                                Some(format!("Replaces: {}", item.replaces.join(", ")))
-                            } else {
-                                None
-                            })
-                            .children(item.notes.as_ref().map(|n| format!("Note: {n}"))),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(palette.text))
-                            .child(cost_range),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(
-                                Button::new(format!("wishlist-edit-{id}"))
-                                    .small()
-                                    .ghost()
-                                    .label("Edit")
-                                    .on_click(cx.listener(move |page, _, window, cx| {
-                                        page.open_item_edit(edit_item.clone(), window, cx)
-                                    })),
-                            )
-                            .child(
-                                Button::new(format!("wishlist-bought-{id}"))
-                                    .small()
-                                    .primary()
-                                    .label(if busy { "Saving…" } else { "Mark bought" })
-                                    .disabled(self.wish_busy.is_some())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        page.set_wish_state(
-                                            bought_id.clone(),
-                                            InventoryState::Owned,
-                                            cx,
+                                    .flex()
+                                    .gap_2()
+                                    .child(
+                                        Button::new(format!("wishlist-group-{id}"))
+                                            .small()
+                                            .ghost()
+                                            .label("Group")
+                                            .disabled(groups.is_empty())
+                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                                page.group_menu = if page.group_menu.as_deref()
+                                                    == Some(group_id.as_str())
+                                                {
+                                                    None
+                                                } else {
+                                                    Some(group_id.clone())
+                                                };
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new(format!("wishlist-edit-{id}"))
+                                            .small()
+                                            .ghost()
+                                            .label("Edit")
+                                            .on_click(cx.listener(move |page, _, window, cx| {
+                                                page.open_item_edit(edit_item.clone(), window, cx)
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new(format!("wishlist-bought-{id}"))
+                                            .small()
+                                            .primary()
+                                            .label(if busy { "Saving…" } else { "Mark bought" })
+                                            .disabled(self.wish_busy.is_some())
+                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                                page.set_wish_state(
+                                                    bought_id.clone(),
+                                                    InventoryState::Owned,
+                                                    cx,
+                                                )
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new(format!("wishlist-remove-{id}"))
+                                            .small()
+                                            .ghost()
+                                            .label(if confirming_remove {
+                                                "Confirm removal"
+                                            } else {
+                                                "No longer wanted"
+                                            })
+                                            .disabled(self.wish_busy.is_some())
+                                            .on_click(cx.listener(move |page, _, _, cx| {
+                                                if page.confirm_remove_wish.as_deref()
+                                                    == Some(remove_id.as_str())
+                                                {
+                                                    page.set_wish_state(
+                                                        remove_id.clone(),
+                                                        InventoryState::Gone,
+                                                        cx,
+                                                    );
+                                                } else {
+                                                    page.confirm_remove_wish =
+                                                        Some(remove_id.clone());
+                                                    cx.notify();
+                                                }
+                                            })),
+                                    )
+                                    .when(confirming_remove, |row| {
+                                        row.child(
+                                            Button::new(format!("wishlist-remove-cancel-{id}"))
+                                                .small()
+                                                .ghost()
+                                                .label("Cancel")
+                                                .on_click(cx.listener(move |page, _, _, cx| {
+                                                    page.confirm_remove_wish = None;
+                                                    cx.notify();
+                                                })),
                                         )
-                                    })),
-                            )
-                            .child(
-                                Button::new(format!("wishlist-remove-{id}"))
-                                    .small()
-                                    .ghost()
-                                    .label(if confirming_remove {
-                                        "Confirm removal"
-                                    } else {
-                                        "No longer wanted"
-                                    })
-                                    .disabled(self.wish_busy.is_some())
-                                    .on_click(cx.listener(move |page, _, _, cx| {
-                                        if page.confirm_remove_wish.as_deref()
-                                            == Some(remove_id.as_str())
-                                        {
-                                            page.set_wish_state(
-                                                remove_id.clone(),
-                                                InventoryState::Gone,
-                                                cx,
-                                            );
-                                        } else {
-                                            page.confirm_remove_wish = Some(remove_id.clone());
-                                            cx.notify();
-                                        }
-                                    })),
-                            )
-                            .when(confirming_remove, |row| {
-                                row.child(
-                                    Button::new(format!("wishlist-remove-cancel-{id}"))
-                                        .small()
-                                        .ghost()
-                                        .label("Cancel")
-                                        .on_click(cx.listener(move |page, _, _, cx| {
-                                            page.confirm_remove_wish = None;
-                                            cx.notify();
-                                        })),
-                                )
-                            }),
+                                    }),
+                            ),
                     ),
-            )
+            );
+        if picker_open {
+            card = card.child(self.render_group_picker(item, groups, palette, cx));
+        }
+        card.into_any_element()
+    }
+
+    /// The picker under one wish: one chip per group, filled where this wish is already a member.
+    fn render_group_picker(
+        &self,
+        item: &InventoryItem,
+        groups: &[WishGroup],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let busy = self.group_busy.is_some();
+        div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_1()
+            .pt_2()
+            .border_t_1()
+            .border_color(rgba(tint(palette.border, 0x22)))
+            .children(groups.iter().map(|candidate| {
+                let member = candidate.contains(&item.id);
+                let group = candidate.clone();
+                let item_id = item.id.clone();
+                Button::new(format!("wish-group-{}-{}", candidate.id, item.id))
+                    .small()
+                    .label(if member {
+                        format!("✓ {}", candidate.title)
+                    } else {
+                        candidate.title.clone()
+                    })
+                    .when(member, |button| button.primary())
+                    .when(!member, |button| button.ghost())
+                    .disabled(busy)
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.toggle_group_member(group.clone(), item_id.clone(), cx);
+                    }))
+            }))
             .into_any_element()
     }
 
@@ -1824,7 +2354,7 @@ impl Render for InventoryPage {
                     .overflow_y_scroll()
                     .child(match self.tab {
                         InventoryTab::Owned => self.render_owned_view(palette, window, cx),
-                        InventoryTab::Wishlist => self.render_wishlist_view(palette, cx),
+                        InventoryTab::Wishlist => self.render_wishlist_view(palette, window, cx),
                         InventoryTab::Interior => self.render_interior_view(palette),
                     }),
             )

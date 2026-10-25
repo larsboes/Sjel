@@ -1,0 +1,35 @@
+# Tooling gaps
+
+Gaps that agents hit while they worked, where Sjel tooling did not cover the task. The rule is in
+[`AGENTS.md`](AGENTS.md). Add an entry when you wrote a script or a workaround instead of using a
+`sjel` command. When someone picks an entry up, move it to a GitHub Issue or build it, then delete
+it here.
+
+Entry format: what was needed, what the agent did instead, and the smallest tooling change that
+covers it.
+
+## Open
+
+- **Runtime status for agents.** `sjel runtime status` answers
+  `invalid or missing authentication token` from an agent session. An agent cannot see whether
+  On-the-go mode deferred a model call. Workaround: read the defer reason from
+  `/tmp/sjel-<cap>.err`. Smallest change: send the agent token, or add a read-only agent route
+  for the runtime mode.
+- **Timestamps in capability logs.** `/tmp/sjel-comms.err` lines such as `Inbox sweep: … 3 event
+  failure(s)` have no time, so a failure cannot be matched to the mail that arrived then.
+  Smallest change: the runner prefixes each stderr line with a UTC time, or `sjel_server` logs
+  through one timestamped helper.
+- **Approval round trips for replays.** Each agent replay of mail event analysis needs one owner
+  approval, and a debug loop needs several. Smallest change: an approval that covers one route and
+  one id set for a short time window.
+- **Inference role probe.** To test what the light model returns for a fixed prompt, the agent
+  wrote a `curl` call against the backend port and could not reach oMLX without its key. Smallest
+  change: `sjel inference probe <role> <prompt-file>`, which uses the configured key and never
+  prints it.
+
+## Done
+
+- `sjel capability mail events [replay] <id>...` reads safe per-mail event scan states and
+  replays them.
+- `tools/service-runner.sh stop|restart` stops an orphaned copy of the capability's own binary
+  that holds its port. Before, it refused and asked for a manual `kill`.

@@ -222,6 +222,9 @@ pub fn command(root: &Path, args: &[String]) -> ExitCode {
                 call(root, "comms", "get", &format!("/feed?days={days}"), &[])
             }
         }
+        "mail" if rest.first().map(String::as_str) == Some("events") => {
+            mail_events(root, &rest[1..])
+        }
         "mail" => {
             // Mail triage without Secret rows. From an agent session the gate also
             // pseudonymizes every row (ISA F9); from the operator's shell the rows are raw.
@@ -249,6 +252,39 @@ pub fn command(root: &Path, args: &[String]) -> ExitCode {
         eprintln!("{e}");
         ExitCode::from(1)
     })
+}
+
+/// `mail events [replay] <id>... [curl-args...]`: the safe event-scan state of up to 20 mails,
+/// or a replay of them through local event analysis. Replay is a write, so an agent repeats it
+/// with `-H "X-Sjel-Approval: <id>"` once the owner allows it.
+fn mail_events(root: &Path, args: &[String]) -> Result<ExitCode, String> {
+    let (replay, args) = match args.split_first() {
+        Some((first, rest)) if first == "replay" => (true, rest),
+        _ => (false, args),
+    };
+    let split = args
+        .iter()
+        .position(|arg| arg.starts_with('-'))
+        .unwrap_or(args.len());
+    let (ids, curl) = args.split_at(split);
+    if ids.is_empty()
+        || ids.len() > 20
+        || !ids
+            .iter()
+            .all(|id| id.bytes().all(|b| b.is_ascii_alphanumeric()))
+    {
+        return usage_error(
+            "usage: sjel capability mail events [replay] <mail-id>... [curl-args...] (1 to 20 ids)",
+        );
+    }
+    if replay {
+        let mut rest = vec![serde_json::json!({ "ids": ids }).to_string()];
+        rest.extend_from_slice(curl);
+        call(root, "comms", "post", "/triage/events/replay", &rest)
+    } else {
+        let path = format!("/triage/events/status?ids={}", ids.join(","));
+        call(root, "comms", "get", &path, curl)
+    }
 }
 
 fn usage_error(msg: &str) -> Result<ExitCode, String> {

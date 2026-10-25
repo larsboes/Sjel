@@ -23,6 +23,10 @@ Always:
   generate, expose, or change a secret without explicit authorization.
 - Keep comments and config comments short: no dates, measurements, decisions or history. The
   commit message carries them. Rules: `Packs/harness/skills/sjel/references/on-documentation.md`.
+- Use Sjel tooling first (`sjel`, `tools/`, capability routes). When a task needs a custom script,
+  a manual workaround, or a raw command that the tooling does not cover, do one of two things.
+  Build it into the tooling in the same change, or add an entry to
+  [`TODO-TOOLING.md`](TODO-TOOLING.md). Do not leave the script only in `/tmp` or in the session.
 - Write a durable rule or decision into the repository: code, the skill that owns it, `ISA.md`, or
   this file. Never into agent memory. On this machine, the untracked `.claude/settings.json` sets
   `autoMemoryEnabled: false`.

@@ -40,6 +40,7 @@ Operate capabilities:
   capability ingest <url>        Ingest a URL through comms
   capability feed [days]         Read the comms feed
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
+  capability mail events [replay] <id>...  Event-scan state of mails, or replay them locally
   agent enroll                   Create or rotate the agent token (Keychain) and its server hash
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
   mcp register [harness]         Register that server with pi or Claude Code, then verify it answers

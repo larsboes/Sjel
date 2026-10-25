@@ -944,6 +944,21 @@ impl<'a> Svc<'a> {
                 .status();
         }
         let _ = std::fs::remove_file(&self.pid_file);
+        // A copy of this capability's own binary that lost its pid file (reparented after a
+        // crash or an interrupted restart) is ours to stop. Anything else on the port is not.
+        if let Some(orphan) = listener_pid(&self.port).filter(|pid| self.runs_our_binary(pid)) {
+            eprintln!(
+                "service-runner.sh: stopping orphaned '{}' (pid {orphan}) that held port {}",
+                self.cap, self.port
+            );
+            kill_tree(&orphan);
+            for _ in 0..20 {
+                if !alive(&orphan) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
         // A port still answering means something outside this pid file holds it; reporting
         // success there sent the next `start` into "already answers" forever.
         if !self.port.is_empty() {
@@ -961,6 +976,21 @@ impl<'a> Svc<'a> {
             }
         }
         Ok(0)
+    }
+
+    /// Whether `pid` executes this capability's declared command binary.
+    fn runs_our_binary(&self, pid: &str) -> bool {
+        let Some(ours) = self.command.first().and_then(|bin| which(bin)) else {
+            return false;
+        };
+        Command::new("ps")
+            .args(["-o", "comm=", "-p", pid])
+            .output()
+            .ok()
+            .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()))
+            .is_some_and(|exe| {
+                exe.canonicalize().ok() == ours.canonicalize().ok() && exe.is_absolute()
+            })
     }
 
     fn status_process(&self) {
@@ -1279,6 +1309,20 @@ fn kill_tree(pid: &str) {
         .args(["-TERM", pid])
         .stderr(Stdio::null())
         .status();
+}
+
+/// The pid listening on a loopback TCP port, per `lsof`.
+fn listener_pid(port: &str) -> Option<String> {
+    port.parse::<u16>().ok()?;
+    let out = Command::new("lsof")
+        .args(["-ti", &format!("tcp:{port}"), "-sTCP:LISTEN"])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .map(str::to_owned)
 }
 
 fn port_answers(port: &str) -> bool {

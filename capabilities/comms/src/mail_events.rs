@@ -308,26 +308,60 @@ fn next_day(date: &str) -> Option<String> {
     Some(format!("{:04}-01-01", year + 1))
 }
 
-fn propose(cfg: &Config, item: &TriageItem, index: usize, event: &Event) -> Result<(), String> {
-    let external_id = external_id(&item.id, event);
-    let body = calendar_payload(item, index, event, &external_id);
+/// One write to Calendar. `what` names the write in the error.
+fn calendar_write(
+    cfg: &Config,
+    method: reqwest::Method,
+    path: &str,
+    body: &Value,
+    what: &str,
+) -> Result<(), String> {
     let base = cfg.calendar_context.base_url.trim_end_matches('/');
-    let url = format!("{base}/api/entries/external");
+    let url = format!("{base}{path}");
     let client = sjel_http::client(
         sjel_http::Purpose::new("comms-calendar-proposal"),
         std::time::Duration::from_millis(cfg.calendar_context.timeout_ms.max(1_000)),
     )
     .map_err(|_| "Calendar request could not be prepared".to_string())?;
-    let response = sjel_server::InboundAuth::with_loopback_auth(client.put(&url).json(&body), &url)
+    let request = client.request(method, &url).json(body);
+    let response = sjel_server::InboundAuth::with_loopback_auth(request, &url)
         .send()
-        .map_err(|_| "Calendar did not accept the event proposal".to_string())?;
+        .map_err(|_| format!("Calendar did not accept the {what}"))?;
     if !response.status().is_success() {
         return Err(format!(
-            "Calendar refused event proposal (HTTP {})",
+            "Calendar refused the {what} (HTTP {})",
             response.status()
         ));
     }
     Ok(())
+}
+
+/// Proposes one event and returns its external id.
+fn propose(cfg: &Config, item: &TriageItem, index: usize, event: &Event) -> Result<String, String> {
+    let external_id = external_id(&item.id, event);
+    let body = calendar_payload(item, index, event, &external_id);
+    calendar_write(
+        cfg,
+        reqwest::Method::PUT,
+        "/api/entries/external",
+        &body,
+        "event proposal",
+    )?;
+    Ok(external_id)
+}
+
+/// Removes this mail's earlier proposals that the new reading does not repeat. The key holds
+/// the title, and a model words a title differently each run, so a re-read would otherwise
+/// leave the old proposal beside the new one.
+fn retire(cfg: &Config, item_id: &str, keep: &[String]) -> Result<(), String> {
+    let body = json!({ "source": "comms", "origin_item_id": item_id, "keep": keep });
+    calendar_write(
+        cfg,
+        reqwest::Method::POST,
+        "/api/entries/external/retire",
+        &body,
+        "retirement of stale proposals",
+    )
 }
 
 /// The events the local model finds in `body`, and whether the body was cut to fit.
@@ -493,7 +527,10 @@ pub(crate) fn analyze_candidates(
                 continue;
             }
         };
-        let read = match tickets::legs(&body) {
+        // A reader's answer is the whole truth about the mail; a model's empty one may not be.
+        let ticket_legs = tickets::legs(&body);
+        let from_reader = ticket_legs.is_some();
+        let read = match ticket_legs {
             Some(events) => Ok((events, false)),
             None => model_events(runtime, cfg, role.as_ref(), &body),
         };
@@ -520,6 +557,11 @@ pub(crate) fn analyze_candidates(
         }
         drop(body);
         if grounded.is_empty() {
+            if from_reader {
+                if let Err(error) = retire(cfg, &item.id, &[]) {
+                    eprintln!("mail events: {error}");
+                }
+            }
             report.no_event += 1;
             record_outcome(
                 &store,
@@ -539,18 +581,24 @@ pub(crate) fn analyze_candidates(
             );
             continue;
         }
-        let mut proposed = false;
+        let mut kept = Vec::new();
         let mut calendar_failed = false;
         for (index, event) in grounded {
             match propose(cfg, &item, index, event) {
-                Ok(()) => {
+                Ok(external_id) => {
                     report.proposals += 1;
-                    proposed = true;
+                    kept.push(external_id);
                 }
                 Err(_) => {
                     report.failed += 1;
                     calendar_failed = true;
                 }
+            }
+        }
+        let proposed = !kept.is_empty();
+        if proposed && !calendar_failed {
+            if let Err(error) = retire(cfg, &item.id, &kept) {
+                eprintln!("mail events: {error}");
             }
         }
         record_outcome(

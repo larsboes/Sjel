@@ -214,6 +214,8 @@ pub enum Target {
     Record(String),
     /// Open the finder, and ask this question in the one Ask session when it is not empty.
     Ask(String),
+    /// A terminal on the Mac: the newest one still running, or a new login shell.
+    Terminal,
     /// A dashboard path, query included.
     Dashboard(String),
 }
@@ -241,6 +243,9 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     }
     if path_only == "/docs" {
         return Some(Target::Native(Page::Docs));
+    }
+    if path_only == "/terminal" {
+        return Some(Target::Terminal);
     }
     if let Some(slug) = path_only.strip_prefix("/docs/") {
         let slug = match slug {
@@ -450,6 +455,10 @@ mod tests {
             parse_deep_link("sjel://ask"),
             Some(Target::Ask(String::new()))
         );
+        // A terminal is a place in the app: the finder's result, a link and a handoff all name
+        // it the same way, and the workspace decides which shell is attached.
+        assert_eq!(parse_deep_link("sjel://terminal"), Some(Target::Terminal));
+        assert_eq!(parse_deep_link("sjel://terminal/"), Some(Target::Terminal));
         assert_eq!(parse_deep_link("sjel://../etc"), None);
         assert_eq!(parse_deep_link("https://calendar"), None);
         for page in Page::ALL {

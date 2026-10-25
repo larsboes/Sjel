@@ -20,6 +20,8 @@
 //! parser keeps history for scrolling back, but a client that drew history would have to agree with
 //! the Mac about offsets. This draws the visible screen, which both screens can always agree on.
 
+use std::sync::Arc;
+
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
@@ -51,6 +53,21 @@ const LINE_HEIGHT: f32 = 1.4;
 const CELL_WIDTH: f32 = FONT_SIZE * 0.6;
 /// How far one notch of the wheel scrolls.
 const WHEEL_LINES: i32 = 3;
+/// What a phone's key row offers, and the bytes each key sends. `Ctrl-C` is here rather than a
+/// modifier chip because interrupting is the one control a shell cannot be used without.
+const TOUCH_KEYS: [(&str, &[u8]); 11] = [
+    ("esc", b"\x1b"),
+    ("tab", b"\t"),
+    ("\u{2190}", b"\x1b[D"),
+    ("\u{2191}", b"\x1b[A"),
+    ("\u{2193}", b"\x1b[B"),
+    ("\u{2192}", b"\x1b[C"),
+    ("|", b"|"),
+    ("~", b"~"),
+    ("/", b"/"),
+    ("\u{23ce}", b"\r"),
+    ("ctrl-c", &[0x03]),
+];
 
 /// The sixteen ANSI tones, then their bright pair. Fixed rather than themed: a program that asks
 /// for red means red, and a palette that renamed it would break the one thing these colours do.
@@ -465,18 +482,23 @@ impl TerminalView {
     }
 
     /// Follow the terminal's stream until the program ends or this view goes away.
+    ///
+    /// A `truncated` frame ends the stream by the capability's own contract, so it is the one
+    /// answer that reconnects instead of stopping: the position has already moved to the oldest
+    /// byte the Mac still holds, and the next stream is asked from there. Every other ending —
+    /// `exit`, or a channel that closes — stops here.
     pub fn attach(&mut self, cx: &mut Context<Self>) {
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.problem = Some(error.to_string().into());
-                return;
-            }
+        let Ok(shell) = self.repo.shell() else {
+            return;
         };
         let id = self.peer.id.clone();
-        let from = self.position.offset();
-        let work = shell::run(async move { shell.terminal_stream(&id, from).await });
-        cx.spawn(async move |weak, cx| {
+        cx.spawn(async move |weak, cx| loop {
+            let Ok(from) = weak.read_with(cx, |view, _| view.position()) else {
+                return;
+            };
+            let stream = Arc::clone(&shell);
+            let name = id.clone();
+            let work = shell::run(async move { stream.terminal_stream(&name, from).await });
             let mut receiver = match work.await.unwrap_or(Err(ShellError::Unreachable)) {
                 Ok(receiver) => receiver,
                 Err(error) => {
@@ -487,15 +509,29 @@ impl TerminalView {
                     return;
                 }
             };
+            let mut again = false;
             while let Some(update) = receiver.next().await {
+                let truncated = matches!(update, Update::Truncated { .. });
                 let ended = !matches!(update, Update::Output { .. });
-                let recv = weak.update(cx, |view, cx| {
-                    view.apply(update);
-                    cx.notify();
-                });
-                if recv.is_err() || ended {
+                if weak
+                    .update(cx, |view, cx| {
+                        view.apply(update);
+                        cx.notify();
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                if truncated {
+                    again = true;
                     break;
                 }
+                if ended {
+                    return;
+                }
+            }
+            if !again {
+                return;
             }
         })
         .detach();
@@ -572,6 +608,44 @@ impl TerminalView {
                 self.send(bytes, cx);
             }
         }
+    }
+
+    /// The keys a phone cannot otherwise send, in one row above the grid.
+    ///
+    /// A touch keyboard produces text, not `Esc` or an arrow, and a shell is unusable without
+    /// both. The bytes are the same ones [`key_bytes`] sends for the same keys on a Mac, which is
+    /// what keeps the two front ends one implementation.
+    pub fn key_row(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let ended = !self.peer.alive;
+        div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_1()
+            .flex_wrap()
+            .w_full()
+            .children(TOUCH_KEYS.iter().map(|(label, bytes)| {
+                div()
+                    .id(SharedString::from(format!("terminal-key-{label}")))
+                    .px_2()
+                    .py(px(3.))
+                    .rounded(px(4.))
+                    .bg(rgba(palette.raised))
+                    .text_color(rgb(palette.muted))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(ended, |this| this.opacity(0.4))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |view, _event, _window, cx| {
+                            if view.peer.alive {
+                                view.send(bytes.to_vec(), cx);
+                            }
+                        }),
+                    )
+                    .child(SharedString::from(*label))
+            }))
+            .into_any_element()
     }
 
     /// The wheel moves through the parser's history; the program is not told about it, because a
@@ -878,6 +952,25 @@ mod tests {
         };
         // ⌘C copies; a terminal that swallowed it would make the app unusable around it.
         assert_eq!(with(platform, "c", Some("c")), None);
+    }
+
+    #[test]
+    fn the_touch_key_row_sends_what_a_keyboard_would() {
+        let bytes = |label: &str| {
+            TOUCH_KEYS
+                .iter()
+                .find(|(name, _)| *name == label)
+                .map(|(_, bytes)| *bytes)
+                .unwrap_or(&[][..])
+        };
+        assert_eq!(bytes("esc"), &[0x1b]);
+        assert_eq!(bytes("tab"), &[0x09]);
+        assert_eq!(bytes("ctrl-c"), &[0x03]);
+        assert_eq!(bytes("\u{2191}"), &b"\x1b[A"[..]);
+        // The row offers the three characters a phone keyboard hides.
+        for character in ["|", "~", "/"] {
+            assert_eq!(bytes(character), character.as_bytes());
+        }
     }
 
     #[test]

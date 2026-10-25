@@ -179,9 +179,12 @@ Steps:
    (`833c571d`): `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in
    `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
    left from this step is the client's half: nothing draws a terminal yet.
-2. **One terminal view for Mac and phone**, specified below. Partly: `ui/src/terminal.rs` draws
-   and types, and `core/src/terminal.rs` carries the wire, but nothing mounts the view — no finder
-   entry, no right-edge seat, no phone tab, and no Face ID gate before a reattach.
+2. **One terminal view for Mac and phone**, specified below. Built for the Mac: `⌘K › Terminal`
+   or `sjel://terminal` opens the newest live terminal — or a login shell — in the right edge
+   (`Seat::Terminal`), and the view wires keys, the wheel, resize and the End button. Open on the
+   phone: it reaches the Mac through `DeviceClient`, and the terminal's client is written against
+   `Shell`, so the seat says so instead of opening a shell it cannot follow. Also open: the Face ID
+   gate before a reattach (no `LocalAuthentication` binding exists in `ios/host` yet).
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the
    connection, and [Blink Shell](https://github.com/blinksh/blink) (GPL-3.0) on the phone with a
@@ -265,11 +268,19 @@ to interactive keystrokes, so access is the control.
   look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
   key row can share; the wheel moves through the parser's history; the cursor is the inverted
   cell. Not built: nothing mounts the view yet.
-- Phone: the Agent tab lists agent sessions and terminals. A key row above the keyboard carries
-  Esc, Tab, Ctrl, arrows, `|`, `~` and `/`. Selection copies to the clipboard. Pinch changes the
-  font size. Mac: a terminal opens from the finder (`sjel://terminal`) or in the right edge. None of
-  this is wired: `TerminalView` is constructed by nobody, and the Face ID gate before a reattach is
-  still owed.
+- Mac: `⌘K › Terminal` or `sjel://terminal` opens the right edge on `Seat::Terminal`, and ends a
+  finished shell by offering a new one rather than a dead grid. Built.
+- Phone, the step that is next: the terminal's client is written against `Shell`
+  (`apps/gpui/core/src/terminal.rs`), and the phone reaches the Mac through `DeviceClient`. Two
+  facts from reading `apps/gpui/core/src/device.rs` decide the shape: it already streams
+  (`streaming_get`, which the agent seat uses for its event stream, so `next_frame` and the
+  `Update` mapping are reusable as they stand), and it has no `DELETE`, so ending a terminal from
+  the phone needs either that method or a `POST …/close` route. Then the phone's seat draws
+  `TerminalView` with `key_row`, which exists.
+- Phone: the Agent tab lists agent sessions and terminals, and a key row above the keyboard carries
+  Esc, Tab, arrows, `|`, `~`, `/`, Return and Ctrl-C. The row is built (`TerminalView::key_row`,
+  and `the_touch_key_row_sends_what_a_keyboard_would` covers its bytes); the phone's client is not.
+  Selection copies to the clipboard and pinch changes the font size: not built.
 
 ### Done when
 
@@ -278,9 +289,9 @@ to interactive keystrokes, so access is the control.
    kernel; `htop` and a full scrollback pass are untested.
 2. On the phone, the `claude` preset starts in `~/Developer/Sjel` and accepts a prompt. After the
    phone is locked for 2 minutes, reopening the app reattaches and replays the missed output. Open:
-   the client exists but no window mounts it.
-3. The Mac and the phone attached to one terminal show the same output. Open: no window mounts a
-   terminal, so two cannot attach to one yet.
+   the phone's client is not written; the Mac's half is.
+3. The Mac and the phone attached to one terminal show the same output. Open: only the Mac attaches
+   today, so this has not been tried with two.
 4. A request with the agent token to each terminal route answers 401 (test). Met, for every route
    in the manifest.
 5. `DELETE` ends the process group, and the audit file holds a start and an end line with no

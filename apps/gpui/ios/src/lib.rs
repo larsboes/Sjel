@@ -3122,6 +3122,16 @@ impl Render for Capabilities {
                     Seat::Soundscape => self.soundscape.clone().into_any_element(),
                     Seat::Activity => self.activity_panel(palette),
                     Seat::Agent => self.agent_panel(palette, window, cx),
+                    // The view and the wire exist (`sjel_gpui_ui::terminal`), but the phone reaches
+                    // the Mac through `DeviceClient`, and the terminal's client is written against
+                    // `Shell`. Until that second client exists this seat says so instead of opening
+                    // a shell it cannot follow.
+                    Seat::Terminal => div()
+                        .p_4()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("A terminal on the Mac opens in the Mac's window today.")
+                        .into_any_element(),
                 };
                 let on_seat = {
                     let entity = entity.clone();

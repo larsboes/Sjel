@@ -41,6 +41,7 @@ use crate::ytalbum::{YtAlbum, YtAlbumEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
 use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
+use sjel_gpui_ui::terminal::TerminalView;
 
 actions!(
     sjel,
@@ -98,6 +99,11 @@ actions!(
 #[action(namespace = sjel, no_json)]
 pub struct GoTo(pub Page);
 
+/// The columns and lines the right edge's terminal asks the pty for. The edge is 390 points wide,
+/// a monospace cell is about 7.2, and the grid is padded inside the seat's frame.
+const TERMINAL_COLS: usize = 48;
+const TERMINAL_ROWS: usize = 44;
+
 /// Open an area at the tab it showed last. ⌘1–⌘8, the sidebar rows and the Go menu use it.
 #[derive(Clone, PartialEq, gpui::Action)]
 #[action(namespace = sjel, no_json)]
@@ -142,6 +148,13 @@ fn finder_commands() -> Vec<Hit> {
             || OpenSoundscape.boxed_clone(),
         ),
     ];
+    // A terminal is a deep link as well as a result, so the same string opens it from either.
+    let terminal = std::iter::once(Hit {
+        kind: "action",
+        title: "Terminal".to_owned(),
+        detail: "shell claude codex pi on this Mac".to_owned(),
+        open: Open::Link("sjel://terminal".to_owned()),
+    });
     let dashboard = route::DESTINATIONS
         .iter()
         .filter(|destination| destination.page().is_none())
@@ -151,7 +164,11 @@ fn finder_commands() -> Vec<Hit> {
             detail: destination.href.to_owned(),
             open: Open::Dashboard(destination.href),
         });
-    pages.chain(actions).chain(dashboard).collect()
+    pages
+        .chain(actions)
+        .chain(terminal)
+        .chain(dashboard)
+        .collect()
 }
 
 pub fn nav_pages() -> impl Iterator<Item = Page> {
@@ -349,6 +366,11 @@ pub struct Workspace {
     pub soundscape_panel: Option<Entity<crate::soundscape::Soundscape>>,
     /// The docked right edge. Its state is shared with the phone and stored in `sidebar.json`.
     pub right_panel: Sidebar,
+    /// The terminal seat, built the first time it is asked for and kept afterwards: closing the
+    /// drawer does not end the shell, so reopening it shows the screen as it is now.
+    pub terminal: Option<Entity<TerminalView>>,
+    /// Why no terminal is showing, in the words the empty seat carries.
+    pub terminal_note: Option<SharedString>,
     /// One input for a search or a prompt (⌘K), drawn over the whole window.
     pub finder: Entity<Finder>,
     _finder: Subscription,
@@ -476,6 +498,8 @@ impl Workspace {
             soundscape: Remote::default(),
             soundscape_panel: None,
             right_panel: Sidebar::load(),
+            terminal: None,
+            terminal_note: None,
             finder,
             _finder: finder_events,
             backups: Remote::default(),
@@ -1094,8 +1118,84 @@ impl Workspace {
             Target::Ask(question) => self
                 .finder
                 .update(cx, |finder, cx| finder.ask(question, cx)),
+            Target::Terminal => self.open_terminal(window, cx),
             Target::Dashboard(path) => self.open_dashboard(path, window, cx),
         }
+    }
+
+    /// Open a terminal in the right edge: the newest one still running, or a new login shell.
+    ///
+    /// The seat is opened first, so a Mac that is slow to answer shows the frame it will fill
+    /// rather than nothing. The view is built once and kept: closing the drawer leaves the stream
+    /// attached, and reopening it draws the live screen instead of replaying a scrollback the Mac
+    /// may since have dropped.
+    fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.right_panel.open_on(Seat::Terminal);
+        cx.notify();
+        if let Some(terminal) = &self.terminal {
+            if terminal.read(cx).peer().alive {
+                terminal.update(cx, |view, cx| view.resize(TERMINAL_COLS, TERMINAL_ROWS, cx));
+                return;
+            }
+        }
+        let palette = Palette::for_appearance(window.appearance());
+        let repo = self.repo.clone();
+        let Ok(shell) = repo.shell() else {
+            return;
+        };
+        let work = shell::run(async move {
+            // A shell someone already started is the one they want back; a fourth empty prompt is
+            // not. The list is the only way to find one, because the routes keep no index here.
+            if let Ok(listed) = shell.terminals().await {
+                if let Some(peer) = listed.into_iter().find(|peer| peer.alive) {
+                    return Some(peer);
+                }
+            }
+            let id = shell
+                .terminal_open("shell", None, TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
+                .await
+                .ok()?;
+            // `POST /terminals` answers the id alone, so the row that names the shell comes from
+            // the list. Without it the view still works: the first frame is the terminal's own.
+            shell
+                .terminals()
+                .await
+                .ok()
+                .and_then(|listed| listed.into_iter().find(|peer| peer.id == id))
+                .or_else(|| {
+                    Some(sjel_gpui_core::terminal::Terminal {
+                        id,
+                        preset: "shell".into(),
+                        title: "shell".into(),
+                        alive: true,
+                        ..Default::default()
+                    })
+                })
+        });
+        cx.spawn(async move |weak, cx| {
+            let peer = match work.await.flatten() {
+                Some(peer) => peer,
+                None => {
+                    let _ = weak.update(cx, |workspace, cx| {
+                        workspace.terminal_note = Some(
+                            "The terminal did not open. Check that the agent capability is running."
+                                .into(),
+                        );
+                        cx.notify();
+                    });
+                    return;
+                }
+            };
+            let _ = weak.update(cx, |workspace, cx| {
+                let entity = cx.new(|cx| {
+                    TerminalView::new(peer, repo, 0, TERMINAL_COLS, TERMINAL_ROWS, palette, cx)
+                });
+                entity.update(cx, |view, cx| view.attach(cx));
+                workspace.terminal = Some(entity);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
@@ -1786,6 +1886,19 @@ impl Render for Workspace {
                     .text_color(rgb(palette.muted))
                     .child("Phone activity is shown on the paired iPhone.")
                     .into_any_element(),
+                Seat::Terminal => match &self.terminal {
+                    Some(terminal) => terminal.clone().into_any_element(),
+                    None => div()
+                        .p_4()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child(self.terminal_note.clone().unwrap_or_else(|| {
+                            SharedString::from(
+                                "A terminal opens here from ⌘K › Terminal or sjel://terminal.",
+                            )
+                        }))
+                        .into_any_element(),
+                },
             };
             let entity = cx.entity().clone();
             let on_seat = {

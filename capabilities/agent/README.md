@@ -149,12 +149,17 @@ approval card, including `write` and `edit` diffs. The docked desktop seat keeps
 after the finder closes. The paired iPhone can create or select sessions, prompt or steer, follow
 and resume streams, inspect and answer approvals, and stop runs through its signed device client.
 
-The terminal is built on both sides and wired on neither: pty sessions, the routes, the ring, the
-resize, the group kill and the audit here (`src/terminal.rs`), a Mac shell driven through them end
-to end, and the app's half in `apps/gpui/core/src/terminal.rs` (the wire client, with the resume
-offset) and `apps/gpui/ui/src/terminal.rs` (the view, `alacritty_terminal` for the grid, keys as pty
-bytes). No window mounts the view yet, so a terminal is opened with `sjel capability call` rather
-than from the app: `docs/plans/agent.md` §6 lists what the wiring still owes.
+The terminal has a client on the Mac. Pty sessions, the routes, the ring, the resize, the group
+kill and the audit are here (`src/terminal.rs`); a Mac shell has been driven through them end to
+end; and the app's half is `apps/gpui/core/src/terminal.rs` (the wire client, with the resume
+offset) and `apps/gpui/ui/src/terminal.rs` (the view: `alacritty_terminal` for the grid, keys as pty
+bytes, the key row a phone needs). On the Mac, `⌘K › Terminal` or `sjel://terminal` opens the newest
+live terminal — or a login shell — in the right edge.
+
+The phone cannot use that client yet: it reaches the Mac through `DeviceClient`, not `Shell`, so its
+seat says so rather than opening a shell it could not follow. `docs/plans/agent.md` §6 names what
+that costs: `streaming_get` already exists, `DELETE` does not, and the Face ID gate has no binding
+in `ios/host`.
 
 The join between the agent UI and the capability is not tested: each part has its own tests, and a
 run has never been driven end to end through the capability. `docs/plans/agent.md` (Live
@@ -162,8 +167,9 @@ validation) lists what to do in which order, and what a session picking it up ne
 
 ## What is not built
 
-- **A mounted terminal.** The view and the client exist; the finder entry, the right-edge seat, the
-  phone tab with its key row, and the Face ID gate before a reattach do not.
+- **The phone's terminal.** Its client is written against `Shell` and the phone speaks
+  `DeviceClient`, so the seat reports that instead of opening one. The Face ID gate before a
+  reattach has no `LocalAuthentication` binding in `ios/host` yet.
 - **Live integration validation.** Work Package 22 still needs a real desktop run and paired-phone
   checks for start, follow, reconnect, transcript recovery, approval from both clients, deny, stop,
   and re-pair. A host-target compile is not evidence that the phone flow works on-device.

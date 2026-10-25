@@ -33,16 +33,24 @@ pub enum Seat {
     Activity,
     /// A run the owner can watch while moving between pages.
     Agent,
+    /// A shell on the Mac: another agent's terminal, driven from this window.
+    Terminal,
 }
 
 impl Seat {
-    pub const ALL: [Seat; 3] = [Seat::Soundscape, Seat::Activity, Seat::Agent];
+    pub const ALL: [Seat; 4] = [
+        Seat::Soundscape,
+        Seat::Activity,
+        Seat::Agent,
+        Seat::Terminal,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
             Self::Soundscape => "soundscape",
             Self::Activity => "activity",
             Self::Agent => "agent",
+            Self::Terminal => "terminal",
         }
     }
 
@@ -56,6 +64,7 @@ impl Seat {
             Self::Soundscape => "Sound",
             Self::Activity => "Activity",
             Self::Agent => "Agent",
+            Self::Terminal => "Terminal",
         }
     }
 
@@ -65,6 +74,7 @@ impl Seat {
             Self::Soundscape => "SOUNDSCAPE",
             Self::Activity => "ACTIVITY",
             Self::Agent => "AGENT",
+            Self::Terminal => "TERMINAL",
         }
     }
 }

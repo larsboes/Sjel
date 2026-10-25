@@ -175,10 +175,10 @@ terminal-emulator crate is in the workspace; `portable-pty` is now (see `upstrea
 
 Steps:
 
-1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below. Built:
-   `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in `<overlay>/config/agent.toml`
-   and the audit in `<overlay>/data/agent/terminals.jsonl`. What is left from this step is the
-   client's half: nothing draws a terminal yet.
+1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below. Built
+   (`833c571d`): `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in
+   `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
+   left from this step is the client's half: nothing draws a terminal yet.
 2. **One terminal view for Mac and phone**, specified below. Not started.
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the

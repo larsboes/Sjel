@@ -4,10 +4,8 @@
 //! an optional `dd.mm.yyyy hh:mm` line, then `nach|to`, the station and its optional date.
 //! A booking without a fixed train (Flexpreis) has no date lines.
 
-use super::Event;
+use super::{iso_date, leg, Event};
 
-/// The legs of a DB confirmation, or `None` when `body` is not one and the model should read it.
-/// A leg without a date is kept with `date: None`, so the caller records `date_missing`.
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Deutsche Bahn") {
         return None;
@@ -29,46 +27,28 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
             return None;
         }
         let (to, to_date, next) = stop(block, next + 1)?;
-        let (date, evidence) = match from_date.or(to_date) {
-            Some((iso, line)) => (Some(iso), line.to_string()),
-            None => (None, format!("{from} {to}")),
-        };
-        events.push(Event {
-            title: format!("{from} → {to}"),
-            date,
-            location: Some(to.to_string()),
-            city: Some(city_of_station(to)),
-            from_city: Some(city_of_station(from)),
-            evidence,
-        });
+        events.push(leg(
+            from,
+            to,
+            city_of_station(from),
+            city_of_station(to),
+            from_date.or(to_date),
+        ));
         i = next;
     }
     (!events.is_empty()).then_some(events)
 }
 
-/// An ISO date and the line it was read from.
-type DateLine<'a> = (String, &'a str);
-
 /// A station at `at` and the date line after it, if any, plus the index after both.
-fn stop<'a>(lines: &[&'a str], at: usize) -> Option<(&'a str, Option<DateLine<'a>>, usize)> {
+fn stop<'a>(lines: &[&'a str], at: usize) -> Option<(&'a str, Option<&'a str>, usize)> {
     let station = lines.get(at)?.trim_end_matches(',').trim();
     if station.is_empty() {
         return None;
     }
-    match lines.get(at + 1).and_then(|l| iso_date(l).map(|d| (d, *l))) {
-        Some(date) => Some((station, Some(date), at + 2)),
+    match lines.get(at + 1).filter(|l| iso_date(l).is_some()) {
+        Some(line) => Some((station, Some(*line), at + 2)),
         None => Some((station, None, at + 1)),
     }
-}
-
-/// `25.10.2026 21:14 Uhr` as `2026-10-25`.
-fn iso_date(line: &str) -> Option<String> {
-    let date = line.split_whitespace().next()?;
-    let mut parts = date.split('.');
-    let (d, m, y) = (parts.next()?, parts.next()?, parts.next()?);
-    let digits = |s: &str, n: usize| s.len() == n && s.bytes().all(|b| b.is_ascii_digit());
-    (parts.next().is_none() && digits(d, 2) && digits(m, 2) && digits(y, 4))
-        .then(|| format!("{y}-{m}-{d}"))
 }
 
 /// `Berlin Hbf` is Berlin, `Frankfurt(Main)Hbf` is Frankfurt: Calendar compares cities.

@@ -17,7 +17,7 @@ use crate::{
     summarize::{self, Outcome, Reach},
 };
 
-mod deutsche_bahn;
+mod tickets;
 
 const ANALYSIS_VERSION: &str = "local-mail-event-analysis-v2";
 const MAX_EVENTS: usize = 8;
@@ -493,7 +493,7 @@ pub(crate) fn analyze_candidates(
                 continue;
             }
         };
-        let read = match deutsche_bahn::legs(&body) {
+        let read = match tickets::legs(&body) {
             Some(events) => Ok((events, false)),
             None => model_events(runtime, cfg, role.as_ref(), &body),
         };

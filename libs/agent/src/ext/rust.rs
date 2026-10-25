@@ -17,8 +17,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sjel_agent::tools::{run_captured, Ran};
-use sjel_agent::{Extension, Tool};
+use crate::tools::{run_captured, Ran};
+use crate::{Extension, Tool};
 
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "rust";

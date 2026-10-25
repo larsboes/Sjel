@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use serde_json::{json, Value};
-use sjel_agent::tools::coding;
-use sjel_agent::{Agent, AgentError, Event, Extension, Message, Tool};
+use crate::tools::coding;
+use crate::{Agent, AgentError, Event, Extension, Message, Tool};
 use sjel_inference::InferenceConfig;
 
 /// The name `agent.toml` and `--ext` use.

@@ -28,9 +28,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use sjel_agent::{extension, session, tools, Agent, AgentError, Event, Extension, Message};
-
-mod ext;
+use sjel_agent::{ext, extension, session, tools, Agent, AgentError, Event, Extension, Message};
 
 const DEFAULT_ROLE: &str = "coding";
 /// How much of a tool result the trace on stderr shows. The model still gets all of it.

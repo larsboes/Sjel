@@ -1,0 +1,33 @@
+[package]
+name = "sjel-agent-capability"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "A coding agent on this machine, for the app and for the phone: sessions that outlive a request, a resumable stream, and the owner's permission in front of every call that writes or runs."
+publish = false
+
+[[bin]]
+name = "agent-server"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+futures = "0.3"
+getrandom.workspace = true
+# The shared database, opened read-only by the `sql` plugin.
+rusqlite.workspace = true
+route-manifest = { path = "../../libs/route-manifest" }
+schemars = "1.2.2"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sjel-agent = { path = "../../libs/agent" }
+sjel-config = { path = "../../libs/sjel-config" }
+sjel-inference = { path = "../../libs/inference" }
+sjel-server = { path = "../../libs/sjel-server" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "sync", "time"] }
+toml.workspace = true
+
+[lints]
+workspace = true

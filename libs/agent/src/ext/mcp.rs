@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use sjel_agent::{Extension, Tool};
+use crate::{Extension, Tool};
 
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "mcp";

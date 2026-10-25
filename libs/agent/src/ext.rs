@@ -1,7 +1,9 @@
 pub mod compaction;
+pub mod graph;
 pub mod guard;
 pub mod mcp;
 pub mod rust;
+pub mod sjel;
 pub mod skills;
 pub mod subagents;
 pub mod web;

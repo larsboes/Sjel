@@ -4,7 +4,7 @@
 //! A turn is never split between its tool calls and their results.
 //! The session file records the summary, so `--continue` sends the summary.
 
-use sjel_agent::{Extension, Message};
+use crate::{Extension, Message};
 
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "compaction";
@@ -207,7 +207,7 @@ impl Extension for Compaction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sjel_agent::{FunctionCall, ToolCall};
+    use crate::{FunctionCall, ToolCall};
 
     fn make_turn(user: &str, tool: &str, result: &str, answer: &str) -> Vec<Message> {
         vec![

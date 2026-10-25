@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use regex::{Captures, Regex};
 use serde_json::{json, Value};
-use sjel_agent::{Extension, Tool, ToolCall, Verdict};
+use crate::{Extension, Tool, ToolCall, Verdict};
 
 /// The name `agent.toml` and `--ext` use. `main.rs` puts this one in the default set.
 pub const NAME: &str = "guard";
@@ -339,7 +339,7 @@ impl Tool for VaultExec {
             }
         }
 
-        let out = sjel_agent::tools::run_bounded(command, Duration::from_secs(timeout), &self.0)?;
+        let out = crate::tools::run_bounded(command, Duration::from_secs(timeout), &self.0)?;
         Ok(scrub(&out, &exposed))
     }
 }
@@ -575,7 +575,7 @@ fn compile(patterns: &[&str]) -> Vec<Regex> {
 mod tests {
     use super::*;
     use serde_json::json;
-    use sjel_agent::FunctionCall;
+    use crate::FunctionCall;
 
     fn verdict(tool: &str, arguments: Value) -> Verdict {
         guard().tool_call(&ToolCall {
@@ -793,7 +793,7 @@ mod tests {
         let root = std::env::temp_dir();
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let unguarded_on_purpose = ["write"];
-        for tool in sjel_agent::tools::coding(&root, &stop) {
+        for tool in crate::tools::coding(&root, &stop) {
             let schema = tool.parameters().to_string();
             if !schema.contains("\"path\"") && !schema.contains("\"command\"") {
                 continue;

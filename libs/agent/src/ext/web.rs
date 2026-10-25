@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sjel_agent::{Extension, Tool};
+use crate::{Extension, Tool};
 use sjel_extraction::{Builtin, Document, Extractor};
 use sjel_http::guard::{check_destination, check_scheme};
 use sjel_http::Purpose;

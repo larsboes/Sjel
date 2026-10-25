@@ -12,6 +12,10 @@
 //! hosted model is an overlay edit, not a code change.
 
 pub mod cloud;
+// The first-party extensions are part of the library, not only of the CLI binary: a capability
+// that hosts the loop (`capabilities/agent`) assembles its plugin set from these names, and a
+// second copy of them in `src/main.rs` would be two modules to keep in step.
+pub mod ext;
 pub mod extension;
 pub mod session;
 pub mod stream;

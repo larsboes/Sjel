@@ -1,0 +1,19 @@
+# agent — a coding loop on this machine, for the app and for the phone. Shape:
+# schemas/service.toml.example.
+#
+# Loopback only, like every capability: the phone reaches it through `tailscale serve` identity
+# or a paired device, never through a wide bind. Never a cloud role — a session holds file
+# contents and command output, and `Agent::run` refuses a remote endpoint for that reason.
+#
+# The approval gate is in the process, not in the manifest: a tool call that writes or runs asks
+# the owner through the same `secrets/agent/approvals/` record every other capability's gate uses,
+# so a decision made in the app and one made on the Systems page are the same decision.
+
+kind        = "process"
+name        = "agent"
+command     = ["target/release/agent-server"]
+build       = ["cargo", "build", "--locked", "--release", "--bin", "agent-server"]
+port        = "8108"
+health_path = "/health"
+ready_path  = "/ready"
+requires    = ["knowledge-graph"]

@@ -4577,14 +4577,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "sjel-agent-capability"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures",
+ "getrandom 0.4.3",
+ "route-manifest",
+ "rusqlite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sjel-agent",
+ "sjel-config",
+ "sjel-inference",
+ "sjel-server",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "sjel-assistant"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "chrono",
  "futures",
  "reqwest",
  "route-manifest",
+ "rusqlite",
  "schemars",
  "serde",
  "serde_json",
@@ -4592,7 +4615,9 @@ dependencies = [
  "sjel-config",
  "sjel-http",
  "sjel-inference",
+ "sjel-runtime",
  "sjel-server",
+ "sjel-store",
  "tokio",
 ]
 
@@ -4769,6 +4794,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "lopdf 0.45.0",
+ "reqwest",
  "route-manifest",
  "rusqlite",
  "schemars",
@@ -4777,6 +4804,8 @@ dependencies = [
  "sha2 0.11.0",
  "sjel-config",
  "sjel-extraction",
+ "sjel-http",
+ "sjel-inference",
  "sjel-server",
  "sjel-store",
  "tokio",

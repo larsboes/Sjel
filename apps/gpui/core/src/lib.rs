@@ -26,6 +26,7 @@
 //!   holds, and the projects those tasks belong to.
 
 pub mod accounts;
+pub mod agent;
 pub mod area;
 pub mod backup;
 pub mod blocks;
@@ -38,6 +39,7 @@ pub mod device;
 pub mod finance;
 pub mod inline;
 pub mod inventory;
+pub mod interior;
 pub mod mail;
 pub mod media;
 pub mod mirror;
@@ -47,6 +49,7 @@ pub mod people;
 pub mod places;
 pub mod research;
 pub mod route;
+pub mod record;
 pub mod search;
 pub mod self_model;
 pub mod setup;

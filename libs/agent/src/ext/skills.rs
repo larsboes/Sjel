@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
-use sjel_agent::{Extension, Tool};
+use crate::{Extension, Tool};
 
 /// The name `agent.toml` and `--ext` use. Not on by default: a run names the skills it wants.
 pub const NAME: &str = "skills";

@@ -52,9 +52,10 @@ reaches nothing else on them.
 { "to": "trip:plan:…", "links": [ … ], "unlinkable": 0 }
 ```
 
-A link is `{ id, kind, title, at?, meta?, via }`: `via` names the field that holds the reference
-(`trip_id`, `payload.plan_id`). `at` and `meta` are omitted when absent. The inspector renders a
-linked row the same for every kind, so one renderer serves all joins.
+A link is `{ id, kind, title, at?, meta?, via }`: `via` names the field or owner ledger that
+holds the reference (`trip_id`, `payload.plan_id`, or Calendar's trip materialization ledger).
+`at` and `meta` are omitted when absent. The inspector renders a linked row the same for every
+kind, so one renderer serves all joins.
 
 `GET /api/links` without `to`, or with an untyped `to`, answers `400` with a stated reason — never
 an empty list.
@@ -127,7 +128,7 @@ All shipped; the paths are the evidence.
 | --- | --- |
 | LNK-1…4 | `sjel-links` parses and refuses ids; `Link` serializes; `/api/links` 400s an untyped `to`; response is `{to, links, unlinkable}`. |
 | LNK-5…6 | `links_to` reaches the registry; the shell asks only declaring capabilities. |
-| LNK-7…9 | Finance answers `to=trip:plan:…`; calendar answers from `payload.plan_id`; places answers `to=fin:tx:…`. |
+| LNK-7…9 | Finance answers `to=trip:plan:…`; calendar answers from trip payloads and its materialization ledger; places answers `to=fin:tx:…`. |
 | ~~LNK-10~~ | Withdrawn: inventory holds no reference to entities. |
 | LNK-11…12 | Places' `stable_id` returns `place:<hex>`; the migration is idempotent and backs up first. |
 | LNK-13 | `connections.ts` holds no capability pair. |
@@ -138,11 +139,11 @@ All shipped; the paths are the evidence.
 ## Known limits
 
 - `trips_plans.travelers` is served by `GET /api/plans`; the companion summary is not published
-  per traveller until the register's person id and a class column exist (see root `ISA.md`).
+  per traveller until the register's person id and a class column exist.
 
 ## Out of scope
 
 - **Trips' own place namespace.** A destination's `obsidian-place:…` id does not resolve to the
   places registry, so a place cannot list the trips that went there. Resolving it is a trips
   decision.
-- **Import and export formats.** They are a separate contract; see root `ISA.md`.
+- **Import and export formats.** They are a separate contract, not specified yet.

@@ -1,7 +1,7 @@
 # projects
 
 Projects, tasks and project notes. Sjel owns them since the import from the Obsidian vault on
-2026-10-18. The open claims are in the projects unit of [`ISA.md`](../../ISA.md).
+2026-10-18. Open work is in [`docs/plans/data.md`](../../docs/plans/data.md#1-import).
 
 One row in the shared store is one markdown file: its path and its bytes. Kind, project, title,
 done, due, priority and archived are derived from those two on every write, so SQL can query them

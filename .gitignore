@@ -53,10 +53,13 @@ graphify-out/
 .opencode/
 # Project-local agent harness discovery symlinks (e.g. pi / antigravity .agents/skills)
 .agents/
+# Third-party skill installs and their lock (`npx skills`); Sjel's own skills live in Packs/.
+.claude/skills/
+skills-lock.json
+.claude/.cc-writes/
+# Vite dependency cache.
+.vite/
 
-# PLAN.md is gone: open work lives in ISA.md (CONTRIBUTING.md#the-backlog-is-isas).
-# It is deliberately NOT ignored, so a stray plan file shows up as untracked in
-# `git status` and gets dealt with rather than disappearing.
 to-integrate/
 
 # Session handoffs between agents carry one session's state, unpushed commit lists and

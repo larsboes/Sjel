@@ -24,8 +24,7 @@ and about a hundred lines.
 "unchanged" most days. The script records the local digest
 (`image inspect --format '{{index .RepoDigests 0}}'`) before and after the pull and recreates only
 on a difference. That is also the honest reading of what a rolling tag costs: the declared tag no
-longer says what is running, so the digest is the only version fact, and `ISA.md` C4 says so for
-every reader.
+longer says what is running, so the digest is the only version fact.
 
 **A `recreate` is a real interruption, so it is the narrow case.** `recreate` stops the container,
 removes it and starts a new one from the current declaration. Declared state survives by

@@ -51,6 +51,14 @@ Each output includes archive checksums, `release.json` and `READINESS.txt`. The 
 create/connect-node integration before it can serve as a fresh-user installer. Packaging an app
 is not evidence that these flows exist.
 
+Capability preparation reads its user-facing metadata from `capabilities/<name>/feature.toml` and
+records the package name, exact version and platform, prerequisites, recommendation topics, data
+access, asset name, byte count and SHA-256 in `release.json`'s `capabilities` array. `publish-draft.ts`
+merges these entries and verifies each one against its release asset. This metadata is not an
+installation approval: a client must require `friend_ready: true`, match the running runtime's
+version and platform, and pass the digest to `sjel distribution install-package`. The published
+catalogue shape is defined by [`release-catalogue.schema.json`](../../schemas/release-catalogue.schema.json).
+
 The app's runtime is read-only inside the bundle. `sjel distribution place` copies it to
 `~/Library/Application Support/Sjel/runtime/<version>` and creates an empty overlay at
 `~/Library/Application Support/Sjel/overlay`. It never overwrites an existing file, and it starts
@@ -127,8 +135,16 @@ Get the digest from the owner's authenticated release channel; a checksum suppli
 untrusted file does not establish authenticity. `install-package` is an explicit later action
 and accepts only a writable packaged runtime of exactly the same version and platform. It refuses
 source checkouts, app bundles, missing prerequisites and existing capability directories. It
-does not enable a capability, start a service, change persistence or delete data. Upgrades,
-rollback and a download/install control in the app remain acceptance work, not shipped behavior.
+does not enable a capability, start a service, change persistence or delete data. GPUI Settings can
+browse the official latest-release catalog, inspect package requirements and data access, and
+request an install after a separate confirmation. Installation stays unavailable until the catalog
+marks a matching-runtime release `friend_ready: true`; a clean-runtime rehearsal is still required
+before a public release. Updates and rollback remain acceptance work. Settings can also list
+installed package receipts and request a data-preserving uninstall. Uninstall refuses enabled
+dependents, payload files that differ from the receipt, and unowned files in the package directory;
+the user must review and move such files before removal. It stops the service, removes persistence,
+disables the capability, removes receipt-owned payload files and retains capability data outside the
+package directory.
 
 The owner rehearses on a separate clean Mac user or clean machine before involving a friend.
 Allow 30–60 minutes after the release files and first-run UI are ready. Record failures in the
@@ -378,7 +394,7 @@ tag is rebuilt under the same name, and `upstreams.toml`'s `pin` recorded an aud
 `host-patch` moved the installed version past it every night.
 
 **Where the version actually lives now.** Not in a manifest. The digest of a running container
-(`docker inspect <name> --format '{{.Image}}'`, ISA.md C4), the label on a built agentbox image,
+(`docker inspect <name> --format '{{.Image}}'`), the label on a built agentbox image,
 `Cargo.lock` and `bun.lock` for what is compiled, and `<overlay>/data/*/last.json` for what the
 last scheduled run did. Every one of those describes a machine rather than an intention.
 `toolchain.toml`'s `min_version` rows are the exception that proves the rule: they are FLOORS —
@@ -395,7 +411,7 @@ working.
 `capabilities/container-refresh` pulls every declared image every 24 hours, recreating the
 container when the digest moves. `tools/check-service-tomls.sh` refused `latest` until 2026-09-02;
 it was defending a reproducibility a tag never gave, since publishers rebuild under the same
-literal. The digest is what identifies a running image (ISA.md C4).
+literal. The digest is what identifies a running image.
 
 **The Bun the workflows install is `latest`.** `oven-sh/setup-bun` is asked for `bun-version:
 latest` in both workflows, so CI runs the runtime a contributor's package manager just gave them.

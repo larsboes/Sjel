@@ -1,6 +1,6 @@
 # Managed Pi configuration
 
-The [main plan](../../../PLAN.md#pi-daily-use-and-managed-configuration) owns the rollout
+The [agent plan](../../../docs/plans/agent.md#pi-daily-use-and-managed-configuration) owns the rollout
 decision. `sjel pi` manages selected Pi settings separately from Pack registrations, sessions
 and authentication. It plans by default; nothing changes until an explicit `apply`.
 

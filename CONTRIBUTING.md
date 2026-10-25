@@ -12,10 +12,9 @@ remains an idea, not an implementation commitment.
 Use GitHub Issues for concrete work that a maintainer or contributor can test or complete.
 Name the consumer, outcome, and acceptance check. Use `type:idea` for experiments that may conclude not to build. Keep temporary plans with the active task; remove them when the work ends.
 
-The existing ISA is a transition backlog, not a task list. Keep only unresolved claims with a
-probe that could falsify them. Move enduring behavior into code, tests, or the owning docs, then
-remove the resolved claim. Comments explain local invariants, not dated decisions; Git keeps the
-history.
+Open work that is not yet an issue lives in [`PLAN.md`](PLAN.md) and the area plans in
+[`docs/plans/`](docs/plans/). Move enduring behavior into code, tests, or the owning docs. Comments
+explain local invariants, not dated decisions. Git keeps the history.
 
 Before external code or adopted design influence enters the tree, record its canonical source in
 `upstreams.toml`. Record the license and verdict there too, then state precisely what Sjel
@@ -579,7 +578,7 @@ Source checkouts retain Git for release identity, updates and repository metadat
 distribution target is now prebuilt apps and a minimal node, with optional capability packages;
 it must not require Git or build tooling on the user's machine. `distribution.json` and the
 release catalogue carry the packaged runtime's identity. The remaining acceptance probes live
-in the ISA; [release preparation](docs/operations/index.md#release-preparation-and-later-testing)
+in [#235](https://github.com/larsboes/Sjel/issues/235), and [release preparation](docs/operations/index.md#release-preparation-and-later-testing)
 does not establish that the source-free installation is ready.
 
 The agent-readable install page is the primary route and the one-liner is the terminal alternative.
@@ -700,19 +699,15 @@ material into Sjel deliberately, redact it, verify the new owner, and leave the 
 user explicitly approves removal. Never bulk-import their history or treat an archive location as
 permanent provenance.
 
-### Issues and the ISA transition
+### Issues and plans
 
 Use GitHub Issues for discrete work that someone can test or complete. State the consumer,
 outcome, and acceptance check. `type:idea` marks an experiment that may end without an
 implementation. Issues remain open to outside reports as well.
 
-Keep the existing ISA organization while it is retired incrementally. An ISA entry is for an
-unresolved claim with an owner and a probe, not ordinary work or completed history. When its
-probe passes or the principal withdraws it, move any lasting contract to code, tests, or the
-owning docs, then remove the entry. Git keeps history.
-
-[`PLAN.md`](PLAN.md) is the one ordered plan: it orders the tracks and links their ISA claims and
-issues, and it holds no task list of its own (decided 2026-10-23). It is not a source of truth.
+[`PLAN.md`](PLAN.md) is the one ordered plan: it orders the work by priority and records the
+decisions that span areas. Each area has one file in [`docs/plans/`](docs/plans/), with its state,
+open work and done-when checks. A plan is not a source of truth.
 Code and tests own implemented behavior. Shipped interfaces belong in the owner's technical manual and are verified by its doctor or
 self-test.
 
@@ -733,7 +728,7 @@ self-test.
 | Technical manual & specs | `docs/` | Bounded interface specifications and architecture diagrams |
 | Interesting unjudged lead | Owning README or relevant `docs/` section | Track a runnable experiment in a `type:idea` issue; apply the provenance gate before adoption |
 | Concrete work someone can test or do | GitHub Issue | State the consumer, outcome, and acceptance check |
-| Unresolved claim that needs a falsifiable probe | Owning ISA during transition | Move lasting truth to code, tests, or owner docs, then remove the claim |
+| Open work that is not yet an issue | The area plan in `docs/plans/` | Give it a done-when check. Move lasting truth to code, tests, or owner docs once built |
 
 ## Control surface
 

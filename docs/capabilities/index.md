@@ -29,4 +29,4 @@ prerequisites; it does not permit one capability to mutate another's tables.
 | Follow journey planning and trip intent | [Travel and routing](travel.md) |
 
 The owning README explains purpose and design choices. These manuals describe interface and data
-contracts; [ISA.md](../../ISA.md) holds open claims and decisions.
+contracts; [PLAN.md](../../PLAN.md) and [docs/plans/](../plans/) hold open work and decisions.

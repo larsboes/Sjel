@@ -62,5 +62,5 @@ The ledger is the table `import_files` in the shared database, keyed by path. `s
 4. **documents folder intake no longer takes `.md`, `.txt` or `.csv`.** The 5,888 existing
    text records stay. Their cleanup is a separate decision.
 
-Open work: `ISA.md`, section "import". The order and the decisions for the remaining routes:
-[`PLAN.md`, track 2](../../PLAN.md#track-2-data-into-sjel).
+Open work: [`docs/plans/data.md`](../../docs/plans/data.md#1-import). The order and the decisions for the remaining routes:
+[the data plan](../../docs/plans/data.md#1-import).

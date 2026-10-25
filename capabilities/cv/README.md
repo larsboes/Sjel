@@ -23,4 +23,3 @@ cv linkedin sheet --lang en
 
 Requires `typst` and `cargo`; `curl` for LinkedIn. Shape of the data:
 `master_cv.schema.yaml`. Manual: [`docs/capabilities/cv.md`](../../docs/capabilities/cv.md).
-Open work: [`ISA.md`](ISA.md).

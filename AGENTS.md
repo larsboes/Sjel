@@ -10,7 +10,7 @@ Keep this file as the bootstrap; link to the owning rule instead of duplicating 
 Before editing:
 
 1. Run `git status --short --branch` and `tools/doctor`.
-2. Derive capabilities, ports, health, and open claims from Sjel tools, the owning `ISA.md`, and
+2. Derive capabilities, ports, health, and open claims from Sjel tools, the area plan in `docs/plans/`, and
    live metadata. Do not trust remembered prose.
 
 Always:
@@ -21,13 +21,15 @@ Always:
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never
   generate, expose, or change a secret without explicit authorization.
+- Write every tracked document in a neutral open-source register, never as a conversation with
+  an assistant. Rules: `Packs/harness/skills/sjel/references/on-documentation.md` (Register).
 - Keep comments and config comments short: no dates, measurements, decisions or history. The
   commit message carries them. Rules: `Packs/harness/skills/sjel/references/on-documentation.md`.
 - Use Sjel tooling first (`sjel`, `tools/`, capability routes). When a task needs a custom script,
   a manual workaround, or a raw command that the tooling does not cover, do one of two things.
   Build it into the tooling in the same change, or add an entry to
   [`TODO-TOOLING.md`](TODO-TOOLING.md). Do not leave the script only in `/tmp` or in the session.
-- Write a durable rule or decision into the repository: code, the skill that owns it, `ISA.md`, or
+- Write a durable rule or decision into the repository: code, the skill that owns it, the area plan in `docs/plans/`, or
   this file. Never into agent memory. On this machine, the untracked `.claude/settings.json` sets
   `autoMemoryEnabled: false`.
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
@@ -41,23 +43,11 @@ Always:
 `graphify explain "<concept>"` for one concept. Dirty `graphify-out/` files are normal. After a
 code change, run `graphify update .`.
 
-## Current Priority: GPUI Universal App & Standalone iOS
+## Current priority
 
-Active engineering focus is on unifying and porting the native GPUI client ([`apps/gpui`](apps/gpui/README.md))
-across platforms (macOS, iOS, and subsequent Linux/Windows targets):
-
-1. **Shared cross-platform core and UI**: Extract and share views, navigation, editor blocks, and
-   data adapters between desktop and mobile rather than maintaining diverged mobile stubs.
-2. **Standalone and offline-first iOS capability**: The iPhone app must function autonomously without
-   requiring an active connection to the Mac host.
-   - On-device local store (embedded SQLite/LibSQL or local cache in the app sandbox).
-   - Local note viewing and editing, task management, and capture.
-   - Offline queue with bi-directional delta synchronization whenever the Mac LAN listener is discovered.
-   - Graceful degradation: local search and cached reads remain responsive when disconnected.
-3. **The dashboard is the second consumer, and it retires** (decided 2026-10-22). Port each
-   dashboard page to GPUI, then improve it there. A rule the two clients share goes into a
-   capability or `apps/gpui/core`, never only into `dashboard/`. Do not start new feature work
-   in the dashboard. It retires when GPUI covers its pages.
-   See [`apps/gpui/PORTING_PLAN.md`](apps/gpui/PORTING_PLAN.md) for the active route migration matrix,
-   work packages for concurrent sessions, and the UI/UX polish roadmap.
-
+[`PLAN.md`](PLAN.md) orders the work in two parallel lanes. Lane B, the top priority, builds the
+Sjel agent and a terminal from the phone to the Mac ([`docs/plans/agent.md`](docs/plans/agent.md)).
+Lane A finishes the GPUI port and deletes the dashboard, Tauri and the demo
+([`docs/plans/gpui.md`](docs/plans/gpui.md)).
+Do not start new feature work in `dashboard/`. A rule both clients share goes into a capability
+or `apps/gpui/core`.

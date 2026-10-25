@@ -65,7 +65,7 @@ Packs/coding/skills/prior-art/scripts/search-prior-art "<query>"
 graphify query "<query>"
 
 # 3. Check for related decisions in ISA or PRD:
-grep -in -C 2 "<query>" ISA.md ARCHITECTURE.md
+grep -in -C 2 "<query>" PLAN.md docs/plans/*.md ARCHITECTURE.md
 ```
 
 Report findings ranked by the ladder rung:

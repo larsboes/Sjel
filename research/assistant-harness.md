@@ -17,7 +17,7 @@ well or better outside the harness its provider built for it (same source).
 
 ## Can the harness improve through code and experiments?
 
-Reviewed 2026-10-24. This section holds the evidence; [Track 2 in the main plan](../PLAN.md#broader-harness-scope-and-factual-precision)
+Reviewed 2026-10-24. This section holds the evidence; [the agent plan](../docs/plans/agent.md#broader-harness-scope-and-factual-precision)
 owns Sjel's chosen scope, evaluation sequence and unresolved implementation choices.
 
 ### Meta-Harness: improve the code around a fixed model
@@ -72,11 +72,11 @@ need verification: source passages, document versions and unresolved contradicti
 necessary. A program consistent with previous observations may still predict a new situation
 incorrectly. Encoding an assertion in code does not establish its truth.
 
-The [main plan](../PLAN.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists)
+The [main plan](../docs/plans/agent.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists)
 records coding and autonomous research/experiments as the first evaluation profiles. Other
 profiles retain the same factual-precision requirement. The planned Pi/Sjel comparison separates
 harness changes from retrieval changes; it is not a new result. Storage choices remain in
-[the data-backbone proposal](../PLAN.md#agent-data-backbone-turso-and-graph-integration).
+[the data-backbone proposal](../docs/plans/agent.md#agent-data-backbone-turso-and-graph-integration).
 
 ## Source index
 
@@ -90,8 +90,8 @@ entry.
 | HarnessTax | [Project and paper links](https://harnesstax.github.io/) | Coding-harness cost/success comparisons; does not establish results for Sjel's other profiles. |
 | Meta-Harness | [Repository](https://github.com/stanford-iris-lab/meta-harness), [v1 paper HTML](https://arxiv.org/html/2603.28052v1), [v1 PDF](https://arxiv.org/pdf/2603.28052v1), [project page](https://yoonholee.com/meta-harness/), [onboarding](https://github.com/stanford-iris-lab/meta-harness/blob/main/ONBOARDING.md), [terminal-harness artifact](https://github.com/stanford-iris-lab/meta-harness-tbench2-artifact) | Candidate-code search and experiment history; distinguish held-out experiments from coding discovery on the search benchmark. |
 | Schema | [Original blog supplied by the operator](https://schema-harness.github.io/), [updated project page](https://guanning03.github.io/schema-webpage/), [paper](https://arxiv.org/abs/2609.39140), [paper HTML](https://arxiv.org/html/2609.39140), [repository](https://github.com/guanning03/Schema), [released ARC traces](https://huggingface.co/datasets/schema-harness/arc-agi-3-schema-traces) | Executable hypotheses and verified action; published game results do not establish factual accuracy in professional work. |
-| SQL and agent state | [Turso Database](https://github.com/tursodatabase/turso), [libSQL](https://github.com/tursodatabase/libsql), [AgentFS](https://docs.turso.tech/agentfs/introduction), [Sjel's Turso guide links](../PLAN.md#turso-references) | Storage candidates and recipes. Keep engine identities separate; storage features do not establish agent quality. |
-| Graph engines | [Grafeo](https://github.com/GrafeoDB/grafeo), [Grafeo server](https://github.com/GrafeoDB/grafeo-server), [IndraDB](https://github.com/indradb/indradb), [Sjel's integration alternatives](../PLAN.md#integration-candidates-to-narrow-together) | Query/storage candidates from the operator's comparison, retained for evaluation; no engine is selected by this entry. |
+| SQL and agent state | [Turso Database](https://github.com/tursodatabase/turso), [libSQL](https://github.com/tursodatabase/libsql), [AgentFS](https://docs.turso.tech/agentfs/introduction), [Sjel's Turso guide links](../docs/plans/storage.md#5-agent-databases) | Storage candidates and recipes. Keep engine identities separate; storage features do not establish agent quality. |
+| Graph engines | [Grafeo](https://github.com/GrafeoDB/grafeo), [Grafeo server](https://github.com/GrafeoDB/grafeo-server), [IndraDB](https://github.com/indradb/indradb), [Sjel's integration alternatives](../docs/plans/agent.md#integration-candidates-to-narrow-together) | Query/storage candidates from the operator's comparison, retained for evaluation; no engine is selected by this entry. |
 
 Meta-Harness and Schema have `inspiration` verdicts in
 [`upstreams.toml`](../upstreams.toml). The source index includes supplementary artifacts for

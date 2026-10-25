@@ -1,7 +1,7 @@
 # Graph store spike: SQL edges against an embedded graph engine
 
 Option A against option B from
-[Track 2's integration candidates](../../../PLAN.md#integration-candidates-to-narrow-together),
+[the agent plan's integration candidates](../../../docs/plans/agent.md#integration-candidates-to-narrow-together),
 for the coding-agent consumer (selected 2026-10-24). One question: does a coding agent's graph
 query need a graph engine, or do edge tables in the SQL engine Sjel already links answer it?
 

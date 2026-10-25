@@ -11,7 +11,7 @@ Zero-context ground truth: verify with `cargo check --workspace` and `cargo test
 
 ## Core Invariants
 
-1. **Safe Rust by Default**: The root workspace is 100% safe Rust (`unsafe_code = "deny"`). No `unsafe` code without a benchmark proving necessity, an explicit authorization, and a documented `// SAFETY:` contract (PRD Q77, ISA.md).
+1. **Safe Rust by Default**: The root workspace is 100% safe Rust (`unsafe_code = "deny"`). No `unsafe` code without a benchmark proving necessity, an explicit authorization, and a documented `// SAFETY:` contract (PRD Q77).
 2. **Backend Logic Defaults to Rust**: New backend logic is written in Rust before shell, Python, or TypeScript.
 3. **One Database, Table Prefixes**: Persistent capabilities open SQLite through `sjel-store` using assigned table prefixes (`<prefix>_<table>`) and `migrate_once`. Never run unpooled, unmigrated raw DDL.
 4. **Mechanical Sympathy**: Pre-allocate known capacities (`Vec::with_capacity`), avoid false sharing with cache line padding, and write branchless code for autovectorization.

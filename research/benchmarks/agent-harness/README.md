@@ -1,7 +1,7 @@
 # Agent harness development cases
 
 Twelve source-grounded cases for the coding, autonomous research/experiments and Sjel-document
-comparisons in [Track 2](../../../PLAN.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists).
+comparisons in [the agent plan](../../../docs/plans/agent.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists).
 This is a development specification with input fixtures and answer keys, not a final-test suite.
 Human label approval remains pending for all twelve.
 
@@ -30,7 +30,7 @@ loader, retaining its source revision, line range and SHA-256. All inputs are pu
 ## Sjel-document cases
 
 D01–D04 ask questions about Sjel itself, for the
-[small GraphRAG](../../../PLAN.md#sjel-questions-over-documents-a-small-graphrag) consumer. Each
+[small GraphRAG](../../../docs/plans/agent.md#sjel-questions-over-documents-a-small-graphrag) consumer. Each
 case's workspace is the same 36-file corpus snapped from revision `8cd46b23`: `AGENTS.md`,
 `CONTRIBUTING.md`, `ISA.md`, `upstreams.toml`, every `libs/*/README.md` and the research notes,
 395 KB in all. Finding the passage is part of the task. Each case lists the corpus paths in
@@ -133,7 +133,7 @@ this repository. No hidden model reasoning is required.
 
 ## Comparison contract before launching runs
 
-Use the [four Pi/Sjel retrieval cells](../../../PLAN.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists)
+Use the [four Pi/Sjel retrieval cells](../../../docs/plans/agent.md#sequence-plan-now-compare-with-pi-after-the-evaluation-contract-exists)
 with the same source snapshot and task policy. Alternate or randomize harness order and reset
 state between attempts. Repeat cases at least twice, as issue #241 requires; this is a starting
 protocol, not a sample size sufficient for statistical significance. Compare each profile and

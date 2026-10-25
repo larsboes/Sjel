@@ -21,7 +21,7 @@ deleted, when a source turns out wrong.
   injection, confirmation fatigue.
 - [How much does the assistant's harness matter?](assistant-harness.md): HarnessTax, the local
   Pi/Sjel smoke test, Meta-Harness and Schema, with a source index and limits on transfer to
-  factual research, writing and professional tasks. [Track 2](../PLAN.md#track-2-turso-for-agents-and-services)
+  factual research, writing and professional tasks. [agent plan](../docs/plans/agent.md#8-evaluation-against-pi)
   owns the evaluation plan.
 - [Agent harness development cases](benchmarks/agent-harness/README.md): twelve coding,
   research/experiment and Sjel-document cases with frozen fixtures, expected evidence and

@@ -174,7 +174,7 @@ the tab's own age line is what tells the person how old that is.
 auth, daily backup) and holds no data, because no writer may follow it until the file question is
 settled. `SJEL_TURSO_URL` stays unset, so `projects` keeps writing `axon.db`.
 
-The split is not refused — it is deferred, and the reason is recorded in `PLAN.md` §6 with these
+The split is not refused — it is deferred, and the reason is recorded in the storage plan history (`docs/plans/storage.md`) with these
 same numbers. Two things argued against doing it now: the owner is not yet sure how much of their
 data belongs on a phone at all, and every split is a one-way move of data plus a permanent extra
 place to look.

@@ -1,18 +1,17 @@
 # libs/sjel-turso
 
-Turso and LibSQL storage engine for Sjel: **async multi-writer concurrency (`BEGIN CONCURRENT` / MVCC) and native vector search**.
+The LibSQL storage engine for Sjel: an async local database with native vector search.
 
 A shared library, not a capability: no domain of its own, no CLI (CONTRIBUTING.md#three-architectural-nouns). Consumers declare an `sjel-turso` path dependency in the workspace.
 
-## Why this exists (PLAN.md)
+## Why this exists
 
 PRD Q45 retired Postgres in favor of SQLite (`axon.db`) with `rusqlite`. While SQLite's WAL mode provided single-file simplicity and zero container overhead, its single-writer limitation (`SQLITE_BUSY` when multiple agents and UI threads interact) and lack of native embedded vector indexing created a ceiling.
 
 `sjel-turso` brings LibSQL (Turso's open-source SQLite engine) into Sjel:
-1. **Concurrent Writers**: Multi-writer support via MVCC and non-blocking writes.
-2. **Embedded Replicas**: Microsecond local disk reads with background synchronization to remote Turso nodes when configured.
-3. **Async Core**: Native Tokio asynchronous I/O matching Axum capability servers and GPUI background task loops.
-4. **Byte-Level Compatibility**: Directly opens existing SQLite `.db` files (`axon.db`) without dump/reload.
+1. **Concurrent writers**: `tests/multi_writer_concurrency.rs` covers concurrent inserts. Contention on the shared file in production is not measured.
+2. **Async core**: Native Tokio asynchronous I/O matching Axum capability servers and GPUI background task loops.
+3. **Byte-level compatibility**: Directly opens existing SQLite `.db` files (`axon.db`) without dump/reload.
 
 ## Connection Lifecycle
 

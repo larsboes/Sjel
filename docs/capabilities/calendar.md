@@ -61,4 +61,4 @@ import/export decisions in [`google.rs`](../../capabilities/calendar/src/google.
   both the home timezone and an explicit offset; all-day exports keep exclusive date ends.
 
 These are reviewed import and export operations, not a continuous incremental-sync-token
-protocol. Open work belongs in [ISA.md](../../ISA.md).
+protocol. Open work belongs in [PLAN.md](../../PLAN.md).

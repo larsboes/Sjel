@@ -65,7 +65,7 @@ The macOS binary failed because of unresolved library paths. Real household PKPa
 barcode extraction was not measured in that evaluation.
 
 Treat those formats as candidates to validate before building automatic intake. Open integration
-work belongs in [ISA.md](../../ISA.md).
+work belongs in [`docs/plans/gpui.md`](../plans/gpui.md#2-phone-priority-areas).
 
 ## 3. Packing & inventory role separation
 
@@ -109,5 +109,5 @@ Cut from the earlier roadmaps for the same reason — machinery ahead of the rec
 
 ## 6. Open questions and known gaps
 
-[ISA.md](../../ISA.md) owns unresolved travel work. Verify a suspected gap against the owning
+[`docs/plans/gpui.md`](../plans/gpui.md#2-phone-priority-areas) owns unresolved travel work. Verify a suspected gap against the owning
 implementation before adding a new producer or a second source of planning state.

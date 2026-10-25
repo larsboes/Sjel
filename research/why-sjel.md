@@ -40,4 +40,4 @@ nothing after the response ([Apple Security Research,
 
 - That people want one system for all of this, rather than better separate apps. Unverified.
 - That a person without technical experience can run a Sjel node. The first test is a second
-  household, not yet measured ([ISA.md](../ISA.md)).
+  household, not yet measured ([PLAN.md](../PLAN.md#success-measures)).

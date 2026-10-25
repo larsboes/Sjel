@@ -255,17 +255,18 @@ impl CalendarStore {
 
     // ---- entries ----------------------------------------------------------
 
-    /// Entries trips wrote for one plan: `source = 'trips'` and `payload.plan_id = plan_id`.
+    /// Calendar entries explicitly associated with one trip plan.
     ///
-    /// A payload is inert provider evidence (`model.rs`, `Entry::payload`). This reads one key of
-    /// it, and only on rows trips itself wrote, because that key is the one reference to a plan an
-    /// entry carries (docs/capabilities/links.md, LNK-8). Every other provider's payload stays inert.
+    /// # Errors
+    ///
+    /// Returns an error when the database query fails.
     pub fn entries_for_plan(&self, plan_id: &str) -> StoreResult<Vec<Entry>> {
         let conn = self.conn()?;
         Ok(conn.query_all(
             &format!(
                 "SELECT * FROM {prefix}_entries \
-                 WHERE source = 'trips' AND json_extract(payload, '$.plan_id') = ?1 \
+                 WHERE (source = 'trips' AND json_extract(payload, '$.plan_id') = ?1) \
+                    OR id IN (SELECT entry_id FROM {prefix}_trip_materializations WHERE plan_id = ?1) \
                  ORDER BY starts_at",
                 prefix = self.prefix
             ),
@@ -1458,7 +1459,7 @@ mod db_tests {
     }
 
     #[test]
-    fn entries_for_plan_reads_only_what_trips_wrote() {
+    fn entries_for_plan_ignores_unowned_payload_plan_ids() {
         let store = open_test_store("entries_for_plan");
         let mut leg = an_entry("Bonn → Stuttgart", "2026-10-07", "away");
         leg.source = "trips".into();

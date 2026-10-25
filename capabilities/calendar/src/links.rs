@@ -1,8 +1,7 @@
 //! What calendar answers on `GET /api/links` (docs/capabilities/links.md, LNK-8).
 //!
-//! Calendar holds one kind of reference: an entry trips wrote carries its plan as
-//! `payload.plan_id`. The store reads that key only on `source = 'trips'` rows
-//! (`CalendarStore::entries_for_plan`). Every entry has a typed id, so `unlinkable` is always 0.
+//! Calendar links a trip's own entries by `payload.plan_id` and adopted draft entries by its
+//! materialization ledger. Every entry has a typed id, so `unlinkable` is always 0.
 
 use sjel_links::{Link, Links, TypedId};
 
@@ -35,7 +34,11 @@ pub fn links(target: &TypedId<'_>, entries: Vec<Entry>) -> Links {
                 meta: entry.location,
                 title: entry.title,
                 id: entry.id,
-                via: "payload.plan_id",
+                via: if entry.source == "trips" {
+                    "payload.plan_id"
+                } else {
+                    "trip materialization"
+                },
             })
             .collect(),
         unlinkable: 0,

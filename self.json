@@ -4,7 +4,14 @@
   "units": [
     {
       "name": "agent",
-      "kind": "lib"
+      "kind": "lib",
+      "service": {
+        "kind": "process",
+        "requires": [
+          "knowledge-graph"
+        ],
+        "port": "8108"
+      }
     },
     {
       "name": "agentbox",
@@ -568,7 +575,18 @@
         "cargo-dep"
       ],
       "evidence": [
+        "capabilities/agent/Cargo.toml",
         "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/agent/Cargo.toml"
       ]
     },
     {
@@ -578,6 +596,7 @@
         "cargo-dep"
       ],
       "evidence": [
+        "capabilities/agent/Cargo.toml",
         "libs/agent/Cargo.toml"
       ]
     },
@@ -589,6 +608,16 @@
       ],
       "evidence": [
         "libs/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/agent/Cargo.toml"
       ]
     },
     {
@@ -633,6 +662,16 @@
     },
     {
       "from": "assistant",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"
@@ -654,6 +693,16 @@
     {
       "from": "assistant",
       "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "sjel-store",
       "kinds": [
         "cargo-dep"
       ],
@@ -1003,6 +1052,16 @@
     },
     {
       "from": "documents",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -1014,6 +1073,16 @@
     {
       "from": "documents",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/documents/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
@@ -1893,6 +1962,16 @@
     },
     {
       "from": "sjel-server",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/sjel-server/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-server",
       "to": "pseudonymize",
       "kinds": [
         "cargo-dep"
@@ -2089,6 +2168,16 @@
       ],
       "evidence": [
         "libs/summarize/Cargo.toml"
+      ]
+    },
+    {
+      "from": "tools",
+      "to": "agent",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "tools/sjel-cli/Cargo.toml"
       ]
     },
     {
@@ -2716,6 +2805,10 @@
       "verdict": "inspiration"
     },
     {
+      "name": "lopdf",
+      "verdict": "adopt"
+    },
+    {
       "name": "lucide",
       "verdict": "quarry"
     },
@@ -2741,6 +2834,10 @@
     },
     {
       "name": "mermaid",
+      "verdict": "adopt"
+    },
+    {
+      "name": "mermaid-rs-renderer",
       "verdict": "adopt"
     },
     {

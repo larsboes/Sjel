@@ -146,15 +146,8 @@ impl Shape {
     }
 }
 
-/// Characters per token, for sizing a prompt against a model's context window.
-///
-/// Measured rather than guessed: the 14,064-character transcript that started
-/// this work prefilled to 3,568 tokens, which is 3.94 characters per token.
-/// Three is deliberately below that. This number decides whether a small model
-/// is offered work it cannot hold, and being wrong in that direction produces a
-/// hard context error, so it sizes for denser text than the sample rather than
-/// for the sample.
-pub const CHARS_PER_TOKEN: usize = 3;
+/// Defined in `sjel_inference`, so the AFM admission there sizes with the same number.
+pub use sjel_inference::CHARS_PER_TOKEN;
 
 /// Tokens to allow for the instruction, the focus terms and the chat envelope
 /// wrapped around the source. The prompt preamble is about 60 words; the rest
@@ -770,13 +763,9 @@ fn runtime_admission(target: &Target, prompt: &str, reply_tokens: u32) -> Result
         && target.backend_name == "foundation-models"
         && target.model == "apple-foundationmodel"
     {
-        let window = target.max_input_tokens.unwrap_or(4096).min(4096) as usize;
-        if prompt
-            .len()
-            .saturating_add(reply_tokens as usize)
-            .saturating_add(256)
-            > window
-        {
+        // Tokens through `fits_window`, the arithmetic callers size their prompts with.
+        let window = target.max_input_tokens.unwrap_or(4096).min(4096);
+        if !fits_window(prompt.chars().count(), reply_tokens, window) {
             return Err("deferred by runtime profile: AFM input plus reply exceeds its context; no request was sent".into());
         }
         let base = target

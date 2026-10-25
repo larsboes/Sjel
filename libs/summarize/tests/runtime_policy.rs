@@ -61,10 +61,18 @@ fn runtime_child() {
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     target.backend_name = "foundation-models".into();
     target.model = "apple-foundationmodel".into();
-    assert!(matches!(
-        ask(Some(&target), &"x".repeat(4096), 100, Reach::LoopbackOnly),
-        Outcome::PolicyDeferred(_)
-    ));
+    // 12,000 characters are 4,000 tokens at CHARS_PER_TOKEN: over the window with the reply.
+    let oversized = ask(Some(&target), &"x".repeat(12_000), 100, Reach::LoopbackOnly);
+    assert!(
+        matches!(&oversized, Outcome::PolicyDeferred(reason) if reason.contains("context")),
+        "{oversized:?}"
+    );
+    // 6,000 characters fit, so the reason is the unreachable model, not the window.
+    let sized = ask(Some(&target), &"x".repeat(6_000), 100, Reach::LoopbackOnly);
+    assert!(
+        matches!(&sized, Outcome::PolicyDeferred(reason) if !reason.contains("context")),
+        "{sized:?}"
+    );
     assert_eq!(
         calls.load(Ordering::Relaxed),
         1,

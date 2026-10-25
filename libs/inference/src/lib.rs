@@ -695,6 +695,16 @@ impl FromStr for InferenceConfig {
     }
 }
 
+/// Characters per token, for sizing a prompt against a model's context window.
+///
+/// Measured rather than guessed: a 14,064-character transcript prefilled to 3,568 tokens, which
+/// is 3.94 characters per token. Three is deliberately below that. Being wrong in the other
+/// direction offers a small model work it cannot hold, which is a hard context error.
+pub const CHARS_PER_TOKEN: usize = 3;
+
+/// AFM's context, shared by input and reply.
+const AFM_CONTEXT_TOKENS: u64 = 4096;
+
 /// apfel can be listening while Apple Intelligence is unavailable. A 200 alone is not ready.
 pub fn afm_available(base_url: &str) -> bool {
     let base = base_url.trim_end_matches('/');
@@ -767,20 +777,23 @@ impl ResolvedRole {
             return Err("request model does not match the admitted inference role".into());
         }
         if self.is_afm() {
-            let window = self.max_input_tokens.unwrap_or(4096).min(4096) as usize;
-            let input_bytes = body
+            let window = self
+                .max_input_tokens
+                .map_or(AFM_CONTEXT_TOKENS, u64::from)
+                .min(AFM_CONTEXT_TOKENS);
+            let input_chars = body
                 .get("messages")
-                .map_or(0, |v| v.to_string().len())
-                .saturating_add(body.get("tools").map_or(0, |v| v.to_string().len()));
+                .map_or(0, |v| v.to_string().chars().count())
+                .saturating_add(
+                    body.get("tools")
+                        .map_or(0, |v| v.to_string().chars().count()),
+                );
             let reply = body
                 .get("max_tokens")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(1024);
-            if input_bytes
-                .saturating_add(usize::try_from(reply).unwrap_or(usize::MAX))
-                .saturating_add(256)
-                > window
-            {
+            let input_tokens = (input_chars / CHARS_PER_TOKEN) as u64;
+            if input_tokens.saturating_add(reply).saturating_add(256) > window {
                 return Err("deferred by runtime profile: AFM request exceeds its input-plus-reply context; no request was sent".into());
             }
             if !afm_available(&self.backend.base_url) {

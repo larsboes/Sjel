@@ -59,7 +59,8 @@ fn runtime_child() {
     wrong["model"] = serde_json::json!("other");
     assert!(afm.admit_chat_request(&wrong).is_err());
     wrong = body;
-    wrong["messages"][0]["content"] = serde_json::json!("x".repeat(4096));
+    // 12,000 characters are 4,000 tokens at CHARS_PER_TOKEN: over the window with the reply.
+    wrong["messages"][0]["content"] = serde_json::json!("x".repeat(12_000));
     assert!(afm.admit_chat_request(&wrong).is_err());
 
     // Only this final operation is permitted to reach the mock. A cached role must see

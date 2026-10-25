@@ -109,12 +109,16 @@ pub struct AgentRoutes {
     pub confirm: &'static [(&'static str, &'static str)],
     /// A `GET` that changes state, so the mode treats it as a write.
     pub get_writes: &'static [(&'static str, &'static str)],
+    /// A route an agent token never reaches, whatever the mode. For the one thing the gate cannot
+    /// check: an interactive shell, where a keystroke is a command and no card can precede it.
+    pub closed: &'static [(&'static str, &'static str)],
 }
 
 impl AgentRoutes {
     pub const NONE: AgentRoutes = AgentRoutes {
         confirm: &[],
         get_writes: &[],
+        closed: &[],
     };
 
     pub fn confirms(&self, method: &str, path: &str) -> bool {
@@ -123,6 +127,10 @@ impl AgentRoutes {
 
     pub fn get_writes(&self, method: &str, path: &str) -> bool {
         any_matches(self.get_writes, method, path)
+    }
+
+    pub fn closes(&self, method: &str, path: &str) -> bool {
+        any_matches(self.closed, method, path)
     }
 }
 
@@ -309,9 +317,13 @@ impl PolicyFiles {
     pub fn set_tier(&self, agent: &str, tier: Tier) -> Result<(), String> {
         let valid = !agent.is_empty()
             && agent.len() <= 40
-            && agent.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+            && agent
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-');
         if !valid {
-            return Err(format!("{agent:?} is not an agent name (letters, digits, '-')"));
+            return Err(format!(
+                "{agent:?} is not an agent name (letters, digits, '-')"
+            ));
         }
         self.write_policy(|policy| {
             policy["tiers"][agent] = Value::from(tier.as_str());

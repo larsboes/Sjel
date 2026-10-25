@@ -15,6 +15,7 @@ mod gate;
 mod plugins;
 mod session;
 mod sql;
+mod terminal;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,16 +26,18 @@ use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::routing::{delete, get, post};
+use axum::{Extension, Json, Router};
+use base64::Engine as _;
 use futures::stream;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sjel_agent::{Agent, AgentInput, Event};
-use sjel_server::agent_policy::PolicyFiles;
+use sjel_server::agent_policy::{AgentRoutes, PolicyFiles};
 
 use crate::session::{Active, Session};
+use crate::terminal::{ReadOutcome, Terminal, Terminals};
 
 /// The inference role a run uses. An overlay that wants another names it here.
 const ROLE: &str = "coding";
@@ -45,11 +48,31 @@ const MAX_STEER_BYTES: usize = 4_000;
 const MAX_TURNS: usize = 40;
 const PORT: u16 = 8108;
 
+/// The routes the agent token never reaches, whatever the owner's mode says.
+///
+/// A terminal is a shell: a keystroke is a command, so there is no argument for the gate to
+/// check and no card a human could read first. Closing them here is what makes "an agent cannot
+/// get a shell" a property of the gate rather than of each handler remembering.
+const AGENT_ROUTES: AgentRoutes = AgentRoutes {
+    confirm: &[],
+    get_writes: &[],
+    closed: &[
+        ("POST", "/api/agent/terminals"),
+        ("GET", "/api/agent/terminals"),
+        ("GET", "/api/agent/terminals/{id}/stream"),
+        ("POST", "/api/agent/terminals/{id}/input"),
+        ("POST", "/api/agent/terminals/{id}/resize"),
+        ("DELETE", "/api/agent/terminals/{id}"),
+    ],
+};
+
 struct AppState {
     /// Live sessions: the ones this process has a conversation for.
     sessions: Mutex<HashMap<String, Arc<Session>>>,
     /// Where sessions are filed: `<overlay>/data/agent/sessions`.
     dir: PathBuf,
+    /// The shells held for the app and the phone.
+    terminals: Arc<Terminals>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -90,6 +113,43 @@ struct ApproveRequest {
 #[serde(deny_unknown_fields)]
 struct StreamQuery {
     /// The last sequence the caller already has. A reconnect sends what it saw last.
+    #[serde(default)]
+    from: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct OpenTerminal {
+    /// A preset name from `<overlay>/config/agent.toml`, or one of the five defaults. An empty
+    /// string is the login shell.
+    preset: String,
+    /// An existing directory under `$HOME`. Absent means `$HOME`.
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    cols: Option<u16>,
+    #[serde(default)]
+    rows: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TerminalInput {
+    /// Bytes to write to the pty, base64. At most 64 KiB, before decoding.
+    data: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TerminalResize {
+    cols: u16,
+    rows: u16,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TerminalStreamQuery {
+    /// The byte offset the caller already has. Absent means the oldest output still held.
     #[serde(default)]
     from: Option<u64>,
 }
@@ -204,6 +264,42 @@ async fn routes() -> Json<Value> {
                 method: "POST",
                 path: "/api/agent/sessions/{id}/stop",
                 summary: "Stop the turn and keep the conversation.",
+                request_schema: None,
+            },
+            route_manifest::Route {
+                method: "POST",
+                path: "/api/agent/terminals",
+                summary: "Open a pty on this Mac: a preset from the overlay, a directory under $HOME, \
+                 and the size the client draws.",
+                request_schema: Some(route_manifest::schema_of::<OpenTerminal>),
+            },
+            route_manifest::get(
+                "GET",
+                "/api/agent/terminals",
+                "Every terminal held on this Mac, newest first.",
+            ),
+            route_manifest::get(
+                "GET",
+                "/api/agent/terminals/{id}/stream",
+                "Server-sent events for one terminal: `output` frames with their byte offset, \
+                 `truncated` with the oldest offset still held, and one `exit`.",
+            ),
+            route_manifest::Route {
+                method: "POST",
+                path: "/api/agent/terminals/{id}/input",
+                summary: "Write base64 bytes to the pty, as if typed.",
+                request_schema: Some(route_manifest::schema_of::<TerminalInput>),
+            },
+            route_manifest::Route {
+                method: "POST",
+                path: "/api/agent/terminals/{id}/resize",
+                summary: "Change the pty's size. The last resize wins.",
+                request_schema: Some(route_manifest::schema_of::<TerminalResize>),
+            },
+            route_manifest::Route {
+                method: "DELETE",
+                path: "/api/agent/terminals/{id}",
+                summary: "End the terminal: SIGHUP to its process group, SIGKILL after five seconds.",
                 request_schema: None,
             },
         ],
@@ -479,9 +575,8 @@ async fn stream(
                 if next.done {
                     return None;
                 }
-                if receiver.recv().await.is_none() {
-                    return None;
-                }
+                // A wake that never comes means every reader of the log is gone.
+                receiver.recv().await?;
             }
         },
     );
@@ -579,6 +674,182 @@ async fn stop(
     Ok(Json(json!({ "stopping": true })))
 }
 
+/// Who asked for a terminal: the paired device's own name, or this machine's loopback.
+fn client_of(device: Option<Extension<sjel_server::AdmittedDevice>>) -> String {
+    device
+        .map(|Extension(device)| device.0)
+        .unwrap_or_else(|| "loopback".to_owned())
+}
+
+fn status_of(refusal: &terminal::Refusal) -> StatusCode {
+    match refusal {
+        terminal::Refusal::BadRequest(_) => StatusCode::BAD_REQUEST,
+        terminal::Refusal::TooMany(_) => StatusCode::CONFLICT,
+        terminal::Refusal::Missing(_) => StatusCode::NOT_FOUND,
+        terminal::Refusal::Failed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn open_terminal(
+    State(state): State<Arc<AppState>>,
+    device: Option<Extension<sjel_server::AdmittedDevice>>,
+    Json(request): Json<OpenTerminal>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let client = client_of(device);
+    let terminal = state
+        .terminals
+        .open(terminal::Open {
+            preset: &request.preset,
+            cwd: request.cwd.as_deref(),
+            cols: request.cols.unwrap_or(80),
+            rows: request.rows.unwrap_or(24),
+            client: &client,
+        })
+        .map_err(|refusal| failure(status_of(&refusal), refusal.message()))?;
+    // The id alone: everything else about a new terminal is its list row, and a client that
+    // wants it asks for the list.
+    Ok(Json(json!({ "id": terminal.id })))
+}
+
+async fn list_terminals(State(state): State<Arc<AppState>>) -> Json<Value> {
+    Json(Value::Array(state.terminals.list()))
+}
+
+async fn terminal_stream(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<TerminalStreamQuery>,
+) -> Result<impl IntoResponse, (StatusCode, Json<Value>)> {
+    let terminal = state
+        .terminals
+        .get(&id)
+        .ok_or_else(|| failure(StatusCode::NOT_FOUND, "no such terminal"))?;
+    // Subscribe before the first read, so output that lands in between is a wake this reader
+    // has not missed.
+    let receiver = terminal.subscribe();
+    terminal.attach();
+    let cursor = query.from.unwrap_or_else(|| terminal.first_offset());
+
+    // The attachment lives in the stream's own state, so the count the list reports falls back
+    // when the reader goes away, however it goes away.
+    let attached = Attached(Arc::clone(&terminal));
+    let events = stream::unfold(
+        (cursor, receiver, attached, false),
+        |(mut cursor, mut receiver, attached, finished)| async move {
+            if finished {
+                return None;
+            }
+            loop {
+                match attached.0.read(cursor, terminal::MAX_FRAME_BYTES) {
+                    ReadOutcome::Truncated { first_offset } => {
+                        // The stream stops here rather than continuing: a reader that kept drawing
+                        // on a grid it never cleared would show a hole as if it were the start.
+                        return Some((
+                            Ok::<_, std::convert::Infallible>(
+                                SseEvent::default()
+                                    .event("truncated")
+                                    .data(json!({ "first_offset": first_offset }).to_string()),
+                            ),
+                            (first_offset, receiver, attached, true),
+                        ));
+                    }
+                    ReadOutcome::Output { offset, bytes } if !bytes.is_empty() => {
+                        cursor = offset + bytes.len() as u64;
+                        let data = json!({
+                            "offset": offset,
+                            "data": base64::engine::general_purpose::STANDARD.encode(&bytes),
+                        });
+                        return Some((
+                            Ok(SseEvent::default().event("output").data(data.to_string())),
+                            (cursor, receiver, attached, false),
+                        ));
+                    }
+                    ReadOutcome::Output { .. } => {}
+                }
+                if !attached.0.alive() {
+                    let exit = terminal::exit_event(&attached.0);
+                    return Some((
+                        Ok(SseEvent::default().event("exit").data(exit.to_string())),
+                        (cursor, receiver, attached, true),
+                    ));
+                }
+                // A wake that never comes means every reader of the log is gone.
+                receiver.recv().await?;
+            }
+        },
+    );
+
+    Ok(Sse::new(events).keep_alive(KeepAlive::default()))
+}
+
+/// Holds one attachment for as long as a reader is attached, and lets go when it is not.
+struct Attached(Arc<Terminal>);
+
+impl Drop for Attached {
+    fn drop(&mut self) {
+        self.0.detach();
+    }
+}
+
+async fn terminal_input(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(request): Json<TerminalInput>,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    if request.data.len() > terminal::MAX_INPUT_BYTES {
+        return Err(failure(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "input is at most {} bytes of base64",
+                terminal::MAX_INPUT_BYTES
+            ),
+        ));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(request.data.as_bytes())
+        .map_err(|error| failure(StatusCode::BAD_REQUEST, format!("data is base64: {error}")))?;
+    let terminal = state
+        .terminals
+        .get(&id)
+        .ok_or_else(|| failure(StatusCode::NOT_FOUND, "no such terminal"))?;
+    terminal.write(&bytes).map_err(|reason| {
+        let status = if terminal.alive() {
+            StatusCode::INTERNAL_SERVER_ERROR
+        } else {
+            StatusCode::CONFLICT
+        };
+        failure(status, reason)
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn terminal_resize(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+    Json(request): Json<TerminalResize>,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    let terminal = state
+        .terminals
+        .get(&id)
+        .ok_or_else(|| failure(StatusCode::NOT_FOUND, "no such terminal"))?;
+    terminal
+        .resize(request.cols, request.rows)
+        .map_err(|reason| failure(StatusCode::CONFLICT, reason))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn close_terminal(
+    State(state): State<Arc<AppState>>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    state
+        .terminals
+        .close(&id)
+        .await
+        .map_err(|refusal| failure(status_of(&refusal), refusal.message()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -595,6 +866,14 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/agent/sessions/{id}/approve", post(approve))
         .route("/api/agent/sessions/{id}/steer", post(steer))
         .route("/api/agent/sessions/{id}/stop", post(stop))
+        .route(
+            "/api/agent/terminals",
+            get(list_terminals).post(open_terminal),
+        )
+        .route("/api/agent/terminals/{id}", delete(close_terminal))
+        .route("/api/agent/terminals/{id}/stream", get(terminal_stream))
+        .route("/api/agent/terminals/{id}/input", post(terminal_input))
+        .route("/api/agent/terminals/{id}/resize", post(terminal_resize))
         .with_state(state)
 }
 
@@ -614,24 +893,31 @@ fn sessions_dir() -> PathBuf {
         .join("sessions")
 }
 
+/// The one line per terminal start and end: no input, no output.
+fn terminals_audit() -> PathBuf {
+    sjel_config::overlay_data_dir("agent")
+        .unwrap_or_else(|| std::env::temp_dir().join("sjel-agent-data"))
+        .join("terminals.jsonl")
+}
+
 #[tokio::main]
 async fn main() {
     let dir = sessions_dir();
     if let Err(error) = std::fs::create_dir_all(&dir) {
         eprintln!("agent: cannot create {}: {error}", dir.display());
     }
+    let terminals = Arc::new(Terminals::new(
+        terminals_audit(),
+        terminal::Presets::configured(),
+    ));
+    tokio::spawn(Terminals::reap_forever(Arc::clone(&terminals)));
     let state = Arc::new(AppState {
         sessions: Mutex::new(HashMap::new()),
         dir,
+        terminals,
     });
     let port = sjel_server::resolve_port(None, None, PORT);
-    sjel_server::serve_local_with(
-        "agent",
-        port,
-        router(state),
-        sjel_server::agent_policy::AgentRoutes::NONE,
-    )
-    .await;
+    sjel_server::serve_local_with("agent", port, router(state), AGENT_ROUTES).await;
 }
 
 #[cfg(test)]
@@ -791,6 +1077,10 @@ mod tests {
         let state = Arc::new(AppState {
             sessions: Mutex::new(HashMap::new()),
             dir: PathBuf::new(),
+            terminals: Arc::new(Terminals::new(
+                std::env::temp_dir().join("sjel-agent-test-terminals.jsonl"),
+                terminal::Presets::defaults(),
+            )),
         });
         // `run_turn` is the same blocking worker the capability starts after accepting a prompt.
         std::thread::spawn(move || {
@@ -811,6 +1101,10 @@ mod tests {
         let state = Arc::new(AppState {
             sessions: Mutex::new(HashMap::from([(session.id.clone(), Arc::clone(&session))])),
             dir: overlay.path.join("data/agent/sessions"),
+            terminals: Arc::new(Terminals::new(
+                overlay.path.join("data/agent/terminals.jsonl"),
+                terminal::Presets::defaults(),
+            )),
         });
         let _ = approve(
             State(state),
@@ -919,11 +1213,142 @@ mod tests {
             "/api/agent/sessions/{id}/approve",
             "/api/agent/sessions/{id}/steer",
             "/api/agent/sessions/{id}/stop",
+            "/api/agent/terminals",
+            "/api/agent/terminals/{id}",
+            "/api/agent/terminals/{id}/stream",
+            "/api/agent/terminals/{id}/input",
+            "/api/agent/terminals/{id}/resize",
         ] {
             assert!(
                 paths.contains(&path),
                 "{path} is not in the manifest: {paths:?}"
             );
         }
+    }
+
+    /// The route layer around the pty: open, list, type into it, resize it, end it.
+    #[tokio::test]
+    async fn a_terminal_route_opens_types_resizes_and_closes() {
+        let presets =
+            terminal::Presets::parse("[terminal.presets]\nprobe = \"printf probe-ok\\n\"\n");
+        let state = Arc::new(AppState {
+            sessions: Mutex::new(HashMap::new()),
+            dir: std::env::temp_dir().join("sjel-agent-route-test"),
+            terminals: Arc::new(Terminals::new(
+                std::env::temp_dir().join(format!(
+                    "sjel-agent-route-audit-{}.jsonl",
+                    std::process::id()
+                )),
+                presets,
+            )),
+        });
+
+        let refused = open_terminal(
+            State(Arc::clone(&state)),
+            None,
+            Json(OpenTerminal {
+                preset: "nope".into(),
+                cwd: None,
+                cols: None,
+                rows: None,
+            }),
+        )
+        .await
+        .expect_err("an unknown preset is refused");
+        assert_eq!(refused.0, StatusCode::BAD_REQUEST);
+
+        let opened = open_terminal(
+            State(Arc::clone(&state)),
+            None,
+            Json(OpenTerminal {
+                preset: "probe".into(),
+                cwd: None,
+                cols: Some(90),
+                rows: Some(30),
+            }),
+        )
+        .await
+        .unwrap();
+        let id = opened.0["id"].as_str().unwrap().to_owned();
+
+        let listed = list_terminals(State(Arc::clone(&state))).await.0;
+        let rows = listed.as_array().unwrap();
+        assert_eq!(rows.len(), 1, "{listed}");
+        assert_eq!(rows[0]["preset"], "probe");
+        assert_eq!(rows[0]["cwd"], std::env::var("HOME").unwrap());
+
+        // A terminal that runs one command ends on its own, and its output is at the offset a
+        // client would read from.
+        let terminal = state.terminals.get(&id).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut seen = String::new();
+        let mut cursor = terminal.first_offset();
+        while std::time::Instant::now() < deadline {
+            if let ReadOutcome::Output { offset, bytes } = terminal.read(cursor, 4096) {
+                cursor = offset + bytes.len() as u64;
+                seen.push_str(&String::from_utf8_lossy(&bytes));
+            }
+            if seen.contains("probe-ok") {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(seen.contains("probe-ok"), "{seen}");
+
+        let bad = terminal_input(
+            State(Arc::clone(&state)),
+            AxumPath(id.clone()),
+            Json(TerminalInput {
+                data: "not base64!!".into(),
+            }),
+        )
+        .await
+        .expect_err("a body that is not base64 is refused");
+        assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+
+        terminal_resize(
+            State(Arc::clone(&state)),
+            AxumPath(id.clone()),
+            Json(TerminalResize {
+                cols: 100,
+                rows: 40,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let missing = close_terminal(State(Arc::clone(&state)), AxumPath("nope".into()))
+            .await
+            .expect_err("an unknown id is a 404");
+        assert_eq!(missing.0, StatusCode::NOT_FOUND);
+        close_terminal(State(Arc::clone(&state)), AxumPath(id.clone()))
+            .await
+            .unwrap();
+        assert!(state.terminals.get(&id).is_none());
+    }
+
+    /// A terminal is a shell, so no mode may admit an agent token to one. The list is checked
+    /// against the manifest rather than restated, so a terminal route added without closing it
+    /// fails here instead of opening a shell quietly.
+    #[test]
+    fn every_terminal_route_is_closed_to_an_agent_token() {
+        let manifest = futures::executor::block_on(routes()).0;
+        let mut checked = 0;
+        for route in manifest["routes"].as_array().unwrap() {
+            let path = route["path"].as_str().unwrap();
+            if !path.starts_with("/api/agent/terminals") {
+                continue;
+            }
+            let method = route["method"].as_str().unwrap();
+            checked += 1;
+            assert!(
+                AGENT_ROUTES.closes(method, path),
+                "{method} {path} would hand an agent token a shell"
+            );
+        }
+        assert_eq!(checked, 6, "the manifest lost a terminal route: {checked}");
+
+        // The rule is narrower than the capability: a session route stays reachable.
+        assert!(!AGENT_ROUTES.closes("POST", "/api/agent/sessions/{id}/prompt"));
     }
 }

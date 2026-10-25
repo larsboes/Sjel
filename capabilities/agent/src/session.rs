@@ -433,7 +433,7 @@ impl Session {
     }
 }
 
-fn now_secs() -> u64 {
+pub(crate) fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -446,7 +446,7 @@ fn title_of(content: &str) -> String {
     line.chars().take(TITLE_LIMIT).collect()
 }
 
-fn new_id() -> String {
+pub(crate) fn new_id() -> String {
     let mut raw = [0u8; 8];
     if getrandom::fill(&mut raw).is_err() {
         // A collision here costs one session, not a decision; the clock keeps ids apart when the

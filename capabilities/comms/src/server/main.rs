@@ -633,6 +633,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/feed/{id}/data-class"),
         ],
         get_writes: &[],
+        closed: &[],
     };
 
 #[tokio::main]

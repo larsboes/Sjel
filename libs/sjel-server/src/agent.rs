@@ -160,10 +160,11 @@ impl AgentAccess {
     /// logged: the shape rules (addresses, numbers, links) still apply without it.
     pub fn from_deployment() -> Option<Self> {
         let root = sjel_config::overlay_root()?;
-        let mut tokens: Vec<(String, [u8; 32])> = read_hash(&root.join("config/agent-token.sha256"))
-            .map(|hash| ("default".to_string(), hash))
-            .into_iter()
-            .collect();
+        let mut tokens: Vec<(String, [u8; 32])> =
+            read_hash(&root.join("config/agent-token.sha256"))
+                .map(|hash| ("default".to_string(), hash))
+                .into_iter()
+                .collect();
         if let Ok(entries) = std::fs::read_dir(root.join("config/agent-tokens")) {
             for path in entries.filter_map(Result::ok).map(|e| e.path()) {
                 let name = path
@@ -315,6 +316,16 @@ pub(crate) async fn admit_agent(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request.uri().path().to_string();
+    // Before the token is admitted into the request: a closed route hands over something no
+    // approval can precede, so the agent is answered as if its token were unknown here.
+    if access.routes.closes(&method, &path) {
+        let response = refuse(
+            StatusCode::UNAUTHORIZED,
+            "this route is not open to an agent token",
+        );
+        access.log(&agent, &method, &path, response.status().as_u16(), "closed");
+        return response;
+    }
     let tier = access.tier(&agent);
     request.extensions_mut().insert(AdmittedAgent {
         name: agent.clone(),

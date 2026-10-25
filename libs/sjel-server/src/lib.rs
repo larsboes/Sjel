@@ -422,6 +422,7 @@ mod http_tests {
     const TEST_ROUTES: agent_policy::AgentRoutes = agent_policy::AgentRoutes {
         confirm: &[("POST", "/triage/{id}/gmail")],
         get_writes: &[("GET", "/discover")],
+        closed: &[("POST", "/shell"), ("GET", "/shell/{id}/stream")],
     };
 
     /// Agent access for "comms" under `mode`, with its own policy files in a temp directory.
@@ -457,6 +458,11 @@ mod http_tests {
                 }),
             )
             .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
+            .route(
+                "/shell",
+                post(|| async { axum::Json(serde_json::json!({"opened": true})) }),
+            )
+            .route("/shell/{id}/stream", get(|| async { "output" }))
             .route("/page", get(|| async { "<html>Erika</html>" }))
             .route(
                 "/whoami",
@@ -494,6 +500,49 @@ mod http_tests {
             let _ = axum::serve(listener, app).await;
         });
         format!("http://{addr}")
+    }
+
+    /// A closed route hands over something no approval can precede, so it answers as if the
+    /// agent's token were unknown here and the handler never runs.
+    #[tokio::test]
+    async fn a_closed_route_never_reaches_its_handler() {
+        let (access, _files) = agent_access_in("comms", agent_policy::Mode::Auto);
+        let auth = InboundAuth::with_token(None)
+            .require_credential()
+            .with_agent_access(access);
+        let base = serve_agent_router(auth).await;
+        let client = reqwest::Client::new();
+
+        let opened = client
+            .post(format!("{base}/shell"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            opened.status().as_u16(),
+            401,
+            "an agent must never be handed a shell"
+        );
+        let body: serde_json::Value = opened.json().await.unwrap();
+        assert!(body.get("opened").is_none(), "the handler ran: {body}");
+
+        let stream = client
+            .get(format!("{base}/shell/abc/stream"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(stream.status().as_u16(), 401);
+
+        // A route the capability did not close is untouched by the list.
+        let whoami = client
+            .get(format!("{base}/whoami"))
+            .bearer_auth("agent-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(whoami.status().as_u16(), 200);
     }
 
     #[tokio::test]
@@ -618,7 +667,11 @@ mod http_tests {
         assert!(named.contains("Erika Mustermann (example.com)"), "{named}");
         assert!(!named.contains("erika@example.com"), "{named}");
         assert!(!named.contains("616685"), "{named}");
-        assert_eq!(files.mode_for("comms"), agent_policy::Mode::Auto, "set_tier kept the mode");
+        assert_eq!(
+            files.mode_for("comms"),
+            agent_policy::Mode::Auto,
+            "set_tier kept the mode"
+        );
     }
 
     /// The handler learns the tier from the gate, never from the client.

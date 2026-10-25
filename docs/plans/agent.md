@@ -170,13 +170,16 @@ agent keeps its native UI. Every other agent uses the terminal.
 
 Facts (2026-10-25): Tailscale SSH is off on this Mac. The node advertises no SSH host keys, and
 `capabilities/host-net` only reports the `RunSSH` flag. tmux is not installed. No PTY or
-terminal-emulator crate is in the workspace. Decided 2026-10-25: build the native terminal first.
-The SSH path is the fallback, not a first step.
+terminal-emulator crate is in the workspace; `portable-pty` is now (see `upstreams.toml`). Decided
+2026-10-25: build the native terminal first. The SSH path is the fallback, not a first step.
 
 Steps:
 
-1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below.
-2. **One terminal view for Mac and phone**, specified below.
+1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below. Built:
+   `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in `<overlay>/config/agent.toml`
+   and the audit in `<overlay>/data/agent/terminals.jsonl`. What is left from this step is the
+   client's half: nothing draws a terminal yet.
+2. **One terminal view for Mac and phone**, specified below. Not started.
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the
    connection, and [Blink Shell](https://github.com/blinksh/blink) (GPL-3.0) on the phone with a
@@ -215,8 +218,9 @@ requires.
 
 - **Presets.** `shell` runs the user's login shell (`$SHELL -l`). `claude`, `codex`, `pi` and
   `sjel-agent` run that program inside the login shell, so `PATH` matches an interactive
-  terminal. The commands live in `<overlay>/config/agent.toml` under `[terminal.presets]`,
-  because install paths are machine facts. `cwd` must be an existing directory under `$HOME`.
+  terminal. The commands live in `<overlay>/config/agent.toml` under `[terminal.presets]`, because
+  install paths are machine facts; the field is the command line, and the five names are the
+  default when the section is absent. `cwd` must be an existing directory under `$HOME`.
 - **Environment.** `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` from the user's
   environment. The PTY never inherits the capability's own secrets or tokens.
 - **Scrollback.** A 2 MiB ring of raw output per terminal, held in memory. A client that
@@ -231,9 +235,15 @@ requires.
 A terminal is a full shell with the user account's rights. The command policy in §3 cannot apply
 to interactive keystrokes, so access is the control.
 
-- The agent token never reaches these routes. `capabilities/agent` does not call
-  `InboundAuth::admit_agents`, so the token answers 401 (`libs/sjel-server/src/agent.rs`). A test
-  asserts this for every terminal route, so a later change cannot open a shell to an agent.
+- The agent token never reaches these routes. `AgentRoutes::closed`
+  (`libs/sjel-server/src/agent_policy.rs`) is checked in the gate before the token is admitted, so a
+  closed route answers 401 with the same shape an unknown token gets. `capabilities/agent` lists
+  every terminal route there, and `every_terminal_route_is_closed_to_an_agent_token` reads the
+  manifest instead of restating the list, so a later route added without closing it fails the test
+  rather than opening a shell.
+  Recorded because the first draft of this section was wrong: `serve_local_with` *does* admit the
+  agent token on this capability, which is why "does not call `admit_agents`" was never the
+  mechanism.
 - The capability stays on `Reach::Loopback`. The phone reaches it only through the paired
   listener and a device signature.
 - The phone asks for Face ID (`LocalAuthentication`) before it opens or reattaches a terminal,
@@ -247,8 +257,9 @@ to interactive keystrokes, so access is the control.
   last offset.
 - `apps/gpui/ui/src/terminal.rs`: the view. `alacritty_terminal` (Apache-2.0) parses the stream
   into a grid, and GPUI draws the grid. Zed's GPUI terminal is the reference to read first. Check
-  its licence against Sjel's AGPL-3.0 before reusing code. `portable-pty` on the Mac side and
-  `alacritty_terminal` each need an `upstreams.toml` row first.
+  its licence against Sjel's AGPL-3.0 before reusing code. `alacritty_terminal` still needs an
+  `upstreams.toml` row; `portable-pty` has one, and its `why` records what it does not do: signal a
+  process group, set the environment, or parse any output.
 - Phone: the Agent tab lists agent sessions and terminals. A key row above the keyboard carries
   Esc, Tab, Ctrl, arrows, `|`, `~` and `/`. Selection copies to the clipboard. Pinch changes the
   font size. Mac: a terminal opens from the finder (`sjel://terminal`) or in the right edge.
@@ -256,13 +267,17 @@ to interactive keystrokes, so access is the control.
 ### Done when
 
 1. On the Mac, the `shell` preset runs `ls`, a resize redraws `htop` correctly, and scrollback
-   reaches the first line.
+   reaches the first line. Partly: `ls` ran through the real service and a resize reached the
+   kernel; `htop` and a full scrollback pass are untested.
 2. On the phone, the `claude` preset starts in `~/Developer/Sjel` and accepts a prompt. After the
-   phone is locked for 2 minutes, reopening the app reattaches and replays the missed output.
-3. The Mac and the phone attached to one terminal show the same output.
-4. A request with the agent token to each terminal route answers 401 (test).
+   phone is locked for 2 minutes, reopening the app reattaches and replays the missed output. Open:
+   no client exists yet.
+3. The Mac and the phone attached to one terminal show the same output. Open: no client exists
+   yet.
+4. A request with the agent token to each terminal route answers 401 (test). Met, for every route
+   in the manifest.
 5. `DELETE` ends the process group, and the audit file holds a start and an end line with no
-   input or output.
+   input or output. Met.
 
 ## 7. Live validation
 

@@ -58,7 +58,7 @@ was started in, `~/Developer/Sjel` by default, and its conversation is filed und
 
 ## Routes
 
-Every route is under `/api/agent/sessions`; the shell proxies the capability as `/agent/…`.
+Every session route is under `/api/agent/sessions`; the shell proxies the capability as `/agent/…`.
 
 | Route | Purpose |
 |---|---|
@@ -71,6 +71,9 @@ Every route is under `/api/agent/sessions`; the shell proxies the capability as 
 | `POST /api/agent/sessions/{id}/approve` | `approval_id`, `allow`, `scope` = `once` or `session` |
 | `POST /api/agent/sessions/{id}/steer` | A message for the next model request |
 | `POST /api/agent/sessions/{id}/stop` | Ends the turn and keeps the conversation |
+
+A terminal is a separate surface, under `/api/agent/terminals`, because it is a shell rather than
+a run of the loop. See [Terminals](#terminals).
 
 One event per frame, because a server-sent event carries one `data:` line and batching JSON
 objects into one would be cut at the first newline by every client that reads the protocol.
@@ -90,6 +93,47 @@ gets `truncated` with the oldest retained `first_seq` when its cursor falls behi
 session-wide grant is keyed by tool **and arguments**, so allowing `cargo test` does not allow
 `cargo publish`.
 
+## Terminals
+
+A real pty on this Mac, so Claude Code, Codex, Pi or any other CLI agent runs here and is driven
+from the phone. The transport is the session stream's: JSON requests, and Server-Sent Events for
+output, signed by the paired device.
+
+| Route | Body or query | Answer |
+|---|---|---|
+| `POST /api/agent/terminals` | `{preset, cwd, cols, rows}` | `{id}` |
+| `GET /api/agent/terminals` | | one row per terminal: `id, preset, title, cwd, started_at, last_output_at, alive, exit_code, clients` |
+| `GET /api/agent/terminals/{id}/stream?from=<offset>` | | events `output` `{offset, data}`, `truncated` `{first_offset}`, `exit` `{code, signal}` |
+| `POST /api/agent/terminals/{id}/input` | `{data}`: base64, at most 64 KiB | `204` |
+| `POST /api/agent/terminals/{id}/resize` | `{cols, rows}` | `204`; the last resize wins |
+| `DELETE /api/agent/terminals/{id}` | | `204` after SIGHUP to the process group, SIGKILL after 5 s |
+
+- **Presets** come from `[terminal.presets]` in `<overlay>/config/agent.toml`, where the value is
+the command line. Absent, the five are `shell` (the login shell), `claude`, `codex`, `pi` and
+`sjel-agent`. Every preset except `shell` runs inside `$SHELL -l -c "<command>"`, so `PATH`
+matches an interactive terminal.
+- **Environment** is an allowlist: `HOME`, `USER`, `LOGNAME`, `PATH`, `LANG`, `LC_ALL`, `TMPDIR`,
+`TZ`, `SHELL`, `SSH_AUTH_SOCK`, plus `TERM=xterm-256color` and `COLORTERM=truecolor`. The builder
+inherits the whole process environment by default, and the capability's carries the overlay root
+and the agent's tokens, so it is cleared first.
+- **Scrollback** is a 2 MiB ring of raw output per terminal, with a byte offset on every frame. A
+reader resumes from its last offset; an offset older than the ring gets one `truncated` frame with
+the oldest offset still held, and the stream stops there, so a client cannot keep drawing on a
+grid it never cleared.
+- **Ending.** A `DELETE` signals the session's process group with SIGHUP, waits up to five seconds,
+then SIGKILLs the group. A terminal with no client attached and no output for twelve hours is
+closed the same way. At most eight are alive at once.
+- **The audit** is one line per start and per end in `<overlay>/data/agent/terminals.jsonl`:
+`{at, id, preset, cwd, client, event, exit_code}`. No input and no output is recorded.
+
+### Why an agent token cannot reach a terminal
+
+A keystroke is a command, so there is no argument for the policy to classify and no card a human
+could read first. The gate therefore refuses the agent token on every terminal route — 401, as if
+the token were unknown here (`AgentRoutes::closed`, `libs/sjel-server/src/agent_policy.rs`) — and
+`every_terminal_route_is_closed_to_an_agent_token` reads the manifest rather than restating the
+list, so a terminal route added without closing it fails the test instead of opening a shell.
+
 ## Run
 
 `service.toml` declares port 8108 and `target/release/agent-server`. `sjel capability start agent`
@@ -105,12 +149,19 @@ approval card, including `write` and `edit` diffs. The docked desktop seat keeps
 after the finder closes. The paired iPhone can create or select sessions, prompt or steer, follow
 and resume streams, inspect and answer approvals, and stop runs through its signed device client.
 
-The join is not tested: each part has its own tests, and a run has never been driven end to end
-through the capability. `docs/plans/agent.md` (Live validation) lists what to do in which
-order, and what a session picking it up needs to know first.
+The terminal exists on the server side only: pty sessions, the routes, the ring, the resize, the
+group kill and the audit are built and tested (`src/terminal.rs`), and a Mac shell was driven
+through them end to end. No client draws one yet — `apps/gpui/core/src/terminal.rs` (the wire
+client) and `apps/gpui/ui/src/terminal.rs` (the view, `alacritty_terminal` for the grid) are the
+next step in `docs/plans/agent.md` §6.
+
+The join between the agent UI and the capability is not tested: each part has its own tests, and a
+run has never been driven end to end through the capability. `docs/plans/agent.md` (Live
+validation) lists what to do in which order, and what a session picking it up needs to know first.
 
 ## What is not built
 
+- **A terminal client.** The Mac view and the phone view, and the Face ID gate before reattaching.
 - **Live integration validation.** Work Package 22 still needs a real desktop run and paired-phone
   checks for start, follow, reconnect, transcript recovery, approval from both clients, deny, stop,
   and re-pair. A host-target compile is not evidence that the phone flow works on-device.

@@ -2945,6 +2945,10 @@
       "verdict": "reject"
     },
     {
+      "name": "portable-pty",
+      "verdict": "adopt"
+    },
+    {
       "name": "postgres",
       "verdict": "reject"
     },

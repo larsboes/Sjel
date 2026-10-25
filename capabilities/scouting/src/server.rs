@@ -148,6 +148,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
     sjel_server::agent_policy::AgentRoutes {
         confirm: &[],
         get_writes: &[("GET", "/discover")],
+        closed: &[],
     };
 
 async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {

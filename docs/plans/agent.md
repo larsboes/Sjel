@@ -178,13 +178,12 @@ Steps:
 1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below. Built
    (`833c571d`): `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in
    `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
-   left from this step is the client's half: nothing draws a terminal yet.
+   left from this step: nothing.
 2. **One terminal view for Mac and phone**, specified below. Built for the Mac: `⌘K › Terminal`
    or `sjel://terminal` opens the newest live terminal — or a login shell — in the right edge
-   (`Seat::Terminal`), and the view wires keys, the wheel, resize and the End button. Open on the
-   phone: it reaches the Mac through `DeviceClient`, and the terminal's client is written against
-   `Shell`, so the seat says so instead of opening a shell it cannot follow. Also open: the Face ID
-   gate before a reattach (no `LocalAuthentication` binding exists in `ios/host` yet).
+   (`Seat::Terminal`), and the view wires keys, the wheel, resize and the End button. Built for
+   the phone: the same seat opens the same terminal through `DeviceClient`, behind Face ID. Not
+   tried on a paired phone yet.
 3. **Fallback.** If the native terminal does not work, use an SSH path instead: Tailscale SSH or
    macOS Remote Login reachable only over the tailnet, tmux on the Mac so a session outlives the
    connection, and [Blink Shell](https://github.com/blinksh/blink) (GPL-3.0) on the phone with a
@@ -258,8 +257,9 @@ to interactive keystrokes, so access is the control.
 
 ### Client
 
-- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Built: the list row, open, the
-  stream with a resume offset, input, resize, close, and [`Position`], which is what stops a
+- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Built: `Host` over the Mac's
+  shell or the phone's `DeviceClient`, the list row, open, attach-or-open, the stream with a
+  resume offset, input, resize, close, and [`Position`], which is what stops a
   replayed frame from being drawn twice and what moves the reader to `first_offset` after
   `truncated`.
 - `apps/gpui/ui/src/terminal.rs`: the view. Built: `alacritty_terminal` 0.26 (Apache-2.0, the
@@ -267,20 +267,16 @@ to interactive keystrokes, so access is the control.
   it does not do) parses the stream into a grid, and GPUI draws it as runs of cells that share a
   look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
   key row can share; the wheel moves through the parser's history; the cursor is the inverted
-  cell. Not built: nothing mounts the view yet.
+  cell.
 - Mac: `⌘K › Terminal` or `sjel://terminal` opens the right edge on `Seat::Terminal`, and ends a
   finished shell by offering a new one rather than a dead grid. Built.
-- Phone, the step that is next: the terminal's client is written against `Shell`
-  (`apps/gpui/core/src/terminal.rs`), and the phone reaches the Mac through `DeviceClient`. Two
-  facts from reading `apps/gpui/core/src/device.rs` decide the shape: it already streams
-  (`streaming_get`, which the agent seat uses for its event stream, so `next_frame` and the
-  `Update` mapping are reusable as they stand), and it has no `DELETE`, so ending a terminal from
-  the phone needs either that method or a `POST …/close` route. Then the phone's seat draws
-  `TerminalView` with `key_row`, which exists.
-- Phone: the Agent tab lists agent sessions and terminals, and a key row above the keyboard carries
-  Esc, Tab, arrows, `|`, `~`, `/`, Return and Ctrl-C. The row is built (`TerminalView::key_row`,
-  and `the_touch_key_row_sends_what_a_keyboard_would` covers its bytes); the phone's client is not.
-  Selection copies to the clipboard and pinch changes the font size: not built.
+- Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
+  passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
+  The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits
+  above the grid, and a tap on the grid raises the software keyboard. Entering the background
+  drops the view and the unlock, so a reattach asks again. Built and linked for the simulator.
+  Open: a preset and directory picker (the seat opens `shell` only), the Agent tab's terminal
+  list, selection to the clipboard, and pinch to change the font size.
 
 ### Done when
 
@@ -289,9 +285,9 @@ to interactive keystrokes, so access is the control.
    kernel; `htop` and a full scrollback pass are untested.
 2. On the phone, the `claude` preset starts in `~/Developer/Sjel` and accepts a prompt. After the
    phone is locked for 2 minutes, reopening the app reattaches and replays the missed output. Open:
-   the phone's client is not written; the Mac's half is.
-3. The Mac and the phone attached to one terminal show the same output. Open: only the Mac attaches
-   today, so this has not been tried with two.
+   the phone opens `shell` only, and nothing has run on a paired phone yet.
+3. The Mac and the phone attached to one terminal show the same output. Open: both clients can
+   attach, but this has not been tried with two.
 4. A request with the agent token to each terminal route answers 401 (test). Met, for every route
    in the manifest.
 5. `DELETE` ends the process group, and the audit file holds a start and an end line with no

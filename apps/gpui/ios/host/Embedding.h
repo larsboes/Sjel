@@ -40,3 +40,7 @@ void sjel_ios_notifications_state(const char *json);
 void sjel_ios_notification_opened(const char *json);
 void sjel_ios_fare_alerts(const char *json);
 void sjel_ios_became_active(void);
+// ios/src/lib.rs: the scene entered the background, and the answer to the Face ID ask that
+// `sjel_ios_unlock` (host/App.swift) starts before a terminal opens.
+void sjel_ios_entered_background(void);
+void sjel_ios_unlocked(bool ok);

@@ -40,6 +40,8 @@ targets:
           - _sjel._tcp
         # The camera scans a pairing code and captures room layouts with RoomPlan.
         NSCameraUsageDescription: Sjel scans pairing codes and captures room layouts.
+        # Face ID confirms the person before a terminal on the Mac opens.
+        NSFaceIDUsageDescription: Sjel confirms it is you before it opens a terminal on your Mac.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

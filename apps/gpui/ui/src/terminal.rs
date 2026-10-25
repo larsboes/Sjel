@@ -23,8 +23,8 @@
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
-    div, px, rgb, rgba, AnyElement, Context, FocusHandle, FontWeight, KeyDownEvent, Keystroke,
-    MouseButton, Render, ScrollDelta, ScrollWheelEvent, SharedString, Window,
+    div, px, rgb, rgba, AnyElement, Context, EventEmitter, FocusHandle, FontWeight, KeyDownEvent,
+    Keystroke, MouseButton, Render, ScrollDelta, ScrollWheelEvent, SharedString, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
@@ -400,6 +400,12 @@ fn control_bytes(key: &str) -> Option<Vec<u8>> {
     Some(vec![byte])
 }
 
+/// What the view tells its owner. A tap on the grid of a touch view asks for the software
+/// keyboard, which belongs to the platform and not to this crate.
+pub enum TerminalEvent {
+    Editing(bool),
+}
+
 /// What a request says when the runtime dropped it before the Mac answered.
 const UNANSWERED: &str = "The Mac did not answer.";
 
@@ -414,7 +420,11 @@ pub struct TerminalView {
     problem: Option<SharedString>,
     palette: Palette,
     closing: bool,
+    /// A phone's view: the key row sits above the grid, and a tap asks for the keyboard.
+    touch: bool,
 }
+
+impl EventEmitter<TerminalEvent> for TerminalView {}
 
 impl TerminalView {
     /// A view of a terminal the capability already holds, attached from byte `from`.
@@ -438,8 +448,15 @@ impl TerminalView {
             problem: None,
             palette,
             closing: false,
+            touch: false,
             peer,
         }
+    }
+
+    /// The same view for a touch screen.
+    pub fn touch(mut self) -> Self {
+        self.touch = true;
+        self
     }
 
     pub fn peer(&self) -> &Peer {
@@ -732,6 +749,7 @@ impl Render for TerminalView {
         let line_height = px(FONT_SIZE * LINE_HEIGHT);
         let lines = self.screen.lines();
         let header = self.header(palette, cx);
+        let keys = self.touch.then(|| self.key_row(palette, cx));
 
         div()
             .size_full()
@@ -742,6 +760,7 @@ impl Render for TerminalView {
             .bg(rgba(palette.panel()))
             .text_color(rgb(palette.text))
             .child(header)
+            .children(keys)
             .child(
                 div()
                     .id("terminal-grid")
@@ -757,6 +776,9 @@ impl Render for TerminalView {
                         MouseButton::Left,
                         cx.listener(|view, _event, window, cx| {
                             window.focus(&view.focus, cx);
+                            if view.touch {
+                                cx.emit(TerminalEvent::Editing(true));
+                            }
                         }),
                     )
                     .on_key_down(cx.listener(|view, event: &KeyDownEvent, _window, cx| {

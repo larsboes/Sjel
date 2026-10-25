@@ -1,3 +1,4 @@
+import LocalAuthentication
 import UIKit
 
 // UIKit owns the window, the navigation bar and the safe areas. GPUI draws the content
@@ -35,6 +36,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         sjel_ios_became_active()
     }
     func sceneWillResignActive(_ scene: UIScene) { gpui_ios_will_resign_active(nil) }
+    // A Face ID sheet only resigns active; entering the background ends the session it unlocked.
+    func sceneDidEnterBackground(_ scene: UIScene) { sjel_ios_entered_background() }
+}
+
+/// `ios/src/lib.rs` asks for Face ID, or the passcode as its fallback, before a terminal on the
+/// Mac opens or reattaches. The answer goes back on the main queue.
+@_cdecl("sjel_ios_unlock")
+public func sjelIOSUnlock() {
+    LAContext().evaluatePolicy(.deviceOwnerAuthentication,
+                               localizedReason: "Open a terminal on your Mac.") { ok, _ in
+        DispatchQueue.main.async { sjel_ios_unlocked(ok) }
+    }
 }
 
 final class SjelController: UIViewController {

@@ -34,6 +34,7 @@ use sjel_gpui_core::mirror::{self, Mirror};
 use sjel_gpui_core::notify as reminders;
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
+use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
@@ -41,6 +42,7 @@ use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 use sjel_gpui_ui::soundscape::Soundscape;
+use sjel_gpui_ui::terminal::{TerminalEvent, TerminalView};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, NotifyPrefs,
@@ -55,6 +57,11 @@ const HEALTH: &str = "/api/sjel-status/health";
 /// How often a waiting join asks whether the owner decided. A request expires after ten minutes
 /// (`capabilities/devices/README.md`), so the wait ends there at the latest.
 const JOIN_POLL: Duration = Duration::from_secs(2);
+/// The pty size the phone asks for: the Mac edge's 48 columns, and the rows left above the
+/// software keyboard.
+// ponytail: fixed size; measure the grid and resize when the keyboard opens if 28 rows is wrong.
+const TERMINAL_COLS: usize = 48;
+const TERMINAL_ROWS: usize = 28;
 #[cfg(target_os = "ios")]
 const LOCAL_NETWORK_DENIED: &str =
     "Sjel may not use the local network. Allow it in Settings, then reopen the app.";
@@ -130,6 +137,12 @@ enum Event {
     /// running, so this is the moment to re-read the replica and re-schedule.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     Foreground,
+    /// The app went to the background. The next terminal open asks for Face ID again.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    Background,
+    /// The answer to the Face ID ask before a terminal opens (`host/App.swift`).
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    Unlocked(bool),
 }
 
 #[derive(Clone, Copy)]
@@ -203,7 +216,19 @@ unsafe extern "C" {
     fn sjel_ios_load_roomplan_status();
     fn sjel_ios_load_roomplan_upload();
     fn sjel_ios_load_roomplan_archive();
+    // Face ID before a terminal on the Mac opens; the answer is `sjel_ios_unlocked`.
+    fn sjel_ios_unlock();
 }
+
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+fn unlock() {
+    // SAFETY: no arguments; the host answers on the main queue through `sjel_ios_unlocked`.
+    unsafe { sjel_ios_unlock() };
+}
+
+#[cfg(not(target_os = "ios"))]
+fn unlock() {}
 
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)]
@@ -352,6 +377,13 @@ pub struct Capabilities {
     agent_input: Option<(gpui::Entity<InputState>, gpui::Subscription)>,
     agent_busy: bool,
     agent_text_streaming: bool,
+    /// The terminal seat, kept while the app stays in the foreground: closing the edge leaves the
+    /// stream attached. Going to the background drops it, so a reattach asks for Face ID.
+    terminal: Option<(gpui::Entity<TerminalView>, gpui::Subscription)>,
+    /// Face ID confirmed this foreground session (`docs/plans/agent.md` §6, Security).
+    terminal_unlocked: bool,
+    /// Why no terminal is showing, in the words the empty seat carries.
+    terminal_note: Option<SharedString>,
     /// Shared Interior scan history and review, with local captures joined to Mac revisions.
     interior: gpui::Entity<RoomPlanHistory>,
     /// The People and Places registers over the same copy (`sjel_gpui_ui::people`). Read-only:
@@ -949,6 +981,23 @@ impl Capabilities {
                             }
                         }
                         Event::NotifyOpen(link) => view.open_link(&link, cx),
+                        Event::Background => {
+                            view.terminal_unlocked = false;
+                            view.terminal = None;
+                        }
+                        Event::Unlocked(ok) => {
+                            view.terminal_unlocked = ok;
+                            if !ok {
+                                view.terminal_note = Some(
+                                    "Face ID did not confirm. Close and reopen the edge to try again."
+                                        .into(),
+                                );
+                            } else if view.sidebar.is_open()
+                                && view.sidebar.seat() == Seat::Terminal
+                            {
+                                view.open_terminal(cx);
+                            }
+                        }
                         Event::Foreground => {
                             load_roomplan_archive();
                             view.rebuild_reminders(cx);
@@ -989,6 +1038,9 @@ impl Capabilities {
             agent_input: None,
             agent_busy: false,
             agent_text_streaming: false,
+            terminal: None,
+            terminal_unlocked: false,
+            terminal_note: None,
             synced: None,
             rows: Vec::new(),
             found: Vec::new(),
@@ -1083,7 +1135,83 @@ impl Capabilities {
             self.agent_sessions_loading = true;
             self.refresh_agent_sessions();
         }
+        if seat == Seat::Terminal {
+            if self.terminal_unlocked {
+                self.open_terminal(cx);
+            } else if self.client.is_some() {
+                self.terminal_note = Some("Confirm with Face ID to open the terminal.".into());
+                unlock();
+            }
+        }
         cx.notify();
+    }
+
+    /// The newest live terminal on the Mac, or a new login shell, in the edge.
+    fn open_terminal(&mut self, cx: &mut Context<Self>) {
+        if self
+            .terminal
+            .as_ref()
+            .is_some_and(|(view, _)| view.read(cx).peer().alive)
+        {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        self.terminal_note = Some("Opening a terminal on the Mac…".into());
+        let host = Host::Device(client);
+        let opener = host.clone();
+        let palette = self.palette();
+        let work = shell::run(async move {
+            opener
+                .attach_or_open(TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
+                .await
+        });
+        cx.spawn(async move |weak, cx| {
+            let opened = work
+                .await
+                .unwrap_or_else(|| Err("The Mac did not answer.".into()));
+            let _ = weak.update(cx, |view, cx| {
+                match opened {
+                    Ok(peer) => {
+                        let terminal = cx.new(|cx| {
+                            TerminalView::new(
+                                peer,
+                                host,
+                                0,
+                                TERMINAL_COLS,
+                                TERMINAL_ROWS,
+                                palette,
+                                cx,
+                            )
+                            .touch()
+                        });
+                        terminal.update(cx, |terminal, cx| terminal.attach(cx));
+                        let subscription = cx.subscribe(&terminal, |_, _, event, _| match event {
+                            TerminalEvent::Editing(open) => keyboard(*open),
+                        });
+                        view.terminal = Some((terminal, subscription));
+                        view.terminal_note = None;
+                    }
+                    Err(why) => {
+                        view.terminal_note =
+                            Some(format!("The terminal did not open: {why}").into())
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn palette(&self) -> Palette {
+        let is_dark = self.appearance.theme_mode.is_dark(false);
+        let base = if is_dark {
+            Palette::dark()
+        } else {
+            Palette::light()
+        };
+        self.appearance.apply_to_palette(base, is_dark)
     }
 
     fn refresh_agent_sessions(&self) {
@@ -1385,6 +1513,9 @@ impl Capabilities {
     /// Puts the edge away, and stops the sound with it: a panel that is not on screen is not a thing
     /// that should still be playing in a pocket.
     fn close_edge(&mut self, cx: &mut Context<Self>) {
+        if self.sidebar.seat() == Seat::Terminal {
+            keyboard(false);
+        }
         self.sidebar.close();
         self.soundscape.update(cx, |drawer, cx| drawer.pause(cx));
         cx.notify();
@@ -3122,16 +3253,23 @@ impl Render for Capabilities {
                     Seat::Soundscape => self.soundscape.clone().into_any_element(),
                     Seat::Activity => self.activity_panel(palette),
                     Seat::Agent => self.agent_panel(palette, window, cx),
-                    // The view and the wire exist (`sjel_gpui_ui::terminal`), but the phone reaches
-                    // the Mac through `DeviceClient`, and the terminal's client is written against
-                    // `Shell`. Until that second client exists this seat says so instead of opening
-                    // a shell it cannot follow.
-                    Seat::Terminal => div()
-                        .p_4()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child("A terminal on the Mac opens in the Mac's window today.")
-                        .into_any_element(),
+                    Seat::Terminal => match (&self.terminal, self.client.is_some()) {
+                        (Some((terminal, _)), _) if self.terminal_unlocked => {
+                            terminal.clone().into_any_element()
+                        }
+                        (_, paired) => div()
+                            .p_4()
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child(match (&self.terminal_note, paired) {
+                                (_, false) => SharedString::from(
+                                    "Pair with the Mac in Settings to open a terminal on it.",
+                                ),
+                                (Some(note), true) => note.clone(),
+                                (None, true) => "Opening a terminal on the Mac…".into(),
+                            })
+                            .into_any_element(),
+                    },
                 };
                 let on_seat = {
                     let entity = entity.clone();
@@ -3331,6 +3469,23 @@ pub unsafe extern "C" fn sjel_ios_roomplan_archive(text: *const std::ffi::c_char
 #[unsafe(no_mangle)]
 pub extern "C" fn sjel_ios_became_active() {
     announce(Event::Foreground);
+}
+
+/// Called by `host/App.swift` when the scene enters the background. A Face ID sheet only resigns
+/// active, so this is the edge that ends a foreground session.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_entered_background() {
+    announce(Event::Background);
+}
+
+/// Called by `host/App.swift` with the answer to `sjel_ios_unlock`, on the main queue.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_unlocked(ok: bool) {
+    announce(Event::Unlocked(ok));
 }
 
 /// Called by `host/App.swift` before `gpui_ios_run_demo`: registers what the GPUI window shows.

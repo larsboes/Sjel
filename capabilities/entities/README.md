@@ -22,7 +22,12 @@ Q117 ruled the shape: a typed core per kind, plus fields the operator declares.
 - **Dated facts** place an entity somewhere. `home_base` holds from `valid_from` on, and a
   move is a new fact, so the old home keeps its dates. `away` holds from `valid_from` to
   `valid_to`, and wins over the home base on the days it covers. `GET /api/located?day=`
-  answers where each person is on a day.
+  answers where each person is on a day. `GET /api/home?day=` answers the operator's home: the
+  `self` entity's `home_base` on that day, which an `away` fact does not change. Calendar reads
+  it to decide what is a trip.
+- **The people registry** withholds words that describe a person rather than name them: words
+  after `aus`, `from`, `in`, `bei`, `at` or `@`, words in brackets, and known places (a fact's
+  city or a `place` entity's name). A city in the registry redacts that city in every mail.
 - **External ids** link an entity to its id in another system, so a sync updates the
   entity instead of adding a second one.
 

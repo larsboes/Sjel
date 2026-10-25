@@ -132,6 +132,12 @@ const ROUTES: &[route_manifest::Route] = &[
          else the home base that holds. With coordinates and the sleeping option, for the \
          dashboard's per-leg join. C2: names; local callers only.",
     ),
+    route_manifest::get(
+        "GET",
+        "/api/home",
+        "The operator's home base on ?day=YYYY-MM-DD (default today): the `self` entity's \
+         home_base fact that holds that day, or null. Away periods do not change it.",
+    ),
 ];
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -577,6 +583,34 @@ async fn located(State(state): State<Arc<AppState>>, Query(q): Query<DayQuery>) 
     Ok(Json(json!({ "day": day, "located": located })))
 }
 
+async fn home(State(state): State<Arc<AppState>>, Query(q): Query<DayQuery>) -> Reply {
+    let day = q.day.unwrap_or_else(civil_date::today);
+    if !entities::model::is_day(&day) {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": format!("{day:?} is not a YYYY-MM-DD date") }),
+        ));
+    }
+    let selves = blocking(&state, |s| s.store.list(Some("self"), None)).await?;
+    let home = selves.iter().find_map(|me| {
+        let bases: Vec<_> = me
+            .facts
+            .iter()
+            .filter(|fact| fact.predicate == "home_base")
+            .cloned()
+            .collect();
+        located_on(&bases, &day).map(|fact| {
+            json!({
+                "place": fact.place,
+                "latitude": fact.latitude,
+                "longitude": fact.longitude,
+                "valid_from": fact.valid_from,
+            })
+        })
+    });
+    Ok(Json(json!({ "day": day, "home": home })))
+}
+
 fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -591,6 +625,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/entities/{id}/facts", post(add_fact))
         .route("/api/entities/{id}/facts/{fact_id}", delete(delete_fact))
         .route("/api/located", get(located))
+        .route("/api/home", get(home))
         .route("/api/entities/{id}/sources", get(entity_sources))
         .route("/api/duplicates", get(duplicates))
         .route("/api/resolve", post(resolve))

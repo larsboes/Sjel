@@ -735,6 +735,26 @@ mod cluster_tests {
         assert!(out.unclustered[0].reason.contains("no place"));
     }
 
+    /// A booked outward and return train nine days apart: the return arrives
+    /// home, but leaves from the trip's city, so it closes that trip.
+    #[test]
+    fn a_return_ticket_home_closes_the_trip_it_leaves() {
+        let leg = |id: &str, city: &str, from: &str, day: &str| {
+            let mut entry = event(id, city, day, day, Commitment::Possible);
+            entry.payload = json!({ "city": city, "from_city": from });
+            entry
+        };
+        let entries = [
+            leg("out", "Berlin", "Example City", "2026-10-30"),
+            leg("back", "Example City", "Berlin", "2026-11-08"),
+        ];
+        let out = cluster_trips(&entries, 5, Some("Example City")).unwrap();
+        assert_eq!(out.drafts.len(), 1, "{:?}", out.unclustered);
+        assert_eq!(out.drafts[0].place, "Berlin");
+        assert_eq!(out.drafts[0].starts_on, "2026-10-30");
+        assert_eq!(out.drafts[0].ends_before, "2026-11-09");
+    }
+
     #[test]
     fn home_is_not_a_trip_and_says_so() {
         let entries = [event(

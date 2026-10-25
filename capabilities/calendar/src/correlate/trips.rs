@@ -56,6 +56,20 @@ pub(super) fn place_of(entry: &Entry) -> Option<String> {
     city.or(fallback).map(|place| place.to_string())
 }
 
+/// The departure city of a ticket leg, as Comms records it in `payload.from_city`.
+pub(super) fn from_city_of(entry: &Entry) -> Option<&str> {
+    entry
+        .payload
+        .get("from_city")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|city| !city.is_empty())
+}
+
+/// The longest stay a booked outward and return leg still bracket as one trip.
+/// ponytail: fixed bound; make it a query parameter if month-long stays appear.
+const TICKET_GAP_DAYS: i64 = 30;
+
 /// Is this place the city the operator lives in, however the source spelled it?
 ///
 /// `home` is a bare city. What sources actually write into `location`
@@ -158,6 +172,13 @@ pub fn cluster_trips(
                 // different: a forgiving home test can only ever exclude a day
                 // the operator was at home anyway, while a forgiving grouping
                 // key would merge two cities into one journey.
+                // A ticket home from somewhere else ends the trip there.
+                let place = match (home, from_city_of(entry)) {
+                    (Some(home), Some(from)) if is_home(&place, home) && !is_home(from, home) => {
+                        from.to_string()
+                    }
+                    _ => place,
+                };
                 if home.is_some_and(|home| is_home(&place, home)) {
                     unclustered.push(Unclustered {
                         entry_id: entry.id.clone(),
@@ -179,7 +200,14 @@ pub fn cluster_trips(
 
         for entry in members {
             let (start, end) = entry_days(entry)?;
-            let split = run_end.is_some_and(|previous_end| start - previous_end > max_gap_days);
+            let ticket = from_city_of(entry).is_some()
+                || run.last().is_some_and(|last| from_city_of(last).is_some());
+            let gap = if ticket {
+                max_gap_days.max(TICKET_GAP_DAYS)
+            } else {
+                max_gap_days
+            };
+            let split = run_end.is_some_and(|previous_end| start - previous_end > gap);
             if split {
                 push_trip_run(&mut drafts, &mut unclustered, &place, &run)?;
                 run.clear();

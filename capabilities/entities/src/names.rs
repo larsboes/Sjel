@@ -42,6 +42,11 @@ const STOPLIST: &[&str] = &[
     "Events", "Support", "Arbeit", "Bar", "Bikes",
 ];
 
+/// Particles after which a contact name describes where someone is from or works, not who
+/// they are: "Max aus Bonn", "Anna from Berlin", "Tom bei SAP". The words after one are
+/// withheld, because a city in the registry redacts that city in every mail.
+const QUALIFIERS: &[&str] = &["aus", "from", "in", "bei", "at", "@"];
+
 const MIN_TOKEN: usize = 3;
 
 #[derive(Debug, Default, Serialize, PartialEq)]
@@ -74,6 +79,12 @@ fn looks_like_a_person(name: &str) -> Result<(), &'static str> {
 
 /// Build the registry from `(name, aliases)` pairs.
 pub fn build(people: &[(String, Vec<String>)]) -> Registry {
+    build_with_places(people, &BTreeSet::new())
+}
+
+/// [`build`], withholding every token that is a known place (lowercase). "Bonn" at the end of a
+/// contact name is where that contact lives; in the registry it redacted Bonn in every mail.
+pub fn build_with_places(people: &[(String, Vec<String>)], places: &BTreeSet<String>) -> Registry {
     let mut tokens = BTreeSet::new();
     let mut withheld = BTreeSet::new();
     let mut registry = Registry::default();
@@ -86,10 +97,23 @@ pub fn build(people: &[(String, Vec<String>)]) -> Registry {
             continue;
         }
         registry.people += 1;
-        let candidates = name
-            .split_whitespace()
-            .map(str::to_string)
-            .chain(aliases.iter().cloned());
+        let mut qualified = false;
+        let mut in_brackets = false;
+        let mut name_tokens = Vec::new();
+        for word in name.split_whitespace() {
+            in_brackets |= word.starts_with('(');
+            if qualified || in_brackets {
+                let c = word.trim_matches(|ch: char| !ch.is_alphanumeric());
+                if c.chars().count() >= MIN_TOKEN {
+                    withheld.insert(c.to_string());
+                }
+            } else {
+                name_tokens.push(word.to_string());
+            }
+            qualified |= QUALIFIERS.iter().any(|q| q.eq_ignore_ascii_case(word));
+            in_brackets &= !word.ends_with(')');
+        }
+        let candidates = name_tokens.into_iter().chain(aliases.iter().cloned());
         for candidate in candidates {
             let c = candidate
                 .trim_matches(|ch: char| !ch.is_alphanumeric())
@@ -97,7 +121,9 @@ pub fn build(people: &[(String, Vec<String>)]) -> Registry {
             if c.chars().count() < MIN_TOKEN {
                 continue;
             }
-            if STOPLIST.iter().any(|s| s.eq_ignore_ascii_case(&c)) {
+            if STOPLIST.iter().any(|s| s.eq_ignore_ascii_case(&c))
+                || places.contains(&c.to_lowercase())
+            {
                 withheld.insert(c);
             } else {
                 tokens.insert(c);
@@ -112,6 +138,17 @@ pub fn build(people: &[(String, Vec<String>)]) -> Registry {
 /// Every person and the operator's own entity, with their `aliases`.
 pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
     let mut people = Vec::new();
+    let mut places = BTreeSet::new();
+    for entity in store.list(None, None)? {
+        if entity.kind == "place" {
+            places.insert(entity.name.trim().to_lowercase());
+        }
+        for fact in &entity.facts {
+            if let Some(city) = fact.place.split(',').next() {
+                places.insert(city.trim().to_lowercase());
+            }
+        }
+    }
     for kind in ["person", "self"] {
         for entity in store.list(Some(kind), None)? {
             let aliases = entity
@@ -128,7 +165,7 @@ pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
             people.push((entity.name, aliases));
         }
     }
-    Ok(build(&people))
+    Ok(build_with_places(&people, &places))
 }
 
 #[cfg(test)]
@@ -150,9 +187,28 @@ mod tests {
         assert!(
             r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string())
         );
+        assert!(!r.tokens.iter().any(|t| t == "Bonn"), "{:?}", r.tokens);
+        assert!(r.withheld.contains(&"Bonn".to_string()));
         // A real name typed in lowercase still redacts: a leak costs more than a wrong match.
         assert!(r.tokens.contains(&"eliah".to_string()));
         assert!(r.tokens.contains(&"Max".to_string()));
+    }
+
+    #[test]
+    fn a_bracketed_affiliation_is_not_part_of_the_name() {
+        let r = build(&[person("Erika (Uni Berlin) Tester", &[])]);
+        assert!(r.tokens.contains(&"Erika".to_string()));
+        assert!(r.tokens.contains(&"Tester".to_string()));
+        assert!(!r.tokens.iter().any(|t| t == "Berlin" || t == "Uni"));
+    }
+
+    #[test]
+    fn a_known_place_is_withheld_from_a_name() {
+        let places = BTreeSet::from(["bonn".to_string()]);
+        let r = build_with_places(&[person("Erika Mustermann Bonn", &[])], &places);
+        assert!(r.tokens.contains(&"Mustermann".to_string()));
+        assert!(!r.tokens.iter().any(|t| t == "Bonn"));
+        assert!(r.withheld.contains(&"Bonn".to_string()));
     }
 
     fn person(name: &str, aliases: &[&str]) -> (String, Vec<String>) {

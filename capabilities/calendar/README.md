@@ -548,7 +548,10 @@ being filtered out. `min_days` drops runs too short to be worth searching.
 
 Phase C's third piece — clustering two or more events by place and time proximity — is
 `correlate::cluster_trips`, served at `GET /api/trip-drafts?from&to`
-(`max_gap_days` defaults to 5, `home` falls back to `home_city` in the config).
+(`max_gap_days` defaults to 5). Without a `home` parameter, home is the `self` entity's
+`home_base` from `GET /api/home` in entities, then `home_city` in the config. A ticket leg
+from Comms carries `payload.from_city`. A leg that arrives home from another city closes the
+trip in that city, and ticket legs stay one trip across up to 30 days.
 A draft is recomputed per request rather than stored, because it is a function
 of entries that can all move. Turning one into a real `trips.plan` remains a
 deliberate act: Calendar calls Trips' public HTTP API and records the result in

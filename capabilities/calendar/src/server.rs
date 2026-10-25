@@ -1148,7 +1148,7 @@ async fn materialize_trip(
             .unwrap_or_else(|| format!("{} — {}", draft.place, draft.starts_on));
         let payload = json!({
             "title": title,
-            "origin": { "id": "", "name": config.home_city.clone().unwrap_or_default() },
+            "origin": { "id": "", "name": home_place(&config.home_city).unwrap_or_default() },
             "destinations": [{ "id": "", "name": draft.place }],
             "date_start": draft.starts_on,
             "date_end": date_end,
@@ -1190,6 +1190,28 @@ async fn materialize_trip(
     }
 }
 
+/// Where the operator lives today: the `self` entity's home base in entities, else the
+/// `home_city` this capability's config carries.
+fn home_place(config_home: &Option<String>) -> Option<String> {
+    let base = sjel_config::env_var("SJEL_ENTITIES_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:8097".to_string());
+    let url = format!("{}/api/home", base.trim_end_matches('/'));
+    let from_entities = sjel_http::client(
+        sjel_http::Purpose::new("calendar-home"),
+        std::time::Duration::from_secs(2),
+    )
+    .ok()
+    .and_then(|client| {
+        sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+            .send()
+            .ok()
+    })
+    .filter(|response| response.status().is_success())
+    .and_then(|response| response.json::<Value>().ok())
+    .and_then(|body| body["home"]["place"].as_str().map(str::to_string));
+    from_entities.or_else(|| config_home.clone())
+}
+
 #[derive(serde::Deserialize)]
 struct TripDraftsQuery {
     from: String,
@@ -1220,7 +1242,7 @@ async fn trip_drafts(
         if max_gap_days < 0 {
             return Err("max_gap_days cannot be negative".into());
         }
-        let home = query.home.clone().or(config_home);
+        let home = query.home.clone().or_else(|| home_place(&config_home));
         let entries = CalendarStore::open(&database_path)
             .and_then(|store| store.list_entries(&query.from, &query.to, &[]))
             .map_err(|error| error.to_string())?;

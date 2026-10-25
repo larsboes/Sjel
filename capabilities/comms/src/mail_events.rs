@@ -17,6 +17,8 @@ use crate::{
     summarize::{self, Outcome, Reach},
 };
 
+mod deutsche_bahn;
+
 const ANALYSIS_VERSION: &str = "local-mail-event-analysis-v2";
 const MAX_EVENTS: usize = 8;
 const REPLY_TOKENS: u32 = 700;
@@ -328,6 +330,65 @@ fn propose(cfg: &Config, item: &TriageItem, index: usize, event: &Event) -> Resu
     Ok(())
 }
 
+/// The events the local model finds in `body`, and whether the body was cut to fit.
+/// `Err` is the receipt's state and failure code.
+fn model_events(
+    runtime: &sjel_runtime::Status,
+    cfg: &Config,
+    role: Option<&sjel_inference::ResolvedRole>,
+    body: &str,
+) -> Result<(Vec<Event>, bool), (&'static str, &'static str)> {
+    let Some(role) = role else {
+        return Err(("failed", "local_model_unavailable"));
+    };
+    if let Err(reason) = role.runtime_admission_with(runtime) {
+        eprintln!("mail events: {reason}");
+        return Err(("deferred", "runtime_busy"));
+    }
+    let target = crate::digest::to_target(cfg, role, runtime);
+    // A rail or hotel confirmation runs past a 4,096-token light window, and refusing it
+    // dropped every Deutsche Bahn and Booking.com confirmation in the inbox. They put the
+    // itinerary at the top, so keep the head. Grounding still checks each quote against the
+    // full body, so the cut can lose an event but cannot invent a date.
+    let room = summarize::window_chars(REPLY_TOKENS, role.max_input_tokens.unwrap_or_default())
+        .saturating_sub(prompt("").chars().count());
+    if let Err(reason) =
+        crate::quiet::runtime_admission(runtime, role, prompt(body).chars().count(), REPLY_TOKENS)
+    {
+        eprintln!("mail events: {reason}");
+        return Err(("deferred", "runtime_busy"));
+    }
+    let request = prompt(&body.chars().take(room).collect::<String>());
+    if !summarize::fits_window(
+        request.chars().count(),
+        REPLY_TOKENS,
+        role.max_input_tokens.unwrap_or_default(),
+    ) {
+        return Err(("failed", "over_window"));
+    }
+    let truncated = body.chars().count() > room;
+    let answer = match summarize::ask_structured(
+        Some(&target),
+        &request,
+        REPLY_TOKENS,
+        Reach::LoopbackOnly,
+        &answer_schema(),
+    ) {
+        Outcome::Ok(answer) => answer,
+        outcome => {
+            eprintln!("mail events: local model {}", outcome.state());
+            let state = if outcome.retryable() || matches!(outcome, Outcome::PolicyDeferred(_)) {
+                "deferred"
+            } else {
+                "failed"
+            };
+            return Err((state, outcome.state()));
+        }
+    };
+    let events = parse_analysis(&answer).map_err(|_| ("failed", "invalid_output"))?;
+    Ok((events, truncated))
+}
+
 /// Analyze a bounded set of inbox threads. The caller controls whether the set
 /// came from an explicit sweep or the optional schedule.
 pub fn analyze_batch(runtime: &sjel_runtime::Status, cfg: &Config, ids: &[String]) -> ScanReport {
@@ -413,37 +474,10 @@ pub(crate) fn analyze_candidates(
         }
         return report;
     };
-    let Some(role) = cfg
+    let role = cfg
         .light_summarization_role()
-        .filter(|role| role.is_loopback())
-    else {
-        report.failed += candidates.len();
-        for (item, candidate) in candidates {
-            record_outcome(
-                &store,
-                &mut report,
-                &item.id,
-                candidate,
-                "failed",
-                Some("local_model_unavailable"),
-            );
-        }
-        return report;
-    };
+        .filter(|role| role.is_loopback());
     for (item, candidate) in candidates {
-        if let Err(reason) = role.runtime_admission_with(runtime) {
-            eprintln!("mail events: {reason}");
-            report.failed += 1;
-            record_outcome(
-                &store,
-                &mut report,
-                &item.id,
-                candidate,
-                "deferred",
-                Some("runtime_busy"),
-            );
-            continue;
-        }
         let body = match google::thread_body_text(&token, &item.id) {
             Ok(Some(body)) => body,
             _ => {
@@ -459,89 +493,15 @@ pub(crate) fn analyze_candidates(
                 continue;
             }
         };
-        let target = crate::digest::to_target(cfg, &role, runtime);
-        // A rail or hotel confirmation runs past a 4,096-token light window, and refusing it
-        // dropped every Deutsche Bahn and Booking.com confirmation in the inbox. They put the
-        // itinerary at the top, so keep the head. Grounding below still checks each quote
-        // against the full body, so the cut can lose an event but cannot invent a date.
-        let room = summarize::window_chars(REPLY_TOKENS, role.max_input_tokens.unwrap_or_default())
-            .saturating_sub(prompt("").chars().count());
-        if let Err(reason) = crate::quiet::runtime_admission(
-            runtime,
-            &role,
-            prompt(&body).chars().count(),
-            REPLY_TOKENS,
-        ) {
-            eprintln!("mail events: {reason}");
-            report.failed += 1;
-            record_outcome(
-                &store,
-                &mut report,
-                &item.id,
-                candidate,
-                "deferred",
-                Some("runtime_busy"),
-            );
-            continue;
-        }
-        let request = prompt(&body.chars().take(room).collect::<String>());
-        if !summarize::fits_window(
-            request.chars().count(),
-            REPLY_TOKENS,
-            role.max_input_tokens.unwrap_or_default(),
-        ) {
-            report.failed += 1;
-            record_outcome(
-                &store,
-                &mut report,
-                &item.id,
-                candidate,
-                "failed",
-                Some("over_window"),
-            );
-            continue;
-        }
-        let truncated = body.chars().count() > room;
-        let answer = match summarize::ask_structured(
-            Some(&target),
-            &request,
-            REPLY_TOKENS,
-            Reach::LoopbackOnly,
-            &answer_schema(),
-        ) {
-            Outcome::Ok(answer) => answer,
-            outcome => {
-                eprintln!("mail events: local model {}", outcome.state());
-                report.failed += 1;
-                let state = if outcome.retryable() || matches!(outcome, Outcome::PolicyDeferred(_))
-                {
-                    "deferred"
-                } else {
-                    "failed"
-                };
-                record_outcome(
-                    &store,
-                    &mut report,
-                    &item.id,
-                    candidate,
-                    state,
-                    Some(outcome.state()),
-                );
-                continue;
-            }
+        let read = match deutsche_bahn::legs(&body) {
+            Some(events) => Ok((events, false)),
+            None => model_events(runtime, cfg, role.as_ref(), &body),
         };
-        let events = match parse_analysis(&answer) {
-            Ok(events) => events,
-            Err(_) => {
+        let (events, truncated) = match read {
+            Ok(read) => read,
+            Err((state, code)) => {
                 report.failed += 1;
-                record_outcome(
-                    &store,
-                    &mut report,
-                    &item.id,
-                    candidate,
-                    "failed",
-                    Some("invalid_output"),
-                );
+                record_outcome(&store, &mut report, &item.id, candidate, state, Some(code));
                 continue;
             }
         };

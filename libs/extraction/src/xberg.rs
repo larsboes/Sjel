@@ -1,8 +1,8 @@
 //! Rung 1 of the ladder: PDFs that already carry a text layer.
 
-use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result};
+use crate::{Document, Extraction, ExtractionError, Extractor, InputClass, Result, cap};
 
-/// PDF, through [xberg](https://github.com/xberg-io/xberg) (`=1.0.5`).
+/// PDF, through [xberg](https://github.com/xberg-io/xberg) (`=1.3.6`).
 ///
 /// Registered for `Pdf` only. xberg reads HTML too and returns more text than
 /// `Builtin` on every URL in the recorded benchmark, but it is an extractor and
@@ -27,7 +27,7 @@ pub struct Xberg;
 
 impl Extractor for Xberg {
     fn name(&self) -> &'static str {
-        "xberg-1.0.5"
+        "xberg-1.3.6"
     }
 
     fn handles(&self, class: InputClass) -> bool {
@@ -59,10 +59,27 @@ impl Extractor for Xberg {
         // and text recovered from a scan is a different answer from text read
         // out of the file, for anything that later doubts the content.
         let producer: &'static str = match document.extraction_method {
-            Some(::xberg::ExtractionMethod::Ocr) => "xberg-1.0.5/ocr",
-            Some(::xberg::ExtractionMethod::Mixed) => "xberg-1.0.5/mixed",
+            Some(::xberg::ExtractionMethod::Ocr) => "xberg-1.3.6/ocr",
+            Some(::xberg::ExtractionMethod::Mixed) => "xberg-1.3.6/mixed",
             _ => self.name(),
         };
+
+        let mut remaining = crate::TEXT_CAP;
+        let pages = document
+            .pages
+            .unwrap_or_default()
+            .into_iter()
+            .map(|page| {
+                let text: String = page.content.chars().take(remaining).collect();
+                remaining = remaining.saturating_sub(text.chars().count());
+                crate::ExtractedPage {
+                    page_number: page.page_number,
+                    text,
+                    engine: producer.to_owned(),
+                    failure: None,
+                }
+            })
+            .collect();
 
         Ok(Extraction {
             title: document.metadata.title.filter(|t| !t.trim().is_empty()),
@@ -72,6 +89,7 @@ impl Extractor for Xberg {
             // xberg CLI itself and asks for both formats there.
             markdown: None,
             producer,
+            pages,
         })
     }
 }
@@ -100,7 +118,12 @@ fn extract_blocking(bytes: Vec<u8>, mime: &'static str) -> Result<::xberg::Extra
             .and_then(|runtime| {
                 runtime.block_on(async {
                     let input = ::xberg::ExtractInput::from_bytes(bytes, mime, None);
-                    ::xberg::extract(input, &::xberg::ExtractionConfig::default())
+                    let mut config = ::xberg::ExtractionConfig::default();
+                    config.pages = Some(::xberg::PageConfig {
+                        extract_pages: true,
+                        ..::xberg::PageConfig::default()
+                    });
+                    ::xberg::extract(input, &config)
                         .await
                         .map_err(|e| ExtractionError::Engine {
                             engine: "xberg",
@@ -137,7 +160,7 @@ mod tests {
             out.text
         );
         assert!(
-            out.producer.starts_with("xberg-1.0.5"),
+            out.producer.starts_with("xberg-1.3.6"),
             "producer must name the extractor: {}",
             out.producer
         );
@@ -157,7 +180,7 @@ mod tests {
         let error = Xberg
             .extract(&Document::html(b"<p>hi</p>"))
             .expect_err("xberg is registered for pdf only");
-        assert_eq!(error.to_string(), "xberg-1.0.5 does not read html input");
+        assert_eq!(error.to_string(), "xberg-1.3.6 does not read html input");
     }
 
     /// The smallest PDF that carries one line of extractable text.

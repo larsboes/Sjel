@@ -65,7 +65,7 @@ pub enum DecisionAction {
     ConfirmGroup { survivor_id: String },
     /// Keep the candidate separate from all other records.
     Dismiss,
-    /// Turn a part finding into a metadata-only page split of the named parent.
+    /// Turn a part finding into stored child PDFs for page ranges of the named parent.
     Split {
         parent_id: String,
         page_count: u32,

@@ -25,7 +25,7 @@
 use sjel_inference::ResolvedRole;
 
 use crate::vision::VisionOcr;
-use crate::{math, ocr_role, Document, Extraction, ExtractionError, Extractor, Result};
+use crate::{Document, Extraction, ExtractionError, Extractor, Result, math, ocr_role};
 
 /// Read a page that carries no text layer.
 ///
@@ -180,6 +180,7 @@ mod tests {
             text: text.to_string(),
             markdown: None,
             producer: crate::vision::ENGINE,
+            pages: Vec::new(),
         }
     }
 

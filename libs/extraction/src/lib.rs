@@ -54,7 +54,7 @@ pub use self::xberg::Xberg;
 
 mod builtin;
 pub use builtin::{
-    collapse_ws, decode_basic_entities, html_title, html_to_lines, looks_like_html, Builtin,
+    Builtin, collapse_ws, decode_basic_entities, html_title, html_to_lines, looks_like_html,
 };
 
 pub mod gate;
@@ -148,6 +148,21 @@ pub struct Extraction {
     /// while reporting success.
     pub markdown: Option<String>,
     pub producer: &'static str,
+    /// Text and provenance recorded for each page when the reader supports it.
+    pub pages: Vec<ExtractedPage>,
+}
+
+/// One page of locally extracted document text.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExtractedPage {
+    /// One-based source page number.
+    pub page_number: u32,
+    /// Extracted text for this source page.
+    pub text: String,
+    /// Reader used for this page, including local OCR when applicable.
+    pub engine: String,
+    /// Extraction failure for this page, if no text could be recovered.
+    pub failure: Option<String>,
 }
 
 /// What went wrong, at the granularity a ladder walker has to distinguish.

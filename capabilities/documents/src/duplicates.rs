@@ -48,7 +48,10 @@ pub struct Pair {
 /// Build the report from every record and the `(id, path)` source receipts.
 pub fn report(documents: &[Document], sources: &[(String, String)]) -> Report {
     let mut by_hash = BTreeMap::<&str, Vec<&Document>>::new();
-    for document in documents {
+    for document in documents
+        .iter()
+        .filter(|document| document.parent_id.is_none())
+    {
         by_hash.entry(&document.sha256).or_default().push(document);
     }
     let mut report = Report::default();
@@ -259,6 +262,9 @@ mod tests {
             extracted_title: None,
             extracted_text: Some(text.into()),
             extractor: None,
+            pages: Vec::new(),
+            parent_id: None,
+            page_range: None,
             suggested_category: None,
             suggestion_reason: None,
         }

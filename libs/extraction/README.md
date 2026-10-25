@@ -44,6 +44,10 @@ wins, one reader per class.
 | `Pdf` | `Xberg` | **Rung 1.** Feature-gated, see below. Last-resort quality by measurement, not by reputation — see its doc comment |
 | `Image` | `VisionOcr` | **Rung 2.** Apple Vision through `tools/visocr`, as a subprocess. macOS-only, and absent rather than erased where it is not |
 
+The local Vision reader tries upright pages first. If a page returns no text, it retries the three
+other orthogonal orientations, which covers scans captured sideways without adding a model or
+changing the source PDF.
+
 `Builtin` deliberately keeps HTML. xberg returns more text on every URL in the recorded
 benchmark and is still not the right reader for the class: it is an extractor and not a
 readability cleaner, so navigation and share widgets survive it. Swapping the HTML path is a

@@ -72,6 +72,7 @@ fn builtin(bytes: &[u8], file_name: &str) -> Result<Extraction, String> {
         text,
         markdown: None,
         producer: "builtin",
+        pages: Vec::new(),
     })
 }
 
@@ -139,6 +140,7 @@ fn xberg(
         text,
         markdown: Some(markdown),
         producer: "xberg",
+        pages: Vec::new(),
     })
 }
 

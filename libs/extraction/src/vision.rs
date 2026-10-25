@@ -40,7 +40,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result};
+use crate::{Document, Extraction, ExtractionError, Extractor, InputClass, Result, cap};
 
 /// What this rung records as `producer`, and what it calls itself in an error.
 pub const ENGINE: &str = "apple-vision";
@@ -131,6 +131,7 @@ fn read(doc: &Document<'_>) -> Result<Extraction> {
         // substitute.
         markdown: None,
         producer: ENGINE,
+        pages: Vec::new(),
     })
 }
 

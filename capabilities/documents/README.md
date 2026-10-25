@@ -10,7 +10,7 @@ Open **Documents** in Sjel's navigation, or use `sjel://documents` from the desk
 The operator must first have provisioned Sjel's shared inbound authentication with
 `tools/setup-inbound-auth.sh`. After adding this service, restart `documents` and `sjel-status`
 so the server loads the credential and the shell discovers its proxy route.
-The collection searches filenames and extracted titles and filters by status or category.
+The collection searches filenames and extracted text, filters by status/category/workflow stage, and groups by category, project, year, status, or workflow stage. Stages are **Needs analysis**, **Review split**, **Split into children**, **Review enrichment**, **Ready to file**, **Filed**, or **Archived**. They are derived from page evidence, child records, the newest category-proposal run, and filing state, so they cannot drift after reanalysis. The CLI exposes the same queue with `documents next`.
 Open a row to read the original PDF, or the extracted text of a PDF, Markdown, or text file.
 Other formats offer the original download. Office previews and Office text extraction are
 not implemented. The library keeps its last successful listing when a refresh fails.
@@ -20,18 +20,27 @@ record and filing decision. The reader's **Filing** controls set a category and 
 project label. Suggestions fill the category only when selected; **File document** commits
 the decision. **Archive** retains the original; filing the record again restores it.
 
-The dashboard owns presentation at `/documents`; the capability owns `/api/documents`.
-`proxy_api_only` keeps the page and API separate. The desktop destination currently opens
-this dashboard page; it is not a native GPUI reader. The older Tauri shell can read through
-its existing binary bridge; raw file uploads require the browser UI.
+GPUI owns the native Documents view and talks to the Documents capability API. CLI and GPUI
+use the same backend contracts for local analysis, page-range splits, search, and filing.
+
+Classification offers deterministic rules and an explicit **Ask local model** action. The model
+action sends a bounded excerpt only to the loopback `document_classification` inference role,
+validates its category and exact evidence quote, and stores the result as a proposal for operator
+review. It does not file the document. CLI equivalent: `documents suggest-model <id>`. A missing
+or unavailable local role leaves the document unchanged; hosted OCR and hosted classification
+are not used for this path.
 
 | Operator API | Result |
 | --- | --- |
-| `GET /api/documents` | Metadata only; `q` searches local extracted text, `status` filters, and `limit`/`offset` paginate. |
-| `GET /api/documents/{id}` | Metadata, locally extracted text, and source-separated proposal records with review history. |
-| `GET /api/documents/{id}/original` | Hash-verified bytes; PDF may be inline, all other formats download. `download=true` forces download. |
+| `GET /api/documents` | Metadata only, including a derived `workflow_stage`; `q` ranks local token-prefix matches across query words and returns matching page numbers; `status` filters and `limit`/`offset` paginate. |
+| `GET /api/documents/{id}` | Metadata, locally extracted text, page evidence, review-only split suggestions, child records, and source-separated proposal records with review history. |
+| `POST /api/documents/{id}/analyze` | Re-run local extraction and persist page text plus engine/failure provenance. Filing metadata and original bytes are preserved. |
+| `GET /api/documents/{id}/children` | List stored child PDFs with exact source page ranges. |
+| `POST /api/documents/{id}/split` | Store a standalone child PDF for each range in a complete, ordered partition. Repeating the same request is idempotent; a different partition is refused while children exist. |
+| `GET /api/documents/{id}/original` | Hash-verified bytes for this record, including a stored child PDF; PDF may be inline, all other formats download. `download=true` forces download. |
 | `POST /api/documents?filename=...` | Raw-byte upload, idempotent by bytes and filename; returns rule proposals separately from filing metadata. |
 | `POST /api/documents/{id}/proposals/regenerate` | Generate and append a fresh rule-proposal run, even when its output matches an earlier run. |
+| `POST /api/documents/{id}/proposals/model` | Run the configured loopback model on a bounded text excerpt; validate and append one proposal without filing. |
 | `POST /api/documents/{id}/proposals/{proposal_id}/review` | Append `accepted`, `rejected`, or `overridden` to proposal history; does not file. |
 | `PATCH /api/documents/{id}` | Operator-chosen `category` and optional `project`; marks the record filed. |
 | `DELETE /api/documents/{id}` | Archive the record without deleting bytes. |
@@ -41,9 +50,42 @@ tokens are not admitted. Document responses prohibit caching; originals cannot b
 without passing their digest check. Only a PDF with a matching file signature is served
 inline. Other bytes are attachments with MIME sniffing disabled. Names suggesting confidential
 material are refused before the upload body is read. Responses conservatively carry `c2` for
-local-only handling; the Documents API does not dispatch to a model.
+local-only handling. The explicit model-proposal route requires a loopback inference role and
+uses Sjel's runtime admission checks; cloud endpoints are refused.
 
-### Experimental CLM loopback adapter
+### Experimental CLM loopback adapter — trial closed, weights removed
+
+The CLM trial was closed on 2026-10-25 and its local checkpoint deleted (4.5 GB) with the isolated
+venv (380 MB). Two measurements closed it. On the 48-item comparison set the 4-bit MLX port scored
+40/48 category suggestions with no evidence spans, while Apple Foundation Models scored 45/48 with
+bounded evidence proposals, and `document_classification` already runs on that framework for zero
+model bytes. No smaller CLM was ever published to move to: the authors released one checkpoint,
+`CLM-v0.1-8B`, and the heads are trained on Qwen3-8B's 4096-wide embeddings, so another encoder
+means retrained heads rather than a smaller download. At 4.4 GB it was also the largest set of
+weights on a machine moving to smaller local models, for a surface that lost its own comparison.
+
+The code below is kept as the re-open recipe, not as a live surface. Nothing here runs on its own
+and nothing loads without a foreground `python`. Re-opening costs one model download and one venv
+build:
+
+```sh
+dir="$HOME/.cache/sjel/models/clm-v0.1-8b-mlx-4bit"
+venv="$HOME/.cache/sjel/clm-mlx-4bit-venv"
+uv venv "$venv"
+uv pip install --python "$venv/bin/python" mlx safetensors numpy huggingface_hub
+"$venv/bin/python" - <<'PY'
+from huggingface_hub import snapshot_download
+snapshot_download("mlx-community/CLM-v0.1-8B-MLX-4bit",
+                  revision="489b421bafc007e3ae409528d77006d26d362689",
+                  local_dir="$HOME/.cache/sjel/models/clm-v0.1-8b-mlx-4bit")
+PY
+```
+
+Until then the adapter refuses to start: it checks for `encoder/model.safetensors` and
+`heads/CLM_v0.1-8B.safetensors` under `SJEL_DOCUMENTS_CLM_MODEL_DIR` before importing anything from
+the model directory, so the missing weights are a named error rather than an import traceback, and
+no code path re-downloads them. The eval corpora, the item-level results and the parity record stay
+in `eval/` and in [`research/local-decision-models.md`](../../research/local-decision-models.md).
 
 `clm_mlx_adapter.py` is a separate, manually started evaluation service. It binds only to
 `127.0.0.1:8700`, serves the System One `/v1/systemone` shape used by the opt-in Pi classifier,
@@ -70,8 +112,8 @@ SJEL_SYSTEMONE_URL=http://127.0.0.1:8700/v1/ \
 The adapter does not write requests or responses, contact hosted inference, file documents, or
 run as part of the Documents service. It has no data-class gate: send only the synthetic corpus
 to it. Do not send real documents or any `c3` content. Its output contains category scores but no
-source evidence spans, so it is an evaluation surface only; the Documents API and GPUI do not
-call it. Hugging Face runs in offline mode. Stop the process manually when the trial ends.
+source evidence spans, so it remains an evaluation surface only and the Documents API and GPUI do
+not call it. Hugging Face runs in offline mode. Stop the process manually when the trial ends.
 
 `eval/clm-corpus.json` is the original frozen 12-item synthetic English/German set. On
 2026-10-22, model revision `489b421bafc007e3ae409528d77006d26d362689` classified 9/12 examples
@@ -133,8 +175,10 @@ merged, and CLM/rules do not yet satisfy the evidence contract. Prompt selection
 `eval/apple-fm-prompt-tuning-hybrid-v1-2026-10-22.json`. The comparison report is
 `eval/cross-source-eval-combined-holdout-v1-2026-10-22.json`; individual results are in the
 corresponding CLM, Apple FM, and rules reports. This set is now spent for comparison and must not be
-used to tune prompts or rules. No real documents or `c3` content were sent, and none of these
-sources is wired to the Documents API or GPUI. Automatic filing remains disabled.
+used to tune prompts or rules. No real documents or `c3` content were sent during this evaluation.
+Apple Foundation Models is now available through the explicit, review-only local model action;
+the measured synthetic score is not a production accuracy guarantee. CLM remains evaluation-only.
+Automatic filing remains disabled.
 
 ## Use
 
@@ -142,9 +186,15 @@ sources is wired to the Documents API or GPUI. Automatic filing remains disabled
 documents intake <file>
 documents inbox <folder> [--limit N] [--dry-run] [--recursive] [--include-sensitive]
 documents duplicates
+documents next [--limit N]
 documents watch <folder>
 documents list [--status inbox|filed|archived]
-documents search <words...>
+documents search <words...> [--status inbox|filed|archived] [--limit N]
+documents analyze <id>
+documents suggest-splits <id>
+documents suggest-model <id>
+documents pages <id>
+documents split <id> <ranges>
 documents review <id> <category> [--project NAME]
 documents archive <id>
 documents export <id> <destination>
@@ -152,7 +202,9 @@ documents restore-index
 documents verify
 ```
 
-The CLI stores the original locally and extracts PDF/plain-text content through Sjel's registered extractor when available. It records extractor provenance; an extraction failure does not lose the original or prevent review. Extracted text is retained locally for later search and filing suggestions, but is never emitted by the CLI. The active keyword-rule config can suggest any configured category; the replaceable defaults are `Finance`, `Events`, and `Reference`. `?` marks a suggestion, not a filing decision. Ambiguous and unmatched documents remain in `inbox`. `search` matches filenames, extracted titles and local extracted text; it prints only matching filenames and metadata. `review` records a human-chosen category and optional project label; it does not rewrite original bytes. `archive` marks a record without deleting it. `export` refuses to overwrite an existing destination.
+`documents next [--limit N] [--offset N]` lists up to 100 inbox records by newest import and labels the derived action. The limit accepts 1–500; offset pages through the queue. `Needs analysis` means local PDF extraction is missing or has a recorded page failure; `Review split` requires explicit page-one evidence; `Split into children` marks an original that already has stored children; `Review enrichment` means the newest proposal run contains an unreviewed category proposal; `Ready to file` means no split or category proposal is awaiting review. The command is read-only. Accepting a category proposal records the decision and does not file the document.
+
+The CLI stores source files locally and extracts PDF/plain-text content through Sjel's registered extractor. Search ranks documents by matched query words and prints matching page numbers; it shows 50 results by default. `analyze` refreshes PDF page evidence locally. Repeating an analysis with unchanged output does not append another proposal run; changed extraction creates a new run. `pages` shows per-page engine, character count, and extraction status without printing document text. `suggest-splits` proposes ranges only when page text contains explicit page-one markers; the proposal includes marker evidence and never creates records. GPUI shows the same proposal with page evidence. Review or edit the ranges, then `split` writes one standalone child PDF into Sjel for each inclusive range, for example `documents split <id> 1-2,3-4`. Child records have their own hash-addressed bytes, retain page-specific text and provenance, and can be searched, filed, previewed, and exported independently. The imported source file remains unchanged. Extraction failures remain visible per page and do not lose the original. The active keyword-rule config can suggest any configured category; `?` marks a suggestion, not a filing decision. Ambiguous and unmatched documents remain in `inbox`. `review` records a human-chosen category and optional project label; it does not rewrite original bytes. `archive` marks a record without deleting it. `export` refuses to overwrite an existing destination.
 
 ## Folder inbox
 
@@ -185,12 +237,11 @@ receipt row. Office and other supported document containers can be stored withou
 text; the current extractor registration reads PDF and plain text only. Neither command
 generates summaries or files suggestions automatically.
 
-For PDFs, xberg reads an existing text layer first. If fewer than 64 non-space characters are
-available, the extraction ladder sends the whole PDF to local Apple Vision OCR through `visocr`;
-recognized pages are joined with form feeds. The 64-character cutoff is an estimate, and mixed
-text-and-scan PDFs currently keep only the text-layer result rather than OCRing missing pages.
-On hosts without Apple Vision or `visocr`, the original is still retained and extraction may be
-unavailable. `documents duplicates` reports exact SHA-256 copy groups as authoritative, plus
+For PDFs, xberg extracts page text and the local extraction layer records each page separately.
+Pages below the existing 64 non-space-character estimate are OCR'd through Apple Vision `visocr`
+in one pass; successful page text replaces only that page, while other native page text remains.
+Page provenance and OCR failures are retained. `analyze` applies this to already imported PDFs.
+`documents duplicates` reports exact SHA-256 copy groups as authoritative, plus
 probable rescans (word-triple Jaccard ≥ 0.6) and split parts (text containment ≥ 0.8) for human
 review. These thresholds are estimates, not measured classifiers; the command changes nothing.
 
@@ -211,7 +262,7 @@ The next stages need evidence before unattended use:
 2. **Page extraction and segmentation.** Extract text and layout per page, recording the
    engine and failures. Start with explicit page ranges or separator pages. A model may
    propose boundaries for mixed scans, but a boundary is distinct from writing a PDF.
-   Child documents must retain the parent hash and page ranges; every input page must be
+   Child documents must retain parent lineage and page ranges; every input page must be
    accounted for, and the unsplit original must remain recoverable.
 3. **Evidence-backed enrichment.** Store document type, issuer, date, summary, key facts, and
    proposed actions separately from originals. Each fact needs a page or source span,
@@ -228,6 +279,49 @@ The next stages need evidence before unattended use:
 Reuse `libs/extraction` for the existing xberg PDF and plain-text paths and its evaluated OCR
 ladder. Upstream xberg documents Office extraction, but Sjel's current registered classes do
 not expose it; support needs local fixtures and explicit failure reporting before expansion.
+
+### Intake to reviewed intelligence
+
+The target workflow treats import, page analysis, splitting, enrichment, and filing as separate
+resumable stages. Today, intake stores the original and extracts locally in the same operation;
+reanalysis of existing records is operator-triggered with `analyze`. The `next` queue is a
+read-only list of operator stages. A bounded background worker resumes local rule-proposal
+backfill by finding records without a proposal for the active version; it stores per-version row
+progress and retries safely. Intake creates proposals for new records idempotently. Extraction of
+existing records and model enrichment still require an operator action. Any later analysis queue
+should resume from the last completed stage and never create another source or child record on
+retry.
+
+1. **Inspect each page.** Record page count, text-layer availability, extracted text, layout
+references, engine/version, and failures per page. Run OCR only for pages whose text layer is
+missing or inadequate. Mixed PDFs must retain both their native text and OCR results, with page
+provenance, instead of choosing one document-wide extraction path.
+2. **Propose boundaries.** Use page signals such as separator pages, abrupt issuer/date changes,
+and page numbering to propose complete page-range partitions. A model may rank or explain a cut,
+but every proposed cut carries the pages and text that support it. OCR accuracy and boundary
+accuracy have separate evaluation sets and acceptance criteria.
+3. **Review the split.** Show the source page strip, extracted text, and proposed ranges together.
+An operator can adjust the ranges and approve the partition. Children remain metadata records
+pointing to the original hash and exact page ranges; the original remains recoverable. Enforce
+ordered, non-overlapping ranges covering every page exactly once.
+4. **Enrich each child independently.** Propose type, issuer, date, reference numbers, amounts,
+summary, category, project, and follow-up candidates. Keep each proposal separate from operator
+metadata and attach its page or source span, engine/model revision, confidence, and review state.
+Low evidence and extraction errors stay visible; filing and cross-capability actions require
+operator review.
+5. **Surface useful work.** Group and filter by approved category, project, year, and status, then
+show unresolved splits and evidence-backed follow-ups in the Documents review queue and relevant
+Today/Ask surfaces. Suggestions can link to Finance, Calendar, or Tasks through their owner APIs
+after approval; analysis never silently creates or changes those records.
+
+Keep private documents local by default: `c2` cannot be sent to hosted OCR or inference, and `c3`
+never enters a prompt. xberg is the current extraction baseline; first extend its adapter to retain
+page-level results and measure it against mixed German/English scans. Evaluate Docling only as a
+focused local experiment if that baseline cannot supply the layout or boundary evidence needed;
+its prior rejection measured formula OCR yield and runtime, not segmentation quality. Mistral OCR
+is a hosted option for explicitly eligible `c0`/`c1` material, subject to a separate provider
+policy and measured comparison. Do not send private scans to it. Any automatic stage must pass
+the frozen DE/EN evaluation and idempotent retry/restore checks before it can affect records.
 
 ### Classification contract — decisions (2026-10-22)
 
@@ -259,9 +353,10 @@ for a local trial. The 12-item synthetic DE/EN evaluation on 2026-10-22 scored 9
 (English 4/6, German 5/6); all three misclassifications were Events items. This is not enough to
 rely on the model, and the sample is too small to set a threshold. Model families and serving
 stacks remain replaceable through `libs/inference`; Documents must not hardcode a provider or
-URL. The current adapter is isolated from the Documents API pending that shared inference
-contract and evidence-bearing proposal records. `c3` must never enter a prompt. A future remote
-path requires an explicit data-policy change, not a backend configuration toggle.
+URL. The experimental CLM adapter remains isolated from the Documents API. The Documents model
+action uses the shared inference contract and persists evidence-bearing proposals. `c3` must never
+enter a prompt. A future remote path requires an explicit data-policy change, not a backend
+configuration toggle.
 
 Each proposal must retain its rule/model identity, version where available, evidence span from the
 filename or extracted text, confidence (or an explicit no-confidence value), and review outcome.
@@ -270,36 +365,26 @@ models, malformed output, and extraction failure all remain visible and reviewab
 classification is optional; rules continue to work offline. Automatic filing is out of scope until
 a frozen local evaluation set, measured threshold, and auditable reversal path are accepted.
 
-Implementation order: (1) define the overlay category/rule configuration and typed proposal
-record without changing filing; (2) add evidence-producing deterministic rules and tests; (3) use
-the existing development corpus for iteration, then freeze a new balanced German/English holdout
-before measuring changed rules or prompts; existing holdouts are spent; (4) add a local-only
-classification role and structured-output validation through the shared inference contract; (5)
-expose proposals and review outcomes through the operator API and UI. Steps 1–2 exist in
-`src/classification.rs`. Rule proposals are stored separately from filing metadata. Each proposal
-has an id scoped to its generation. Opening the library backfills the active rule version only
-when that version has no stored run; an explicit regenerate request always creates a new run,
-even if its output matches an earlier one. Review outcomes are append-only events, and the latest
-outcome is projected onto the proposal for display. A dedicated private classification sidecar v2
-preserves proposals and review events for `restore-index`. The authenticated API exposes stored
-records, regeneration, and review; the UI does not display them yet. The legacy `suggested_category`
-field uses the first matching configured rule for compatibility. Filing remains an explicit,
-separate operator action. The current inference library resolves roles and enforces runtime/cloud
-policy, but does not yet expose a general classification call; add that through its owning contract
-rather than dispatching ad hoc from Documents.
+The overlay category/rule configuration, typed proposal records, deterministic evidence-producing
+rules, persistence, regeneration, append-only review events, restore sidecars, and explicit local
+model proposals through the shared inference contract are implemented. The authenticated API, GPUI,
+and CLI expose those actions. The legacy `suggested_category` field still uses the first matching
+configured rule for compatibility. Filing remains a separate operator action. The existing synthetic
+holdouts are spent; any prompt or rule changes need a fresh balanced German/English evaluation set.
 
 Second local model decision (2026-10-22): evaluate Apple Foundation Models (`foundation-models`,
 `apple-foundationmodel`) as a separate local proposal source, selected over Qwen3.5 to diversify
 model families. `tools/model-check --local` found the model available through the existing
-`summarization_light` role, but Documents has no classification role or call yet. Synthetic
-JSON-schema chat-completion probes returned valid JSON on 2026-10-22. The apfel schema subset
-rejects `minLength` with HTTP 400, so the evaluation script uses supported constraints and checks
-non-empty, exact evidence in code. This verifies one local request path, not full schema enforcement,
-availability behavior, or classification accuracy. Any Documents role must remain replaceable
-through `libs/inference`, keep c2 text on the owner host, and exclude c3 from prompts.
-[lopdf's page extraction](https://github.com/J-F-Liu/lopdf/blob/main/pdfutil/README.md) is a
-candidate for materializing reviewed page ranges in Rust, not a boundary detector. It is
-already present transitively in the lockfile; no direct dependency or splitter is adopted here.
+`summarization_light` role at evaluation time. Documents now has a dedicated
+`document_classification` role and explicit local proposal call through `libs/inference`. The
+production prompt uses the evaluated category guidance and evidence limits; returned categories and
+exact source spans are validated again in code. The apfel schema subset rejects `minLength` with
+HTTP 400, so non-empty and exact evidence remain application checks. This synthetic evaluation does
+not guarantee accuracy on personal documents. The role remains replaceable through `libs/inference`,
+keeps c2 text on the owner host, and excludes c3 from prompts.
+[lopdf](https://github.com/J-F-Liu/lopdf) materializes operator-reviewed page ranges as
+standalone PDFs. It does not infer boundaries; the direct dependency and its narrow role are
+recorded in `upstreams.toml`.
 [Paperless-ngx workflows](https://docs.paperless-ngx.com/usage/#workflows) remain useful prior
 art for metadata automation under the existing `upstreams.toml` inspiration verdict.
 
@@ -319,34 +404,34 @@ shape, and the phases are ordered so the first one cannot collide with concurren
 1. **PDF pages render in-process on the client.** A dedicated module carries
    `#![allow(unsafe_code)]` with its reason in the header, as `apps/gpui/src/macos_glass.rs` does,
    and draws each page through CGPDF/PDFKit into a GPUI `RenderImage`. Clients fetch the
-   hash-verified original from `GET /api/documents/{id}/original` and render it themselves, so the
-   iPhone reads documents offline. A rendering failure shows the extracted text and an explicit
+   hash-verified bytes for the selected record from `GET /api/documents/{id}/original` and render
+   them themselves, so a child displays its own stored pages. A rendering failure shows the extracted text and an explicit
    open-in-system-viewer action; it never shows an empty pane. Linux and Windows need a different
    rasterizer and are out of scope.
 2. **Grouping uses the metadata a record already has** — category, project, year, status — before
    any new filing concept. Collections and folders are a later decision, taken only if grouping by
    metadata proves insufficient.
-3. **A split writes metadata, not bytes.** A child carries the parent's SHA-256 and a page range;
-   the unsplit original stays openable and every input page is accounted for. A child PDF is
-   materialized only when one is exported or sent, so no orphaned blobs are created by a wrong
-   boundary.
+3. **A split writes child PDFs inside Sjel.** Each reviewed page range becomes a separate
+   content-addressed blob with parent and page-range lineage. The source PDF remains unchanged,
+   every source page belongs to exactly one child, and exports copy the already stored child.
 4. **The duplicate report is consumed, never reimplemented.** `src/duplicates.rs` owns the report.
    This capability records what a human decided about it: a survivor with its absorbed records and
    source paths, a dismissal that does not come back, or a part that becomes a split.
 
-Phase order:
+Document workflow:
 
-1. Reader parity in `apps/gpui/**` only: original bytes through the shell, the page renderer, page
-   strip and zoom, the text pane, and filing with an operator-typed category and project. Adds no
-   route and touches nothing under `src/`.
-2. Decisions in new modules — `collections`, `merge`, `split`, `summary` — with an `IF NOT EXISTS`
-   migration, one route each, and sidecar v2 so `restore-index` keeps them. UI: the duplicates
-   queue with side-by-side compare, the split editor over the page strip, and the metadata panel.
-3. Summaries and proposals are stored and reviewable as their own records: engine identity,
-   revision, evidence page, confidence, review outcome. Rule and model proposals stay separate
-   rows, an operator value is never overwritten by a proposal, and nothing files automatically.
-   Generation stays blocked until a loopback inference role exists; the pane says no summary was
-   generated rather than showing a substituted one.
+1. Import source bytes into Sjel's hash-addressed library. Intake and later operations never rename,
+   move, split, or sort the import source.
+2. Extract page text and provenance locally. Keep failures visible per page; do not treat a blank
+   extraction as evidence that pages are blank.
+3. Group records with category, project, year, and inbox status. Keep inferred categories and
+   document facts as proposals until an operator accepts them.
+4. Review a complete, ordered page partition in the GPUI reader. Each cut must be traceable to page
+   evidence or an explicit visual review.
+5. Store one standalone PDF per approved range inside Sjel. Keep the source PDF unchanged and link
+   every child to its source id and exact page range.
+6. Enrich and file each child using evidence from its own pages. Preserve source text and proposals
+   so later revisions do not overwrite the operator's choices.
 
-Out of the first release: PDF text selection and in-page search from the page image (the extracted
-text pane carries search), printing, and materialized child PDFs.
+The OCR inference rung remains gated by the frozen DE/EN evaluation corpus. Until an engine clears
+that gate, extraction failures stay visible and split ranges require direct operator review.

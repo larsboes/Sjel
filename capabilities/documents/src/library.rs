@@ -1,8 +1,10 @@
 use std::{
+    collections::HashSet,
     fs,
     io::Write,
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -12,6 +14,8 @@ use crate::review::DuplicateDecision;
 use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "documents";
+const DOCUMENT_ID_BATCH: usize = 500;
+const SEARCH_INDEX_VERSION: i64 = 1;
 pub(crate) const MAX_BYTES: usize = 128 * 1024 * 1024;
 
 type Fallible<T> = Result<T, LibraryError>;
@@ -22,6 +26,7 @@ pub enum LibraryError {
     Io(std::io::Error),
     Sql(rusqlite::Error),
     Store(String),
+    Model(String),
 }
 
 impl std::fmt::Display for LibraryError {
@@ -31,6 +36,7 @@ impl std::fmt::Display for LibraryError {
             Self::Io(error) => write!(f, "document file operation: {error}"),
             Self::Sql(error) => write!(f, "document metadata: {error}"),
             Self::Store(error) => write!(f, "document store: {error}"),
+            Self::Model(error) => write!(f, "local document model: {error}"),
         }
     }
 }
@@ -62,8 +68,22 @@ pub struct Document {
     pub extracted_title: Option<String>,
     pub extracted_text: Option<String>,
     pub extractor: Option<String>,
+    #[serde(default)]
+    pub pages: Vec<sjel_extraction::ExtractedPage>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub page_range: Option<crate::split::PageRange>,
     pub suggested_category: Option<String>,
     pub suggestion_reason: Option<String>,
+}
+
+/// A page of documents ranked by how many query terms match locally stored text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentSearchPage {
+    pub documents: Vec<Document>,
+    pub matched_pages: Vec<Vec<u32>>,
+    pub total: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -91,6 +111,7 @@ pub struct Library {
     pool: sjel_store::Pool,
     root: PathBuf,
     classification: crate::classification::ClassificationConfig,
+    rule_proposal_lock: Mutex<()>,
 }
 
 impl Library {
@@ -127,9 +148,8 @@ impl Library {
             pool,
             root,
             classification,
+            rule_proposal_lock: Mutex::new(()),
         };
-        library.restore_proposal_sidecars()?;
-        library.backfill_rule_proposals()?;
         Ok(library)
     }
 
@@ -153,6 +173,10 @@ impl Library {
         }
         let id = record_id(&sha256, &filename);
         let extracted = extract(&media_type, bytes);
+        let extracted_pages = extracted
+            .as_ref()
+            .and_then(|value| serde_json::to_string(&value.pages).ok())
+            .unwrap_or_else(|| "[]".into());
         self.write_blob(&sha256, bytes)?;
         let document = Document {
             id: id.clone(),
@@ -167,6 +191,11 @@ impl Library {
             extracted_title: extracted.as_ref().and_then(|e| e.title.clone()),
             extracted_text: extracted.as_ref().map(|e| e.text.clone()),
             extractor: extracted.as_ref().map(|e| e.producer.to_string()),
+            pages: extracted
+                .as_ref()
+                .map_or_else(Vec::new, |e| e.pages.clone()),
+            parent_id: None,
+            page_range: None,
             suggested_category: None,
             suggestion_reason: None,
         };
@@ -176,16 +205,16 @@ impl Library {
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         let inserted = conn.execute(
             "INSERT OR IGNORE INTO documents_items
-             (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, ?7, ?8, ?9)",
+             (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, ?7, ?8, ?9, ?10, NULL, NULL, NULL)",
             params![document.id, document.sha256, document.filename, document.media_type, document.byte_len,
-                document.imported_at, document.extracted_title, document.extracted_text, document.extractor],
+                document.imported_at, document.extracted_title, document.extracted_text, document.extractor, extracted_pages],
         )?;
         let saved = self.get(&id)?.ok_or_else(|| {
             LibraryError::Invalid("intake did not create a document record".into())
         })?;
         if inserted == 1 {
-            self.generate_rule_proposals(&saved, new_generation_id()?)?;
+            self.ensure_rule_proposals(&saved.id)?;
         }
         self.write_record(&saved)?;
         if inserted == 1 {
@@ -208,9 +237,9 @@ impl Library {
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         let sql = if status.is_some() {
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE status = ?1 ORDER BY imported_at DESC, filename"
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE status = ?1 ORDER BY imported_at DESC, filename"
         } else {
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items ORDER BY imported_at DESC, filename"
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items ORDER BY imported_at DESC, filename"
         };
         let mut stmt = conn.prepare(sql)?;
         let rows = if let Some(status) = status {
@@ -225,6 +254,188 @@ impl Library {
             .collect())
     }
 
+    /// Read one recent page of document metadata without loading the full library.
+    pub fn list_page(
+        &self,
+        status: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> Fallible<(Vec<Document>, usize)> {
+        if let Some(status) = status {
+            check_status(status)?;
+        }
+        let limit = i64::try_from(limit)
+            .map_err(|_| LibraryError::Invalid("document page limit is too large".into()))?;
+        let offset = i64::try_from(offset)
+            .map_err(|_| LibraryError::Invalid("document page offset is too large".into()))?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|e| LibraryError::Store(e.to_string()))?;
+        let (count_sql, page_sql) = if status.is_some() {
+            (
+                "SELECT COUNT(*) FROM documents_items WHERE status = ?1",
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE status = ?1 ORDER BY imported_at DESC, filename LIMIT ?2 OFFSET ?3",
+            )
+        } else {
+            (
+                "SELECT COUNT(*) FROM documents_items",
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items ORDER BY imported_at DESC, filename LIMIT ?1 OFFSET ?2",
+            )
+        };
+        let total: i64 = if let Some(status) = status {
+            conn.query_row(count_sql, [status], |row| row.get(0))?
+        } else {
+            conn.query_row(count_sql, [], |row| row.get(0))?
+        };
+        let total = usize::try_from(total)
+            .map_err(|_| LibraryError::Invalid("document count is out of range".into()))?;
+        let mut statement = conn.prepare(page_sql)?;
+        let rows = if let Some(status) = status {
+            statement.query_map(params![status, limit, offset], read_document)?
+        } else {
+            statement.query_map(params![limit, offset], read_document)?
+        };
+        let documents = rows
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(|document| self.with_configured_suggestion(document))
+            .collect();
+        Ok((documents, total))
+    }
+
+    /// Search indexed document text locally with token prefixes, loading full records only for this page.
+    ///
+    /// # Errors
+    /// The query is empty, pagination exceeds the supported range, or the store cannot be read.
+    pub fn search(
+        &self,
+        query: &str,
+        status: Option<&str>,
+        offset: usize,
+        limit: usize,
+    ) -> Fallible<DocumentSearchPage> {
+        if let Some(status) = status {
+            check_status(status)?;
+        }
+        if !(1..=500).contains(&limit) || offset > 1_000_000 {
+            return Err(LibraryError::Invalid(
+                "search pagination is out of range".into(),
+            ));
+        }
+        let terms = search_terms(query);
+        if terms.is_empty() {
+            return Err(LibraryError::Invalid(
+                "search needs at least one word".into(),
+            ));
+        }
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let fts_query = terms
+            .iter()
+            .map(|term| format!("{term}*"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let mut statement = conn.prepare(
+            "SELECT d.id, d.filename, d.extracted_title, d.extracted_text, d.category, d.project, d.imported_at
+             FROM documents_search
+             JOIN documents_items d ON d.rowid = documents_search.rowid
+             WHERE documents_search MATCH ?1 AND (?2 IS NULL OR d.status = ?2)",
+        )?;
+        let rows = statement.query_map(params![fts_query, status], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })?;
+        let mut matches = Vec::new();
+        for row in rows {
+            let (id, filename, title, text, category, project, imported_at) = row?;
+            let filename = filename.to_lowercase();
+            let title = title.unwrap_or_default().to_lowercase();
+            let text = text.unwrap_or_default().to_lowercase();
+            let category = category.unwrap_or_default().to_lowercase();
+            let project = project.unwrap_or_default().to_lowercase();
+            let score = terms
+                .iter()
+                .filter(|term| {
+                    filename.contains(term.as_str())
+                        || title.contains(term.as_str())
+                        || text.contains(term.as_str())
+                        || category.contains(term.as_str())
+                        || project.contains(term.as_str())
+                })
+                .count();
+            if score > 0 {
+                matches.push((score, imported_at, id));
+            }
+        }
+        matches.sort_by(|left, right| {
+            right
+                .0
+                .cmp(&left.0)
+                .then_with(|| right.1.cmp(&left.1))
+                .then_with(|| left.2.cmp(&right.2))
+        });
+        let total = matches.len();
+        let selected = matches
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .map(|(_, _, id)| id)
+            .collect::<Vec<_>>();
+        let mut documents = Vec::with_capacity(selected.len());
+        let mut matched_pages = Vec::with_capacity(selected.len());
+        for id in selected {
+            let Some(document) = self.get(&id)? else {
+                continue;
+            };
+            matched_pages.push(
+                document
+                    .pages
+                    .iter()
+                    .filter(|page| {
+                        let page_text = page.text.to_lowercase();
+                        terms.iter().any(|term| page_text.contains(term.as_str()))
+                    })
+                    .map(|page| page.page_number)
+                    .collect(),
+            );
+            documents.push(self.with_configured_suggestion(document));
+        }
+        Ok(DocumentSearchPage {
+            documents,
+            matched_pages,
+            total,
+        })
+    }
+
+    /// Read child records for one original in page order.
+    ///
+    /// # Errors
+    /// The parent id is invalid or the metadata query fails.
+    pub fn children(&self, parent_id: &str) -> Fallible<Vec<Document>> {
+        check_id(parent_id)?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let mut statement = conn.prepare(
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE parent_id = ?1 ORDER BY page_first, id",
+        )?;
+        let rows = statement.query_map([parent_id], read_document)?;
+        rows.map(|row| row.map(|document| self.with_configured_suggestion(document)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
     /// Generate deterministic proposals from the library's active configuration.
     pub fn proposals(
         &self,
@@ -235,6 +446,269 @@ impl Library {
             &document.filename,
             document.extracted_text.as_deref(),
         )
+    }
+
+    /// Re-run local extraction for one original and persist page-level evidence.
+    ///
+    /// # Errors
+    /// The id is invalid, the record is a child, extraction is unavailable, or storage fails.
+    pub fn analyze(&self, id: &str) -> Fallible<Document> {
+        check_id(id)?;
+        let document = self
+            .get(id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        if document.parent_id.is_some() {
+            return Err(LibraryError::Invalid(
+                "analyze the original document before splitting it".into(),
+            ));
+        }
+        let bytes = self.read_blob(&document.sha256)?;
+        let extraction = extract(&document.media_type, &bytes)
+            .ok_or_else(|| LibraryError::Invalid("no local extractor is available".into()))?;
+        let pages_json = serde_json::to_string(&extraction.pages)
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+        let previous_pages_json = serde_json::to_string(&document.pages)
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+        let extraction_changed = document.extracted_title != extraction.title
+            || document.extracted_text.as_deref() != Some(extraction.text.as_str())
+            || document.extractor.as_deref() != Some(extraction.producer)
+            || previous_pages_json != pages_json;
+        if !extraction_changed {
+            self.ensure_rule_proposals(id)?;
+            return Ok(document);
+        }
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        conn.execute(
+            "UPDATE documents_items SET extracted_title = ?2, extracted_text = ?3, extractor = ?4, extracted_pages_json = ?5 WHERE id = ?1",
+            params![id, extraction.title, extraction.text, extraction.producer, pages_json],
+        )?;
+        let analyzed = self
+            .get(id)?
+            .ok_or_else(|| LibraryError::Invalid("analyzed document disappeared".into()))?;
+        self.generate_rule_proposals(&analyzed, new_generation_id()?)?;
+        self.write_record(&analyzed)?;
+        Ok(analyzed)
+    }
+
+    /// Suggest page ranges from explicit page-one markers without writing child records.
+    ///
+    /// # Errors
+    /// The id is invalid, the record is not an original PDF, or its metadata cannot be read.
+    pub fn split_suggestions(&self, id: &str) -> Fallible<crate::split::SplitSuggestion> {
+        check_id(id)?;
+        let document = self
+            .get(id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        if document.parent_id.is_some() || document.media_type != "application/pdf" {
+            return Err(LibraryError::Invalid(
+                "split suggestions require an original PDF".into(),
+            ));
+        }
+        Ok(crate::split::suggest_ranges(&document.pages))
+    }
+
+    /// Create idempotent child PDFs for a complete, human-approved page partition.
+    ///
+    /// Each child has its own content-addressed bytes and retains page-level lineage to the
+    /// unchanged parent record.
+    ///
+    /// # Errors
+    /// The parent extraction is incomplete, the partition is invalid, the PDF cannot be safely
+    /// split, a child filename is invalid or repeated, a prior partition conflicts, or persistence
+    /// fails.
+    pub fn split(
+        &self,
+        parent_id: &str,
+        request: &crate::split::SplitRequest,
+    ) -> Fallible<Vec<Document>> {
+        check_id(parent_id)?;
+        let parent = self
+            .get(parent_id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        if parent.parent_id.is_some() || parent.media_type != "application/pdf" {
+            return Err(LibraryError::Invalid(
+                "only an original PDF can be split".into(),
+            ));
+        }
+        let page_count = u32::try_from(parent.pages.len())
+            .map_err(|_| LibraryError::Invalid("page count exceeds supported range".into()))?;
+        if request.page_count != page_count
+            || parent
+                .pages
+                .iter()
+                .enumerate()
+                .any(|(index, page)| page.page_number != index as u32 + 1)
+        {
+            return Err(LibraryError::Invalid(
+                "analyze the original to record every page before splitting".into(),
+            ));
+        }
+        let ranges = request
+            .children
+            .iter()
+            .map(|child| crate::split::PageRange::new(child.first, child.last))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+        crate::split::Partition::new(request.page_count, ranges.clone())
+            .map_err(|error| LibraryError::Invalid(error.to_string()))?;
+
+        let source_pdf = self.read_blob(&parent.sha256)?;
+        let mut filenames = std::collections::BTreeSet::new();
+        let mut children = Vec::with_capacity(request.children.len());
+        let mut child_blobs = std::collections::BTreeMap::new();
+        for (input, page_range) in request.children.iter().zip(ranges) {
+            let filename = safe_filename(&input.filename)?;
+            if !Path::new(&filename)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+            {
+                return Err(LibraryError::Invalid(
+                    "child filenames must use the .pdf extension".into(),
+                ));
+            }
+            if !filenames.insert(filename.clone()) {
+                return Err(LibraryError::Invalid(
+                    "child filenames must be unique".into(),
+                ));
+            }
+            let pages: Vec<_> = parent
+                .pages
+                .iter()
+                .filter(|page| {
+                    page_range.first <= page.page_number && page.page_number <= page_range.last
+                })
+                .cloned()
+                .collect();
+            let text = pages
+                .iter()
+                .map(|page| page.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n\u{000c}\n\n");
+            let bytes = crate::split::materialize_pdf_range(&source_pdf, page_range, page_count)
+                .map_err(LibraryError::Invalid)?;
+            let sha256 = hex(&Sha256::digest(&bytes));
+            let byte_len = i64::try_from(bytes.len()).map_err(|_| {
+                LibraryError::Invalid("child PDF exceeds the supported size".into())
+            })?;
+            let id = child_record_id(parent_id, page_range, &filename);
+            child_blobs.insert(id.clone(), bytes);
+            children.push(Document {
+                id,
+                sha256,
+                filename,
+                media_type: parent.media_type.clone(),
+                byte_len,
+                imported_at: chrono::Utc::now().to_rfc3339(),
+                status: "inbox".into(),
+                category: None,
+                project: None,
+                extracted_title: None,
+                extracted_text: Some(text),
+                extractor: parent.extractor.clone(),
+                pages,
+                parent_id: Some(parent_id.to_owned()),
+                page_range: Some(page_range),
+                suggested_category: None,
+                suggestion_reason: None,
+            });
+        }
+
+        let existing_children: Vec<Document> = self
+            .list(None)?
+            .into_iter()
+            .filter(|document| document.parent_id.as_deref() == Some(parent_id))
+            .collect();
+        if !existing_children.is_empty() {
+            if existing_children.len() != children.len()
+                || !children.iter().all(|child| {
+                    existing_children.iter().any(|existing| {
+                        existing.id == child.id
+                            && existing.page_range == child.page_range
+                            && existing.filename == child.filename
+                            && existing.pages == child.pages
+                    })
+                })
+            {
+                return Err(LibraryError::Invalid(
+                    "this original already has a different split; child records are retained"
+                        .into(),
+                ));
+            }
+
+            let mut refreshed = Vec::with_capacity(children.len());
+            let mut conn = self
+                .pool
+                .get()
+                .map_err(|error| LibraryError::Store(error.to_string()))?;
+            let transaction = sjel_store::write_transaction(&mut conn)?;
+            for expected in &children {
+                let mut existing = existing_children
+                    .iter()
+                    .find(|existing| existing.id == expected.id)
+                    .cloned()
+                    .ok_or_else(|| LibraryError::Invalid("split child disappeared".into()))?;
+                if existing.sha256 == parent.sha256 {
+                    let bytes = child_blobs.get(&expected.id).ok_or_else(|| {
+                        LibraryError::Invalid("materialized child bytes disappeared".into())
+                    })?;
+                    self.write_blob(&expected.sha256, bytes)?;
+                    transaction.execute(
+                        "UPDATE documents_items SET sha256 = ?2, byte_len = ?3 WHERE id = ?1",
+                        params![existing.id, expected.sha256, expected.byte_len],
+                    )?;
+                    existing.sha256 = expected.sha256.clone();
+                    existing.byte_len = expected.byte_len;
+                    refreshed.push(existing);
+                } else {
+                    refreshed.push(existing);
+                }
+            }
+            transaction.commit()?;
+            for child in &refreshed {
+                self.write_record(child)?;
+            }
+            return Ok(refreshed);
+        }
+        for child in &children {
+            if self
+                .by_hash_and_name(&child.sha256, &child.filename)?
+                .is_some()
+            {
+                return Err(LibraryError::Invalid(format!(
+                    "child filename already exists in this library: {}",
+                    child.filename
+                )));
+            }
+            let bytes = child_blobs.get(&child.id).ok_or_else(|| {
+                LibraryError::Invalid("materialized child bytes disappeared".into())
+            })?;
+            self.write_blob(&child.sha256, bytes)?;
+        }
+
+        let mut conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        for child in &children {
+            transaction.execute(
+                "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'inbox', NULL, NULL, NULL, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![child.id, child.sha256, child.filename, child.media_type, child.byte_len,
+                    child.imported_at, child.extracted_text, child.extractor,
+                    serde_json::to_string(&child.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?,
+                    parent_id, child.page_range.map(|range| range.first), child.page_range.map(|range| range.last)],
+            )?;
+        }
+        transaction.commit()?;
+        for child in &children {
+            self.generate_rule_proposals(child, new_generation_id()?)?;
+            self.write_record(child)?;
+        }
+        Ok(children)
     }
 
     /// Read the immutable proposal records and their append-only review events.
@@ -301,7 +775,7 @@ impl Library {
                         _ => {
                             return Err(LibraryError::Invalid(
                                 "stored proposal review is invalid".into(),
-                            ))
+                            ));
                         }
                     };
                     Ok(crate::classification::ProposalReviewEvent {
@@ -321,6 +795,126 @@ impl Library {
             });
         }
         Ok(records)
+    }
+
+    /// Return document ids whose newest proposal run contains an unreviewed category proposal.
+    ///
+    /// # Errors
+    /// The store cannot be read, or a stored proposal is malformed.
+    pub fn pending_proposal_documents(&self, document_ids: &[String]) -> Fallible<HashSet<String>> {
+        if document_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        for id in document_ids {
+            check_id(id)?;
+        }
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let mut pending = HashSet::new();
+        for batch in document_ids.chunks(DOCUMENT_ID_BATCH) {
+            let placeholders = vec!["?"; batch.len()].join(", ");
+            let sql = format!(
+                "SELECT p.document_id, p.proposal_json
+                 FROM documents_classification_proposals p
+                 LEFT JOIN documents_classification_reviews r ON r.proposal_id = p.proposal_id
+                 WHERE p.document_id IN ({placeholders})
+                   AND p.generation_id = (
+                     SELECT newest.generation_id
+                     FROM documents_classification_proposals newest
+                     WHERE newest.document_id = p.document_id
+                     ORDER BY newest.generated_at DESC, newest.generation_id DESC
+                     LIMIT 1
+                   )
+                 GROUP BY p.proposal_id
+                 HAVING COUNT(r.review_id) = 0"
+            );
+            let rows = {
+                let mut statement = conn.prepare(&sql)?;
+                let mapped = statement
+                    .query_map(rusqlite::params_from_iter(batch.iter()), |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })?;
+                mapped.collect::<Result<Vec<_>, _>>()?
+            };
+            for (document_id, proposal_json) in rows {
+                let proposal: crate::classification::ClassificationProposal =
+                    serde_json::from_str(&proposal_json).map_err(|error| {
+                        LibraryError::Invalid(format!("stored classification proposal: {error}"))
+                    })?;
+                if matches!(
+                    proposal.outcome,
+                    crate::classification::ProposalOutcome::Proposed { .. }
+                ) {
+                    pending.insert(document_id);
+                }
+            }
+        }
+        Ok(pending)
+    }
+
+    /// Return parent ids that already have stored split children.
+    ///
+    /// # Errors
+    /// The store cannot be read, or a document id is invalid.
+    pub fn documents_with_children(&self, document_ids: &[String]) -> Fallible<HashSet<String>> {
+        if document_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        for id in document_ids {
+            check_id(id)?;
+        }
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let mut parents = HashSet::new();
+        for batch in document_ids.chunks(DOCUMENT_ID_BATCH) {
+            let placeholders = vec!["?"; batch.len()].join(", ");
+            let sql = format!(
+                "SELECT DISTINCT parent_id FROM documents_items
+                 WHERE parent_id IN ({placeholders})"
+            );
+            let mut statement = conn.prepare(&sql)?;
+            parents.extend(
+                statement
+                    .query_map(rusqlite::params_from_iter(batch.iter()), |row| {
+                        row.get::<_, String>(0)
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
+        }
+        Ok(parents)
+    }
+
+    /// Ensure the selected document has a proposal run for the active rule-set version.
+    ///
+    /// # Errors
+    /// The document does not exist or proposal persistence fails.
+    pub fn ensure_rule_proposals(&self, document_id: &str) -> Fallible<()> {
+        check_id(document_id)?;
+        let _guard = self
+            .rule_proposal_lock
+            .lock()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let document = self
+            .get(document_id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let has_current_version = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM documents_classification_proposals
+             WHERE document_id = ?1 AND source_kind = 'rules' AND source_version = ?2)",
+            params![document_id, self.classification.version()],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !has_current_version {
+            self.generate_rule_proposals(&document, new_generation_id()?)?;
+        }
+        Ok(())
     }
 
     /// Append one review event without changing the proposal or filing state.
@@ -393,6 +987,78 @@ impl Library {
         Ok(())
     }
 
+    /// Backfill active local rules for one bounded range of documents.
+    ///
+    /// Returns `true` when the current rule version has reached the current library tail.
+    ///
+    /// # Errors
+    /// A proposal cannot be stored or the progress checkpoint cannot be updated.
+    pub(crate) fn backfill_rule_proposal_batch(&self, limit: usize) -> Fallible<bool> {
+        if !(1..=256).contains(&limit) {
+            return Err(LibraryError::Invalid(
+                "proposal backfill batch must be 1..=256".into(),
+            ));
+        }
+        let version = self.classification.version();
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        let high_water = conn
+            .query_row(
+                "SELECT high_water_rowid FROM documents_classification_backfills WHERE version = ?1",
+                [version],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .unwrap_or_default();
+        let latest: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(rowid), 0) FROM documents_items",
+            [],
+            |row| row.get(0),
+        )?;
+        let documents = {
+            let mut statement = conn.prepare(
+                "SELECT item.rowid, item.id FROM documents_items AS item
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM documents_classification_proposals AS proposal
+                    WHERE proposal.document_id = item.id
+                      AND proposal.source_kind = 'rules'
+                      AND proposal.source_version = ?1
+                 )
+                 ORDER BY item.rowid LIMIT ?2",
+            )?;
+            let documents = statement
+                .query_map(params![version, limit as i64], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            documents
+        };
+        drop(conn);
+
+        for (_, document_id) in &documents {
+            self.ensure_rule_proposals(document_id)?;
+        }
+
+        let completed = documents
+            .last()
+            .map(|(rowid, _)| *rowid)
+            .unwrap_or(latest.max(high_water));
+
+        let conn = self
+            .pool
+            .get()
+            .map_err(|error| LibraryError::Store(error.to_string()))?;
+        conn.execute(
+            "INSERT INTO documents_classification_backfills (version, high_water_rowid)
+             VALUES (?1, ?2)
+             ON CONFLICT(version) DO UPDATE SET high_water_rowid = MAX(high_water_rowid, excluded.high_water_rowid)",
+            params![version, completed],
+        )?;
+        Ok(documents.is_empty())
+    }
+
     /// Generate a fresh rule-proposal run and append its records.
     ///
     /// # Errors
@@ -413,9 +1079,47 @@ impl Library {
             .collect())
     }
 
+    /// Ask the configured local role for one reviewable classification proposal.
+    pub fn generate_model_proposal(
+        &self,
+        document_id: &str,
+    ) -> Fallible<Vec<crate::classification::StoredProposal>> {
+        let document = self
+            .get(document_id)?
+            .ok_or_else(|| LibraryError::Invalid("no document with that id".into()))?;
+        let proposal = crate::classification_model::propose(&document, &self.classification)?;
+        let generation_id = new_generation_id()?;
+        self.store_proposals(&document, &generation_id, vec![proposal])?;
+        Ok(self
+            .proposal_records(document_id)?
+            .into_iter()
+            .filter(|record| record.generation_id == generation_id)
+            .collect())
+    }
+
     fn generate_rule_proposals(&self, document: &Document, generation_id: String) -> Fallible<()> {
         let generated_at = chrono::Utc::now().to_rfc3339();
         let proposals = self.proposals(document);
+        self.store_proposals_at(document, &generation_id, proposals, &generated_at)
+    }
+
+    fn store_proposals(
+        &self,
+        document: &Document,
+        generation_id: &str,
+        proposals: Vec<crate::classification::ClassificationProposal>,
+    ) -> Fallible<()> {
+        let generated_at = chrono::Utc::now().to_rfc3339();
+        self.store_proposals_at(document, generation_id, proposals, &generated_at)
+    }
+
+    fn store_proposals_at(
+        &self,
+        document: &Document,
+        generation_id: &str,
+        proposals: Vec<crate::classification::ClassificationProposal>,
+        generated_at: &str,
+    ) -> Fallible<()> {
         let mut conn = self
             .pool
             .get()
@@ -520,7 +1224,7 @@ impl Library {
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         Ok(conn
             .query_row(
-                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE id = ?1",
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE id = ?1",
                 [id],
                 read_document,
             )
@@ -536,7 +1240,7 @@ impl Library {
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         Ok(conn
             .query_row(
-                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE sha256 = ?1 AND filename = ?2",
+                "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE sha256 = ?1 AND filename = ?2",
                 params![sha256, filename],
                 read_document,
             )
@@ -555,7 +1259,7 @@ impl Library {
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor FROM documents_items WHERE sha256 = ?1 ORDER BY imported_at, filename",
+            "SELECT id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last FROM documents_items WHERE sha256 = ?1 ORDER BY imported_at, filename",
         )?;
         let rows = stmt.query_map([sha256], read_document)?;
         Ok(rows.collect::<Result<_, _>>()?)
@@ -770,6 +1474,23 @@ impl Library {
                     "sidecar filename does not match its digest".into(),
                 ));
             }
+            let expected_id = match (document.parent_id.as_deref(), document.page_range) {
+                (None, None) => record_id(&document.sha256, &document.filename),
+                (Some(parent_id), Some(range)) => {
+                    check_id(parent_id)?;
+                    child_record_id(parent_id, range, &document.filename)
+                }
+                _ => {
+                    return Err(LibraryError::Invalid(
+                        "sidecar has incomplete child lineage".into(),
+                    ));
+                }
+            };
+            if expected_id != document.id {
+                return Err(LibraryError::Invalid(
+                    "sidecar id does not match its source lineage".into(),
+                ));
+            }
             if self.read_blob(&document.sha256)?.len() as i64 != document.byte_len {
                 return Err(LibraryError::Invalid(format!(
                     "sidecar length does not match original {}",
@@ -790,6 +1511,7 @@ impl Library {
             }
         }
         self.restore_proposal_sidecars()?;
+        self.backfill_rule_proposals()?;
         Ok((restored, unchanged))
     }
 
@@ -943,9 +1665,57 @@ impl Library {
         let mut issues = Vec::new();
         let known: std::collections::HashSet<String> =
             docs.iter().map(|doc| doc.id.clone()).collect();
+        let by_id: std::collections::HashMap<&str, &Document> = docs
+            .iter()
+            .map(|document| (document.id.as_str(), document))
+            .collect();
+        let mut children_by_parent = std::collections::BTreeMap::<&str, Vec<_>>::new();
+        for child in docs.iter().filter(|document| document.parent_id.is_some()) {
+            let parent_id = child.parent_id.as_deref().unwrap_or_default();
+            match (by_id.get(parent_id), child.page_range) {
+                (Some(parent), Some(range))
+                    if parent.parent_id.is_none()
+                        && u32::try_from(parent.pages.len())
+                            .is_ok_and(|count| range.last <= count)
+                        && usize::try_from(range.last - range.first + 1)
+                            .is_ok_and(|count| child.pages.len() == count)
+                        && child.pages.iter().enumerate().all(|(index, page)| {
+                            u32::try_from(index)
+                                .ok()
+                                .and_then(|offset| range.first.checked_add(offset))
+                                == Some(page.page_number)
+                        }) =>
+                {
+                    children_by_parent.entry(parent_id).or_default().push(range);
+                }
+                _ => issues.push(format!("{}:parent", child.id)),
+            }
+        }
+        for (parent_id, ranges) in children_by_parent {
+            let Some(parent) = by_id.get(parent_id) else {
+                continue;
+            };
+            let mut ranges = ranges;
+            ranges.sort_by_key(|range| range.first);
+            if u32::try_from(parent.pages.len())
+                .ok()
+                .and_then(|count| crate::split::Partition::new(count, ranges).ok())
+                .is_none()
+            {
+                issues.push(format!("{parent_id}:partition"));
+            }
+        }
         for doc in docs {
             match fs::read(self.blob_path(&doc.sha256)) {
-                Ok(bytes) if hex(&Sha256::digest(&bytes)) == doc.sha256 => {}
+                Ok(bytes) if hex(&Sha256::digest(&bytes)) == doc.sha256 => {
+                    if let Some(range) = doc.page_range {
+                        let expected_count = usize::try_from(range.last - range.first + 1).ok();
+                        match lopdf::Document::load_mem(&bytes) {
+                            Ok(pdf) if Some(pdf.get_pages().len()) == expected_count => {}
+                            _ => issues.push(format!("{}:pages", doc.id)),
+                        }
+                    }
+                }
                 _ => issues.push(format!("{}:original", doc.id)),
             }
             match fs::read(self.record_path(&doc.id)) {
@@ -1044,9 +1814,11 @@ impl Library {
             .get()
             .map_err(|e| LibraryError::Store(e.to_string()))?;
         conn.execute(
-            "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO documents_items (id, sha256, filename, media_type, byte_len, imported_at, status, category, project, extracted_title, extracted_text, extractor, extracted_pages_json, parent_id, page_first, page_last) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![document.id, document.sha256, document.filename, document.media_type, document.byte_len, document.imported_at,
-                document.status, document.category, document.project, document.extracted_title, document.extracted_text, document.extractor],
+                document.status, document.category, document.project, document.extracted_title, document.extracted_text, document.extractor,
+                serde_json::to_string(&document.pages).map_err(|error| LibraryError::Invalid(error.to_string()))?, document.parent_id,
+                document.page_range.map(|range| range.first), document.page_range.map(|range| range.last)],
         )?;
         Ok(())
     }
@@ -1101,7 +1873,11 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             project TEXT,
             extracted_title TEXT,
             extracted_text TEXT,
-            extractor TEXT
+            extractor TEXT,
+            extracted_pages_json TEXT NOT NULL DEFAULT '[]',
+            parent_id TEXT,
+            page_first INTEGER,
+            page_last INTEGER
         );
         CREATE INDEX IF NOT EXISTS documents_items_status_time ON documents_items (status, imported_at DESC);"
     )?;
@@ -1112,7 +1888,25 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     if !columns.iter().any(|column| column == "sha256") {
         conn.execute_batch("ALTER TABLE documents_items ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''; UPDATE documents_items SET sha256 = id WHERE sha256 = ''; ")?;
     }
-    conn.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS documents_items_digest_filename ON documents_items (sha256, filename);")?;
+    if !columns
+        .iter()
+        .any(|column| column == "extracted_pages_json")
+    {
+        conn.execute_batch("ALTER TABLE documents_items ADD COLUMN extracted_pages_json TEXT NOT NULL DEFAULT '[]';")?;
+    }
+    if !columns.iter().any(|column| column == "parent_id") {
+        conn.execute_batch("ALTER TABLE documents_items ADD COLUMN parent_id TEXT;")?;
+    }
+    if !columns.iter().any(|column| column == "page_first") {
+        conn.execute_batch("ALTER TABLE documents_items ADD COLUMN page_first INTEGER;")?;
+    }
+    if !columns.iter().any(|column| column == "page_last") {
+        conn.execute_batch("ALTER TABLE documents_items ADD COLUMN page_last INTEGER;")?;
+    }
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS documents_items_digest_filename ON documents_items (sha256, filename);
+         CREATE INDEX IF NOT EXISTS documents_items_parent_range ON documents_items (parent_id, page_first);",
+    )?;
     // Where folder intake found each record. Not in the sidecars: a rescan of the
     // same folders derives it again.
     conn.execute_batch(
@@ -1144,8 +1938,53 @@ fn migrate(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             proposal_id TEXT NOT NULL REFERENCES documents_classification_proposals(proposal_id) ON DELETE CASCADE,
             outcome TEXT NOT NULL CHECK (outcome IN ('accepted', 'rejected', 'overridden')),
             reviewed_at TEXT NOT NULL
-        );",
+        );
+        CREATE TABLE IF NOT EXISTS documents_classification_backfills (
+            version TEXT PRIMARY KEY,
+            high_water_rowid INTEGER NOT NULL
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS documents_search USING fts5(
+            filename, extracted_title, extracted_text, category, project,
+            content='documents_items', content_rowid='rowid',
+            tokenize='unicode61 remove_diacritics 2'
+        );
+        CREATE TABLE IF NOT EXISTS documents_search_state (
+            version INTEGER NOT NULL
+        );
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_insert
+        AFTER INSERT ON documents_items BEGIN
+            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
+        END;
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_update
+        AFTER UPDATE OF filename, extracted_title, extracted_text, category, project ON documents_items BEGIN
+            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
+            INSERT INTO documents_search(rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES (new.rowid, new.filename, new.extracted_title, new.extracted_text, new.category, new.project);
+        END;
+        CREATE TRIGGER IF NOT EXISTS documents_search_after_delete
+        AFTER DELETE ON documents_items BEGIN
+            INSERT INTO documents_search(documents_search, rowid, filename, extracted_title, extracted_text, category, project)
+            VALUES ('delete', old.rowid, old.filename, old.extracted_title, old.extracted_text, old.category, old.project);
+        END;",
     )?;
+    let search_index_version: Option<i64> = conn.query_row(
+        "SELECT MAX(version) FROM documents_search_state",
+        [],
+        |row| row.get(0),
+    )?;
+    if search_index_version.unwrap_or_default() < SEARCH_INDEX_VERSION {
+        conn.execute(
+            "INSERT INTO documents_search(documents_search) VALUES ('rebuild')",
+            [],
+        )?;
+        conn.execute("DELETE FROM documents_search_state", [])?;
+        conn.execute(
+            "INSERT INTO documents_search_state (version) VALUES (?1)",
+            [SEARCH_INDEX_VERSION],
+        )?;
+    }
     let proposal_columns = conn
         .prepare("PRAGMA table_info(documents_classification_proposals)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -1201,6 +2040,17 @@ fn record_id(sha256: &str, filename: &str) -> String {
     hex(&hash.finalize())
 }
 
+fn child_record_id(parent_id: &str, range: crate::split::PageRange, filename: &str) -> String {
+    let mut hash = Sha256::new();
+    hash.update(b"sjel-document-child\0");
+    hash.update(parent_id.as_bytes());
+    hash.update(range.first.to_be_bytes());
+    hash.update(range.last.to_be_bytes());
+    hash.update(b"\0");
+    hash.update(filename.as_bytes());
+    hex(&hash.finalize())
+}
+
 fn parse_sidecar(bytes: &[u8]) -> Result<Document, serde_json::Error> {
     let mut document: Document = serde_json::from_slice(bytes)?;
     if document.sha256.is_empty() {
@@ -1222,11 +2072,51 @@ fn same_record(left: &Document, right: &Document) -> bool {
         && left.extracted_title == right.extracted_title
         && left.extracted_text == right.extracted_text
         && left.extractor == right.extractor
+        && left.pages == right.pages
+        && left.parent_id == right.parent_id
+        && left.page_range == right.page_range
 }
 
 fn read_document(row: &Row<'_>) -> rusqlite::Result<Document> {
     let filename: String = row.get(2)?;
     let extracted_text: Option<String> = row.get(10)?;
+    let page_json: String = row.get(12)?;
+    let pages: Vec<sjel_extraction::ExtractedPage> =
+        serde_json::from_str(&page_json).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                12,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })?;
+    let parent_id: Option<String> = row.get(13)?;
+    let page_first: Option<u32> = row.get(14)?;
+    let page_last: Option<u32> = row.get(15)?;
+    let page_range = match (page_first, page_last) {
+        (Some(first), Some(last)) => {
+            Some(crate::split::PageRange::new(first, last).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    14,
+                    rusqlite::types::Type::Integer,
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        error.to_string(),
+                    )),
+                )
+            })?)
+        }
+        (None, None) => None,
+        _ => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                14,
+                rusqlite::types::Type::Integer,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "incomplete child page range",
+                )),
+            ));
+        }
+    };
     Ok(Document {
         id: row.get(0)?,
         sha256: row.get(1)?,
@@ -1240,6 +2130,9 @@ fn read_document(row: &Row<'_>) -> rusqlite::Result<Document> {
         extracted_title: row.get(9)?,
         extracted_text,
         extractor: row.get(11)?,
+        pages,
+        parent_id,
+        page_range,
         suggested_category: None,
         suggestion_reason: None,
     })
@@ -1249,8 +2142,77 @@ fn extract(media_type: &str, bytes: &[u8]) -> Option<sjel_extraction::Extraction
     use sjel_extraction::{Document as Input, InputClass};
     match media_type {
         "application/pdf" => {
-            let layer = sjel_extraction::for_class(InputClass::Pdf)
+            let mut layer = sjel_extraction::for_class(InputClass::Pdf)
                 .and_then(|rung1| rung1.extract(&Input::pdf(bytes)).ok());
+            if let Some(extraction) = layer.as_mut().filter(|value| !value.pages.is_empty()) {
+                let has_scanned_pages = extraction
+                    .pages
+                    .iter()
+                    .any(|page| !has_text_layer(&page.text));
+                if has_scanned_pages {
+                    match sjel_extraction::vision::read_pdf(&Input::pdf(bytes)) {
+                        Ok(ocr) => {
+                            let recognized: Vec<_> = ocr.text.split('\u{000c}').collect();
+                            if recognized.len() == extraction.pages.len() {
+                                for (page, recognized_text) in
+                                    extraction.pages.iter_mut().zip(recognized)
+                                {
+                                    if !has_text_layer(&page.text) {
+                                        if has_text_layer(recognized_text) {
+                                            page.text = recognized_text.trim().to_owned();
+                                            page.engine = ocr.producer.to_owned();
+                                            page.failure = None;
+                                        } else {
+                                            page.failure =
+                                                Some("local OCR returned no usable text".into());
+                                        }
+                                    }
+                                }
+                            } else {
+                                let message = format!(
+                                    "local OCR returned {} pages for an extraction with {} pages",
+                                    recognized.len(),
+                                    extraction.pages.len()
+                                );
+                                for page in &mut extraction.pages {
+                                    if !has_text_layer(&page.text) {
+                                        page.failure = Some(message.clone());
+                                    }
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            for page in &mut extraction.pages {
+                                if !has_text_layer(&page.text) {
+                                    page.failure = Some(error.to_string());
+                                }
+                            }
+                        }
+                    }
+                    let mut remaining = sjel_extraction::TEXT_CAP;
+                    for page in &mut extraction.pages {
+                        page.text = page.text.chars().take(remaining).collect();
+                        remaining = remaining.saturating_sub(page.text.chars().count());
+                    }
+                    extraction.text = if extraction
+                        .pages
+                        .iter()
+                        .any(|page| !page.text.trim().is_empty())
+                    {
+                        sjel_extraction::cap(
+                            extraction
+                                .pages
+                                .iter()
+                                .map(|page| page.text.as_str())
+                                .collect::<Vec<_>>()
+                                .join("\n\n\u{000c}\n\n"),
+                        )
+                    } else {
+                        String::new()
+                    };
+                }
+                return layer;
+            }
             if layer.as_ref().is_some_and(|e| has_text_layer(&e.text)) {
                 return layer;
             }
@@ -1339,6 +2301,26 @@ fn safe_filename(name: &str) -> Fallible<String> {
         ));
     }
     Ok(name.to_string())
+}
+
+fn search_terms(query: &str) -> Vec<String> {
+    const STOP_WORDS: &[&str] = &[
+        "a", "an", "and", "bei", "das", "dem", "den", "der", "des", "die", "ein", "eine", "einer",
+        "eines", "for", "from", "in", "is", "mit", "of", "on", "or", "the", "to", "und", "von",
+        "wegen", "with", "zu",
+    ];
+    let mut terms = Vec::new();
+    for term in query
+        .split(|character: char| !character.is_alphanumeric())
+        .map(str::trim)
+        .filter(|term| term.chars().count() > 1)
+    {
+        let folded = term.to_lowercase();
+        if !STOP_WORDS.contains(&folded.as_str()) && !terms.contains(&folded) {
+            terms.push(folded);
+        }
+    }
+    terms
 }
 
 fn safe_category(category: &str) -> Fallible<&str> {
@@ -1441,6 +2423,46 @@ mod tests {
             Stored::Unchanged(_)
         ));
         assert!(library.verify().unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn indexed_search_tracks_filename_text_and_filing_metadata() {
+        let (library, root) = scratch();
+        let Stored::New(document) = library
+            .intake("bahn-gutschein.pdf", b"synthetic PDF placeholder")
+            .unwrap()
+        else {
+            panic!("new document expected")
+        };
+
+        let filename_hits = library.search("Gutschein", None, 0, 10).unwrap();
+        assert_eq!(filename_hits.documents[0].id, document.id);
+
+        let conn = library.pool.get().unwrap();
+        conn.execute(
+            "UPDATE documents_items SET extracted_text = ?2 WHERE id = ?1",
+            params![document.id, "Fahrgastrechte Verspätungsentschädigung"],
+        )
+        .unwrap();
+        drop(conn);
+        let text_hits = library.search("Fahrgastrechte", None, 0, 10).unwrap();
+        assert_eq!(text_hits.documents[0].id, document.id);
+        let delay_hits = library.search("Verspätung", None, 0, 10).unwrap();
+        assert_eq!(delay_hits.documents[0].id, document.id);
+
+        library
+            .review(
+                &document.id,
+                &Review {
+                    category: "Travel".into(),
+                    project: Some("Rail".into()),
+                },
+            )
+            .unwrap();
+        let filed_hits = library.search("Rail", Some("filed"), 0, 10).unwrap();
+        assert_eq!(filed_hits.documents[0].id, document.id);
+
         fs::remove_dir_all(root).unwrap();
     }
 

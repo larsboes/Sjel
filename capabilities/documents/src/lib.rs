@@ -1,12 +1,14 @@
 #![deny(unsafe_code)]
 
 pub mod classification;
+mod classification_model;
 pub mod duplicates;
 pub mod inbox;
 mod library;
 pub mod review;
 pub mod server;
 pub mod split;
+pub mod workflow;
 
 pub use library::{Document, Library, LibraryError, Review, Stored};
 

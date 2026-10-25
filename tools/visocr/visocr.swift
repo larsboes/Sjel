@@ -2,9 +2,8 @@
 // (PRD Q63 -> B30; the engine's measurement is upstreams.toml [auge], the OS
 // framework it stands on is systems.toml [apple-vision]).
 //
-// Adopted verbatim from the implementation that produced the 2026-08-31
-// measurement, so the engine recorded there and the engine Sjel runs are the
-// same binary. Only this header is new.
+// Upright recognition runs first; orthogonal orientations are tried only when it
+// returns no text, which keeps the common printed-page path to one Vision pass.
 //
 // PROTOCOL. Reads one file path per line on stdin. Emits, per input, one line:
 //
@@ -32,6 +31,7 @@ import Foundation
 import Vision
 import AppKit
 import PDFKit
+import ImageIO
 
 let langs = ["de-DE", "en-US"]
 
@@ -57,12 +57,35 @@ func recognizePDF(_ path: String) -> String {
 }
 
 func recognize(_ cg: CGImage) -> String {
+    let upright = recognize(cg, orientation: .up)
+    if !upright.isEmpty { return upright }
+
+    var best = ""
+    for orientation in [CGImagePropertyOrientation.right, .left, .down] {
+        let candidate = recognize(cg, orientation: orientation)
+        if isBetter(candidate, than: best) { best = candidate }
+    }
+    return best
+}
+
+func recognize(_ cg: CGImage, orientation: CGImagePropertyOrientation) -> String {
     let req = VNRecognizeTextRequest()
     req.recognitionLevel = .accurate
     req.recognitionLanguages = langs
     req.usesLanguageCorrection = true
-    do { try VNImageRequestHandler(cgImage: cg, options: [:]).perform([req]) } catch { return "" }
+    do {
+        try VNImageRequestHandler(cgImage: cg, orientation: orientation, options: [:]).perform([req])
+    } catch {
+        return ""
+    }
     return (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+}
+
+func isBetter(_ candidate: String, than current: String) -> Bool {
+    let candidateLines = candidate.split(whereSeparator: { $0.isNewline }).count
+    let currentLines = current.split(whereSeparator: { $0.isNewline }).count
+    return candidateLines > currentLines ||
+        (candidateLines == currentLines && candidate.count > current.count)
 }
 
 while let line = readLine(strippingNewline: true) {

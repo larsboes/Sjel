@@ -86,6 +86,7 @@ pub enum AbstentionReason {
     MissingEvidence,
     ModelUnavailable,
     CategoryNotConfigured,
+    SafetyRefused,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

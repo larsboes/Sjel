@@ -18,43 +18,101 @@ use crate::{
     classification::{ProposalReviewRequest, StoredProposal},
     library::MAX_BYTES,
     review::{CandidateKind, DecisionAction, DuplicateDecision},
+    split::SplitRequest,
     Document, Library, LibraryError, Review, Stored,
 };
 
 const DEFAULT_PORT: u16 = 8104;
 
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AnalyzeRequest {}
+
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Check document service liveness."),
-    route_manifest::get("GET", "/routes", "Describe the operator-only document API. Agent credentials are not admitted."),
-    route_manifest::get("GET", "/api/documents", "List metadata only. Optional q searches local text; status filters inbox/filed/archived; sha256 returns the records holding those bytes under any filename; limit (1..500) and offset paginate."),
-    route_manifest::get("GET", "/api/documents/{id}", "Read metadata, locally extracted text, and independent local rule proposals in the authenticated operator UI."),
-    route_manifest::get("GET", "/api/documents/{id}/original", "Read hash-verified original bytes. download=true forces attachment disposition."),
-    route_manifest::get("GET", "/api/documents/duplicates", "Read paginated exact-copy and advisory duplicate candidates without extracted text."),
+    route_manifest::get(
+        "GET",
+        "/routes",
+        "Describe the operator-only document API. Agent credentials are not admitted.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/documents",
+        "List metadata only. Optional q ranks local word-prefix matches and returns matching page numbers; status filters inbox/filed/archived; sha256 returns records holding those bytes under any filename; limit (1..500) and offset paginate.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/documents/{id}",
+        "Read metadata, page evidence, review-only split suggestions, and independent local rule proposals in the authenticated operator UI.",
+    ),
     route_manifest::Route {
-        method: "POST", path: "/api/documents/duplicates/review",
+        method: "POST",
+        path: "/api/documents/{id}/analyze",
+        request_schema: Some(route_manifest::schema_of::<AnalyzeRequest>),
+        summary: "Run local page-aware extraction again and persist page evidence without changing filing metadata or original bytes. Send an empty JSON object.",
+    },
+    route_manifest::get(
+        "GET",
+        "/api/documents/{id}/children",
+        "List stored child PDFs and their exact source page ranges.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/documents/{id}/original",
+        "Read hash-verified bytes for this document record. download=true forces attachment disposition.",
+    ),
+    route_manifest::get(
+        "GET",
+        "/api/documents/duplicates",
+        "Read paginated exact-copy and advisory duplicate candidates without extracted text.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/documents/duplicates/review",
         request_schema: Some(route_manifest::schema_of::<DuplicateDecision>),
         summary: "Persist an operator decision for a current duplicate candidate. Originals and records are retained.",
     },
     route_manifest::Route {
-        method: "POST", path: "/api/documents/{id}/proposals/{proposal_id}/review",
+        method: "POST",
+        path: "/api/documents/{id}/proposals/{proposal_id}/review",
         request_schema: Some(route_manifest::schema_of::<ProposalReviewRequest>),
         summary: "Append an operator review outcome to one classification proposal. This does not file the document.",
     },
     route_manifest::Route {
-        method: "POST", path: "/api/documents/{id}/proposals/regenerate",
+        method: "POST",
+        path: "/api/documents/{id}/proposals/regenerate",
         request_schema: Some(route_manifest::schema_of::<RegenerateProposalRequest>),
         summary: "Generate a new deterministic rule-proposal run. Every run is stored separately and does not file the document.",
     },
     route_manifest::Route {
-        method: "POST", path: "/api/documents", request_schema: Some(binary_schema),
+        method: "POST",
+        path: "/api/documents/{id}/proposals/model",
+        request_schema: Some(route_manifest::schema_of::<RegenerateProposalRequest>),
+        summary: "Ask the configured loopback model for one locally processed review proposal. Output is validated and stored without filing the document.",
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/documents/{id}/split",
+        request_schema: Some(route_manifest::schema_of::<SplitRequest>),
+        summary: "Store a standalone child PDF for each range in an operator-approved complete page partition, with parent id and source page range.",
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/documents",
+        request_schema: Some(binary_schema),
         summary: "Upload raw original bytes with required filename query parameter. Sensitive names are refused before reading the body. Maximum 128 MiB; idempotent by bytes and filename. Returns local rule proposals separately from filing metadata.",
     },
     route_manifest::Route {
-        method: "PATCH", path: "/api/documents/{id}",
+        method: "PATCH",
+        path: "/api/documents/{id}",
         request_schema: Some(route_manifest::schema_of::<Review>),
         summary: "File with an operator-selected category and optional project reference. Original bytes are unchanged.",
     },
-    route_manifest::get("DELETE", "/api/documents/{id}", "Archive a document record; retain its original and metadata. Refile to restore."),
+    route_manifest::get(
+        "DELETE",
+        "/api/documents/{id}",
+        "Archive a document record; retain its original and metadata. Refile to restore.",
+    ),
 ];
 
 fn binary_schema() -> Value {
@@ -77,10 +135,15 @@ struct Summary {
     suggested_category: Option<String>,
     suggestion_reason: Option<String>,
     data_class: &'static str,
+    page_count: usize,
+    parent_id: Option<String>,
+    page_range: Option<crate::split::PageRange>,
+    matched_pages: Vec<u32>,
+    workflow_stage: &'static str,
 }
 
-impl From<&Document> for Summary {
-    fn from(document: &Document) -> Self {
+impl Summary {
+    fn from_document(document: &Document, pending_proposal: bool, has_children: bool) -> Self {
         Self {
             id: document.id.clone(),
             filename: document.filename.clone(),
@@ -92,15 +155,56 @@ impl From<&Document> for Summary {
             project: document.project.clone(),
             extracted_title: document.extracted_title.clone(),
             extractor: document.extractor.clone(),
-            extracted_chars: document
-                .extracted_text
-                .as_deref()
-                .map_or(0, |s| s.chars().count()),
+            extracted_chars: document.extracted_text.as_deref().map_or(0, |text| {
+                text.chars()
+                    .filter(|character| !character.is_whitespace())
+                    .count()
+            }),
             suggested_category: document.suggested_category.clone(),
             suggestion_reason: document.suggestion_reason.clone(),
             data_class: "c2",
+            page_count: document.pages.len(),
+            parent_id: document.parent_id.clone(),
+            page_range: document.page_range,
+            matched_pages: Vec::new(),
+            workflow_stage: crate::workflow::stage(document, pending_proposal, has_children)
+                .as_str(),
         }
     }
+}
+
+fn summarize_documents<'a>(
+    library: &Library,
+    documents: impl IntoIterator<Item = &'a Document>,
+) -> Result<Vec<Summary>, LibraryError> {
+    let documents = documents.into_iter().collect::<Vec<_>>();
+    let ids = documents
+        .iter()
+        .map(|document| document.id.clone())
+        .collect::<Vec<_>>();
+    let pending = library.pending_proposal_documents(&ids)?;
+    let parents_with_children = library.documents_with_children(&ids)?;
+    Ok(documents
+        .into_iter()
+        .map(|document| {
+            Summary::from_document(
+                document,
+                pending.contains(&document.id),
+                parents_with_children.contains(&document.id),
+            )
+        })
+        .collect())
+}
+
+fn summarize_document(library: &Library, document: &Document) -> Result<Summary, LibraryError> {
+    let pending = library.pending_proposal_documents(std::slice::from_ref(&document.id))?;
+    let parents_with_children =
+        library.documents_with_children(std::slice::from_ref(&document.id))?;
+    Ok(Summary::from_document(
+        document,
+        pending.contains(&document.id),
+        parents_with_children.contains(&document.id),
+    ))
 }
 
 struct ApiError(StatusCode, String);
@@ -109,6 +213,7 @@ impl From<LibraryError> for ApiError {
     fn from(error: LibraryError) -> Self {
         match error {
             LibraryError::Invalid(message) => Self(StatusCode::BAD_REQUEST, message),
+            LibraryError::Model(message) => Self(StatusCode::SERVICE_UNAVAILABLE, message),
             _ => Self(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Document storage could not be read or updated.".into(),
@@ -165,11 +270,32 @@ async fn list(
     }
     let offset = query.offset.unwrap_or(0);
     blocking(library, move |library| {
-        let documents = match &query.sha256 {
-            Some(sha256) => library.by_hash(sha256)?,
-            None => library.list(query.status.as_deref())?,
-        };
-        let q = query.q.unwrap_or_default().trim().to_lowercase();
+        let q = query.q.unwrap_or_default().trim().to_owned();
+        if q.chars().count() > 256 {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                "q must be at most 256 characters".into(),
+            ));
+        }
+        if query.sha256.is_none() && !q.is_empty() {
+            let page = library.search(&q, query.status.as_deref(), offset, limit)?;
+            let mut documents = summarize_documents(library, page.documents.iter())?;
+            for (summary, matched_pages) in documents.iter_mut().zip(page.matched_pages) {
+                summary.matched_pages = matched_pages;
+            }
+            return Ok(Json(
+                json!({"documents": documents, "total": page.total, "offset": offset, "limit": limit}),
+            ));
+        }
+        if query.sha256.is_none() {
+            let (documents, total) = library.list_page(query.status.as_deref(), offset, limit)?;
+            let rows = summarize_documents(library, documents.iter())?;
+            return Ok(Json(
+                json!({"documents": rows, "total": total, "offset": offset, "limit": limit}),
+            ));
+        }
+        let documents = library.by_hash(query.sha256.as_deref().unwrap_or_default())?;
+        let q = q.to_lowercase();
         let matched: Vec<_> = documents
             .iter()
             .filter(|d| {
@@ -183,12 +309,7 @@ async fn list(
                         .is_some_and(|s| s.to_lowercase().contains(&q))
             })
             .collect();
-        let rows: Vec<_> = matched
-            .iter()
-            .skip(offset)
-            .take(limit)
-            .map(|d| Summary::from(*d))
-            .collect();
+        let rows = summarize_documents(library, matched.iter().skip(offset).take(limit).copied())?;
         Ok(Json(
             json!({"documents": rows, "total": matched.len(), "offset": offset, "limit": limit}),
         ))
@@ -223,7 +344,7 @@ async fn duplicate_candidates(
             return Err(ApiError(
                 StatusCode::BAD_REQUEST,
                 "kind must be exact_copy, rescan or part".into(),
-            ))
+            ));
         }
     };
     let offset = query.offset.unwrap_or(0);
@@ -296,12 +417,64 @@ async fn detail(
 ) -> Result<Json<Value>, ApiError> {
     blocking(library, move |library| {
         let document = require_document(library, &id)?;
+        library.ensure_rule_proposals(&document.id)?;
         let proposals: Vec<StoredProposal> = library.proposal_records(&document.id)?;
+        let split_suggestions =
+            if document.parent_id.is_none() && document.media_type == "application/pdf" {
+                Some(library.split_suggestions(&document.id)?)
+            } else {
+                None
+            };
         Ok(Json(json!({
-            "document": Summary::from(&document),
+            "document": summarize_document(library, &document)?,
             "text": document.extracted_text,
+            "pages": document.pages,
+            "children": summarize_documents(library, library.children(&id)?.iter())?,
             "proposals": proposals,
+            "split_suggestions": split_suggestions,
         })))
+    })
+    .await
+}
+
+async fn analyze(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+    Json(_request): Json<AnalyzeRequest>,
+) -> Result<Json<Value>, ApiError> {
+    blocking(library, move |library| {
+        let document = library.analyze(&id)?;
+        Ok(Json(json!({
+            "document": summarize_document(library, &document)?,
+            "text": document.extracted_text,
+            "pages": document.pages,
+        })))
+    })
+    .await
+}
+
+async fn children(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Summary>>, ApiError> {
+    blocking(library, move |library| {
+        require_document(library, &id)?;
+        Ok(Json(summarize_documents(
+            library,
+            library.children(&id)?.iter(),
+        )?))
+    })
+    .await
+}
+
+async fn split(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+    Json(request): Json<SplitRequest>,
+) -> Result<Json<Vec<Summary>>, ApiError> {
+    blocking(library, move |library| {
+        let children = library.split(&id, &request)?;
+        Ok(Json(summarize_documents(library, children.iter())?))
     })
     .await
 }
@@ -340,7 +513,7 @@ async fn upload(
                 StatusCode::OK
             },
             Json(json!({
-                "document": Summary::from(&document),
+                "document": summarize_document(library, &document)?,
                 "proposals": proposals,
                 "created": created,
             })),
@@ -362,6 +535,18 @@ async fn regenerate_proposals(
     blocking(library, move |library| {
         require_document(library, &id)?;
         Ok(Json(library.regenerate_rule_proposals(&id)?))
+    })
+    .await
+}
+
+async fn generate_model_proposal(
+    State(library): State<Arc<Library>>,
+    Path(id): Path<String>,
+    Json(_request): Json<RegenerateProposalRequest>,
+) -> Result<Json<Vec<StoredProposal>>, ApiError> {
+    blocking(library, move |library| {
+        require_document(library, &id)?;
+        Ok(Json(library.generate_model_proposal(&id)?))
     })
     .await
 }
@@ -389,7 +574,8 @@ async fn review(
 ) -> Result<Json<Summary>, ApiError> {
     blocking(library, move |library| {
         require_document(library, &id)?;
-        Ok(Json(Summary::from(&library.review(&id, &review)?)))
+        let document = library.review(&id, &review)?;
+        Ok(Json(summarize_document(library, &document)?))
     })
     .await
 }
@@ -400,7 +586,8 @@ async fn archive(
 ) -> Result<Json<Summary>, ApiError> {
     blocking(library, move |library| {
         require_document(library, &id)?;
-        Ok(Json(Summary::from(&library.archive(&id)?)))
+        let document = library.archive(&id)?;
+        Ok(Json(summarize_document(library, &document)?))
     })
     .await
 }
@@ -482,6 +669,9 @@ fn router(library: Arc<Library>) -> Router {
             get(|| async { Json(route_manifest::manifest("documents", ROUTES)) }),
         )
         .route("/api/documents", get(list).post(upload))
+        .route("/api/documents/{id}/analyze", axum::routing::post(analyze))
+        .route("/api/documents/{id}/children", get(children))
+        .route("/api/documents/{id}/split", axum::routing::post(split))
         .route("/api/documents/duplicates", get(duplicate_candidates))
         .route(
             "/api/documents/duplicates/review",
@@ -490,6 +680,10 @@ fn router(library: Arc<Library>) -> Router {
         .route(
             "/api/documents/{id}/proposals/regenerate",
             axum::routing::post(regenerate_proposals),
+        )
+        .route(
+            "/api/documents/{id}/proposals/model",
+            axum::routing::post(generate_model_proposal),
         )
         .route(
             "/api/documents/{id}/proposals/{proposal_id}/review",
@@ -515,7 +709,9 @@ fn router(library: Arc<Library>) -> Router {
 pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let library = Arc::new(crate::open_default()?);
     let port = sjel_config::resolve_port(None, None, DEFAULT_PORT);
-    tokio::runtime::Runtime::new()?.block_on(sjel_server::serve(
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.spawn(proposal_backfill_worker(Arc::clone(&library)));
+    runtime.block_on(sjel_server::serve(
         "documents",
         sjel_server::Reach::Loopback,
         port,
@@ -523,6 +719,26 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
         sjel_server::InboundAuth::from_deployment().require_credential(),
     ));
     Ok(())
+}
+
+async fn proposal_backfill_worker(library: Arc<Library>) {
+    loop {
+        let batch_library = Arc::clone(&library);
+        match tokio::task::spawn_blocking(move || batch_library.backfill_rule_proposal_batch(128))
+            .await
+        {
+            Ok(Ok(true)) => return,
+            Ok(Ok(false)) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            Ok(Err(error)) => {
+                eprintln!("documents: local proposal backfill failed; retrying: {error}");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+            Err(error) => {
+                eprintln!("documents: local proposal worker failed; retrying: {error}");
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

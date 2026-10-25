@@ -1,6 +1,6 @@
 //! HTML and plain text, hand-rolled, no dependency.
 
-use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result, TEXT_CAP};
+use crate::{Document, Extraction, ExtractionError, Extractor, InputClass, Result, TEXT_CAP, cap};
 
 /// HTML and plain text, hand-rolled, no dependency.
 ///
@@ -26,12 +26,14 @@ impl Extractor for Builtin {
                 text: html_to_lines(&body),
                 markdown: None,
                 producer: self.name(),
+                pages: Vec::new(),
             }),
             InputClass::PlainText => Ok(Extraction {
                 title: None,
                 text: cap(body.trim().to_string()),
                 markdown: None,
                 producer: self.name(),
+                pages: Vec::new(),
             }),
             // Listed rather than wildcarded, so adding an input class is a
             // compile error here and a decision somebody makes on purpose.
@@ -66,11 +68,7 @@ pub fn html_title(html: &str) -> Option<String> {
     let end = low[gt..].find("</title>")? + gt;
     let title = decode_basic_entities(&strip_all_tags(html[gt..end].trim()));
     let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
-    if title.is_empty() {
-        None
-    } else {
-        Some(title)
-    }
+    if title.is_empty() { None } else { Some(title) }
 }
 
 /// Does this look like markup rather than the text a client already extracted?

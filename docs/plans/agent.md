@@ -272,14 +272,20 @@ to interactive keystrokes, so access is the control.
   ends a finished shell by offering a new one rather than a dead grid. The grid measures itself
   and resizes the pty; the edge's left border drags its width, kept in `sidebar.json`. The page's
   single-key bindings use `Workspace && !Terminal`, so Enter, J, K, G and Esc reach the program.
-  Built.
+  A drag selects (double-click a word, triple-click a line, shift extends), ⌘C copies, ⌘V
+  pastes with bracketed paste when the program asks for it, and ⌘A selects the scrollback.
+  Settings › Appearance › Terminal sets the grid's tone and opacity. Built.
 - Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
   passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
   The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits
   above the grid, and a tap on the grid raises the software keyboard. Entering the background
   drops the view and the unlock, so a reattach asks again. Built and linked for the simulator.
-  Open: a preset and directory picker (the seat opens `shell` only), the Agent tab's terminal
-  list, selection to the clipboard, and pinch to change the font size.
+  The key row carries copy and paste. Open: a preset and directory picker (the seat opens `shell`
+  only), the Agent tab's terminal list, the Terminal appearance rows on the phone's Settings, and
+  pinch to change the font size.
+- Both: a glyph outside ASCII draws at a fixed cell width, so a Nerd Font icon that the mono font
+  lacks is clipped to its cell instead of shifting the line. Open: a font setting, so a Nerd Font
+  can draw those icons whole.
 
 ### Done when
 

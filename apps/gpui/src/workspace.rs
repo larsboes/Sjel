@@ -200,6 +200,7 @@ pub fn bind_keys(cx: &mut App) {
     // What the panel itself carries: space, the next preset, and the way out.
     cx.bind_keys(crate::soundscape::Soundscape::keys());
     cx.bind_keys(Finder::keys());
+    cx.bind_keys(sjel_gpui_ui::terminal::keys());
     cx.bind_keys([Finder::mode_key()]);
     cx.bind_keys([
         KeyBinding::new("cmd-k", OpenPalette, None),
@@ -1881,7 +1882,10 @@ impl Render for Workspace {
                     .child("Phone activity is shown on the paired iPhone.")
                     .into_any_element(),
                 Seat::Terminal => match &self.terminal {
-                    Some(terminal) => terminal.clone().into_any_element(),
+                    Some(terminal) => {
+                        terminal.update(cx, |view, _| view.set_palette(palette));
+                        terminal.clone().into_any_element()
+                    }
                     None => div()
                         .p_4()
                         .text_sm()

@@ -11,6 +11,8 @@ pub struct Palette {
     pub surface: u32,
     pub sidebar_surface: u32,
     pub panel_surface: u32,
+    /// The terminal grid's background, as `0xRRGGBBAA`.
+    pub terminal_surface: u32,
     pub raised: u32,
     pub border: u32,
     pub text: u32,
@@ -41,6 +43,7 @@ impl Palette {
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self {
                 window_tint: 0xf3f5f9a8,
                 surface: 0xfffffff0,
+                terminal_surface: 0xfffffff0,
                 sidebar_surface: 0xffffffff,
                 panel_surface: 0xf3f5f9ff,
                 raised: 0x1118270b,
@@ -55,6 +58,7 @@ impl Palette {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self {
                 window_tint: 0x10131ae0,
                 surface: 0x252a3499,
+                terminal_surface: 0x252a3499,
                 sidebar_surface: 0x252a34ff,
                 panel_surface: 0x10131aff,
                 raised: 0xffffff18,
@@ -404,6 +408,11 @@ pub struct AppearanceSettings {
     pub accent: AccentColor,
     pub theme_mode: ThemeMode,
     pub density: Density,
+    /// The terminal grid's own background: a tone (`System` follows the theme) and how much of
+    /// what is behind it shows through.
+    pub terminal_tone: BackgroundTone,
+    #[serde(default = "default_panel_opacity")]
+    pub terminal_opacity: WindowOpacity,
 }
 
 impl Default for AppearanceSettings {
@@ -417,6 +426,8 @@ impl Default for AppearanceSettings {
             accent: AccentColor::default(),
             theme_mode: ThemeMode::default(),
             density: Density::default(),
+            terminal_tone: BackgroundTone::default(),
+            terminal_opacity: default_panel_opacity(),
         }
     }
 }
@@ -436,6 +447,11 @@ impl AppearanceSettings {
         palette.sidebar_surface = with_alpha(palette.sidebar_surface, self.sidebar_opacity.alpha());
         palette.panel_surface = with_alpha(palette.surface, self.panel_opacity.alpha());
         palette.accent = self.accent.color_rgb(dark);
+        let terminal = self
+            .terminal_tone
+            .tint_rgb(dark)
+            .unwrap_or(palette.surface >> 8);
+        palette.terminal_surface = tint(terminal, self.terminal_opacity.alpha());
         palette
     }
 
@@ -755,6 +771,23 @@ mod tests {
     /// The right edge's settings keep their shape, and a damaged file is a closed edge rather than a
     /// panel over the page at launch.
     #[test]
+    fn the_terminal_background_is_its_tone_at_its_opacity() {
+        let settings = AppearanceSettings {
+            terminal_tone: BackgroundTone::ObsidianNoir,
+            terminal_opacity: WindowOpacity::Translucent,
+            ..AppearanceSettings::default()
+        };
+        let palette = settings.apply_to_palette(Palette::dark(), true);
+        assert_eq!(palette.terminal_surface, 0x090a0f8c);
+        // System follows the theme's own surface, opaque unless asked otherwise.
+        let palette = AppearanceSettings::default().apply_to_palette(Palette::dark(), true);
+        assert_eq!(
+            palette.terminal_surface,
+            tint(Palette::dark().surface >> 8, 0xff)
+        );
+    }
+
+    #[test]
     fn sidebar_settings_keep_their_shape() {
         let prefs = SidebarPrefs {
             open: true,
@@ -896,6 +929,8 @@ mod tests {
             accent: AccentColor::Emerald,
             theme_mode: ThemeMode::Dark,
             density: Density::Comfortable,
+            terminal_tone: BackgroundTone::MidnightSlate,
+            terminal_opacity: WindowOpacity::SoftGlass,
         };
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: AppearanceSettings = serde_json::from_str(&json).unwrap();

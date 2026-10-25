@@ -624,6 +624,24 @@ fn appearance(
             ..settings
         },
     );
+    let terminal_tone = segmented(
+        "terminal-tone",
+        BackgroundTone::ALL.map(|t| (t.label(), settings.terminal_tone == t)),
+        cx,
+        move |ix| AppearanceSettings {
+            terminal_tone: BackgroundTone::ALL[ix],
+            ..settings
+        },
+    );
+    let terminal_opacity = segmented(
+        "terminal-opacity",
+        WindowOpacity::ALL.map(|o| (o.short_label(), settings.terminal_opacity == o)),
+        cx,
+        move |ix| AppearanceSettings {
+            terminal_opacity: WindowOpacity::ALL[ix],
+            ..settings
+        },
+    );
     let glass = Switch::new("liquid-glass")
         .checked(settings.glass == GlassStyle::LiquidGlass)
         .on_click(cx.listener(move |view, on: &bool, _, cx| {
@@ -684,6 +702,24 @@ fn appearance(
                     "Background tone",
                     Some("Tints the window. System uses the macOS colour."),
                     tone,
+                    palette,
+                ),
+            ],
+            palette,
+        ),
+        group(
+            "TERMINAL",
+            vec![
+                row(
+                    "Background",
+                    Some("The terminal grid's colour. System follows the theme."),
+                    terminal_tone,
+                    palette,
+                ),
+                row(
+                    "Background opacity",
+                    Some("How much of the window shows through the grid."),
+                    terminal_opacity,
                     palette,
                 ),
             ],

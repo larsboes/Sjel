@@ -23,14 +23,17 @@
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, font, px, rgb, rgba, AnyElement, Context, EventEmitter, FocusHandle, FontWeight,
-    KeyDownEvent, Keystroke, MouseButton, Render, ScrollDelta, ScrollWheelEvent, SharedString,
-    Window,
+    actions, canvas, div, font, point, px, rgb, rgba, AnyElement, ClipboardItem, Context,
+    EventEmitter, FocusHandle, FontWeight, KeyBinding, KeyDownEvent, Keystroke, MouseButton,
+    MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, ScrollDelta, ScrollWheelEvent,
+    SharedString, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::{Dimensions, Scroll};
+use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
@@ -39,6 +42,21 @@ use sjel_gpui_core::shell;
 use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update, MAX_INPUT_BYTES};
 
 use crate::theme::Palette;
+
+actions!(terminal, [Copy, Paste, SelectAll]);
+
+/// The keys the terminal takes from the window while its grid has focus. `Terminal` is deeper than
+/// any page context, so these win over a binding of the same keys further out.
+pub fn keys() -> [KeyBinding; 3] {
+    [
+        KeyBinding::new("cmd-c", Copy, Some("Terminal")),
+        KeyBinding::new("cmd-v", Paste, Some("Terminal")),
+        KeyBinding::new("cmd-a", SelectAll, Some("Terminal")),
+    ]
+}
+
+/// The grid's padding inside its border, on each side.
+const GRID_PADDING: f32 = 8.;
 
 /// The history the parser keeps, for the scroll-back the wheel already moves through.
 const HISTORY: usize = 10_000;
@@ -175,10 +193,69 @@ impl Screen {
         self.term.scroll_display(Scroll::Delta(lines));
     }
 
+    /// The grid cell at a visible `col` and `row`, in the parser's coordinates, which count
+    /// history lines as negative.
+    fn point_at(&self, col: usize, row: usize) -> GridPoint {
+        let row = row.min(self.size.rows - 1) as i32;
+        GridPoint::new(
+            Line(row - self.scrolled() as i32),
+            Column(col.min(self.size.cols - 1)),
+        )
+    }
+
+    fn select(&mut self, kind: SelectionType, at: GridPoint, side: Side) {
+        self.term.selection = Some(Selection::new(kind, at, side));
+    }
+
+    fn extend_selection(&mut self, at: GridPoint, side: Side) {
+        if let Some(selection) = self.term.selection.as_mut() {
+            selection.update(at, side);
+        }
+    }
+
+    /// Every line the parser still holds, history included.
+    fn select_all(&mut self) {
+        let top = GridPoint::new(Line(-(self.term.grid().history_size() as i32)), Column(0));
+        let bottom = GridPoint::new(Line(self.size.rows as i32 - 1), Column(self.size.cols - 1));
+        let mut selection = Selection::new(SelectionType::Lines, top, Side::Left);
+        selection.update(bottom, Side::Right);
+        self.term.selection = Some(selection);
+    }
+
+    /// A click without a drag selects nothing, so it leaves no highlight behind.
+    fn drop_empty_selection(&mut self) {
+        if self
+            .term
+            .selection
+            .as_ref()
+            .is_some_and(Selection::is_empty)
+        {
+            self.term.selection = None;
+        }
+    }
+
+    fn clear_selection(&mut self) {
+        self.term.selection = None;
+    }
+
+    fn selected_text(&self) -> Option<String> {
+        self.term
+            .selection_to_string()
+            .filter(|text| !text.is_empty())
+    }
+
+    fn bracketed_paste(&self) -> bool {
+        self.term.mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     /// The screen as the view draws it: one entry per line, each a run per shared look.
     fn lines(&self) -> Vec<ScreenLine> {
         let content = self.term.renderable_content();
         let cursor = content.cursor;
+        let selection = content.selection;
+        // The iterator counts history lines as negative; the view's rows start at the top of what
+        // is on screen, so the scroll offset moves one into the other.
+        let offset = content.display_offset as i32;
         let show_cursor = content.mode.contains(TermMode::SHOW_CURSOR) && self.scrolled() == 0;
         let mut lines: Vec<ScreenLine> = Vec::with_capacity(self.size.rows);
         for _ in 0..self.size.rows {
@@ -188,21 +265,50 @@ impl Screen {
             });
         }
         for indexed in content.display_iter {
-            let row = indexed.point.line.0.max(0) as usize;
+            let Ok(row) = usize::try_from(indexed.point.line.0 + offset) else {
+                continue;
+            };
             let cell = indexed.cell;
             let Some(line) = lines.get_mut(row) else {
                 continue;
             };
+            let selected = selection.is_some_and(|range| range.contains(indexed.point));
             let style = Style {
                 fg: cell.fg,
                 bg: cell.bg,
                 bold: cell.flags.contains(Flags::BOLD),
+                reverse: cell.flags.contains(Flags::INVERSE) != selected,
             };
+            // The second half of a wide character holds no glyph; the character's own run is
+            // drawn two cells wide instead.
+            if cell
+                .flags
+                .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+            {
+                continue;
+            }
+            // A character outside ASCII may come from a fallback font with its own advance (an
+            // icon, an emoji), so it gets its own run at a fixed width and cannot push the rest
+            // of the line out of its columns.
+            if !cell.c.is_ascii() {
+                let cells = if cell.flags.contains(Flags::WIDE_CHAR) {
+                    2
+                } else {
+                    1
+                };
+                line.runs.push(Run {
+                    style,
+                    text: cell.c.to_string(),
+                    fixed: Some(cells),
+                });
+                continue;
+            }
             match line.runs.last_mut() {
-                Some(run) if run.style == style => run.text.push(cell.c),
+                Some(run) if run.style == style && run.fixed.is_none() => run.text.push(cell.c),
                 _ => line.runs.push(Run {
                     style,
                     text: cell.c.to_string(),
+                    fixed: None,
                 }),
             }
         }
@@ -212,14 +318,15 @@ impl Screen {
         for line in &mut lines {
             while let Some(last) = line.runs.last() {
                 let blank = last.text.trim_end().is_empty()
-                    && last.style.bg == Color::Named(NamedColor::Background);
+                    && last.style.bg == Color::Named(NamedColor::Background)
+                    && !last.style.reverse;
                 if !blank {
                     break;
                 }
                 line.runs.pop();
             }
             if let Some(last) = line.runs.last_mut() {
-                if last.style.bg == Color::Named(NamedColor::Background) {
+                if last.style.bg == Color::Named(NamedColor::Background) && !last.style.reverse {
                     let trimmed = last.text.trim_end().len();
                     last.text.truncate(trimmed);
                 }
@@ -227,7 +334,7 @@ impl Screen {
             line.runs.retain(|run| !run.text.is_empty());
         }
         if show_cursor {
-            let row = cursor.point.line.0.max(0) as usize;
+            let row = (cursor.point.line.0 + offset).max(0) as usize;
             if let Some(line) = lines.get_mut(row) {
                 line.cursor = Some(cursor.point.column.0);
             }
@@ -247,15 +354,25 @@ struct ScreenLine {
 struct Run {
     style: Style,
     text: String,
+    /// Cells a single character run spans at a fixed width, for a glyph whose advance the font
+    /// does not promise. `None` is a run of ASCII drawn at the font's own monospace advance.
+    fixed: Option<usize>,
 }
 
 impl Run {
+    fn cells(&self) -> usize {
+        self.fixed.unwrap_or_else(|| self.text.chars().count())
+    }
+
     /// The run's background (absent means the window's own) and foreground, as tones.
     fn tones(&self, palette: &Palette) -> (Option<u32>, u32) {
-        (
-            tone_of(self.style.bg, palette),
-            tone_of(self.style.fg, palette).unwrap_or(palette.text),
-        )
+        let bg = tone_of(self.style.bg, palette);
+        let fg = tone_of(self.style.fg, palette).unwrap_or(palette.text);
+        if self.style.reverse {
+            (Some(fg), bg.unwrap_or(palette.terminal_surface >> 8))
+        } else {
+            (bg, fg)
+        }
     }
 }
 
@@ -264,6 +381,8 @@ struct Style {
     fg: Color,
     bg: Color,
     bold: bool,
+    /// Foreground and background swapped: a program's reverse video, or a selected cell.
+    reverse: bool,
 }
 
 /// A colour as `0xRRGGBB`, or `None` for "the window's own", which the parent draws.
@@ -323,6 +442,19 @@ fn named_index(named: NamedColor) -> u8 {
         NamedColor::BrightCyan | NamedColor::DimCyan => 14,
         NamedColor::BrightWhite | NamedColor::DimWhite => 15,
         _ => 7,
+    }
+}
+
+/// What a paste sends. Line breaks become Return, which is what a typed newline is. A program that
+/// turned on bracketed paste gets the text between the markers, minus any end marker inside it, so
+/// pasted text cannot end the paste early and run as typed commands.
+fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
+    let text = text.replace("\r\n", "\r").replace('\n', "\r");
+    if bracketed {
+        let inner = text.replace("\x1b[201~", "");
+        format!("\x1b[200~{inner}\x1b[201~").into_bytes()
+    } else {
+        text.into_bytes()
     }
 }
 
@@ -426,6 +558,12 @@ pub struct TerminalView {
     /// Bytes typed while a write is in flight. One write at a time keeps keystrokes in order.
     outgoing: Vec<u8>,
     sending: bool,
+    /// Where the grid's first cell is drawn and how big a cell is, as last measured, so a pointer
+    /// position becomes a cell.
+    origin: Point<Pixels>,
+    cell: gpui::Size<Pixels>,
+    /// True from a press on the grid until its release: a move extends the selection.
+    selecting: bool,
 }
 
 impl EventEmitter<TerminalEvent> for TerminalView {}
@@ -461,8 +599,17 @@ impl TerminalView {
             touch: false,
             outgoing: Vec::new(),
             sending: false,
+            origin: Point::default(),
+            cell: gpui::size(px(CELL_WIDTH), px(FONT_SIZE * LINE_HEIGHT)),
+            selecting: false,
             peer,
         }
+    }
+
+    /// The app's palette, Appearance settings applied. The host hands it in on every frame, so a
+    /// change in Settings reaches a terminal that is already open.
+    pub fn set_palette(&mut self, palette: Palette) {
+        self.palette = palette;
     }
 
     /// The same view for a touch screen.
@@ -569,6 +716,9 @@ impl TerminalView {
         if bytes.is_empty() || !self.peer.alive {
             return;
         }
+        // Typing answers the live screen, the way every terminal behaves.
+        self.screen.clear_selection();
+        self.screen.term.scroll_display(Scroll::Bottom);
         self.outgoing.extend_from_slice(&bytes);
         if self.sending {
             return;
@@ -606,6 +756,72 @@ impl TerminalView {
             }
         })
         .detach();
+    }
+
+    /// The cell under a pointer position, and which half of it the pointer is on.
+    fn cell_at(&self, position: Point<Pixels>) -> (GridPoint, Side) {
+        let x = f32::from(position.x - self.origin.x).max(0.);
+        let y = f32::from(position.y - self.origin.y).max(0.);
+        let columns = x / f32::from(self.cell.width);
+        let side = if columns.fract() < 0.5 {
+            Side::Left
+        } else {
+            Side::Right
+        };
+        let row = (y / f32::from(self.cell.height)) as usize;
+        (self.screen.point_at(columns as usize, row), side)
+    }
+
+    fn press(&mut self, event: &MouseDownEvent, cx: &mut Context<Self>) {
+        let (at, side) = self.cell_at(event.position);
+        if event.modifiers.shift && self.screen.term.selection.is_some() {
+            self.screen.extend_selection(at, side);
+        } else {
+            let kind = match event.click_count {
+                0 | 1 => SelectionType::Simple,
+                2 => SelectionType::Semantic,
+                _ => SelectionType::Lines,
+            };
+            self.screen.select(kind, at, side);
+        }
+        self.selecting = true;
+        cx.notify();
+    }
+
+    fn drag(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        if !self.selecting || event.pressed_button != Some(MouseButton::Left) {
+            return;
+        }
+        let (at, side) = self.cell_at(event.position);
+        self.screen.extend_selection(at, side);
+        cx.notify();
+    }
+
+    fn release(&mut self, cx: &mut Context<Self>) {
+        if self.selecting {
+            self.selecting = false;
+            self.screen.drop_empty_selection();
+            cx.notify();
+        }
+    }
+
+    pub fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = self.screen.selected_text() {
+            cx.write_to_clipboard(ClipboardItem::new_string(text));
+        }
+    }
+
+    pub fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+            return;
+        };
+        let bytes = paste_bytes(&text, self.screen.bracketed_paste());
+        self.send(bytes, cx);
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        self.screen.select_all();
+        cx.notify();
     }
 
     /// Tell the parser and the pty the same size, so the program redraws to it.
@@ -690,6 +906,43 @@ impl TerminalView {
                     )
                     .child(SharedString::from(*label))
             }))
+            // A touch screen has no ⌘C or ⌘V, so the row carries them.
+            .child(
+                div()
+                    .id("terminal-key-copy")
+                    .px_2()
+                    .py(px(3.))
+                    .rounded(px(4.))
+                    .bg(rgba(palette.raised))
+                    .text_color(rgb(palette.muted))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(self.screen.selected_text().is_none(), |this| {
+                        this.opacity(0.4)
+                    })
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _event, window, cx| view.copy(&Copy, window, cx)),
+                    )
+                    .child("copy"),
+            )
+            .child(
+                div()
+                    .id("terminal-key-paste")
+                    .px_2()
+                    .py(px(3.))
+                    .rounded(px(4.))
+                    .bg(rgba(palette.raised))
+                    .text_color(rgb(palette.muted))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(ended, |this| this.opacity(0.4))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _event, window, cx| view.paste(&Paste, window, cx)),
+                    )
+                    .child("paste"),
+            )
             .into_any_element()
     }
 
@@ -778,12 +1031,11 @@ impl TerminalView {
 }
 
 impl Render for TerminalView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // The appearance follows the window, so a terminal in light mode is not a black rectangle.
-        self.palette = Palette::for_appearance(window.appearance());
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette;
         let mono = cx.theme().mono_font_family.clone();
         let line_height = px(FONT_SIZE * LINE_HEIGHT);
+        let cell_width = self.cell.width;
         let lines = self.screen.lines();
         let header = self.header(palette, cx);
         let keys = self.touch.then(|| self.key_row(palette, cx));
@@ -806,19 +1058,34 @@ impl Render for TerminalView {
                     .flex_1()
                     .overflow_y_scroll()
                     .track_focus(&self.focus)
-                    .bg(rgba(palette.surface))
+                    .bg(rgba(palette.terminal_surface))
                     .rounded(px(8.))
                     .border_1()
                     .border_color(rgba(palette.border))
                     .p_2()
+                    .on_action(cx.listener(Self::copy))
+                    .on_action(cx.listener(Self::paste))
+                    .on_action(cx.listener(Self::select_all))
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|view, _event, window, cx| {
+                        cx.listener(|view, event: &MouseDownEvent, window, cx| {
                             window.focus(&view.focus, cx);
                             if view.touch {
                                 cx.emit(TerminalEvent::Editing(true));
                             }
+                            view.press(event, cx);
                         }),
+                    )
+                    .on_mouse_move(cx.listener(|view, event: &MouseMoveEvent, _window, cx| {
+                        view.drag(event, cx);
+                    }))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|view, _event, _window, cx| view.release(cx)),
+                    )
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|view, _event, _window, cx| view.release(cx)),
                     )
                     .on_key_down(cx.listener(|view, event: &KeyDownEvent, _window, cx| {
                         if !event.is_held {
@@ -847,8 +1114,15 @@ impl Render for TerminalView {
                                     .flex_row()
                                     .items_center()
                                     .h(line_height)
+                                    .overflow_hidden()
                                     .whitespace_nowrap()
-                                    .children(runs_of(line, cursor, &palette, mono.clone()))
+                                    .children(runs_of(
+                                        line,
+                                        cursor,
+                                        &palette,
+                                        mono.clone(),
+                                        cell_width,
+                                    ))
                             })),
                     ),
             )
@@ -868,12 +1142,18 @@ fn fit(view: gpui::Entity<TerminalView>, mono: SharedString) -> impl IntoElement
                 .advance(font_id, size, 'm')
                 .map(|advance| advance.width)
                 .unwrap_or(px(CELL_WIDTH));
-            // The grid's padding is `p_2` on each side.
-            let inner = bounds.size - gpui::size(px(16.), px(16.));
+            let padding = px(GRID_PADDING);
+            let line = px(FONT_SIZE * LINE_HEIGHT);
+            let inner = bounds.size - gpui::size(padding * 2., padding * 2.);
             let cols = (inner.width / cell).floor().max(1.) as usize;
-            let rows = (inner.height / px(FONT_SIZE * LINE_HEIGHT)).floor().max(1.) as usize;
+            let rows = (inner.height / line).floor().max(1.) as usize;
+            let origin = bounds.origin + point(padding, padding);
             app.defer(move |app| {
-                view.update(app, |view, cx| view.resize(cols, rows, cx));
+                view.update(app, |view, cx| {
+                    view.origin = origin;
+                    view.cell = gpui::size(cell, line);
+                    view.resize(cols, rows, cx);
+                });
             });
         },
         |_, _, _, _| {},
@@ -890,13 +1170,32 @@ fn runs_of(
     cursor: Option<usize>,
     palette: &Palette,
     mono: SharedString,
+    cell_width: Pixels,
 ) -> Vec<AnyElement> {
     let mut elements: Vec<AnyElement> = Vec::new();
     let mut column = 0usize;
     for run in line.runs {
         let (bg, fg) = run.tones(palette);
         let characters: Vec<char> = run.text.chars().collect();
-        let end = column + characters.len();
+        let end = column + run.cells();
+        if let Some(cells) = run.fixed {
+            let under_cursor = cursor.is_some_and(|at| at >= column && at < end);
+            let (bg, fg) = if under_cursor {
+                (Some(fg), bg.unwrap_or(palette.terminal_surface >> 8))
+            } else {
+                (bg, fg)
+            };
+            elements.push(
+                div()
+                    .flex_none()
+                    .w(cell_width * cells as f32)
+                    .overflow_hidden()
+                    .child(cell(run.text, bg, fg, run.style.bold, &mono))
+                    .into_any_element(),
+            );
+            column = end;
+            continue;
+        }
         match cursor {
             Some(at) if at >= column && at < end => {
                 let offset = at - column;
@@ -912,7 +1211,7 @@ fn runs_of(
                         .flex_none()
                         .h(px(FONT_SIZE * LINE_HEIGHT))
                         .bg(rgb(fg))
-                        .text_color(rgb(bg.unwrap_or(palette.surface)))
+                        .text_color(rgb(bg.unwrap_or(palette.terminal_surface >> 8)))
                         .font_family(mono.clone())
                         .text_size(px(FONT_SIZE))
                         .child(SharedString::from(under))
@@ -1036,6 +1335,68 @@ mod tests {
     }
 
     #[test]
+    fn a_dragged_selection_copies_the_cells_it_covers() {
+        let mut screen = Screen::new(20, 3);
+        screen.feed(b"hello world");
+        let start = screen.point_at(0, 0);
+        let end = screen.point_at(4, 0);
+        screen.select(SelectionType::Simple, start, Side::Left);
+        screen.extend_selection(end, Side::Right);
+        assert_eq!(screen.selected_text().as_deref(), Some("hello"));
+        // The selected cells are drawn reversed, the rest of the line is not.
+        let lines = screen.lines();
+        assert!(lines[0].runs[0].style.reverse);
+        assert_eq!(lines[0].runs[0].text, "hello");
+        assert!(!lines[0].runs[1].style.reverse);
+    }
+
+    #[test]
+    fn an_icon_glyph_is_its_own_fixed_width_run() {
+        let mut screen = Screen::new(20, 3);
+        // A Nerd Font folder icon, then a name: the icon cannot share the name's run.
+        screen.feed("\u{f115} Docs".as_bytes());
+        let runs = &screen.lines()[0].runs;
+        assert_eq!(runs[0].fixed, Some(1));
+        assert_eq!(runs[1].text, " Docs");
+        assert_eq!(runs[1].fixed, None);
+        // A wide character spans two cells and its spacer is not drawn as a third.
+        let mut screen = Screen::new(20, 3);
+        screen.feed("漢a".as_bytes());
+        let runs = &screen.lines()[0].runs;
+        assert_eq!(runs[0].fixed, Some(2));
+        assert_eq!(runs[1].text, "a");
+    }
+
+    #[test]
+    fn a_click_without_a_drag_leaves_nothing_selected() {
+        let mut screen = Screen::new(20, 3);
+        screen.feed(b"hello");
+        let at = screen.point_at(2, 0);
+        screen.select(SelectionType::Simple, at, Side::Left);
+        screen.drop_empty_selection();
+        assert_eq!(screen.selected_text(), None);
+    }
+
+    #[test]
+    fn scrolled_back_history_draws_on_its_own_rows() {
+        let mut screen = Screen::new(10, 3);
+        screen.feed(b"1\r\n2\r\n3\r\n4\r\n5");
+        screen.scroll(2);
+        let lines = screen.lines();
+        let shown: Vec<String> = lines.iter().map(|line| text_of(line)).collect();
+        assert_eq!(shown, ["1", "2", "3"]);
+    }
+
+    #[test]
+    fn a_paste_types_returns_and_cannot_end_a_bracketed_paste_early() {
+        assert_eq!(paste_bytes("ls\nexit\r\n", false), b"ls\rexit\r");
+        assert_eq!(
+            paste_bytes("a\x1b[201~rm -rf", true),
+            b"\x1b[200~arm -rf\x1b[201~"
+        );
+    }
+
+    #[test]
     fn the_touch_key_row_sends_what_a_keyboard_would() {
         let bytes = |label: &str| {
             TOUCH_KEYS
@@ -1140,6 +1501,7 @@ mod tests {
                     .map(|run| Run {
                         style: run.style,
                         text: run.text.clone(),
+                        fixed: run.fixed,
                     })
                     .collect(),
                 cursor: Some(1),
@@ -1147,6 +1509,7 @@ mod tests {
             Some(1),
             &Palette::dark(),
             SharedString::from("monospace"),
+            px(CELL_WIDTH),
         );
         // "a", the inverted "b", then "c": the cursor splits the run rather than replacing it.
         assert_eq!(elements.len(), 3);

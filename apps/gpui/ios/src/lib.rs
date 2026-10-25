@@ -3253,6 +3253,7 @@ impl Render for Capabilities {
                     Seat::Agent => self.agent_panel(palette, window, cx),
                     Seat::Terminal => match (&self.terminal, self.client.is_some()) {
                         (Some((terminal, _)), _) if self.terminal_unlocked => {
+                            terminal.update(cx, |view, _| view.set_palette(palette));
                             terminal.clone().into_any_element()
                         }
                         (_, paired) => div()

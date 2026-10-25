@@ -158,6 +158,132 @@ fn identity(
     }
 }
 
+/// Keys that place something exactly. The trusted view drops them, so a name never travels
+/// with a coordinate or a street address.
+const LOCATION_KEYS: &[&str] = &[
+    "latitude",
+    "longitude",
+    "lat",
+    "lng",
+    "lon",
+    "coordinates",
+    "address",
+    "street",
+    "postal_code",
+    "zip",
+];
+
+/// The view for an owner-trusted or verified zero-retention model (`Tier::Zdr`,
+/// `Tier::Trusted` in `sjel-server`). Names stay readable. A c3 object is still removed, a
+/// location key is dropped, and an email address, phone number, IBAN or token-shaped value
+/// in any string is replaced. A sender keeps its display name, plus its domain when that is an
+/// organisation's.
+pub fn trusted_view(value: &mut Value) -> ViewReport {
+    let mut report = ViewReport::default();
+    trusted_walk(value, None, &mut report);
+    report
+}
+
+fn trusted_walk(value: &mut Value, key: Option<&str>, report: &mut ViewReport) {
+    match value {
+        Value::String(s) => match key {
+            Some(k) if is_structural(k) => {}
+            Some(k) if IDENTITY_KEYS.contains(&k) => *s = trusted_identity(s),
+            _ => *s = trusted_text(s),
+        },
+        Value::Array(items) => {
+            let before = items.len();
+            items.retain(|item| !is_secret_object(item));
+            report.withheld_secret += before - items.len();
+            for item in items {
+                trusted_walk(item, key, report);
+            }
+        }
+        Value::Object(map) => {
+            map.retain(|k, _| !LOCATION_KEYS.contains(&k.as_str()));
+            for (k, v) in map.iter_mut() {
+                if is_secret_object(v) {
+                    *v = Value::Null;
+                    report.withheld_secret += 1;
+                    continue;
+                }
+                trusted_walk(v, Some(k.as_str()), report);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn trusted_identity(value: &str) -> String {
+    let name = value
+        .split('<')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .trim_matches('"');
+    let domain =
+        crate::pattern::sender_domain(value).filter(|d| !crate::pattern::is_freemail_domain(d));
+    match (name.is_empty() || crate::pattern::looks_like_email(name), domain) {
+        (false, Some(d)) => format!("{name} ({d})"),
+        (false, None) => name.to_string(),
+        (true, Some(d)) => format!("[email] ({d})"),
+        (true, None) => "[email]".to_string(),
+    }
+}
+
+fn trusted_text(value: &str) -> String {
+    use crate::pattern::{looks_like_email, looks_like_iban, looks_like_phone, looks_like_token};
+    let digitish = |w: &str| {
+        !w.is_empty()
+            && w.chars().any(|c| c.is_ascii_digit())
+            && w.chars().all(|c| c.is_ascii_digit() || "+()/-".contains(c))
+    };
+    let pieces: Vec<&str> = value.split_inclusive(char::is_whitespace).collect();
+    let mut out = String::with_capacity(value.len());
+    let mut i = 0;
+    while i < pieces.len() {
+        let word = pieces[i].trim_end();
+        // A number written in groups ("+49 170 1234567") is judged as one run.
+        if digitish(word) {
+            let mut end = i;
+            while end + 1 < pieces.len() && digitish(pieces[end + 1].trim_end()) {
+                end += 1;
+            }
+            let run: String = pieces[i..=end].concat();
+            let digits = run.chars().filter(char::is_ascii_digit).count();
+            let phone = digits >= 7 && (run.trim_start().starts_with('+') || end > i);
+            if phone || looks_like_phone(run.trim_end()) {
+                let last = pieces[end];
+                out.push_str("[phone]");
+                out.push_str(&last[last.trim_end().len()..]);
+            } else {
+                out.push_str(&run);
+            }
+            i = end + 1;
+            continue;
+        }
+        let gap = &pieces[i][word.len()..];
+        let replaced = if looks_like_email(word) {
+            Some("[email]")
+        } else if looks_like_iban(word) {
+            Some("[account]")
+        } else if looks_like_token(word) {
+            Some("[token]")
+        } else {
+            None
+        };
+        match replaced {
+            Some(r) => {
+                out.push_str(r);
+                out.push_str(gap);
+            }
+            None => out.push_str(pieces[i]),
+        }
+        i += 1;
+    }
+    out
+}
+
 /// Whether the whole response is one c3 object and must not be sent at all.
 pub fn is_withheld(value: &Value) -> bool {
     is_secret_object(value)
@@ -227,29 +353,55 @@ mod tests {
         PseudonymizerSession::keyed(crate::keyed::session_key(b"test", "s"))
     }
 
+    #[test]
+    fn the_trusted_view_keeps_names_and_drops_contact_and_location() {
+        let mut value = json!({
+            "data_class": "c2",
+            "name": "Erika Beispiel",
+            "from_addr": "Erika <erika@gmail.com>",
+            "note": "Call +49 170 1234567 or erika@gmail.com, IBAN DE89370400440532013000",
+            "latitude": 50.7, "longitude": 7.1, "place": "Bonn",
+            "secret": {"data_class": "c3", "code": "123456"},
+            "invoice": {"total": "179,80 EUR", "date": "30.10.2026"}
+        });
+        let report = trusted_view(&mut value);
+        assert_eq!(value["name"], "Erika Beispiel");
+        assert_eq!(value["from_addr"], "Erika");
+        assert_eq!(value["place"], "Bonn");
+        assert!(value.get("latitude").is_none() && value.get("longitude").is_none());
+        let note = value["note"].as_str().unwrap();
+        assert!(!note.contains("erika@") && !note.contains("DE89"), "{note}");
+        assert!(!note.contains("1234567") && note.contains("[phone]"), "{note}");
+        assert_eq!(trusted_text("Hinfahrt 30.10.2026 um 08:12"), "Hinfahrt 30.10.2026 um 08:12");
+        assert_eq!(value["secret"], Value::Null);
+        assert_eq!(report.withheld_secret, 1);
+        assert_eq!(value["invoice"]["total"], "179,80 EUR");
+        assert_eq!(trusted_identity("DHL Paket <noreply@dhl.de>"), "DHL Paket (dhl.de)");
+    }
+
     fn registry() -> EntityRegistry {
-        EntityRegistry::builder().add_people(["Katrin"]).build()
+        EntityRegistry::builder().add_people(["Erika"]).build()
     }
 
     #[test]
     fn a_declared_public_key_stays_and_nothing_else_does() {
         let mut value = json!({
-            "name": "Katrin Hbf",
-            "summary": "Katrin",
-            "sender": "Katrin <k@x.de>",
-            "secret": {"data_class": "c3", "name": "Katrin"},
-            "letter": {"data_class": "c2", "name": "Katrin"},
+            "name": "Erika Hbf",
+            "summary": "Erika",
+            "sender": "Erika <k@x.de>",
+            "secret": {"data_class": "c3", "name": "Erika"},
+            "letter": {"data_class": "c2", "name": "Erika"},
         });
         let report =
             agent_view_public(&mut value, &mut session(), &registry(), &["name", "sender"]);
-        assert_eq!(value["name"], "Katrin Hbf", "declared public");
-        assert_ne!(value["summary"], "Katrin", "not declared");
+        assert_eq!(value["name"], "Erika Hbf", "declared public");
+        assert_ne!(value["summary"], "Erika", "not declared");
         assert!(
-            !value["sender"].as_str().unwrap().contains("Katrin"),
+            !value["sender"].as_str().unwrap().contains("Erika"),
             "identity never public"
         );
         assert_eq!(value["secret"], Value::Null, "c3 still withheld");
-        assert_ne!(value["letter"]["name"], "Katrin", "c2 stays pseudonymized");
+        assert_ne!(value["letter"]["name"], "Erika", "c2 stays pseudonymized");
         assert_eq!(report.withheld_secret, 1);
     }
 
@@ -261,7 +413,7 @@ mod tests {
             "internal_date": "2026-09-26T10:00:00Z",
             "data_class": "c1",
             "stream": "aktiv",
-            "from_addr": "Katrin Wissem <katrin@example.com>",
+            "from_addr": "Erika Mustermann <erika@example.com>",
             "subject": "616685 is your UNiDAYS passcode",
             "score_bp": 4200
         }]);
@@ -287,7 +439,7 @@ mod tests {
         let mut value = json!({
             "items": [
                 {"data_class": "c3", "subject": "reset code"},
-                {"data_class": "c2", "subject": "Katrin's receipt"}
+                {"data_class": "c2", "subject": "Erika's receipt"}
             ],
             "pinned": {"data_class": "c3", "subject": "another code"}
         });
@@ -297,7 +449,7 @@ mod tests {
         assert!(value["pinned"].is_null());
         // c2 stays, pseudonymized (ruling 2026-09-30).
         let subject = value["items"][0]["subject"].as_str().unwrap();
-        assert!(!subject.contains("Katrin"), "{subject}");
+        assert!(!subject.contains("Erika"), "{subject}");
     }
 
     #[test]
@@ -339,7 +491,7 @@ mod tests {
             {"data_class": "c1", "from_addr": "DHL Paket <noreply@dhl.de>"},
             {"data_class": "c1", "from_addr": "Anna <anna.b@gmail.com>"},
             {"data_class": "c1", "from_addr": "x <hi@mail.gmx.net>"},
-            {"data_class": "c1", "from_addr": "K <k@katrin-design.de>"},
+            {"data_class": "c1", "from_addr": "K <k@erika-design.de>"},
             {"data_class": "c2", "from_addr": "Praxis <termine@praxis-am-see.de>"}
         ]);
         agent_view(&mut value, &mut session(), &registry());
@@ -381,7 +533,7 @@ mod tests {
             "files": [
                 "Waschmaschine/Assets/IMG_1234.jpeg",
                 "Steuer-2025/Belege/2025-11-04-rechnung-1234567.pdf",
-                "Reisen/Katrin/IMG_1234.jpeg"
+                "Reisen/Erika/IMG_1234.jpeg"
             ],
             "path": "Waschmaschine/Assets/IMG_1234.jpeg"
         });
@@ -394,9 +546,9 @@ mod tests {
             "Steuer-2025/Belege/2025-11-04-rechnung-1234567.pdf"
         );
         let named = files[2].as_str().unwrap();
-        assert!(!named.contains("Katrin"), "{named}");
+        assert!(!named.contains("Erika"), "{named}");
         assert!(named.ends_with("/IMG_1234.jpeg"), "{named}");
-        assert_eq!(s.rehydrate_text(named), "Reisen/Katrin/IMG_1234.jpeg");
+        assert_eq!(s.rehydrate_text(named), "Reisen/Erika/IMG_1234.jpeg");
         assert_eq!(value["path"], "Waschmaschine/Assets/IMG_1234.jpeg");
     }
 }

@@ -72,6 +72,31 @@ fn quiet_broken_pipe() {
     }));
 }
 
+/// Owner-only: how much one named agent token reads (`libs/sjel-server/src/agent_policy.rs`).
+/// Refused from an agent session, so an agent cannot raise its own tier.
+fn agent_tier(args: &[String]) -> ExitCode {
+    use sjel_server::agent_policy::{PolicyFiles, Tier};
+    if capability::in_agent_session() {
+        return fail("sjel: agent tiers are owner-only; run this in your own shell");
+    }
+    let [name, tier] = args else {
+        return fail("usage: sjel agent tier <name> <pseudonymized|zdr|trusted>");
+    };
+    let Some(tier) = Tier::parse(tier) else {
+        return fail("sjel: the tier is pseudonymized, zdr or trusted");
+    };
+    let Some(files) = PolicyFiles::from_deployment() else {
+        return fail("sjel: no overlay is configured, so there is no agent policy");
+    };
+    match files.set_tier(name, tier) {
+        Ok(()) => {
+            println!("agent '{name}' reads at tier {}", tier.as_str());
+            ExitCode::SUCCESS
+        }
+        Err(error) => fail(&format!("sjel: {error}")),
+    }
+}
+
 fn main() -> ExitCode {
     quiet_broken_pipe();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -166,10 +191,13 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "distribution" => distribution::run(root, rest),
         "testflight" => testflight::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
-            Some("enroll") => {
-                exec(Command::new(tool("tools/capability-auth/capability-auth")).arg("enroll"))
-            }
-            _ => fail("usage: sjel agent enroll"),
+            Some("enroll") => exec(
+                Command::new(tool("tools/capability-auth/capability-auth"))
+                    .arg("enroll")
+                    .args(&rest[1..]),
+            ),
+            Some("tier") => agent_tier(&rest[1..]),
+            _ => fail("usage: sjel agent enroll [<name>] | sjel agent tier <name> <pseudonymized|zdr|trusted>"),
         },
         "pack" => pack(root, rest),
         // The public Pack list the marketplace generator reads. No tools/ launcher: its only

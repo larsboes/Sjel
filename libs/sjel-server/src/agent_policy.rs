@@ -63,6 +63,41 @@ impl Mode {
     }
 }
 
+/// How much of a response one agent token reads, by the trust in the model behind it.
+///
+/// `Pseudonymized` is the default for any cloud model. `Zdr` is a route whose zero data
+/// retention was verified for the account and endpoint. `Trusted` is a route the owner trusts
+/// without that proof. Both read the same view, [`sjel_pseudonymize::view::trusted_view`]; the
+/// tier is logged so a call shows which promise it relied on
+/// (`docs/architecture/data-processing-policy.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Tier {
+    Pseudonymized,
+    Zdr,
+    Trusted,
+}
+
+impl Tier {
+    pub const ALL: [Tier; 3] = [Tier::Pseudonymized, Tier::Zdr, Tier::Trusted];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Tier::Pseudonymized => "pseudonymized",
+            Tier::Zdr => "zdr",
+            Tier::Trusted => "trusted",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Tier> {
+        Tier::ALL.into_iter().find(|t| t.as_str() == text)
+    }
+
+    /// Whether names reach the agent verbatim.
+    pub fn reads_names(self) -> bool {
+        self != Tier::Pseudonymized
+    }
+}
+
 /// The mode when the policy names nothing for a capability.
 pub const DEFAULT_MODE: Mode = Mode::Auto;
 
@@ -260,20 +295,50 @@ impl PolicyFiles {
         }
     }
 
+    /// The tier of the named agent token. Unnamed, unknown or unreadable answers
+    /// [`Tier::Pseudonymized`]: a policy that cannot be read is not a reason to unmask.
+    /// Read per call: the file is small, and a lowered tier must apply at once.
+    pub fn tier_for(&self, agent: &str) -> Tier {
+        fs::read_to_string(self.policy_path())
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|value| value["tiers"][agent].as_str().and_then(Tier::parse))
+            .unwrap_or(Tier::Pseudonymized)
+    }
+
+    pub fn set_tier(&self, agent: &str, tier: Tier) -> Result<(), String> {
+        let valid = !agent.is_empty()
+            && agent.len() <= 40
+            && agent.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+        if !valid {
+            return Err(format!("{agent:?} is not an agent name (letters, digits, '-')"));
+        }
+        self.write_policy(|policy| {
+            policy["tiers"][agent] = Value::from(tier.as_str());
+        })
+    }
+
     pub fn set_mode(&self, capability: &str, mode: Mode) -> Result<(), String> {
-        let mut modes = self.modes()?;
-        modes.insert(capability.to_string(), mode);
-        let mut names: Vec<_> = modes.keys().cloned().collect();
-        names.sort();
-        let map: serde_json::Map<String, Value> = names
-            .into_iter()
-            .map(|n| {
-                let m = modes[&n];
-                (n, Value::from(m.as_str()))
-            })
-            .collect();
-        let text =
-            serde_json::to_vec_pretty(&json!({ "modes": map })).map_err(|e| e.to_string())?;
+        self.modes()?;
+        self.write_policy(|policy| {
+            policy["modes"][capability] = Value::from(mode.as_str());
+        })
+    }
+
+    /// Rewrite the policy with one change, keeping every other key.
+    fn write_policy(&self, change: impl FnOnce(&mut Value)) -> Result<(), String> {
+        let mut policy = match fs::read_to_string(self.policy_path()) {
+            Ok(text) => serde_json::from_str::<Value>(&text).map_err(|e| e.to_string())?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+            Err(e) => return Err(e.to_string()),
+        };
+        for key in ["modes", "tiers"] {
+            if !policy[key].is_object() {
+                policy[key] = json!({});
+            }
+        }
+        change(&mut policy);
+        let text = serde_json::to_vec_pretty(&policy).map_err(|e| e.to_string())?;
         write_atomic(&self.policy_path(), &text).map_err(|e| e.to_string())?;
         // The readable copy follows the real one. Failing to write it costs a tool list only.
         if let Err(error) = write_atomic(&self.mirror_path(), &text) {
@@ -399,6 +464,8 @@ impl PolicyFiles {
         let line = json!({
             "at": at,
             "capability": call.capability,
+            "agent": call.agent,
+            "tier": call.tier,
             "method": call.method,
             "path": call.path,
             "status": call.status,
@@ -460,6 +527,9 @@ pub enum Consumed {
 /// One logged agent call. `path` carries no query: a query can hold the values the log must not.
 pub struct AgentCall<'a> {
     pub capability: &'a str,
+    /// The agent token's name and tier, so a call shows which trust it ran under.
+    pub agent: &'a str,
+    pub tier: &'a str,
     pub method: &'a str,
     pub path: &'a str,
     pub status: u16,
@@ -596,6 +666,8 @@ mod tests {
         for (i, path) in ["/feed", "/triage"].iter().enumerate() {
             files.log_call(&AgentCall {
                 capability: "comms",
+                agent: "default",
+                tier: "pseudonymized",
                 method: "GET",
                 path,
                 status: 200 + i as u16,

@@ -38,6 +38,24 @@ count. Stable identifiers, rare details, exact dates and location combinations c
 or reveal a sensitive relationship. A derivative therefore needs a declared purpose, allowed field
 set, transformation version, processor tier and source-class recheck at dispatch.
 
+## Agent tiers at the gate
+
+The agent gate (`libs/sjel-server/src/agent.rs`) applies the cloud tiers to agent sessions. Each
+harness holds its own token (`sjel agent enroll <name>`, selected by `SJEL_AGENT_NAME`), and the
+owner sets each name's tier with `sjel agent tier <name> <tier>`. The tier lives in the policy
+file under `secrets/agent/`, which no agent can write.
+
+| Tier | Meaning | View |
+|---|---|---|
+| `pseudonymized` | Any cloud model. The default for an unnamed or unknown token. | Names and identities become session tokens (`agent_view_public`). |
+| `zdr` | A route whose zero data retention was verified for the account and endpoint. | `trusted_view` |
+| `trusted` | A route the owner trusts without that proof. | `trusted_view` |
+
+`trusted_view` (`libs/pseudonymize/src/view.rs`) keeps names. It still removes every c3 object,
+drops coordinate and street-address keys, and replaces email addresses, phone numbers, IBANs and
+token-shaped values. A sender keeps its display name and an organisation's domain. Each call log
+line records the agent name and tier.
+
 ## Implementation sequence
 
 1. Inventory every class definition, local prompt gate, cloud admission gate, derivative builder,

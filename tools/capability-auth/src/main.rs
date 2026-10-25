@@ -22,8 +22,32 @@ use std::process::{Command, ExitCode, Stdio};
 use sha2::{Digest, Sha256};
 use sjel_server::InboundAuth;
 
-/// The Keychain item that holds the agent token.
+/// The Keychain item that holds the default agent token. A named token is
+/// `sjel-agent-token.<name>`.
 const KEYCHAIN_SERVICE: &str = "sjel-agent-token";
+
+/// The agent this harness runs as: `SJEL_AGENT_NAME`, else `default`. Each name has its own
+/// token, and the owner sets each name's tier (`sjel agent tier`).
+fn agent_name() -> String {
+    std::env::var("SJEL_AGENT_NAME")
+        .ok()
+        .filter(|n| valid_name(n))
+        .unwrap_or_else(|| "default".into())
+}
+
+fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 40
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+fn keychain_service(name: &str) -> String {
+    if name == "default" {
+        KEYCHAIN_SERVICE.into()
+    } else {
+        format!("{KEYCHAIN_SERVICE}.{name}")
+    }
+}
 
 /// The capability's own token first, then the deployment's, in the order comms' gate
 /// resolves them (`InboundAuth::resolve`, `libs/sjel-server/src/auth.rs`).
@@ -35,10 +59,20 @@ fn bearer_for(capability: Option<&str>) -> Option<String> {
     InboundAuth::resolve(own).bearer_header()
 }
 
-/// The agent token, read from the login Keychain. `None` when it is not enrolled.
+/// The named agent token, else the default one, read from the login Keychain. Falling back
+/// is safe: the default token has the lowest tier unless the owner raised it.
 fn agent_bearer() -> Option<String> {
+    let name = agent_name();
+    keychain_token(&name).or_else(|| {
+        (name != "default")
+            .then(|| keychain_token("default"))
+            .flatten()
+    })
+}
+
+fn keychain_token(name: &str) -> Option<String> {
     let out = Command::new("security")
-        .args(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"])
+        .args(["find-generic-password", "-s", &keychain_service(name), "-w"])
         .stderr(Stdio::null())
         .output()
         .ok()?;
@@ -70,10 +104,12 @@ fn write_private(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 ///    rotating it would change every token an agent already holds.
 /// 2. A new random token goes into the login Keychain. It is written through `security -i` on
 ///    stdin, so it never appears in an argument list.
-/// 3. Its SHA-256 goes to `<overlay>/config/agent-token.sha256`. The server reads only that.
+/// 3. Its SHA-256 goes to `<overlay>/config/agent-token.sha256`, or for a named agent to
+///    `<overlay>/config/agent-tokens/<name>.sha256`. The server reads only that.
 ///
 /// The token is never printed.
-fn enroll() -> Result<(), String> {
+fn enroll(name: &str) -> Result<(), String> {
+    let service = keychain_service(name);
     let root = sjel_config::overlay_root().ok_or("no overlay is configured")?;
     let key_path = root.join("secrets/agent-pseudonym.key");
     if !key_path.exists() {
@@ -100,7 +136,7 @@ fn enroll() -> Result<(), String> {
         .ok_or("security: no stdin")?
         .write_all(
             format!(
-                "add-generic-password -U -a {account} -s {KEYCHAIN_SERVICE} -l \"Sjel agent token\" -w {token}\n"
+                "add-generic-password -U -a {account} -s {service} -l \"Sjel agent token ({name})\" -w {token}\n"
             )
             .as_bytes(),
         )
@@ -112,18 +148,22 @@ fn enroll() -> Result<(), String> {
     if !out.status.success() || !stderr.trim().is_empty() {
         return Err(format!("the Keychain refused the token: {}", stderr.trim()));
     }
-    if agent_bearer().as_deref() != Some(format!("Bearer {token}").as_str()) {
+    if keychain_token(name).as_deref() != Some(format!("Bearer {token}").as_str()) {
         return Err(
             "the Keychain item could not be read back; nothing was changed on the server side"
                 .into(),
         );
     }
 
-    let hash_path = root.join("config/agent-token.sha256");
+    let hash_path = if name == "default" {
+        root.join("config/agent-token.sha256")
+    } else {
+        root.join(format!("config/agent-tokens/{name}.sha256"))
+    };
     let digest = hex(&Sha256::digest(token.as_bytes()));
     write_private(&hash_path, format!("{digest}\n").as_bytes())
         .map_err(|e| format!("{}: {e}", hash_path.display()))?;
-    println!("agent token stored in the login Keychain as '{KEYCHAIN_SERVICE}'");
+    println!("agent token stored in the login Keychain as '{service}'");
     println!("wrote {}", hash_path.display());
     println!("restart each capability that admits agents to load it: comms");
     Ok(())
@@ -132,11 +172,17 @@ fn enroll() -> Result<(), String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().map(String::as_str) == Some("enroll") {
-        if args.len() > 1 {
-            eprintln!("sjel-capability-auth: enroll takes no arguments");
-            return ExitCode::from(2);
-        }
-        return match enroll() {
+        let name = match args.get(1..).unwrap_or_default() {
+            [] => "default",
+            [name] if valid_name(name) => name.as_str(),
+            _ => {
+                eprintln!(
+                    "sjel-capability-auth: usage: enroll [<agent-name>] (letters, digits, '-')"
+                );
+                return ExitCode::from(2);
+            }
+        };
+        return match enroll(name) {
             Ok(()) => ExitCode::SUCCESS,
             Err(message) => {
                 eprintln!("sjel-capability-auth: {message}");

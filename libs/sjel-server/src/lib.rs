@@ -409,7 +409,7 @@ mod http_tests {
         use sha2::Digest;
         let hash: [u8; 32] = sha2::Sha256::digest(b"agent-token").into();
         let registry = sjel_pseudonymize::EntityRegistry::builder()
-            .add_people(["Katrin"])
+            .add_people(["Erika"])
             .build();
         agent::AgentAccess::new(hash, vec![9; 32], registry)
     }
@@ -441,26 +441,26 @@ mod http_tests {
             .route(
                 "/triage",
                 get(|q: axum::extract::Query<std::collections::HashMap<String, String>>| async move {
-                    let from_matches = q.get("from").map(|f| f == "Katrin Wissem <katrin@example.com>");
+                    let from_matches = q.get("from").map(|f| f == "Erika Mustermann <erika@example.com>");
                     axum::Json(serde_json::json!([
                         {"id": "18f3a9c2b7d41e05", "data_class": "c1",
-                         "from_addr": "Katrin Wissem <katrin@example.com>",
-                         "subject": "Scans from Katrin", "from_matches": from_matches},
+                         "from_addr": "Erika Mustermann <erika@example.com>",
+                         "subject": "Scans from Erika", "from_matches": from_matches},
                         {"id": "18f3a9c2b7d41e06", "data_class": "c3",
                          "subject": "616685 is your code"}
                     ]))
                 }),
             )
             .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
-            .route("/page", get(|| async { "<html>Katrin</html>" }))
+            .route("/page", get(|| async { "<html>Erika</html>" }))
             .route(
                 "/stations",
                 get(|| async {
                     (
                         [(agent::PUBLIC_FIELDS_HEADER, "name, sender")],
                         axum::Json(serde_json::json!([
-                            {"name": "Katrin Hbf", "note": "Katrin",
-                             "sender": "Katrin Wissem <katrin@example.com>"}
+                            {"name": "Erika Hbf", "note": "Erika",
+                             "sender": "Erika Mustermann <erika@example.com>"}
                         ])),
                     )
                 }),
@@ -504,7 +504,7 @@ mod http_tests {
         assert_eq!(rows.len(), 1, "{body}");
         assert_eq!(rows[0]["id"], "18f3a9c2b7d41e05");
         let text = body.to_string();
-        assert!(!text.contains("Katrin") && !text.contains('@'), "{text}");
+        assert!(!text.contains("Erika") && !text.contains('@'), "{text}");
 
         // With no deployment token provisioned, ordinary callers remain closed. The agent
         // credential is not promoted into a raw-data bypass; it only entered the agent branch.
@@ -527,9 +527,9 @@ mod http_tests {
             .json()
             .await
             .unwrap();
-        assert_eq!(stations[0]["name"], "Katrin Hbf");
-        assert_ne!(stations[0]["note"], "Katrin");
-        assert!(!stations[0]["sender"].as_str().unwrap().contains("Katrin"));
+        assert_eq!(stations[0]["name"], "Erika Hbf");
+        assert_ne!(stations[0]["note"], "Erika");
+        assert!(!stations[0]["sender"].as_str().unwrap().contains("Erika"));
     }
 
     #[tokio::test]
@@ -577,6 +577,37 @@ mod http_tests {
         assert_eq!(echoed[0]["from_matches"], true, "{echoed}");
     }
 
+    /// The same response, read by the default token and then by a token the owner set to
+    /// `trusted`: names appear only for the second, and the c3 row stays out for both.
+    #[tokio::test]
+    async fn a_trusted_tier_reads_names_and_still_never_reads_secrets() {
+        let (access, files) = agent_access_in("tier", agent_policy::Mode::Auto);
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(access);
+        let base = serve_agent_router(auth).await;
+        let read = |base: String| async move {
+            reqwest::Client::new()
+                .get(format!("{base}/triage"))
+                .bearer_auth("agent-token")
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        };
+        let masked = read(base.clone()).await;
+        assert!(!masked.contains("Erika"), "{masked}");
+        files
+            .set_tier("default", agent_policy::Tier::Trusted)
+            .unwrap();
+        let named = read(base).await;
+        assert!(named.contains("Scans from Erika"), "{named}");
+        assert!(named.contains("Erika Mustermann (example.com)"), "{named}");
+        assert!(!named.contains("erika@example.com"), "{named}");
+        assert!(!named.contains("616685"), "{named}");
+        assert_eq!(files.mode_for("comms"), agent_policy::Mode::Auto, "set_tier kept the mode");
+    }
+
     #[tokio::test]
     async fn the_agent_token_cannot_write_or_read_what_it_cannot_rewrite() {
         let (access, _files) = agent_access_in("read-only", agent_policy::Mode::ReadOnly);
@@ -597,7 +628,7 @@ mod http_tests {
             .await
             .unwrap();
         assert_eq!(page.status(), 406);
-        assert!(!page.text().await.unwrap().contains("Katrin"));
+        assert!(!page.text().await.unwrap().contains("Erika"));
         let secret = client
             .get(format!("{base}/secret"))
             .bearer_auth("agent-token")
@@ -626,7 +657,7 @@ mod http_tests {
         request.send().await.unwrap()
     }
 
-    /// The token the agent sees for Katrin's address, read in the "writer" session.
+    /// The token the agent sees for Erika's address, read in the "writer" session.
     async fn sender_token(base: &str) -> String {
         let rows: serde_json::Value = reqwest::Client::new()
             .get(format!("{base}/triage"))

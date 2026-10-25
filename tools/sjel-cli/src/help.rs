@@ -41,7 +41,8 @@ Operate capabilities:
   capability feed [days]         Read the comms feed
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
   capability mail events [replay] <id>...  Event-scan state of mails, or replay them locally
-  agent enroll                   Create or rotate the agent token (Keychain) and its server hash
+  agent enroll [name]            Create or rotate an agent token (Keychain) and its server hash
+  agent tier <name> <tier>       Owner-only: pseudonymized, zdr or trusted
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode
   mcp register [harness]         Register that server with pi or Claude Code, then verify it answers
   claude [apply|check]           Write or check THIS device's Claude Code settings

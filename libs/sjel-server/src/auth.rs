@@ -676,8 +676,11 @@ async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next)
     // The agent branch runs before the token rule and replaces it: an agent token is never
     // the deployment token, and must never fall through to the full-access path.
     if let Some(agent) = auth.agent.as_ref() {
-        if !exempt && presented_token(request.headers()).is_some_and(|t| agent.matches(t)) {
-            return crate::agent::admit_agent(Arc::clone(agent), request, next).await;
+        let name = (!exempt)
+            .then(|| presented_token(request.headers()).and_then(|t| agent.matches(t)))
+            .flatten();
+        if let Some(name) = name {
+            return crate::agent::admit_agent(Arc::clone(agent), name, request, next).await;
         }
     }
     // A browser session stands in for the token, never for `refuse_without_token`: a route

@@ -357,7 +357,7 @@ fn url(root: &Path, name: &str) -> Result<String, String> {
 /// An agent session is read-only and every response is pseudonymized (ISA F9). `SJEL_AGENT=1`
 /// marks one by hand, `CLAUDECODE=1` is Claude Code's own marker, and `SJEL_AGENT=0` turns it
 /// off for the operator.
-fn in_agent_session() -> bool {
+pub fn in_agent_session() -> bool {
     match std::env::var("SJEL_AGENT").as_deref() {
         Ok("1") => true,
         Ok("0") => false,

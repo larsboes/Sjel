@@ -42,8 +42,10 @@ use axum::Json;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::agent_policy::{write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles};
-use sjel_pseudonymize::view::{agent_view_public, is_withheld};
+use crate::agent_policy::{
+    write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles, Tier,
+};
+use sjel_pseudonymize::view::{agent_view_public, is_withheld, trusted_view};
 use sjel_pseudonymize::{EntityRegistry, PseudonymizerSession};
 
 /// The header an agent may send to scope its tokens to one conversation.
@@ -73,7 +75,9 @@ const MIN_NAME_CHARS: usize = 3;
 
 /// Everything the gate needs to admit and rewrite agent requests.
 pub struct AgentAccess {
-    token_sha256: [u8; 32],
+    /// Each enrolled agent token's name and SHA-256. `default` is `config/agent-token.sha256`;
+    /// a named one is `config/agent-tokens/<name>.sha256`. The name selects the tier.
+    tokens: Vec<(String, [u8; 32])>,
     machine_secret: Vec<u8>,
     registry: EntityRegistry,
     sessions: Mutex<HashMap<String, (Instant, PseudonymizerSession)>>,
@@ -98,7 +102,7 @@ impl AgentAccess {
     /// No I/O. For tests and for a caller that resolved the three inputs itself.
     pub fn new(token_sha256: [u8; 32], machine_secret: Vec<u8>, registry: EntityRegistry) -> Self {
         Self {
-            token_sha256,
+            tokens: vec![("default".to_string(), token_sha256)],
             machine_secret,
             registry,
             sessions: Mutex::new(HashMap::new()),
@@ -128,10 +132,20 @@ impl AgentAccess {
         }
     }
 
-    fn log(&self, method: &str, path: &str, status: u16, decision: &str) {
+    /// The named token's tier. Without policy files every agent is pseudonymized.
+    fn tier(&self, agent: &str) -> Tier {
+        match &self.files {
+            Some(files) => files.tier_for(agent),
+            None => Tier::Pseudonymized,
+        }
+    }
+
+    fn log(&self, agent: &str, method: &str, path: &str, status: u16, decision: &str) {
         if let Some(files) = &self.files {
             files.log_call(&AgentCall {
                 capability: &self.capability,
+                agent,
+                tier: self.tier(agent).as_str(),
                 method,
                 path,
                 status,
@@ -146,7 +160,25 @@ impl AgentAccess {
     /// logged: the shape rules (addresses, numbers, links) still apply without it.
     pub fn from_deployment() -> Option<Self> {
         let root = sjel_config::overlay_root()?;
-        let hash = read_hash(&root.join("config/agent-token.sha256"))?;
+        let mut tokens: Vec<(String, [u8; 32])> = read_hash(&root.join("config/agent-token.sha256"))
+            .map(|hash| ("default".to_string(), hash))
+            .into_iter()
+            .collect();
+        if let Ok(entries) = std::fs::read_dir(root.join("config/agent-tokens")) {
+            for path in entries.filter_map(Result::ok).map(|e| e.path()) {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .and_then(|n| n.strip_suffix(".sha256"))
+                    .filter(|n| n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'));
+                if let (Some(name), Some(hash)) = (name, read_hash(&path)) {
+                    tokens.push((name.to_string(), hash));
+                }
+            }
+        }
+        if tokens.is_empty() {
+            return None;
+        }
         let secret = std::fs::read(root.join("secrets/agent-pseudonym.key")).ok()?;
         if secret.len() < 32 {
             eprintln!("agent access: agent-pseudonym.key is shorter than 32 bytes; agents refused");
@@ -163,12 +195,18 @@ impl AgentAccess {
         let registry = EntityRegistry::builder()
             .add_people(names.unwrap_or_default())
             .build();
-        Some(Self::new(hash, secret, registry))
+        let mut access = Self::new([0; 32], secret, registry);
+        access.tokens = tokens;
+        Some(access)
     }
 
-    pub(crate) fn matches(&self, presented: &str) -> bool {
+    /// The name of the enrolled agent token `presented` is, if any.
+    pub(crate) fn matches(&self, presented: &str) -> Option<String> {
         let digest: [u8; 32] = Sha256::digest(presented.as_bytes()).into();
-        crate::auth::constant_time_eq(&digest, &self.token_sha256)
+        self.tokens
+            .iter()
+            .find(|(_, hash)| crate::auth::constant_time_eq(&digest, hash))
+            .map(|(name, _)| name.clone())
     }
 
     fn with_session<T>(&self, id: &str, f: impl FnOnce(&mut PseudonymizerSession) -> T) -> T {
@@ -263,18 +301,21 @@ fn refuse(status: StatusCode, message: &str) -> Response {
 /// The agent branch of the gate. The caller has already matched the token.
 pub(crate) async fn admit_agent(
     access: Arc<AgentAccess>,
+    agent: String,
     request: Request,
     next: Next,
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request.uri().path().to_string();
-    let (response, decision) = decide_and_run(&access, request, next).await;
-    access.log(&method, &path, response.status().as_u16(), decision);
+    let tier = access.tier(&agent);
+    let (response, decision) = decide_and_run(&access, tier, request, next).await;
+    access.log(&agent, &method, &path, response.status().as_u16(), decision);
     response
 }
 
 async fn decide_and_run(
     access: &Arc<AgentAccess>,
+    tier: Tier,
     mut request: Request,
     next: Next,
 ) -> (Response, &'static str) {
@@ -329,7 +370,7 @@ async fn decide_and_run(
 
     if !is_write {
         return (
-            pseudonymize_response(access, &id, next.run(request).await, true).await,
+            pseudonymize_response(access, tier, &id, next.run(request).await, true).await,
             "read",
         );
     }
@@ -442,7 +483,7 @@ async fn decide_and_run(
     parts.headers.remove(APPROVAL_HEADER);
     let request = Request::from_parts(parts, axum::body::Body::from(restored));
     (
-        pseudonymize_response(access, &id, next.run(request).await, false).await,
+        pseudonymize_response(access, tier, &id, next.run(request).await, false).await,
         decision,
     )
 }
@@ -524,6 +565,7 @@ fn unknown_token_refusal(token: &str) -> Response {
 /// reduced to its status, because the write has already happened and the agent needs to know.
 async fn pseudonymize_response(
     access: &AgentAccess,
+    tier: Tier,
     id: &str,
     response: Response,
     read: bool,
@@ -577,11 +619,20 @@ async fn pseudonymize_response(
         .map(str::trim)
         .filter(|k| !k.is_empty())
         .collect();
-    let (report, receipt) = access.with_session(id, |session| {
-        session.take_findings();
-        let report = agent_view_public(&mut value, session, &access.registry, &public);
-        (report, session.receipt())
-    });
+    let (report, receipt) = if tier.reads_names() {
+        let report = trusted_view(&mut value);
+        let receipt = format!(
+            "tier {}: names verbatim; contact, account and location fields removed",
+            tier.as_str()
+        );
+        (report, Some(receipt))
+    } else {
+        access.with_session(id, |session| {
+            session.take_findings();
+            let report = agent_view_public(&mut value, session, &access.registry, &public);
+            (report, session.receipt())
+        })
+    };
     let out = serde_json::to_vec(&value).unwrap_or_default();
     parts.headers.remove(header::CONTENT_LENGTH);
     let receipt = receipt.unwrap_or_else(|| "nothing replaced".to_string());
@@ -642,8 +693,8 @@ mod tests {
 
     #[test]
     fn the_artifact_parser_skips_short_entries() {
-        let names = people_from_artifact(r#"{"tokens":["Jo","Katrin","Anna Lena"]}"#).unwrap();
-        assert_eq!(names, vec!["Katrin".to_string(), "Anna Lena".to_string()]);
+        let names = people_from_artifact(r#"{"tokens":["Jo","Erika","Anna Lena"]}"#).unwrap();
+        assert_eq!(names, vec!["Erika".to_string(), "Anna Lena".to_string()]);
     }
 
     #[test]
@@ -688,7 +739,7 @@ mod tests {
     fn the_token_is_matched_by_its_hash() {
         let hash: [u8; 32] = Sha256::digest(b"agent-secret").into();
         let access = AgentAccess::new(hash, vec![7; 32], EntityRegistry::builder().build());
-        assert!(access.matches("agent-secret"));
-        assert!(!access.matches("agent-secreT"));
+        assert_eq!(access.matches("agent-secret").as_deref(), Some("default"));
+        assert_eq!(access.matches("agent-secreT"), None);
     }
 }

@@ -50,7 +50,105 @@ pub enum RebuildState {
     Idle,
     Building,
     Success(String),
-    Failed(String),
+    Failed(BuildFailure),
+}
+
+/// One compiler error as `cargo build --message-format=json` reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Diagnostic {
+    /// `E0624`, or empty when rustc named no code.
+    pub code: String,
+    pub file: String,
+    pub line: u32,
+    /// The message itself, without the rendered block around it.
+    pub message: String,
+}
+
+impl Diagnostic {
+    /// `E0624 · ui/src/inventory.rs:366`, or the file alone when there is no code.
+    pub fn location(&self) -> String {
+        match (self.code.is_empty(), self.line) {
+            (false, _) => format!("{} · {}:{}", self.code, self.file, self.line),
+            (true, 0) => self.file.clone(),
+            (true, _) => format!("{}:{}", self.file, self.line),
+        }
+    }
+}
+
+/// Why a rebuild failed: the first error cargo reported, and the whole output for the log.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuildFailure {
+    pub first: Option<Diagnostic>,
+    pub log: String,
+}
+
+impl BuildFailure {
+    /// A failure that never reached cargo: the script or the process itself refused.
+    pub fn without_diagnostics(log: impl Into<String>) -> Self {
+        Self {
+            first: None,
+            log: log.into(),
+        }
+    }
+
+    /// The one line a panel shows before the log.
+    pub fn headline(&self) -> String {
+        match &self.first {
+            Some(diagnostic) => format!("Rebuild failed — {}", diagnostic.location()),
+            None => "Rebuild failed".to_owned(),
+        }
+    }
+}
+
+/// What one run of cargo's JSON output holds.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BuildOutput {
+    pub errors: Vec<Diagnostic>,
+    /// The records rendered back to text, so the log a person reads is a compiler log and not
+    /// JSON. Lines cargo or the script did not wrap in a record stay as they are.
+    pub log: String,
+}
+
+/// Reads cargo's `--message-format=json-render-diagnostics` output. It arrives on stdout together
+/// with whatever else the install script prints, so a line that is not a record is kept as text.
+pub fn read_cargo_output(stdout: &str) -> BuildOutput {
+    let mut output = BuildOutput::default();
+    for line in stdout.lines() {
+        let Ok(record) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
+            output.log.push_str(line);
+            output.log.push('\n');
+            continue;
+        };
+        if record["reason"] != "compiler-message" {
+            continue;
+        }
+        let message = &record["message"];
+        if let Some(rendered) = message["rendered"].as_str() {
+            output.log.push_str(rendered);
+        }
+        if message["level"] != "error" {
+            continue;
+        }
+        let span = message["spans"]
+            .as_array()
+            .and_then(|spans| spans.iter().find(|span| span["is_primary"] == true))
+            .or_else(|| message["spans"].as_array().and_then(|spans| spans.first()));
+        let text = |value: &serde_json::Value, key: &str| {
+            value[key].as_str().unwrap_or_default().to_owned()
+        };
+        output.errors.push(Diagnostic {
+            code: message["code"]["code"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            file: span.map(|span| text(span, "file_name")).unwrap_or_default(),
+            line: span
+                .and_then(|span| span["line_start"].as_u64())
+                .unwrap_or(0) as u32,
+            message: text(message, "message"),
+        });
+    }
+    output
 }
 
 /// Discovers the Sjel repository root.
@@ -168,13 +266,17 @@ pub fn check_git_updates(repo_root: &Path) -> Option<UpdateInfo> {
 }
 
 /// Executes the install script.
-pub fn execute_rebuild(repo_root: &Path) -> Result<String, String> {
+///
+/// The build runs with `--message-format=json-render-diagnostics`, so a failure comes back as a
+/// record per error instead of one log: the panel can name the first one without a human reading
+/// 200 lines. The rendering stays inside each record, so the log is still readable.
+pub fn execute_rebuild(repo_root: &Path) -> Result<String, BuildFailure> {
     let install_script = repo_root.join("apps/gpui/install");
     if !install_script.exists() {
-        return Err(format!(
-            "Installer script not found at {:?}",
-            install_script
-        ));
+        return Err(BuildFailure::without_diagnostics(format!(
+            "Installer script not found at {}",
+            install_script.display()
+        )));
     }
 
     let home = std::env::var("HOME").unwrap_or_default();
@@ -187,16 +289,28 @@ pub fn execute_rebuild(repo_root: &Path) -> Result<String, String> {
         .arg(&install_script)
         .current_dir(repo_root)
         .env("PATH", path_env)
+        .env("SJEL_BUILD_MESSAGE_FORMAT", "json-render-diagnostics")
         .output()
-        .map_err(|e| format!("Failed to spawn installer: {}", e))?;
+        .map_err(|e| {
+            BuildFailure::without_diagnostics(format!("Failed to spawn installer: {e}"))
+        })?;
 
     if output.status.success() {
-        Ok("Sjel Desktop rebuilt and installed successfully!".to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        Err(if !stderr.is_empty() { stderr } else { stdout })
+        return Ok("Sjel Desktop rebuilt and installed successfully!".to_string());
     }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    // Cargo writes build records to stdout; anything else the script says goes to stderr.
+    let read = read_cargo_output(&stdout);
+    let first = read.errors.into_iter().next();
+    let log = match (read.log.trim().is_empty(), stderr.trim().is_empty()) {
+        (true, true) => "The installer failed without output.".to_owned(),
+        (true, false) => stderr,
+        (false, true) => read.log,
+        (false, false) => format!("{}\n{stderr}", read.log),
+    };
+    Err(BuildFailure { first, log })
 }
 
 /// Rebuilds and restarts the local shell outside its own authenticated API.
@@ -394,5 +508,60 @@ mod tests {
         let info = info.unwrap();
         assert!(!info.latest_commit.is_empty());
         assert_eq!(info.repo_root, root);
+    }
+
+    #[test]
+    fn test_a_compiler_error_becomes_a_location_a_panel_can_show() {
+        // Records as rustc emits them, with the explanation dropped and the script's own lines
+        // between them: stdout carries both.
+        let stdout = concat!(
+            r#"{"reason":"compiler-message","message":{"level":"error","message":"cannot find value `y` in this scope","code":{"code":"E0425"},"rendered":"error[E0425]: cannot find value `y` in this scope\n --> src/main.rs:1:45","spans":[{"file_name":"src/main.rs","line_start":1,"column_start":45,"is_primary":true}]}}"#,
+            "\n",
+            r#"{"reason":"compiler-message","message":{"level":"warning","message":"unused import","code":null,"rendered":"warning: unused import","spans":[]}}"#,
+            "\n",
+            r#"{"reason":"build-finished","success":false}"#,
+            "\n",
+            "apps/gpui/install: signing",
+            "\n",
+            r#"{"reason":"compiler-message","message":{"level":"error","message":"no method named `missing` found","code":{"code":"E0599"},"rendered":"error[E0599]: no method named `missing` found","spans":[{"file_name":"ui/src/inventory.rs","line_start":360,"is_primary":false},{"file_name":"ui/src/inventory.rs","line_start":366,"is_primary":true}]}}"#,
+        );
+
+        let read = read_cargo_output(stdout);
+        assert_eq!(
+            read.errors.len(),
+            2,
+            "warnings, finished records and echoes are not errors"
+        );
+        assert_eq!(read.errors[0].location(), "E0425 · src/main.rs:1");
+        assert_eq!(
+            read.errors[0].message,
+            "cannot find value `y` in this scope"
+        );
+        // The primary span wins over the first one: that is the line the compiler points at.
+        assert_eq!(read.errors[1].location(), "E0599 · ui/src/inventory.rs:366");
+
+        // The log a person opens is the rendering, not the JSON, and what was never a record stays.
+        assert!(read.log.contains("error[E0425]: cannot find value"));
+        assert!(read.log.contains("apps/gpui/install: signing"));
+        assert!(!read.log.contains("\"reason\""));
+    }
+
+    #[test]
+    fn test_a_failure_without_diagnostics_still_names_the_cause() {
+        let refused = BuildFailure::without_diagnostics("no code-signing identity in the keychain");
+        assert_eq!(refused.headline(), "Rebuild failed");
+        assert_eq!(refused.first, None);
+        assert_eq!(refused.log, "no code-signing identity in the keychain");
+
+        let uncoded = BuildFailure {
+            first: Some(Diagnostic {
+                code: String::new(),
+                file: "apps/gpui/install".into(),
+                line: 0,
+                message: "the script refused".into(),
+            }),
+            log: String::new(),
+        };
+        assert_eq!(uncoded.headline(), "Rebuild failed — apps/gpui/install");
     }
 }

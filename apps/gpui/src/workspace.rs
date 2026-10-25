@@ -336,6 +336,8 @@ pub struct Workspace {
     pub settings_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
     pub update_info: Option<crate::update::UpdateInfo>,
     pub rebuild_state: crate::update::RebuildState,
+    /// Whether the failed rebuild shows cargo's whole output instead of the first error.
+    pub show_rebuild_log: bool,
     focus: FocusHandle,
     /// Set when the page changes. The old page's field may have had focus and is gone from the
     /// tree, which would leave every shortcut with no path to this view.
@@ -518,6 +520,7 @@ impl Workspace {
             settings_search: Some((settings_search, settings_search_events)),
             update_info: None,
             rebuild_state: crate::update::RebuildState::Idle,
+            show_rebuild_log: false,
             _appearance: Some(appearance),
             frames: crate::frames::FrameProbe::from_env(),
             #[cfg(target_os = "macos")]
@@ -754,6 +757,7 @@ impl Workspace {
             return;
         };
         self.rebuild_state = crate::update::RebuildState::Building;
+        self.show_rebuild_log = false;
         cx.notify();
         window.push_notification(
             Notification::info("Rebuilding Sjel Desktop in background..."),

@@ -10,6 +10,7 @@ use std::fs;
 use gpui_kit::component::button::{Button, ButtonGroup, ButtonVariants};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::kbd::Kbd;
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{Disableable, IconName, Selectable, Sizable};
 use gpui_kit::{
@@ -19,7 +20,8 @@ use gpui_kit::{
 
 use crate::route::Page;
 use crate::theme::{
-    AccentColor, AppearanceSettings, BackgroundTone, GlassStyle, Palette, ThemeMode, WindowOpacity,
+    tint, AccentColor, AppearanceSettings, BackgroundTone, GlassStyle, Palette, ThemeMode,
+    WindowOpacity,
 };
 use crate::ui::{list, note, section};
 use crate::update::{RebuildState, BUILD_TIME, RUNNING_COMMIT};
@@ -1383,7 +1385,7 @@ fn updates(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
             palette.accent,
         )),
         RebuildState::Success(message) => Some((message.clone(), palette.green)),
-        RebuildState::Failed(error) => Some((format!("Rebuild failed: {error}"), palette.red)),
+        RebuildState::Failed(failure) => Some((failure.headline(), palette.red)),
     };
 
     let mut rows = vec![
@@ -1445,15 +1447,74 @@ fn updates(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> V
         ),
     ];
     if let Some((line, color)) = outcome {
-        rows.push(
-            div()
-                .px_4()
-                .py_3()
-                .text_xs()
-                .text_color(rgb(color))
-                .child(line)
-                .into_any_element(),
-        );
+        let mut block = div()
+            .px_4()
+            .py_3()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().text_xs().text_color(rgb(color)).child(line));
+        if let RebuildState::Failed(failure) = &view.rebuild_state {
+            // The first error is what a person acts on; the log behind the button is for triage.
+            if let Some(diagnostic) = &failure.first {
+                block = block.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(diagnostic.message.clone()),
+                );
+            }
+            block = block.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("rebuild-log")
+                            .ghost()
+                            .small()
+                            .label(if view.show_rebuild_log {
+                                "Hide full log"
+                            } else {
+                                "Full log"
+                            })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.show_rebuild_log = !view.show_rebuild_log;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("rebuild-log-copy")
+                            .ghost()
+                            .small()
+                            .icon(IconName::Copy)
+                            .tooltip("Copy the log")
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                let RebuildState::Failed(failure) = &view.rebuild_state else {
+                                    return;
+                                };
+                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                    failure.log.clone(),
+                                ));
+                            })),
+                    ),
+            );
+            if view.show_rebuild_log {
+                block = block.child(
+                    div()
+                        .mt_1()
+                        .max_h(px(320.))
+                        .overflow_y_scrollbar()
+                        .rounded_md()
+                        .bg(rgba(tint(palette.raised, 0x40)))
+                        .p_2()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(failure.log.clone()),
+                );
+            }
+        }
+        rows.push(block.into_any_element());
     }
 
     let mut groups = vec![group("SJEL DESKTOP", rows, palette)];

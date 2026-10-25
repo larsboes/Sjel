@@ -33,10 +33,19 @@ if [ -d "$shared_target" ] && [ -z "${CARGO_TARGET_DIR:-}" ]; then
 fi
 
 commit="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
+# The app reads compiler errors as records (`--message-format=json-render-diagnostics`); a terminal
+# run keeps cargo's own rendering, which is what a person expects to see scrolling past.
+cargo_args=(build --release)
 if [ "$native_maps" = 1 ]; then
-  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" MLN_PRECOMPILE=1 cargo build --release --locked --features native-maps)
+  cargo_args+=(--locked --features native-maps)
+fi
+if [ -n "${SJEL_BUILD_MESSAGE_FORMAT:-}" ]; then
+  cargo_args+=("--message-format=$SJEL_BUILD_MESSAGE_FORMAT")
+fi
+if [ "$native_maps" = 1 ]; then
+  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" MLN_PRECOMPILE=1 cargo "${cargo_args[@]}")
 else
-  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" cargo build --release)
+  (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" cargo "${cargo_args[@]}")
 fi
 target_dir="$(cd "$APP_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
 binary="$target_dir/release/sjel-gpui"

@@ -66,8 +66,8 @@ open from Today, from the finder, and from links in mail and trips. The change i
 ### What may live on the phone
 
 `sjel mirror build` deliberately leaves comms, documents and finance out of the phone's copy
-(`tools/sjel-cli/src/mirror.rs`, `PHONE_SET`). Mail and documents on the phone follow three rules,
-proposed 2026-10-25:
+(`tools/sjel-cli/src/mirror.rs`, `PHONE_SET`). Mail and documents on the phone follow three rules
+(decided 2026-10-25):
 
 1. **Online first.** Mail and documents are read live from the Mac through the signed device
    client.

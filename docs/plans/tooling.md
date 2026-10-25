@@ -1,9 +1,9 @@
 # Tooling gaps
 
-Gaps that agents hit while they worked, where Sjel tooling did not cover the task. The rule is in
-[`AGENTS.md`](AGENTS.md). Add an entry when you wrote a script or a workaround instead of using a
-`sjel` command. When someone picks an entry up, move it to a GitHub Issue or build it, then delete
-it here.
+Gaps agents hit where Sjel tooling did not cover the task. The rule is in
+[`AGENTS.md`](../../AGENTS.md): add an entry when you wrote a script or a workaround instead of
+using a `sjel` command. When someone picks an entry up, build it or move it to a GitHub Issue,
+then move it to Done here.
 
 Entry format: what was needed, what the agent did instead, and the smallest tooling change that
 covers it.
@@ -25,7 +25,7 @@ covers it.
   mail only. Smallest change: `sjel capability mail events report`, which groups receipts and
   candidate metadata by sender domain and state, and prints counts only.
 - **Installed-software route for the dashboard and `ask`.** `sjel storage installed` walks every
-  app bundle and its `~/Library` data and takes about 30 s on this machine, so it stays CLI-only —
+  app bundle and its `~/Library` data and takes about 30 s on this machine, so it stays CLI-only,
   the same reason `report --where` is not served. Smallest change: sample it daily into the store
   `capabilities/sjel-status/src/storage_history.rs` already owns, and serve the last snapshot from
   `/api/sjel-status/storage-installed`, so the panel and an agent read a number instead of waiting
@@ -47,6 +47,10 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
+- **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
+  files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
+  `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:
+  `sjel backup status|runs [--limit N]` over the existing routes.
 
 ## Done
 

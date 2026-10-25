@@ -89,6 +89,10 @@ captures with Apple RoomPlan ([Apple's guide](https://developer.apple.com/docume
    admission, a daily usage ledger. Missing: the route, the provider review, a paid role pointed
    at the existing `inference-gemini` keychain credential, the phone consent and frame sampling
    UI, and the mapping into Interior proposals. No Gemini request has been sent.
+   The key is the same `inference-gemini` item Settings stores. What differs is billing: Google
+   serves the paid tier only when billing is enabled on the Cloud project behind the key, and the
+   RoomPlan code admits only a role with `billing_mode = "prepaid_credit"`. Enabling billing is a
+   later step and a spending decision. Until then this item waits.
 
 **Consent rules (settled).** Scans stay local unless the user opts in for that scan. The
 choices are `Local only`, `Analyze selected still`, and `Enable live guidance for this scan`.

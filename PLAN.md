@@ -39,13 +39,19 @@ belongs to Priority 1.
 
 ## Priority 3: everything else
 
-- Full Turso migration and the rest of the standalone phone ([`storage.md`](docs/plans/storage.md)).
+- Full Turso migration, the rest of the standalone phone, and backups that prove a restore
+  ([`storage.md`](docs/plans/storage.md)). The stalled backup timer (§5 item 1) is not deferred:
+  it is fixed as soon as it is understood.
 - RoomPlan device validation and the shared capture pipeline ([`scanning.md`](docs/plans/scanning.md)).
 - Imports, formats, the settings surface, adaptive features and the domain backlog
   ([`data.md`](docs/plans/data.md)).
 - UI polish for areas outside Priority 1, and the public site with screenshots, animations, docs
   and a description of the app.
 - A fresh-user Mac and iPhone install ([#235](https://github.com/larsboes/Sjel/issues/235)).
+
+## Continuous
+
+- Tooling gaps agents hit while working: [`tooling.md`](docs/plans/tooling.md).
 
 ## Success measures
 

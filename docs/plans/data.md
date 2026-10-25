@@ -75,6 +75,22 @@ the GPUI Settings tab. No new client, page or CLI verb set.
   function, `backend_api_key`: keychain first, then a key file. `tools/model-check --role <role>
   --probe` sends one request to one role. Checked 2026-10-25: the `deepseek` and `gemini` backends
   answer from their keychain items alone.
+- **Model policy** (2026-10-25). Gemini: `gemini-3.5-flash-lite` for cheap bulk roles
+  (`cloud_gemini_content_analysis`), the newest flash model for every other role
+  (`gemini-3.8-flash` on 2026-10-25). DeepSeek: the flash model, `deepseek-flash` on DeepSeek's own
+  API and `deepseek-ai/deepseek-v4.1-flash` on NVIDIA NIM. `tools/model-check` reports "newer
+  available" when a newer flash model appears, and `tools/model-check --list <backend>` prints a
+  backend's catalogue. NVIDIA's free content-analysis role runs
+  `nvidia/nemotron-3.5-lightning-30b-a3b`, because the older Nemotron ids are listed but answer
+  404.
+- **One key path.** Settings › Accounts writes the keychain, and that is the path for every
+  provider it lists (OpenAI, DeepSeek, OpenCode Go, NVIDIA NIM, Gemini). The older path,
+  Vaultwarden into a key file through `tools/materialize-inference-key`, still feeds `nvidia-nim`,
+  `opencode-go`, `cohere`, `groq`, `cloudflare-workers-ai` and `assistant-openai`. `omlx` reads
+  the local server's own key from oMLX's settings and stays as it is. Next:
+  enter the NVIDIA key in Settings, then remove `api_key_file` from each backend that has a
+  keychain item, delete its key file, and add Settings entries for the providers that have none.
+  The Gemini key file was removed on 2026-10-25.
 - **Next.** The settings section shows key presence only. It should show, per backend, whether its
   model answers, and offer the one-role probe as a button.
 - Shows, in order: each backend with its model, whether the model answers, and whether its key is
@@ -109,8 +125,7 @@ A proposal comes after Lane A, and it starts from measured use, not from guesses
 Open items that belong to one capability and to no priority yet.
 
 - **Documents.**
-  - External backup: originals are local, metadata is in the shared store's archive. Done when a
-    restore from the selected external SSD returns a document's bytes and metadata together.
+  - External backup: see [`storage.md`](storage.md#5-backups).
   - Enrichment: folder intake and polling exist. Source identities, mail attachment intake,
     source-linked insights and class-gated model enrichment do not. Done with a frozen German and
     English corpus, declared acceptance criteria, recorded results and an idempotent mail replay.
@@ -126,5 +141,3 @@ Open items that belong to one capability and to no priority yet.
   prices the wrong company silently), and the `finance-prices` launchd unit.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.
-- **Backup kinds.** A target kind counts as verified only when its own restore passes. Only the
-  local kind is rehearsed. iCloud and ssh are unproven.

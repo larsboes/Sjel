@@ -375,7 +375,7 @@ Keep vector search with same-file section context. Drop cross-document edges unt
 question set shows evidence that only a link reaches.
 
 Turso agent features (AgentFS, AI memory, code indexing, content caching) are candidates in
-[`storage.md`](storage.md#5-agent-databases).
+[`storage.md`](storage.md#6-agent-databases).
 
 ## 10. Decisions
 

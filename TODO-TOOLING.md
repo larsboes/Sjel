@@ -27,6 +27,11 @@ covers it.
   change: `sjel inference probe <role> <prompt-file>`, which uses the configured key and never
   prints it.
 
+- **Real names in tracked files.** A test fixture carried a real contact's full name, and no gate
+  noticed. The agent compared tracked files against the people registry with an ad hoc Python
+  script. Smallest change: the publication hygiene check in `tools/doctor` flags two adjacent
+  registry tokens in a tracked file, and prints only the file and a count.
+
 ## Done
 
 - `sjel capability mail events [replay] <id>...` reads safe per-mail event scan states and

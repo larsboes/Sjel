@@ -198,7 +198,12 @@ pub fn sidebar_frame(
         .size_full()
         .flex()
         .flex_col()
-        .bg(rgba(palette.panel()))
+        // The terminal seat paints its own background at the opacity its setting asks for, so
+        // the frame under it stays clear: two opaque layers would hide what the setting lets
+        // show through.
+        .when(seat != Seat::Terminal, |frame| {
+            frame.bg(rgba(palette.panel()))
+        })
         .text_color(rgb(palette.text))
         .child(
             div()

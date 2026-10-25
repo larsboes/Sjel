@@ -3402,9 +3402,12 @@ impl Render for Capabilities {
                             entity.update(app, |view, cx| view.close_edge(cx));
                         }
                     },
+                    // The edge lies over the page, so it is always filled; the frame leaves the
+                    // terminal seat clear for the Mac, where it docks beside the window instead.
                     div()
                         .flex_1()
                         .min_h_0()
+                        .bg(gpui::rgba(palette.panel()))
                         .child(sidebar_frame(palette, seat, body, on_seat, on_close))
                         .into_any_element(),
                 ))

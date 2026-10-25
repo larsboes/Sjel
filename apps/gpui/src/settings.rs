@@ -1791,15 +1791,21 @@ fn segmented<L: Into<SharedString>>(
     cx: &mut Context<Workspace>,
     next: impl Fn(usize) -> AppearanceSettings + 'static,
 ) -> impl IntoElement {
+    // The chosen option is filled with the accent and the rest are outlined: gpui-kit draws a
+    // selected outline button like a pressed one, which reads the same as the others.
     ButtonGroup::new(id)
-        .outline()
         .small()
         .children(
             options
                 .into_iter()
                 .enumerate()
                 .map(|(ix, (label, selected))| {
-                    Button::new((id, ix)).label(label).selected(selected)
+                    let button = Button::new((id, ix)).label(label).selected(selected);
+                    if selected {
+                        button.primary()
+                    } else {
+                        button.outline()
+                    }
                 }),
         )
         .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {

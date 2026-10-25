@@ -1168,7 +1168,6 @@ impl Render for TerminalView {
             .flex_col()
             .gap_2()
             .p_3()
-            .bg(rgba(palette.panel()))
             .text_color(rgb(palette.text))
             .child(header)
             .children(keys)

@@ -44,6 +44,30 @@ function service(name: string) {
   return Bun.TOML.parse(readFileSync(join(root, "capabilities", name, "service.toml"), "utf8")) as Record<string, unknown>;
 }
 
+function feature(name: string) {
+  const path = join(root, "capabilities", name, "feature.toml");
+  if (!existsSync(path)) throw new Error(`${name}: a feature.toml is required for a catalogued package`);
+  const metadata = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  const allowed = new Set(["schema", "title", "summary", "category", "recommend_topics", "data_access"]);
+  if (metadata.schema !== 1 || typeof metadata.title !== "string" || !metadata.title.trim()
+    || metadata.title.length > 80
+    || typeof metadata.summary !== "string" || !metadata.summary.trim() || metadata.summary.length > 240
+    || typeof metadata.category !== "string" || !metadata.category.trim() || metadata.category.length > 40
+    || Object.keys(metadata).some((key) => !allowed.has(key))
+    || !Array.isArray(metadata.recommend_topics) || !metadata.recommend_topics.length || metadata.recommend_topics.length > 24
+    || !metadata.recommend_topics.every((topic) => typeof topic === "string" && /^[a-z0-9][a-z0-9-]{0,47}$/.test(topic))
+    || new Set(metadata.recommend_topics).size !== metadata.recommend_topics.length
+    || !Array.isArray(metadata.data_access) || metadata.data_access.length > 32
+    || !metadata.data_access.every((item) => typeof item === "string" && item.trim())) {
+    throw new Error(`${name}: invalid feature.toml metadata`);
+  }
+  if (metadata.data_access.some((item) => (item as string).length > 120)
+    || new Set(metadata.data_access).size !== metadata.data_access.length) {
+    throw new Error(`${name}: invalid feature.toml data access list`);
+  }
+  return metadata;
+}
+
 function binaryName(name: string): string {
   const manifest = service(name);
   const command = manifest.command as string[];
@@ -158,6 +182,7 @@ function capability(options: Options, stage: string) {
   const manifest = {
     schema: 1, name: options.capability, version: options.version, platform,
     requires: service(options.capability).requires ?? [],
+    feature: feature(options.capability),
     files: files(payload).map((path) => ({ path, bytes: statSync(join(payload, path)).size,
       sha256: sha(join(payload, path)), executable: (statSync(join(payload, path)).mode & 0o111) !== 0 })),
   };
@@ -240,9 +265,22 @@ function main() {
       run(["tar", "-czf", join(options.out, `sjel-node-${options.version}-${platform}.tar.gz`), "sjel"], stage);
     }
     const assets = readdirSync(options.out).filter((name) => /\.(tar\.gz|dmg)$/.test(name));
+    const capabilityPackages = options.kind === "capability"
+      ? assets.map((name) => ({
+        name: options.capability,
+        version: options.version,
+        platform,
+        requires: (service(options.capability).requires as string[] | undefined) ?? [],
+        feature: feature(options.capability),
+        asset: name,
+        bytes: statSync(join(options.out, name)).size,
+        sha256: sha(join(options.out, name)),
+      }))
+      : [];
     const catalogue = { schema: 1, version: options.version, platform, source, friend_ready: false,
       signed: Boolean(options.identity), notarized: Boolean(options.notary),
-      assets: assets.map((name) => ({ name, bytes: statSync(join(options.out, name)).size, sha256: sha(join(options.out, name)) })) };
+      assets: assets.map((name) => ({ name, bytes: statSync(join(options.out, name)).size, sha256: sha(join(options.out, name)) })),
+      capabilities: capabilityPackages };
     writeFileSync(join(options.out, "release.json"), JSON.stringify(catalogue, null, 2) + "\n");
     writeFileSync(join(options.out, "SHA256SUMS"), assets.map((name) => `${sha(join(options.out, name))}  ${name}\n`).join(""));
     console.log(`Prepared ${assets.length} artifact(s) in ${options.out}; nothing installed or published.`);

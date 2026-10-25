@@ -1,0 +1,6 @@
+schema = 1
+title = "Calendar"
+summary = "Manage events, availability, and planning contexts."
+category = "Planning"
+recommend_topics = ["calendar", "events", "availability", "scheduling"]
+data_access = ["calendar entries", "availability rhythms", "planning contexts"]

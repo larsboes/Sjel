@@ -20,8 +20,8 @@ use gpui_kit::{
 
 use crate::route::Page;
 use crate::theme::{
-    tint, AccentColor, AppearanceSettings, BackgroundTone, GlassStyle, Palette, ThemeMode,
-    WindowOpacity,
+    tint, AccentColor, AppearanceSettings, BackgroundTone, GlassStyle, Palette, TerminalFont,
+    ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
 };
 use crate::ui::{list, note, section};
 use crate::update::{RebuildState, BUILD_TIME, RUNNING_COMMIT};
@@ -642,6 +642,33 @@ fn appearance(
             ..settings
         },
     );
+    let fonts = TerminalFont::available(cx);
+    let terminal_font = segmented(
+        "terminal-font",
+        fonts
+            .iter()
+            .map(|font| (font.label(), settings.terminal_font == *font))
+            .collect::<Vec<_>>(),
+        cx,
+        move |ix| AppearanceSettings {
+            terminal_font: fonts[ix],
+            ..settings
+        },
+    );
+    let terminal_font_size = segmented(
+        "terminal-font-size",
+        TERMINAL_FONT_SIZES.map(|size| {
+            (
+                SharedString::from(size.to_string()),
+                settings.terminal_font_size == size,
+            )
+        }),
+        cx,
+        move |ix| AppearanceSettings {
+            terminal_font_size: TERMINAL_FONT_SIZES[ix],
+            ..settings
+        },
+    );
     let glass = Switch::new("liquid-glass")
         .checked(settings.glass == GlassStyle::LiquidGlass)
         .on_click(cx.listener(move |view, on: &bool, _, cx| {
@@ -711,8 +738,15 @@ fn appearance(
             "TERMINAL",
             vec![
                 row(
+                    "Font",
+                    Some("Auto uses an installed Nerd Font, so prompt and ls icons draw whole."),
+                    terminal_font,
+                    palette,
+                ),
+                row("Font size", Some("Points."), terminal_font_size, palette),
+                row(
                     "Background",
-                    Some("The terminal grid's colour. System follows the theme."),
+                    Some("System is Monokai's background. The colours are Monokai."),
                     terminal_tone,
                     palette,
                 ),
@@ -1751,9 +1785,9 @@ fn dot_value(text: SharedString, color: u32) -> impl IntoElement {
 
 /// A row of buttons where exactly one is selected, like a macOS segmented control. `next` builds
 /// the settings the picked option stands for.
-fn segmented<const N: usize>(
+fn segmented<L: Into<SharedString>>(
     id: &'static str,
-    options: [(&'static str, bool); N],
+    options: impl IntoIterator<Item = (L, bool)>,
     cx: &mut Context<Workspace>,
     next: impl Fn(usize) -> AppearanceSettings + 'static,
 ) -> impl IntoElement {
@@ -1761,9 +1795,12 @@ fn segmented<const N: usize>(
         .outline()
         .small()
         .children(
-            options.iter().enumerate().map(|(ix, (label, selected))| {
-                Button::new((id, ix)).label(*label).selected(*selected)
-            }),
+            options
+                .into_iter()
+                .enumerate()
+                .map(|(ix, (label, selected))| {
+                    Button::new((id, ix)).label(label).selected(selected)
+                }),
         )
         .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
             if let Some(&ix) = picked.first() {

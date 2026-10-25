@@ -44,5 +44,6 @@ pub use primitives::{
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{
     tint, AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs,
-    Palette, SidebarPrefs, SoundscapePrefs, ThemeMode, WindowOpacity,
+    Palette, SidebarPrefs, SoundscapePrefs, TerminalFont, ThemeMode, WindowOpacity,
+    TERMINAL_FONT_SIZES,
 };

@@ -23,10 +23,10 @@
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
-    actions, canvas, div, font, point, px, rgb, rgba, AnyElement, ClipboardItem, Context,
-    EventEmitter, FocusHandle, FontWeight, KeyBinding, KeyDownEvent, Keystroke, MouseButton,
-    MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, ScrollDelta, ScrollWheelEvent,
-    SharedString, Window,
+    actions, canvas, div, fill, font, point, px, rgb, rgba, AnyElement, Bounds, ClipboardItem,
+    ContentMask, Context, EventEmitter, FocusHandle, Font, FontWeight, KeyBinding, KeyDownEvent,
+    Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, ScrollDelta,
+    ScrollWheelEvent, SharedString, TextAlign, TextRun, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
@@ -41,7 +41,7 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use sjel_gpui_core::shell;
 use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update, MAX_INPUT_BYTES};
 
-use crate::theme::Palette;
+use crate::theme::{Palette, TerminalFont, TerminalScheme, MONOKAI};
 
 actions!(terminal, [Copy, Paste, SelectAll]);
 
@@ -55,18 +55,12 @@ pub fn keys() -> [KeyBinding; 3] {
     ]
 }
 
-/// The grid's padding inside its border, on each side.
-const GRID_PADDING: f32 = 8.;
-
 /// The history the parser keeps, for the scroll-back the wheel already moves through.
 const HISTORY: usize = 10_000;
-/// The size a view assumes before it has measured itself.
-pub const START_COLS: usize = 100;
-pub const START_ROWS: usize = 30;
 /// A monospace cell at this size is about 7 by 15 points at the default UI font.
-const FONT_SIZE: f32 = 12.0;
 const LINE_HEIGHT: f32 = 1.4;
-const CELL_WIDTH: f32 = FONT_SIZE * 0.6;
+/// The size a view draws at before its host hands it the Appearance setting.
+const DEFAULT_FONT_SIZE: f32 = 13.0;
 /// How far one notch of the wheel scrolls.
 const WHEEL_LINES: i32 = 3;
 /// What a phone's key row offers, and the bytes each key sends. `Ctrl-C` is here rather than a
@@ -83,27 +77,6 @@ const TOUCH_KEYS: [(&str, &[u8]); 11] = [
     ("/", b"/"),
     ("\u{23ce}", b"\r"),
     ("ctrl-c", &[0x03]),
-];
-
-/// The sixteen ANSI tones, then their bright pair. Fixed rather than themed: a program that asks
-/// for red means red, and a palette that renamed it would break the one thing these colours do.
-const ANSI: [(u8, u8, u8); 16] = [
-    (0x1d, 0x1f, 0x21),
-    (0xcc, 0x66, 0x66),
-    (0xb5, 0xbd, 0x68),
-    (0xf0, 0xc6, 0x74),
-    (0x81, 0xa2, 0xbe),
-    (0xb2, 0x94, 0xbb),
-    (0x8a, 0xbe, 0xb7),
-    (0xc5, 0xc8, 0xc6),
-    (0x66, 0x66, 0x66),
-    (0xd5, 0x4e, 0x53),
-    (0xe0, 0xdc, 0x6c),
-    (0xff, 0xd0, 0x7a),
-    (0x90, 0xb4, 0xd4),
-    (0xc9, 0xa7, 0xd4),
-    (0x9c, 0xdc, 0xd3),
-    (0xf0, 0xf0, 0xf0),
 ];
 
 /// What the parser reports to. A title, a colour query and a bell are events this client does not
@@ -272,43 +245,18 @@ impl Screen {
             let Some(line) = lines.get_mut(row) else {
                 continue;
             };
-            let selected = selection.is_some_and(|range| range.contains(indexed.point));
             let style = Style {
                 fg: cell.fg,
                 bg: cell.bg,
                 bold: cell.flags.contains(Flags::BOLD),
-                reverse: cell.flags.contains(Flags::INVERSE) != selected,
+                reverse: cell.flags.contains(Flags::INVERSE),
+                selected: selection.is_some_and(|range| range.contains(indexed.point)),
             };
-            // The second half of a wide character holds no glyph; the character's own run is
-            // drawn two cells wide instead.
-            if cell
-                .flags
-                .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
-            {
-                continue;
-            }
-            // A character outside ASCII may come from a fallback font with its own advance (an
-            // icon, an emoji), so it gets its own run at a fixed width and cannot push the rest
-            // of the line out of its columns.
-            if !cell.c.is_ascii() {
-                let cells = if cell.flags.contains(Flags::WIDE_CHAR) {
-                    2
-                } else {
-                    1
-                };
-                line.runs.push(Run {
-                    style,
-                    text: cell.c.to_string(),
-                    fixed: Some(cells),
-                });
-                continue;
-            }
             match line.runs.last_mut() {
-                Some(run) if run.style == style && run.fixed.is_none() => run.text.push(cell.c),
+                Some(run) if run.style == style => run.text.push(cell.c),
                 _ => line.runs.push(Run {
                     style,
                     text: cell.c.to_string(),
-                    fixed: None,
                 }),
             }
         }
@@ -319,14 +267,18 @@ impl Screen {
             while let Some(last) = line.runs.last() {
                 let blank = last.text.trim_end().is_empty()
                     && last.style.bg == Color::Named(NamedColor::Background)
-                    && !last.style.reverse;
+                    && !last.style.reverse
+                    && !last.style.selected;
                 if !blank {
                     break;
                 }
                 line.runs.pop();
             }
             if let Some(last) = line.runs.last_mut() {
-                if last.style.bg == Color::Named(NamedColor::Background) && !last.style.reverse {
+                if last.style.bg == Color::Named(NamedColor::Background)
+                    && !last.style.reverse
+                    && !last.style.selected
+                {
                     let trimmed = last.text.trim_end().len();
                     last.text.truncate(trimmed);
                 }
@@ -350,30 +302,11 @@ struct ScreenLine {
     cursor: Option<usize>,
 }
 
-/// Cells that share a look, drawn as one text element.
+/// Cells that share a look. A wide character's second cell is a space in the run, so every
+/// character is one cell and the run's length is its width.
 struct Run {
     style: Style,
     text: String,
-    /// Cells a single character run spans at a fixed width, for a glyph whose advance the font
-    /// does not promise. `None` is a run of ASCII drawn at the font's own monospace advance.
-    fixed: Option<usize>,
-}
-
-impl Run {
-    fn cells(&self) -> usize {
-        self.fixed.unwrap_or_else(|| self.text.chars().count())
-    }
-
-    /// The run's background (absent means the window's own) and foreground, as tones.
-    fn tones(&self, palette: &Palette) -> (Option<u32>, u32) {
-        let bg = tone_of(self.style.bg, palette);
-        let fg = tone_of(self.style.fg, palette).unwrap_or(palette.text);
-        if self.style.reverse {
-            (Some(fg), bg.unwrap_or(palette.terminal_surface >> 8))
-        } else {
-            (bg, fg)
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -381,24 +314,40 @@ struct Style {
     fg: Color,
     bg: Color,
     bold: bool,
-    /// Foreground and background swapped: a program's reverse video, or a selected cell.
+    /// Foreground and background swapped: a program's reverse video.
     reverse: bool,
+    selected: bool,
 }
 
-/// A colour as `0xRRGGBB`, or `None` for "the window's own", which the parent draws.
-fn tone_of(colour: Color, palette: &Palette) -> Option<u32> {
+impl Style {
+    /// The background (absent means the grid's own) and foreground, as `0xRRGGBB`.
+    fn tones(&self, scheme: &TerminalScheme) -> (Option<u32>, u32) {
+        let bg = tone_of(self.bg, scheme);
+        let fg = tone_of(self.fg, scheme).unwrap_or(scheme.foreground);
+        let (bg, fg) = if self.reverse {
+            (Some(fg), bg.unwrap_or(scheme.background))
+        } else {
+            (bg, fg)
+        };
+        if self.selected {
+            (Some(scheme.selection), fg)
+        } else {
+            (bg, fg)
+        }
+    }
+}
+
+/// A colour as `0xRRGGBB`, or `None` for the terminal's own background, which the grid draws.
+fn tone_of(colour: Color, scheme: &TerminalScheme) -> Option<u32> {
     match colour {
         Color::Spec(rgb) => Some(hex(rgb.r, rgb.g, rgb.b)),
-        Color::Indexed(index) => {
-            let (r, g, b) = ansi_256(index);
-            Some(hex(r, g, b))
-        }
-        Color::Named(NamedColor::Background) | Color::Named(NamedColor::Cursor) => None,
-        Color::Named(NamedColor::Foreground) => Some(palette.text),
-        Color::Named(named) => {
-            let (r, g, b) = ansi_256(named_index(named));
-            Some(hex(r, g, b))
-        }
+        Color::Indexed(index) => Some(ansi_256(index, scheme)),
+        Color::Named(NamedColor::Background) => None,
+        Color::Named(NamedColor::Cursor) => Some(scheme.cursor),
+        Color::Named(
+            NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground,
+        ) => Some(scheme.foreground),
+        Color::Named(named) => Some(scheme.ansi[named_index(named) as usize]),
     }
 }
 
@@ -406,18 +355,18 @@ fn hex(r: u8, g: u8, b: u8) -> u32 {
     (r as u32) << 16 | (g as u32) << 8 | b as u32
 }
 
-/// The xterm 256-colour palette: the sixteen ANSI tones, then a 6×6×6 cube, then 24 greys.
-fn ansi_256(index: u8) -> (u8, u8, u8) {
+/// The xterm 256-colour palette: the scheme's sixteen tones, then a 6×6×6 cube, then 24 greys.
+fn ansi_256(index: u8, scheme: &TerminalScheme) -> u32 {
     match index {
-        0..=15 => ANSI[index as usize],
+        0..=15 => scheme.ansi[index as usize],
         16..=231 => {
             let cube = index - 16;
             let level = |value: u8| if value == 0 { 0 } else { 55 + value * 40 };
-            (level(cube / 36), level((cube % 36) / 6), level(cube % 6))
+            hex(level(cube / 36), level((cube % 36) / 6), level(cube % 6))
         }
         _ => {
             let grey = 8 + (index - 232) * 10;
-            (grey, grey, grey)
+            hex(grey, grey, grey)
         }
     }
 }
@@ -442,6 +391,149 @@ fn named_index(named: NamedColor) -> u8 {
         NamedColor::BrightCyan | NamedColor::DimCyan => 14,
         NamedColor::BrightWhite | NamedColor::DimWhite => 15,
         _ => 7,
+    }
+}
+
+/// One stretch of a line in one look, at the column it starts: what the grid paints.
+#[derive(Debug, PartialEq, Eq)]
+struct Span {
+    column: usize,
+    text: String,
+    bg: Option<u32>,
+    fg: u32,
+    bold: bool,
+}
+
+/// A line as spans. The cursor splits the run it sits in and draws its cell inverted, which is
+/// what every terminal does; a cursor past the end of the text gets a cell of its own.
+fn spans(line: ScreenLine, scheme: &TerminalScheme) -> Vec<Span> {
+    let mut spans = Vec::new();
+    let mut column = 0;
+    let cursor = line.cursor;
+    for run in line.runs {
+        let (bg, fg) = run.style.tones(scheme);
+        let characters: Vec<char> = run.text.chars().collect();
+        let end = column + characters.len();
+        let mut push = |from: usize, to: usize, bg: Option<u32>, fg: u32| {
+            if from < to {
+                spans.push(Span {
+                    column: column + from,
+                    text: characters[from..to].iter().collect(),
+                    bg,
+                    fg,
+                    bold: run.style.bold,
+                });
+            }
+        };
+        match cursor {
+            Some(at) if at >= column && at < end => {
+                let offset = at - column;
+                push(0, offset, bg, fg);
+                push(
+                    offset,
+                    offset + 1,
+                    Some(scheme.cursor),
+                    bg.unwrap_or(scheme.background),
+                );
+                push(offset + 1, characters.len(), bg, fg);
+            }
+            _ => push(0, characters.len(), bg, fg),
+        }
+        column = end;
+    }
+    if let Some(at) = cursor.filter(|at| *at >= column) {
+        spans.push(Span {
+            column: at,
+            text: " ".to_owned(),
+            bg: Some(scheme.cursor),
+            fg: scheme.background,
+            bold: false,
+        });
+    }
+    spans
+}
+
+/// The font the grid draws in, and the cell it measures.
+#[derive(Clone)]
+struct Metrics {
+    family: SharedString,
+    size: Pixels,
+    line: Pixels,
+}
+
+/// Paints the grid: one quad per painted background and one shaped line per row. The text system
+/// places every glyph on the cell's advance (`force_width`), so an icon from a fallback font or a
+/// wide character keeps the columns after it where they belong.
+fn paint_grid(
+    bounds: Bounds<Pixels>,
+    rows: Vec<Vec<Span>>,
+    metrics: &Metrics,
+    cell: Pixels,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
+    let regular = font(metrics.family.clone());
+    let bold = Font {
+        weight: FontWeight::BOLD,
+        ..regular.clone()
+    };
+    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        for (row, spans) in rows.into_iter().enumerate() {
+            let y = bounds.origin.y + metrics.line * row as f32;
+            let mut text = String::new();
+            let mut runs = Vec::with_capacity(spans.len());
+            let mut column = 0;
+            for span in &spans {
+                let width = span.text.chars().count();
+                if let Some(bg) = span.bg {
+                    let origin = point(bounds.origin.x + cell * span.column as f32, y);
+                    let size = gpui::size(cell * width as f32, metrics.line);
+                    window.paint_quad(fill(Bounds::new(origin, size), rgb(bg)));
+                }
+                // Spans are contiguous from column 0 except the cursor's own cell past the end,
+                // which the gap before it is padded to.
+                if span.column > column {
+                    let gap = " ".repeat(span.column - column);
+                    runs.push(text_run(gap.len(), &regular, span.fg));
+                    text.push_str(&gap);
+                }
+                runs.push(text_run(
+                    span.text.len(),
+                    if span.bold { &bold } else { &regular },
+                    span.fg,
+                ));
+                text.push_str(&span.text);
+                column = span.column + width;
+            }
+            if text.trim().is_empty() {
+                continue;
+            }
+            let shaped = window.text_system().shape_line(
+                SharedString::from(text),
+                metrics.size,
+                &runs,
+                Some(cell),
+            );
+            let _ = shaped.paint(
+                point(bounds.origin.x, y),
+                metrics.line,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            );
+        }
+    });
+}
+
+fn text_run(len: usize, font: &Font, fg: u32) -> TextRun {
+    TextRun {
+        len,
+        font: font.clone(),
+        color: rgb(fg).into(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
     }
 }
 
@@ -562,6 +654,9 @@ pub struct TerminalView {
     /// position becomes a cell.
     origin: Point<Pixels>,
     cell: gpui::Size<Pixels>,
+    /// The font the grid draws in, resolved from the Appearance choice when that changes.
+    metrics: Metrics,
+    font_choice: Option<(TerminalFont, u8)>,
     /// True from a press on the grid until its release: a move extends the selection.
     selecting: bool,
 }
@@ -600,16 +695,38 @@ impl TerminalView {
             outgoing: Vec::new(),
             sending: false,
             origin: Point::default(),
-            cell: gpui::size(px(CELL_WIDTH), px(FONT_SIZE * LINE_HEIGHT)),
+            cell: gpui::size(
+                px(DEFAULT_FONT_SIZE * 0.6),
+                px(DEFAULT_FONT_SIZE * LINE_HEIGHT),
+            ),
+            metrics: Metrics {
+                family: SharedString::from("Menlo"),
+                size: px(DEFAULT_FONT_SIZE),
+                line: px(DEFAULT_FONT_SIZE * LINE_HEIGHT),
+            },
+            font_choice: None,
             selecting: false,
             peer,
         }
     }
 
-    /// The app's palette, Appearance settings applied. The host hands it in on every frame, so a
-    /// change in Settings reaches a terminal that is already open.
-    pub fn set_palette(&mut self, palette: Palette) {
+    /// The app's palette and the terminal's font, Appearance settings applied. The host hands
+    /// them in on every frame, so a change in Settings reaches a terminal that is already open.
+    /// The font is resolved against the installed families only when the choice changes.
+    pub fn set_style(&mut self, palette: Palette, font: TerminalFont, size: u8, cx: &gpui::App) {
         self.palette = palette;
+        if self.font_choice == Some((font, size)) {
+            return;
+        }
+        self.font_choice = Some((font, size));
+        let families = TerminalFont::families(cx);
+        let theme_mono = cx.theme().mono_font_family.clone();
+        let size = px(size as f32);
+        self.metrics = Metrics {
+            family: font.resolve(families, &theme_mono).into(),
+            size,
+            line: size * LINE_HEIGHT,
+        };
     }
 
     /// The same view for a touch screen.
@@ -1033,10 +1150,15 @@ impl TerminalView {
 impl Render for TerminalView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self.palette;
-        let mono = cx.theme().mono_font_family.clone();
-        let line_height = px(FONT_SIZE * LINE_HEIGHT);
-        let cell_width = self.cell.width;
-        let lines = self.screen.lines();
+        let scheme = MONOKAI;
+        let rows: Vec<Vec<Span>> = self
+            .screen
+            .lines()
+            .into_iter()
+            .map(|line| spans(line, &scheme))
+            .collect();
+        let metrics = self.metrics.clone();
+        let view = cx.entity();
         let header = self.header(palette, cx);
         let keys = self.touch.then(|| self.key_row(palette, cx));
 
@@ -1056,7 +1178,6 @@ impl Render for TerminalView {
                     .key_context("Terminal")
                     .relative()
                     .flex_1()
-                    .overflow_y_scroll()
                     .track_focus(&self.focus)
                     .bg(rgba(palette.terminal_surface))
                     .rounded(px(8.))
@@ -1102,161 +1223,45 @@ impl Render for TerminalView {
                             view.scroll_by(lines, cx);
                         }
                     }))
-                    .child(fit(cx.entity(), mono.clone()))
                     .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .children(lines.into_iter().map(|line| {
-                                let cursor = line.cursor;
-                                div()
-                                    .flex()
-                                    .flex_row()
-                                    .items_center()
-                                    .h(line_height)
-                                    .overflow_hidden()
-                                    .whitespace_nowrap()
-                                    .children(runs_of(
-                                        line,
-                                        cursor,
-                                        &palette,
-                                        mono.clone(),
-                                        cell_width,
-                                    ))
-                            })),
+                        canvas(
+                            {
+                                let metrics = metrics.clone();
+                                move |bounds, window, app| {
+                                    // The cell is the font's own advance, so columns land where
+                                    // the glyphs do. The pty is resized to what fits.
+                                    let font_id = window
+                                        .text_system()
+                                        .resolve_font(&font(metrics.family.clone()));
+                                    let cell = window
+                                        .text_system()
+                                        .advance(font_id, metrics.size, 'm')
+                                        .map(|advance| advance.width)
+                                        .unwrap_or(metrics.size * 0.6);
+                                    let cols = (bounds.size.width / cell).floor().max(1.) as usize;
+                                    let rows = (bounds.size.height / metrics.line).floor().max(1.)
+                                        as usize;
+                                    let origin = bounds.origin;
+                                    let line = metrics.line;
+                                    app.defer(move |app| {
+                                        view.update(app, |view, cx| {
+                                            view.origin = origin;
+                                            view.cell = gpui::size(cell, line);
+                                            view.resize(cols, rows, cx);
+                                        });
+                                    });
+                                    cell
+                                }
+                            },
+                            move |bounds, cell, window, app| {
+                                paint_grid(bounds, rows, &metrics, cell, window, app);
+                            },
+                        )
+                        .size_full(),
                     ),
             )
             .into_any_element()
     }
-}
-
-/// Measures the grid each frame and resizes the pty to the cells that fit, so a wider edge or a
-/// taller window gets more columns and rows instead of a fixed 48 × 44.
-fn fit(view: gpui::Entity<TerminalView>, mono: SharedString) -> impl IntoElement {
-    canvas(
-        move |bounds, window, app| {
-            let size = px(FONT_SIZE);
-            let font_id = window.text_system().resolve_font(&font(mono));
-            let cell = window
-                .text_system()
-                .advance(font_id, size, 'm')
-                .map(|advance| advance.width)
-                .unwrap_or(px(CELL_WIDTH));
-            let padding = px(GRID_PADDING);
-            let line = px(FONT_SIZE * LINE_HEIGHT);
-            let inner = bounds.size - gpui::size(padding * 2., padding * 2.);
-            let cols = (inner.width / cell).floor().max(1.) as usize;
-            let rows = (inner.height / line).floor().max(1.) as usize;
-            let origin = bounds.origin + point(padding, padding);
-            app.defer(move |app| {
-                view.update(app, |view, cx| {
-                    view.origin = origin;
-                    view.cell = gpui::size(cell, line);
-                    view.resize(cols, rows, cx);
-                });
-            });
-        },
-        |_, _, _, _| {},
-    )
-    .absolute()
-    .top_0()
-    .left_0()
-    .size_full()
-}
-
-/// One line's runs as elements, with the cursor's cell drawn inverted where it sits.
-fn runs_of(
-    line: ScreenLine,
-    cursor: Option<usize>,
-    palette: &Palette,
-    mono: SharedString,
-    cell_width: Pixels,
-) -> Vec<AnyElement> {
-    let mut elements: Vec<AnyElement> = Vec::new();
-    let mut column = 0usize;
-    for run in line.runs {
-        let (bg, fg) = run.tones(palette);
-        let characters: Vec<char> = run.text.chars().collect();
-        let end = column + run.cells();
-        if let Some(cells) = run.fixed {
-            let under_cursor = cursor.is_some_and(|at| at >= column && at < end);
-            let (bg, fg) = if under_cursor {
-                (Some(fg), bg.unwrap_or(palette.terminal_surface >> 8))
-            } else {
-                (bg, fg)
-            };
-            elements.push(
-                div()
-                    .flex_none()
-                    .w(cell_width * cells as f32)
-                    .overflow_hidden()
-                    .child(cell(run.text, bg, fg, run.style.bold, &mono))
-                    .into_any_element(),
-            );
-            column = end;
-            continue;
-        }
-        match cursor {
-            Some(at) if at >= column && at < end => {
-                let offset = at - column;
-                let before: String = characters[..offset].iter().collect();
-                let under: String = characters[offset..offset + 1].iter().collect();
-                let after: String = characters[offset + 1..].iter().collect();
-                if !before.is_empty() {
-                    elements.push(cell(before, bg, fg, run.style.bold, &mono));
-                }
-                // The cursor is the cell's own look inverted, which is what every terminal does.
-                elements.push(
-                    div()
-                        .flex_none()
-                        .h(px(FONT_SIZE * LINE_HEIGHT))
-                        .bg(rgb(fg))
-                        .text_color(rgb(bg.unwrap_or(palette.terminal_surface >> 8)))
-                        .font_family(mono.clone())
-                        .text_size(px(FONT_SIZE))
-                        .child(SharedString::from(under))
-                        .into_any_element(),
-                );
-                if !after.is_empty() {
-                    elements.push(cell(after, bg, fg, run.style.bold, &mono));
-                }
-            }
-            _ => elements.push(cell(run.text, bg, fg, run.style.bold, &mono)),
-        }
-        column = end;
-    }
-    // A cursor past the last character of the line still needs somewhere to be drawn.
-    if let Some(at) = cursor.filter(|at| *at >= column) {
-        let padding = " ".repeat(at.saturating_sub(column));
-        if !padding.is_empty() {
-            elements.push(cell(padding, None, palette.text, false, &mono));
-        }
-        elements.push(
-            div()
-                .flex_none()
-                .w(px(CELL_WIDTH))
-                .h(px(FONT_SIZE * LINE_HEIGHT))
-                .bg(rgb(palette.text))
-                .into_any_element(),
-        );
-    }
-    elements
-}
-
-fn cell(text: String, bg: Option<u32>, fg: u32, bold: bool, mono: &SharedString) -> AnyElement {
-    let mut element = div()
-        .flex_none()
-        .font_family(mono.clone())
-        .text_size(px(FONT_SIZE))
-        .text_color(rgb(fg))
-        .child(SharedString::from(text));
-    if let Some(bg) = bg {
-        element = element.bg(rgb(bg));
-    }
-    if bold {
-        element = element.font_weight(FontWeight::BOLD);
-    }
-    element.into_any_element()
 }
 
 #[cfg(test)]
@@ -1343,28 +1348,23 @@ mod tests {
         screen.select(SelectionType::Simple, start, Side::Left);
         screen.extend_selection(end, Side::Right);
         assert_eq!(screen.selected_text().as_deref(), Some("hello"));
-        // The selected cells are drawn reversed, the rest of the line is not.
-        let lines = screen.lines();
-        assert!(lines[0].runs[0].style.reverse);
-        assert_eq!(lines[0].runs[0].text, "hello");
-        assert!(!lines[0].runs[1].style.reverse);
+        // The selected cells draw on the scheme's selection colour, the rest of the line does not.
+        let mut lines = screen.lines();
+        let spans = spans(lines.remove(0), &MONOKAI);
+        assert_eq!(spans[0].text, "hello");
+        assert_eq!(spans[0].bg, Some(MONOKAI.selection));
+        assert_eq!(spans[1].bg, None);
     }
 
     #[test]
-    fn an_icon_glyph_is_its_own_fixed_width_run() {
-        let mut screen = Screen::new(20, 3);
-        // A Nerd Font folder icon, then a name: the icon cannot share the name's run.
-        screen.feed("\u{f115} Docs".as_bytes());
-        let runs = &screen.lines()[0].runs;
-        assert_eq!(runs[0].fixed, Some(1));
-        assert_eq!(runs[1].text, " Docs");
-        assert_eq!(runs[1].fixed, None);
-        // A wide character spans two cells and its spacer is not drawn as a third.
+    fn a_wide_character_keeps_its_second_cell() {
+        // The grid draws every character on one cell's advance, so the wide character's second
+        // cell must stay in the text as a space or everything after it shifts left by one.
         let mut screen = Screen::new(20, 3);
         screen.feed("漢a".as_bytes());
         let runs = &screen.lines()[0].runs;
-        assert_eq!(runs[0].fixed, Some(2));
-        assert_eq!(runs[1].text, "a");
+        let text: String = runs.iter().map(|run| run.text.as_str()).collect();
+        assert_eq!(text, "漢 a");
     }
 
     #[test]
@@ -1417,15 +1417,27 @@ mod tests {
 
     #[test]
     fn the_ansi_palette_is_the_tones_a_program_asks_for() {
-        assert_eq!(ansi_256(1), ANSI[1]);
-        assert_eq!(ansi_256(9), ANSI[9]);
+        // The first sixteen are the scheme's: Monokai's red is its pink.
+        assert_eq!(ansi_256(1, &MONOKAI), 0xf92672);
+        assert_eq!(
+            tone_of(Color::Named(NamedColor::Red), &MONOKAI),
+            Some(0xf92672)
+        );
+        assert_eq!(
+            tone_of(Color::Named(NamedColor::Foreground), &MONOKAI),
+            Some(MONOKAI.foreground)
+        );
+        assert_eq!(
+            tone_of(Color::Named(NamedColor::Background), &MONOKAI),
+            None
+        );
         // The cube: 196 is full red, 16 is black, 231 white.
-        assert_eq!(ansi_256(196), (255, 0, 0));
-        assert_eq!(ansi_256(16), (0, 0, 0));
-        assert_eq!(ansi_256(231), (255, 255, 255));
+        assert_eq!(ansi_256(196, &MONOKAI), 0xff0000);
+        assert_eq!(ansi_256(16, &MONOKAI), 0x000000);
+        assert_eq!(ansi_256(231, &MONOKAI), 0xffffff);
         // The greys run from 8 to 238.
-        assert_eq!(ansi_256(232), (8, 8, 8));
-        assert_eq!(ansi_256(255), (238, 238, 238));
+        assert_eq!(ansi_256(232, &MONOKAI), 0x080808);
+        assert_eq!(ansi_256(255, &MONOKAI), 0xeeeeee);
     }
 
     #[test]
@@ -1492,26 +1504,19 @@ mod tests {
     fn the_cursor_cell_is_inverted_and_the_rest_of_the_line_survives() {
         let mut screen = Screen::new(20, 3);
         screen.feed(b"abc");
-        let lines = screen.lines();
-        let elements = runs_of(
-            ScreenLine {
-                runs: lines[0]
-                    .runs
-                    .iter()
-                    .map(|run| Run {
-                        style: run.style,
-                        text: run.text.clone(),
-                        fixed: run.fixed,
-                    })
-                    .collect(),
-                cursor: Some(1),
-            },
-            Some(1),
-            &Palette::dark(),
-            SharedString::from("monospace"),
-            px(CELL_WIDTH),
-        );
+        let mut lines = screen.lines();
+        let mut line = lines.remove(0);
+        line.cursor = Some(1);
+        let spans = spans(line, &MONOKAI);
         // "a", the inverted "b", then "c": the cursor splits the run rather than replacing it.
-        assert_eq!(elements.len(), 3);
+        let texts: Vec<&str> = spans.iter().map(|span| span.text.as_str()).collect();
+        assert_eq!(texts, ["a", "b", "c"]);
+        assert_eq!(spans[1].bg, Some(MONOKAI.cursor));
+        assert_eq!(spans[1].fg, MONOKAI.background);
+        // A cursor past the text draws a cell of its own at its column.
+        let mut line = screen.lines().remove(0);
+        line.cursor = Some(5);
+        let spans = super::spans(line, &MONOKAI);
+        assert_eq!(spans.last().map(|span| span.column), Some(5));
     }
 }

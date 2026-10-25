@@ -46,7 +46,7 @@ use sjel_gpui_ui::terminal::{TerminalEvent, TerminalView};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, NotifyPrefs,
-    Palette, SoundscapePrefs, ThemeMode,
+    Palette, SoundscapePrefs, TerminalFont, ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
 };
 
 mod audio;
@@ -1202,6 +1202,63 @@ impl Capabilities {
         .detach();
     }
 
+    /// The Terminal rows of Settings, the same four the Mac's Appearance page has.
+    fn terminal_settings(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let settings = self.appearance;
+        let fonts = TerminalFont::available(cx);
+        let font_options = fonts
+            .iter()
+            .map(|font| (font.label().into(), settings.terminal_font == *font))
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(choice_row(
+                "TERMINAL FONT",
+                font_options,
+                palette,
+                cx,
+                move |appearance, ix| appearance.terminal_font = fonts[ix],
+            ))
+            .child(choice_row(
+                "TERMINAL FONT SIZE",
+                TERMINAL_FONT_SIZES
+                    .iter()
+                    .map(|size| {
+                        (
+                            size.to_string().into(),
+                            settings.terminal_font_size == *size,
+                        )
+                    })
+                    .collect(),
+                palette,
+                cx,
+                |appearance, ix| appearance.terminal_font_size = TERMINAL_FONT_SIZES[ix],
+            ))
+            .child(choice_row(
+                "TERMINAL BACKGROUND",
+                BackgroundTone::ALL
+                    .iter()
+                    .map(|tone| (tone.label().into(), settings.terminal_tone == *tone))
+                    .collect(),
+                palette,
+                cx,
+                |appearance, ix| appearance.terminal_tone = BackgroundTone::ALL[ix],
+            ))
+            .child(choice_row(
+                "TERMINAL OPACITY",
+                WindowOpacity::ALL
+                    .iter()
+                    .map(|o| (o.short_label().into(), settings.terminal_opacity == *o))
+                    .collect(),
+                palette,
+                cx,
+                |appearance, ix| appearance.terminal_opacity = WindowOpacity::ALL[ix],
+            ))
+            .into_any_element()
+    }
+
     fn palette(&self) -> Palette {
         let is_dark = self.appearance.theme_mode.is_dark(false);
         let base = if is_dark {
@@ -2043,6 +2100,56 @@ impl Capabilities {
 }
 
 /// Shows or hides the software keyboard as a note's editor opens or closes.
+/// One labelled row of choices on the phone's Settings page. A tap writes `appearance.json`, the
+/// way the theme and tone rows above it do.
+fn choice_row(
+    title: &'static str,
+    options: Vec<(SharedString, bool)>,
+    palette: Palette,
+    cx: &mut Context<Capabilities>,
+    pick: impl Fn(&mut AppearanceSettings, usize) + 'static,
+) -> AnyElement {
+    let pick = std::rc::Rc::new(pick);
+    let mut row = div().flex().items_center().gap_1();
+    for (ix, (label, active)) in options.into_iter().enumerate() {
+        let pick = pick.clone();
+        row = row.child(
+            div()
+                .flex_1()
+                .py(px(6.))
+                .rounded(px(6.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_xs()
+                .when(active, |el| {
+                    el.bg(rgb(palette.accent))
+                        .text_color(rgb(0xffffff))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                })
+                .when(!active, |el| {
+                    el.bg(rgb(0xf3f5f9)).text_color(rgb(palette.muted))
+                })
+                .child(label)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |view, _, _, cx| {
+                        pick(&mut view.appearance, ix);
+                        let _ = view.appearance.save();
+                        cx.notify();
+                    }),
+                ),
+        );
+    }
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(div().text_xs().text_color(rgb(palette.muted)).child(title))
+        .child(row)
+        .into_any_element()
+}
+
 fn keyboard(open: bool) {
     #[cfg(target_os = "ios")]
     if open {
@@ -3013,7 +3120,8 @@ impl Render for Capabilities {
                                             }
                                             row
                                         }),
-                                ),
+                                )
+                                .child(self.terminal_settings(palette, cx)),
                         )
                     })
                     .when(is_today, |page| page.child(self.today.clone()))
@@ -3253,7 +3361,15 @@ impl Render for Capabilities {
                     Seat::Agent => self.agent_panel(palette, window, cx),
                     Seat::Terminal => match (&self.terminal, self.client.is_some()) {
                         (Some((terminal, _)), _) if self.terminal_unlocked => {
-                            terminal.update(cx, |view, _| view.set_palette(palette));
+                            let settings = self.appearance;
+                            terminal.update(cx, |view, cx| {
+                                view.set_style(
+                                    palette,
+                                    settings.terminal_font,
+                                    settings.terminal_font_size,
+                                    cx,
+                                )
+                            });
                             terminal.clone().into_any_element()
                         }
                         (_, paired) => div()

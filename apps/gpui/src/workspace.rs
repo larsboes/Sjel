@@ -1883,7 +1883,15 @@ impl Render for Workspace {
                     .into_any_element(),
                 Seat::Terminal => match &self.terminal {
                     Some(terminal) => {
-                        terminal.update(cx, |view, _| view.set_palette(palette));
+                        let settings = self.appearance_settings;
+                        terminal.update(cx, |view, cx| {
+                            view.set_style(
+                                palette,
+                                settings.terminal_font,
+                                settings.terminal_font_size,
+                                cx,
+                            )
+                        });
                         terminal.clone().into_any_element()
                     }
                     None => div()

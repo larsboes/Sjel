@@ -274,18 +274,19 @@ to interactive keystrokes, so access is the control.
   single-key bindings use `Workspace && !Terminal`, so Enter, J, K, G and Esc reach the program.
   A drag selects (double-click a word, triple-click a line, shift extends), ⌘C copies, ⌘V
   pastes with bracketed paste when the program asks for it, and ⌘A selects the scrollback.
-  Settings › Appearance › Terminal sets the grid's tone and opacity. Built.
+  Settings › Appearance › Terminal sets the font (Auto picks an installed Nerd Font), size, tone
+  and opacity. Built.
 - Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
   passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
   The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits
   above the grid, and a tap on the grid raises the software keyboard. Entering the background
   drops the view and the unlock, so a reattach asks again. Built and linked for the simulator.
-  The key row carries copy and paste. Open: a preset and directory picker (the seat opens `shell`
-  only), the Agent tab's terminal list, the Terminal appearance rows on the phone's Settings, and
-  pinch to change the font size.
-- Both: a glyph outside ASCII draws at a fixed cell width, so a Nerd Font icon that the mono font
-  lacks is clipped to its cell instead of shifting the line. Open: a font setting, so a Nerd Font
-  can draw those icons whole.
+  The key row carries copy and paste, and Settings has the same four Terminal rows as the Mac.
+  Open: a preset and directory picker (the seat opens `shell` only), the Agent tab's terminal
+  list, and pinch to change the font size.
+- Both: the grid is one canvas in Monokai (`theme::MONOKAI`). Each row is one shaped line with
+  every glyph on the cell's advance (`force_width`) and one quad per painted background, so a
+  fallback-font icon or a wide character keeps its columns.
 
 ### Done when
 

@@ -1123,7 +1123,9 @@ async fn materialize_trip(
             entries.push(entry);
         }
 
-        let drafts = correlate::cluster_trips(&entries, i64::MAX, None)?;
+        // The home the drafts were made with: without it a ticket home is a trip to home.
+        let home = home_place(&config.home_city);
+        let drafts = correlate::cluster_trips(&entries, i64::MAX, home.as_deref())?;
         let draft = drafts
             .drafts
             .first()
@@ -1148,7 +1150,7 @@ async fn materialize_trip(
             .unwrap_or_else(|| format!("{} — {}", draft.place, draft.starts_on));
         let payload = json!({
             "title": title,
-            "origin": { "id": "", "name": home_place(&config.home_city).unwrap_or_default() },
+            "origin": { "id": "", "name": home.clone().unwrap_or_default() },
             "destinations": [{ "id": "", "name": draft.place }],
             "date_start": draft.starts_on,
             "date_end": date_end,

@@ -80,6 +80,7 @@ tools/model-check — is every model this machine names real, served, and the ne
   tools/model-check --probe    also ask every model to answer (spends provider quota)
   tools/model-check --local    only loopback backends, each probed (free; what doctor runs)
   tools/model-check --role <r> only that role; with --probe, one request to its model
+  tools/model-check --list <b> print the model ids backend <b> lists
   tools/model-check --json     machine-readable report
   tools/model-check -h         this help
 
@@ -168,6 +169,21 @@ pub fn run(argv: &[String]) -> ExitCode {
     let Some(overlay) = paths.overlay_root.as_deref() else {
         return fail("no overlay — run tools/install.sh", 2);
     };
+    if let Some(backend) = argv
+        .iter()
+        .position(|a| a == "--list")
+        .and_then(|i| argv.get(i + 1))
+    {
+        return match list(overlay, backend) {
+            Ok(ids) => {
+                for id in ids {
+                    println!("{id}");
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => fail(&e, 1),
+        };
+    }
     match report(&opts, overlay) {
         Ok(outcome) => {
             if opts.json {
@@ -534,13 +550,20 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
                 } else {
                     String::new()
                 };
+                let verdict = if spoke.is_empty() || answered(&spoke) {
+                    "ok"
+                } else {
+                    "✗ listed, but"
+                };
                 checker.say(&format!(
-                    "{}: {model} on {backend_name} ok{}{suffix}",
+                    "{}: {model} on {backend_name} {verdict}{}{suffix}",
                     label,
                     if spoke.is_empty() {
                         String::new()
-                    } else {
+                    } else if verdict == "ok" {
                         format!(" — {spoke}")
+                    } else {
+                        format!(" {spoke}")
                     }
                 ));
                 entries.push(Entry {
@@ -571,6 +594,26 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
         role_count: roles.len(),
         backend_count: checks.len() - roles.len(),
     })
+}
+
+/// The model ids one backend's catalogue lists, sorted. The key is used, never printed.
+fn list(overlay: &Path, name: &str) -> Result<Vec<String>, String> {
+    let (backends, _) = read_config(overlay)?;
+    let backend = backends
+        .get(name)
+        .ok_or_else(|| format!("no backend named {name} in inference.json"))?;
+    let client = sjel_http::client(Purpose::new("model-check"), CATALOGUE_TIMEOUT)
+        .map_err(|e| e.to_string())?;
+    let opts = Options::default();
+    let checker = Checker {
+        catalogue_client: &client,
+        probe_client: &client,
+        opts: &opts,
+        breaches: 0,
+    };
+    let mut ids = checker.catalogue(backend, backend_key(overlay, backend).as_deref())?;
+    ids.sort();
+    Ok(ids)
 }
 
 /// The backend's bearer key, resolved the way `libs/inference` resolves it for a real request.
@@ -700,7 +743,7 @@ impl Checker<'_> {
             let text = response.text().unwrap_or_default();
             let (detail, stated) = refusal_detail(&text);
             let reply = format!(
-                "answers HTTP {status}{}",
+                "refused: HTTP {status}{}",
                 if detail.is_empty() {
                     String::new()
                 } else {
@@ -769,7 +812,7 @@ impl Checker<'_> {
             let text = response.text().unwrap_or_default();
             let (detail, stated) = refusal_detail(&text);
             let reply = format!(
-                "answers HTTP {status}{}",
+                "refused: HTTP {status}{}",
                 if detail.is_empty() {
                     String::new()
                 } else {
@@ -843,7 +886,7 @@ impl Checker<'_> {
             let text = response.text().unwrap_or_default();
             let (detail, stated) = refusal_detail(&text);
             let reply = format!(
-                "answers HTTP {status}{}",
+                "refused: HTTP {status}{}",
                 if detail.is_empty() {
                     String::new()
                 } else {

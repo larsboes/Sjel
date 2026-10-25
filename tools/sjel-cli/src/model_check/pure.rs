@@ -398,7 +398,7 @@ mod tests {
     fn only_an_answer_counts_as_an_answer() {
         assert!(answered("answers"));
         assert!(answered("answers (1024-dimensional)"));
-        assert!(!answered("answers HTTP 503 — high demand"));
+        assert!(!answered("refused: HTTP 503 — high demand"));
         assert!(!answered("no answer within 60s"));
         assert!(!answered(""));
     }

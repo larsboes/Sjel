@@ -961,8 +961,10 @@ impl ResolvedRole {
         if self.backend.api == Api::OpenAiResponses {
             return oauth_access_token(self.backend.oauth_credential_id.as_deref());
         }
-        api_key_from_credential(self.backend.api_key_credential_id.as_deref())
-            .or_else(|| api_key_from_file(self.backend.api_key_file.as_deref()))
+        backend_api_key(
+            self.backend.api_key_credential_id.as_deref(),
+            self.backend.api_key_file.as_deref(),
+        )
     }
 
     /// Cheap readiness probe that confirms the role's selected model is listed
@@ -1209,6 +1211,12 @@ impl ResolvedRole {
         }
         Ok(vectors)
     }
+}
+
+/// A backend's API key: the keychain credential first, then the declared key file. Every caller
+/// that sends a backend request resolves its key here, so a checker and the runtime agree.
+pub fn backend_api_key(credential_id: Option<&str>, key_file: Option<&str>) -> Option<String> {
+    api_key_from_credential(credential_id).or_else(|| api_key_from_file(key_file))
 }
 
 fn api_key_from_credential(id: Option<&str>) -> Option<String> {

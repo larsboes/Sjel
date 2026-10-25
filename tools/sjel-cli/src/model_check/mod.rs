@@ -79,6 +79,7 @@ tools/model-check — is every model this machine names real, served, and the ne
   tools/model-check            check the catalogue each role's model is declared in
   tools/model-check --probe    also ask every model to answer (spends provider quota)
   tools/model-check --local    only loopback backends, each probed (free; what doctor runs)
+  tools/model-check --role <r> only that role; with --probe, one request to its model
   tools/model-check --json     machine-readable report
   tools/model-check -h         this help
 
@@ -90,11 +91,13 @@ Config: <overlay>/config/inference.json
 const CATALOGUE_TIMEOUT: Duration = Duration::from_secs(20);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Options {
     pub probe: bool,
     pub local_only: bool,
     pub json: bool,
+    /// Check only this role, and skip the backends' own models.
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -152,6 +155,11 @@ pub fn run(argv: &[String]) -> ExitCode {
         probe: argv.iter().any(|a| a == "--probe"),
         local_only: argv.iter().any(|a| a == "--local"),
         json: argv.iter().any(|a| a == "--json"),
+        role: argv
+            .iter()
+            .position(|a| a == "--role")
+            .and_then(|i| argv.get(i + 1))
+            .cloned(),
     };
     let paths = match Paths::from_env() {
         Ok(p) => p,
@@ -214,6 +222,7 @@ struct BackendDecl {
     is_ollama: bool,
     base_url: Option<String>,
     api_key_file: Option<String>,
+    api_key_credential_id: Option<String>,
     /// The backend's OWN model, not a role's. `tools/graphify.sh` reads this when it has no role
     /// to ask, and nothing checked it until 2026-10-24 — see the backend pass in [`report`].
     model: Option<String>,
@@ -259,6 +268,7 @@ fn read_config(overlay: &Path) -> Result<(HashMap<String, BackendDecl>, Vec<Role
                 is_ollama: b.get("api").and_then(Value::as_str) == Some("ollama"),
                 base_url: string("base_url"),
                 api_key_file: string("api_key_file"),
+                api_key_credential_id: string("api_key_credential_id"),
                 model: string("model"),
             },
         );
@@ -295,6 +305,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
 
     let roles: Vec<&RoleDecl> = roles
         .iter()
+        .filter(|role| opts.role.as_deref().is_none_or(|only| only == role.name))
         .filter(|role| {
             if !opts.local_only {
                 return true;
@@ -304,6 +315,12 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
             })
         })
         .collect();
+
+    if let Some(only) = opts.role.as_deref() {
+        if roles.is_empty() {
+            return Err(format!("no role named {only} in inference.json"));
+        }
+    }
 
     let catalogue_client = sjel_http::client(Purpose::new("model-check"), CATALOGUE_TIMEOUT)
         .map_err(|e| e.to_string())?;
@@ -348,6 +365,7 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
         .collect();
     let mut own_model: Vec<(&String, &BackendDecl)> = backends
         .iter()
+        .filter(|_| opts.role.is_none())
         .filter(|(_, b)| b.model.as_deref().is_some_and(|m| !m.is_empty()))
         .filter(|(_, b)| {
             !opts.local_only || sjel_inference::is_loopback_url(b.base_url.as_deref().unwrap_or(""))
@@ -555,12 +573,13 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
     })
 }
 
-/// The backend's bearer key: the declared file, resolved against the config directory the way
-/// `libs/inference` resolves it, then read the way `libs/inference` reads it.
+/// The backend's bearer key, resolved the way `libs/inference` resolves it for a real request.
 fn backend_key(overlay: &Path, backend: &BackendDecl) -> Option<String> {
-    let raw = backend.api_key_file.as_deref()?;
-    let resolved = sjel_inference::resolve_key_file(&overlay.join("config"), raw);
-    sjel_inference::api_key_from_file(Some(&resolved))
+    let file = backend
+        .api_key_file
+        .as_deref()
+        .map(|raw| sjel_inference::resolve_key_file(&overlay.join("config"), raw));
+    sjel_inference::backend_api_key(backend.api_key_credential_id.as_deref(), file.as_deref())
 }
 
 struct Checker<'a> {

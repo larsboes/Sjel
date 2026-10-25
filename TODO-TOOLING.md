@@ -24,10 +24,6 @@ covers it.
   domain with an ad hoc Python script. Only 19 mails had a receipt, because the sweep scans new
   mail only. Smallest change: `sjel capability mail events report`, which groups receipts and
   candidate metadata by sender domain and state, and prints counts only.
-- **Inference role probe.** To test what the light model returns for a fixed prompt, the agent
-  wrote a `curl` call against the backend port and could not reach oMLX without its key. Smallest
-  change: `sjel inference probe <role> <prompt-file>`, which uses the configured key and never
-  prints it.
 - **Installed-software route for the dashboard and `ask`.** `sjel storage installed` walks every
   app bundle and its `~/Library` data and takes about 30 s on this machine, so it stays CLI-only —
   the same reason `report --where` is not served. Smallest change: sample it daily into the store
@@ -54,6 +50,8 @@ covers it.
 
 ## Done
 
+- `tools/model-check --role <role> --probe` sends one request to one role with its configured key
+  and never prints the key. A prompt file is not supported. The probe uses a fixed prompt.
 - `sjel capability mail events [replay] <id>...` reads safe per-mail event scan states and
   replays them.
 - `tools/service-runner.sh stop|restart` stops an orphaned copy of the capability's own binary

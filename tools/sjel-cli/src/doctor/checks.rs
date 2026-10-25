@@ -518,6 +518,7 @@ fn inference_roles(ctx: &mut Ctx) {
         probe: false,
         local_only: true,
         json: true,
+        role: None,
     };
     let overlay = overlay_dir(ctx);
     let data = match crate::model_check::report(&opts, &overlay) {

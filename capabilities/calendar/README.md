@@ -390,8 +390,9 @@ capability.
 | POST | `/api/rhythms/:id/materialize` | Idempotent re‑materialize |
 | POST | `/api/verdicts` | Feasibility verdicts for a batch of dated candidates (see Correlation contract) |
 | GET | `/api/windows?from=&to=&min_days=` | Runs of days travel is possible in; `from` inclusive, `to` exclusive |
-| GET | `/api/trip-drafts?from=&to=&max_gap_days=` | Recomputed, place/time-clustered journey candidates; no write |
-| POST | `/api/trip-drafts/materialize` | Explicitly create one Trips plan from named `entry_ids`; Calendar records an idempotence ledger only after Trips accepts it |
+| GET | `/api/trip-drafts?from=&to=&max_gap_days=` | Recomputed, place/time-clustered journey candidates; no write. A draft whose entries already became a plan carries its `plan_id` |
+| POST | `/api/trip-drafts/materialize` | Explicitly create one Trips plan from named `entry_ids`, clustered with the same home as the drafts; Calendar records an idempotence ledger only after Trips accepts it |
+| POST | `/api/entries/external/retire` | `{source, origin_item_id, keep}`: delete the provider's other `possible` proposals from that item. Entries in a trip stay |
 | POST | `/api/google/import` | Pull the configured Google calendar in as drafts. Body `{"dry_run": false}` |
 | GET | `/api/google/drafts?from=&to=` | Google-source entries still at `possible`, the draft inbox's ownership contract |
 | POST | `/api/google/import-preview` | Read-only, date-bounded candidate review. Body `{"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}`; maximum 90 days |
@@ -552,7 +553,8 @@ Phase C's third piece — clustering two or more events by place and time proxim
 `home_base` from `GET /api/home` in entities, then `home_city` in the config. A ticket leg
 from Comms carries `payload.from_city`. A leg that arrives home from another city closes the
 trip in that city, and ticket legs stay one trip across up to 30 days.
-A draft is recomputed per request rather than stored, because it is a function
+An entry whose place starts with "online" or "virtual" has no place, so online events never
+form a trip. A draft is recomputed per request rather than stored, because it is a function
 of entries that can all move. Turning one into a real `trips.plan` remains a
 deliberate act: Calendar calls Trips' public HTTP API and records the result in
 its own idempotence ledger; it never writes into Trips' store directly.

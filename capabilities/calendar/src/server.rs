@@ -1289,10 +1289,19 @@ async fn trip_drafts(
             return Err("max_gap_days cannot be negative".into());
         }
         let home = query.home.clone().or_else(|| home_place(&config_home));
-        let entries = CalendarStore::open(&database_path)
-            .and_then(|store| store.list_entries(&query.from, &query.to, &[]))
+        let store = CalendarStore::open(&database_path).map_err(|error| error.to_string())?;
+        let entries = store
+            .list_entries(&query.from, &query.to, &[])
             .map_err(|error| error.to_string())?;
-        let drafts = correlate::cluster_trips(&entries, max_gap_days, home.as_deref())?;
+        let mut drafts = correlate::cluster_trips(&entries, max_gap_days, home.as_deref())?;
+        for draft in &mut drafts.drafts {
+            for entry_id in &draft.entry_ids {
+                if let Some(plan_id) = store.trip_plan_for(entry_id).map_err(|e| e.to_string())? {
+                    draft.plan_id = Some(plan_id);
+                    break;
+                }
+            }
+        }
         Ok(json!({
             "from": query.from,
             "to": query.to,

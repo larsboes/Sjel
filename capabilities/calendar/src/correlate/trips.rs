@@ -16,6 +16,10 @@ pub struct TripDraft {
     /// merely found is a possible trip; one booked ticket among them makes the
     /// whole journey real, because you are going either way.
     pub commitment: Commitment,
+    /// The Trips plan a member already became, so a client offers "open" instead of "create".
+    /// Filled by the server from the materialization ledger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
 }
 
 /// An entry that cannot be clustered, and why. Reported rather than dropped:
@@ -301,5 +305,6 @@ pub(super) fn draft_from(place: &str, run: &[&Entry]) -> Result<TripDraft, Strin
             .map(|e| e.commitment)
             .max()
             .unwrap_or(Commitment::Possible),
+        plan_id: None,
     })
 }

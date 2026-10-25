@@ -233,8 +233,17 @@ fn trusted_identity(value: &str) -> String {
 
 fn trusted_text(value: &str) -> String {
     use crate::pattern::{looks_like_email, looks_like_iban, looks_like_phone, looks_like_token};
+    // `2026-10-25` is a date, not a number in groups: dates are what a trusted agent plans with.
+    let iso_date = |w: &str| {
+        let b = w.as_bytes();
+        b.len() == 10
+            && b[4] == b'-'
+            && b[7] == b'-'
+            && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+    };
     let digitish = |w: &str| {
         !w.is_empty()
+            && !iso_date(w)
             && w.chars().any(|c| c.is_ascii_digit())
             && w.chars().all(|c| c.is_ascii_digit() || "+()/-".contains(c))
     };
@@ -373,6 +382,8 @@ mod tests {
         assert!(!note.contains("erika@") && !note.contains("DE89"), "{note}");
         assert!(!note.contains("1234567") && note.contains("[phone]"), "{note}");
         assert_eq!(trusted_text("Hinfahrt 30.10.2026 um 08:12"), "Hinfahrt 30.10.2026 um 08:12");
+        assert_eq!(trusted_text("2026-10-25"), "2026-10-25");
+        assert_eq!(trusted_text("Ruf 0228-123-4567 an"), "Ruf [phone] an");
         assert_eq!(value["secret"], Value::Null);
         assert_eq!(report.withheld_secret, 1);
         assert_eq!(value["invoice"]["total"], "179,80 EUR");

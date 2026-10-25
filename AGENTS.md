@@ -5,13 +5,13 @@ change. It routes to the rules for placement, documentation, verification, data 
 commits. For operations, run `sjel help` or `sjel search <task>` before you browse files.
 
 Shared documentation and planning rules live in [CONTRIBUTING.md](CONTRIBUTING.md#documentation).
-Keep this file as the bootstrap; link to the owning rule instead of duplicating it here.
+Keep this file as the bootstrap. Link to the owning rule instead of duplicating it here.
 
 Before editing:
 
 1. Run `git status --short --branch` and `tools/doctor`.
-2. Derive capabilities, ports, health, and open claims from Sjel tools, the area plan in `docs/plans/`, and
-   live metadata. Do not trust remembered prose.
+2. Derive capabilities, ports, health, and open work from Sjel tools, the area plan in
+   `docs/plans/`, and live metadata. Do not trust remembered prose.
 
 Always:
 
@@ -28,10 +28,11 @@ Always:
 - Use Sjel tooling first (`sjel`, `tools/`, capability routes). When a task needs a custom script,
   a manual workaround, or a raw command that the tooling does not cover, do one of two things.
   Build it into the tooling in the same change, or add an entry to
-  [`docs/plans/tooling.md`](docs/plans/tooling.md). Do not leave the script only in `/tmp` or in the session.
-- Write a durable rule or decision into the repository: code, the skill that owns it, the area plan in `docs/plans/`, or
-  this file. Never into agent memory. On this machine, the untracked `.claude/settings.json` sets
-  `autoMemoryEnabled: false`.
+  [`docs/plans/tooling.md`](docs/plans/tooling.md) in its format. Do not leave the script only in
+  `/tmp` or in the session.
+- Write a durable rule or decision into the repository: code, the skill that owns it, the area
+  plan in `docs/plans/`, or this file. Never into agent memory. On this machine, the untracked
+  `.claude/settings.json` sets `autoMemoryEnabled: false`.
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.
@@ -43,11 +44,19 @@ Always:
 `graphify explain "<concept>"` for one concept. Dirty `graphify-out/` files are normal. After a
 code change, run `graphify update .`.
 
-## Current priority
+## Working through the plan
 
-[`PLAN.md`](PLAN.md) orders the work in two parallel lanes. Lane B, the top priority, builds the
-Sjel agent and a terminal from the phone to the Mac ([`docs/plans/agent.md`](docs/plans/agent.md)).
-Lane A finishes the GPUI port and deletes the dashboard, Tauri and the demo
-([`docs/plans/gpui.md`](docs/plans/gpui.md)).
+[`PLAN.md`](PLAN.md) orders the work by priority. Each area has one plan in
+[`docs/plans/`](docs/plans/) with its state, specs and done-when checks. Rules:
+`Packs/harness/skills/sjel/references/on-documentation.md` (Plans).
+
+1. Take work from the highest priority in `PLAN.md` that no other session holds. Read its area
+   plan before you edit code.
+2. Build to the spec. If the spec is wrong or missing a decision, stop and ask. Do not decide a
+   product question in code.
+3. In the same change, update the area plan: shrink shipped work to one line with its commit,
+   record what is still open, and state each check that did not run.
+4. A tooling gap you hit goes to [`docs/plans/tooling.md`](docs/plans/tooling.md) (see Always).
+
 Do not start new feature work in `dashboard/`. A rule both clients share goes into a capability
 or `apps/gpui/core`.

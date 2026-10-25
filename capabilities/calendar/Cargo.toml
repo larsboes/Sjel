@@ -16,6 +16,7 @@ name = "calendar-server"
 path = "src/server.rs"
 
 [dependencies]
+schemars = "1.2.2"
 # Howard Hinnant's civil-from-days pair, shared rather than copied. No
 # dependencies of its own, which is why the four copies existed.
 civil-date = { path = "../../libs/civil-date" }

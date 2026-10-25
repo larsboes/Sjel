@@ -15,6 +15,7 @@ devices          4
 documents        0
 entities         0
 finance         19
+import           0
 interior        11
 inventory        5
 media            0
@@ -23,6 +24,7 @@ places           5
 projects         0
 punctuality      1
 scouting         3
+software         0
 # 5, not 0: `POST /capabilities/{name}/start`, `/stop` and `/restart`,
 # `/session/ticket` and `/session/logout` read no body at all, and a `Route`
 # cannot say so — the field that would say it, `request_schema`, means the

@@ -81,11 +81,12 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/entries/external",
         "Idempotent provider contribution. Requires source + external_id.",
     ),
-    r(
-        "POST",
-        "/api/entries/external/retire",
-        "Delete a provider's possible proposals from one origin item, except the external_ids in keep. Entries in a trip stay.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/entries/external/retire",
+        summary: "Delete a provider's possible proposals from one origin item, except the external_ids in keep. Entries in a trip stay.",
+        request_schema: Some(route_manifest::schema_of::<RetireBody>),
+    },
     r(
         "GET",
         "/api/content/{source}/{id}",
@@ -498,7 +499,7 @@ async fn upsert_external_entry(
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, schemars::JsonSchema)]
 struct RetireBody {
     source: String,
     origin_item_id: String,

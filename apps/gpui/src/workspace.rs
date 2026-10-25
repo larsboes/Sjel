@@ -2267,6 +2267,26 @@ mod tests {
         );
     }
 
+    /// `sjel://terminal` opens the edge on its own seat. The test endpoint is not loopback, so no
+    /// shell can be opened here — which is the second half of the assertion: a Mac that cannot
+    /// answer leaves the seat saying so rather than a grid that never fills.
+    #[gpui::test]
+    fn a_terminal_link_opens_the_edge_on_the_terminal_seat(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update_in(cx, |view, window, cx| {
+            view.open_target(Target::Terminal, window, cx);
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert!(view.right_panel.is_open(), "the edge stayed closed");
+            assert_eq!(view.right_panel.seat(), Seat::Terminal);
+            assert!(
+                view.terminal.is_none(),
+                "a terminal was built without a capability to hold it"
+            );
+        });
+    }
+
     #[gpui::test]
     fn typing_in_the_palette_does_not_move_the_selection(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);

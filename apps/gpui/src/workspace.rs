@@ -2045,9 +2045,14 @@ mod tests {
 
     use super::*;
 
-    /// The real window shape: `Root` around the workspace. A non-loopback endpoint makes every
-    /// request fail at once, so the test never touches the network.
+    /// The real window shape: `Root` around the workspace.
+    ///
+    /// Building a `Workspace` starts the pages' own reads against `http://example.invalid`. They
+    /// fail at once, but the failure arrives on the HTTP runtime's thread, which the deterministic
+    /// test scheduler reports as foreign activity. `allow_parking` is the scheduler's own switch for
+    /// a test that mixes GPUI's executor with real I/O.
     fn open(cx: &mut TestAppContext) -> (Entity<Workspace>, &mut VisualTestContext) {
+        cx.executor().allow_parking();
         cx.update(|cx| {
             gpui_kit::init(cx);
             bind_keys(cx);

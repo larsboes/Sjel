@@ -1719,10 +1719,14 @@ mod tests {
     use crate::route::Page;
     use crate::workspace::{bind_keys, Workspace};
 
-    /// ⌘, opens Settings, and every section renders. The endpoint is not on loopback, so no
-    /// request leaves the test.
+    /// ⌘, opens Settings, and every section renders.
+    ///
+    /// Building the workspace starts the pages' own reads against `http://example.invalid`. They fail
+    /// at once, but the failure arrives on the HTTP runtime's thread, so the deterministic scheduler
+    /// needs `allow_parking` to accept the test as one that touches real I/O.
     #[gpui::test]
     fn cmd_comma_opens_settings_and_every_section_renders(cx: &mut TestAppContext) {
+        cx.executor().allow_parking();
         cx.update(|cx| {
             gpui_kit::init(cx);
             bind_keys(cx);

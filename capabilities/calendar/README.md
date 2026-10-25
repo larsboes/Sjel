@@ -391,8 +391,8 @@ capability.
 | POST | `/api/rhythms/:id/materialize` | Idempotent re‑materialize |
 | POST | `/api/verdicts` | Feasibility verdicts for a batch of dated candidates (see Correlation contract) |
 | GET | `/api/windows?from=&to=&min_days=` | Runs of days travel is possible in; `from` inclusive, `to` exclusive |
-| GET | `/api/trip-drafts?from=&to=&max_gap_days=` | Recomputed, place/time-clustered journey candidates; no write. A draft whose entries already became a plan carries its `plan_id` |
-| POST | `/api/trip-drafts/materialize` | Explicitly create one Trips plan from named `entry_ids`, clustered with the same home as the drafts; Calendar records an idempotence ledger only after Trips accepts it |
+| GET | `/api/trip-drafts?from=&to=&max_gap_days=` | Recomputed, place/time-clustered journey candidates; no write. A draft whose entries already became a plan carries its `plan_id`, and `unplanned_entry_ids` lists the members not in it yet |
+| POST | `/api/trip-drafts/materialize` | Explicitly create one Trips plan from named `entry_ids`, clustered with the same home as the drafts; Calendar records an idempotence ledger only after Trips accepts it. When some entries are in a plan already, it adds the rest to that plan and widens its dates (`extended: true`) |
 | POST | `/api/entries/external/retire` | `{source, origin_item_id, keep}`: delete the provider's other `possible` proposals from that item. Entries in a trip stay |
 | POST | `/api/google/import` | Pull the configured Google calendar in as drafts. Body `{"dry_run": false}` |
 | GET | `/api/google/drafts?from=&to=` | Google-source entries still at `possible`, the draft inbox's ownership contract |

@@ -1125,6 +1125,7 @@ async fn materialize_trip(
         // calendar did, not what trips kept, so a plan deleted over there would
         // otherwise leave the entry permanently refusing to become one again
         // and pointing at something that no longer exists.
+        let mut existing: Option<(String, Value)> = None;
         for entry_id in &body.entry_ids {
             let Some(plan_id) = store.trip_plan_for(entry_id).map_err(|e| e.to_string())? else {
                 continue;
@@ -1139,11 +1140,11 @@ async fn materialize_trip(
                     format!("cannot ask trips whether {plan_id} still exists ({e})")
                 })?;
             if probe.status().is_success() {
-                return Ok(json!({
-                    "plan_id": plan_id,
-                    "created": false,
-                    "reason": format!("{entry_id} already belongs to {plan_id}"),
-                }));
+                let plan: Value = probe
+                    .json()
+                    .map_err(|e| format!("trips returned something unreadable: {e}"))?;
+                existing = Some((plan_id, plan));
+                break;
             }
             if probe.status() == reqwest::StatusCode::NOT_FOUND {
                 let forgotten = store
@@ -1187,6 +1188,61 @@ async fn materialize_trip(
         let date_end = date::parse_date(&draft.ends_before)
             .map(|day| date::format_date(day - 1))
             .ok_or("unreadable draft end")?;
+
+        // Part of the draft is a plan already: a leg booked later joins it, and the plan
+        // widens to cover it. Asked for, like the plan itself.
+        if let Some((plan_id, plan)) = existing {
+            let mut added = Vec::new();
+            for entry_id in &body.entry_ids {
+                if store
+                    .trip_plan_for(entry_id)
+                    .map_err(|e| e.to_string())?
+                    .is_none()
+                {
+                    added.push(entry_id.clone());
+                }
+            }
+            if added.is_empty() {
+                return Ok(json!({
+                    "plan_id": plan_id,
+                    "created": false,
+                    "reason": format!("every entry already belongs to {plan_id}"),
+                }));
+            }
+            let start = plan["date_start"]
+                .as_str()
+                .filter(|start| *start < draft.starts_on.as_str())
+                .unwrap_or(&draft.starts_on)
+                .to_string();
+            let end = plan["date_end"]
+                .as_str()
+                .filter(|end| *end > date_end.as_str())
+                .unwrap_or(&date_end)
+                .to_string();
+            let url = format!("{base}/api/plans/{plan_id}");
+            let patch = json!({ "date_start": start, "date_end": end });
+            let response =
+                sjel_server::InboundAuth::with_loopback_auth(client.patch(&url).json(&patch), &url)
+                    .send()
+                    .map_err(|e| format!("PATCH {url}: {e}"))?;
+            if !response.status().is_success() {
+                return Err(format!(
+                    "trips refused to widen {plan_id} ({})",
+                    response.status()
+                ));
+            }
+            store
+                .record_trip_materialization(&added, &plan_id)
+                .map_err(|e| e.to_string())?;
+            return Ok(json!({
+                "plan_id": plan_id,
+                "created": false,
+                "extended": true,
+                "added_entry_ids": added,
+                "date_start": start,
+                "date_end": end,
+            }));
+        }
 
         let title = body
             .title
@@ -1295,11 +1351,15 @@ async fn trip_drafts(
             .map_err(|error| error.to_string())?;
         let mut drafts = correlate::cluster_trips(&entries, max_gap_days, home.as_deref())?;
         for draft in &mut drafts.drafts {
+            let mut unplanned = Vec::new();
             for entry_id in &draft.entry_ids {
-                if let Some(plan_id) = store.trip_plan_for(entry_id).map_err(|e| e.to_string())? {
-                    draft.plan_id = Some(plan_id);
-                    break;
+                match store.trip_plan_for(entry_id).map_err(|e| e.to_string())? {
+                    Some(plan_id) => draft.plan_id = draft.plan_id.take().or(Some(plan_id)),
+                    None => unplanned.push(entry_id.clone()),
                 }
+            }
+            if draft.plan_id.is_some() {
+                draft.unplanned_entry_ids = unplanned;
             }
         }
         Ok(json!({

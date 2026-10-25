@@ -20,6 +20,10 @@ pub struct TripDraft {
     /// Filled by the server from the materialization ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<String>,
+    /// With `plan_id`: the members not in that plan yet, such as a return leg booked later.
+    /// Materializing the draft adds them and widens the plan.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unplanned_entry_ids: Vec<String>,
 }
 
 /// An entry that cannot be clustered, and why. Reported rather than dropped:
@@ -306,5 +310,6 @@ pub(super) fn draft_from(place: &str, run: &[&Entry]) -> Result<TripDraft, Strin
             .max()
             .unwrap_or(Commitment::Possible),
         plan_id: None,
+        unplanned_entry_ids: Vec::new(),
     })
 }

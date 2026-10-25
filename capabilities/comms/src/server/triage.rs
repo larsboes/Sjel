@@ -1088,6 +1088,46 @@ pub(super) async fn triage_data_class_handler(
     }
 }
 
+/// One mail's body for an agent the owner trusts with names (`docs/architecture/data-processing-policy.md`).
+/// Fetched from Gmail per call and never stored. `data_class` is in the answer so the gate
+/// withholds a c3 mail. The deployment token gets 403: the tier comes only from the gate.
+pub(super) async fn triage_body_handler(
+    Path(id): Path<String>,
+    agent: Option<axum::Extension<sjel_server::AdmittedAgent>>,
+) -> HttpResponse {
+    use sjel_server::agent_policy::Tier;
+    if !matches!(agent.map(|a| a.0.tier), Some(Tier::Zdr | Tier::Trusted)) {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "a mail body is served only to an agent at tier zdr or trusted",
+        );
+    }
+    let result = tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+        let cfg = Config::load();
+        let store = Store::open(&cfg.database_path).map_err(|e| e.to_string())?;
+        let Some(item) = store.get_triage(&id).map_err(|e| e.to_string())? else {
+            return Ok(None);
+        };
+        let token = google::access_token(&cfg.google_env_path).map_err(|e| e.to_string())?;
+        let body = google::thread_body_text(&token, &item.id).map_err(|e| e.to_string())?;
+        Ok(body.map(|body| {
+            json!({
+                "id": item.id,
+                "data_class": item.data_class,
+                "subject": item.subject,
+                "body": body,
+            })
+        }))
+    })
+    .await;
+    match result {
+        Ok(Ok(Some(value))) => (StatusCode::OK, Json(value)),
+        Ok(Ok(None)) => error_response(StatusCode::NOT_FOUND, "not found"),
+        Ok(Err(error)) => error_response(StatusCode::BAD_GATEWAY, error),
+        Err(_) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "task failed"),
+    }
+}
+
 /// Freshness and failure of the unattended schedule, for a dashboard to read.
 /// Unauthenticated with the other reads: it carries counts, timestamps and an
 /// error class, and no mail ever reaches it.

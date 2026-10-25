@@ -36,6 +36,7 @@ pub mod session;
 /// The identity `tailscale serve` proves, for the caller that cannot hold a secret.
 pub mod tailnet;
 
+pub use agent::AdmittedAgent;
 pub use auth::{
     authenticated, comms_config_token, device_signed_path, normalize_legacy_headers,
     session_cookie, token_from_file, AdmittedDevice, AdmittedPairingClaim, DeviceVerifier,
@@ -454,6 +455,14 @@ mod http_tests {
             .route("/secret", get(|| async { axum::Json(serde_json::json!({"data_class": "c3"})) }))
             .route("/page", get(|| async { "<html>Erika</html>" }))
             .route(
+                "/whoami",
+                get(|agent: Option<axum::Extension<AdmittedAgent>>| async move {
+                    axum::Json(serde_json::json!({
+                        "tier": agent.map(|a| a.0.tier.as_str()),
+                    }))
+                }),
+            )
+            .route(
                 "/stations",
                 get(|| async {
                     (
@@ -606,6 +615,35 @@ mod http_tests {
         assert!(!named.contains("erika@example.com"), "{named}");
         assert!(!named.contains("616685"), "{named}");
         assert_eq!(files.mode_for("comms"), agent_policy::Mode::Auto, "set_tier kept the mode");
+    }
+
+    /// The handler learns the tier from the gate, never from the client.
+    #[tokio::test]
+    async fn the_handler_sees_the_gate_tier_and_no_client_can_claim_one() {
+        let (access, files) = agent_access_in("whoami", agent_policy::Mode::Auto);
+        files
+            .set_tier("default", agent_policy::Tier::Trusted)
+            .unwrap();
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(access);
+        let base = serve_agent_router(auth).await;
+        let tier = |token: &'static str| {
+            let base = base.clone();
+            async move {
+                reqwest::Client::new()
+                    .get(format!("{base}/whoami"))
+                    .bearer_auth(token)
+                    .header("x-sjel-agent-tier", "trusted")
+                    .send()
+                    .await
+                    .unwrap()
+                    .json::<serde_json::Value>()
+                    .await
+                    .unwrap()["tier"]
+                    .clone()
+            }
+        };
+        assert_eq!(tier("agent-token").await, "trusted");
+        assert_eq!(tier("full").await, serde_json::Value::Null);
     }
 
     #[tokio::test]

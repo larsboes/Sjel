@@ -53,8 +53,14 @@ file under `secrets/agent/`, which no agent can write.
 
 `trusted_view` (`libs/pseudonymize/src/view.rs`) keeps names. It still removes every c3 object,
 drops coordinate and street-address keys, and replaces email addresses, phone numbers, IBANs and
-token-shaped values. A sender keeps its display name and an organisation's domain. Each call log
-line records the agent name and tier.
+token-shaped values. An ISO date stays. A sender keeps its display name and an organisation's
+domain. Each call log line records the agent name and tier.
+
+The gate gives each admitted agent request an `AdmittedAgent` extension that holds the name and
+tier. It is a request extension and not a header, so a client cannot set it. A handler that
+serves more than stored data reads the extension. For example, comms `GET /triage/{id}/body`
+fetches one mail body from Gmail, stores nothing, and answers only `zdr` and `trusted`. The
+deployment token gets 403 on that route.
 
 ## Implementation sequence
 

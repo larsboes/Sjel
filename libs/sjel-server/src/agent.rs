@@ -298,16 +298,28 @@ fn refuse(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({ "error": message }))).into_response()
 }
 
+/// The agent token's name and tier, set on every request the gate admits as an agent's.
+/// A request extension rather than a header, so no client can claim a tier.
+#[derive(Clone, Debug)]
+pub struct AdmittedAgent {
+    pub name: String,
+    pub tier: Tier,
+}
+
 /// The agent branch of the gate. The caller has already matched the token.
 pub(crate) async fn admit_agent(
     access: Arc<AgentAccess>,
     agent: String,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request.uri().path().to_string();
     let tier = access.tier(&agent);
+    request.extensions_mut().insert(AdmittedAgent {
+        name: agent.clone(),
+        tier,
+    });
     let (response, decision) = decide_and_run(&access, tier, request, next).await;
     access.log(&agent, &method, &path, response.status().as_u16(), decision);
     response

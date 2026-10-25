@@ -193,6 +193,11 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r("GET", "/triage", "Mail proposals. Optional status and max_data_class filters. Optional q: keep mail whose sender, subject or snippet contains the text, ignoring case."),
     r(
+        "GET",
+        "/triage/{id}/body",
+        "One mail's body as text, fetched from Gmail and not stored. Agents at tier zdr or trusted only.",
+    ),
+    r(
         "POST",
         "/triage/{id}/status",
         "Set a mail proposal's status.",
@@ -418,6 +423,7 @@ fn build_router(dashboard_origin: &str) -> Router {
         // older build of it still asks here. libs/sjel-server/src/auth.rs says why both answer.
         .route(sjel_server::LEGACY_FRESHNESS_PATH, get(freshness_handler))
         .route("/triage", get(triage_handler))
+        .route("/triage/{id}/body", get(triage_body_handler))
         .route("/triage/sweep/status", get(triage_sweep_status_handler))
         .route("/triage/events/status", get(triage_events_status_handler))
         .route(

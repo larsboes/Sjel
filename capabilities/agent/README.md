@@ -137,9 +137,10 @@ list, so a terminal route added without closing it fails the test instead of ope
 
 ## Run
 
-`service.toml` declares port 8108 and `target/release/agent-server`. `sjel capability start agent`
-runs it; it needs a local `coding` role in the overlay's `config/inference.json`, or `/ready`
-answers 503 and says which role is missing.
+`service.toml` declares port 8108 and `target/release/agent-server`. `tools/service-runner.sh
+start agent` runs it, and `restart agent` picks up a new build; a restart ends every terminal. It
+needs a local `coding` role in the overlay's `config/inference.json`, or `/ready` answers 503 and
+says which role is missing.
 
 ## What is built
 

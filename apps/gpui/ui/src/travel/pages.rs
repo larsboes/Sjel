@@ -1,9 +1,9 @@
 //! Travel's trip library and the four subpages of an opened trip.
 use super::forms::{FormKind, Remove};
-use super::{Travel, trip_draft_key};
-use gpui::{AnyElement, ClipboardItem, Context, SharedString, div, prelude::*, px, rgb, rgba};
-use gpui_kit::component::Disableable;
+use super::{trip_draft_key, Travel};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, SharedString};
 use gpui_kit::component::button::ButtonVariants;
+use gpui_kit::component::Disableable;
 use sjel_gpui_core::{
     shell::CalendarEntry,
     travel::{Item, Place, TravelRoute, TripSection},
@@ -59,7 +59,12 @@ impl Travel {
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(div().text_sm().font_weight(gpui::FontWeight::MEDIUM).child(title))
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .child(title),
+                )
                 .child(div().text_xs().text_color(rgb(palette.muted)).child(detail))
         };
         if show_draft {
@@ -80,7 +85,11 @@ impl Travel {
                     .child(
                         self.button("home-create-trip")
                             .primary()
-                            .label(if busy { "Creating trip…" } else { "Create trip" })
+                            .label(if busy {
+                                "Creating trip…"
+                            } else {
+                                "Create trip"
+                            })
                             .disabled(busy || self.writer().is_none())
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 view.materialize_trip_draft(draft.clone(), cx)
@@ -97,7 +106,10 @@ impl Travel {
             plan.date_end,
             when(&plan.date_start)
         );
-        Some((line(plan.title.clone(), detail).into_any_element(), Some(plan.id)))
+        Some((
+            line(plan.title.clone(), detail).into_any_element(),
+            Some(plan.id),
+        ))
     }
 
     pub(super) fn render_page(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -285,9 +297,7 @@ impl Travel {
             .child(
                 self.button("open-location-map")
                     .label("Explore locations on map")
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.open_route(TravelRoute::Map, cx)
-                    })),
+                    .on_click(cx.listener(|view, _, _, cx| view.open_route(TravelRoute::Map, cx))),
             )
             .child(self.trip_suggestions(cx))
             .child(
@@ -569,7 +579,11 @@ impl Travel {
                         .child(format!(
                             "{} event{} need review before they can shape a trip:",
                             drafts.unclustered.len(),
-                            if drafts.unclustered.len() == 1 { "" } else { "s" }
+                            if drafts.unclustered.len() == 1 {
+                                ""
+                            } else {
+                                "s"
+                            }
                         )),
                 );
                 for entry in drafts.unclustered.iter().take(8) {
@@ -622,62 +636,10 @@ impl Travel {
                     )),
             );
         page = page.child(self.trip_calendar_timeline());
-        page = page.children(self.related_calendar_events());
         for (i, place) in plan.places().enumerate() {
             page = page.child(self.place_row(i, place, cx));
         }
         page.into_any_element()
-    }
-
-    fn related_calendar_events(&self) -> Option<AnyElement> {
-        let palette = self.palette;
-        let id = self.selected.as_ref()?;
-        let slot = self.details.get(id)?;
-        if !slot.calendar_events_loaded
-            || slot.calendar_events_loading
-            || slot.calendar_events_error.is_some()
-        {
-            return None;
-        }
-        let linked_ids: std::collections::HashSet<_> = slot
-            .calendar_links
-            .iter()
-            .filter(|link| link.via == "trip materialization")
-            .map(|link| link.id.as_str())
-            .collect();
-        let events: Vec<_> = slot
-            .calendar_events
-            .iter()
-            .filter(|event| !linked_ids.contains(event.id.as_str()))
-            .collect();
-        if events.is_empty() {
-            return None;
-        }
-        let mut section = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .p_3()
-            .rounded(px(8.))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .bg(rgba(palette.surface))
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .child("Other Calendar events nearby"),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("Calendar grouped these with this destination and travel window, but they are not linked to the trip."),
-            );
-        for event in events {
-            section = section.child(calendar_event_row(event, palette));
-        }
-        Some(section.into_any_element())
     }
 
     fn trip_calendar_timeline(&self) -> AnyElement {
@@ -702,10 +664,19 @@ impl Travel {
         };
         let Some(slot) = self.details.get(id) else {
             return section
-                .child(div().text_sm().text_color(rgb(palette.muted)).child("Loading trip events…"))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("Loading trip events…"),
+                )
                 .into_any_element();
         };
-        if !slot.calendar_links_loaded || slot.calendar_links_loading {
+        if !slot.calendar_links_loaded
+            || slot.calendar_links_loading
+            || !slot.calendar_events_loaded
+            || slot.calendar_events_loading
+        {
             section = section.child(
                 div()
                     .text_sm()
@@ -719,22 +690,59 @@ impl Travel {
                     .text_color(rgb(palette.amber))
                     .child(format!("Trip events could not load: {error}")),
             );
+        } else if let Some(error) = &slot.calendar_events_error {
+            section = section.child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.amber))
+                    .child(format!("Nearby Calendar events could not load: {error}")),
+            );
         } else {
-            let events: Vec<_> = slot
+            let linked: Vec<_> = slot
                 .calendar_links
                 .iter()
                 .filter(|link| link.via == "trip materialization")
                 .collect();
-            if events.is_empty() {
+            let linked_ids: std::collections::HashSet<_> =
+                linked.iter().map(|link| link.id.as_str()).collect();
+            let nearby: Vec<_> = slot
+                .calendar_events
+                .iter()
+                .filter(|event| !linked_ids.contains(event.id.as_str()))
+                .collect();
+            if linked.is_empty() && nearby.is_empty() {
                 section = section.child(
                     div()
                         .text_sm()
                         .text_color(rgb(palette.muted))
-                        .child("No mail or Calendar events are linked to this trip."),
+                        .child("No mail or Calendar events fall in this trip window."),
                 );
             } else {
-                for event in events {
-                    section = section.child(calendar_link_row(event, palette));
+                for event in linked {
+                    let entry = slot
+                        .calendar_events
+                        .iter()
+                        .find(|entry| entry.id == event.id);
+                    section = section.child(calendar_link_row(event, entry, palette));
+                }
+                if !nearby.is_empty() {
+                    section = section
+                        .child(
+                            div()
+                                .pt_2()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child("Nearby Calendar events · not linked to this trip"),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child("Calendar grouped these by destination and travel window. Add one to the itinerary to link it."),
+                        );
+                    for event in nearby {
+                        section = section.child(calendar_event_row(event, palette));
+                    }
                 }
             }
         }
@@ -952,13 +960,7 @@ impl Travel {
 }
 
 fn calendar_event_row(event: &CalendarEntry, palette: crate::Palette) -> AnyElement {
-    let when = if event.all_day {
-        format!("{} · all day", event.starts_at.get(..10).unwrap_or(&event.starts_at))
-    } else if let Some((day, time)) = event.starts_at.split_once('T') {
-        format!("{day} · {}", time.get(..5).unwrap_or(time))
-    } else {
-        event.starts_at.clone()
-    };
+    let when = calendar_event_when(event);
     div()
         .flex()
         .flex_col()
@@ -982,19 +984,67 @@ fn calendar_event_row(event: &CalendarEntry, palette: crate::Palette) -> AnyElem
             )
         })
         .when_some(event.notes.clone(), |row, notes| {
-            row.child(div().text_sm().child(notes))
+            row.child(calendar_agenda(&notes, palette))
         })
         .into_any_element()
 }
 
-fn calendar_link_row(link: &sjel_gpui_core::record::Link, palette: crate::Palette) -> AnyElement {
-    let when = link
-        .at
-        .as_deref()
-        .map(|at| {
-            at.split_once('T')
-                .map(|(day, time)| format!("{day} · {}", time.get(..5).unwrap_or(time)))
-                .unwrap_or_else(|| at.to_owned())
+fn calendar_agenda(notes: &str, palette: crate::Palette) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .children(notes.lines().map(|line| {
+            div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(line.to_owned())
+        }))
+        .into_any_element()
+}
+
+fn calendar_event_when(event: &CalendarEntry) -> String {
+    if event.all_day {
+        format!(
+            "{} · all day",
+            event.starts_at.get(..10).unwrap_or(&event.starts_at)
+        )
+    } else if let Some((day, time)) = event.starts_at.split_once('T') {
+        let start = time.get(..5).unwrap_or(time);
+        let end = event
+            .ends_at
+            .split_once('T')
+            .map(|(_, time)| time.get(..5).unwrap_or(time))
+            .unwrap_or("");
+        if end.is_empty() {
+            format!("{day} · {start}")
+        } else {
+            let end_day = event.ends_at.get(..10).unwrap_or(day);
+            let end = if end_day == day {
+                end.to_owned()
+            } else {
+                format!("{end_day} {end}")
+            };
+            format!("{day} · {start}–{end}")
+        }
+    } else {
+        event.starts_at.clone()
+    }
+}
+
+fn calendar_link_row(
+    link: &sjel_gpui_core::record::Link,
+    entry: Option<&CalendarEntry>,
+    palette: crate::Palette,
+) -> AnyElement {
+    let when = entry
+        .map(calendar_event_when)
+        .or_else(|| {
+            link.at.as_deref().map(|at| {
+                at.split_once('T')
+                    .map(|(day, time)| format!("{day} · {}", time.get(..5).unwrap_or(time)))
+                    .unwrap_or_else(|| at.to_owned())
+            })
         })
         .unwrap_or_else(|| "Date unavailable".into());
     div()
@@ -1018,6 +1068,9 @@ fn calendar_link_row(link: &sjel_gpui_core::record::Link, palette: crate::Palett
                     .text_color(rgb(palette.muted))
                     .child(location),
             )
+        })
+        .when_some(entry.and_then(|entry| entry.notes.clone()), |row, notes| {
+            row.child(calendar_agenda(&notes, palette))
         })
         .into_any_element()
 }

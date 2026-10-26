@@ -117,7 +117,9 @@ the Mac's last sync time.
 ### Travel
 
 1. **Itinerary timeline.** One card per day. Each stage shows its mode, times and the connection
-   time to the next stage. A tap copies the booking code.
+   time to the next stage. Trip details include linked events and nearby calendar events, each
+   with its full start–end time range and any extracted programme details; nearby matches stay
+   marked as unlinked until explicitly added to the itinerary. A tap copies the booking code.
 2. **Map.** Category pins for stays, stations, airports and places. A tap opens a card with the
    stop's name, address, date, and "Open in Apple Maps". A "fit trip" control.
 3. **Offline-ready mark.** Shown per trip when its details, its booking PDFs (kept under rule 2)

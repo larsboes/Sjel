@@ -185,6 +185,29 @@ pub struct Open<'a> {
     pub client: &'a str,
 }
 
+/// The folder under `$HOME` whose subfolders a new terminal is offered, and how many of them.
+const PROJECT_ROOT: &str = "Developer";
+const MAX_FOLDERS: usize = 20;
+
+/// Where a new terminal is offered to start: `home`, then the folders in `~/Developer`, most
+/// recently changed first. Hidden folders and files are not offered.
+pub fn folders(home: &Path) -> Vec<String> {
+    let mut found: Vec<(std::time::SystemTime, PathBuf)> =
+        std::fs::read_dir(home.join(PROJECT_ROOT))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+            .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+            .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+            .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    std::iter::once(home.to_path_buf())
+        .chain(found.into_iter().take(MAX_FOLDERS).map(|(_, path)| path))
+        .map(|path| path.display().to_string())
+        .collect()
+}
+
 /// The terminals this process holds.
 pub struct Terminals {
     live: Mutex<HashMap<String, Arc<Terminal>>>,
@@ -199,6 +222,15 @@ impl Terminals {
             audit,
             presets,
         }
+    }
+
+    /// The preset names a client may open, in the overlay's order.
+    pub fn preset_names(&self) -> Vec<String> {
+        self.presets
+            .names()
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<Terminal>> {
@@ -803,6 +835,26 @@ fn clamp_rows(rows: u16) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folders_offer_home_then_project_folders_newest_first() {
+        let home = std::env::temp_dir().join(format!("sjel-folders-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let root = home.join(PROJECT_ROOT);
+        std::fs::create_dir_all(root.join("older")).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        std::fs::create_dir_all(root.join("newer")).unwrap();
+        std::fs::create_dir_all(root.join(".hidden")).unwrap();
+        std::fs::write(root.join("notes.txt"), "a file").unwrap();
+        let offered = folders(&home);
+        let _ = std::fs::remove_dir_all(&home);
+        let names: Vec<&str> = offered
+            .iter()
+            .map(|path| path.rsplit('/').next().unwrap_or(""))
+            .collect();
+        assert_eq!(offered[0], home.display().to_string());
+        assert_eq!(&names[1..], ["newer", "older"]);
+    }
 
     fn audit_path(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(

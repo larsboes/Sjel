@@ -42,11 +42,12 @@ use sjel_gpui_ui::people::{People, PeopleEvent};
 use sjel_gpui_ui::projects::{Projects, ProjectsEvent};
 use sjel_gpui_ui::sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 use sjel_gpui_ui::soundscape::Soundscape;
-use sjel_gpui_ui::terminal::{TerminalEvent, TerminalView};
+use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
-    mobile_tab_bar, AccentColor, AppearanceSettings, BackgroundTone, Density, NavItem, NotifyPrefs,
-    Palette, SoundscapePrefs, TerminalFont, ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
+    mobile_tab_bar, step_terminal_font_size, AccentColor, AppearanceSettings, BackgroundTone,
+    Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeMode,
+    WindowOpacity, TERMINAL_FONT_SIZES,
 };
 
 mod audio;
@@ -141,6 +142,9 @@ enum Event {
     /// The answer to the Face ID ask before a terminal opens (`host/App.swift`).
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     Unlocked(bool),
+    /// A pinch on the page: its scale since it began, and whether it ended (`host/App.swift`).
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    Pinch(f64, bool),
 }
 
 #[derive(Clone, Copy)]
@@ -377,7 +381,9 @@ pub struct Capabilities {
     agent_text_streaming: bool,
     /// The terminal seat, kept while the app stays in the foreground: closing the edge leaves the
     /// stream attached. Going to the background drops it, so a reattach asks for Face ID.
-    terminal: Option<(gpui::Entity<TerminalView>, gpui::Subscription)>,
+    terminal: Option<(gpui::Entity<TerminalDeck>, gpui::Subscription)>,
+    /// The pinch scale the font size last stepped at; a new pinch starts from 1.
+    pinch_base: f64,
     /// Face ID confirmed this foreground session (`docs/plans/agent.md` §6, Security).
     terminal_unlocked: bool,
     /// Why no terminal is showing, in the words the empty seat carries.
@@ -979,6 +985,17 @@ impl Capabilities {
                             }
                         }
                         Event::NotifyOpen(link) => view.open_link(&link, cx),
+                        Event::Pinch(scale, ended) => {
+                            if view.sidebar.is_open() && view.sidebar.seat() == Seat::Terminal {
+                                let steps = pinch_steps(&mut view.pinch_base, scale);
+                                if steps != 0 {
+                                    view.zoom_terminal(steps, cx);
+                                }
+                            }
+                            if ended {
+                                view.pinch_base = 1.0;
+                            }
+                        }
                         Event::Background => {
                             view.terminal_unlocked = false;
                             view.terminal = None;
@@ -1038,6 +1055,7 @@ impl Capabilities {
             agent_text_streaming: false,
             terminal: None,
             terminal_unlocked: false,
+            pinch_base: 1.0,
             terminal_note: None,
             synced: None,
             rows: Vec::new(),
@@ -1145,61 +1163,34 @@ impl Capabilities {
     }
 
     /// The newest live terminal on the Mac, or a new login shell, in the edge.
+    /// The Mac's terminals in the edge, as tabs: every live one, or a new login shell.
     fn open_terminal(&mut self, cx: &mut Context<Self>) {
-        if self
-            .terminal
-            .as_ref()
-            .is_some_and(|(view, _)| view.read(cx).peer().alive)
-        {
+        if self.terminal.is_some() {
             return;
         }
         let Some(client) = self.client.clone() else {
             return;
         };
-        self.terminal_note = Some("Opening a terminal on the Mac…".into());
-        let host = Host::Device(client);
-        let opener = host.clone();
-        let palette = self.palette();
-        let work = shell::run(async move {
-            opener
-                .attach_or_open(TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
-                .await
+        let deck = cx.new(|cx| {
+            TerminalDeck::new(Host::Device(client), true, TERMINAL_COLS, TERMINAL_ROWS, cx)
         });
-        cx.spawn(async move |weak, cx| {
-            let opened = work
-                .await
-                .unwrap_or_else(|| Err("The Mac did not answer.".into()));
-            let _ = weak.update(cx, |view, cx| {
-                match opened {
-                    Ok(peer) => {
-                        let terminal = cx.new(|cx| {
-                            TerminalView::new(
-                                peer,
-                                host,
-                                0,
-                                TERMINAL_COLS,
-                                TERMINAL_ROWS,
-                                palette,
-                                cx,
-                            )
-                            .touch()
-                        });
-                        terminal.update(cx, |terminal, cx| terminal.attach(cx));
-                        let subscription = cx.subscribe(&terminal, |_, _, event, _| match event {
-                            TerminalEvent::Editing(open) => keyboard(*open),
-                        });
-                        view.terminal = Some((terminal, subscription));
-                        view.terminal_note = None;
-                    }
-                    Err(why) => {
-                        view.terminal_note =
-                            Some(format!("The terminal did not open: {why}").into())
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
+        let subscription = cx.subscribe(&deck, |view, _, event: &TerminalEvent, cx| match event {
+            TerminalEvent::Editing(open) => keyboard(*open),
+            TerminalEvent::Zoom(steps) => view.zoom_terminal(*steps, cx),
+        });
+        deck.update(cx, |deck, cx| deck.load(cx));
+        self.terminal = Some((deck, subscription));
+        self.terminal_note = None;
+    }
+
+    /// Steps the terminal's font size and keeps it, the way the Settings row does.
+    fn zoom_terminal(&mut self, steps: i32, cx: &mut Context<Self>) {
+        let size = step_terminal_font_size(self.appearance.terminal_font_size, steps);
+        if size != self.appearance.terminal_font_size {
+            self.appearance.terminal_font_size = size;
+            let _ = self.appearance.save();
+            cx.notify();
+        }
     }
 
     /// The Terminal rows of Settings, the same four the Mac's Appearance page has.
@@ -2100,6 +2091,25 @@ impl Capabilities {
 }
 
 /// Shows or hides the software keyboard as a note's editor opens or closes.
+/// How far a pinch travels, as a scale ratio, before it steps the font size once.
+const PINCH_RATIO: f64 = 1.2;
+
+/// The font-size steps a pinch at `scale` makes since `base`, moving `base` to where it stepped.
+fn pinch_steps(base: &mut f64, scale: f64) -> i32 {
+    let ratio = scale / *base;
+    let steps = if ratio >= PINCH_RATIO {
+        1
+    } else if ratio <= 1.0 / PINCH_RATIO {
+        -1
+    } else {
+        0
+    };
+    if steps != 0 {
+        *base = scale;
+    }
+    steps
+}
+
 /// One labelled row of choices on the phone's Settings page. A tap writes `appearance.json`, the
 /// way the theme and tone rows above it do.
 fn choice_row(
@@ -3360,17 +3370,16 @@ impl Render for Capabilities {
                     Seat::Activity => self.activity_panel(palette),
                     Seat::Agent => self.agent_panel(palette, window, cx),
                     Seat::Terminal => match (&self.terminal, self.client.is_some()) {
-                        (Some((terminal, _)), _) if self.terminal_unlocked => {
+                        (Some((deck, _)), _) if self.terminal_unlocked => {
                             let settings = self.appearance;
-                            terminal.update(cx, |view, cx| {
-                                view.set_style(
+                            deck.update(cx, |deck, _| {
+                                deck.set_style(
                                     palette,
                                     settings.terminal_font,
                                     settings.terminal_font_size,
-                                    cx,
                                 )
                             });
-                            terminal.clone().into_any_element()
+                            deck.clone().into_any_element()
                         }
                         (_, paired) => div()
                             .p_4()
@@ -3598,6 +3607,14 @@ pub extern "C" fn sjel_ios_entered_background() {
     announce(Event::Background);
 }
 
+/// Called by `host/App.swift` while a pinch moves, with its scale since it began.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_pinch(scale: f64, ended: bool) {
+    announce(Event::Pinch(scale, ended));
+}
+
 /// Called by `host/App.swift` with the answer to `sjel_ios_unlock`, on the main queue.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
@@ -3621,4 +3638,20 @@ pub extern "C" fn gpui_ios_register_app() {
             cx.new(|cx| Root::new(view, window, cx))
         });
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pinch_steps_once_per_ratio_and_restarts_from_where_it_stepped() {
+        let mut base = 1.0;
+        assert_eq!(pinch_steps(&mut base, 1.1), 0);
+        assert_eq!(pinch_steps(&mut base, 1.25), 1);
+        // The next step is measured from 1.25, not from where the pinch began.
+        assert_eq!(pinch_steps(&mut base, 1.4), 0);
+        assert_eq!(pinch_steps(&mut base, 1.5), 1);
+        assert_eq!(pinch_steps(&mut base, 1.2), -1);
+    }
 }

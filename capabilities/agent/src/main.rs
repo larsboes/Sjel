@@ -59,6 +59,7 @@ const AGENT_ROUTES: AgentRoutes = AgentRoutes {
     closed: &[
         ("POST", "/api/agent/terminals"),
         ("GET", "/api/agent/terminals"),
+        ("GET", "/api/agent/terminals/options"),
         ("GET", "/api/agent/terminals/{id}/stream"),
         ("POST", "/api/agent/terminals/{id}/input"),
         ("POST", "/api/agent/terminals/{id}/resize"),
@@ -277,6 +278,12 @@ async fn routes() -> Json<Value> {
                 "GET",
                 "/api/agent/terminals",
                 "Every terminal held on this Mac, newest first.",
+            ),
+            route_manifest::get(
+                "GET",
+                "/api/agent/terminals/options",
+                "What a new terminal can be: the preset names, and the folders it is offered to \
+                 start in (home, then ~/Developer's folders, newest first).",
             ),
             route_manifest::get(
                 "GET",
@@ -715,6 +722,13 @@ async fn list_terminals(State(state): State<Arc<AppState>>) -> Json<Value> {
     Json(Value::Array(state.terminals.list()))
 }
 
+async fn terminal_options(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let folders = std::env::var_os("HOME")
+        .map(|home| terminal::folders(std::path::Path::new(&home)))
+        .unwrap_or_default();
+    Json(json!({ "presets": state.terminals.preset_names(), "folders": folders }))
+}
+
 async fn terminal_stream(
     State(state): State<Arc<AppState>>,
     AxumPath(id): AxumPath<String>,
@@ -870,6 +884,7 @@ fn router(state: Arc<AppState>) -> Router {
             "/api/agent/terminals",
             get(list_terminals).post(open_terminal),
         )
+        .route("/api/agent/terminals/options", get(terminal_options))
         .route("/api/agent/terminals/{id}", delete(close_terminal))
         .route("/api/agent/terminals/{id}/stream", get(terminal_stream))
         .route("/api/agent/terminals/{id}/input", post(terminal_input))
@@ -1346,7 +1361,7 @@ mod tests {
                 "{method} {path} would hand an agent token a shell"
             );
         }
-        assert_eq!(checked, 6, "the manifest lost a terminal route: {checked}");
+        assert_eq!(checked, 7, "the manifest lost a terminal route: {checked}");
 
         // The rule is narrower than the capability: a session route stays reachable.
         assert!(!AGENT_ROUTES.closes("POST", "/api/agent/sessions/{id}/prompt"));

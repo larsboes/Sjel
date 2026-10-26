@@ -103,6 +103,16 @@ pub enum Update {
     Exit { code: i32, signal: Option<String> },
 }
 
+/// What a new terminal can be, as `GET /api/agent/terminals/options` answers: the preset names,
+/// and the folders it is offered to start in, home first.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct Options {
+    #[serde(default)]
+    pub presets: Vec<String>,
+    #[serde(default)]
+    pub folders: Vec<String>,
+}
+
 /// What `POST /api/agent/terminals` answers.
 #[derive(Clone, Debug, Default, Deserialize)]
 struct Opened {
@@ -220,6 +230,17 @@ impl Host {
         }
     }
 
+    pub async fn options(&self) -> Result<Options, String> {
+        let path = format!("{BASE}/api/agent/terminals/options");
+        match self {
+            Self::Shell(shell) => shell
+                .json(Method::GET, &path, None, WRITE_TIMEOUT)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
     pub async fn open(
         &self,
         preset: &str,
@@ -258,17 +279,29 @@ impl Host {
                 return Ok(peer);
             }
         }
-        let id = self.open("shell", None, cols, rows).await?;
-        // `POST /terminals` answers the id alone, so the row that names the shell comes from the
-        // list. Without it the view still works: the first frame is the terminal's own.
+        self.open_row("shell", None, cols, rows).await
+    }
+
+    /// Opens a terminal and answers its list row.
+    pub async fn open_row(
+        &self,
+        preset: &str,
+        cwd: Option<&str>,
+        cols: u16,
+        rows: u16,
+    ) -> Result<Terminal, String> {
+        let id = self.open(preset, cwd, cols, rows).await?;
+        // `POST /terminals` answers the id alone, so the row that names the program comes from
+        // the list. Without it the view still works: the first frame is the terminal's own.
         let listed = self.terminals().await.unwrap_or_default();
         Ok(listed
             .into_iter()
             .find(|peer| peer.id == id)
             .unwrap_or_else(|| Terminal {
                 id,
-                preset: "shell".into(),
-                title: "shell".into(),
+                preset: preset.into(),
+                title: preset.into(),
+                cwd: cwd.unwrap_or_default().into(),
                 alive: true,
                 ..Default::default()
             }))

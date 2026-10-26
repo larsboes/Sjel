@@ -103,6 +103,7 @@ output, signed by the paired device.
 |---|---|---|
 | `POST /api/agent/terminals` | `{preset, cwd, cols, rows}` | `{id}` |
 | `GET /api/agent/terminals` | | one row per terminal: `id, preset, title, cwd, started_at, last_output_at, alive, exit_code, clients` |
+| `GET /api/agent/terminals/options` | | `{presets, folders}`: preset names, then `$HOME` and the folders in `~/Developer`, newest first |
 | `GET /api/agent/terminals/{id}/stream?from=<offset>` | | events `output` `{offset, data}`, `truncated` `{first_offset}`, `exit` `{code, signal}` |
 | `POST /api/agent/terminals/{id}/input` | `{data}`: base64, at most 64 KiB | `204` |
 | `POST /api/agent/terminals/{id}/resize` | `{cols, rows}` | `204`; the last resize wins |

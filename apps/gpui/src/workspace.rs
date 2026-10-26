@@ -36,13 +36,13 @@ use crate::shell::{
     self, AgentView, AvailableFeature, Backups, GlobalTask, InstalledFeature, NodeHealth,
     ShellError, Snapshot, SoundscapeState,
 };
-use crate::theme::{AppearanceSettings, GlassStyle, Palette};
+use crate::theme::{step_terminal_font_size, AppearanceSettings, GlassStyle, Palette};
 use crate::ytalbum::{YtAlbum, YtAlbumEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
 use sjel_gpui_core::terminal::Host;
 use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
-use sjel_gpui_ui::terminal::TerminalView;
+use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 
 actions!(
     sjel,
@@ -379,7 +379,7 @@ pub struct Workspace {
     resizing_edge: bool,
     /// The terminal seat, built the first time it is asked for and kept afterwards: closing the
     /// drawer does not end the shell, so reopening it shows the screen as it is now.
-    pub terminal: Option<Entity<TerminalView>>,
+    pub terminal: Option<Entity<TerminalDeck>>,
     /// Why no terminal is showing, in the words the empty seat carries.
     pub terminal_note: Option<SharedString>,
     /// One input for a search or a prompt (⌘K), drawn over the whole window.
@@ -1144,53 +1144,35 @@ impl Workspace {
     fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.right_panel.open_on(Seat::Terminal);
         cx.notify();
-        if let Some(terminal) = &self.terminal {
-            if terminal.read(cx).peer().alive {
-                return;
-            }
+        if let Some(deck) = &self.terminal {
+            window.focus(&gpui::Focusable::focus_handle(deck, cx), cx);
+            return;
         }
-        let palette = Palette::for_appearance(window.appearance());
         let Ok(shell) = self.repo.shell() else {
+            self.terminal_note = Some("Sjel is not running on this Mac.".into());
             return;
         };
-        let host = Host::Shell(shell);
-        let opener = host.clone();
-        let work = shell::run(async move {
-            opener
-                .attach_or_open(TERMINAL_COLS as u16, TERMINAL_ROWS as u16)
-                .await
+        let deck = cx.new(|cx| {
+            TerminalDeck::new(Host::Shell(shell), false, TERMINAL_COLS, TERMINAL_ROWS, cx)
         });
-        cx.spawn_in(window, async move |weak, cx| {
-            let peer = match work.await {
-                Some(Ok(peer)) => peer,
-                failed => {
-                    let why = failed.and_then(Result::err).unwrap_or_default();
-                    let _ = weak.update(cx, |workspace, cx| {
-                        workspace.terminal_note = Some(
-                            format!(
-                                "The terminal did not open. Check that the agent capability is running. {why}"
-                            )
-                            .trim_end()
-                            .to_owned()
-                            .into(),
-                        );
-                        cx.notify();
-                    });
-                    return;
-                }
-            };
-            let _ = weak.update_in(cx, |workspace, window, cx| {
-                let entity = cx.new(|cx| {
-                    TerminalView::new(peer, host, 0, TERMINAL_COLS, TERMINAL_ROWS, palette, cx)
-                });
-                entity.update(cx, |view, cx| view.attach(cx));
-                // The terminal was asked for, so it takes the keys without a click first.
-                window.focus(&gpui::Focusable::focus_handle(&entity, cx), cx);
-                workspace.terminal = Some(entity);
-                cx.notify();
-            });
+        // A pinch on the grid changes the font size, which is an Appearance setting.
+        cx.subscribe(&deck, |workspace, _, event: &TerminalEvent, cx| {
+            if let TerminalEvent::Zoom(steps) = event {
+                let settings = workspace.appearance_settings;
+                let terminal_font_size =
+                    step_terminal_font_size(settings.terminal_font_size, *steps);
+                workspace.set_appearance(
+                    AppearanceSettings {
+                        terminal_font_size,
+                        ..settings
+                    },
+                    cx,
+                );
+            }
         })
         .detach();
+        deck.update(cx, |deck, cx| deck.load(cx));
+        self.terminal = Some(deck);
     }
 
     fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
@@ -1882,17 +1864,16 @@ impl Render for Workspace {
                     .child("Phone activity is shown on the paired iPhone.")
                     .into_any_element(),
                 Seat::Terminal => match &self.terminal {
-                    Some(terminal) => {
+                    Some(deck) => {
                         let settings = self.appearance_settings;
-                        terminal.update(cx, |view, cx| {
-                            view.set_style(
+                        deck.update(cx, |deck, _| {
+                            deck.set_style(
                                 palette,
                                 settings.terminal_font,
                                 settings.terminal_font_size,
-                                cx,
                             )
                         });
-                        terminal.clone().into_any_element()
+                        deck.clone().into_any_element()
                     }
                     None => div()
                         .p_4()
@@ -2348,9 +2329,9 @@ mod tests {
                 alive: true,
                 ..Default::default()
             };
-            let palette = Palette::for_appearance(window.appearance());
-            let terminal =
-                cx.new(|cx| TerminalView::new(peer, Host::Shell(shell), 0, 48, 44, palette, cx));
+            let _ = window;
+            let terminal = cx.new(|cx| TerminalDeck::new(Host::Shell(shell), false, 48, 44, cx));
+            terminal.update(cx, |deck, cx| deck.adopt(peer, cx));
             view.terminal = Some(terminal.clone());
             view.right_panel.open_on(Seat::Terminal);
             cx.notify();

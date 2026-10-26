@@ -43,7 +43,7 @@ pub use primitives::{
 };
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{
-    tint, AccentColor, AppearanceSettings, BackgroundTone, Density, GlassStyle, NotifyPrefs,
-    Palette, SidebarPrefs, SoundscapePrefs, TerminalFont, ThemeMode, WindowOpacity,
-    TERMINAL_FONT_SIZES,
+    step_terminal_font_size, tint, AccentColor, AppearanceSettings, BackgroundTone, Density,
+    GlassStyle, NotifyPrefs, Palette, SidebarPrefs, SoundscapePrefs, TerminalFont, ThemeMode,
+    WindowOpacity, TERMINAL_FONT_SIZES,
 };

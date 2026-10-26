@@ -25,8 +25,8 @@ use gpui::prelude::*;
 use gpui::{
     actions, canvas, div, fill, font, point, px, rgb, rgba, AnyElement, Bounds, ClipboardItem,
     ContentMask, Context, EventEmitter, FocusHandle, Font, FontWeight, KeyBinding, KeyDownEvent,
-    Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, ScrollDelta,
-    ScrollWheelEvent, SharedString, TextAlign, TextRun, Window,
+    Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, PinchEvent, Pixels, Point, Render,
+    ScrollDelta, ScrollWheelEvent, SharedString, TextAlign, TextRun, TouchPhase, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
@@ -42,6 +42,10 @@ use sjel_gpui_core::shell;
 use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update, MAX_INPUT_BYTES};
 
 use crate::theme::{Palette, TerminalFont, TerminalScheme, MONOKAI};
+
+mod deck;
+
+pub use deck::TerminalDeck;
 
 actions!(terminal, [Copy, Paste, SelectAll]);
 
@@ -629,7 +633,16 @@ fn control_bytes(key: &str) -> Option<Vec<u8>> {
 /// keyboard, which belongs to the platform and not to this crate.
 pub enum TerminalEvent {
     Editing(bool),
+    /// A pinch asked for this many font sizes larger (or smaller, below zero). The size is an
+    /// Appearance setting, so the host applies and saves it.
+    Zoom(i32),
 }
+
+/// How long the grid's size holds still before the pty is told it.
+const RESIZE_SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// How far a trackpad pinch travels before it steps the font size once.
+const PINCH_STEP: f32 = 0.15;
 
 /// What a request says when the runtime dropped it before the Mac answered.
 const UNANSWERED: &str = "The Mac did not answer.";
@@ -659,6 +672,10 @@ pub struct TerminalView {
     font_choice: Option<(TerminalFont, u8)>,
     /// True from a press on the grid until its release: a move extends the selection.
     selecting: bool,
+    /// How far the current pinch has travelled since it last stepped the font size.
+    pinch: f32,
+    /// Counts resizes, so a pty resize goes out only for the last one in a burst.
+    resize_generation: u64,
 }
 
 impl EventEmitter<TerminalEvent> for TerminalView {}
@@ -706,6 +723,8 @@ impl TerminalView {
             },
             font_choice: None,
             selecting: false,
+            pinch: 0.,
+            resize_generation: 0,
             peer,
         }
     }
@@ -947,15 +966,25 @@ impl TerminalView {
             return;
         }
         self.screen.resize(cols, rows);
+        // The grid follows at once; the pty hears only the size the grid settles on. A drag or
+        // a sliding edge resizes every frame, and each size the shell hears is a prompt it
+        // redraws for a width the grid has already left.
+        self.resize_generation += 1;
+        let generation = self.resize_generation;
         let host = self.host.clone();
         let id = self.peer.id.clone();
         let cols = self.screen.cols() as u16;
         let rows = self.screen.rows() as u16;
-        let work = shell::run(async move { host.resize(&id, cols, rows).await });
-        cx.spawn(async move |_weak, _cx| {
-            // A resize the Mac refuses leaves the program wrapping at the old width. Nothing here
-            // can fix that, and a card in the middle of typing would be worse than the wrap.
-            let _ = work.await;
+        cx.spawn(async move |weak, cx| {
+            cx.background_executor().timer(RESIZE_SETTLE).await;
+            let settled = weak
+                .read_with(cx, |view, _| view.resize_generation == generation)
+                .unwrap_or(false);
+            if settled {
+                // A resize the Mac refuses leaves the program wrapping at the old width. Nothing
+                // here can fix that, and a card in the middle of typing would be worse than it.
+                let _ = shell::run(async move { host.resize(&id, cols, rows).await }).await;
+            }
         })
         .detach();
         cx.notify();
@@ -1210,6 +1239,16 @@ impl Render for TerminalView {
                     .on_key_down(cx.listener(|view, event: &KeyDownEvent, _window, cx| {
                         if !event.is_held {
                             view.type_keystroke(&event.keystroke, cx);
+                        }
+                    }))
+                    .on_pinch(cx.listener(|view, event: &PinchEvent, _window, cx| {
+                        view.pinch += event.delta;
+                        if view.pinch.abs() >= PINCH_STEP {
+                            cx.emit(TerminalEvent::Zoom(view.pinch.signum() as i32));
+                            view.pinch = 0.;
+                        }
+                        if event.phase == TouchPhase::Ended {
+                            view.pinch = 0.;
                         }
                     }))
                     .on_scroll_wheel(cx.listener(|view, event: &ScrollWheelEvent, _window, cx| {

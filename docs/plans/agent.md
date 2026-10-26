@@ -202,6 +202,7 @@ The phone signs every request with `DeviceClient` through the paired listener.
 |---|---|---|
 | `POST /api/agent/terminals` | `{preset, cwd, cols, rows}` | `{id}` |
 | `GET /api/agent/terminals` | | `[{id, preset, cwd, title, started_at, last_output_at, alive, exit_code, clients}]` |
+| `GET /api/agent/terminals/options` | | `{presets, folders}`: preset names, then `$HOME` and the folders in `~/Developer`, newest first |
 | `GET /api/agent/terminals/{id}/stream?from=<offset>` | | SSE, events below |
 | `POST /api/agent/terminals/{id}/input` | `{data}`: base64 bytes, at most 64 KiB | `204` |
 | `POST /api/agent/terminals/{id}/resize` | `{cols, rows}` | `204`. The last resize wins. |
@@ -275,15 +276,19 @@ to interactive keystrokes, so access is the control.
   A drag selects (double-click a word, triple-click a line, shift extends), ⌘C copies, ⌘V
   pastes with bracketed paste when the program asks for it, and ⌘A selects the scrollback.
   Settings › Appearance › Terminal sets the font (Auto picks an installed Nerd Font), size, tone
-  and opacity. Built.
+  and opacity; a trackpad pinch steps the size. Built.
+- Both: the seat is a deck of tabs (`ui/src/terminal/deck.rs`), one per live terminal, and
+  `+ New` picks a preset and a folder from `GET /api/agent/terminals/options`. A tab's × ends its
+  program. A resize reaches the pty only once the grid's size has held for 150 ms. Built; the
+  options route needs the agent capability restarted to answer.
 - Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
   passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
   The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits
   above the grid, and a tap on the grid raises the software keyboard. Entering the background
   drops the view and the unlock, so a reattach asks again. Built and linked for the simulator.
-  The key row carries copy and paste, and Settings has the same four Terminal rows as the Mac.
-  Open: a preset and directory picker (the seat opens `shell` only), the Agent tab's terminal
-  list, and pinch to change the font size.
+  The key row carries copy and paste, Settings has the same four Terminal rows as the Mac, and a
+  pinch steps the font size (`UIPinchGestureRecognizer` in `ios/host/App.swift`, because the iOS
+  port reports no pinch). Not tried on a paired phone.
 - Both: the grid is one canvas in Monokai (`theme::MONOKAI`). Each row is one shaped line with
   every glyph on the cell's advance (`force_width`) and one quad per painted background, so a
   fallback-font icon or a wide character keeps its columns.

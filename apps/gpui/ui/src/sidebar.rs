@@ -198,12 +198,13 @@ pub fn sidebar_frame(
         .size_full()
         .flex()
         .flex_col()
-        // The terminal seat paints its own background at the opacity its setting asks for, so
-        // the frame under it stays clear: two opaque layers would hide what the setting lets
-        // show through.
-        .when(seat != Seat::Terminal, |frame| {
-            frame.bg(rgba(palette.panel()))
-        })
+        // The terminal seat's frame takes the terminal's opacity, so lowering it lets the window
+        // show through the grid and the frame alike, with the frame still tinted enough to read.
+        .bg(rgba(if seat == Seat::Terminal {
+            (palette.panel() & 0xffff_ff00) | (palette.terminal_surface & 0xff)
+        } else {
+            palette.panel()
+        }))
         .text_color(rgb(palette.text))
         .child(
             div()

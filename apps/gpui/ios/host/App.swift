@@ -79,6 +79,22 @@ final class SjelController: UIViewController {
         addChild(content)
         view.addSubview(content.view)
         content.didMove(toParent: self)
+        // GPUI's iOS port reports one touch as a pointer and no pinch, so the gesture is UIKit's.
+        // It does not cancel the touches, so a pinch over anything else still reaches GPUI.
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        pinch.cancelsTouchesInView = false
+        content.view.addGestureRecognizer(pinch)
+    }
+
+    @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
+        switch gesture.state {
+        case .began, .changed:
+            sjel_ios_pinch(Double(gesture.scale), false)
+        case .ended, .cancelled, .failed:
+            sjel_ios_pinch(Double(gesture.scale), true)
+        default:
+            break
+        }
     }
 
     override func viewDidLayoutSubviews() {

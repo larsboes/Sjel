@@ -44,3 +44,6 @@ void sjel_ios_became_active(void);
 // `sjel_ios_unlock` (host/App.swift) starts before a terminal opens.
 void sjel_ios_entered_background(void);
 void sjel_ios_unlocked(bool ok);
+// ios/src/lib.rs: a pinch on the page, its scale since it began, and whether it ended. The
+// terminal steps its font size with it.
+void sjel_ios_pinch(double scale, bool ended);

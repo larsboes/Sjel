@@ -363,6 +363,17 @@ impl TerminalFont {
 /// The terminal's font sizes on offer, in points.
 pub const TERMINAL_FONT_SIZES: [u8; 5] = [11, 12, 13, 14, 16];
 
+/// The size `steps` places away from `current` among [`TERMINAL_FONT_SIZES`], held at both ends.
+/// A size that is not on offer (an edited file) steps from the nearest one that is.
+pub fn step_terminal_font_size(current: u8, steps: i32) -> u8 {
+    let at = TERMINAL_FONT_SIZES
+        .iter()
+        .position(|size| *size >= current)
+        .unwrap_or(TERMINAL_FONT_SIZES.len() - 1) as i32;
+    let to = (at + steps).clamp(0, TERMINAL_FONT_SIZES.len() as i32 - 1);
+    TERMINAL_FONT_SIZES[to as usize]
+}
+
 fn default_terminal_font_size() -> u8 {
     13
 }
@@ -906,6 +917,15 @@ mod tests {
         // System is Monokai's background, opaque unless asked otherwise, in either app theme.
         let palette = AppearanceSettings::default().apply_to_palette(Palette::light(), false);
         assert_eq!(palette.terminal_surface, tint(MONOKAI.background, 0xff));
+    }
+
+    #[test]
+    fn a_pinch_steps_through_the_sizes_on_offer() {
+        assert_eq!(step_terminal_font_size(13, 1), 14);
+        assert_eq!(step_terminal_font_size(13, -2), 11);
+        assert_eq!(step_terminal_font_size(16, 1), 16);
+        assert_eq!(step_terminal_font_size(11, -1), 11);
+        assert_eq!(step_terminal_font_size(15, 0), 16);
     }
 
     #[test]

@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use sjel_agent::ext::policy::{Class, Decision, Policy};
 use sjel_agent::{Extension, ToolCall, Verdict};
 use sjel_server::agent_policy::PolicyFiles;
 
@@ -43,6 +44,8 @@ const POLL: Duration = Duration::from_millis(250);
 
 pub struct ApprovalGate {
     policy: Option<PolicyFiles>,
+    /// What this session may reach, and so what its commands are classified against (§3).
+    commands: Policy,
     log: Arc<EventLog>,
     root: PathBuf,
     read_only: HashSet<String>,
@@ -55,12 +58,14 @@ impl ApprovalGate {
     pub fn new(
         log: Arc<EventLog>,
         root: PathBuf,
+        reach: Option<PathBuf>,
         read_only: HashSet<String>,
         grants: Arc<Grants>,
         stop: Arc<AtomicBool>,
     ) -> Self {
         Self {
             policy: PolicyFiles::from_deployment(),
+            commands: Policy::new(reach),
             log,
             root,
             read_only,
@@ -136,6 +141,23 @@ impl ApprovalGate {
         }
     }
 
+    /// The class of this call when the policy has one: `bash` and the file writers.
+    fn classify(&self, call: &ToolCall) -> Option<Decision> {
+        let args: Value =
+            serde_json::from_str(call.function.arguments.trim()).unwrap_or(Value::Null);
+        match call.function.name.as_str() {
+            "bash" => {
+                let command = args.get("command").and_then(Value::as_str)?;
+                (!command.trim().is_empty()).then(|| self.commands.bash(command))
+            }
+            "write" | "edit" => {
+                let path = args.get("path").and_then(Value::as_str)?;
+                Some(self.commands.write(path))
+            }
+            _ => None,
+        }
+    }
+
     fn read(&self, path: &str) -> Option<String> {
         let path = resolve(&self.root, path);
         let meta = std::fs::metadata(&path).ok()?;
@@ -157,7 +179,37 @@ impl Extension for ApprovalGate {
     }
 
     fn tool_call(&self, call: &ToolCall) -> Verdict {
-        if self.read_only.contains(call.function.name.as_str()) || self.granted(call) {
+        if self.read_only.contains(call.function.name.as_str()) {
+            return Verdict::Allow;
+        }
+        if let Some(decision) = self.classify(call) {
+            match decision.class {
+                Class::Allow => {
+                    self.log.push(json!({
+                        "type": "allowed",
+                        "name": call.function.name,
+                        "rule": decision.rule,
+                        "reason": decision.reason,
+                    }));
+                    return Verdict::Allow;
+                }
+                Class::Block => {
+                    self.log.push(json!({
+                        "type": "blocked",
+                        "name": call.function.name,
+                        "rule": decision.rule,
+                        "reason": decision.reason,
+                    }));
+                    return Verdict::Deny(format!(
+                        "refused before it ran (rule {}): {}. This one is not a permission the \
+                         owner grants for a session; say what you wanted to achieve and ask.",
+                        decision.rule, decision.reason
+                    ));
+                }
+                Class::Ask => {}
+            }
+        }
+        if self.granted(call) {
             return Verdict::Allow;
         }
         let Some(policy) = &self.policy else {
@@ -308,6 +360,7 @@ mod tests {
     fn gate(root: &Path) -> ApprovalGate {
         ApprovalGate {
             policy: None,
+            commands: Policy::new(Some(root.to_path_buf())),
             log: Arc::new(EventLog::new()),
             root: root.to_path_buf(),
             read_only: HashSet::from(["read".to_string(), "grep".to_string()]),
@@ -342,7 +395,10 @@ mod tests {
     fn without_an_overlay_a_write_is_refused_rather_than_run_silently() {
         let dir = scratch("no-overlay");
         let gate = gate(&dir);
-        let Verdict::Deny(reason) = gate.tool_call(&call("bash", json!({"command": "rm -rf /"})))
+        // A command the policy asks about, so the refusal comes from the missing overlay rather
+        // than from a rule that blocks it outright.
+        let Verdict::Deny(reason) =
+            gate.tool_call(&call("bash", json!({"command": "git commit -m x"})))
         else {
             panic!("a write with nowhere to record a decision must be refused");
         };
@@ -353,15 +409,67 @@ mod tests {
     fn a_granted_call_is_allowed_without_asking_again() {
         let dir = scratch("granted");
         let gate = gate(&dir);
-        let bash = call("bash", json!({"command": "cargo test"}));
+        let bash = call("bash", json!({"command": "git commit -m x"}));
         gate.grants.note_pending("a1", key(&bash));
         assert!(gate.grants.allow_for_session("a1"));
         assert_eq!(gate.tool_call(&bash), Verdict::Allow);
         // The grant is for those exact arguments: another command asks (and here, has no overlay).
         assert!(matches!(
-            gate.tool_call(&call("bash", json!({"command": "cargo publish"}))),
+            gate.tool_call(&call("bash", json!({"command": "git push origin main"}))),
             Verdict::Deny(_)
         ));
+    }
+
+    #[test]
+    fn a_build_runs_without_a_card_and_the_log_names_its_rule() {
+        let dir = scratch("allow");
+        let gate = gate(&dir);
+        let bash = call("bash", json!({"command": "cargo test -p sjel-comms"}));
+        assert_eq!(gate.tool_call(&bash), Verdict::Allow);
+        let logged = gate.log.after(0).event.expect("the decision is logged");
+        assert_eq!(logged["type"], "allowed");
+        assert_eq!(logged["rule"], "R3");
+    }
+
+    #[test]
+    fn a_blocked_call_never_reaches_the_card_and_names_its_rule() {
+        let dir = scratch("block");
+        let gate = gate(&dir);
+        let mut cursor = 0;
+        for (command, rule) in [
+            ("rm -rf /", "B1"),
+            ("git reset --hard", "B2"),
+            ("sudo ls", "B3"),
+            ("cargo publish", "B7"),
+        ] {
+            let Verdict::Deny(reason) = gate.tool_call(&call("bash", json!({"command": command})))
+            else {
+                panic!("{command} ran");
+            };
+            assert!(reason.contains(rule), "{command}: {reason}");
+            assert!(reason.contains("not a permission"), "{command}: {reason}");
+            let logged = gate
+                .log
+                .after(cursor)
+                .event
+                .expect("the decision is logged");
+            assert_eq!(logged["type"], "blocked");
+            assert_eq!(logged["rule"], rule);
+            cursor = logged["seq"].as_u64().unwrap();
+        }
+    }
+
+    #[test]
+    fn a_write_outside_the_scope_is_blocked_before_the_card() {
+        let dir = scratch("write-block");
+        let gate = gate(&dir);
+        let Verdict::Deny(reason) = gate.tool_call(&call(
+            "write",
+            json!({"path": "/etc/hosts", "content": "x"}),
+        )) else {
+            panic!("a write outside the scope ran");
+        };
+        assert!(reason.contains("rule B1"), "{reason}");
     }
 
     #[test]

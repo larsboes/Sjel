@@ -399,9 +399,11 @@ async fn create_session(
     };
     // Assembling once here turns a typo in a plugin name into a 400 at creation, not a failed run
     // the operator reads a minute later.
+    let reach = tier.reach(&root, &home);
     plugins::assemble(
         &plugins,
         &root,
+        reach.clone(),
         &Arc::new(AtomicBool::new(false)),
         Arc::new(session::EventLog::new()),
         session::Grants::new(),
@@ -409,7 +411,6 @@ async fn create_session(
     )
     .map_err(|reason| failure(StatusCode::BAD_REQUEST, reason))?;
 
-    let reach = tier.reach(&root, &home);
     let dir = state.dir.join(session::root_slug(&root));
     let session = Session::create(&dir, &root, tier, reach, plugins)
         .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -539,6 +540,7 @@ fn run_turn(
     let set = plugins::assemble(
         session.plugins(),
         &session.root,
+        session.reach.clone(),
         &stop,
         Arc::clone(&session.log),
         Arc::clone(&session.grants),

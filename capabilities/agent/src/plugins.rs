@@ -38,6 +38,7 @@ pub struct Set {
 pub fn assemble(
     names: &[String],
     root: &Path,
+    reach: Option<std::path::PathBuf>,
     stop: &Arc<AtomicBool>,
     log: Arc<crate::session::EventLog>,
     grants: Arc<Grants>,
@@ -95,6 +96,7 @@ pub fn assemble(
     extensions.push(Box::new(ApprovalGate::new(
         log,
         root.to_path_buf(),
+        reach,
         read_only,
         grants,
         Arc::clone(stop),
@@ -179,6 +181,7 @@ mod tests {
             let set = assemble(
                 &names,
                 &dir,
+                Some(dir.clone()),
                 &stop,
                 Arc::new(crate::session::EventLog::new()),
                 Grants::new(),
@@ -200,6 +203,7 @@ mod tests {
         let err = match assemble(
             &["typo".to_owned()],
             &dir,
+            Some(dir.clone()),
             &stop,
             Arc::new(crate::session::EventLog::new()),
             Grants::new(),
@@ -221,6 +225,7 @@ mod tests {
         let set = assemble(
             &["fs".to_owned()],
             &dir,
+            Some(dir.clone()),
             &stop,
             Arc::new(crate::session::EventLog::new()),
             Grants::new(),

@@ -1642,8 +1642,9 @@ fn shortcuts(
     let keymap = cx.key_bindings();
     let keymap = keymap.borrow();
     let docs = cx.action_documentation();
-    let mut groups: [ShortcutGroup; 12] = [
+    let mut groups: [ShortcutGroup; 13] = [
         ("sjel::", "WORKSPACE", Vec::new()),
+        ("terminal::", "TERMINAL", Vec::new()),
         ("context_page::", "TODAY", Vec::new()),
         ("calendar::", "CALENDAR", Vec::new()),
         ("finance_page::", "FINANCE", Vec::new()),

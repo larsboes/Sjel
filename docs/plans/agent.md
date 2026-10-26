@@ -276,7 +276,8 @@ to interactive keystrokes, so access is the control.
   A drag selects (double-click a word, triple-click a line, shift extends), ⌘C copies, ⌘V
   pastes with bracketed paste when the program asks for it, and ⌘A selects the scrollback.
   Settings › Appearance › Terminal sets the font (Auto picks an installed Nerd Font), size, tone
-  and opacity; a trackpad pinch steps the size. Built.
+  and opacity; a trackpad pinch steps the size. ⌘T opens the terminal from anywhere; inside it
+  ⌘T opens `+ New`, and ⇧⌘] / ⇧⌘[ (or ⌃Tab / ⌃⇧Tab) step the tabs. Built.
 - Both: the seat is a deck of tabs (`ui/src/terminal/deck.rs`), one per live terminal, and
   `+ New` picks a preset and a folder from `GET /api/agent/terminals/options`. A tab's × ends its
   program. A resize reaches the pty only once the grid's size has held for 150 ms. Built; the

@@ -77,6 +77,8 @@ actions!(
         DocToggleZoom,
         /// Open Settings at the section it showed last.
         OpenSettings,
+        /// Open the terminal in the right edge.
+        OpenTerminal,
         /// Open Settings at Appearance.
         OpenAppearance,
         /// Slide the soundscape panel in, or away again.
@@ -208,6 +210,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-d", OpenInDashboard, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
+        // Inside the terminal the same key starts a new one (`ui/src/terminal.rs`).
+        KeyBinding::new("cmd-t", OpenTerminal, None),
         KeyBinding::new("cmd-[", ClearSelection, None),
         KeyBinding::new("escape", ClearSelection, Some("!Terminal")),
         // Tabs inside the open area, the way Safari and Xcode step tabs
@@ -1315,6 +1319,10 @@ impl Workspace {
         self.open_dashboard(self.page.href().to_owned(), window, cx);
     }
 
+    fn on_open_terminal(&mut self, _: &OpenTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_terminal(window, cx);
+    }
+
     fn on_open_settings(&mut self, _: &OpenSettings, _: &mut Window, cx: &mut Context<Self>) {
         self.open_settings(None, cx);
     }
@@ -2048,6 +2056,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_run_primary))
             .on_action(cx.listener(Self::on_run_secondary))
             .on_action(cx.listener(Self::on_open_settings))
+            .on_action(cx.listener(Self::on_open_terminal))
             .on_action(cx.listener(Self::on_open_appearance))
             .on_action(cx.listener(Self::on_open_soundscape))
             .on_action(cx.listener(Self::on_toggle_soundscape_panel))
@@ -2344,6 +2353,16 @@ mod tests {
         cx.simulate_keystrokes("j j enter escape");
         view.read_with(cx, |view, _| {
             assert_eq!(view.selection.cursor, None, "j moved the page's selection");
+            assert_eq!(view.right_panel.seat(), Seat::Terminal);
+        });
+    }
+
+    #[gpui::test]
+    fn command_t_opens_the_terminal_edge(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        cx.simulate_keystrokes("cmd-t");
+        view.read_with(cx, |view, _| {
+            assert!(view.right_panel.is_open(), "⌘T left the edge closed");
             assert_eq!(view.right_panel.seat(), Seat::Terminal);
         });
     }

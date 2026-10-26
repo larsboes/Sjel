@@ -47,15 +47,37 @@ mod deck;
 
 pub use deck::TerminalDeck;
 
-actions!(terminal, [Copy, Paste, SelectAll]);
+actions!(
+    terminal,
+    [
+        /// Copy the selection.
+        Copy,
+        /// Paste into the terminal.
+        Paste,
+        /// Select the whole scrollback.
+        SelectAll,
+        /// Start a new terminal: choose the program and the folder.
+        NewTerminal,
+        /// Show the next terminal tab.
+        NextTab,
+        /// Show the previous terminal tab.
+        PrevTab,
+    ]
+);
 
 /// The keys the terminal takes from the window while its grid has focus. `Terminal` is deeper than
 /// any page context, so these win over a binding of the same keys further out.
-pub fn keys() -> [KeyBinding; 3] {
+pub fn keys() -> [KeyBinding; 8] {
     [
         KeyBinding::new("cmd-c", Copy, Some("Terminal")),
         KeyBinding::new("cmd-v", Paste, Some("Terminal")),
         KeyBinding::new("cmd-a", SelectAll, Some("Terminal")),
+        KeyBinding::new("cmd-t", NewTerminal, Some("Terminal")),
+        // The keys that step a window's tabs in Safari and Terminal step the terminal's here.
+        KeyBinding::new("shift-cmd-]", NextTab, Some("Terminal")),
+        KeyBinding::new("shift-cmd-[", PrevTab, Some("Terminal")),
+        KeyBinding::new("ctrl-tab", NextTab, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-tab", PrevTab, Some("Terminal")),
     ]
 }
 

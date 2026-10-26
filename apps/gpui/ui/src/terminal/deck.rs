@@ -11,7 +11,7 @@ use gpui::{
 use sjel_gpui_core::shell;
 use sjel_gpui_core::terminal::{Host, Options, Terminal as Peer};
 
-use super::{TerminalEvent, TerminalView, UNANSWERED};
+use super::{NewTerminal, NextTab, PrevTab, TerminalEvent, TerminalView, UNANSWERED};
 use crate::theme::{Palette, TerminalFont};
 
 /// The preset the menu starts with when the capability offers it.
@@ -191,6 +191,15 @@ impl TerminalDeck {
             });
         })
         .detach();
+    }
+
+    /// The tab `by` places along, wrapping at both ends.
+    fn step(&mut self, by: isize, cx: &mut Context<Self>) {
+        let count = self.tabs.len() as isize;
+        if count > 1 {
+            let next = (self.active as isize + by).rem_euclid(count) as usize;
+            self.choose(next, cx);
+        }
     }
 
     fn choose(&mut self, ix: usize, cx: &mut Context<Self>) {
@@ -421,6 +430,13 @@ impl Render for TerminalDeck {
             .flex()
             .flex_col()
             .track_focus(&self.focus)
+            .on_action(cx.listener(|deck, _: &NewTerminal, _, cx| {
+                if deck.menu.is_none() {
+                    deck.toggle_menu(cx);
+                }
+            }))
+            .on_action(cx.listener(|deck, _: &NextTab, _, cx| deck.step(1, cx)))
+            .on_action(cx.listener(|deck, _: &PrevTab, _, cx| deck.step(-1, cx)))
             .child(strip)
             .children(menu)
             .child(div().flex_1().min_h_0().child(body))

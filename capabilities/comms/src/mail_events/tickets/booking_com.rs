@@ -34,8 +34,11 @@ fn stay(lines: &[&str]) -> Option<Event> {
     Some(Event {
         title: format!("Stay at {hotel}"),
         date: Some(iso_date_english(check_in)?),
+        starts_at: None,
+        ends_at: None,
         end_date: Some(iso_date_english(check_out)?),
         location: Some(hotel.to_string()),
+        agenda: Vec::new(),
         city: city(lines).map(str::to_string),
         from_city: None,
         evidence: check_in_line.to_string(),

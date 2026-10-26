@@ -132,6 +132,11 @@ Open items that belong to one capability and to no priority yet.
     No `c2` document reaches cloud inference, and no `c3` content enters a prompt.
   - Mixed scans: approved partitions already create child PDFs with exact page ranges. Broader
     boundary detection and a measured evaluation on annotated multi-document scans remain.
+- **Mail event extraction.** Explicit invitation date, time range and location labels establish the
+  event frame; the local model extracts grounded programme items from invitation text. Other mail
+  uses the same model with grounded evidence. Open: measure extraction against a reviewed English
+  and German mail corpus. Done when replayed invitations retain timed events and sourced programme
+  details while unsupported dates and agenda items remain rejected.
 - **Mail classification labels.** The harness exported 121 fixtures with 0 labels
   (`<overlay>/config/comms-mail-stream-shadow.json`). Labels are hand judgements, written before
   any model output is read. The stream switch needs model agreement of at least control plus 10

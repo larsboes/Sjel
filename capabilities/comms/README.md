@@ -200,17 +200,25 @@ A stored inbox sweep also checks new mail for event/ticket terms in its subject 
 candidate's latest body is fetched, capped, and sent to the loopback `summarization_light` role;
 body text and model prompts are never stored. `c3` is refused before the body fetch. `c2` may be
 analyzed locally, but the title, location and evidence are redacted before they cross into
-Calendar. If no light local role is configured, or the message does not fit its window, no bigger
-or remote model is substituted.
+Calendar. The local event schema also extracts timed programme items with verbatim grounding;
+their bounded titles and descriptions are redacted before they are stored as Calendar notes. If no
+light local role is configured, or the message does not fit its window, no bigger or remote model is
+substituted.
 
 Dates become Calendar `event` proposals only when the model supplies a verbatim evidence quote
-that grounds the date in the fetched body; the quote is discarded after validation. Each proposal
-is an all-day, one-day `possible` entry with an idempotent source key. It does not mark a ticket as committed, write to Gmail, or export
-to Google Calendar. Calendar's existing trip-draft clustering can then suggest a trip; creating
-the Trips plan remains an explicit action. The existing `inbox_sweep_minutes` cadence controls
+that grounds the date in the fetched body; timed proposals also require the quote to carry both
+times. Invitations with explicit `Event details`, `Date`, `Time` and `Location` labels are read
+directly, preserving their stated date and time range. Ticket readers retain departure and arrival
+timestamps directly from supported booking layouts. A proposal is timed only when both local
+wall-clock timestamps are present and valid; otherwise it remains an all-day entry. Every proposal
+is `possible` with an idempotent source key.
+It does not mark a ticket as committed, write to Gmail, or export to Google Calendar. Calendar's
+existing trip-draft clustering can then suggest a trip; creating the Trips plan remains an
+explicit action. The existing `inbox_sweep_minutes` cadence controls
 both collection and event analysis: `0` is manual-only (the default), and a configured interval
 processes only newly stored threads. A manual sweep can re-check its page after a reported
-analysis failure.
+analysis failure. `sjel capability mail events replay <id>` refreshes selected existing proposals
+in place under their stable source keys.
 
 ### Paid receipts into Finance
 

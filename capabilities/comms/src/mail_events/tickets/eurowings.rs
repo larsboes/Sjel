@@ -26,15 +26,27 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
         };
         let from = airport_after(&lines[i..], "Abflug")?;
         let to = airport_after(&lines[i..], "Ankunft")?;
+        let departure = time_after(&lines[i..], "Abflug");
+        let arrival = time_after(&lines[i..], "Ankunft");
+        let mut event = leg(
+            from,
+            to,
+            airport_city(from),
+            airport_city(to),
+            Some(date_line),
+        );
+        if let (Some(date), Some(departure), Some(arrival)) =
+            (event.date.as_deref(), departure, arrival)
+        {
+            event.starts_at = Some(format!("{date}T{departure}"));
+            event.ends_at = Some(format!("{date}T{arrival}"));
+            if event.starts_at >= event.ends_at {
+                event.ends_at = None;
+            }
+        }
         events.push(Event {
             booking_key: key.clone(),
-            ..leg(
-                from,
-                to,
-                airport_city(from),
-                airport_city(to),
-                Some(date_line),
-            )
+            ..event
         });
     }
     (!events.is_empty()).then_some(events)
@@ -57,6 +69,11 @@ fn is_time(line: &str) -> bool {
         && b.iter()
             .enumerate()
             .all(|(i, c)| i == 2 || c.is_ascii_digit())
+}
+
+fn time_after<'a>(lines: &[&'a str], label: &str) -> Option<&'a str> {
+    let at = lines.iter().position(|line| *line == label)?;
+    lines[at + 1..].iter().copied().find(|line| is_time(line))
 }
 
 #[cfg(test)]

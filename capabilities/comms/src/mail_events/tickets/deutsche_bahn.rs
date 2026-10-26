@@ -4,7 +4,7 @@
 //! an optional `dd.mm.yyyy hh:mm` line, then `nach|to`, the station and its optional date.
 //! A booking without a fixed train (Flexpreis) has no date lines.
 
-use super::{booking_key, iso_date, leg, Event};
+use super::{booking_key, iso_date, leg, local_timestamp, Event};
 
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Deutsche Bahn") {
@@ -36,15 +36,18 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
             return None;
         }
         let (to, to_date, next) = stop(block, next + 1)?;
+        let mut event = leg(
+            from,
+            to,
+            city_of_station(from),
+            city_of_station(to),
+            from_date.or(to_date),
+        );
+        event.starts_at = local_timestamp(from_date);
+        event.ends_at = local_timestamp(to_date);
         events.push(Event {
             booking_key: key.clone(),
-            ..leg(
-                from,
-                to,
-                city_of_station(from),
-                city_of_station(to),
-                from_date.or(to_date),
-            )
+            ..event
         });
         i = next;
     }

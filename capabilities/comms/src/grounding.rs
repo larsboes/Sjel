@@ -35,6 +35,12 @@ fn normalized(text: &str) -> String {
         .join(" ")
 }
 
+/// Whether a quoted span appears in a source document after whitespace and case normalization.
+pub fn quote_is_grounded(document: &str, quote: &str) -> bool {
+    let quote = normalized(quote);
+    !quote.is_empty() && normalized(document).contains(&quote)
+}
+
 /// The quote reduced to scannable tokens: alphanumeric runs, everything else
 /// a separator. "10.08.2026" becomes ["10","08","2026"], "10. August" becomes
 /// ["10","august"].
@@ -74,10 +80,14 @@ fn month_number(token: &str) -> Option<u32> {
 }
 
 fn as_number(token: &str) -> Option<u32> {
-    if token.len() > 4 {
+    let digits = ["st", "nd", "rd", "th"]
+        .iter()
+        .find_map(|suffix| token.strip_suffix(suffix))
+        .unwrap_or(token);
+    if digits.len() > 4 {
         return None;
     }
-    token.parse().ok()
+    digits.parse().ok()
 }
 
 /// Whether the quote's tokens carry the claimed day+month, in any of the
@@ -114,8 +124,7 @@ fn quote_carries_day_month(quote_tokens: &[String], month: u32, day: u32) -> boo
 /// whose date cannot even be parsed is nobody's evidence and comes back
 /// `Unsupported`.
 pub fn date_grounding(document: &str, source_text: &str, date: &str) -> DateGrounding {
-    let quote = normalized(source_text);
-    if quote.is_empty() || !normalized(document).contains(&quote) {
+    if !quote_is_grounded(document, source_text) {
         return DateGrounding::QuoteMissing;
     }
     let mut parts = date.splitn(3, '-');

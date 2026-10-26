@@ -352,13 +352,11 @@ mod tests {
         assert!(corpus.fixtures.iter().any(|f| f.page_kind != "math"));
         // A notation page with no forbidden confusion declared would score the
         // recorded failure as a pass.
-        assert!(
-            corpus
-                .fixtures
-                .iter()
-                .filter(|f| f.page_kind == "math")
-                .all(|f| !f.forbidden_confusions.is_empty())
-        );
+        assert!(corpus
+            .fixtures
+            .iter()
+            .filter(|f| f.page_kind == "math")
+            .all(|f| !f.forbidden_confusions.is_empty()));
     }
 
     #[test]

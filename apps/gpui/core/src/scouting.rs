@@ -318,10 +318,7 @@ pub fn default_calendar_end(starts_at: &str, source_ends_at: &str) -> Option<Str
         Some(start_time) => {
             let start_datetime = start.date.and_time(start_time);
             let end = source_end
-                .and_then(|end| {
-                    end.time
-                        .map(|time| end.date.and_time(time))
-                })
+                .and_then(|end| end.time.map(|time| end.date.and_time(time)))
                 .filter(|end| *end > start_datetime)
                 .unwrap_or(start_datetime + Duration::hours(1));
             Some(end.format("%Y-%m-%dT%H:%M:%S").to_string())

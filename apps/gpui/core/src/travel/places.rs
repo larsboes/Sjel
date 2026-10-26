@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{Coordinate, Place, Source, cache_dir};
+use super::{cache_dir, Coordinate, Place, Source};
 use crate::shell::{self, ShellError};
 
 const FILE: &str = "places.json";
@@ -257,15 +257,13 @@ mod tests {
     #[test]
     fn an_answer_without_a_place_or_coordinate_is_no_coordinate() {
         assert!(coordinate(Reply { place: None }).is_none());
-        assert!(
-            coordinate(Reply {
-                place: Some(Point {
-                    latitude: None,
-                    longitude: None
-                })
+        assert!(coordinate(Reply {
+            place: Some(Point {
+                latitude: None,
+                longitude: None
             })
-            .is_none()
-        );
+        })
+        .is_none());
         assert_eq!(
             coordinate(Reply {
                 place: Some(Point {

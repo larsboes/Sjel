@@ -16,9 +16,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde_json::{json, Value};
 use crate::tools::{run_captured, Ran};
 use crate::{Extension, Tool};
+use serde_json::{json, Value};
 
 /// The name `agent.toml` and `--ext` use.
 pub const NAME: &str = "rust";

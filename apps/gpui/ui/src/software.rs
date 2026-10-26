@@ -11,9 +11,9 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
-use crate::theme::Palette;
 use crate::primitives::{dot, list, note, placeholder, row, section};
+use crate::theme::Palette;
+use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
 
 const SCAN: &str = "software:scan";
 

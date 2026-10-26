@@ -239,9 +239,7 @@ mod tests {
     /// Read as a bare value, every one of these was an object and every field was lost.
     #[test]
     fn the_apis_wrapped_values_reach_the_card_and_the_editor() {
-        let wrapped = |value: serde_json::Value, source: &str| {
-            serde_json::json!({ "value": value, "source": source, "updated_at": "2026-10-25" })
-        };
+        let wrapped = |value: serde_json::Value, source: &str| serde_json::json!({ "value": value, "source": source, "updated_at": "2026-10-25" });
         let mut values = BTreeMap::new();
         values.insert(
             "emails".into(),

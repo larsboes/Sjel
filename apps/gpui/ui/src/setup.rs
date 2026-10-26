@@ -12,8 +12,8 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::theme::Palette;
 use crate::primitives::{card, dot, note, placeholder, section};
+use crate::theme::Palette;
 use chrono::Local;
 use sjel_gpui_core::setup::{
     has_apply_input, merge_verification_probes, minutes_left, pairing_payload, partition_devices,

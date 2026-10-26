@@ -71,8 +71,8 @@ struct ShellBridge {
 
 impl ShellBridge {
     fn get(&self, path: &str) -> Result<String, String> {
-        let client = sjel_http::client(PURPOSE, TIMEOUT)
-            .map_err(|e| format!("http client: {e}"))?;
+        let client =
+            sjel_http::client(PURPOSE, TIMEOUT).map_err(|e| format!("http client: {e}"))?;
         let url = format!("{}{path}", self.base);
         let mut req = client.get(&url);
         if let Some(auth) = &self.bearer {

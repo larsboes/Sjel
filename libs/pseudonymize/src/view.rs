@@ -223,7 +223,10 @@ fn trusted_identity(value: &str) -> String {
         .trim_matches('"');
     let domain =
         crate::pattern::sender_domain(value).filter(|d| !crate::pattern::is_freemail_domain(d));
-    match (name.is_empty() || crate::pattern::looks_like_email(name), domain) {
+    match (
+        name.is_empty() || crate::pattern::looks_like_email(name),
+        domain,
+    ) {
         (false, Some(d)) => format!("{name} ({d})"),
         (false, None) => name.to_string(),
         (true, Some(d)) => format!("[email] ({d})"),
@@ -239,7 +242,9 @@ fn trusted_text(value: &str) -> String {
         b.len() == 10
             && b[4] == b'-'
             && b[7] == b'-'
-            && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+            && b.iter()
+                .enumerate()
+                .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
     };
     let digitish = |w: &str| {
         !w.is_empty()
@@ -380,14 +385,23 @@ mod tests {
         assert!(value.get("latitude").is_none() && value.get("longitude").is_none());
         let note = value["note"].as_str().unwrap();
         assert!(!note.contains("erika@") && !note.contains("DE89"), "{note}");
-        assert!(!note.contains("1234567") && note.contains("[phone]"), "{note}");
-        assert_eq!(trusted_text("Hinfahrt 30.10.2026 um 08:12"), "Hinfahrt 30.10.2026 um 08:12");
+        assert!(
+            !note.contains("1234567") && note.contains("[phone]"),
+            "{note}"
+        );
+        assert_eq!(
+            trusted_text("Hinfahrt 30.10.2026 um 08:12"),
+            "Hinfahrt 30.10.2026 um 08:12"
+        );
         assert_eq!(trusted_text("2026-10-25"), "2026-10-25");
         assert_eq!(trusted_text("Ruf 0228-123-4567 an"), "Ruf [phone] an");
         assert_eq!(value["secret"], Value::Null);
         assert_eq!(report.withheld_secret, 1);
         assert_eq!(value["invoice"]["total"], "179,80 EUR");
-        assert_eq!(trusted_identity("DHL Paket <noreply@dhl.de>"), "DHL Paket (dhl.de)");
+        assert_eq!(
+            trusted_identity("DHL Paket <noreply@dhl.de>"),
+            "DHL Paket (dhl.de)"
+        );
     }
 
     fn registry() -> EntityRegistry {

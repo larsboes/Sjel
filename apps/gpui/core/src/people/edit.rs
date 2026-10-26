@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::shell::EntityField;
 
@@ -128,8 +128,7 @@ impl PersonEdit {
             let value = if text.trim().is_empty() {
                 Value::Null
             } else {
-                typed_as(key, field_type, text)?
-                    .unwrap_or(Value::Null)
+                typed_as(key, field_type, text)?.unwrap_or(Value::Null)
             };
             values.insert(key.clone(), value);
         }

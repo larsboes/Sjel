@@ -11,8 +11,8 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::theme::Palette;
 use crate::primitives::{card, dot, note, placeholder, section};
+use crate::theme::Palette;
 use sjel_gpui_core::research::{
     group_upstreams, BenchmarkSuite, ResearchArticle, ResearchView, SystemRow, UpstreamRow,
 };

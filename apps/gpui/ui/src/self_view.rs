@@ -10,8 +10,8 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::theme::Palette;
 use crate::primitives::{card, dot, note, placeholder, section};
+use crate::theme::Palette;
 use sjel_gpui_core::self_model::{
     incoming_couplings, isolated_units, outgoing_couplings, unit_degree, unit_liveness,
     SelfModelResponse, SelfUnit,

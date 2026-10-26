@@ -12,10 +12,10 @@
 use super::forms::FormKind;
 use super::{LocationMarker, Travel};
 use futures::future::{AbortHandle, Abortable};
-use futures::{SinkExt, StreamExt, stream};
+use futures::{stream, SinkExt, StreamExt};
 use gpui::{
-    AnyElement, Context, MouseButton, PathBuilder, StyledImage, canvas, div, img, point,
-    prelude::*, px, rgb, rgba,
+    canvas, div, img, point, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton,
+    PathBuilder, StyledImage,
 };
 use gpui_kit::component::button::{Button, ButtonVariants};
 use sjel_gpui_core::{
@@ -207,29 +207,22 @@ impl Travel {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(
-                        div()
-                            .text_sm()
-                            .child(if overview {
-                                if self.selected_stop.is_some() {
-                                    "Selected place"
-                                } else {
-                                    "Up next"
-                                }
-                            } else {
-                                "Stops"
-                            }),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(self.palette.muted))
-                            .child(if overview {
-                                format!("{} locations", places.len())
-                            } else {
-                                places.len().to_string()
-                            }),
-                    ),
+                    .child(div().text_sm().child(if overview {
+                        if self.selected_stop.is_some() {
+                            "Selected place"
+                        } else {
+                            "Up next"
+                        }
+                    } else {
+                        "Stops"
+                    }))
+                    .child(div().text_xs().text_color(rgb(self.palette.muted)).child(
+                        if overview {
+                            format!("{} locations", places.len())
+                        } else {
+                            places.len().to_string()
+                        },
+                    )),
             );
         if overview && self.selected_stop.is_none() {
             if let Some(marker) = markers.first() {
@@ -335,9 +328,7 @@ impl Travel {
                                 .child(marker.label.clone()),
                         )
                         .child(
-                            self.button(gpui::SharedString::from(format!(
-                                "map-open-trip-{index}"
-                            )))
+                            self.button(gpui::SharedString::from(format!("map-open-trip-{index}")))
                                 .primary()
                                 .label("Open trip")
                                 .on_click(cx.listener(move |view, _, _, cx| {
@@ -444,18 +435,20 @@ impl Travel {
                     .child(marker.label.clone()),
             )
             .child(
-                self.button(gpui::SharedString::from(format!("location-open-trip-{index}")))
-                    .ghost()
-                    .label("Open trip")
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.open_route(
-                            TravelRoute::Trip {
-                                id: open_trip_id.clone(),
-                                section: TripSection::Overview,
-                            },
-                            cx,
-                        )
-                    })),
+                self.button(gpui::SharedString::from(format!(
+                    "location-open-trip-{index}"
+                )))
+                .ghost()
+                .label("Open trip")
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.open_route(
+                        TravelRoute::Trip {
+                            id: open_trip_id.clone(),
+                            section: TripSection::Overview,
+                        },
+                        cx,
+                    )
+                })),
             );
         row.into_any_element()
     }
@@ -763,7 +756,11 @@ impl Travel {
             .h(px(if self.compact_map {
                 260.
             } else if matches!(self.route, TravelRoute::Map) {
-                if self.density.is_mobile() { 440. } else { 600. }
+                if self.density.is_mobile() {
+                    440.
+                } else {
+                    600.
+                }
             } else if self.density.is_mobile() {
                 320.
             } else {
@@ -1212,8 +1209,8 @@ mod tests {
     use super::*;
     use crate::Density;
     use gpui::{
-        Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
-        VisualTestContext, point,
+        point, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+        VisualTestContext,
     };
     use std::cell::RefCell;
     use std::rc::Rc;

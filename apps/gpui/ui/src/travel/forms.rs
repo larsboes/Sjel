@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, Entity, SharedString, Subscription, Window, div, prelude::*, px, rgb, rgba,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
 };
 use gpui_kit::component::button::ButtonVariants;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -13,8 +13,8 @@ use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
     shell::{self, Shell, ShellError},
     travel::{
+        edit::{BookingDraft, StageDraft, StageEdit, TripDraft, STAGE_STATUSES, TRANSPORT_MODES},
         Item, Source, Stage, TravelRoute, TripSection,
-        edit::{BookingDraft, STAGE_STATUSES, StageDraft, StageEdit, TRANSPORT_MODES, TripDraft},
     },
 };
 
@@ -510,8 +510,7 @@ impl Travel {
         self.writer()?;
         let open = self.form.as_ref().is_some_and(|form| {
             form.kind == kind
-                || (matches!(&kind, FormKind::Trip(_))
-                    && matches!(&form.kind, FormKind::Trip(_)))
+                || (matches!(&kind, FormKind::Trip(_)) && matches!(&form.kind, FormKind::Trip(_)))
         });
         let button = self.button(id).label(label).disabled(open);
         let button = if matches!(&kind, FormKind::Trip(None)) {

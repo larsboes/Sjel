@@ -25,7 +25,7 @@
 use sjel_inference::ResolvedRole;
 
 use crate::vision::VisionOcr;
-use crate::{Document, Extraction, ExtractionError, Extractor, Result, math, ocr_role};
+use crate::{math, ocr_role, Document, Extraction, ExtractionError, Extractor, Result};
 
 /// Read a page that carries no text layer.
 ///

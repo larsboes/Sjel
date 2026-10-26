@@ -7,8 +7,8 @@ use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Remote, Repo};
-use crate::theme::Palette;
 use crate::primitives::{card, dot, note, placeholder, section};
+use crate::theme::Palette;
 use sjel_gpui_core::media::{
     format_bytes, run_label, sort_run_items, total_volume_bytes, MediaIngestDetail,
     MediaIngestItem, MediaIngestRun, MediaStatus, MediaView, MediaVolume,

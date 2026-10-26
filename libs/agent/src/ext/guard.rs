@@ -20,9 +20,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
+use crate::{Extension, Tool, ToolCall, Verdict};
 use regex::{Captures, Regex};
 use serde_json::{json, Value};
-use crate::{Extension, Tool, ToolCall, Verdict};
 
 /// The name `agent.toml` and `--ext` use. `main.rs` puts this one in the default set.
 pub const NAME: &str = "guard";
@@ -574,8 +574,8 @@ fn compile(patterns: &[&str]) -> Vec<Regex> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::FunctionCall;
+    use serde_json::json;
 
     fn verdict(tool: &str, arguments: Value) -> Verdict {
         guard().tool_call(&ToolCall {

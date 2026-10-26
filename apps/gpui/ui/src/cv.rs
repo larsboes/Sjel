@@ -11,8 +11,8 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::theme::Palette;
 use crate::primitives::{card, dot, note, placeholder, section};
+use crate::theme::Palette;
 use sjel_gpui_core::cv::{
     count_stale_pdfs, filter_applications, last_status_date, pdf_for_profile, slug_for,
     CvApplication, CvView, CvWriteRequest,

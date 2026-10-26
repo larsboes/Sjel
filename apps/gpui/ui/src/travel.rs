@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use futures::future::AbortHandle;
-use gpui::{AnyElement, Context, Point, Render, ScrollHandle, Window, point, prelude::*, px};
+use gpui::{point, prelude::*, px, AnyElement, Context, Point, Render, ScrollHandle, Window};
 use gpui_kit::component::button::Button;
 use sjel_gpui_core::{
     calendar::{TripDraft, TripDrafts, TripMaterialization},

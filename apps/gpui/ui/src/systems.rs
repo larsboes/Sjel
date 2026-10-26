@@ -28,9 +28,9 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use sjel_gpui_core::shell::{AgentGate, AgentView, Approval};
-use crate::theme::{tint, Palette};
 use crate::primitives::{card, dot, list, note, placeholder, row, section};
+use crate::theme::{tint, Palette};
+use sjel_gpui_core::shell::{AgentGate, AgentView, Approval};
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, clock_label, dated_absences, day_label, gigabytes,
     percent, storage_bytes, temperature, version_label, watts, Finding, MacmonSample,
@@ -1579,7 +1579,9 @@ mod tests {
 
     #[test]
     fn the_live_slot_is_not_read_twice_at_once() {
-        let mut page = SystemsPage::new(Repo::new(Err(sjel_gpui_core::shell::ShellError::NotLoopback)));
+        let mut page = SystemsPage::new(Repo::new(Err(
+            sjel_gpui_core::shell::ShellError::NotLoopback,
+        )));
         assert!(page.macmon.begin(), "the first read starts");
         assert!(!page.macmon.begin(), "a second read waits for the first");
         assert_eq!(page.generation, 0);

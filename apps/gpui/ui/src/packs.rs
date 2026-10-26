@@ -17,8 +17,8 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::theme::{tint, Palette};
 use crate::primitives::{card, dot, list, note, placeholder, section};
+use crate::theme::{tint, Palette};
 use sjel_gpui_core::packs::{
     all_packs, deployed_units, held_packs, installed_harnesses, matrix_rows, orphaned_harnesses,
     row_needs_attention, status_of, MatrixRow, PacksView,

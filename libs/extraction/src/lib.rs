@@ -54,7 +54,7 @@ pub use self::xberg::Xberg;
 
 mod builtin;
 pub use builtin::{
-    Builtin, collapse_ws, decode_basic_entities, html_title, html_to_lines, looks_like_html,
+    collapse_ws, decode_basic_entities, html_title, html_to_lines, looks_like_html, Builtin,
 };
 
 pub mod gate;

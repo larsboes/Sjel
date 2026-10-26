@@ -40,7 +40,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use crate::{Document, Extraction, ExtractionError, Extractor, InputClass, Result, cap};
+use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result};
 
 /// What this rung records as `producer`, and what it calls itself in an error.
 pub const ENGINE: &str = "apple-vision";

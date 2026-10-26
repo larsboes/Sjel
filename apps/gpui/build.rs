@@ -21,11 +21,11 @@ fn build_stamp(manifest: &Path) {
         .ok()
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
-            output(Command::new("git").current_dir(manifest).args([
-                "rev-parse",
-                "--short",
-                "HEAD",
-            ]))
+            output(
+                Command::new("git")
+                    .current_dir(manifest)
+                    .args(["rev-parse", "--short", "HEAD"]),
+            )
         })
         .unwrap_or_else(|| "dev".into());
     let time = std::env::var("SJEL_BUILD_TIME")

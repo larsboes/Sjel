@@ -1,6 +1,6 @@
 //! Rung 1 of the ladder: PDFs that already carry a text layer.
 
-use crate::{Document, Extraction, ExtractionError, Extractor, InputClass, Result, cap};
+use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result};
 
 /// PDF, through [xberg](https://github.com/xberg-io/xberg) (`=1.3.6`).
 ///

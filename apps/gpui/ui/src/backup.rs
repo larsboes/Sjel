@@ -11,13 +11,13 @@ use gpui_kit::{
 };
 
 use crate::data::{Remote, Repo};
-use sjel_gpui_core::shell::{self, BackupStatus, Backups, ShellError};
-use crate::theme::{tint, Palette};
 use crate::primitives::dot;
+use crate::theme::{tint, Palette};
 use sjel_gpui_core::backup::{
     format_age_seconds, format_bytes, format_duration, run_outcome, BackupRunAttemptRecord,
     BackupTargetRecord, VerifyTargetResult,
 };
+use sjel_gpui_core::shell::{self, BackupStatus, Backups, ShellError};
 
 /// The `Busy` key the button marks while its requests are in flight.
 pub const BACK_UP_ALL: &str = "backup:all";

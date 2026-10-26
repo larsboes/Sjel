@@ -118,11 +118,13 @@ fn extract_blocking(bytes: Vec<u8>, mime: &'static str) -> Result<::xberg::Extra
             .and_then(|runtime| {
                 runtime.block_on(async {
                     let input = ::xberg::ExtractInput::from_bytes(bytes, mime, None);
-                    let mut config = ::xberg::ExtractionConfig::default();
-                    config.pages = Some(::xberg::PageConfig {
-                        extract_pages: true,
-                        ..::xberg::PageConfig::default()
-                    });
+                    let config = ::xberg::ExtractionConfig {
+                        pages: Some(::xberg::PageConfig {
+                            extract_pages: true,
+                            ..::xberg::PageConfig::default()
+                        }),
+                        ..::xberg::ExtractionConfig::default()
+                    };
                     ::xberg::extract(input, &config)
                         .await
                         .map_err(|e| ExtractionError::Engine {

@@ -1140,7 +1140,7 @@ impl Library {
                 } => ("model", role.as_str(), revision.as_deref().unwrap_or(model)),
             };
             let proposal_id =
-                classification_proposal_id(&document.id, &generation_id, &proposal_json);
+                classification_proposal_id(&document.id, generation_id, &proposal_json);
             transaction.execute(
                 "INSERT INTO documents_classification_proposals
                  (proposal_id, document_id, generation_id, source_kind, source_identity, source_version, proposal_json, generated_at)

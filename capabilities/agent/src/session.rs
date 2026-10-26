@@ -290,7 +290,7 @@ impl Session {
                         .filter_map(|v| v.as_str().map(str::to_owned))
                         .collect()
                 })
-                .unwrap_or_else(|| crate::plugins::configured()),
+                .unwrap_or_else(crate::plugins::configured),
         })
     }
 

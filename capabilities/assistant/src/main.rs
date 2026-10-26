@@ -20,8 +20,14 @@ const MAX_PROMPT_BYTES: usize = 32 * 1024;
 const MAX_REPLY_TOKENS: u32 = 1024;
 const DEFAULT_REPLY_TOKENS: u32 = 512;
 const MAX_AGENT_TURNS: usize = 6;
+// The RoomPlan groundwork: the typed request, admission and validation for opt-in Gemini
+// interior ideas. The route, the provider review and the phone consent UI are item 2 in
+// `docs/plans/scanning.md` §3, so nothing below is called yet.
+#[allow(dead_code)]
 const ROOMPLAN_ROLE: &str = "cloud_roomplan_google";
+#[allow(dead_code)]
 const ROOMPLAN_MAX_IMAGE_BYTES: usize = 256 * 1024;
+#[allow(dead_code)]
 const ROOMPLAN_MAX_REPLY_BYTES: u64 = 128 * 1024;
 const DEFAULT_SHELL_URL: &str = "http://127.0.0.1:8082";
 const SYSTEM_INSTRUCTIONS: &str = "You are Sjel Assistant. Give concise, factual answers. Do not claim access to data or tools that the prompt does not provide.";
@@ -29,6 +35,7 @@ const SYSTEM_INSTRUCTIONS: &str = "You are Sjel Assistant. Give concise, factual
 struct AppState {
     client: reqwest::Client,
     shell_url: String,
+    #[allow(dead_code)]
     roomplan_usage: Option<sjel_store::Pool>,
     ask_runs: Mutex<HashMap<u64, AskRun>>,
     next_ask_id: AtomicU64,
@@ -65,6 +72,7 @@ struct GenerateResponse {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceRequest {
     /// Required acknowledgement that this exact still and pseudonymized geometry may leave the Mac.
     consent: bool,
@@ -76,6 +84,7 @@ struct RoomPlanGuidanceRequest {
 
 #[derive(Debug, Clone, Copy, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 enum RoomPlanConsentMode {
     SingleStill,
     LiveSampling,
@@ -83,6 +92,7 @@ enum RoomPlanConsentMode {
 
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceRoom {
     width_cm: u32,
     depth_cm: u32,
@@ -92,6 +102,7 @@ struct RoomPlanGuidanceRoom {
 
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceOpening {
     wall: RoomPlanWallSide,
     offset_cm: u32,
@@ -101,6 +112,7 @@ struct RoomPlanGuidanceOpening {
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 enum RoomPlanWallSide {
     North,
     East,
@@ -110,6 +122,7 @@ enum RoomPlanWallSide {
 
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceItem {
     /// An ephemeral alias such as `item_01`; never a Sjel or RoomPlan identifier.
     slot: String,
@@ -120,6 +133,7 @@ struct RoomPlanGuidanceItem {
 
 #[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceResponse {
     summary: String,
     ideas: Vec<RoomPlanGuidanceIdea>,
@@ -128,6 +142,7 @@ struct RoomPlanGuidanceResponse {
 
 #[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidanceIdea {
     title: String,
     rationale: String,
@@ -138,6 +153,7 @@ struct RoomPlanGuidanceIdea {
 
 #[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RoomPlanGuidancePosition {
     slot: String,
     x_cm: u32,
@@ -398,6 +414,7 @@ fn cloud_provider_options(
         .collect()
 }
 
+#[allow(dead_code)]
 fn roomplan_gemini_role() -> Result<(sjel_inference::ResolvedRole, sjel_runtime::Status), String> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let runtime = sjel_runtime::current().map_err(|error| error.to_string())?;
@@ -435,6 +452,7 @@ fn roomplan_gemini_role() -> Result<(sjel_inference::ResolvedRole, sjel_runtime:
     Ok((role, runtime))
 }
 
+#[allow(dead_code)]
 fn roomplan_usage_pool() -> Option<sjel_store::Pool> {
     sjel_store::open_pool(&sjel_config::database_path(), "assistant", |connection| {
         connection.execute_batch(
@@ -450,6 +468,7 @@ fn roomplan_usage_pool() -> Option<sjel_store::Pool> {
     .ok()
 }
 
+#[allow(dead_code)]
 fn claim_roomplan_gemini_request(
     pool: &sjel_store::Pool,
     role: &sjel_inference::ResolvedRole,
@@ -488,6 +507,7 @@ fn claim_roomplan_gemini_request(
     transaction.commit().map_err(|error| error.to_string())
 }
 
+#[allow(dead_code)]
 fn validate_roomplan_guidance_request(request: &RoomPlanGuidanceRequest) -> Result<(), String> {
     use base64::Engine as _;
 
@@ -557,6 +577,7 @@ fn validate_roomplan_guidance_request(request: &RoomPlanGuidanceRequest) -> Resu
     Ok(())
 }
 
+#[allow(dead_code)]
 fn roomplan_guidance_payload(
     role: &sjel_inference::ResolvedRole,
     request: &RoomPlanGuidanceRequest,
@@ -604,11 +625,13 @@ fn roomplan_guidance_payload(
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 struct RawRoomPlanGuidance {
     summary: String,
     ideas: Vec<RoomPlanGuidanceIdea>,
 }
 
+#[allow(dead_code)]
 fn validate_roomplan_guidance(
     raw: RawRoomPlanGuidance,
     request: &RoomPlanGuidanceRequest,
@@ -673,6 +696,7 @@ fn validate_roomplan_guidance(
     })
 }
 
+#[allow(dead_code)]
 async fn roomplan_guidance(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RoomPlanGuidanceRequest>,

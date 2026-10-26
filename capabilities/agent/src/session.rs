@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 use sjel_agent::{AgentInput, Message};
 
+use crate::tier::Tier;
+
 /// How many events one session keeps for a reconnect. A stream that asks for an older sequence is
 /// told the log was truncated, because a reader silently resumed mid-turn would draw half a tool
 /// call as if it were the whole of one.
@@ -215,6 +217,11 @@ pub struct Active {
 pub struct Session {
     pub id: String,
     pub root: PathBuf,
+    /// What this session may reach. Fixed at creation (A3): a grant in one tier must not be usable
+    /// from another, so the only way into a wider tier is a new session.
+    pub tier: Tier,
+    /// The directory the tier lets this session touch, or `None` when it touches no filesystem.
+    pub reach: Option<PathBuf>,
     pub created_at: u64,
     /// The turns so far. Held for the length of a run, so one run per session.
     pub messages: Mutex<Vec<Message>>,
@@ -231,7 +238,13 @@ pub struct Session {
 
 impl Session {
     /// Creates the file and its directory, so a session that was announced exists after a crash.
-    pub fn create(dir: &Path, root: &Path, plugins: Vec<String>) -> std::io::Result<Self> {
+    pub fn create(
+        dir: &Path,
+        root: &Path,
+        tier: Tier,
+        reach: Option<PathBuf>,
+        plugins: Vec<String>,
+    ) -> std::io::Result<Self> {
         let id = new_id();
         std::fs::create_dir_all(dir)?;
         let path = dir.join(format!("{id}.jsonl"));
@@ -239,6 +252,8 @@ impl Session {
         let session = Self {
             id,
             root: root.to_path_buf(),
+            tier,
+            reach,
             created_at: now_secs(),
             messages: Mutex::new(Vec::new()),
             log: Arc::new(EventLog::new()),
@@ -273,6 +288,11 @@ impl Session {
         Some(Self {
             id: id.to_owned(),
             root: PathBuf::from(meta["root"].as_str().unwrap_or_default()),
+            tier: meta["tier"]
+                .as_str()
+                .and_then(Tier::parse)
+                .unwrap_or(crate::tier::DEFAULT),
+            reach: meta["reach"].as_str().map(PathBuf::from),
             created_at: meta["created_at"].as_u64().unwrap_or(0),
             messages: Mutex::new(messages),
             log: Arc::new(EventLog::new()),
@@ -325,6 +345,8 @@ impl Session {
         json!({
             "id": self.id,
             "root": self.root.to_string_lossy(),
+            "tier": self.tier.as_str(),
+            "reach": self.reach.as_ref().map(|reach| reach.to_string_lossy()),
             "created_at": self.created_at,
             "plugins": self.plugins,
             "turns": self.turns.load(Ordering::Relaxed),
@@ -567,8 +589,16 @@ mod tests {
     fn one_run_at_a_time_and_the_turns_reach_the_file() {
         let dir = scratch("session");
         let root = scratch("root");
-        let session = Session::create(&dir, &root, vec!["fs".into()]).unwrap();
+        let session = Session::create(
+            &dir,
+            &root,
+            crate::tier::Tier::Project,
+            Some(root.clone()),
+            vec!["fs".into()],
+        )
+        .unwrap();
         assert!(session.meta()["title"].is_null());
+        assert_eq!(session.meta()["tier"], "project");
 
         session.push_user("fix the inbox test\nand then stop".into());
         assert_eq!(session.meta()["title"], "fix the inbox test");

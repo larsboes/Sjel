@@ -201,7 +201,7 @@ pub fn folders(home: &Path) -> Vec<String> {
             .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
             .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
             .collect();
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     std::iter::once(home.to_path_buf())
         .chain(found.into_iter().take(MAX_FOLDERS).map(|(_, path)| path))
         .map(|path| path.display().to_string())

@@ -172,8 +172,8 @@ mod tests {
         path
     }
 
-    fn tool(path: &PathBuf) -> Box<dyn Tool> {
-        Sql::at(path.clone()).tools().pop().unwrap()
+    fn tool(path: &std::path::Path) -> Box<dyn Tool> {
+        Sql::at(path.to_path_buf()).tools().pop().unwrap()
     }
 
     #[test]

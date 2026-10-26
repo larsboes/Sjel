@@ -16,6 +16,7 @@ mod plugins;
 mod session;
 mod sql;
 mod terminal;
+mod tier;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -38,6 +39,7 @@ use sjel_server::agent_policy::{AgentRoutes, PolicyFiles};
 
 use crate::session::{Active, Session};
 use crate::terminal::{ReadOutcome, Terminal, Terminals};
+use crate::tier::Tier;
 
 /// The inference role a run uses. An overlay that wants another names it here.
 const ROLE: &str = "coding";
@@ -79,10 +81,17 @@ struct AppState {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct CreateSession {
-    /// Absolute path the run works in. Absent means the checkout this capability runs from.
+    /// Absolute path the run works in. Absent means `$HOME` for an `account` session and this
+    /// capability's checkout otherwise.
     #[serde(default)]
     root: Option<String>,
-    /// Plugin names. Absent means `<overlay>/config/agent.toml`, then the default set.
+    /// `sjel`, `project` or `account`. Absent means `project`. The tier sets the plugin set and
+    /// the scope, and cannot be changed afterwards.
+    #[serde(default)]
+    tier: Option<String>,
+    /// Plugin names, to narrow the tier's own set. Absent means the whole tier. A name the tier
+    /// does not carry is refused at creation rather than dropped, so a client cannot believe it
+    /// widened the session.
     #[serde(default)]
     plugins: Option<Vec<String>>,
 }
@@ -224,7 +233,7 @@ async fn routes() -> Json<Value> {
             route_manifest::get(
                 "GET",
                 "/api/agent/sessions/{id}",
-                "One session's meta: root, plugins, turn count, and whether a run is active.",
+                "One session's meta: root, tier, plugins, turn count, and whether a run is active.",
             ),
             route_manifest::get(
                 "GET",
@@ -240,7 +249,7 @@ async fn routes() -> Json<Value> {
             route_manifest::Route {
                 method: "POST",
                 path: "/api/agent/sessions",
-                summary: "Start a session in a root with a plugin set.",
+                summary: "Start a session in a tier: its plugin set, and a root inside its scope.",
                 request_schema: Some(route_manifest::schema_of::<CreateSession>),
             },
             route_manifest::Route {
@@ -317,7 +326,34 @@ async fn create_session(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateSession>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = match request
+    let tier = match request
+        .tier
+        .as_deref()
+        .map(str::trim)
+        .filter(|tier| !tier.is_empty())
+    {
+        Some(given) => Tier::parse(given).ok_or_else(|| {
+            failure(
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "`{given}` is not a tier. This capability carries: {}",
+                    Tier::ALL
+                        .iter()
+                        .map(|tier| tier.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })?,
+        None => tier::DEFAULT,
+    };
+    let home = home_dir().ok_or_else(|| {
+        failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "this machine has no home directory",
+        )
+    })?;
+    let asked = match request
         .root
         .as_deref()
         .map(str::trim)
@@ -335,10 +371,32 @@ async fn create_session(
             }
             resolved
         }
+        None if tier == Tier::Account => home.clone(),
         None => std::env::current_dir()
             .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
     };
-    let plugins = request.plugins.unwrap_or_else(plugins::configured);
+    let root = tier
+        .root(&asked, &home)
+        .map_err(|reason| failure(StatusCode::BAD_REQUEST, reason))?;
+    let carried = tier.plugins();
+    let plugins = match request.plugins {
+        Some(names) => {
+            for name in &names {
+                if !carried.contains(name) {
+                    return Err(failure(
+                        StatusCode::BAD_REQUEST,
+                        format!(
+                            "`{name}` is not in the `{}` tier, which carries: {}",
+                            tier.as_str(),
+                            carried.join(", ")
+                        ),
+                    ));
+                }
+            }
+            names
+        }
+        None => carried,
+    };
     // Assembling once here turns a typo in a plugin name into a 400 at creation, not a failed run
     // the operator reads a minute later.
     plugins::assemble(
@@ -351,8 +409,9 @@ async fn create_session(
     )
     .map_err(|reason| failure(StatusCode::BAD_REQUEST, reason))?;
 
+    let reach = tier.reach(&root, &home);
     let dir = state.dir.join(session::root_slug(&root));
-    let session = Session::create(&dir, &root, plugins)
+    let session = Session::create(&dir, &root, tier, reach, plugins)
         .map_err(|e| failure(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let meta = session.meta();
     state
@@ -892,6 +951,16 @@ fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+/// This machine's home directory, which is the scope of an `account` tier.
+///
+/// Resolved, because a tier compares a root that the caller already canonicalized against it. A
+/// home that is itself a symlink would otherwise refuse every root inside it.
+fn home_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").filter(|home| !home.is_empty())?;
+    let home = PathBuf::from(home);
+    Some(std::fs::canonicalize(&home).unwrap_or(home))
+}
+
 /// `~` and `~/…`, so a root can be typed the way it is written.
 fn expand(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
@@ -1048,6 +1117,8 @@ mod tests {
         Session::create(
             &overlay.path.join("data/agent/sessions").join("fixture"),
             &root,
+            Tier::Project,
+            Some(root.clone()),
             vec!["fs".into()],
         )
         .unwrap()
@@ -1239,6 +1310,64 @@ mod tests {
                 "{path} is not in the manifest: {paths:?}"
             );
         }
+    }
+
+    /// A session's tier decides what it carries and where it may be rooted.
+    #[tokio::test]
+    async fn a_session_starts_in_a_tier_that_sets_its_plugins_and_its_scope() {
+        let home = home_dir().expect("a home directory");
+        let dir = std::env::temp_dir().join(format!("sjel-agent-tier-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = Arc::new(AppState {
+            sessions: Mutex::new(HashMap::new()),
+            dir: dir.clone(),
+            terminals: Arc::new(Terminals::new(
+                dir.join("terminals.jsonl"),
+                terminal::Presets::defaults(),
+            )),
+        });
+        let ask = |tier: Option<&str>, root: Option<&std::path::Path>, plugins: Option<&[&str]>| {
+            CreateSession {
+                root: root.map(|root| root.to_string_lossy().into_owned()),
+                tier: tier.map(str::to_owned),
+                plugins: plugins.map(|list| list.iter().map(|name| (*name).to_owned()).collect()),
+            }
+        };
+        let creates =
+            |request: CreateSession| create_session(State(Arc::clone(&state)), Json(request));
+
+        let Json(meta) = creates(ask(None, Some(&home), None)).await.unwrap();
+        assert_eq!(meta["tier"], "project");
+        assert!(carries(&meta, "fs"), "a coding tier carries a shell");
+
+        let Json(meta) = creates(ask(Some("sjel"), None, None)).await.unwrap();
+        assert_eq!(meta["tier"], "sjel");
+        assert!(!carries(&meta, "fs"), "the data tier carries no shell");
+        assert!(carries(&meta, "sjel"));
+
+        let Json(meta) = creates(ask(Some("account"), None, None)).await.unwrap();
+        assert_eq!(meta["tier"], "account");
+        assert_eq!(PathBuf::from(meta["root"].as_str().unwrap()), home);
+
+        for refused in [
+            ask(Some("root"), None, None),
+            ask(Some("sjel"), None, Some(&["fs"])),
+            ask(None, Some(std::path::Path::new("/etc")), None),
+            ask(Some("account"), Some(std::path::Path::new("/etc")), None),
+        ] {
+            let outcome = creates(refused).await;
+            assert_eq!(
+                outcome.err().map(|(status, _)| status),
+                Some(StatusCode::BAD_REQUEST)
+            );
+        }
+    }
+
+    fn carries(meta: &Value, plugin: &str) -> bool {
+        meta["plugins"]
+            .as_array()
+            .is_some_and(|list| list.iter().any(|name| name == plugin))
     }
 
     /// The route layer around the pty: open, list, type into it, resize it, end it.

@@ -109,8 +109,7 @@ fn middle<'a>(old: &[&'a str], new: &[&'a str]) -> Vec<Line<'a>> {
 pub fn render(old: &str, new: &str, max_lines: usize) -> (String, bool) {
     let lines = lines(old, new);
     let mut out = String::new();
-    let mut shown = 0;
-    for line in &lines {
+    for (shown, line) in lines.iter().enumerate() {
         if shown == max_lines {
             out.push_str(&format!(
                 "… {} more line(s) not shown\n",
@@ -123,7 +122,6 @@ pub fn render(old: &str, new: &str, max_lines: usize) -> (String, bool) {
             Line::Removed(text) => out.push_str(&format!("- {text}\n")),
             Line::Added(text) => out.push_str(&format!("+ {text}\n")),
         }
-        shown += 1;
     }
     (out, false)
 }

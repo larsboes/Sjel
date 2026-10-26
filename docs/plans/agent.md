@@ -132,6 +132,13 @@ m -rf x`, `env rm -rf x`, `command rm -rf x`,
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
+Built (6622b21e): `libs/agent/src/ext/policy.rs` holds the classifier and the rule table, and
+`libs/agent/tests/policy_cases.toml` holds one case per rule plus the evasion list, run by
+`tests/policy_cases.rs`. `capabilities/agent/src/gate.rs` reads the class: Allow runs without a
+card, Block is refused before any card, Ask is the card as before, and each decision is logged
+with its rule ID on the call log. Open: §5's separate Block card that can allow one call, the A6
+classifier for unknown programs, and the measures below, none of which have run.
+
 **Measures for the policy.**
 
 - **Prompt rate.** Approvals in `secrets/agent/approvals/` divided by lines in

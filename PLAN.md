@@ -11,7 +11,7 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 
 | Area | Phone today | Next | Plan |
 |---|---|---|---|
-| The Sjel agent | Sessions, prompts, steering, approvals and stop on the right edge. Not tested on a device. | Tiers and command policy, then live validation | [`agent.md`](docs/plans/agent.md) |
+| The Sjel agent | Sessions, prompts, steering, approvals and stop on the right edge. A session has one of three access tiers. Not tested on a device. | The command policy, then live validation | [`agent.md`](docs/plans/agent.md) |
 | Other agents (Claude Code, Codex, Pi) | Terminal on the Mac behind Face ID, opens a login shell. Not tested on a device. | Live validation, then a preset and directory picker | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
 | Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Documents | Nothing (reader planned) | The native reader, offline, from the hash-verified original (#245) | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |

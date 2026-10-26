@@ -53,6 +53,15 @@ The tier is set when the session starts and does not change (A3). A higher tier 
 session. This keeps a grant from one tier out of another. The phone may start a session in any
 tier (A4).
 
+Built (bc1ec6bc): `capabilities/agent/src/tier.rs` holds the three tiers, each naming its plugin
+set and the directory it reaches. `POST /api/agent/sessions` takes a `tier`, defaults to
+`project`, refuses a name it does not carry, refuses a `project` or `account` root outside
+`$HOME`, and accepts `plugins` only as a narrowing of the tier's own set — so a client cannot
+widen the session it is given. The tier and the reach it grants are written into the session's
+meta, and a session read back from disk never derives a wider one. Open: the picker in §5, and
+`rust`, `skills`, `web` and `subagents` join the coding tiers when §4's port reaches them into
+this capability; `plugins::KNOWN` names what exists today.
+
 ## 3. Command policy
 
 Decided 2026-10-25. Every `bash` call and every write gets one of three classes.

@@ -42,6 +42,8 @@ belongs to Priority 1.
 - Full Turso migration, the rest of the standalone phone, and backups that prove a restore
   ([`storage.md`](docs/plans/storage.md)). The stalled backup timer (§5 item 1) is not deferred:
   it is fixed as soon as it is understood.
+- Measured transit reliability, starting with the Köln–Bonn corridor, and collection that works
+  while the Mac is closed ([`transit.md`](docs/plans/transit.md)).
 - RoomPlan device validation and the shared capture pipeline ([`scanning.md`](docs/plans/scanning.md)).
 - Imports, formats, the settings surface, adaptive features and the domain backlog
   ([`data.md`](docs/plans/data.md)).
@@ -77,6 +79,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Pantry stock is a domain inside `inventory`. | 2026-10-25 |
 | The phone writes inventory and wishlist next, then People. | 2026-10-25 |
 | `ISA.md` is retired. Its open items moved to the area plans and to issues #245–247. The file is a pointer until no session links to it. | 2026-10-25 |
+| The Mac is not an always-on host. Collection and alerts run on a host independent of it. | 2026-10-27 |
 
 ## Rules for this plan
 

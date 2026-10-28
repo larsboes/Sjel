@@ -20,8 +20,9 @@ read-only tool activity into the transcript; the composer steers an active run a
 step. Provider API keys are managed centrally in Settings → Accounts & keys, stored in the OS
 keychain, and never sent through the Ask service or conversation.
 
-**Settings** groups appearance, connection and sync, Accounts & keys, Features, updates, and
-shortcuts. Its searchable contents rail can be hidden. The Feature Manager's package, lifecycle,
+**Settings** groups appearance, connection and sync, Accounts & keys, Clipper, Features, updates,
+and shortcuts. Clipper edits the Sjel Clipper's templates and names the local model its
+Interpreter runs on; comms holds both and the browser extension pulls them. Its searchable contents rail can be hidden. The Feature Manager's package, lifecycle,
 and local recommendation contract lives in [the architecture guide](../../docs/architecture/feature-manager.md).
 Settings can browse the official feature catalogue, inspect package requirements and data access,
 and install a confirmed package when the placed runtime and release are compatible. Local Ask
@@ -35,7 +36,9 @@ dashboard's: j and k move, s keeps, d dismisses, u undoes, Enter or o opens the 
 original, and Escape goes back. Decisions go through `POST /comms/feed/:id/status` only, which
 records them for the ranking model. The shell exchanges the app's deployment token for comms'
 own credential (`capabilities/sjel-status/src/proxy.rs`). Digests, cloud processing, the review
-queue and the library stay in the dashboard for now.
+queue and the library stay in the dashboard for now. Feed's **Clips** tab lists the pages saved with
+the Sjel Clipper and reads one. Clips and Clipper settings travel over comms' owner-only clip
+socket (`libs/clip-socket`), never through the shell, so they are read on the Mac only.
 
 Feed's **Mail** tab triages Gmail proposals (comms `/triage`): Pending, Archived, Trash, Dismissed
 or All, filtered by category and grouped in the order `core/src/mail.rs` owns. x selects; d

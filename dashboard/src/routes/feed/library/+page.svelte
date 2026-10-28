@@ -181,8 +181,8 @@
       <button
         type="button"
         class="action-btn success"
-        aria-label="Keep in Obsidian"
-        use:tip={"Keep in Obsidian"}
+        aria-label="Keep item"
+        use:tip={"Keep item"}
         onclick={(e) => {
           e.stopPropagation();
           void setStatus(r.id, "keeper");

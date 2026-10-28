@@ -45,6 +45,6 @@
 # rather than listing it, so a third tree cannot join without its own copy.
 
 [test]
-pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**"]
+pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**", "capabilities/comms/clipper/**"]
 # Builds sjel-cli once before collection; tools/lib/sjel-cli-preload.ts says why.
 preload = ["./tools/lib/sjel-cli-preload.ts"]

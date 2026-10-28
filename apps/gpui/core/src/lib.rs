@@ -32,6 +32,7 @@ pub mod backup;
 pub mod blocks;
 pub mod calendar;
 pub mod capture;
+pub mod clipper;
 pub mod context;
 pub mod cv;
 pub mod data;

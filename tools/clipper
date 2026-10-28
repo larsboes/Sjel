@@ -1,0 +1,86 @@
+#!/bin/bash
+# tools/clipper — Build the Sjel Clipper and connect it to comms on this Mac.
+#
+# Commands:
+#   tools/clipper build      Build the Chrome extension into capabilities/comms/clipper/dist
+#   tools/clipper install    Build comms-clip-host and register it as Chrome's native messaging host
+#   tools/clipper check      Verify the registration and ping comms through the host
+#   tools/clipper uninstall  Remove the registration and the host wrapper
+#
+# The host wrapper lives in the overlay because it names this machine's overlay and checkout.
+# Loading the unpacked extension from dist/ stays a manual step in chrome://extensions.
+#
+# bash 3.2-safe.
+set -euo pipefail
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+. "$_here/lib/paths.sh"
+
+CLIPPER="$SJEL_ROOT/capabilities/comms/clipper"
+HOST_NAME="dev.sjel.clip"
+EXTENSION_ID="$(tr -d '[:space:]' < "$CLIPPER/extension-id")"
+WRAPPER="$SJEL_OVERLAY_ROOT/data/comms/clip-host"
+HOST_BIN="$SJEL_ROOT/target/release/comms-clip-host"
+CHROME_HOSTS="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+MANIFEST="$CHROME_HOSTS/$HOST_NAME.json"
+
+die() { echo "clipper: $*" >&2; exit 1; }
+
+cmd_build() {
+  command -v bun >/dev/null || die "bun is required"
+  (cd "$CLIPPER" && bun install --frozen-lockfile --ignore-scripts && bun run build)
+  echo "clipper: extension built at $CLIPPER/dist"
+}
+
+cmd_install() {
+  [ -n "$EXTENSION_ID" ] || die "$CLIPPER/extension-id is empty"
+  CARGO_TARGET_DIR="$SJEL_ROOT/target" cargo build --locked --release --bin comms-clip-host \
+    --manifest-path "$SJEL_ROOT/Cargo.toml"
+  mkdir -p "$(dirname "$WRAPPER")" "$CHROME_HOSTS"
+  chmod 700 "$(dirname "$WRAPPER")"
+  # Chrome starts hosts with a minimal environment, so the wrapper supplies the overlay.
+  printf '#!/bin/sh\nSJEL_PERSONAL_ROOT=%q exec %q "$@"\n' "$SJEL_OVERLAY_ROOT" "$HOST_BIN" > "$WRAPPER"
+  chmod 700 "$WRAPPER"
+  python3 - "$MANIFEST" "$WRAPPER" "$EXTENSION_ID" "$HOST_NAME" <<'EOF'
+import json, sys
+manifest, wrapper, extension, name = sys.argv[1:]
+json.dump({
+    "name": name,
+    "description": "Sjel Clipper to comms",
+    "path": wrapper,
+    "type": "stdio",
+    "allowed_origins": [f"chrome-extension://{extension}/"],
+}, open(manifest, "w"), indent=2)
+EOF
+  echo "clipper: host registered for chrome-extension://$EXTENSION_ID/"
+  cmd_check
+}
+
+cmd_check() {
+  local ok=1
+  [ -x "$WRAPPER" ] && echo "  ok   host wrapper $WRAPPER" || { echo "  MISS host wrapper $WRAPPER"; ok=0; }
+  [ -f "$MANIFEST" ] && echo "  ok   Chrome registration $MANIFEST" || { echo "  MISS Chrome registration $MANIFEST"; ok=0; }
+  [ "$ok" = 1 ] || die "not installed: run tools/clipper install"
+  # Ping through the wrapper exactly as Chrome would: a length-prefixed JSON frame on stdin.
+  local answer
+  answer="$(python3 -c 'import json,struct,sys; b=json.dumps({"type":"ping"}).encode(); sys.stdout.buffer.write(struct.pack("<I",len(b))+b)' \
+    | "$WRAPPER" chrome-extension://"$EXTENSION_ID"/ \
+    | python3 -c 'import json,struct,sys; d=sys.stdin.buffer.read(); print(json.dumps(json.loads(d[4:4+struct.unpack("<I",d[:4])[0]])) if len(d)>=4 else "{}")')"
+  case "$answer" in
+    *'"ok": true'*) echo "  ok   comms answers on the clip socket" ;;
+    *unavailable*)  echo "  WARN comms is not serving the clip socket; clips queue in the browser (tools/service-runner.sh restart comms)"; return 1 ;;
+    *)              echo "  FAIL host answered: $answer"; return 1 ;;
+  esac
+}
+
+cmd_uninstall() {
+  rm -f "$MANIFEST" "$WRAPPER"
+  echo "clipper: registration removed; remove the extension in chrome://extensions"
+}
+
+case "${1:-}" in
+  build) cmd_build ;;
+  install) cmd_install ;;
+  check) cmd_check ;;
+  uninstall) cmd_uninstall ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

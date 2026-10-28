@@ -1,0 +1,7 @@
+# The Sjel Clipper resolves its own dependencies, so the install hold and the scanner apply
+# here too: Bun does not inherit a parent bunfig.toml. The reasoning is in dashboard/bunfig.toml.
+[install]
+minimumReleaseAge = 86400
+
+[install.security]
+scanner = "@socketsecurity/bun-security-scanner"

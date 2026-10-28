@@ -65,6 +65,7 @@ pub enum Section {
     Appearance,
     Connection,
     Accounts,
+    Clipper,
     Features,
     Updates,
     Shortcuts,
@@ -106,10 +107,11 @@ const SHORTCUT_GROUPS: [&str; 12] = [
 ];
 
 impl Section {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::Appearance,
         Self::Connection,
         Self::Accounts,
+        Self::Clipper,
         Self::Features,
         Self::Updates,
         Self::Shortcuts,
@@ -120,6 +122,7 @@ impl Section {
             Self::Appearance => "Appearance",
             Self::Connection => "Connection & Sync",
             Self::Accounts => "Accounts & keys",
+            Self::Clipper => "Clipper",
             Self::Features => "Features",
             Self::Updates => "Updates",
             Self::Shortcuts => "Shortcuts",
@@ -132,6 +135,7 @@ impl Section {
             Self::Appearance => "Changes apply at once and are kept for the next launch",
             Self::Connection => "The Sjel shell this window reads from",
             Self::Accounts => "Provider keys and credentials, stored in the OS keychain",
+            Self::Clipper => "Templates and the Interpreter model for the Sjel Clipper",
             Self::Features => "Discover, install, and remove optional Sjel features",
             Self::Updates => "Sjel Desktop builds from your checkout of the Sjel repository",
             Self::Shortcuts => "Read from the key bindings this build registers",
@@ -147,6 +151,8 @@ pub(crate) fn search_section(query: &str, catalogue_has_match: bool) -> Option<S
     let matches = |terms: &[&str]| terms.iter().any(|term| query.contains(term));
     if matches(&["appearance", "theme", "opacity", "accent"]) {
         Some(Section::Appearance)
+    } else if matches(&["clip", "template", "interpreter", "browser"]) {
+        Some(Section::Clipper)
     } else if matches(&[
         "account",
         "key",
@@ -327,6 +333,7 @@ pub fn render(
         Section::Appearance => appearance(view.appearance_settings, palette, cx),
         Section::Connection => connection(view, palette, cx),
         Section::Accounts => vec![view.accounts.clone().into_any_element()],
+        Section::Clipper => vec![view.clipper_settings.clone().into_any_element()],
         Section::Updates => updates(view, palette, cx),
         Section::Shortcuts => shortcuts(
             palette,

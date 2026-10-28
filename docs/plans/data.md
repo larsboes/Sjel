@@ -134,69 +134,34 @@ feed projection or enrichment. Large captures need a bounded attachment path and
 behavior; raising the global request limit alone does not provide it. Classification and egress
 must be resolved before enabling automatic processing for browser-provided material.
 
-1. **Inventory and parity specification.** Pin an upstream revision and enumerate its features,
-   browser permissions, settings, storage, template formats and tests, including Safari on macOS
-   and iOS. Define a parity matrix against real workflows and existing user templates and
-   highlights. Done when each upstream behavior has a Sjel acceptance test or a named open
-   decision; do not claim full parity from a selected feature list.
-2. **Capture contract.** Define an owned `comms` contract for page content, original URL and
-   metadata, highlights, user edits, templates, attachments and provenance. Preserve original
-   bytes where available, version the payload, make retries idempotent and expose failures.
-   Review data classification, authorization and local-only handling before browser access.
-   Done when retries, attachment recovery and partial failures are tested without duplicate or
-   lost captures. Existing capture and ingest routes remain usable. In progress: an unexposed
-   `comms` store primitive holds versioned JSON under a client retry key, refuses conflicting
-   reuse and records `c2`; it reads a stored clip by its key and does not fetch or enrich. Inline
-   JSON is bounded at 2 MiB. It has no browser route, attachment contract or recovery UI.
-   `cargo check --locked -p sjel-comms --tests` and the two focused
-   storage tests passed; the tests required a scratch Cargo target because cleanup of temporary
-   files under the shared target was denied. A prototype HTTP route passed a local authentication
-   and retry test, but was removed: `sjel-status` proxies the Comms path, so a loopback bind alone
-   does not prove that `c2` content stays on the host. Define and test a host-only transport and
-   agent access policy before exposing a clip route; do not assume origin or client-supplied
-   forwarding headers prove locality.
-3. **Browser integration.** Evaluate a maintained upstream fork against a minimal adapter after
-   the inventory; reuse upstream extraction, Reader and highlighting where feasible. Preserve
-   existing template import/export, URL and schema triggers, variables, filters, logic, and
-   create/append behavior through explicit Sjel destinations. Preserve highlight persistence,
-   search/export, selection and keyboard workflows. Queue safely when Sjel is unavailable.
-   Done when the parity matrix passes on each supported browser and the original workflow can
-   save and reopen a capture without Obsidian.
-4. **Interpreter and Sjel use.** Preserve prompt variables, configurable context, provider/model
-   choices and explicit interpretation; connect to Sjel inference only under its data boundaries.
-   Keep source material and user edits separate from generated results. Add review and routing to
-   owning capabilities with provenance, and allow knowledge to be linked into the vault when
-   warranted. Done when captures can be reviewed and routed without a second canonical copy.
-5. **Migration and end-to-end verification.** Import existing clipper templates and highlights
-   where accessible, and preserve historical clippings and attachments before routing them.
-   Test offline/retry, duplicate submissions, large pages, images, authenticated pages, browser
-   restarts, and backup/restore on Mac and iPhone. Done when a real clip survives capture,
-   restart, review and restore, and no existing clipping is lost.
+Decided 2026-10-28: a vendored, detached fork of upstream; native messaging as the only
+transport; versioned clip documents for the template behaviors; Chrome first, Safari next.
+Shipped in `31efb1e2`: the Sjel Clipper (`capabilities/comms/clipper`, README there), the clip
+store and socket in `comms`, `comms clips`, and `tools/clipper`. Upstream's 218 tests and five
+destination tests pass; one upstream fixture fails at the pinned revision and is skipped. A
+native-messaging ping reaches the live `comms-server`. Open, in order:
 
-#### Delivery order
+1. **First real clip.** Load `dist/` unpacked in Chrome, import the settings and highlights
+   exported from Obsidian Web Clipper, save a page, and read it back with `comms clips`. Not yet
+   run.
+2. **Parity matrix.** Walk the table above in the browser: Reader, highlights on revisit,
+   template triggers, each save behavior, shortcuts, context menus, side panel, offline queue
+   and browser restart. Record each row as passed or as a named gap.
+3. **Safari on Mac and iPhone.** A Safari web extension in an app wrapper, using native
+   messaging to the same host. The upstream `xcode/` project was not taken because of its
+   trademarked icons.
+4. **Settings from the app.** Shipped in `96758d40`: Sjel owns the templates (Settings ›
+   Clipper) and the Interpreter, which answers on the light local role; Feed › Clips lists and
+   reads clips. Not yet checked in the browser: the first seed, a locked editor, and an
+   Interpreter run.
+5. **Review and routing.** Clip documents to owning capabilities with provenance, and into the
+   vault when the result is knowledge. Clips stay `c2` and unenriched until then.
+6. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts
+   and a dry run; keep the originals.
+7. **Retire `axon-clip`** after the new extension carries daily use.
 
-1. Complete the upstream inventory against real templates, highlights and settings. Give every
-   upstream behavior a parity test or a named open decision.
-2. Decide supported browser and device targets and ownership (maintained fork or adapter). Keep
-   the current Chromium capture extension working while the replacement is built.
-3. Specify the `comms` record, host-only authorization, attachment storage, retry identity,
-   duplicate handling, backup and restore. Store source bytes, extracted text, highlights, edits
-   and Interpreter output separately with provenance. Prove browser content cannot leave the host
-   except through an explicit Sjel workflow.
-4. Port or adapt capture, Reader, persistent highlights, template editor and runtime, variables,
-   filters, logic, destinations, settings, import/export and offline queue. Add parity checks from
-   the inventory at each stage; a first capture release is not full support.
-5. Add Interpreter through Sjel inference with explicit invocation, visible provider/model, and
-   preserved source versus generated output. Apply existing data-class and egress rules.
-6. Migrate user templates, highlights, settings and historical clippings with a dry run, counts,
-   idempotent import and restore rehearsal. Keep originals until parity and recovery checks pass.
-7. Run the browser/device matrix, including authenticated and client-rendered pages, offline
-   recovery, browser restart, attachment failure, duplicate retries and backup restore. Retire
-   Obsidian as a clipping destination only after this passes.
-
-Open decisions: the first supported browser and device, exact Sjel mapping for existing-note and
-daily-note template actions, and whether to maintain a fork or a narrow adapter. Resolve these
-after the parity inventory; do not silently drop functionality to make the first release smaller.
+Later: platform integrations such as Instagram saves, only where the platform's terms allow
+automated access; a capture of a page the operator is viewing stays the default.
 
 ## 2. Formats
 

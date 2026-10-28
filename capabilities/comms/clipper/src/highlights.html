@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" id="highlights-page" style="height: 100%; overflow: hidden;">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<title>Highlights</title>
+	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="reader.css">
+	<script src="browser-polyfill.min.js"></script>
+</head>
+<body style="height: 100%; overflow: hidden;">
+	<div id="highlights">
+		<div id="highlights-container">
+			<div id="highlights-sidebar" class="sidebar">
+				<div id="highlights-sidebar-title">
+					<img class="logo" src="icons/icon48.png" alt="" width="24" height="24">
+					<span data-i18n="highlights">Highlights</span>
+					<a href="settings.html" id="highlights-settings-link" class="clickable-icon" data-i18n-title="settings">
+						<i data-lucide="settings"></i>
+					</a>
+				</div>
+				<div class="highlights-search-container">
+					<input type="text" id="highlights-search" data-i18n="searchHighlightsPlaceholder" placeholder="Search highlights…" autocomplete="off" spellcheck="false" />
+					<div class="menu-btn">
+						<button type="button" id="highlights-sort-btn" class="menu-toggle clickable-icon" data-i18n-title="sort">
+							<i data-lucide="ellipsis"></i>
+						</button>
+						<div id="highlights-sort-menu" class="menu">
+							<div class="menu-item" data-sort="az">
+								<div class="menu-item-title" data-i18n="sortAZ">A to Z</div>
+								<div class="menu-item-icon"><i data-lucide="check"></i></div>
+							</div>
+							<div class="menu-item" data-sort="za">
+								<div class="menu-item-title" data-i18n="sortZA">Z to A</div>
+								<div class="menu-item-icon"><i data-lucide="check"></i></div>
+							</div>
+							<div class="menu-item" data-sort="new">
+								<div class="menu-item-title" data-i18n="sortNewOld">Newest first</div>
+								<div class="menu-item-icon"><i data-lucide="check"></i></div>
+							</div>
+							<div class="menu-item" data-sort="old">
+								<div class="menu-item-title" data-i18n="sortOldNew">Oldest first</div>
+								<div class="menu-item-icon"><i data-lucide="check"></i></div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<ul id="highlights-domain-list"></ul>
+			</div>
+			<div id="highlights-main">
+				<div id="highlights-navbar">
+					<div id="highlights-navbar-title">
+						<img class="logo" src="icons/icon48.png" alt="" width="24" height="24">
+						<span data-i18n="highlights">Highlights</span>
+					</div>
+					<button id="highlights-hamburger" class="hamburger-menu clickable-icon">
+						<span class="hamburger-icon"></span>
+					</button>
+				</div>
+				<div id="highlights-main-header">
+					<div id="highlights-breadcrumb"></div>
+					<div class="highlights-main-actions">
+						<button type="button" id="export-context-btn" data-i18n="export">Export</button>
+						<button type="button" id="delete-context-btn" class="mod-warning" data-i18n="delete">Delete</button>
+					</div>
+				</div>
+				<div id="highlights-scroll">
+					<div id="highlights-list"></div>
+					<div id="highlights-empty" class="highlights-empty" style="display:none;">
+						<p data-i18n="noResults">No results found</p>
+					</div>
+					<div id="highlights-sentinel"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script type="module" src="highlights.js"></script>
+</body>
+</html>

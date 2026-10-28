@@ -23,6 +23,11 @@ path = "src/main.rs"
 name = "comms-server"
 path = "src/server/main.rs"
 
+# Chrome's native messaging host for the Sjel Clipper. See web_clip_socket.rs.
+[[bin]]
+name = "comms-clip-host"
+path = "src/clip_host_main.rs"
+
 [[bin]]
 name = "comms-extraction-eval"
 path = "src/extraction_eval_main.rs"
@@ -60,10 +65,6 @@ sjel-store = { path = "../../libs/sjel-store" }
 sjel-summarize = { path = "../../libs/summarize" }
 sjel-pseudonymize = { path = "../../libs/pseudonymize" }
 content-item = { path = "../../libs/content-item" }
-# The shared machine->vault projection mechanism (PRD Q49). comms declares the
-# shape of a saved link; libs/markdown-root does the writing, the containment and
-# the ownership check.
-markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
 # The `/api/links` body every capability answers alike (docs/capabilities/links.md).
 sjel-links = { path = "../../libs/links" }
@@ -99,6 +100,7 @@ base64 = "0.23"
 # is still worth writing down: it says what this crate would need on its own.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
 axum.workspace = true
+sjel-clip-socket = { path = "../../libs/clip-socket" }
 tower-http = { workspace = true, features = ["cors"] }
 
 [lints]

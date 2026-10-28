@@ -485,10 +485,6 @@ fn build_router(dashboard_origin: &str) -> Router {
             "/triage/classify/revert",
             post(triage_classify_revert_handler),
         )
-        // feed-personalization 2026-09-03, on the EXISTING write set rather
-        // than a third router: the projection layer below sits on this block
-        // and nowhere else, so a route added here is covered by the same
-        // sentence that covers every other mutation.
         .route("/feed/{id}/interactions", post(feed_interactions_handler))
         .route("/feed/model/train", post(model_train_handler))
         .route("/captures", post(capture_post_handler))
@@ -496,96 +492,9 @@ fn build_router(dashboard_origin: &str) -> Router {
 
     Router::new()
         .merge(read_routes)
-        // The projection layer sits on the write set and nowhere else. Trips tests
-        // the method instead (`libs`-side rule: non-GET plus 2xx), and the reason
-        // this file can do better is that the mutating routes are already declared
-        // as one router above — a route added to that block is covered by the same
-        // sentence, and a GET never pays for an export it cannot have caused.
-        .merge(write_routes.layer(axum::middleware::from_fn(project_library_after_write)))
+        .merge(write_routes)
         .layer(cors)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024)) // 2 MiB
-}
-
-/// Serialises exports. `std::fs::write` is not atomic, and a half-written note is
-/// the one state the mechanism exists to prevent; two mutations landing together
-/// must not interleave inside one file.
-static EXPORT_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
-
-/// "The library has changed since the last export finished."
-///
-/// One flag rather than a queue: the export is a full re-projection of
-/// `feed_library()`, so two pending exports and one pending export produce
-/// byte-identical folders. See `project_library_after_write` for the ordering
-/// that makes coalescing safe.
-static EXPORT_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Re-project the feed library into the vault after any successful write.
-///
-/// A layer rather than a line inside `feed_status_handler`, for the reason
-/// `trips::server` gives: one call site puts the rule "a library change reaches the
-/// vault" in one place, and the next handler that moves an item silently stops
-/// projecting otherwise — a data-loss bug that looks like nothing at all.
-///
-/// After the response, never before it: the export reads the store, so running it
-/// first would project the state the write is about to replace. And in a spawned
-/// task, so a vault on iCloud cannot make a save feel slow.
-///
-/// A failure is logged and the request still succeeds. Refusing a save because the
-/// vault is unreachable would trade a durable row for a missing file, which is the
-/// wrong way round. `comms export-sources` is the repair, and it runs with this
-/// process down.
-///
-/// What this does *not* catch is enrichment: a summary that arrives later comes from
-/// the background drain, not from a request, so the note carries it only after the
-/// next mutation or the next repair run.
-async fn project_library_after_write(
-    request: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    let response = next.run(request).await;
-    if !response.status().is_success() {
-        return response;
-    }
-    let Some(root) = Config::load().obsidian_root else {
-        return response;
-    };
-    // Mark the library dirty BEFORE queuing, so a writer can never be the one
-    // whose change is missed: whoever holds the lock next sees the flag.
-    EXPORT_DIRTY.store(true, Ordering::Release);
-    tokio::spawn(async move {
-        let _held = EXPORT_LOCK.get_or_init(Default::default).lock().await;
-        // Coalescing, not throttling. Keyboard triage turns one glance into a
-        // burst of presses, and `feed_library()` reads the same whole set every
-        // time — so N presses cost one export, and the LAST press is always
-        // exported. The flag is cleared before the read and re-checked after
-        // it: a write that lands mid-export sets it again and buys one more
-        // pass, which is why this drops a redundant export and never the last
-        // one. A task that finds the flag already clear exits having done
-        // nothing, because someone else has just exported the state it wanted.
-        while EXPORT_DIRTY.swap(false, Ordering::AcqRel) {
-            let root = root.clone();
-            let outcome = tokio::task::spawn_blocking(move || -> Result<_, String> {
-                let root = markdown_root::MarkdownRoot::declare(root).map_err(|e| e.to_string())?;
-                let cfg = Config::load();
-                let store = Store::open(&cfg.database_path).map_err(|e| e.to_string())?;
-                let saved = store.feed_library().map_err(|e| e.to_string())?;
-                comms::projection::export_all(&root, &saved).map_err(|e| e.to_string())
-            })
-            .await;
-            match outcome {
-                Ok(Ok(report)) => {
-                    for path in &report.refused {
-                        eprintln!("comms: vault projection refused, somebody else owns {path}");
-                    }
-                }
-                Ok(Err(error)) => eprintln!(
-                    "comms: vault projection failed ({error}); the rows are safe, the folder is stale — run `comms export-sources`"
-                ),
-                Err(error) => eprintln!("comms: vault projection task failed ({error})"),
-            }
-        }
-    });
-    response
 }
 
 /// This capability's inbound gate.
@@ -646,6 +555,16 @@ async fn main() {
     }
 
     let _background_services = BackgroundServices::start(&cfg);
+
+    if let Some(socket) = comms::web_clip_socket::socket_path() {
+        let database = cfg.database_path.clone();
+        let interpreter = comms::web_clip_socket::LocalInterpreter(cfg.clone());
+        std::thread::spawn(move || {
+            if let Err(error) = comms::web_clip_socket::serve(&socket, &database, &interpreter) {
+                eprintln!("comms-server: clip socket unavailable: {error}");
+            }
+        });
+    }
 
     let app = build_router(&cfg.dashboard_origin);
 

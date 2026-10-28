@@ -39,6 +39,7 @@ sjel-config = { path = "../../../libs/sjel-config" }
 # `name_key`, the one rule for comparing a person's name with the register's rows
 # (src/places.rs). Shared rather than copied: places, trips and comms all key their decisions by it.
 sjel-links = { path = "../../../libs/links" }
+sjel-clip-socket = { path = "../../../libs/clip-socket" }
 sjel-credentials = { path = "../../../libs/sjel-credentials" }
 zeroize = "=1.9.1"
 

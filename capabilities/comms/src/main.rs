@@ -6,7 +6,6 @@
 //!   comms feed [--stream S] [--days N=7] [--include-dismissed]
 //!   comms keep <id> | dismiss <id>            set feed item status
 //!   comms summarize --pending                 retry missing summaries
-//!   comms export-sources [--dry-run]          reconcile the feed library with the vault
 //!   comms mail classify [--shadow|--apply]    the local model classification rung
 //!   comms --help
 //!
@@ -66,8 +65,6 @@ fn print_help() {
     println!("  summarize --pending             summarize feed items that still lack a summary");
     println!("  normalize --explain             print the normalization rules and what each drops");
     println!("  normalize --all                 re-run normalization over stored raw content");
-    println!("  export-sources [--dry-run]      reconcile every saved feed item with");
-    println!("                                  Resources/Sources/ in the configured vault");
     println!("  reclassify-feed --rationale <t> re-derive `legacy` feed data classes from the");
     println!("       [--dry-run]                CURRENT feed source declarations. Lowering a");
     println!("                                  class is a human act, so the rationale is");
@@ -98,6 +95,9 @@ fn print_help() {
     println!("                                  the corpus complete. Needs comms-server up: it");
     println!("                                  is an HTTP client, not a second opener of the");
     println!("                                  database.");
+    println!("  clips [--limit N=20]            list Sjel Clipper documents, newest first");
+    println!("  clips show <document-key>       print a clip document's current Markdown");
+    println!("                                  Both read through comms-server's clip socket.");
     println!("  egress-log [--limit N=25]       show outbound cloud model calls with token counts");
     println!("       [--audit]                  and costs, or audit egress payloads for C2 leaks");
     println!("  --help, -h                      show this help");
@@ -122,17 +122,58 @@ fn main() {
         "dismiss" => cmd_set_status(&args, &cfg, "dismissed"),
         "summarize" => cmd_summarize(&args, &cfg),
         "normalize" => cmd_normalize(&args, &cfg),
-        "export-sources" => cmd_export_sources(&args, &cfg),
         "reclassify-feed" => cmd_reclassify_feed(&args, &cfg),
         "mail" => cmd_mail(&args, &cfg),
         "digest" => cmd_digest(&args, &cfg),
         "relevance" => cmd_relevance(&args, &cfg),
         "egress-log" => cmd_egress_log(&args, &cfg),
+        "clips" => cmd_clips(&args),
         other => {
             eprintln!("error: unknown command '{other}'\n");
             print_help();
             std::process::exit(1);
         }
+    }
+}
+
+// -- clips ---------------------------------------------------------------
+
+/// Read clip documents through the server's socket; like `relevance`, never a second opener.
+fn cmd_clips(args: &[String]) {
+    let Some(socket) = comms::web_clip_socket::socket_path() else {
+        eprintln!("error: SJEL_PERSONAL_ROOT is not set, so the clip socket has no path");
+        std::process::exit(1);
+    };
+    let request = match args.get(2).map(String::as_str) {
+        Some("show") => match args.get(3) {
+            Some(key) => serde_json::json!({ "type": "document", "key": key }),
+            None => {
+                eprintln!("error: usage: comms clips show <document-key>");
+                std::process::exit(1);
+            }
+        },
+        _ => serde_json::json!({
+            "type": "documents",
+            "limit": arg_after(args, "--limit").and_then(|v| v.parse::<u64>().ok()).unwrap_or(20),
+        }),
+    };
+    let answer = comms::web_clip_socket::relay(&socket, &request);
+    if answer["ok"] != true {
+        eprintln!("error: {}", answer["error"].as_str().unwrap_or("unknown"));
+        std::process::exit(1);
+    }
+    if let Some(document) = answer.get("document") {
+        println!("{}", document["markdown"].as_str().unwrap_or_default());
+        return;
+    }
+    for document in answer["documents"].as_array().into_iter().flatten() {
+        println!(
+            "{}  v{}  {}  {}",
+            document["updated_at"].as_str().unwrap_or(""),
+            document["versions"],
+            document["document_key"].as_str().unwrap_or(""),
+            document["title"].as_str().unwrap_or(""),
+        );
     }
 }
 
@@ -718,74 +759,6 @@ fn cmd_normalize(args: &[String], cfg: &Config) {
             eprintln!("error: {e}");
             std::process::exit(1);
         }
-    }
-}
-
-// -- export-sources ------------------------------------------------------
-
-/// Reconcile every saved feed item with `Resources/Sources/` in the configured vault.
-///
-/// The repair half of the bridge, and the reason the server's layer is allowed to fail
-/// quietly: a vault that was unplugged, an iCloud folder that was not down yet, or a
-/// summary that arrived from the background drain after the last mutation all leave the
-/// folder stale, and all of them are fixed by one run of this — with the server down,
-/// which is when a vault problem is usually being worked on.
-///
-/// It is also the only path that projects the library as it stands *today* on a host
-/// that has never run the bridge. `--dry-run` prints the files it would write and
-/// touches nothing, because the first thing anybody wants to know about a command that
-/// writes into their notes is what it is about to write.
-fn cmd_export_sources(args: &[String], cfg: &Config) {
-    let dry_run = args.iter().any(|a| a == "--dry-run");
-    let Some(root_path) = cfg.obsidian_root.clone() else {
-        eprintln!("error: no vault configured: set obsidian.root in <overlay>/config/comms.json");
-        std::process::exit(1);
-    };
-
-    let store = open_store(cfg);
-    let saved = match store.feed_library() {
-        Ok(saved) => saved,
-        Err(e) => {
-            eprintln!("error: could not read the feed library: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    if dry_run {
-        for projection in comms::projection::render_all(&saved) {
-            println!("{}  ({} bytes)", projection.path, projection.body.len());
-        }
-        println!("{} saved item(s) — nothing written", saved.len());
-        return;
-    }
-
-    let root = match markdown_root::MarkdownRoot::declare(root_path) {
-        Ok(root) => root,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(1);
-        }
-    };
-    let report = match comms::projection::export_all(&root, &saved) {
-        Ok(report) => report,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(1);
-        }
-    };
-    println!(
-        "{} saved item(s) → {}: {} created, {} updated, {} unchanged",
-        saved.len(),
-        comms::projection::DIR,
-        report.created,
-        report.updated,
-        report.unchanged
-    );
-    for path in &report.removed {
-        println!("  removed (no longer saved, or retitled): {path}");
-    }
-    for path in &report.refused {
-        println!("  refused, this file is not comms' to write: {path}");
     }
 }
 

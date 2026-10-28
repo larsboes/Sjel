@@ -749,39 +749,6 @@ impl Store {
         Ok(conn.query_all(&sql, bound.as_slice(), row_to_feed_list)?)
     }
 
-    /// Every saved item, oldest first — the feed library, unbounded by time.
-    ///
-    /// `list_feed` cannot answer this. It bounds by `day >= date('now', -N days)`
-    /// because it serves a queue, and the library is the opposite: `/feed/library`
-    /// is documented as "the durable collection view over up to ten years of Feed
-    /// state" (`dashboard/README.md`). A projection built on a windowed query would
-    /// delete every note whose item aged out of the window, which is a sweep that
-    /// destroys exactly what the bridge exists to preserve.
-    ///
-    /// Saved means `status = 'keeper'`. Nothing else in the store records a decision
-    /// to keep something: `dismissed` is the explicit no and `new` is the unread
-    /// queue, so `keeper` is the whole library and there is no second flag to
-    /// consult.
-    ///
-    /// Oldest first so the collision rule sees a stable order. No transcript: the
-    /// projection renders the summary, and pulling every stored transcript to render
-    /// none of them would be the largest read this capability makes.
-    pub fn feed_library(&self) -> Result<Vec<FeedItem>, Box<dyn std::error::Error>> {
-        let conn = self.conn()?;
-        let sql = format!(
-            "SELECT id, stream, kind, title, url, author, summary, NULL, day, created_at, status,
-                    content_status, summary_attempts, summary_last_error, summary_next_attempt,
-                    captured_via, transcript_source,
-                    data_class, data_class_rationale, data_classification_method,
-                    data_classification_version
-             FROM {}_feed_items
-             WHERE status = 'keeper'
-             ORDER BY created_at ASC, id ASC",
-            self.prefix
-        );
-        Ok(conn.query_all(&sql, [], row_to_feed_list)?)
-    }
-
     /// Feed items eligible for summarization: transcript present, no summary,
     /// not past the attempt cap, and backoff window elapsed. Bounded retry
     /// replaces the old unbounded "summary IS NULL" scan.

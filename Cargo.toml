@@ -30,6 +30,7 @@ members = [
     "libs/agent",
     "libs/libsql-auth",
     "libs/sjel-config",
+    "libs/clip-socket",
     "libs/sjel-credentials",
     "libs/sjel-http",
     "libs/sjel-server",

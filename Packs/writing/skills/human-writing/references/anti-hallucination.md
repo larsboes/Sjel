@@ -34,6 +34,10 @@ the concrete detail is already present or directly entailed. If the source says 
 performance", the rewrite may not say "cut latency 40%" unless that number is in the source.
 Sharpen the wording, not the facts.
 
+The reverse holds too: keep the author's precision level. "Overnight the Kafka dashboard view
+went towards zero" is a correct observation at the precision the author had. Do not flag it as
+vague, do not name the metric for them, and do not pad it with a hedge.
+
 **3. Cut empty sentences rather than dressing them.** When a sentence says nothing, delete
 it. Never rescue it by inventing a detail, an example, a quote, or a source.
 

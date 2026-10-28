@@ -2,7 +2,8 @@
 
 `config.base.toml` is an opt-in permissions baseline, not an installer. Replace `@HOME@`
 with the absolute home directory, merge its root keys into the user config, and add its
-`permissions.sjel-auto` and `shell_environment_policy` tables. Preserve unrelated operator keys. Back up the user config
+`analytics`, `permissions.sjel-auto` and `shell_environment_policy` tables. `analytics` turns
+off the usage metrics the CLI sends to OpenAI by default. Preserve unrelated operator keys. Back up the user config
 before changing it. Do not combine `default_permissions` with `sandbox_mode` or
 `sandbox_workspace_write`. Copy `security.rules` to a separate user rules file, leaving
 existing command approvals alone. Restart Codex to load the result.

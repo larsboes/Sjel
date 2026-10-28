@@ -4,6 +4,7 @@
 //! vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
 //! vault lint   [--root PATH] [--json] [--carrying KEY]
 //! vault class  [--root PATH] [--json] [--only c2] [--list]
+//! vault classify --id VAULT/RELATIVE.md [--declared c1] [--json]
 //! vault bases  [--root PATH] [--json] [--strict]
 //! ```
 //!
@@ -68,6 +69,7 @@ fn main() {
                vault compare --root PATH --against PATH [--json] [--list]\n  \
                vault lint  [--root PATH] [--json] [--carrying KEY]\n  \
                vault class [--root PATH] [--json] [--only c2] [--list]\n  \
+               vault classify --id VAULT/RELATIVE.md [--declared c1] [--json]\n  \
                vault bases [--root PATH] [--json] [--strict]\n\
              \n\
              The root comes from the overlay's config/knowledge.toml unless --root says otherwise."
@@ -78,6 +80,22 @@ fn main() {
     if cmd == "compare" && flag(&args, "--root").is_none() {
         die("compare requires --root PATH");
     }
+
+    if cmd == "classify" {
+        let id = flag(&args, "--id").unwrap_or_else(|| die("classify requires --id"));
+        let declared = flag(&args, "--declared");
+        let classified = content_item::DataClass::classify_vault_note(&id, declared.as_deref());
+        if json {
+            println!("{}", serde_json::to_string(&classified).unwrap_or_default());
+        } else {
+            println!(
+                "{}\t{}\t{}",
+                classified.value, classified.method, classified.rationale
+            );
+        }
+        return;
+    }
+
     let root = note::resolve_root(flag(&args, "--root")).unwrap_or_else(|e| die(e));
     let (notes, problems) = note::load_all(&root).unwrap_or_else(|e| die(e));
 

@@ -109,6 +109,14 @@ single piece of the "AI accent," a rhythm the model falls into to sound insightf
 **Fix.** state the thing plainly. If Y is the point, just say Y. Delete the throat-clearing
 negation in front of it.
 
+**Technical-doc form.** In engineering text the cadence shrinks to a trailing contrast:
+"batch ceilings are ceilings, not request sizes", "it declined later, not differently",
+"mitigates but does not fix", "X, but not Y". One is a distinction; a document where every
+second sentence ends in ", not X" is the accent. The scanner matches `, not …` at clause end
+and `but not`, and counts them toward density. Fix: say what it is ("are upper limits per
+request"), or state the negative as its own observation when the reader needs it ("The decline
+stayed.").
+
 ### 3. The formulaic essay shape and the "In conclusion" wrap-up
 
 **Evidence.** formulaic shape cited 2.5%; the "In conclusion" / "in summary" closer cited
@@ -327,6 +335,13 @@ restates the prompt, hedges, and moves on. Fluency with nothing behind it is the
 
 **Fix.** make a real claim and cut the filler. If a paragraph could be deleted with nothing
 lost, delete it. Say each thing once.
+
+**In measurement and investigation docs** it shows up as caveat stacking: an "evidence
+boundaries" table, a methods paragraph on how rates were derived, "missing X does not prove Y"
+repeated after every finding, "this does not identify an upstream cause". Each caveat is true
+and the pile says nothing. Ask of each one: does the reader act differently because of it?
+Keep the one that changes a conclusion, as one sentence next to that conclusion ("Not in this
+export: CPU throttling, memory, restarts."). Cut the rest.
 
 ### 16. No contractions / over-formal register
 

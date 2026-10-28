@@ -1,4 +1,5 @@
 import { dirname, relative, resolve } from "node:path";
+import { firstHit, gpuiInputs } from "./ci-changes.ts";
 
 export interface Package {
   name: string;
@@ -86,7 +87,13 @@ function main() {
   const impact = deleted.size
     ? { mode: "all", packages: packages.map((p: any) => p.name).sort(), skipped: [], reasons: [`${[...deleted].sort()[0]}: deleted or renamed input`] }
     : rustImpact(changed, packages);
-  console.log(JSON.stringify({ shadow: true, base: base ?? null, local, files: changed, rust: impact, note: "Candidate only; full CI remains required. Runtime file reads are not modeled." }, null, 2));
+  const hit = firstHit(changed, gpuiInputs(root));
+  const gpui = deleted.size
+    ? { run: true, reason: "deleted or renamed input requires the full GPUI matrix" }
+    : hit
+      ? { run: true, reason: `${hit[0]} is under ${hit[1] || "<repo root>"}` }
+      : { run: false, reason: "no changed file matches the existing GPUI inputs" };
+  console.log(JSON.stringify({ shadow: true, base: base ?? null, local, files: changed, rust: impact, gpui, note: "Rust is a candidate only; full CI remains required. Runtime file reads are not modeled." }, null, 2));
 }
 
 if (import.meta.main) {

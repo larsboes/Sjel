@@ -226,9 +226,18 @@ function fixture(): string {
   symlinkSync(join(pi.modulesDir, "@types", "node"), join(modules, "@types", "node"));
 
   for (const file of [...packs, ...registered]) {
-    const destination = join(dir, file.rel);
-    mkdirSync(dirname(destination), { recursive: true });
-    cpSync(file.path, destination);
+    const destination = join(dirname(join(dir, file.rel)), "");
+    mkdirSync(destination, { recursive: true });
+    cpSync(file.path, join(dir, file.rel));
+    // A directory extension may import sibling modules (command-policy keeps its pure classifier
+    // beside the entry so it can be tested without pi). Copy those too, or the entry cannot load.
+    if (packs.includes(file) && file.rel.endsWith("/index.ts")) {
+      for (const sibling of readdirSync(dirname(file.path))) {
+        if (sibling.endsWith(".ts") && sibling !== "index.ts" && !sibling.endsWith(".test.ts")) {
+          cpSync(join(dirname(file.path), sibling), join(destination, sibling));
+        }
+      }
+    }
   }
 
   fixtureDir = dir;
@@ -368,6 +377,8 @@ async function load(file: ExtensionFile, dir: string): Promise<Loaded> {
 /* ── the gate ────────────────────────────────────────────────────────────── */
 
 const packs = packExtensions();
+// One compiler run per extension, in sequence; a slow filesystem (WSL) needs several seconds each.
+const TYPECHECK_MS_PER_EXTENSION = 15_000;
 const registered = registeredExtensions();
 
 /**
@@ -418,7 +429,7 @@ describe.skipIf(!piConfigured)("pack extensions", () => {
         `these extensions do not typecheck against pi ${piVersion()}, using ${compiler?.via}:\n\n${failures.join("\n\n")}`,
       );
     }
-  });
+  }, TYPECHECK_MS_PER_EXTENSION * packs.length);
 
   test("the extensions pi has registered typecheck too (they live outside this repository)", () => {
     if (registered.length === 0) return;

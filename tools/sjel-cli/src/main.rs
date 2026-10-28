@@ -37,6 +37,8 @@ mod persist;
 mod pi_config;
 mod provider_login;
 mod registry;
+mod rotation_guard;
+mod rotation_probe;
 mod runargs;
 mod runner;
 mod runtime;
@@ -116,6 +118,10 @@ fn main() -> ExitCode {
         "toolchain-check" => return toolchain::run(rest),
         "capability.sh" => return registry::run(rest),
         "service-runner.sh" => return runner::run(rest),
+        "--service-runner-protocol" if rest.is_empty() => {
+            println!("sjel-service-runner-sqld-rotation-v1");
+            return ExitCode::SUCCESS;
+        }
         "harnesses" => return harnesses::run(rest),
         "packs-claude" | "packs-codex" | "packs-opencode" | "packs-copilot" | "packs-pi" => {
             return packs::run(command, rest)

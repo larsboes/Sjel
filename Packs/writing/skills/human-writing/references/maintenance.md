@@ -11,6 +11,14 @@ SKILL.md.
   SKILL.md. Verified against the calibration corpus: 0 of 24 human and 0 of 10 ESL-formal files
   pick up a false positive. **Re-apply this delta if the linter is ever re-vendored.**
 - Additive entries in `ai_prose_patterns.json`.
+- **Engineering-doc calibration (2026-10-07).** Found on a log-pipeline experiment log where the
+  author's own text scored 19.0 (`strong-tell`) and an AI-written learnings file 8.0 with none
+  of its ~11 trailing ", not X" contrasts flagged. Changes: `antithesis_patterns` gained the
+  trailing `, not …` and `but not` forms; `checks.py::check_em_dash` skips paired-dash asides
+  whose dash joins two numbers; `checks.py::check_ngram_repetition` skips n-grams with a
+  single-letter token (unit fragments such as `k records s`); new register `engineering_log`
+  (`defaults.py::REGISTERS`, `register_mutes`, tokens `fixed_terms` and `data_lists`). After:
+  author 3.2 `clean`, AI file 12.0 `watch`. **Re-apply if re-vendored.**
 - **Inline HTML ignore directives removed (2026-09-26).** The upstream linter supports
   `human-voice` comments, but Sjel does not. Keep scanner policy outside prose files.
 - **One user-facing string corrected in `patterns.py` (2026-09-17).** Its pattern-file-not-found

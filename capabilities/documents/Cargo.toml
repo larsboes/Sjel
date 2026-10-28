@@ -20,7 +20,7 @@ axum.workspace = true
 route-manifest = { path = "../../libs/route-manifest" }
 schemars = "1.2.2"
 chrono.workspace = true
-lopdf = { version = "=0.45.0", default-features = false }
+lopdf = { version = "=0.46.0", default-features = false }
 reqwest.workspace = true
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -377,6 +377,27 @@ pub(crate) fn apply(
         return Err("--interval-secs must be greater than zero".to_owned());
     }
 
+    let marker = crate::rotation_guard::marker_path(paths)?;
+    let config = marker
+        .parent()
+        .ok_or("sqld rotation: marker has no parent")?;
+    std::fs::create_dir_all(config)
+        .map_err(|e| format!("cannot create {}: {e}", config.display()))?;
+    let guard = crate::rotation_guard::acquire(paths)?;
+    if guard.marker_is_present()? {
+        return Err("sqld rotation is incomplete; Turso setup is inhibited".to_owned());
+    }
+    // The caller's snapshot may predate another guarded setup operation.
+    let body = match std::fs::read_to_string(env.path()) {
+        Ok(body) => body,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("cannot read {}: {e}", env.path().display())),
+    };
+    let env = EnvFile {
+        path: env.path().to_path_buf(),
+        body,
+    };
+
     // Build the new body first, then write it once: a failure part way through leaves the file as
     // it was instead of half-written.
     let mut next = EnvFile {
@@ -492,6 +513,9 @@ pub(crate) fn apply(
         lines.insert(0, format!("{}: written", env.path().display()));
     }
 
+    // The runner takes the same lock before starting sqld.
+    drop(guard);
+
     // The host steps run AFTER the write, and that order is the whole reason the primary is not
     // started with an empty configuration: `sqld` reads SQLD_DB_PATH and SQLD_AUTH_JWT_KEY_FILE
     // from its environment at exec time, so starting it before the record exists makes it open a
@@ -599,7 +623,7 @@ fn host_primary_start(paths: &Paths) -> Result<Vec<String>, String> {
 }
 
 /// The port the `sqld` manifest declares, read from the manifest itself.
-fn sqld_port(paths: &Paths) -> Result<String, String> {
+pub(super) fn sqld_port(paths: &Paths) -> Result<String, String> {
     let manifest = paths.caps_dir.join("sqld").join("service.toml");
     let body = std::fs::read_to_string(&manifest).map_err(|e| {
         format!(
@@ -989,9 +1013,37 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A credential already in the deployment record is reused, and nothing is minted: these
-    /// tests must never touch this machine's Keychain, so every path that mints is kept out of
-    /// them. Minting is exercised end to end by `sjel setup apply` against a real primary.
+    #[test]
+    fn incomplete_rotation_and_held_lock_refuse_setup_without_writes() {
+        let dir = std::env::temp_dir().join(format!("sjel-setup-inhibit-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("config")).unwrap();
+        let record = dir.join("config/deployment");
+        std::fs::write(&record, "SJEL_TURSO_AUTH_TOKEN=fixture\n").unwrap();
+        let mut paths = paths_stub();
+        paths.overlay_root = Some(dir.clone());
+        let env = EnvFile::read(record.clone());
+        let options = Options {
+            url: Some("libsql://example.test"),
+            interval_secs: None,
+            mint_days: 30,
+            remint: true,
+            host_here: true,
+        };
+        let guard = crate::rotation_guard::acquire(&paths).unwrap();
+        assert!(apply(&paths, &env, &options, Some("fixture-new")).is_err());
+        drop(guard);
+        std::fs::write(dir.join("config/sqld-rotation-inhibit"), "incomplete").unwrap();
+        assert!(apply(&paths, &env, &options, Some("fixture-new"))
+            .unwrap_err()
+            .contains("inhibited"));
+        assert_eq!(
+            std::fs::read_to_string(record).unwrap(),
+            "SJEL_TURSO_AUTH_TOKEN=fixture\n"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A credential already in the deployment record is reused without touching the Keychain.
     #[test]
     fn a_recorded_credential_is_reused_without_minting() {
         let dir = std::env::temp_dir().join(format!("sjel-setup-reuse-{}", std::process::id()));

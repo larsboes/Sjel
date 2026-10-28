@@ -1,0 +1,9 @@
+{
+  "name": "system-tools",
+  "description": "Discover and use system-level CLI tools for shell operations, package management, process control, and system administration.",
+  "author": {
+    "name": "Lars Boes",
+    "url": "https://github.com/larsboes/Sjel"
+  },
+  "license": "MIT"
+}

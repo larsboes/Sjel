@@ -1,0 +1,7 @@
+# Package registries this machine must use. Copy to <overlay>/config/registries.toml.
+# Read by tools/js-install. Absent file or key: the public default registry.
+#
+# Only the URL lives here. Credentials for the mirror stay in ~/.npmrc (or the OS keychain),
+# never in the overlay. With a mirror set, Sjel installs with the committed lockfiles and never
+# writes the mirror's host back into them.
+npm = "https://mirror.example/api/npm/registry.npmjs.org/"

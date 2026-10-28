@@ -29,6 +29,7 @@ written.
 | `release_notes` | Terse, user-facing, past tense | imperative or past bullets, fragments | marketing hype, vague "various improvements" |
 | `ux_microcopy` | Minimal, plain | fragments, dropped articles, terseness | full-sentence padding, cleverness over clarity |
 | `tutorial` | Instructional, second person, present | direct address, imperatives, numbered steps | over-explaining the obvious, rhetorical filler |
+| `engineering_log` | Terse record of what was changed and measured, past tense | repeating the same fixed term (one term per concept), lists of metrics, fragments, an observation as precise as the author saw it | caveat stacking, trailing "…, not X" contrasts, conclusions the run does not support |
 
 ## Detection cues
 
@@ -36,7 +37,8 @@ Code blocks, metrics, or config imply `technical`. A call to action or a product
 implies `marketing`. Citations and measured hedging imply `academic`. A first-person anecdote
 with casual contractions implies `casual`. A greeting plus sign-off implies `email`. A
 versioned, past-tense, bulleted change list implies `release_notes`. Numbered how-to steps
-imply `tutorial`. When the cues genuinely conflict and the answer changes the voice, ask one
+imply `tutorial`. Dated runs with configuration blocks, screenshots and measured rates (experiment
+logs, incident notes, investigation records) imply `engineering_log`. When the cues genuinely conflict and the answer changes the voice, ask one
 short question rather than guessing.
 
 ## Format conventions, not preferences

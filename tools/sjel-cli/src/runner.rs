@@ -360,6 +360,7 @@ impl<'a> Svc<'a> {
     }
 
     fn dispatch(&mut self, cmd: &str) -> R<u8> {
+        let _rotation_guard = check_rotation_inhibit(&self.cap, cmd, self.paths)?;
         if self.kind == "data" {
             if cmd == "persistence-status" {
                 println!(
@@ -1271,6 +1272,32 @@ impl<'a> Svc<'a> {
 
 // ---- helpers ------------------------------------------------------------------------------
 
+fn check_rotation_inhibit(
+    cap: &str,
+    cmd: &str,
+    paths: &Paths,
+) -> R<Option<crate::rotation_guard::Guard>> {
+    if cap != "sqld" || !matches!(cmd, "start" | "resume" | "restart" | "recreate") {
+        return Ok(None);
+    }
+    let error = |msg| Fail {
+        code: 1,
+        msg: format!("service-runner.sh: {msg}"),
+    };
+    let guard = crate::rotation_guard::acquire(paths).map_err(error)?;
+    if guard.marker_is_present().map_err(error)? {
+        let marker = crate::rotation_guard::marker_path(paths).map_err(error)?;
+        return fail(
+            1,
+            format!(
+                "service-runner.sh: '{cap}' is inhibited for rotation ({})",
+                marker.display()
+            ),
+        );
+    }
+    Ok(Some(guard))
+}
+
 /// The exit status of a foreground child, its output inherited. A program that cannot be
 /// started reads 127, as the shell reports one.
 pub fn status_of(c: &mut Command) -> u8 {
@@ -1566,6 +1593,149 @@ mod tests {
 
     fn cargo_build() -> Vec<String> {
         vec!["cargo".to_owned(), "build".to_owned()]
+    }
+
+    /// Retries `attempt` while it fails on lock contention. Tests share one process, so a child
+    /// another test forks holds a copy of the lock's descriptor until it execs.
+    fn past_forked_copies<T, E>(
+        mut attempt: impl FnMut() -> Result<T, E>,
+        message: impl Fn(&E) -> &str,
+    ) -> Result<T, E> {
+        for _ in 0..100 {
+            match attempt() {
+                Err(e) if message(&e).contains("cannot acquire lock") => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                other => return other,
+            }
+        }
+        attempt()
+    }
+
+    fn inhibit(cap: &str, cmd: &str, paths: &Paths) -> Result<(), Fail> {
+        past_forked_copies(
+            || check_rotation_inhibit(cap, cmd, paths).map(drop),
+            |f| f.msg.as_str(),
+        )
+    }
+
+    #[test]
+    fn rotation_inhibit_blocks_only_sqld_starting_verbs_without_expiry() {
+        let overlay = scratch("rotation-inhibit");
+        let marker = overlay.join("config/sqld-rotation-inhibit");
+        std::fs::create_dir_all(overlay.join("config")).unwrap();
+        let mut paths = Paths {
+            root: overlay.clone(),
+            caps_dir: overlay.join("capabilities"),
+            overlay_root: Some(overlay.clone()),
+            overlay_caps_dir: None,
+            machine_toml: None,
+        };
+        for cmd in ["start", "resume", "restart", "recreate"] {
+            assert!(inhibit("sqld", cmd, &paths).is_ok());
+        }
+        paths.overlay_root = None;
+        assert!(inhibit("sqld", "start", &paths).is_err());
+        paths.overlay_root = Some(overlay.clone());
+        write_at(&marker, SystemTime::UNIX_EPOCH + Duration::from_secs(1));
+        for cmd in ["start", "resume", "restart", "recreate"] {
+            let err = inhibit("sqld", cmd, &paths).err().unwrap();
+            assert_ne!(err.code, 0);
+            assert!(err.msg.contains("inhibited for rotation"), "{}", err.msg);
+            assert!(check_rotation_inhibit("other", cmd, &paths).is_ok());
+        }
+        for cmd in ["stop", "idle-stop", "status", "persistence-status"] {
+            assert!(check_rotation_inhibit("sqld", cmd, &paths).is_ok());
+        }
+        assert!(marker.exists());
+        let _ = std::fs::remove_dir_all(&overlay);
+    }
+
+    #[test]
+    fn inhibited_dispatch_refuses_before_lifecycle_side_effects() {
+        let root = scratch("rotation-dispatch");
+        let overlay = root.join("overlay");
+        let manifest = root.join("capabilities/sqld/service.toml");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        std::fs::write(&manifest, "kind = 'process'\ncommand = ['false']\n").unwrap();
+        write_at(
+            &overlay.join("config/sqld-rotation-inhibit"),
+            SystemTime::UNIX_EPOCH,
+        );
+        let paths = Paths {
+            caps_dir: root.join("capabilities"),
+            root: root.clone(),
+            overlay_root: Some(overlay),
+            overlay_caps_dir: None,
+            machine_toml: None,
+        };
+        let platform = Platform {
+            os: "test".into(),
+            runtime: "test".into(),
+            machine: root.join("machine.toml"),
+            machine_table: toml::Table::new(),
+        };
+        let mut svc = Svc::load(&paths, platform, "sqld", true).unwrap();
+        svc.lock = root.join("maintenance");
+        std::fs::write(&svc.lock, "hold").unwrap();
+        for cmd in ["start", "resume", "restart", "recreate"] {
+            assert_ne!(svc.dispatch(cmd).unwrap_err().code, 0);
+            assert!(svc.lock.exists());
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sqld_dispatch_holds_rotation_lock_until_runtime_returns() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = scratch("rotation-held-dispatch");
+        let overlay = root.join("overlay");
+        std::fs::create_dir_all(overlay.join("config")).unwrap();
+        let manifest = root.join("capabilities/sqld/service.toml");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        std::fs::write(&manifest, "name = 'sqld'\n").unwrap();
+        let runtime = root.join("runtime");
+        std::fs::write(&runtime, format!("#!/bin/sh\ntouch '{}'\ni=0\nwhile [ ! -e '{}' ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done\nprintf 'sqld\\n'\n", root.join("ready").display(), root.join("release").display())).unwrap();
+        std::fs::set_permissions(&runtime, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let paths = Paths {
+            caps_dir: root.join("capabilities"),
+            root: root.clone(),
+            overlay_root: Some(overlay),
+            overlay_caps_dir: None,
+            machine_toml: None,
+        };
+        let platform = Platform {
+            os: "test".into(),
+            runtime: "test".into(),
+            machine: root.join("machine.toml"),
+            machine_table: toml::Table::new(),
+        };
+        let mut svc = Svc::load(&paths, platform, "sqld", true).unwrap();
+        svc.prepared = true;
+        svc.runtime_bin = runtime.display().to_string();
+        svc.lock = root.join("maintenance");
+        std::thread::scope(|scope| {
+            let dispatch = scope.spawn(|| svc.dispatch("start"));
+            for _ in 0..200 {
+                if root.join("ready").exists() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let ready = root.join("ready").exists();
+            let blocked = crate::rotation_guard::acquire(&paths).is_err();
+            std::fs::write(root.join("release"), "").unwrap();
+            assert_eq!(dispatch.join().unwrap().unwrap(), 0);
+            assert!(ready, "runtime did not start");
+            assert!(blocked, "rotation lock was released during dispatch");
+            if let Err(e) =
+                past_forked_copies(|| crate::rotation_guard::acquire(&paths), |e| e.as_str())
+            {
+                panic!("{e}");
+            }
+        });
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

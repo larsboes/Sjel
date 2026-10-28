@@ -9,8 +9,8 @@ use regex::Regex;
 use serde_json::Value as Json;
 
 use crate::harnesses::engine::SkillStatus;
-use crate::harnesses::mutate::held_units;
 use crate::harnesses::mutate::hold_matches;
+use crate::harnesses::mutate::{held_sources, hold_source};
 use crate::harnesses::registry::{is_installed, Model, Registry};
 use crate::harnesses::statuses_for;
 
@@ -2107,10 +2107,12 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
             }
             Ok(rows) => {
                 let mut unselected: Vec<String> = Vec::new();
-                // Units `profiles.toml` holds back from this harness. Read here so the "not
-                // deployed" warning can be replaced by the reason, and so a hold that was
-                // overridden by a hand-run deploy is reported instead of passing as intent.
-                let held = held_units(&harness.config).unwrap_or_default();
+                // Units `profiles.toml` or this machine's machine.toml holds back from this
+                // harness. Read here so the "not deployed" warning can be replaced by the reason,
+                // and so a hold that was overridden by a hand-run deploy is reported instead of
+                // passing as intent.
+                let held_by = held_sources(&harness.config).unwrap_or_default();
+                let held: std::collections::BTreeSet<String> = held_by.keys().cloned().collect();
                 for row in &rows {
                     let label = format!("{}/{}", row.pack, row.skill);
                     if hold_matches(&held, &label) && row.status != SkillStatus::NotDeployed {
@@ -2126,8 +2128,9 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                         lines.push((
                             Level::Bad,
                             format!(
-                                "{label} is deployed to {} although profiles.toml [unit_hold] holds it back — {remedy}",
-                                harness.label
+                                "{label} is deployed to {} although {} [unit_hold] holds it back — {remedy}",
+                                harness.label,
+                                hold_source(&held_by, &label)
                             ),
                         ));
                         continue;
@@ -2145,8 +2148,9 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                                 lines.push((
                                     Level::Ok,
                                     format!(
-                                        "{label} held back from {} by profiles.toml [unit_hold]",
-                                        harness.label
+                                        "{label} held back from {} by {} [unit_hold]",
+                                        harness.label,
+                                        hold_source(&held_by, &label)
                                     ),
                                 ));
                             } else if harness.model == Model::Registry {

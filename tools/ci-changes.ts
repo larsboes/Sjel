@@ -93,17 +93,23 @@ export function firstHit(changed: string[], inputs: string[]): [string, string] 
   return null;
 }
 
-function decide(root: string, base: string | undefined): boolean {
+/** Decide whether the GPUI matrix must run for a committed diff. */
+export function decide(root: string, base: string | undefined): boolean {
   if (!base) {
     console.error("ci-changes: no base commit, so every job runs");
     return true;
   }
-  const diff = Bun.spawnSync(["git", "diff", "--name-only", `${base}...HEAD`], { cwd: root });
+  const diff = Bun.spawnSync(["git", "diff", "--name-only", "-z", "--no-renames", `${base}...HEAD`], { cwd: root });
   if (diff.exitCode !== 0) {
     console.error(`ci-changes: git diff failed, so every job runs: ${diff.stderr.toString()}`);
     return true;
   }
-  const changed = diff.stdout.toString().split("\n").filter(Boolean);
+  const removed = Bun.spawnSync(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", `${base}...HEAD`], { cwd: root });
+  if (removed.exitCode !== 0 || removed.stdout.length > 0) {
+    console.error("ci-changes: deleted or renamed input, or deletion detection failed, so GPUI runs");
+    return true;
+  }
+  const changed = diff.stdout.toString().split("\0").filter(Boolean);
   const hit = firstHit(changed, gpuiInputs(root));
   console.error(hit ? `ci-changes: gpui runs: ${hit[0]} is under ${hit[1] || "<repo root>"}` : `ci-changes: gpui skipped: none of ${changed.length} changed files is a GPUI input`);
   return hit !== null;

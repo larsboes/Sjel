@@ -535,7 +535,9 @@
     "\\bstop\\s+\\w+ing\\b[^.?!\\n]{1,40}[.?!]\\s+start\\s+\\w+ing\\b",
     "\\bwhile\\b[^.?!\\n]{1,40}?\\bmight seem\\b[^.?!\\n]{1,40}?,\\s+\\w+\\s+actually\\b",
     "\\b\\w+\\s+is dead[.?!]\\s+\\w+\\s+is the future\\b",
-    "\\bwhether you('?re| are)\\b[^.?!\\n]{1,40}?\\bor\\b[^.?!\\n]{1,30}?,"
+    "\\bwhether you('?re| are)\\b[^.?!\\n]{1,40}?\\bor\\b[^.?!\\n]{1,30}?,",
+    ",\\s+not\\s+(?:only\\s+|just\\s+|merely\\s+)?(?:a|an|the|by|from|to|in|on|at|for|with|as)?\\s*[^,.;:!?()\\n]{1,40}[.;]",
+    "\\bbut\\s+not\\b"
   ],
   "_false_agency_note": "Abstract/inanimate subject + a human cognition/volition verb. AI loves this because it avoids naming the actor ('the complaint becomes a fix' — someone fixed it). The fix is to name the human (or use 'you'), never to invent one. Conventional in academic/scientific prose ('the data show'), so the false_agency category is muted for the academic register.",
   "false_agency_patterns": [
@@ -650,6 +652,12 @@
       "rhetorical_questions",
       "name_signal",
       "essay_shape"
+    ],
+    "engineering_log": [
+      "name_signal",
+      "fragments",
+      "fixed_terms",
+      "data_lists"
     ]
   },
   "_muted_checks_note": "Maps a register-allowance token to the linter categories it silences. As of the Phase-2 checks, passive_voice silences the passive-voice density check (academic prose runs passive) and rhetorical_questions silences the rhetorical-question density check (marketing/casual/creative use them deliberately). warmth/contractions/you-address/light-enthusiasm correspond to NO linter check, so they silence nothing — the linter never penalized them. Crucially, puffery is NOT muted for marketing: hype is the marketing failure mode, so it stays flagged.",
@@ -698,6 +706,12 @@
     ],
     "over_correction_ok": [
       "over_correction"
+    ],
+    "fixed_terms": [
+      "ngram_repetition"
+    ],
+    "data_lists": [
+      "rule_of_three"
     ],
     "metaphor_ok": [
       "cliche_metaphor"

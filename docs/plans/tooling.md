@@ -10,6 +10,23 @@ covers it.
 
 ## Open
 
+- **A launchd unit whose capability manifest is gone.** `com.sjel.tailscaled` runs
+  `/opt/homebrew/opt/tailscale/bin/tailscaled` with `--statedir=<overlay>/secrets/tailscale-sjel`,
+  and that userspace daemon is the tailnet node `sjel` that reaches `homepi`, the remote backup
+  host. No `capabilities/tailscaled` manifest exists in either root, so `doctor` reports an orphan
+  unit for a capability this machine does not enable and suggests `remove-persistence tailscaled` —
+  which would drop the remote backup path at the next boot. Acting on that advice needs a check
+  that asks what the unit serves, not only whether the enabled set names it. Smallest change: have
+  the boot-persistence check report a unit with no manifest as `unmanaged` with its command line,
+  and refuse the removal suggestion while another capability's declared remote depends on it.
+- **CI cache inventory.** Inspecting Actions cache sizes and removing a merged pull request's
+  unreachable cache required GitHub API calls. Add a read-only `sjel` cache report with a
+  separately invoked cleanup for caches tied to closed pull requests and a dry run.
+- **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
+  refused to report success because an orphan still held the declared port. `lsof` identified
+  the listener; the sandbox refused a direct signal. Smallest change: let the runner identify
+  the listener against the declared executable and stop it through its existing orphan guard,
+  while refusing an unrelated executable.
 - **Package state of other hosts.** `tools/host-patch.sh` and `tools/doctor` cover only the
   machine they run on. Checking a Linux host on the tailnet for pending updates took a manual
   `ssh <host> apt list --upgradable`. Smallest change: a doctor line that runs that read over SSH
@@ -76,8 +93,9 @@ covers it.
 - **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
   candidate in pull-request CI without changing the full checks. It maps Rust source changes to
   package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
-  files. Runtime file reads are not modeled. Open work:
+  files and reports the existing GPUI input match. Runtime file reads are not modeled. Open work:
   1. CI reports separate Rust test compilation and execution resource usage and target size.
+     Pages uses the same main-only dependency cache policy as CI.
      Measure cache restore/save time and bytes and local target-directory growth for
      documentation, leaf crate, shared crate, UI and lockfile changes. Use existing storage
      reporting; do not clean a running deployment target.
@@ -88,8 +106,9 @@ covers it.
   3. Compare candidate selections against full PR checks in shadow mode, including tests that
      deliberately break cross-package and runtime-file dependencies. Record misses and repair
      them before enabling selective enforcement. Main continues to run the complete suite.
-  4. Add an always-running aggregate required check that fails on planner or selected-job failure.
-     Confirm branch-protection and merge-queue behavior before changing required checks.
+  4. The `verification result` job aggregates planner and job results, including the selected GPUI
+     matrix. The main ruleset still requires the five existing checks; test the aggregate in CI
+     before making it required. Confirm merge-queue behavior before changing required checks.
   5. Benchmark bounded local parallelism and cache retention against wall time, CPU, peak memory,
      disk and cache transfer. Set defaults only from measurements; keep controls reversible.
   Done when local and CI use the same validated planner, every unclassified input runs the full
@@ -107,3 +126,6 @@ covers it.
   replays them.
 - `tools/service-runner.sh stop|restart` stops an orphaned copy of the capability's own binary
   that holds its port. Before, it refused and asked for a manual `kill`.
+- `tools/harnesses` and `tools/doctor` read a `[unit_hold]` table from the overlay's machine.toml
+  and merge it with `profiles.toml`'s, so one machine can hold a unit back without changing the
+  shared file.

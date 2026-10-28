@@ -10,7 +10,7 @@ test suite asserts the JSON stays consistent with these values.
 from __future__ import annotations
 
 REGISTERS = ["technical", "business", "marketing", "academic", "casual", "creative",
-             "email", "release_notes", "ux_microcopy", "tutorial"]
+             "email", "release_notes", "ux_microcopy", "tutorial", "engineering_log"]
 
 DEFAULTS: dict = {
     # Numeric knobs read by the checks. Densities are per-1000-words; *_floor are

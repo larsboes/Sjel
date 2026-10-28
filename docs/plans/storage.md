@@ -5,6 +5,37 @@ capability or agent, a phone that reads and writes on its own and syncs when it 
 backups that prove they can be restored. Priority 3 in [`PLAN.md`](../../PLAN.md), except the
 storage work Priority 1 needs for the phone.
 
+## Rotation
+
+`sjel setup rotate turso` replaces the primary's signing key in one act. This sqld holds no data
+and has no client a person cannot reprovision, so there is no staged key to promote and nothing to
+roll back. The journal it writes *is* the inhibit marker that `sjel setup apply turso` and the
+managed `sqld` starting verbs consult.
+
+- **Authorization** is a terminal on stdin and stderr, `--confirm`, and a typed phrase. An agent
+  session is refused outright.
+- **Preflight** refuses a primary answering on the manifest port, installed and loaded boot
+  persistence, and a missing or unpinned `sqld`. Nothing is started, installed or enabled.
+- **Order**: the journal is written and fsynced first; the old-key probe token is minted while the
+  old key is still active and its signature checked; the previous private half is retained at
+  `turso-rotation-previous`; the new key reaches the Keychain before the public key file, so
+  `signing_key` never signs with a key sqld rejects; the replacement is journalled, then proven.
+- **The proof** is a disposable `sqld` on a loopback port it reserves, over a temporary database,
+  with the new public key: `probe_rotation` requires a real `SELECT 1` for a new-key token and
+  explicit 401/403 for the old-key and absent ones.
+- **Failure** keeps the marker, exits nonzero and never restores the old key. The retained private
+  half is deleted after the proof, and the report says plainly when it survives.
+- `sjel setup rotate recover` reports the journal and the public key file. It reads files only and
+  clears nothing.
+
+Open: the proof establishes key mechanics, not the live primary; the persistence answer is
+`persistence-status` alone, so a directly started `sqld` is caught only by the port check; and
+reprovisioning clients — this machine's own recorded token included — stays a separate command
+(`sjel setup apply turso --remint`).
+
+Not run: an end-to-end rotation on a live deployment, the live Keychain read and delete path, a
+power-loss test at each durable write, and any check of a started primary.
+
 ## 1. Facts (checked 2026-10-25)
 
 - **One shared file.** Capabilities open `<overlay>/data/axon/axon.db` through

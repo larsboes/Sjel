@@ -11,6 +11,7 @@ differ from Pi's tool-call interception and `vault_exec`; it is not a Pi extensi
 | Artifact | Harness | What it does |
 |----------|---------|-------------|
 | `extensions/secrets-guard.ts` | **pi** | Intercepts `read`, `edit`, `ls`, `grep`, `find`, `bash` tool calls to block reading/searching .env, .secrets, credentials, .pem/.key, .netrc, git-credentials, kubeconfig, ssh keys, and Bitwarden items. Registers `vault_exec` and `vault_keys` custom tools for safe credential usage. |
+| `extensions/command-policy/` | **pi** | Classifies every `bash` call, `vault_exec` command and `write`/`edit` as Block, Ask or Allow by the rules in [`docs/plans/agent.md` §3](../../docs/plans/agent.md) (`rm -rf`, force pushes, `sudo`, `curl … \| sh`: block; commits, pushes, installs, network, unknown programs: ask; reads, git reads, builds and tests: allow). A blocked call can be allowed once from its card; an asked call once or for the session. Without a UI both refuse. Cases: `command-policy/cases.toml`, run by `tools/command-policy.test.ts`. Not a sandbox. |
 | `extensions/inference-keys/` | **pi** | Supplies provider API keys from the macOS login keychain, falling back to the Bitwarden/Vaultwarden vault, instead of from environment variables or `auth.json`. The key is handed to pi by a command and never enters the conversation. The pi entry stays in TypeScript; its credential gateway, unlock flow, and keychain migration are implemented in the shared Rust CLI. See its [README](extensions/inference-keys/README.md). |
 | `skills/secrets-guard/` | **Claude Code** | Skill teaching the safe credential workflow (env-sourcing, never read/echo secrets, hand off secret creation to `tools/setup-secret.sh`) — the counterpart to Sjel's deny policy in the user-level Claude Code settings (`tools/templates/claude-code/settings.base.json`, applied by `sjel claude`). Deploy with `tools/packs.sh link security`. |
 
@@ -35,7 +36,7 @@ reaches the agent's context.
 | `bash` | `cat`/`grep`/`head`/`tail` on secret files | `cat .env` → blocked |
 | `bash` | `bw get`/`list`/`sync`/`export` | `bw get item "API"` → blocked |
 | `bash` | `echo $TOKEN` or `printenv` | `echo $GOOGLE_CLIENT_SECRET` → blocked |
-| `edit` | `*.env`, `*.secrets` | `edit .env` → blocked |
+| `edit`/`write` | `*.env`, `*.secrets`, also through a symlinked path | `edit .env` → blocked |
 
 ### Allowed operations
 
@@ -43,8 +44,20 @@ reaches the agent's context.
 |-----------|---------|----------|
 | `bash` with `source` | `source .env && curl ...` | Sourced into env, stdout doesn't contain values |
 | `bash` with `bw unlock` | `bw unlock` | Unlocks vault, doesn't read items |
-| `write` to `.env` | `write .env` | Writing secrets is legitimate setup |
 | `export VAR=...` | `export API_KEY=....` | Setting env vars is not reading them |
+
+### Providers trusted with raw secrets
+
+By default no model sees a raw secret. The overlay may name providers that can, in
+`config/secrets-guard.toml`:
+
+```toml
+raw_secret_providers = ["provider-name"]
+```
+
+A listed provider gets raw output only in an ephemeral (`--no-session`) session, where tool
+results are not written to a session file. Which provider is trusted is a machine decision,
+so the list never lives in Sjel.
 
 ### Custom tools
 

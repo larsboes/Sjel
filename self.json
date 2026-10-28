@@ -206,6 +206,10 @@
       }
     },
     {
+      "name": "gcp",
+      "kind": "pack"
+    },
+    {
       "name": "harness",
       "kind": "pack"
     },
@@ -512,6 +516,14 @@
     {
       "name": "summarize",
       "kind": "lib"
+    },
+    {
+      "name": "system-tools",
+      "kind": "pack"
+    },
+    {
+      "name": "technical-precision",
+      "kind": "pack"
     },
     {
       "name": "tools",
@@ -2915,6 +2927,10 @@
       "verdict": "quarry"
     },
     {
+      "name": "obsidian-local-rest-api",
+      "verdict": "adopt"
+    },
+    {
       "name": "obsidian-web-clipper",
       "verdict": "adopt"
     },
@@ -3075,6 +3091,10 @@
       "verdict": "inspiration"
     },
     {
+      "name": "smol-toml",
+      "verdict": "adopt"
+    },
+    {
       "name": "sqlite-vec",
       "verdict": "watch"
     },
@@ -3192,6 +3212,10 @@
     },
     {
       "name": "yahoo-finance-chart",
+      "verdict": "adopt"
+    },
+    {
+      "name": "yaml-js",
       "verdict": "adopt"
     },
     {

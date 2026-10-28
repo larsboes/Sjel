@@ -213,6 +213,31 @@ fn check(opts: &mut Options) -> Result<ExitCode, String> {
             totals.skipped += 1;
             continue;
         }
+        // A machine may declare a tool out of scope (machine.toml `toolchain_skip`): a work
+        // machine that keeps its secrets elsewhere has no use for the vault CLI, and a
+        // permanent red line teaches the operator to read past doctor. Reported as n/a, never
+        // hidden, so the waiver stays visible where the requirement is checked.
+        if waived(machine.as_ref(), name) {
+            if opts.json {
+                json_entries.push(serde_json::json!(JsonEntry {
+                    tool: name,
+                    bin,
+                    class,
+                    present: false,
+                    status: "n/a",
+                    version: "",
+                    note: "waived by machine.toml toolchain_skip",
+                    install,
+                }));
+            } else {
+                let _ = writeln!(
+                    text,
+                    "▸ {name:<16} · n/a here — waived by machine.toml toolchain_skip"
+                );
+            }
+            totals.skipped += 1;
+            continue;
+        }
         // Reported rather than dropped: an operator seeing `n/a (workflow:audit)` learns the
         // tool exists and what would require it, which a silent omission never teaches.
         if let Some(scope) = entry_scope(&entry.needed_by, &opts.workflow, &deployment) {
@@ -563,6 +588,14 @@ fn numeric(v: &str) -> Option<Vec<u64>> {
         .collect()
 }
 
+/// Whether machine.toml's `toolchain_skip` names this toolchain.toml entry.
+fn waived(machine: Option<&toml::Table>, name: &str) -> bool {
+    machine
+        .and_then(|m| m.get("toolchain_skip"))
+        .and_then(toml::Value::as_array)
+        .is_some_and(|names| names.iter().any(|n| n.as_str() == Some(name)))
+}
+
 fn or<'a>(s: &'a str, fallback: &'a str) -> &'a str {
     if s.is_empty() {
         fallback
@@ -574,6 +607,21 @@ fn or<'a>(s: &'a str, fallback: &'a str) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tool_is_waived_only_when_machine_toml_names_it() {
+        let machine: toml::Table =
+            toml::from_str("toolchain_skip = [\"bitwarden-cli\"]").expect("valid toml");
+        assert!(waived(Some(&machine), "bitwarden-cli"));
+        assert!(
+            !waived(Some(&machine), "bw"),
+            "the entry name, not the binary, is waived"
+        );
+        assert!(!waived(Some(&machine), "git"));
+        assert!(!waived(None, "bitwarden-cli"));
+        let empty: toml::Table = toml::from_str("os = \"linux\"").expect("valid toml");
+        assert!(!waived(Some(&empty), "bitwarden-cli"));
+    }
 
     #[test]
     fn dotted_number_is_the_leftmost_full_match() {

@@ -1,0 +1,42 @@
+version = 1
+
+# Fail closed for a model that has no matching rule.
+default_max_class = "c0"
+default_access = ["standard"]
+
+transport = "auto" # fetch, curl-exe, or auto (curl.exe under WSL)
+base_url = "http://127.0.0.1:27123"
+max_response_bytes = 500000
+request_timeout_seconds = 120
+max_collection_items = 50
+
+# Optional overrides. By default the extension discovers target/release/vault
+# below SJEL_ROOT and writes its content-free audit log below the private overlay.
+# classifier_path = "/path/to/Sjel/target/release/vault"
+# audit_path = "/path/to/private/logs/obsidian-access.jsonl"
+egress_tools = ["web_search", "source_check", "fetch_content", "get_search_content"]
+
+# The optional vault-writing contract is set in config/knowledge.toml, not here:
+# contract_path = "Meta/Vault-Contract.md"
+
+# Optional restrictions for paths and non-Markdown files that cannot declare
+# sensitivity or agent_access in frontmatter. Rules may only tighten access.
+[[paths]]
+pattern = "**/_Internal/**"
+access = "internal"
+
+# Replace these examples with reviewed provider/model ids in the private overlay.
+# C3 is intentionally unavailable: Sjel forbids it from entering any prompt.
+[[models]]
+pattern = "local-provider/*"
+max_class = "c2"
+access = ["standard", "internal", "confidential"]
+processing = "local"
+c2_approved = true
+
+[[models]]
+pattern = "reviewed-cloud/specific-model"
+max_class = "c1"
+access = ["standard", "internal"]
+processing = "external"
+c2_approved = false

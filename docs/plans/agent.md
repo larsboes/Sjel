@@ -84,13 +84,15 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
    `zsh -c` strings recursively. `xargs <cmd>` and `find … -exec <cmd>` are classified as `<cmd>`
    with unknown arguments.
 3. **Opaque input.** A command whose program name comes from a substitution (`$(…)`, backticks,
-   `$VAR`), `eval`, `source` of a file the session did not read, or a here-document fed to a shell
-   is at least Ask. If the opaque part reaches a Block program name, it is Block.
+   `$VAR`), or `eval`, is at least Ask. If the opaque part reaches a Block program name, it is
+   Block. A here-document fed to a shell is classified by its body.
 4. **Paths.** Resolve every path argument and every redirect target (`>`, `>>`, `2>`, `tee`)
    against the working directory, with `~` and `..` expanded and symlinks followed. A write
-   target outside the tier scope (§2) is Block.
+   inside the tier scope (§2) or outside `$HOME` is Allow. A write under `$HOME` but outside the
+   tier scope is Ask (A1).
 5. **Strictest wins.** The class of a compound command is the strictest class of its parts.
-6. **Unknown is Ask.** A program with no rule is Ask, never Allow.
+6. **Unknown is Allow.** A program with no rule is Allow (R4). Only the harmful classes above
+   ask or block: history, remotes, packages, processes, destruction and privilege.
 7. **Log.** Every decision is written to the call log with its class and the rule ID.
 
 ### Rules
@@ -104,17 +106,16 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 | B5 | Block | Disks and system state: `dd`, `mkfs*`, `diskutil`, `fdisk`, `shred`, `csrutil`, `spctl`, `nvram`, `launchctl`, `systemctl`, `crontab -r`, `defaults write`, `chmod -R`, `chown -R`. |
 | B6 | Block | Secrets: the existing guard (`libs/agent/src/ext/guard.rs`), plus `security find-*-password -w` and `security delete-*`. |
 | B7 | Block | Irreversible publishing: `cargo publish`, `npm publish`, `bun publish`, `gh release create`, `gh repo delete`. |
-| A1 | Ask | Any write or edit through the `write` and `edit` tools inside the tier scope. |
-| A2 | Ask | Git changes that keep history: `git commit`, `git push` (no force), `git merge`, `git rebase`, `git cherry-pick`, `git stash`, `git tag`, `git branch` (create), `git switch -c`. |
-| A3 | Ask | Package changes: `brew`, `npm`, `bun`, `pip`, `uv`, `cargo install` and `cargo add`, `rustup`. |
-| A4 | Ask | Network: `curl`, `wget`, `ssh`, `scp`, `rsync` to a remote, `gh` write subcommands (`pr create`, `issue create`, `pr merge`). |
-| A5 | Ask | Processes and containers: `kill`, `pkill`, `killall`, `docker` and `orb` run commands, `open`. |
-| A6 | Ask | Opaque input (step 3) and every program without a rule (step 6). |
-| R1 | Allow | Reading: `ls`, `cat`, `head`, `tail`, `wc`, `rg`, `grep`, `find` without `-delete` or `-exec`, `fd`, `tree`, `stat`, `file`, `du`, `df`, `pwd`, `echo`, `which`, `date`, `env` with no command. |
-| R2 | Allow | Git reads: `git status`, `diff`, `log`, `show`, `blame`, `rev-parse`, `ls-files`, `grep`, `branch` (list), `remote -v`. |
-| R3 | Allow | Build and test: `cargo check`, `test`, `clippy`, `build`, `fmt --check`, `bun test`, `tools/doctor`, and `sjel` read verbs (`help`, `search`, `context`, `status`). |
-
-A redirect that writes inside the tier scope turns an R rule into A1.
+| A1 | Ask | A write through the shell or the `write` and `edit` tools whose target is under `$HOME` but outside the tier scope. |
+| A2 | Ask | Git changes to history, branches or remotes: `commit`, `push` (no force), `pull`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`, `apply`, `stash` (save, pop, apply), `reset` (soft or mixed), `switch`, `checkout` of a branch, `branch` and `tag` create, rename or delete, `worktree`, `submodule`, `remote` changes, `config` writes, `gc`, `prune`, `notes`, `bisect`, `update-index`. |
+| A3 | Ask | Package changes and download-and-run: `brew`, `npm`/`pnpm`/`yarn`/`bun` `install`, `add`, `remove`, `update` and `link`, `pip install` and `uninstall`, `pipx`, `uv` `add`, `remove`, `sync`, `pip` and `tool`, `cargo install`, `add`, `update` and `remove`, `rustup` changes, `apt`, `dnf`, `snap`, `flatpak`, `gem install`, `go install` and `go get`, and `npx`, `bunx`, `uvx`. |
+| A4 | Ask | Network writes and remote shells: `curl` or `wget` that send data (`-d`, `--data*`, `-F`, `-T`, a `-X` other than `GET` or `HEAD`), `ssh`, `scp`, `sftp`, `rsync` to a remote, `nc`, `telnet`, `ftp`, and `gh` write subcommands. |
+| A5 | Ask | Processes and containers: `kill`, `pkill`, `killall`, and `docker`, `podman` and `orb` commands other than reads. |
+| A6 | Ask | Opaque input (step 3): a program name built at run time, `eval`. |
+| R1 | Allow | Reading: `ls`, `cat`, `rg`, `grep`, `find` without `-delete`, `curl` and `wget` reads, and the like. |
+| R2 | Allow | Git reads and local index changes: `status`, `diff`, `log`, `show`, `blame`, `branch` (list), `remote -v`, `fetch`, `add`, `rm`, `mv`, `restore --staged`, `clone`, `init`. |
+| R3 | Allow | Build and test: `cargo` other than A3, `bun test`, `bun run`, `npm run`, `tools/doctor`, `sjel` read verbs. |
+| R4 | Allow | Every program without a rule, interpreters running a named script or `-c` code, here-documents, `source`, `sed -i` and `perl -i`, plain `rm` of a file inside the tier scope, and writes per step 4. |
 
 ### Where it lives and how it is tested
 
@@ -128,6 +129,23 @@ m -rf x`, `env rm -rf x`, `command rm -rf x`,
   `ls; rm -rf x`, and `cat x > ../outside`.
 - Done when every case passes, the gate shows the rule ID on each card, and one week of real use
   gives a prompt rate (below).
+
+**Pi has it now (2026-10-26).** `Packs/security/extensions/command-policy/` implements this section
+for pi in TypeScript, with the case table in `command-policy/cases.toml` (every rule ID and every
+evasion case above). It implements the rule table above: cards are reserved for harmful classes,
+so writes inside the scope, unknown programs and interpreters run without one.
+
+**Open: the Rust classifier still implements the previous table.** The committed
+`libs/agent/src/ext/policy.rs` and `libs/agent/tests/policy_cases.toml` ask about every in-scope
+write and every unknown program (old A1 and A6) and block writes outside the scope. An uncommitted
+port of the table above exists in a working tree. Against the shared `command-policy/cases.toml`
+(fixture home a synthetic `$HOME`, scope a `proj` directory inside it) it misses 13 of 120 cases, 5 of them Allow where the table
+says Block: `timeout 5 nice -n 10 rm -fr`, `X=1 rm -r`, `rm -rf` inside a `for` loop, `busybox
+rm -rf`, `secret-tool lookup`. The rest are rule IDs (`R1` vs `R4`) and `bun`, `uv run`, `go test`.
+Finish the port, point `libs/agent/tests/policy_cases.rs` at the shared table with
+`Policy::with_home` so it does not depend on the machine's `$HOME`, remove the second table, and
+update `capabilities/agent/src/gate.rs` tests that use a command which now runs without a card.
+Done when the Rust and pi tests pass against the one table.
 
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.

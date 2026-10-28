@@ -1,0 +1,9 @@
+{
+  "name": "technical-precision",
+  "description": "Apply concise, evidence-backed, technically precise reasoning and writing for research, debugging, evaluation, comparison, recommendations, architecture, and technical documents.",
+  "author": {
+    "name": "Lars Boes",
+    "url": "https://github.com/larsboes/Sjel"
+  },
+  "license": "MIT"
+}

@@ -12,6 +12,8 @@ export SJEL_PUBLICATION_ROOT="$SCRATCH"
 # the gate happens to default to. `private-user` is the fixture's operator; every home path in
 # this file is built around it.
 export SJEL_PRIVATE_USERS="private-user"
+# No overlay leaks into these cases: the overlay-private marker list is injected per case below.
+export SJEL_PUBLICATION_MARKERS="/nonexistent/publication-markers.txt"
 
 git -C "$SCRATCH" init -q
 printf '%s\n' 'container example: /home/agent/config' > "$SCRATCH/safe.txt"
@@ -95,7 +97,7 @@ git -C "$SCRATCH" add instance.txt
 expect_pass "a compound identifier beginning with a marker"
 
 # ...but the marker itself, in a path or on its own, still fails.
-printf '%s\n' 'see ~/Developer/sjel-personal/config' > "$SCRATCH/instance.txt"
+printf '%s\n' 'see ~/Developer/''sjel-personal/config' > "$SCRATCH/instance.txt"
 git -C "$SCRATCH" add instance.txt
 expect_fail_with "a marker used as a real path" "instance.txt"
 
@@ -106,6 +108,28 @@ expect_fail_with "a marker alone on a line" "instance.txt"
 printf '%s\n' 'selected deployment overlay' > "$SCRATCH/instance.txt"
 git -C "$SCRATCH" add instance.txt
 expect_pass "generic deployment language"
+
+# Overlay-private markers: the list lives outside the repository, a hit names the path but
+# never the term, comments are ignored, and matching ignores case.
+MARKERS="$(mktemp)"
+printf '%s\n' '# employer-internal names' 'acme-proxy' > "$MARKERS"
+printf '%s\n' 'routes through ACME-Proxy today' > "$SCRATCH/private.txt"
+git -C "$SCRATCH" add private.txt
+expect_pass "an overlay marker with no list configured"
+export SJEL_PUBLICATION_MARKERS="$MARKERS"
+expect_fail_with "an overlay marker in any case" "private.txt"
+if "$CHECK" 2>&1 | grep -qi 'acme-proxy'; then
+  echo "FAIL: the gate must not print the overlay marker itself"; fails=$((fails + 1))
+fi
+printf '%s\n' 'a proxy in general' > "$SCRATCH/private.txt"
+git -C "$SCRATCH" add private.txt
+expect_pass "text near but not matching an overlay marker"
+printf '%s\n' 'routes through ACME-Proxy today' > "$SCRATCH/private.txt"
+git -C "$SCRATCH" add private.txt
+printf '%s\n' '# only comments' > "$MARKERS"
+expect_pass "a marker list holding only comments"
+rm -f "$MARKERS"
+export SJEL_PUBLICATION_MARKERS="/nonexistent/publication-markers.txt"
 
 if [ "$fails" -gt 0 ]; then
   echo "publication hygiene: $fails check(s) failed"

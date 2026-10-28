@@ -41,6 +41,83 @@ export function rustImpact(files: string[], packages: Package[]): Impact {
   return { mode: "candidate", packages: [...selected].sort(), skipped: all.filter((name) => !selected.has(name)), reasons };
 }
 
+export interface FastCheck {
+  name: string;
+  cmd: string[];
+  reason: string;
+}
+
+/** Inputs the root workspace's clippy reads; apps/gpui is its own workspace and CI matrix. */
+function rustInput(file: string): boolean {
+  if (file.startsWith("apps/gpui/")) return false;
+  const base = file.split("/").pop()!;
+  return file.endsWith(".rs") || base === "Cargo.toml" || base === "Cargo.lock" ||
+    file === "rust-toolchain.toml" || file === "clippy.toml" || file.startsWith(".cargo/");
+}
+
+/**
+ * The local subset of CI for a change. Full CI still runs on every push; this only
+ * catches the cheap failures before it. Every doubt about Rust widens clippy to the workspace.
+ */
+export function fastPlan(files: string[], deleted: boolean, packages: Package[], exists: (path: string) => boolean) {
+  const checks: FastCheck[] = [
+    { name: "cargo fmt", cmd: ["cargo", "fmt", "--all", "--check"], reason: "always: one second" },
+    { name: "repo gates", cmd: ["tools/ci-local", "run", "repo-gates"], reason: "always: file-based, about a minute" },
+  ];
+  const skipped: string[] = [];
+
+  const rust = files.filter(rustInput);
+  if (rust.length === 0 && !deleted) {
+    skipped.push("clippy and cargo test: no root-workspace Rust input changed");
+  } else {
+    const impact = deleted
+      ? { mode: "all" as const, packages: [], reasons: ["a deleted or renamed input"] }
+      : rustImpact(rust, packages);
+    const scope = impact.mode === "all" ? ["--workspace"] : impact.packages.flatMap((p) => ["-p", p]);
+    checks.push({
+      name: "clippy",
+      cmd: ["tools/cargo-hermetic", "clippy", ...scope, "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"],
+      reason: impact.mode === "all" ? `workspace: ${impact.reasons[0]}` : impact.packages.join(", "),
+    });
+    // Same scope as clippy. Tests that read repository files at run time can still fail only
+    // in CI's full run; this catches the compile and unit failures first.
+    checks.push({
+      name: "cargo test",
+      cmd: ["tools/cargo-hermetic", "test", ...scope, "--locked"],
+      reason: impact.mode === "all" ? "workspace" : impact.packages.join(", "),
+    });
+  }
+
+  // Tests named after a changed file: x.test.ts beside x.ts, tools/x.test.sh beside tools/x.
+  const bun = new Set<string>();
+  const shell = new Set<string>();
+  for (const file of files) {
+    const stem = file.replace(/\.test\.(ts|sh)$/, "").replace(/\.(ts|sh)$/, "");
+    if (exists(`${stem}.test.ts`)) bun.add(`./${stem}.test.ts`);
+    if (exists(`${stem}.test.sh`)) shell.add(`${stem}.test.sh`);
+  }
+  if (bun.size) checks.push({ name: "bun test", cmd: ["bun", "test", ...[...bun].sort()], reason: `${bun.size} test file(s) beside changed files` });
+  for (const t of [...shell].sort()) checks.push({ name: t, cmd: ["bash", t], reason: "beside a changed file" });
+  if (!bun.size && !shell.size) skipped.push("bun and shell tests: none beside a changed file");
+
+  if (files.some((f) => f.startsWith("apps/gpui/"))) skipped.push("gpui: CI's platform matrix checks it");
+  skipped.push("ui-check: CI runs it in full");
+  return { checks, skipped };
+}
+
+/** The root workspace's packages and their in-workspace dependencies. */
+export function rootPackages(root: string): Package[] {
+  const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1"], root));
+  const members = new Set<string>(metadata.workspace_members);
+  const workspace = metadata.packages.filter((p: any) => members.has(p.id));
+  const namesByDir = new Map<string, string>(workspace.map((p: any) => [dirname(p.manifest_path), p.name]));
+  return workspace.map((p: any) => ({
+    name: p.name,
+    dir: relative(root, dirname(p.manifest_path)),
+    dependencies: p.dependencies.flatMap((d: any) => d.path && namesByDir.has(d.path) ? [namesByDir.get(d.path)] : []),
+  }));
+}
+
 function command(args: string[], root: string): string {
   const run = Bun.spawnSync(args, { cwd: root });
   if (run.exitCode !== 0) throw new Error(`${args.join(" ")}: ${run.stderr.toString()}`);
@@ -73,15 +150,7 @@ function main() {
   const local = Bun.argv.includes("--local");
   if (!base && !local) throw new Error("supply --base <commit>, --local, or both");
   if (baseAt >= 0 && (!base || base.startsWith("--"))) throw new Error("--base requires a commit");
-  const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1"], root));
-  const members = new Set<string>(metadata.workspace_members);
-  const workspace = metadata.packages.filter((p: any) => members.has(p.id));
-  const namesByDir = new Map<string, string>(workspace.map((p: any) => [dirname(p.manifest_path), p.name]));
-  const packages: Package[] = workspace.map((p: any) => ({
-    name: p.name,
-    dir: relative(root, dirname(p.manifest_path)),
-    dependencies: p.dependencies.flatMap((d: any) => d.path && namesByDir.has(d.path) ? [namesByDir.get(d.path)] : []),
-  }));
+  const packages = rootPackages(root);
   const { files, deleted } = changedFiles(root, base, local);
   const changed = [...files].sort();
   const impact = deleted.size

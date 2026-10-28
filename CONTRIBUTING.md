@@ -76,6 +76,11 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
+`sjel check` (`tools/ci-local fast`) runs the quick subset of CI for the current change, in
+parallel: `cargo fmt`, the repo gates, clippy and `cargo test` on the affected crates, and the
+tests beside changed files. The pre-push hook runs it; `SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs
+the full suite.
+
 `tools/ci-local list` identifies CI jobs that can be replayed locally. `tools/ci-local run
 repo-gates` and `tools/ci-local run bun-tests` read their scripts from the CI workflow; action
 setup is not replayed, and the Bun job installs locked dependencies in the checkout. The runner

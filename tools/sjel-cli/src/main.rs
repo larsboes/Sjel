@@ -190,6 +190,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
                 .args(["run", "bun-tests"])
                 .args(rest),
         ),
+        "check" => exec(Command::new(tool("tools/ci-local")).arg("fast").args(rest)),
         "cargo" => exec(Command::new(tool("tools/cargo-hermetic")).args(rest)),
         "capability" => capability::command(root, rest),
         "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
@@ -238,7 +239,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "update" => help::UPDATE,
         "mirror" => help::MIRROR,
         "setup" => help::SETUP,
-        "gates" | "test" => help::GATES,
+        "gates" | "test" | "check" => help::GATES,
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,

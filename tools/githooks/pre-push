@@ -1,5 +1,5 @@
 #!/bin/bash
-# pre-push — the secret check that runs when a push does, not a day later.
+# pre-push — the secret check and the quick CI subset, run when a push does, not later.
 #
 # The public repo is covered by GitHub's own push protection (tools/sjel-cli/src/audit.rs states
 # that as its reason for scanning the overlay at all), but a PRIVATE repository needs a paid plan
@@ -16,9 +16,10 @@
 # on stdin. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
 set -u
 
+scanner=1
 if ! command -v gitleaks >/dev/null 2>&1; then
   echo "pre-push: gitleaks is not installed — this push was NOT secret-scanned" >&2
-  exit 0
+  scanner=0
 fi
 
 status=0
@@ -30,6 +31,7 @@ while read -r _local_ref local_sha _remote_ref _remote_sha; do
   # Two refs pushed from one commit are one range, and gitleaks is not free.
   case " $seen " in *" $local_sha "*) continue ;; esac
   seen="$seen $local_sha"
+  [ "$scanner" -eq 1 ] || continue
 
   # `--exit-code` takes an INT in gitleaks 8.30.1, so it needs its value: bare, it swallows the
   # next flag and every push fails on the parse rather than on a secret.
@@ -41,5 +43,24 @@ done
 
 if [ "$status" -ne 0 ]; then
   echo "pre-push: gitleaks found a secret in a commit being pushed — fix or remove it, then push again" >&2
+  exit "$status"
 fi
-exit "$status"
+
+# The quick subset of CI, so a fmt or clippy slip fails here in seconds instead of on main
+# minutes later. It checks the working tree, so another session's uncommitted edits can fail
+# it; SJEL_SKIP_PUSH_CHECKS=1 skips it for one push. Only a Sjel checkout carries the tool.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+[ -n "$seen" ] && [ -x "$repo_root/tools/ci-local" ] || exit 0
+if [ "${SJEL_SKIP_PUSH_CHECKS:-}" = 1 ]; then
+  echo "pre-push: SJEL_SKIP_PUSH_CHECKS=1 — local checks skipped, CI still runs them" >&2
+  exit 0
+fi
+if ! command -v bun >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-push: bun or cargo is missing — local checks NOT run" >&2
+  exit 0
+fi
+if ! "$repo_root/tools/ci-local" fast >&2; then
+  echo "pre-push: local checks failed. Fix them, or push with SJEL_SKIP_PUSH_CHECKS=1 when the failure is not yours" >&2
+  exit 1
+fi
+exit 0

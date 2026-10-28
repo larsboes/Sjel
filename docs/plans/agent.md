@@ -139,7 +139,7 @@ so writes inside the scope, unknown programs and interpreters run without one.
 `libs/agent/src/ext/policy.rs` and `libs/agent/tests/policy_cases.toml` ask about every in-scope
 write and every unknown program (old A1 and A6) and block writes outside the scope. An uncommitted
 port of the table above exists in a working tree. Against the shared `command-policy/cases.toml`
-(home `/home/u`, scope `/home/u/proj`) it misses 13 of 120 cases, 5 of them Allow where the table
+(fixture home a synthetic `$HOME`, scope a `proj` directory inside it) it misses 13 of 120 cases, 5 of them Allow where the table
 says Block: `timeout 5 nice -n 10 rm -fr`, `X=1 rm -r`, `rm -rf` inside a `for` loop, `busybox
 rm -rf`, `secret-tool lookup`. The rest are rule IDs (`R1` vs `R4`) and `bun`, `uv run`, `go test`.
 Finish the port, point `libs/agent/tests/policy_cases.rs` at the shared table with

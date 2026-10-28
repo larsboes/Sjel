@@ -73,12 +73,25 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
-- **Selective root-workspace tests in CI.** `tools/ci-changes` skips the GPUI matrix when no
-  GPUI input changed. `cargo test` and clippy still run the whole root workspace on every pull
-  request, because its tests read repository files through `CARGO_MANIFEST_DIR` at run time and
-  no static scan lists them. Smallest change: measure how `cargo test` splits between compile and
-  run under rust-cache. If the run part dominates, test changed crates and their reverse
-  dependencies on pull requests and the whole workspace on `main`.
+- **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
+  candidate in pull-request CI without changing the full checks. It maps Rust source changes to
+  package owners and reverse dependencies; runtime file reads are not modeled. Open work:
+  1. Measure compile and test time separately, cache restore/save time and bytes, peak memory,
+     and local target-directory growth for documentation, leaf crate, shared crate, UI and
+     lockfile changes. Use existing storage reporting; do not clean a running deployment target.
+  2. Extend the shared planner to cover local uncommitted changes, both Cargo workspaces, feature
+     and target combinations, build scripts, generated inputs, runtime file reads, Bun and shell
+     tests, UI packages and repository gates. Unknown inputs, missing metadata, renames and
+     deletions must widen the plan. Report each selected and skipped check with its reason.
+  3. Compare candidate selections against full PR checks in shadow mode, including tests that
+     deliberately break cross-package and runtime-file dependencies. Record misses and repair
+     them before enabling selective enforcement. Main continues to run the complete suite.
+  4. Add an always-running aggregate required check that fails on planner or selected-job failure.
+     Confirm branch-protection and merge-queue behavior before changing required checks.
+  5. Benchmark bounded local parallelism and cache retention against wall time, CPU, peak memory,
+     disk and cache transfer. Set defaults only from measurements; keep controls reversible.
+  Done when local and CI use the same validated planner, every unclassified input runs the full
+  relevant checks, full main checks remain green, and measurements show the cost and savings.
 - **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:

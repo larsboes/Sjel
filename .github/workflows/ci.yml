@@ -351,6 +351,15 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: tools/ci-changes --base "$BASE" >> "$GITHUB_OUTPUT"
+      - name: Report Rust impact candidate
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo '### Rust impact candidate (shadow only)' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          bun run tools/ci-impact.ts --base "$BASE" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   # The GPUI app is its own workspace (apps/gpui/Cargo.toml), so nothing above builds it. Each
   # platform checks natively: a cross check from one host needs every target's C toolchain

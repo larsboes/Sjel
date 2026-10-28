@@ -287,7 +287,7 @@ mod tests {
     #[cfg(feature = "xberg")]
     #[test]
     fn the_pdf_rung_is_present_exactly_when_its_feature_is() {
-        assert_eq!(for_class(InputClass::Pdf).unwrap().name(), "xberg-1.0.5");
+        assert_eq!(for_class(InputClass::Pdf).unwrap().name(), "xberg-1.3.6");
         assert!(require(InputClass::Pdf).is_ok());
     }
 

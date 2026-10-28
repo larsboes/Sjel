@@ -581,8 +581,9 @@ impl Terminal {
             },
         };
         *self.lock_status() = Some(end.clone());
-        self.exited.store(true, Ordering::SeqCst);
+        // Before `exited`: `close` returns on it, and its caller may read the audit file.
         self.audit_line("end", Some(end.code));
+        self.exited.store(true, Ordering::SeqCst);
         self.subscribers.wake();
     }
 

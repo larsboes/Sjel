@@ -44,6 +44,8 @@ belongs to Priority 1.
   it is fixed as soon as it is understood.
 - Measured transit reliability, starting with the Köln–Bonn corridor, and collection that works
   while the Mac is closed ([`transit.md`](docs/plans/transit.md)).
+- Pack deployment at user, project and account level, and its defects
+  ([`packs.md`](docs/plans/packs.md)).
 - RoomPlan device validation and the shared capture pipeline ([`scanning.md`](docs/plans/scanning.md)).
 - Imports, formats, the settings surface, adaptive features and the domain backlog
   ([`data.md`](docs/plans/data.md)).

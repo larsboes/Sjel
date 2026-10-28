@@ -150,9 +150,10 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
 3. **Safari on Mac and iPhone.** A Safari web extension in an app wrapper, using native
    messaging to the same host. The upstream `xcode/` project was not taken because of its
    trademarked icons.
-4. **Interpreter through Sjel.** Upstream's Interpreter calls the provider set in the extension.
-   Until it routes through Sjel inference with its data-class rules, configure only the local
-   OpenAI-compatible endpoint.
+4. **Settings from the app.** Shipped in `96758d40`: Sjel owns the templates (Settings ›
+   Clipper) and the Interpreter, which answers on the light local role; Feed › Clips lists and
+   reads clips. Not yet checked in the browser: the first seed, a locked editor, and an
+   Interpreter run.
 5. **Review and routing.** Clip documents to owning capabilities with provenance, and into the
    vault when the result is knowledge. Clips stay `c2` and unenriched until then.
 6. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts

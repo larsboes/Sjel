@@ -10,6 +10,15 @@ covers it.
 
 ## Open
 
+- **A launchd unit whose capability manifest is gone.** `com.sjel.tailscaled` runs
+  `/opt/homebrew/opt/tailscale/bin/tailscaled` with `--statedir=<overlay>/secrets/tailscale-sjel`,
+  and that userspace daemon is the tailnet node `sjel` that reaches `homepi`, the remote backup
+  host. No `capabilities/tailscaled` manifest exists in either root, so `doctor` reports an orphan
+  unit for a capability this machine does not enable and suggests `remove-persistence tailscaled` —
+  which would drop the remote backup path at the next boot. Acting on that advice needs a check
+  that asks what the unit serves, not only whether the enabled set names it. Smallest change: have
+  the boot-persistence check report a unit with no manifest as `unmanaged` with its command line,
+  and refuse the removal suggestion while another capability's declared remote depends on it.
 - **CI cache inventory.** Inspecting Actions cache sizes and removing a merged pull request's
   unreachable cache required GitHub API calls. Add a read-only `sjel` cache report with a
   separately invoked cleanup for caches tied to closed pull requests and a dry run.

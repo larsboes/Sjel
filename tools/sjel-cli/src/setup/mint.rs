@@ -41,12 +41,22 @@ const PUBLIC_NAME: &str = "sqld-auth.pub";
 /// the key pair, and rotation is cheaper than that.
 pub(crate) const DEFAULT_MINT_DAYS: u64 = 30;
 
+/// The address of the private half: one credential id, and the Keychain service the provider
+/// derives from it. Shared with `sjel setup rotate turso`, because a second copy of the string is a
+/// second place for the key to hide.
+pub(crate) fn key_reference() -> Result<(CredentialId, ProviderReference), String> {
+    let id = CredentialId::parse(KEY_ID).map_err(|e| format!("credential id refused: {e}"))?;
+    Ok((
+        id,
+        ProviderReference::Keychain {
+            account: KEY_ID.to_owned(),
+        },
+    ))
+}
+
 /// The signing key, created on first use and read from the Keychain afterwards.
 fn signing_key() -> Result<PrimaryKey, String> {
-    let id = CredentialId::parse(KEY_ID).map_err(|e| format!("credential id refused: {e}"))?;
-    let reference = ProviderReference::Keychain {
-        account: KEY_ID.to_owned(),
-    };
+    let (id, reference) = key_reference()?;
     let provider = KeychainProvider::system();
 
     match provider
@@ -72,19 +82,27 @@ fn signing_key() -> Result<PrimaryKey, String> {
     }
 }
 
-/// Write the public half where `sqld` reads it, answering the path.
-///
-/// Written every time rather than only when absent: the file is public, and a key that changed
-/// with the file left behind would make every token fail with no hint why.
-pub(crate) fn write_public_key(paths: &Paths, key: &PrimaryKey) -> Result<PathBuf, String> {
+/// Where `sqld --auth-jwt-key-file` reads the public half, which is the one path that answers for
+/// this deployment's key file.
+pub(crate) fn public_key_path(paths: &Paths) -> Result<PathBuf, String> {
     let Some(root) = paths.overlay_root.as_ref() else {
         return Err(
             "no overlay resolved, so there is no private directory for the public key".to_owned(),
         );
     };
-    let dir = root.join("config");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-    let path = dir.join(PUBLIC_NAME);
+    Ok(root.join("config").join(PUBLIC_NAME))
+}
+
+/// Write the public half where `sqld` reads it, answering the path.
+///
+/// Written every time rather than only when absent: the file is public, and a key that changed
+/// with the file left behind would make every token fail with no hint why.
+pub(crate) fn write_public_key(paths: &Paths, key: &PrimaryKey) -> Result<PathBuf, String> {
+    let path = public_key_path(paths)?;
+    let Some(dir) = path.parent() else {
+        return Err("the public key path has no directory".to_owned());
+    };
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     let body = key.public_key_base64url();
     if std::fs::read_to_string(&path).ok().as_deref() != Some(body.as_str()) {
         std::fs::write(&path, &body)

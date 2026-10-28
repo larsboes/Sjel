@@ -664,7 +664,7 @@ why = "Prof. Peng Sida's (彭思达) publicly shared research/paper-writing note
 url = "https://github.com/amosblomqvist/learnharness"
 verdict = "quarry"
 license = "AGPL-3.0 -- ideas only; the knowledge Pack is MIT, so no prompt text is copied"
-summary = "Amos Blomqvist's desktop learning harness: probe, plan, teach, practice, and a graph of propositions and reasoning chains"
+summary = "Desktop learning harness for probing, teaching, practice, and graphs of propositions and reasoning."
 why = "Read 2026-10-28 at the default branch. Its predecessor https://github.com/amosblomqvist/learn is what Packs/knowledge/skills/teach started from. Three ideas taken, paraphrased: the predict-teach-check cycle with thinking and confidence on every answer (teacher/28-predictions.md, shared/16-mental-model.md) into teach; extraction into propositions plus reasoning chains whose premises jointly imply a conclusion (src/core/contracts/graph.ts) as the vault's claim notes; the practice doctrine (practice/10-doctrine.md) as Packs/knowledge/skills/practice. Not adopted: the Electron app and its JSONL graph store -- the vault is the store, and Obsidian is the client on Mac and phone."
 
 # --- home-server container dependencies ------------------------------------

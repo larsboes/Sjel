@@ -64,6 +64,12 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
+- **Selective root-workspace tests in CI.** `tools/ci-changes` skips the GPUI matrix when no
+  GPUI input changed. `cargo test` and clippy still run the whole root workspace on every pull
+  request, because its tests read repository files through `CARGO_MANIFEST_DIR` at run time and
+  no static scan lists them. Smallest change: measure how `cargo test` splits between compile and
+  run under rust-cache. If the run part dominates, test changed crates and their reverse
+  dependencies on pull requests and the whole workspace on `main`.
 - **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:

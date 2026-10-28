@@ -132,7 +132,7 @@ unsafe_code = "deny"
 # the lock.
 [workspace.dependencies]
 aho-corasick = "1.1"
-base64 = "0.22"
+base64 = "0.23"
 axum = "0.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 getrandom = "0.4"

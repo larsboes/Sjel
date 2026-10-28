@@ -75,11 +75,13 @@ covers it.
   `check-doc-self-references.sh`, in the same CI repo gates.
 - **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
   candidate in pull-request CI without changing the full checks. It maps Rust source changes to
-  package owners and reverse dependencies; runtime file reads are not modeled. Open work:
-  1. Measure compile and test time separately, cache restore/save time and bytes, peak memory,
-     and local target-directory growth for documentation, leaf crate, shared crate, UI and
-     lockfile changes. Use existing storage reporting; do not clean a running deployment target.
-  2. Extend the shared planner to cover local uncommitted changes, both Cargo workspaces, feature
+  package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
+  files. Runtime file reads are not modeled. Open work:
+  1. CI reports separate Rust test compilation and execution resource usage and target size.
+     Measure cache restore/save time and bytes and local target-directory growth for
+     documentation, leaf crate, shared crate, UI and lockfile changes. Use existing storage
+     reporting; do not clean a running deployment target.
+  2. Extend the shared planner to cover both Cargo workspaces, feature
      and target combinations, build scripts, generated inputs, runtime file reads, Bun and shell
      tests, UI packages and repository gates. Unknown inputs, missing metadata, renames and
      deletions must widen the plan. Report each selected and skipped check with its reason.

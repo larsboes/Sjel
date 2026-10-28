@@ -10,6 +10,7 @@ export interface Impact {
   mode: "all" | "candidate";
   packages: string[];
   reasons: string[];
+  skipped: string[];
 }
 
 /** Propose Rust packages for shadow comparison; runtime file reads are not modeled. */
@@ -20,7 +21,7 @@ export function rustImpact(files: string[], packages: Package[]): Impact {
   for (const file of files) {
     const owner = packages.filter((p) => file.startsWith(`${p.dir}/`)).sort((a, b) => b.dir.length - a.dir.length)[0];
     if (!owner || !file.endsWith(".rs") || file.endsWith("/build.rs")) {
-      return { mode: "all", packages: all, reasons: [`${file}: input is not a package Rust source`] };
+      return { mode: "all", packages: all, skipped: [], reasons: [`${file}: input is not a package Rust source`] };
     }
     selected.add(owner.name);
     reasons.push(`${file}: owned by ${owner.name}`);
@@ -36,7 +37,7 @@ export function rustImpact(files: string[], packages: Package[]): Impact {
       }
     }
   }
-  return { mode: "candidate", packages: [...selected].sort(), reasons };
+  return { mode: "candidate", packages: [...selected].sort(), skipped: all.filter((name) => !selected.has(name)), reasons };
 }
 
 function command(args: string[], root: string): string {
@@ -49,7 +50,9 @@ function main() {
   const root = resolve(import.meta.dir, "..");
   const baseAt = Bun.argv.indexOf("--base");
   const base = baseAt < 0 ? undefined : Bun.argv[baseAt + 1];
-  if (!base) throw new Error("--base requires a commit");
+  const local = Bun.argv.includes("--local");
+  if (!base && !local) throw new Error("supply --base <commit>, --local, or both");
+  if (baseAt >= 0 && (!base || base.startsWith("--"))) throw new Error("--base requires a commit");
   const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1"], root));
   const members = new Set<string>(metadata.workspace_members);
   const workspace = metadata.packages.filter((p: any) => members.has(p.id));
@@ -59,10 +62,25 @@ function main() {
     dir: relative(root, dirname(p.manifest_path)),
     dependencies: p.dependencies.flatMap((d: any) => d.path && namesByDir.has(d.path) ? [namesByDir.get(d.path)] : []),
   }));
-  const diff = command(["git", "diff", "--name-only", "-z", "--no-renames", `${base}...HEAD`], root);
-  const files = diff.split("\0").filter(Boolean);
-  const impact = rustImpact(files, packages);
-  console.log(JSON.stringify({ shadow: true, base, files, rust: impact, note: "Candidate only; full CI remains required. Runtime file reads are not modeled." }, null, 2));
+  const files = new Set<string>();
+  const deleted = new Set<string>();
+  const collect = (args: string[], output: Set<string>) => {
+    for (const file of command(args, root).split("\0")) if (file) output.add(file);
+  };
+  if (base) {
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", `${base}...HEAD`], files);
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", `${base}...HEAD`], deleted);
+  }
+  if (local) {
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "HEAD"], files);
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", "HEAD"], deleted);
+    collect(["git", "ls-files", "--others", "--exclude-standard", "-z"], files);
+  }
+  const changed = [...files].sort();
+  const impact = deleted.size
+    ? { mode: "all", packages: packages.map((p: any) => p.name).sort(), skipped: [], reasons: [`${[...deleted].sort()[0]}: deleted or renamed input`] }
+    : rustImpact(changed, packages);
+  console.log(JSON.stringify({ shadow: true, base: base ?? null, local, files: changed, rust: impact, note: "Candidate only; full CI remains required. Runtime file reads are not modeled." }, null, 2));
 }
 
 if (import.meta.main) {

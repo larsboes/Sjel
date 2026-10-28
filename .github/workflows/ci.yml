@@ -75,8 +75,15 @@ jobs:
       - name: Install ExifTool
         run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
 
-      - name: cargo test
-        run: cargo test --workspace --locked --no-fail-fast
+      - name: Compile Rust tests (resource baseline)
+        run: /usr/bin/time -v cargo test --workspace --locked --no-run
+
+      - name: Run Rust tests (resource baseline)
+        run: /usr/bin/time -v cargo test --workspace --locked --no-fail-fast
+
+      - name: Report Rust build storage
+        if: always()
+        run: du -sh target 2>/dev/null || true
 
   # One rootward `bun test`, not a list of directories. The list said ./tools/ and
   # Packs/sjel/evals/, which is how dashboard/vite/comms-proxy-auth.test.ts and

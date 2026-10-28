@@ -51,6 +51,8 @@ jobs:
     steps:
       - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       # rust-cache keeps the registry and compiled dependencies, not the workspace's own crates.
       # Only main saves, so pull requests restore without filling the repository's cache quota.
@@ -79,7 +81,28 @@ jobs:
         run: /usr/bin/time -v cargo test --workspace --locked --no-run
 
       - name: Run Rust tests (resource baseline)
-        run: /usr/bin/time -v cargo test --workspace --locked --no-fail-fast
+        run: |
+          set -o pipefail
+          /usr/bin/time -v cargo test --workspace --locked --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+
+      # Shadow only: compare the planner's package set with what failed. A miss is a failing
+      # package the plan skipped; enforcement waits on none (docs/plans/tooling.md).
+      - name: Set up Bun
+        if: always() && github.event_name == 'pull_request'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Rust impact shadow
+        if: always() && github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          {
+            echo '### Rust impact shadow'
+            echo '```json'
+            bun run tools/ci-impact.ts --base "$BASE" --failures "$RUNNER_TEMP/cargo-test.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report Rust build storage
         if: always()
@@ -389,15 +412,6 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: tools/ci-changes --base "$BASE" >> "$GITHUB_OUTPUT"
-      - name: Report Rust impact candidate
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          echo '### Rust impact candidate (shadow only)' >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          bun run tools/ci-impact.ts --base "$BASE" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   # The GPUI app is its own workspace (apps/gpui/Cargo.toml), so nothing above builds it. Each
   # platform checks natively: a cross check from one host needs every target's C toolchain

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, fastPlan, rustImpact, type Package } from "./ci-impact.ts";
+import { changedFiles, failedPackages, fastPlan, namedPaths, rustImpact, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -16,14 +16,38 @@ test("includes transitive reverse dependencies", () => {
   expect(rustImpact(["libs/base/src/lib.rs"], packages).packages).toEqual(["app", "base", "top"]);
 });
 
-test("widens unknown and build inputs", () => {
-  for (const file of ["Cargo.lock", "libs/base/build.rs", "libs/base/fixture.json"]) {
+test("widens workspace-wide inputs and a deleted unowned Rust source", () => {
+  for (const file of ["Cargo.lock", "Cargo.toml", "rust-toolchain.toml", ".cargo/config.toml"]) {
     expect(rustImpact([file], packages).mode).toBe("all");
+  }
+  expect(rustImpact([], packages, ["libs/gone/src/lib.rs"]).mode).toBe("all");
+});
+
+test("a build script, manifest or fixture selects its owner", () => {
+  for (const file of ["libs/base/build.rs", "libs/base/Cargo.toml", "libs/base/fixture.json"]) {
+    expect(rustImpact([file], packages).packages).toEqual(["app", "base", "top"]);
   }
 });
 
 test("does not confuse sibling path prefixes", () => {
-  expect(rustImpact(["libs/base-extra/src/lib.rs"], packages).mode).toBe("all");
+  expect(rustImpact(["libs/base-extra/src/lib.rs"], packages).packages).toEqual([]);
+});
+
+test("a file outside every package selects the packages that name it, and only those", () => {
+  const reading: Package[] = [
+    { ...packages[0], reads: ["docs/plans"] },
+    { ...packages[2], reads: ["."] },
+    packages[1], packages[3],
+  ];
+  expect(rustImpact(["docs/plans/x.md"], reading).packages).toEqual(["app", "base", "other", "top"]);
+  expect(rustImpact(["docs/plansx.md"], reading).packages).toEqual(["other"]);
+  expect(rustImpact(["README.md"], packages).packages).toEqual([]);
+});
+
+test("namedPaths resolves upward literals and keeps top-level names", () => {
+  const top = new Set(["docs", "Packs", "README.md"]);
+  const src = `let a = "../../docs/plans"; let b = "Packs"; let c = "application/json"; let d = "../..";`;
+  expect(namedPaths(src, "libs/base/src/lib.rs", "libs/base", top).sort()).toEqual([".", "Packs", "docs/plans", "libs", "libs/docs/plans"]);
 });
 
 test("reports unaffected packages explicitly", () => {
@@ -107,19 +131,31 @@ test("aggregate fails for a failed, missing or unexpectedly skipped job", async 
 test("fast plan: docs-only change skips clippy, Rust change scopes it, deletion widens it", () => {
   const none = () => false;
   const names = (p: ReturnType<typeof fastPlan>) => p.checks.map((c) => c.name);
-  expect(names(fastPlan(["docs/x.md"], false, packages, none))).toEqual(["cargo fmt", "repo gates"]);
-  expect(names(fastPlan(["libs/base/src/lib.rs"], false, packages, none))).toContain("cargo test");
-  const scoped = fastPlan(["libs/base/src/lib.rs"], false, packages, none).checks.find((c) => c.name === "clippy")!;
+  expect(names(fastPlan(["docs/x.md"], [], packages, none))).toEqual(["cargo fmt", "repo gates"]);
+  expect(names(fastPlan(["libs/base/src/lib.rs"], [], packages, none))).toContain("cargo test");
+  const scoped = fastPlan(["libs/base/src/lib.rs"], [], packages, none).checks.find((c) => c.name === "clippy")!;
   expect(scoped.cmd).toContain("-p");
   expect(scoped.cmd).not.toContain("--workspace");
-  expect(fastPlan(["Cargo.lock"], false, packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
-  expect(fastPlan(["docs/x.md"], true, packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
-  expect(names(fastPlan(["apps/gpui/src/main.rs"], false, packages, none))).not.toContain("clippy");
+  expect(fastPlan(["Cargo.lock"], [], packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
+  expect(fastPlan(["libs/gone/src/lib.rs"], ["libs/gone/src/lib.rs"], packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
+  expect(names(fastPlan(["apps/gpui/src/main.rs"], [], packages, none))).not.toContain("clippy");
 });
 
 test("fast plan: picks tests beside changed files", () => {
   const exists = (p: string) => ["tools/x.test.ts", "tools/x.test.sh"].includes(p);
-  const plan = fastPlan(["tools/x.ts", "tools/x"], false, packages, exists);
+  const plan = fastPlan(["tools/x.ts", "tools/x"], [], packages, exists);
   expect(plan.checks.find((c) => c.name === "bun test")!.cmd).toEqual(["bun", "test", "./tools/x.test.ts"]);
   expect(plan.checks.map((c) => c.name)).toContain("tools/x.test.sh");
+});
+
+test("failedPackages names a failing test binary's package and a crate that did not compile", () => {
+  const targets = new Map([["sjel_cli", ["sjel-cli"]], ["civil_date", ["civil-date"]]]);
+  const log = [
+    "     Running unittests src/lib.rs (target/debug/deps/civil_date-73bf82e7ddc5d063)",
+    "test result: ok. 3 passed; 0 failed",
+    "     Running unittests src/main.rs (target/debug/deps/sjel_cli-a90016d6dc09e508)",
+    "test result: FAILED. 1 passed; 1 failed",
+    "error: could not compile `sjel-comms` (lib test) due to 1 previous error",
+  ].join("\n");
+  expect(failedPackages(log, targets)).toEqual(["sjel-cli", "sjel-comms"]);
 });

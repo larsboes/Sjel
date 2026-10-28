@@ -141,7 +141,7 @@ if (cmd === "fast") {
     process.exit(2);
   }
   const { files, deleted } = changedFiles(root, base, !argv.includes("--committed"));
-  const plan = fastPlan([...files].sort(), deleted.size > 0, rootPackages(root), (p) => existsSync(join(root, p)));
+  const plan = fastPlan([...files].sort(), [...deleted].sort(), rootPackages(root), (p) => existsSync(join(root, p)));
   console.log(`ci-local fast: ${files.size} changed file(s) against ${base}\n`);
   for (const c of plan.checks) console.log(`  run   ${c.name.padEnd(28)} ${c.reason}`);
   for (const s of plan.skipped) console.log(`  skip  ${s}`);

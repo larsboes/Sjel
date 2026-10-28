@@ -90,34 +90,27 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
-- **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
-  candidate in pull-request CI without changing the full checks. It maps Rust source changes to
-  package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
-  files and reports the existing GPUI input match. Runtime file reads are not modeled.
-  `fastPlan` in the same file drives `sjel check` and the pre-push hook: fmt, repo gates, clippy
-  and cargo test on affected crates, and tests beside changed files. CI runs `tools/*.test.sh`
-  in parallel. Open work:
-  1. CI reports separate Rust test compilation and execution resource usage and target size.
-     Pages uses the same main-only dependency cache policy as CI. `bun-tests`, `ui-check` and
-     `repo-gates` share a `sjel-cli-release` cache; measure their step times once main has saved
-     it.
-     Measure cache restore/save time and bytes and local target-directory growth for
-     documentation, leaf crate, shared crate, UI and lockfile changes. Use existing storage
-     reporting; do not clean a running deployment target.
-  2. Extend the shared planner to cover both Cargo workspaces, feature
-     and target combinations, build scripts, generated inputs, runtime file reads, Bun and shell
-     tests, UI packages and repository gates. Unknown inputs, missing metadata, renames and
-     deletions must widen the plan. Report each selected and skipped check with its reason.
-  3. Compare candidate selections against full PR checks in shadow mode, including tests that
-     deliberately break cross-package and runtime-file dependencies. Record misses and repair
-     them before enabling selective enforcement. Main continues to run the complete suite.
-  4. The `verification result` job aggregates planner and job results, including the selected GPUI
-     matrix. The main ruleset still requires the five existing checks; test the aggregate in CI
-     before making it required. Confirm merge-queue behavior before changing required checks.
-  5. Benchmark bounded local parallelism and cache retention against wall time, CPU, peak memory,
-     disk and cache transfer. Set defaults only from measurements; keep controls reversible.
-  Done when local and CI use the same validated planner, every unclassified input runs the full
-  relevant checks, full main checks remain green, and measurements show the cost and savings.
+- **Selective verification and build resources.** `tools/ci-impact.ts` plans the root Cargo
+  workspace's packages for a change: the owner of each changed file, every package whose sources
+  name the file's path (runtime reads, modeled from path literals), and their reverse
+  dependencies. Workspace-wide inputs select every package. `fastPlan` in the same file drives
+  `sjel check` and the pre-push hook. The `cargo test` job compares the plan with the packages
+  that failed on every pull request and writes misses to the run summary; it skips nothing.
+  `tools/ci-impact-backtest.ts` replays CI history the same way. `bun-tests`, `ui-check` and
+  `repo-gates` share a `sjel-cli-release` cache, and CI runs `tools/*.test.sh` in parallel.
+  Open work:
+  1. Decide whether a file that no package owns or names selects no Rust package, as the planner
+     does now, or widens to every package. The second is safe and saves nothing on documentation
+     changes.
+  2. Enforce on pull requests only after the shadow step reports no miss over a period of real
+     pull requests. Main keeps the complete suite. The ruleset requires the five existing checks;
+     test the `verification result` aggregate before making it required.
+  3. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
+     gates.
+  4. Measure local target-directory growth and cache transfer, and benchmark bounded local
+     parallelism. Set defaults only from measurements.
+  Done when local and CI use the same validated planner, full main checks remain green, and
+  measurements show the cost and savings.
 - **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:

@@ -148,3 +148,53 @@ describe("station suggest", () => {
     expect(hits[0].extId).toBe(VOCABULARY.stations[0].id);
   });
 });
+
+describe("the geocoder places calls", () => {
+  test("answers a demo city in the shape places parses", async () => {
+    const res = await ask("/nominatim/search?q=Lisbon&format=jsonv2&limit=1");
+    expect(res.status).toBe(200);
+    const [hit] = (await res.json()) as any[];
+    expect(Number(hit.lat)).toBeCloseTo(38.7223);
+    expect(typeof hit.lon).toBe("string");
+    expect(hit.address.country_code).toBe("pt");
+    expect(hit.addresstype).toBe("city");
+  });
+
+  test("an unknown place is an empty list, which places reads as not found", async () => {
+    const res = await ask("/nominatim/search?q=Atlantis");
+    expect(await res.json()).toEqual([]);
+  });
+});
+
+describe("the Gmail stand-in comms reads", () => {
+  test("lists every demo thread on one inbox page", async () => {
+    const page = (await (await ask("/gmail/threads?q=in:inbox&maxResults=100")).json()) as any;
+    expect(page.threads.length).toBe(VOCABULARY.mail.length);
+    expect(page.nextPageToken).toBeUndefined();
+  });
+
+  test("metadata carries From, Subject and Date, and an address on the reserved domain", async () => {
+    const page = (await (await ask("/gmail/threads")).json()) as any;
+    const thread = (await (await ask(`/gmail/threads/${page.threads[0].id}?format=metadata`)).json()) as any;
+    const headers = Object.fromEntries(thread.messages[0].payload.headers.map((h: any) => [h.name, h.value]));
+    expect(headers.From).toMatch(/<[^@]+@example\.org>$/);
+    expect(headers.Subject).toBe(VOCABULARY.mail[0].subject);
+    expect(thread.messages[0].payload.body).toBeUndefined();
+  });
+
+  test("an invitation's full body has the labels comms reads without a model", async () => {
+    const index = VOCABULARY.mail.findIndex((m) => "invitation" in m);
+    const page = (await (await ask("/gmail/threads")).json()) as any;
+    const thread = (await (await ask(`/gmail/threads/${page.threads[index].id}?format=full`)).json()) as any;
+    const text = Buffer.from(thread.messages[0].payload.body.data, "base64url").toString();
+    expect(text).toContain("Event details");
+    expect(text).toMatch(/^Date: [A-Z][a-z]+ \d{1,2}, \d{4}$/m);
+    expect(text).toMatch(/^Time: \d\d:\d\d - \d\d:\d\d$/m);
+    expect(text).toMatch(/^Location: .+, \d{4,6} [A-Z]/m);
+  });
+
+  test("an unknown thread is a Gmail-shaped 404", async () => {
+    const res = await ask("/gmail/threads/ffffffff");
+    expect(res.status).toBe(404);
+  });
+});

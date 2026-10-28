@@ -23,11 +23,11 @@
 # different-looking demo — not by editing generators.
 seed = "axon-demo-v1"
 
-# The demo's "today". Everything dated is generated relative to this, so a page showing
-# "next week" keeps meaning it, and a rebuild two months from now produces the identical
-# bytes. Deliberately NOT the build date: a fixture set that changes daily would make the
-# hygiene diff below unreadable and turn every rebuild into a spurious change.
-anchor = "2026-03-16"
+# The demo's "today". Everything dated is generated relative to it. "today" means the run's
+# local date, so Today, Calendar and Travel have something to show. SJEL_DEMO_ANCHOR=YYYY-MM-DD
+# pins it for a reproducible run. The Pages build pins 2026-03-16, the date the record paths
+# below were written for.
+anchor = "today"
 
 # Stamped into the banner and the landing page. A reader who finds this page in a year
 # should be able to tell that the dates are staged rather than stale.
@@ -119,6 +119,20 @@ expand = [
   { from = "/entities/api/entities?kind=person", list_field = "entities", id_field = "id", into = "/entities/api/entities/{id}/sources" },
 ]
 
+[capability.places]
+writes = "places"
+# Invented pins and companions (tools/lib/demo-data.ts, VOCABULARY.pois and contacts). Cities
+# resolve through tools/demo-origin's Nominatim route (SJEL_PLACES_NOMINATIM_URL, set by
+# tools/demo-up), so nothing reaches the real geocoder. The climate strip stays empty: it
+# folds ten years of real observations, and the demo does not invent a measurement.
+paths = [
+  "/places/api/places",
+  "/places/api/people/proposals",
+  "/places/api/layers/travel",
+  "/places/api/layers/people",
+  "/places/api/layers/spend",
+]
+
 [capability.finance]
 writes = "finance"
 # Seeded the way a person actually onboards: a synthetic bank CSV through
@@ -157,6 +171,7 @@ paths = [
   # mail-llm-rung: counts only, and empty until a pass has run. An empty state
   # is the honest demo of a rung that ships in shadow.
   "/comms/triage/classify/report",
+  "/comms/captures",
 ]
 expand = [{ from = "/comms/feed", id_field = "id", into = "/comms/feed/{id}" }]
 
@@ -227,25 +242,6 @@ paths = [
 # Comms, Scouting and Transit left this section on 2026-08-20. All three were absent for the
 # same reason — each fetches from somewhere else, and a demo has nowhere else — and all three
 # are here now because `[demo] origin` gives them one.
-
-[absent.places]
-reason = """
-places is absent because its two interesting surfaces cannot be seeded honestly. The map layers \
-are joins over finance transactions, transit legs and the companion register, which is C2 and \
-never leaves the host -- seeding it would mean inventing people, and a made-up \
-person in a made-up city is exactly the shape of the data the rule exists to protect. And the \
-seasonality strip on the travel page reads climate normals folded from ten years of real daily \
-observations per place, fetched once from Open-Meteo and cached permanently; a hand-written \
-twelve-month grid would be a fixture wearing a measurement's clothes, which is the one thing this \
-demo does not do.
-
-The pages still work. The Travel page's "Companions" section renders this sentence in place of \
-the waiting decisions, the strip and the map say what is missing instead of drawing an empty \
-grid, and the map layers places would draw are simply not there. That is the designed behaviour \
--- absence degrades, it never fails. Without this block the fetch shim would find no owner for a \
-/places/... path and fall through to a real network request from a static page, which is worse \
-than a stated 503.\
-"""
 
 [absent.punctuality]
 reason = """

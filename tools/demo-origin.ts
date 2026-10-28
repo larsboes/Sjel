@@ -19,7 +19,7 @@
 //   tools/demo-origin           serve until killed
 //   tools/demo-origin --once    print one of each payload and exit (what the tests read)
 
-import { Rng, VOCABULARY, addDays } from "./lib/demo-data.ts";
+import { Rng, VOCABULARY, addDays, email } from "./lib/demo-data.ts";
 import { loadManifest, type DemoManifest } from "./lib/demo-endpoints.ts";
 
 // ─── Content ──────────────────────────────────────────────────────────────────
@@ -319,6 +319,107 @@ function orteResponse(query: string): unknown {
   }));
 }
 
+/** Nominatim's `/search?format=jsonv2` shape, for the demo cities only. Places reads `lat` and
+ *  `lon` as strings, `display_name`, `name`, `address.country_code` and `addresstype`
+ *  (capabilities/places/src/geocode.rs). The osm ids are a synthetic block. */
+export function nominatimResponse(query: string): unknown[] {
+  const needle = query.split(",")[0].trim().toLowerCase();
+  const hits = VOCABULARY.cities.filter((c) => needle !== "" && c.name.toLowerCase() === needle);
+  return hits.map((c) => ({
+    lat: String(c.latitude),
+    lon: String(c.longitude),
+    name: c.name,
+    display_name: `${c.name}, ${c.region}`,
+    addresstype: "city",
+    osm_type: "node",
+    osm_id: 990_000 + VOCABULARY.cities.indexOf(c),
+    address: { city: c.name, country: c.region, country_code: c.countryCode },
+  }));
+}
+
+// ─── Gmail ────────────────────────────────────────────────────────────────────
+//
+// The Gmail API v1 shapes comms reads (capabilities/comms/src/google.rs): the inbox page, one
+// thread as metadata or full, labels, and the three thread actions. comms calls these through
+// SJEL_COMMS_GMAIL_URL, set by tools/demo-up, and sends a placeholder token while it is set.
+
+type Mail = (typeof VOCABULARY.mail)[number];
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August",
+  "September", "October", "November", "December"];
+
+/** The thread id for the mail at `index`: hex, like Gmail's. */
+export const mailId = (index: number) => `d3m0${index.toString(16).padStart(4, "0")}`;
+
+/** The day an invitation's event falls on, relative to the anchor. */
+function invitationDate(mail: Mail, anchor: string): string | null {
+  if (!("invitation" in mail)) return null;
+  const inv = mail.invitation as { tripCity?: string; offsetDays?: number };
+  const trip = VOCABULARY.trips.find((t) => t.city === inv.tripCity);
+  return addDays(anchor, trip ? trip.offsetDays + 1 : (inv.offsetDays ?? 0));
+}
+
+function mailText(mail: Mail, anchor: string): string {
+  const lines = ["Hello,", "", mail.snippet];
+  const date = invitationDate(mail, anchor);
+  if (date && "invitation" in mail) {
+    const [y, m, d] = date.split("-").map(Number);
+    lines.push("", "Event details", `Date: ${MONTH_NAMES[m - 1]} ${d}, ${y}`,
+      `Time: ${mail.invitation.time}`, `Location: ${mail.invitation.location}`);
+  }
+  return lines.concat("", `${mail.sender}`).join("\n");
+}
+
+function mailMessage(index: number, anchor: string, full: boolean): unknown {
+  const mail = VOCABULARY.mail[index];
+  const sent = new Date(`${addDays(anchor, -mail.daysAgo)}T09:${String(10 + index).padStart(2, "0")}:00Z`);
+  const local = "noreply" in mail && mail.noreply ? "noreply@example.org" : email(mail.sender);
+  const headers = [
+    { name: "From", value: `${mail.sender} <${local}>` },
+    { name: "Subject", value: mail.subject },
+    { name: "Date", value: sent.toUTCString().replace("GMT", "+0000") },
+  ];
+  if ("unsubscribe" in mail && mail.unsubscribe) {
+    headers.push({ name: "List-Unsubscribe", value: "<mailto:unsubscribe@example.org>" });
+  }
+  const payload: Record<string, unknown> = { headers };
+  if (full) {
+    payload.mimeType = "text/plain";
+    payload.body = { data: Buffer.from(mailText(mail, anchor)).toString("base64url") };
+  }
+  return {
+    id: `${mailId(index)}m`,
+    threadId: mailId(index),
+    labelIds: ["INBOX", ...(mail.daysAgo === 0 ? ["UNREAD"] : [])],
+    snippet: mail.snippet,
+    internalDate: String(sent.getTime()),
+    payload,
+  };
+}
+
+function gmail(url: URL, method: string, anchor: string): Response | null {
+  const path = url.pathname.slice("/gmail".length);
+  if (method === "GET" && path === "/threads") {
+    return Response.json({
+      threads: VOCABULARY.mail.map((m, i) => ({ id: mailId(i), snippet: m.snippet })),
+      resultSizeEstimate: VOCABULARY.mail.length,
+    });
+  }
+  const thread = /^\/threads\/([0-9a-z]+)(\/(modify|trash|untrash))?$/.exec(path);
+  if (thread) {
+    const index = VOCABULARY.mail.findIndex((_, i) => mailId(i) === thread[1]);
+    if (index < 0) return Response.json({ error: { code: 404, message: "Not Found" } }, { status: 404 });
+    if (thread[3] && method === "POST") return Response.json({ id: thread[1] });
+    const full = url.searchParams.get("format") === "full";
+    return Response.json({ id: thread[1], messages: [mailMessage(index, anchor, full)] });
+  }
+  if (path === "/labels") {
+    if (method === "POST") return Response.json({ id: "Label_1", name: "Waiting" });
+    return Response.json({ labels: [{ id: "INBOX", name: "INBOX" }, { id: "Label_1", name: "Waiting" }] });
+  }
+  return null;
+}
+
 // ─── Request routing ──────────────────────────────────────────────────────────
 
 /** The EVA out of either request shape. dbweb sends it bare; dbnav wraps it in the short lid
@@ -377,7 +478,16 @@ export async function handle(
     return json(dbnav ? dbnavResponse(journeys, date) : dbwebResponse(journeys, date));
   }
 
-  return new Response("demo-origin serves /feed.xml, /articles/<slug>, /orte, /fahrplan, /dbnav/fahrplan\n", {
+  if (url.pathname.startsWith("/gmail/")) {
+    const answer = gmail(url, request.method, manifest.anchor);
+    if (answer) return answer;
+  }
+
+  if (url.pathname === "/nominatim/search") {
+    return json(nominatimResponse(url.searchParams.get("q") ?? url.searchParams.get("city") ?? ""));
+  }
+
+  return new Response("demo-origin serves /feed.xml, /articles/<slug>, /orte, /fahrplan, /dbnav/fahrplan, /nominatim/search, /gmail/…\n", {
     status: 404,
   });
 }

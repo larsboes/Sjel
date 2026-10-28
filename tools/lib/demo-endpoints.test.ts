@@ -7,7 +7,7 @@
 // like working software right up until somebody reads the page.
 
 import { describe, expect, test } from "bun:test";
-import { DEMO_OVERLAY, fixtureFile, loadManifest, registry, resolvePath, routes, type RegistryEntry } from "./demo-endpoints.ts";
+import { DEMO_OVERLAY, fixtureFile, loadManifest, localDate, registry, resolvePath, routes, type RegistryEntry } from "./demo-endpoints.ts";
 
 /** A registry standing in for three real shapes: the uniform rule, the api-only rule, and a
  *  capability with a legacy unstripped prefix. */
@@ -111,9 +111,26 @@ describe("the committed demo.toml", () => {
   // repository; it must not depend on the runner.
   const live = routes(registry(DEMO_OVERLAY));
 
-  test("declares a fixed seed and a fixed anchor date", () => {
+  test("declares a fixed seed and resolves the anchor to a date", () => {
     expect(manifest.seed).not.toBe("");
     expect(manifest.anchor).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test("SJEL_DEMO_ANCHOR pins the anchor, and a bad value is refused", () => {
+    const before = process.env.SJEL_DEMO_ANCHOR;
+    try {
+      process.env.SJEL_DEMO_ANCHOR = "2026-03-16";
+      expect(loadManifest().anchor).toBe("2026-03-16");
+      process.env.SJEL_DEMO_ANCHOR = "next week";
+      expect(() => loadManifest()).toThrow(/YYYY-MM-DD/);
+    } finally {
+      if (before === undefined) delete process.env.SJEL_DEMO_ANCHOR;
+      else process.env.SJEL_DEMO_ANCHOR = before;
+    }
+  });
+
+  test("localDate is the local calendar day", () => {
+    expect(localDate(new Date(2026, 9, 28, 23, 59))).toBe("2026-10-28");
   });
 
   test("every declared path resolves against the real registry", () => {

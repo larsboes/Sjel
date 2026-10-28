@@ -13,7 +13,13 @@ Those are true, checkable and completely useless to somebody asking what the thi
 tools/demo-up            start the stack, seed it, record it
 tools/demo-site          assemble site/ from the recording
 tools/demo-origin        the synthetic remote, started by demo-up (--once prints its payloads)
+tools/demo-shots         run the stack in a container and screenshot the GPUI app against it
+                         (also `sjel demo up | mac <page> | down`)
 ```
+
+Dates are relative to `[demo] anchor`. `"today"` means the run's local date, so the app shows
+upcoming trips and recent mail. `SJEL_DEMO_ANCHOR=YYYY-MM-DD` pins it for a reproducible run.
+The Pages build pins `2026-03-16`, the date the recorded paths were written for.
 
 ## How the data gets there
 
@@ -33,6 +39,16 @@ fed by posting URLs to its ordinary `/ingest` route and fetches and extracts the
 Scouting is pointed at the feed by a generated source declaration and parses it with its own
 `rss` adapter; Transit reads the origin through the endpoint overrides its HAFAS client already
 supports (`SJEL_TRANSIT_FAHRPLAN_URL` and its two siblings), so its real parser does the work.
+
+The origin also stands in for two more remotes:
+
+- **Nominatim** (`SJEL_PLACES_NOMINATIM_URL`). Places geocodes the companions' home cities
+  through it, so the map shows invented people in real cities without a request to the real
+  geocoder.
+- **Gmail** (`SJEL_COMMS_GMAIL_URL`). One sweep reads eleven invented threads. comms' own rules,
+  plus two overlay rules `tools/demo-up` writes, sort them into all seven streams. The two
+  invitations become Calendar proposals without a model. comms accepts this override only on
+  loopback, and while it is set comms reads no real credential.
 What gets recorded is their output, not the origin's input.
 
 Comms' half of that needs one written permission. `POST /ingest` refuses a URL that resolves to

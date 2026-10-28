@@ -76,6 +76,18 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
+For a lower-concurrency local Rust test run, Cargo and the test harness accept independent limits:
+
+~~~sh
+CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 tools/cargo-hermetic test --workspace --locked
+~~~
+
+The limits reduce parallel work, which can reduce peak memory and contention at the cost of elapsed
+time. `tools/cargo-hermetic` isolates writable data and refuses release builds; its target directory
+is reused across runs. `bun run tools/ci-impact.ts --local` reports an experimental Rust package
+selection for staged, unstaged and untracked changes. It is a shadow report, not a substitute for
+the required checks: runtime file reads are not modeled.
+
 A performance claim is proved by a probe this repository can re-run, not by a scratch program
 outside the checkout: an ignored test beside the code it measures, or a script under `tools/`. The
 comment or README that states the number names that probe, so the next person can repeat it on

@@ -46,6 +46,25 @@ function command(args: string[], root: string): string {
   return run.stdout.toString();
 }
 
+/** Collect committed and working-tree changes without interpreting path bytes as lines. */
+export function changedFiles(root: string, base: string | undefined, local: boolean) {
+  const files = new Set<string>();
+  const deleted = new Set<string>();
+  const collect = (args: string[], output: Set<string>) => {
+    for (const file of command(args, root).split("\0")) if (file) output.add(file);
+  };
+  if (base) {
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", `${base}...HEAD`], files);
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", `${base}...HEAD`], deleted);
+  }
+  if (local) {
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "HEAD"], files);
+    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", "HEAD"], deleted);
+    collect(["git", "ls-files", "--others", "--exclude-standard", "-z"], files);
+  }
+  return { files, deleted };
+}
+
 function main() {
   const root = resolve(import.meta.dir, "..");
   const baseAt = Bun.argv.indexOf("--base");
@@ -62,20 +81,7 @@ function main() {
     dir: relative(root, dirname(p.manifest_path)),
     dependencies: p.dependencies.flatMap((d: any) => d.path && namesByDir.has(d.path) ? [namesByDir.get(d.path)] : []),
   }));
-  const files = new Set<string>();
-  const deleted = new Set<string>();
-  const collect = (args: string[], output: Set<string>) => {
-    for (const file of command(args, root).split("\0")) if (file) output.add(file);
-  };
-  if (base) {
-    collect(["git", "diff", "--name-only", "-z", "--no-renames", `${base}...HEAD`], files);
-    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", `${base}...HEAD`], deleted);
-  }
-  if (local) {
-    collect(["git", "diff", "--name-only", "-z", "--no-renames", "HEAD"], files);
-    collect(["git", "diff", "--name-only", "-z", "--no-renames", "--diff-filter=D", "HEAD"], deleted);
-    collect(["git", "ls-files", "--others", "--exclude-standard", "-z"], files);
-  }
+  const { files, deleted } = changedFiles(root, base, local);
   const changed = [...files].sort();
   const impact = deleted.size
     ? { mode: "all", packages: packages.map((p: any) => p.name).sort(), skipped: [], reasons: [`${[...deleted].sort()[0]}: deleted or renamed input`] }

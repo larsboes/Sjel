@@ -19,7 +19,11 @@
     },
     {
       "name": "archive",
-      "kind": "capability"
+      "kind": "capability",
+      "service": {
+        "kind": "data",
+        "requires": []
+      }
     },
     {
       "name": "assistant",

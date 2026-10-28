@@ -2539,6 +2539,7 @@ mod tests {
             replacement.clone(),
         )
         .unwrap();
+        while !library.backfill_rule_proposal_batch(128).unwrap() {}
         let records = library.proposal_records(&document.id).unwrap();
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].review_history.len(), 1);

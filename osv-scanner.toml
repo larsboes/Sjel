@@ -34,6 +34,16 @@ ignoreUntil = 2027-01-01
 reason = "SvelteKit before 3.0.0, CVSS 4.7: URL redirection to an untrusted site through a server-side self-fetch fallback. Reach: needs a Kit server runtime to follow a redirect, and neither app has one -- adapter-static emits files, sjel-status hands them out, and the soundscape bundle is served by its capability. The dev server does run Kit's SSR path, so this is bounded to a development session on loopback. Ends when both apps run @sveltejs/kit >= 3.0.0."
 
 [[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-01-01
+reason = "deepmerge 4.3.1 prototype poisoning in mergeObject(), no fixed version. Reach: dashboard/bun.lock and capabilities/soundscape/ui/bun.lock, only via @sveltejs/vite-plugin-svelte 7.3.1, which merges its own build options at build time. Neither bundle ships deepmerge, and no runtime input reaches a merge. Ends when deepmerge publishes a fix or vite-plugin-svelte drops it."
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+ignoreUntil = 2027-01-01
+reason = "block-buffer 0.10.4: a panic caught inside the compress callback leaves the cursor corrupt. Fixed in 0.12.1 only, which needs the digest 0.11 stack; every lockfile here reaches it through digest 0.10.7 <- sha2 0.10 / md-5 0.10. The callback is the hasher core's own compress function, which does not panic, and no caller here supplies one. Ends when sha2 and md-5 move to digest 0.11."
+
+[[IgnoredVulns]]
 id = "RUSTSEC-2025-0141"
 ignoreUntil = 2027-01-01
 reason = "bincode 2.0.1 is unmaintained (RustSec type INFO, no CVE, no affected function, no patched version: the team stopped development after a harassment campaign). Reach: `research/benchmarks/graph-store/Cargo.lock` only — a benchmark crate that is built by hand when someone re-measures the graph store, and that no capability links. Ends when that benchmark drops bincode or moves to a maintained fork; adopting one is the maintainer's call, not a patch here."
@@ -132,4 +142,4 @@ reason = "Unmaintained rustls-pemfile 2.2.0, via gpui-pre-reqwest 0.12.15 <- gpu
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0449"
 ignoreUntil = 2026-12-01
-reason = "Unmaintained unsafe-libyaml 0.2.11, runtime, via xberg 1.3.0 <- serde_yaml_ng 0.10.0 <- sjel-extraction (`cargo tree -i serde_yaml_ng`, 2026-10-13: xberg is the only path). Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and this tree is on 0.2.11. Upstream was archived 2024-03-25 at that release and no patched version exists, so the remedy is xberg moving off serde_yaml_ng or off serde_yaml_ng's libyaml backend — nothing here can patch a c2rust translation of libyaml. Revisit when xberg changes its YAML parser."
+reason = "Unmaintained unsafe-libyaml 0.2.11, runtime, via serde_yaml_ng 0.10.0 <- sjel-cv (`cargo tree -i unsafe-libyaml`; xberg 1.3.10 moved to yaml_serde, so capabilities/cv is the only path). Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and this tree is on 0.2.11. Upstream was archived 2024-03-25 at that release and no patched version exists, so the remedy is capabilities/cv moving to yaml_serde (on libyaml-rs), which xberg now uses — nothing here can patch a c2rust translation of libyaml."

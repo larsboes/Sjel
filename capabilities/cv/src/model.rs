@@ -456,7 +456,7 @@ impl Master {
     /// # Errors
     /// The YAML does not parse, does not match the shape, or fails [`Master::validate`].
     pub fn from_yaml(text: &str) -> Result<Master, String> {
-        let master: Master = serde_yaml_ng::from_str(text).map_err(|e| format!("master: {e}"))?;
+        let master: Master = yaml_serde::from_str(text).map_err(|e| format!("master: {e}"))?;
         master.validate()?;
         Ok(master)
     }
@@ -466,7 +466,7 @@ impl Master {
     /// # Errors
     /// Serialization fails, which a value built from this type does not do in practice.
     pub fn to_yaml(&self) -> Result<String, String> {
-        let body = serde_yaml_ng::to_string(self).map_err(|e| e.to_string())?;
+        let body = yaml_serde::to_string(self).map_err(|e| e.to_string())?;
         Ok(format!(
             "# CV master. Shape and field meanings: capabilities/cv/master_cv.schema.yaml.\n{body}"
         ))
@@ -696,7 +696,7 @@ impl Application {
     /// # Errors
     /// The YAML does not parse or does not match the shape.
     pub fn from_yaml(text: &str) -> Result<Application, String> {
-        serde_yaml_ng::from_str(text).map_err(|e| format!("application: {e}"))
+        yaml_serde::from_str(text).map_err(|e| format!("application: {e}"))
     }
 
     /// Serialize to YAML.
@@ -704,7 +704,7 @@ impl Application {
     /// # Errors
     /// Serialization fails, which a value built from this type does not do in practice.
     pub fn to_yaml(&self) -> Result<String, String> {
-        serde_yaml_ng::to_string(self).map_err(|e| e.to_string())
+        yaml_serde::to_string(self).map_err(|e| e.to_string())
     }
 }
 
@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn priority_resolves_per_profile_then_default() {
-        let p: Priority = serde_yaml_ng::from_str("{default: 2, hackathon: 1}").unwrap();
+        let p: Priority = yaml_serde::from_str("{default: 2, hackathon: 1}").unwrap();
         assert_eq!(p.level("hackathon"), 1);
         assert_eq!(p.level("swe"), 2);
         assert_eq!(Priority::Level(3).level("swe"), 3);
@@ -749,7 +749,7 @@ mod tests {
     #[test]
     fn profiles_include_default_and_per_profile_priority_keys() {
         let mut m = Master::from_yaml(SCHEMA).unwrap();
-        m.skills[0].priority = Some(serde_yaml_ng::from_str("{default: 2, quant: 1}").unwrap());
+        m.skills[0].priority = Some(yaml_serde::from_str("{default: 2, quant: 1}").unwrap());
         let tags = m.profiles();
         assert!(tags.contains(&"default".to_string()));
         assert!(tags.contains(&"quant".to_string()));

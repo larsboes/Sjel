@@ -21,10 +21,10 @@ path = "src/main.rs"
 sjel-config = { path = "../../libs/sjel-config" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-# Both were already in the workspace lock (serde_yaml_ng 0.10 via libs/extraction's xberg,
-# indexmap 2 via serde_json), so this crate resolves no new external crate. IndexMap keeps
-# the master's key order on every save. upstreams.toml [serde_yaml_ng].
-serde_yaml_ng = "0.10"
+# Both are already in the workspace lock (yaml_serde via libs/extraction's xberg, indexmap 2
+# via serde_json), so this crate resolves no new external crate. IndexMap keeps the master's
+# key order on every save. upstreams.toml [yaml_serde].
+yaml_serde = "0.10"
 indexmap = { version = "2", features = ["serde"] }
 chrono.workspace = true
 

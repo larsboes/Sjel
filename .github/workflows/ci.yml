@@ -89,7 +89,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
 
       - name: cargo test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
 
   # One rootward `bun test`, not a list of directories. The list said ./tools/ and
   # Packs/sjel/evals/, which is how dashboard/vite/comms-proxy-auth.test.ts and

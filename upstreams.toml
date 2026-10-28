@@ -569,12 +569,12 @@ license = "Apache-2.0"
 summary = "Typesetting engine that renders Sjel's CVs, replacing LaTeX"
 why = "capabilities/cv rendering -- LaTeX replacement for CV typesetting. Plain-text templates with real scripting (array filter/map) instead of awesome-cv.cls's `\\ifx\\cvtarget` macro chains; single Rust-built binary, no TeX Live install, git-diffable output. Adopt over build: a typesetting engine is exactly the kind of thing not to hand-roll"
 
-[serde_yaml_ng]
-url = "https://github.com/acatton/serde-yaml-ng"
+[yaml_serde]
+url = "https://github.com/yaml/yaml-serde"
 verdict = "adopt"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 summary = "YAML serde backend for the typed CV master in capabilities/cv"
-why = "capabilities/cv parses and writes master_cv.yaml through serde. Already in the workspace lock through libs/extraction's xberg, so taking it directly resolves no new crate. Chosen over the archived serde_yaml it forks"
+why = "capabilities/cv parses and writes master_cv.yaml through serde. Already in the workspace lock through libs/extraction's xberg, so taking it directly resolves no new crate. Replaces serde_yaml_ng, whose unsafe-libyaml backend is unmaintained (RUSTSEC-2024-0449); yaml_serde runs on libyaml-rs"
 
 [yq]
 url = "https://github.com/mikefarah/yq"

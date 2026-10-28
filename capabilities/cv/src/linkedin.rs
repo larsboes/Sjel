@@ -526,7 +526,7 @@ mod tests {
     fn sheet_localizes_roles() {
         let mut m = Master::from_yaml(include_str!("../master_cv.schema.yaml")).unwrap();
         m.experience[0].role =
-            Some(serde_yaml_ng::from_str("{en: Role EN, de: Rolle DE}").unwrap());
+            Some(yaml_serde::from_str("{en: Role EN, de: Rolle DE}").unwrap());
         assert!(sheet(&m, Lang::De).contains("Rolle DE @ "));
         assert!(sheet(&m, Lang::En).starts_with("HEADLINE\n"));
     }

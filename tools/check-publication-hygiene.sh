@@ -89,8 +89,28 @@ while IFS= read -r path; do
   failed=1
 done < <(git grep --cached -a -l -E "$instance_markers" || true)
 
+# Markers only the overlay may name. The list above is public, so it can only hold names whose
+# mention is harmless; an employer's internal systems, model proxies and project codes are not.
+# Naming them in this script would publish exactly what the gate exists to keep out, so the
+# overlay keeps them in config/publication-markers.txt: one extended regex per line, matched
+# case-insensitively, `#` lines ignored. A hit prints the path and never the matching term.
+# CI has no overlay and skips this half; the local pre-commit hook and doctor are what run it.
+markers_file="${SJEL_PUBLICATION_MARKERS:-${SJEL_OVERLAY_ROOT:+$SJEL_OVERLAY_ROOT/config/publication-markers.txt}}"
+if [ -n "$markers_file" ] && [ -f "$markers_file" ]; then
+  patterns="$(mktemp)"
+  trap 'rm -f "$blob" "$patterns"' EXIT
+  grep -vE '^[[:space:]]*(#|$)' "$markers_file" >"$patterns" || true
+  if [ -s "$patterns" ]; then
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      echo "publication hygiene: tracked blob contains an overlay-private marker: $path" >&2
+      failed=1
+    done < <(git grep --cached -a -l -i -E -f "$patterns" || true)
+  fi
+fi
+
 if [ "$failed" -ne 0 ]; then
   exit 1
 fi
 
-echo "publication hygiene passed (tracked artifacts, workstation paths, and deployment markers)"
+echo "publication hygiene passed (tracked artifacts, workstation paths, deployment markers, and overlay-private markers)"

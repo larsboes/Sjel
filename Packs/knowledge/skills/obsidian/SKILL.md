@@ -11,16 +11,37 @@ material. Keep one canonical home for each record and link to its owner instead 
 
 ## Resolve and gate
 
-Always resolve the configured vault and read its contract before changing vault contents:
+Always resolve the configured vault and read its contract, if one is configured, before changing
+vault contents. The contract path is set per machine with `contract_path` in the overlay's
+`config/knowledge.toml`; the contract is optional. When one is configured, it owns placement, the
+no-doubling law, naming, and frontmatter typing. When none is configured, follow the vault's
+existing conventions: read neighbouring notes, their folders and frontmatter before writing.
+
+In Pi, use the governed `obsidian_*` tools. Call `obsidian_contract` before the first mutation in
+a session. It loads the configured contract from the vault through Obsidian and gates writes
+against its current digest, or reports that no contract is configured for this machine. If a
+contract is configured but missing, stop and say so — do not improvise structure or substitute an
+overlay-local contract.
+
+Outside Pi, resolve the vault and contract through the bundled helper:
 
 ```bash
 scripts/vault root
 scripts/vault contract
 ```
 
-The contract is at `Knowledge/Meta/Vault/Vault-Contract.md`. If the gate fails, stop and report it;
-do not invent a replacement structure. Follow the contract's note types, metadata, placement and
-link rules.
+`scripts/vault contract` prints the configured contract's path, or reports on stderr that none is
+configured. If it fails, stop and report it; do not invent a replacement structure. Follow the
+contract's note types, metadata, placement and link rules.
+
+In Pi, use the narrowest governed operation that fits: `obsidian_read` supports whole-note, heading,
+block, and frontmatter targets; `obsidian_outline`, `obsidian_search`, `obsidian_backlinks`,
+`obsidian_properties`, and `obsidian_tags` cover low-token discovery. Read `.base` files with
+`obsidian_base_read`; validate drafts with `obsidian_note_validate` or `obsidian_base_validate`
+before writing. Create with `obsidian_create`, extend with `obsidian_append`, and make structural
+edits with `obsidian_patch`. Reserve `obsidian_write` for deliberate whole-note replacement.
+Moves and deletes require confirmation; never work around a refusal by switching to shell or
+direct filesystem access.
 
 ## Read before writing
 
@@ -34,7 +55,7 @@ Create no capability data, operational inbox, or second copy of a Sjel record in
 | Task | Read |
 |---|---|
 | Wikilinks, embeds, callouts, properties | `references/markdown.md` |
-| `.base` views, filters, formulas | `references/bases.md` |
+| `.base` views, filters, formulas | `references/bases.md`, then `obsidian_base_validate` |
 | `.canvas` files | `references/canvas.md` |
 | Obsidian CLI | `references/cli.md`, then `obsidian help` |
 | Ingest, synthesize, or lint knowledge | `references/wiki.md` |

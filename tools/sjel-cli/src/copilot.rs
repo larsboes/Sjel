@@ -361,8 +361,46 @@ fn collect_drift(existing: &Value, baseline: &Value, prefix: &str, paths: &mut V
                 collect_drift(actual, value, &path, paths)
             }
             Some(actual) if actual == value => {}
+            // A baseline array is a floor, not the whole list: deny-lists such as
+            // sandbox.userPolicy.filesystem.deniedPaths gain machine-specific entries, and an
+            // extra denied path is stricter than the baseline, never looser. `apply` keeps those
+            // entries, so `check` must not call them drift. A missing baseline entry still is.
+            Some(Value::Array(actual))
+                if value
+                    .as_array()
+                    .is_some_and(|base| base.iter().all(|entry| actual.contains(entry))) => {}
             _ => paths.push(path),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drift_paths;
+    use serde_json::json;
+
+    #[test]
+    fn a_baseline_array_with_extra_machine_entries_is_not_drift() {
+        let baseline = json!({"sandbox": {"deniedPaths": ["~/.ssh", "~/.netrc"]}});
+        let existing = json!({"sandbox": {"deniedPaths": ["/work/data", "~/.netrc", "~/.ssh"]}});
+        assert!(drift_paths(&existing, &baseline).is_empty());
+    }
+
+    #[test]
+    fn a_missing_baseline_array_entry_is_drift() {
+        let baseline = json!({"sandbox": {"deniedPaths": ["~/.ssh", "~/.netrc"]}});
+        let existing = json!({"sandbox": {"deniedPaths": ["/work/data", "~/.ssh"]}});
+        assert_eq!(
+            drift_paths(&existing, &baseline),
+            vec!["sandbox.deniedPaths"]
+        );
+    }
+
+    #[test]
+    fn a_scalar_that_differs_is_still_drift() {
+        let baseline = json!({"sandbox": {"enabled": true}});
+        let existing = json!({"sandbox": {"enabled": false}});
+        assert_eq!(drift_paths(&existing, &baseline), vec!["sandbox.enabled"]);
     }
 }
 

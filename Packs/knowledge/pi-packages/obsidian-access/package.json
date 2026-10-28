@@ -1,0 +1,30 @@
+{
+  "name": "@sjel/obsidian-access",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Policy-aware Obsidian tools for Pi, backed by obsidian-local-rest-api.",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "smol-toml": "1.9.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typebox": "1.3.34",
+    "typescript": "7.0.2"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

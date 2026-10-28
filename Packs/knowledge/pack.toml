@@ -7,5 +7,5 @@ name        = "knowledge"
 description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, taught learning sessions, practice on what was taught, and clean web capture."
 skills      = ["obsidian", "teach", "practice", "defuddle"]
 license     = "MIT"
-personal    = ["config/knowledge.toml"]
+personal    = ["config/knowledge.toml", "config/obsidian-access.toml"]
 links       = ["knowledge-base"]

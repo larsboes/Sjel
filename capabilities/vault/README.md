@@ -1,12 +1,13 @@
 # vault
 
-Reads an Obsidian vault as data. Four CLI verbs and one HTTP surface, all
+Reads an Obsidian vault as data. Five CLI verbs and one HTTP surface, all
 read-only.
 
 ```
 vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
 vault lint   [--root PATH] [--json] [--carrying KEY]
 vault class  [--root PATH] [--json] [--only c2] [--list]
+vault classify --id VAULT/RELATIVE.md [--declared c1] [--json]
 vault bases  [--root PATH] [--json] [--strict]
 vault compare --root PATH --against PATH [--json] [--list]
 ```
@@ -35,7 +36,9 @@ C2 wherever it sits; everything else is **C1 Mine**.
 The rule is not here. `content_item::DataClass::classify_vault_note` holds it,
 beside the mail rules and the C0–C3 vocabulary they share, because PRD §6.1
 forbids a second definition of what `c2` means by name. This verb is the walk
-and the report.
+and the report. `vault classify` calls that same function for one vault-relative
+path without loading the vault. Governed clients use this narrow command instead
+of maintaining their own copy of the folder rules.
 
 **Measured against this vault, 2026-09-07** — the acceptance figures, in the
 same spirit as the link counts below:

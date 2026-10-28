@@ -4,7 +4,7 @@
 Two jobs the model should never do by hand:
 
   root      print the vault path (from the overlay, never hardcoded)
-  contract  print the vault contract path, or fail loudly if it is missing
+  contract  print the configured vault contract path; optional, fails if configured but missing
   recall    search Claude Code transcripts by content, cwd, date, or title
 
 `recall` exists because the transcripts already hold everything a capture hook
@@ -58,10 +58,15 @@ def overlay_root() -> Path:
     return Path(os.path.expanduser(raw))
 
 
-def vault_root() -> Path:
+def knowledge_config() -> Path:
     cfg = overlay_root() / "config/knowledge.toml"
     if not cfg.exists():
         die(f"missing {cfg} — it holds vault_root; never hardcode the path")
+    return cfg
+
+
+def vault_root() -> Path:
+    cfg = knowledge_config()
     m = re.search(r'^vault_root\s*=\s*"([^"]+)"', cfg.read_text(), re.M)
     if not m:
         die(f"no single-line `vault_root = \"...\"` in {cfg}")
@@ -76,11 +81,20 @@ def cmd_root(_args) -> None:
 
 
 def cmd_contract(_args) -> None:
-    path = vault_root() / "Knowledge/Meta/Vault/Vault-Contract.md"
+    # contract_path is vault-relative and optional; without it the vault's own conventions apply.
+    m = re.search(r'^contract_path\s*=\s*"([^"]+)"', knowledge_config().read_text(), re.M)
+    if not m:
+        print("vault: no vault contract configured for this machine; follow the vault's existing conventions",
+              file=sys.stderr)
+        return
+    rel = m.group(1)
+    if rel.startswith("/") or ".." in Path(rel).parts:
+        die(f"contract_path {rel!r} must be vault-relative")
+    path = vault_root() / rel
     if path.is_file():
         print(path)
         return
-    die(f"vault contract missing at {path} — stop and say so; do not improvise structure")
+    die(f"configured vault contract missing at {path} — stop and say so; do not improvise structure")
 
 
 def _transcript_meta(path: Path) -> dict:

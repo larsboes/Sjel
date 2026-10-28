@@ -3,7 +3,10 @@
  *
  * Prevents the agent from reading secrets files (.env, .secrets, *credentials*),
  * Bitwarden items, and other sensitive material. Blocks at the tool-call boundary
- * before any data reaches the LLM.
+ * before any data reaches the LLM. A provider the overlay lists in
+ * `config/secrets-guard.toml` (`raw_secret_providers = [...]`) may read raw secrets,
+ * and only in ephemeral (`--no-session`) sessions, where tool results are not
+ * persisted to JSONL. Sjel itself trusts no provider: without that file the list is empty.
  *
  * == What is blocked ==
  *
@@ -20,7 +23,7 @@
  *         — env, env | …, env > f (dumping the whole environment; the word
  *           "env" in `process.env.X`, `env_file:` or `environment:` is not that)
  *
- *   edit  — any edit targeting a path matching *.env, *.secrets, etc.
+ *   edit/write — any mutation targeting a path matching *.env, *.secrets, etc.
  *
  * == What is allowed ==
  *
@@ -28,8 +31,6 @@
  *         — bw unlock          (unlocks vault, session token not a secret value)
  *         — bw encode, bw generate
  *         — export VAR=…
- *
- *   write — writing to .env or .secrets files (legitimate config setup)
  *
  * == Custom tool: vault_exec ==
  *
@@ -43,11 +44,11 @@
  *   and never appear in the output — the extension resolves them directly.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { readFileSync, existsSync } from "node:fs";
+import { chmodSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 // ---- patterns -----------------------------------------------------------
 
@@ -100,7 +101,29 @@ const SECRET_BASH_PATTERNS: RegExp[] = [
   /\bopenssl\s+(?:pkey|rsa|ec|dsa)\s+.*-in\s+.*\.(?:pem|key)/,
 ];
 
+/**
+ * Providers the overlay trusts with raw secrets. Which providers qualify is a machine
+ * decision, so the list lives in the overlay's `config/secrets-guard.toml` as one line:
+ * `raw_secret_providers = ["name", ...]`. A missing or unreadable file means none.
+ */
+function loadRawSecretProviders(): Set<string> {
+  const overlay = process.env.SJEL_OVERLAY_ROOT ?? process.env.SJEL_PERSONAL_ROOT;
+  if (!overlay) return new Set();
+  const path = resolve(overlay, "config", "secrets-guard.toml");
+  if (!existsSync(path)) return new Set();
+  try {
+    const line = readFileSync(path, "utf-8").match(/^raw_secret_providers\s*=\s*\[([^\]]*)\]/m);
+    if (!line) return new Set();
+    return new Set([...line[1].matchAll(/"([^"]+)"/g)].map((m) => m[1].toLowerCase()));
+  } catch {
+    return new Set();
+  }
+}
+
+const RAW_SECRET_PROVIDERS = loadRawSecretProviders();
+
 /** Env-var name patterns that hold secrets — stripped from tool output. */
+
 const SECRET_VAR_PATTERNS: RegExp[] = [
   /TOKEN/i,
   /SECRET/i,
@@ -116,10 +139,40 @@ const SECRET_VAR_PATTERNS: RegExp[] = [
 
 // ---- helpers -----------------------------------------------------------
 
+/** Raw secret output is allowed only for approved providers without session persistence. */
+function canReceiveRawSecrets(ctx: ExtensionContext): boolean {
+  const provider = ctx.model?.provider.toLowerCase();
+  return Boolean(
+    provider &&
+    RAW_SECRET_PROVIDERS.has(provider) &&
+    !ctx.sessionManager.getSessionFile()
+  );
+}
+
 /** Check if a path matches any secret-file pattern. */
 function isSecretPath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/");
   return SECRET_FILE_PATTERNS.some((p) => p.test(normalized));
+}
+
+/** Resolve symlinks, including symlinked parents of a path that does not exist yet. */
+function canonicalPath(rawPath: string, cwd: string): string {
+  const lexical = resolve(cwd, rawPath);
+  let existing = lexical;
+  const missingSegments: string[] = [];
+
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) return lexical;
+    missingSegments.unshift(basename(existing));
+    existing = parent;
+  }
+
+  return resolve(realpathSync(existing), ...missingSegments);
+}
+
+function isSecretToolPath(rawPath: string, cwd: string): boolean {
+  return isSecretPath(rawPath) || isSecretPath(canonicalPath(rawPath, cwd));
 }
 
 /** Build a readable list of matched patterns for the block reason. */
@@ -317,12 +370,31 @@ function runWithEnv(cmd: string, envFile?: string): string {
 // ---- extension ---------------------------------------------------------
 
 export default function (pi: ExtensionAPI) {
+  const hardenSessionFile = (ctx: ExtensionContext): void => {
+    const sessionFile = ctx.sessionManager.getSessionFile();
+    if (!sessionFile || process.platform === "win32" || !existsSync(sessionFile)) return;
+
+    try {
+      chmodSync(sessionFile, 0o600);
+    } catch (error) {
+      ctx.ui?.notify?.(
+        `[secrets-guard] could not set session file permissions to 600: ${String(error)}`,
+        "warning",
+      );
+    }
+  };
+
+  pi.on("session_start", async (_event, ctx) => hardenSessionFile(ctx));
+  pi.on("agent_end", async (_event, ctx) => hardenSessionFile(ctx));
+
   // ── Block reads of secret files ───────────────────────────────────────
 
   pi.on("tool_call", async (event, ctx) => {
+    const rawSecretsAllowed = canReceiveRawSecrets(ctx);
+
     if (event.toolName === "read") {
       const path = event.input.path as string;
-      if (isSecretPath(path)) {
+      if (isSecretToolPath(path, ctx.cwd) && !rawSecretsAllowed) {
         ctx.ui?.notify?.(
           `[secrets-guard] blocked read of ${path} — use vault_exec for commands needing credentials`,
           "warning",
@@ -334,20 +406,23 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    if (event.toolName === "edit") {
+    if (event.toolName === "edit" || event.toolName === "write") {
       const path = event.input.path as string;
-      if (isSecretPath(path)) {
+      if (isSecretToolPath(path, ctx.cwd)) {
         return {
           block: true,
-          reason: `secrets-guard: editing ${path} is blocked — env files contain secrets.`,
+          reason: `secrets-guard: ${event.toolName} on ${path} is blocked — secret files cannot be mutated through model tools.`,
         };
       }
     }
 
-    if (event.toolName === "ls" || event.toolName === "grep" || event.toolName === "find") {
+    if (
+      !rawSecretsAllowed &&
+      (event.toolName === "ls" || event.toolName === "grep" || event.toolName === "find")
+    ) {
       const input = event.input as { path?: string; pattern?: string; glob?: string };
       const p = input.path ?? "";
-      if (p && isSecretPath(p)) {
+      if (p && isSecretToolPath(p, ctx.cwd)) {
         return {
           block: true,
           reason: `secrets-guard: ${event.toolName} on ${p} could expose secrets ${matchReason(p)}. Use vault_keys to list env-file variable names without values.`,
@@ -363,7 +438,7 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    if (event.toolName === "bash") {
+    if (event.toolName === "bash" && !rawSecretsAllowed) {
       const command = event.input.command as string;
       const check = isSecretReadCommand(command);
       if (check.blocked) {
@@ -381,7 +456,9 @@ export default function (pi: ExtensionAPI) {
 
   // ── Sanitize tool results so leaked secrets don't reach the LLM ──────
 
-  pi.on("tool_result", async (event) => {
+  pi.on("tool_result", async (event, ctx) => {
+    if (canReceiveRawSecrets(ctx)) return;
+
     if (event.toolName === "bash" || event.toolName === "read") {
       const sanitized = event.content?.map((block) => {
         if (block.type === "text") {
@@ -406,7 +483,7 @@ export default function (pi: ExtensionAPI) {
     name: "vault_exec",
     label: "Vault Exec",
     description:
-      "Run a shell command with an env file sourced. The env file is read directly by the extension — the LLM never sees the secret values. Captures stdout/stderr and strips leaked secrets from the output. Pass `keys` to expose only the variables the command needs: without it the whole environment is inherited. Use for curl, API calls, or any command that needs credentials from .env / .secrets files.",
+      "Run a shell command with a minimal environment. When env_file is supplied, keys is required and only those variables plus PATH and HOME are exposed. The extension reads the file directly, and strips exposed values from output. Use for API calls or commands that need credentials from .env / .secrets files.",
 
     parameters: Type.Object({
       cmd: Type.String({
@@ -420,7 +497,7 @@ export default function (pi: ExtensionAPI) {
       keys: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Names of the environment variables to expose. When set, ONLY these plus PATH and HOME exist in the child environment, so the command has nothing else to leak. Omit to keep the permissive default: the whole process environment, plus every variable in env_file. Prefer setting it.",
+            "Names of the environment variables to expose. Required with env_file. Only these variables plus PATH and HOME exist in the child environment.",
         }),
       ),
       timeout: Type.Optional(
@@ -454,40 +531,37 @@ export default function (pi: ExtensionAPI) {
       };
 
       try {
-        // Scoping. Without `keys` the child inherits the whole process environment and every
-        // variable from env_file, which makes one `printenv | base64` enough to read what this
-        // tool exists to keep out of the transcript — the output stripping is literal-only and
-        // would not catch the encoding. With `keys`, the environment is those names plus PATH and
-        // HOME, so there is nothing else to dump.
-        const wanted = params.keys && params.keys.length > 0 ? params.keys : null;
-        const env: NodeJS.ProcessEnv = wanted
-          ? { PATH: process.env.PATH, HOME: process.env.HOME }
-          : { ...process.env };
+        const wanted = params.keys && params.keys.length > 0 ? [...new Set(params.keys)] : [];
+        if (params.env_file && wanted.length === 0) {
+          throw new Error("vault_exec: keys is required when env_file is supplied");
+        }
+
+        const env: NodeJS.ProcessEnv = {
+          PATH: process.env.PATH,
+          HOME: process.env.HOME,
+        };
+        const source = params.env_file ? loadEnvFile(params.env_file) : process.env;
+        const present = wanted.filter((key) => source[key] !== undefined);
+        const absent = wanted.filter((key) => source[key] === undefined);
+        if (absent.length > 0) {
+          const sourceName = params.env_file ?? "the Pi process environment";
+          throw new Error(
+            `vault_exec: ${absent.join(", ")} not present in ${sourceName}` +
+              (present.length > 0 ? ` (found: ${present.join(", ")})` : ""),
+          );
+        }
+
+        for (const key of present) {
+          const value = source[key];
+          if (value === undefined) continue;
+          env[key] = value;
+          exposedValues.push(value);
+        }
 
         if (params.env_file) {
-          const loaded = loadEnvFile(params.env_file);
-          const present = wanted ? wanted.filter((key) => key in loaded) : [];
-          const absent = wanted ? wanted.filter((key) => !(key in loaded)) : [];
-          if (absent.length > 0) {
-            throw new Error(
-              `vault_exec: ${absent.join(", ")} not present in ${params.env_file}` +
-                (present.length > 0 ? ` (found: ${present.join(", ")})` : ""),
-            );
-          }
-          const entries = wanted
-            ? Object.entries(loaded).filter(([key]) => wanted.includes(key))
-            : Object.entries(loaded);
-          for (const [key, val] of entries) {
-            env[key] = val;
-            exposedValues.push(val);
-          }
-
-          // Notify user that env file was used
           ctx.ui?.notify?.(
-            `[vault_exec] sourced ${params.env_file} (${entries.length} var${entries.length === 1 ? "" : "s"}${
-              wanted ? ", scoped" : " — UNSCOPED, pass keys to limit the environment"
-            })`,
-            wanted ? "info" : "warning",
+            `[vault_exec] sourced ${params.env_file} (${present.length} scoped var${present.length === 1 ? "" : "s"})`,
+            "info",
           );
         }
 

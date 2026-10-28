@@ -7,9 +7,10 @@ below.
 The pack is the purpose; `obsidian` is the tool inside it. Eight skills collapsed to
 three on 2026-08-22.
 
-Vault-coupled, never vault-hardcoded: the vault root is read from the overlay
-(`config/knowledge.toml`, `vault_root`) at runtime, so nothing personal is baked
-into a skill.
+Vault-coupled, never vault-hardcoded: the private overlay's `config/knowledge.toml` selects a
+vault profile and may provide `vault_root` for filesystem-only helpers. It may also name a
+vault-writing contract with `contract_path`, a vault-relative note path that differs per machine.
+The contract is optional; without it, writes follow the vault's existing conventions.
 
 ## Skills
 
@@ -68,6 +69,35 @@ always offered. Before answering, the learner can type their thinking (`t`) and 
 confidence (`←→`, unset by default); after the reveal, `n` adds a reaction. Used by `teach` to
 find the edge and to check each step. In Claude Code, `teach` uses `AskUserQuestion` instead:
 the item plus a confidence question per round, the thinking in the option note.
+
+### `obsidian-access`
+
+`pi-packages/obsidian-access` registers Pi-native tools over the installed
+`obsidian-local-rest-api` plugin. The plugin remains the vault transport; this package owns the
+model boundary. It checks the active `provider/model`, combines Sjel's C0-C3 class with the
+optional `agent_access: internal|confidential` frontmatter restriction, applies private overlay
+path rules to non-Markdown objects and folder boundaries, and filters collection results before a
+filename or search snippet enters model context. Existing `sensitivity: internal` or `restricted`
+notes retain their older access boundary. C3 is always refused.
+
+The read surface covers whole or targeted note reads, validated Base reads, outlines, listings,
+search, active-file state, backlinks, tags, and access explanations. Draft validators check strict
+Markdown frontmatter or Base YAML without writing. Controlled Markdown mutations provide create, append,
+whole-note write, targeted patch, copy, move, and delete; destructive operations and policy-field
+edits require confirmation, while version preconditions reject concurrent changes. The private
+overlay supplies
+`config/obsidian-access.toml`; an absent policy admits C0 only. C0–C3 folder decisions use the
+local `vault classify` command and therefore the canonical Rust implementation. If that binary is
+unavailable, undeclared notes use C2 as a conservative fallback. The package does not configure
+the upstream plugin's unrestricted MCP endpoint.
+
+Install its local dependencies before selecting the Pack in Pi:
+
+```sh
+cargo build --release -p vault --bin vault
+cd "$SJEL_ROOT/Packs/knowledge/pi-packages/obsidian-access"
+bun install --frozen-lockfile --ignore-scripts
+```
 
 ## Attribution
 

@@ -2,6 +2,12 @@ default_permissions = "sjel-auto"
 approval_policy = { granular = { sandbox_approval = false, rules = true, mcp_elicitations = true, request_permissions = false, skill_approval = true } }
 approvals_reviewer = "user"
 
+# Usage and health metrics to OpenAI are on by default in the CLI; this turns them off.
+# Key from codex-rs/config/src/config_toml.rs (`analytics.enabled`). OTel export already
+# defaults to `none` and is not touched.
+[analytics]
+enabled = false
+
 [shell_environment_policy]
 ignore_default_excludes = false
 

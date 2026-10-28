@@ -1595,6 +1595,30 @@ mod tests {
         vec!["cargo".to_owned(), "build".to_owned()]
     }
 
+    /// Retries `attempt` while it fails on lock contention. Tests share one process, so a child
+    /// another test forks holds a copy of the lock's descriptor until it execs.
+    fn past_forked_copies<T, E>(
+        mut attempt: impl FnMut() -> Result<T, E>,
+        message: impl Fn(&E) -> &str,
+    ) -> Result<T, E> {
+        for _ in 0..100 {
+            match attempt() {
+                Err(e) if message(&e).contains("cannot acquire lock") => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                other => return other,
+            }
+        }
+        attempt()
+    }
+
+    fn inhibit(cap: &str, cmd: &str, paths: &Paths) -> Result<(), Fail> {
+        past_forked_copies(
+            || check_rotation_inhibit(cap, cmd, paths).map(drop),
+            |f| f.msg.as_str(),
+        )
+    }
+
     #[test]
     fn rotation_inhibit_blocks_only_sqld_starting_verbs_without_expiry() {
         let overlay = scratch("rotation-inhibit");
@@ -1608,16 +1632,16 @@ mod tests {
             machine_toml: None,
         };
         for cmd in ["start", "resume", "restart", "recreate"] {
-            assert!(check_rotation_inhibit("sqld", cmd, &paths).is_ok());
+            assert!(inhibit("sqld", cmd, &paths).is_ok());
         }
         paths.overlay_root = None;
-        assert!(check_rotation_inhibit("sqld", "start", &paths).is_err());
+        assert!(inhibit("sqld", "start", &paths).is_err());
         paths.overlay_root = Some(overlay.clone());
         write_at(&marker, SystemTime::UNIX_EPOCH + Duration::from_secs(1));
         for cmd in ["start", "resume", "restart", "recreate"] {
-            let err = check_rotation_inhibit("sqld", cmd, &paths).err().unwrap();
+            let err = inhibit("sqld", cmd, &paths).err().unwrap();
             assert_ne!(err.code, 0);
-            assert!(err.msg.contains("inhibited for rotation"));
+            assert!(err.msg.contains("inhibited for rotation"), "{}", err.msg);
             assert!(check_rotation_inhibit("other", cmd, &paths).is_ok());
         }
         for cmd in ["stop", "idle-stop", "status", "persistence-status"] {
@@ -1705,7 +1729,11 @@ mod tests {
             assert_eq!(dispatch.join().unwrap().unwrap(), 0);
             assert!(ready, "runtime did not start");
             assert!(blocked, "rotation lock was released during dispatch");
-            assert!(crate::rotation_guard::acquire(&paths).is_ok());
+            if let Err(e) =
+                past_forked_copies(|| crate::rotation_guard::acquire(&paths), |e| e.as_str())
+            {
+                panic!("{e}");
+            }
         });
         std::fs::remove_dir_all(root).unwrap();
     }

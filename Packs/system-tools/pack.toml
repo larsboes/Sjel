@@ -1,0 +1,4 @@
+name        = "system-tools"
+description = "Discover and use system-level CLI tools for shell operations, package management, process control, and system administration."
+skills      = ["system-tools"]
+license     = "MIT"

@@ -23,6 +23,13 @@ Always:
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never
   generate, expose, or change a secret without explicit authorization.
+- Never name an employer's internal systems in Sjel: model proxies and providers, internal
+  hosts and registries, project codes, repository paths, or the work overlay's packs and
+  extensions. Sjel is public. Such code and config live in the work overlay, and Sjel reads any
+  needed value from overlay config at run time. Keep the terms themselves out of Sjel too: they
+  belong in the overlay's `config/publication-markers.txt`, which the pre-commit hook
+  (`tools/githooks/pre-commit`) and `tools/doctor` check against the Git index. Public
+  open-source references, such as an upstream on GitHub, are not internal.
 - Write every tracked document in a neutral open-source register, never as a conversation with
   an assistant. Rules: `Packs/harness/skills/sjel/references/on-documentation.md` (Register).
 - Keep comments and config comments short: no dates, measurements, decisions or history. The

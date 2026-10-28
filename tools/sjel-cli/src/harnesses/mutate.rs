@@ -476,7 +476,8 @@ fn remove_owned_unit(
 
 pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
-        let held = held_units(config)?;
+        let sources = held_sources(config)?;
+        let held: BTreeSet<String> = sources.keys().cloned().collect();
         let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
             .into_iter()
             .partition(|u| !hold_matches(&held, &format!("{pack}/{}", u.key)));
@@ -485,7 +486,7 @@ pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Strin
             return Err(format!("{pack}: not deployed; deploy it first"));
         }
         let desired: BTreeSet<String> = units.iter().map(|u| u.key.clone()).collect();
-        let mut messages = held_messages(pack, &config.adapter, &held_here);
+        let mut messages = held_messages(pack, &config.adapter, &held_here, &sources);
         let mut failures: Vec<String> = Vec::new();
 
         // Preflight both stale removals and desired updates before mutating either.
@@ -772,7 +773,8 @@ pub fn deploy_pack(
     skill_subset: Option<&BTreeSet<String>>,
 ) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
-        let held = held_units(config)?;
+        let sources = held_sources(config)?;
+        let held: BTreeSet<String> = sources.keys().cloned().collect();
         let (units, held_here): (Vec<Unit>, Vec<Unit>) = pack_units(config, pack)?
             .into_iter()
             .filter(|u| skill_subset.is_none_or(|s| !u.is_skill || s.contains(&u.key)))
@@ -814,7 +816,7 @@ pub fn deploy_pack(
                     .insert(unit.key.clone(), record);
             }
         }
-        let mut messages = held_messages(pack, &config.adapter, &held_here);
+        let mut messages = held_messages(pack, &config.adapter, &held_here, &sources);
         let mut failures: Vec<String> = Vec::new();
         for unit in &units {
             match install_one(config, &mut state, pack, unit, "deploy").and_then(|m| {
@@ -1065,8 +1067,9 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
         .collect()
 }
 
-/// Per-harness unit holds, from `profiles.toml`'s `[unit_hold]` table:
-/// `<harness> = ["<pack>/<unit>"]`.
+/// Per-harness unit holds, from a `[unit_hold]` table: `<harness> = ["<pack>/<unit>"]`.
+/// `profiles.toml` holds a unit on every machine; the overlay's machine.toml holds it on that
+/// machine only. `held_sources` merges the two.
 ///
 /// A held unit is never written by `deploy` or `sync` for that harness, and `tools/doctor` reads
 /// the same table instead of reporting the unit as missing. It lives here and not in a Pack
@@ -1087,8 +1090,15 @@ pub type UnitHolds = BTreeMap<String, Vec<String>>;
 /// protection-zones default `c196797b` removed on the same day, one table over.
 pub const HOLD_ALL: &str = "*";
 
+/// The shared holds: `profiles.toml`'s `[unit_hold]` under `root`.
 pub fn read_unit_holds_at(root: &Path) -> Result<UnitHolds, String> {
-    let path = root.join("profiles.toml");
+    read_unit_holds_file(&root.join("profiles.toml"))
+}
+
+/// One file's `[unit_hold]` table. A missing file or table holds nothing; a malformed entry is an
+/// error naming that file.
+pub fn read_unit_holds_file(path: &Path) -> Result<UnitHolds, String> {
+    let path = path.to_path_buf();
     if !path.is_file() {
         return Ok(UnitHolds::new());
     }
@@ -1136,15 +1146,79 @@ pub fn read_unit_holds_at(root: &Path) -> Result<UnitHolds, String> {
 /// A per-harness entry only ADDS to the wildcard, so a harness cannot disagree with a decision
 /// the table says applies everywhere. It does not need to: a unit held everywhere is held here.
 pub fn held_units(config: &DeployConfig) -> Result<BTreeSet<String>, String> {
-    let holds = read_unit_holds_at(&config.axon_root)?;
+    Ok(held_sources(config)?.into_keys().collect())
+}
+
+/// The source label of the shared holds file.
+pub const PROFILES_SOURCE: &str = "profiles.toml";
+
+#[cfg(test)]
+thread_local! {
+    /// The machine manifest a test substitutes for the overlay's, so a test never reads the
+    /// holds of the machine it runs on.
+    static TEST_MACHINE_TOML: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_test_machine_toml(path: Option<PathBuf>) {
+    TEST_MACHINE_TOML.with(|p| *p.borrow_mut() = path);
+}
+
+/// This machine's manifest in the overlay, resolved the way `tools/doctor` resolves it.
+fn machine_toml_for(root: &Path) -> Option<PathBuf> {
+    #[cfg(test)]
+    {
+        let _ = root;
+        TEST_MACHINE_TOML.with(|p| p.borrow().clone())
+    }
+    #[cfg(not(test))]
+    {
+        let overlay = crate::doctor::overlay::resolve_overlay_root(root)?;
+        Some(crate::doctor::overlay::resolve_machine_toml(root, &overlay.root).path)
+    }
+}
+
+/// The keys held back from this deployment's harness, each with the file that holds it:
+/// `profiles.toml` (shared by every machine) merged with this machine's manifest
+/// (`[unit_hold]` in the overlay's machine.toml), which holds a unit on this machine only.
+/// A key both files name reports `profiles.toml`.
+pub fn held_sources(config: &DeployConfig) -> Result<BTreeMap<String, String>, String> {
+    let mut out = BTreeMap::new();
+    if let Some(path) = machine_toml_for(&config.axon_root) {
+        let label = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "machine.toml".to_owned());
+        let holds = read_unit_holds_file(&path)?;
+        for key in holds_for_harness(&holds, &config.adapter) {
+            out.insert(key, label.clone());
+        }
+    }
+    let shared = read_unit_holds_at(&config.axon_root)?;
+    for key in holds_for_harness(&shared, &config.adapter) {
+        out.insert(key, PROFILES_SOURCE.to_owned());
+    }
+    Ok(out)
+}
+
+fn holds_for_harness(holds: &UnitHolds, harness: &str) -> BTreeSet<String> {
     let mut out: BTreeSet<String> = holds
         .get(HOLD_ALL)
         .map(|keys| keys.iter().cloned().collect())
         .unwrap_or_default();
-    if let Some(keys) = holds.get(&config.adapter) {
+    if let Some(keys) = holds.get(harness) {
         out.extend(keys.iter().cloned());
     }
-    Ok(out)
+    out
+}
+
+/// The file whose hold names this key, for a message; `profiles.toml` when none matches.
+pub fn hold_source<'a>(sources: &'a BTreeMap<String, String>, key: &str) -> &'a str {
+    sources
+        .iter()
+        .find(|(hold, _)| hold_matches(&BTreeSet::from([(*hold).clone()]), key))
+        .map(|(_, source)| source.as_str())
+        .unwrap_or(PROFILES_SOURCE)
 }
 
 /// A key in `<pack>/<unit>` form, whichever channel spelled it.
@@ -1203,13 +1277,17 @@ pub fn hold_matches(held: &BTreeSet<String>, key: &str) -> bool {
 
 /// The note a deploy or sync prints for each unit a hold kept out, so an absent unit reads as a
 /// decision rather than as a failure.
-fn held_messages(pack: &str, harness: &str, held: &[Unit]) -> Vec<String> {
+fn held_messages(
+    pack: &str,
+    harness: &str,
+    held: &[Unit],
+    sources: &BTreeMap<String, String>,
+) -> Vec<String> {
     held.iter()
         .map(|unit| {
-            format!(
-                "- {pack}/{} held back from {harness} (profiles.toml [unit_hold])",
-                unit.key
-            )
+            let key = format!("{pack}/{}", unit.key);
+            let source = hold_source(sources, &key);
+            format!("- {key} held back from {harness} ({source} [unit_hold])")
         })
         .collect()
 }
@@ -1646,6 +1724,83 @@ mod tests {
         // No table, no holds: a repository that declares none behaves as it did before.
         fs::write(root.join("profiles.toml"), "[[profile]]\nname = \"p\"\n").unwrap();
         assert!(read_unit_holds_at(&root).unwrap().is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A machine's own `[unit_hold]` adds to the shared one: the effective set is the union, each
+    /// key reports the file that holds it, and a malformed machine entry names machine.toml.
+    #[test]
+    fn a_unit_hold_in_machine_toml_merges_with_profiles_toml() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-harnesses-machine-holds-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("repo")).unwrap();
+        fs::create_dir_all(root.join("overlay/config")).unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[unit_hold]\n\"*\" = [\"demo/gamma\"]\n",
+        )
+        .unwrap();
+        let machine = root.join("overlay/config/machine.toml");
+        fs::write(
+            &machine,
+            "os = \"linux\"\n\n[unit_hold]\npi = [\"demo/extensions/keys\", \"demo/gamma\"]\nclaude = [\"demo/beta\"]\n",
+        )
+        .unwrap();
+        set_test_machine_toml(Some(machine.clone()));
+        let mut config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "pi".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        let sources = held_sources(&config).unwrap();
+        assert_eq!(
+            sources.keys().cloned().collect::<Vec<_>>(),
+            vec!["demo/extensions/keys".to_owned(), "demo/gamma".to_owned()],
+            "the union of both files, scoped to pi"
+        );
+        assert_eq!(
+            hold_source(&sources, "demo/extensions/keys"),
+            "machine.toml"
+        );
+        assert_eq!(
+            hold_source(&sources, "demo/gamma"),
+            "profiles.toml",
+            "a key both files hold reports the shared file"
+        );
+        assert!(hold_matches(
+            &held_units(&config).unwrap(),
+            "demo/extensions/keys"
+        ));
+
+        config.adapter = "claude".to_owned();
+        let held = held_units(&config).unwrap();
+        assert!(hold_matches(&held, "demo/beta"));
+        assert!(hold_matches(&held, "demo/gamma"));
+        assert!(!hold_matches(&held, "demo/extensions/keys"));
+
+        fs::write(&machine, "[unit_hold]\npi = [\"demo\"]\n").unwrap();
+        let err = held_units(&config).unwrap_err();
+        assert!(err.contains("machine.toml"), "{err}");
+        assert!(err.contains("<pack>/<unit>"), "{err}");
+
+        // No machine manifest: only the shared holds apply.
+        set_test_machine_toml(Some(root.join("overlay/config/absent.toml")));
+        assert_eq!(
+            held_units(&config).unwrap(),
+            ["demo/gamma".to_owned()].into_iter().collect()
+        );
+        set_test_machine_toml(None);
         let _ = fs::remove_dir_all(&root);
     }
 

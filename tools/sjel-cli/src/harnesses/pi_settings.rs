@@ -345,11 +345,12 @@ pub(super) fn registered_path(entry: &str) -> PathBuf {
 /// A hold is written `<pack>/<path from the Pack root>` — `harness/pi-packages/accordion` —
 /// because a path is the only form that names a pi unit: all three channels this adapter writes
 /// (skills, extensions, vendored packages) are registered by path. `mutate::held_units` owns the
-/// read, so `profiles.toml` stays the operator's file and this adapter only obeys it.
-fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
+/// read, so `profiles.toml` and machine.toml stay the operator's files and this adapter only
+/// obeys them. Each entry is `(key, absolute path, source file)`.
+fn held_for(config: &DeployConfig) -> Result<Vec<(String, String, String)>, String> {
     let roots = config.pack_roots.clone().unwrap_or_default();
     let mut out = Vec::new();
-    for key in mutate::held_units(config)? {
+    for (key, source) in mutate::held_sources(config)? {
         // Both spellings, so a hold written in the unit-key form (`knowledge/defuddle`) also
         // matches the path this channel actually registered (`knowledge/skills/defuddle`).
         for spelling in mutate::path_spellings(&key) {
@@ -357,6 +358,7 @@ fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
                 out.push((
                     key.clone(),
                     engine::resolve(&root.join(&spelling)).display().to_string(),
+                    source.clone(),
                 ));
             }
         }
@@ -366,7 +368,7 @@ fn held_for(config: &DeployConfig) -> Result<Vec<(String, String)>, String> {
 
 /// One channel's paths, with the held ones dropped. A hold removes the unit the Pack names and
 /// nothing else, so the rest of that Pack still deploys.
-fn without_held(paths: Vec<String>, held: &[(String, String)]) -> Vec<String> {
+fn without_held(paths: Vec<String>, held: &[(String, String, String)]) -> Vec<String> {
     paths
         .into_iter()
         .filter(|path| !is_held(path, held))
@@ -374,10 +376,17 @@ fn without_held(paths: Vec<String>, held: &[(String, String)]) -> Vec<String> {
 }
 
 /// Whether a path is one a `[unit_hold]` entry names, compared the way the registry compares
-/// paths (`canonical_path`), so `~/…` and an absolute path are one hold.
-fn is_held(path: &str, held: &[(String, String)]) -> bool {
+/// paths (`canonical_path`), so `~/…` and an absolute path are one hold. A directory extension
+/// registers as `<dir>/index.ts`, and the status line names it `<dir>`, so a hold on the
+/// directory holds its entry point.
+fn is_held(path: &str, held: &[(String, String, String)]) -> bool {
     let resolved = canonical_path(path).display().to_string();
-    held.iter().any(|(_, held_path)| *held_path == resolved)
+    held.iter()
+        .any(|(_, held_path, _)| names_held_path(&resolved, held_path))
+}
+
+fn names_held_path(resolved: &str, held_path: &str) -> bool {
+    resolved == held_path || resolved == format!("{held_path}/index.ts")
 }
 
 /// One line per held unit this Pack carries, so an absent unit reads as a decision rather than as
@@ -385,17 +394,17 @@ fn is_held(path: &str, held: &[(String, String)]) -> bool {
 fn held_notes(
     pack: &str,
     carried: &[String],
-    held: &[(String, String)],
+    held: &[(String, String, String)],
     harness: &str,
 ) -> Vec<String> {
     held.iter()
-        .filter(|(key, _)| key.starts_with(&format!("{pack}/")))
-        .filter(|(_, held_path)| {
+        .filter(|(key, _, _)| key.starts_with(&format!("{pack}/")))
+        .filter(|(_, held_path, _)| {
             carried
                 .iter()
-                .any(|path| canonical_path(path).display().to_string() == *held_path)
+                .any(|path| names_held_path(&canonical_path(path).display().to_string(), held_path))
         })
-        .map(|(key, _)| format!("- {key} held back from {harness} (profiles.toml [unit_hold])"))
+        .map(|(key, _, source)| format!("- {key} held back from {harness} ({source} [unit_hold])"))
         .collect()
 }
 
@@ -1033,7 +1042,8 @@ mod tests {
             held,
             vec![(
                 "harness/pi-packages/accordion".to_owned(),
-                accordion.display().to_string()
+                accordion.display().to_string(),
+                "profiles.toml".to_owned(),
             )],
             "the claude-only hold must not reach pi"
         );
@@ -1054,6 +1064,66 @@ mod tests {
                     .to_owned()
             ]
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A machine-level hold keeps a pi extension out of settings.json on that machine only, and
+    /// its note names machine.toml rather than profiles.toml.
+    #[test]
+    fn a_machine_hold_keeps_an_extension_out_of_pis_settings() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-pi-machine-hold-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let pack_root = root.join("Packs");
+        let keys = pack_root.join("security/extensions/inference-keys");
+        let guard = pack_root.join("security/extensions/secrets-guard");
+        fs::create_dir_all(&keys).unwrap();
+        fs::create_dir_all(&guard).unwrap();
+        fs::write(keys.join("index.ts"), "").unwrap();
+        fs::write(root.join("profiles.toml"), "[[profile]]\nname = \"p\"\n").unwrap();
+        let machine = root.join("overlay/config/machine.toml");
+        fs::create_dir_all(machine.parent().unwrap()).unwrap();
+        fs::write(
+            &machine,
+            "os = \"linux\"\n\n[unit_hold]\npi = [\"security/extensions/inference-keys\"]\n",
+        )
+        .unwrap();
+        mutate::set_test_machine_toml(Some(machine));
+        let config = DeployConfig {
+            axon_root: root.clone(),
+            pack_roots: Some(vec![pack_root.clone()]),
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "pi".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+
+        let held = held_for(&config).unwrap();
+        // A directory extension registers its entry point, and the hold names the directory.
+        let carried = vec![
+            keys.join("index.ts").display().to_string(),
+            guard.display().to_string(),
+        ];
+        assert_eq!(
+            extensions_for_pack(&config, "security").unwrap(),
+            vec![carried[0].clone()]
+        );
+        assert_eq!(
+            without_held(carried.clone(), &held),
+            vec![guard.display().to_string()]
+        );
+        assert_eq!(
+            held_notes("security", &carried, &held, "pi"),
+            vec![
+                "- security/extensions/inference-keys held back from pi (machine.toml [unit_hold])"
+                    .to_owned()
+            ]
+        );
+        mutate::set_test_machine_toml(None);
         let _ = fs::remove_dir_all(&root);
     }
 }

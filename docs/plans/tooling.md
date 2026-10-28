@@ -126,3 +126,6 @@ covers it.
   replays them.
 - `tools/service-runner.sh stop|restart` stops an orphaned copy of the capability's own binary
   that holds its port. Before, it refused and asked for a manual `kill`.
+- `tools/harnesses` and `tools/doctor` read a `[unit_hold]` table from the overlay's machine.toml
+  and merge it with `profiles.toml`'s, so one machine can hold a unit back without changing the
+  shared file.

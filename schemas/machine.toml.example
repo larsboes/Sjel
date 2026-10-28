@@ -45,6 +45,11 @@ container_runtime = "docker"       # "docker" | "podman"
 # dependency-closed. Single line, per the toml.sh contract above.
 capabilities = ["home-assistant", "vaultwarden"]
 
+# toolchain.toml entries this machine does not use, by entry name (not binary). Each one is
+# reported as "n/a here — waived" by tools/toolchain-check and doctor instead of failing.
+# Example: a work machine that keeps its secrets outside Bitwarden.
+# toolchain_skip = ["bitwarden-cli"]
+
 # Rejected alternative: tagging each [[state_mount]] with an owning machine
 # (machines = ["mac"]) and leaving everything in sjel.toml. Smaller diff, but it keeps every
 # machine's facts in one shared file and makes each node's config grow with the node count —
@@ -132,6 +137,14 @@ capabilities = ["home-assistant", "vaultwarden"]
 # env = ["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=this-host.example.ts.net"]
 #   # Vite rejects a request whose Host header it does not know, and a tailnet name is exactly
 #   # such a host — machine-local by nature, so it cannot live in the tracked service.toml.
+
+# --- unit holds (optional) ----------------------------------------------
+# Pack units held back from a harness on THIS machine only, with the same shape as
+# profiles.toml's [unit_hold]: "*" or a harness name, each a list of "<pack>/<unit>" keys.
+# The effective holds are the union of both files.
+#
+# [unit_hold]
+# pi = ["security/extensions/inference-keys"]
 
 # --- state mounts (optional, repeatable) ---------------------------------
 # Where a tool on this machine actually persists data. Sjel records the tool's own default

@@ -135,6 +135,18 @@ def _is_numeric_en_dash(text, m):
 PAIRED_DASH_RE = re.compile(r"[—–]\s?[^—–\n]{1,50}?\s?[—–]")
 
 
+def _numeric_dash_at(text, pos):
+    """True when the en dash at text[pos] joins two numbers (a range)."""
+    if text[pos] != "–":
+        return False
+    i, j = pos, pos + 1
+    while i > 0 and text[i - 1].isspace():
+        i -= 1
+    while j < len(text) and text[j].isspace():
+        j += 1
+    return i > 0 and j < len(text) and text[i - 1].isdigit() and text[j].isdigit()
+
+
 def check_em_dash(text, words, threshold, hits, report, lm):
     matches = [m for m in EM_DASH_RE.finditer(text) if not _is_numeric_en_dash(text, m)]
     count = len(matches)
@@ -142,7 +154,12 @@ def check_em_dash(text, words, threshold, hits, report, lm):
     report["em_dash_per_1k"] = round(per_1k, 1)
     report["em_dash_count"] = sum(1 for m in matches if "—" in m.group(0) or "--" in m.group(0))
     report["en_dash_count"] = sum(1 for m in matches if "–" in m.group(0))
-    paired = list(PAIRED_DASH_RE.finditer(text))
+    paired = [m for m in PAIRED_DASH_RE.finditer(text)
+              if not _numeric_dash_at(text, m.start())
+              and not _numeric_dash_at(text, m.end() - 1)]
+    # LOCAL DELTA: upstream counted two numeric ranges within 50 characters
+    # ("6.4–11.6k events/s with 1.3–2.1") as a paired dash aside. Ranges are
+    # not asides; the pair is skipped when either dash sits between digits.
     report["paired_dash_asides"] = len(paired)
     # LOCAL DELTA vs upstream human-voice: upstream gated on
     # `per_1k > threshold and count >= 2`, so a lone em dash in a document was
@@ -371,6 +388,10 @@ def check_ngram_repetition(prose_text, sizes, min_count, hits):
         for i in range(len(words) - n + 1):
             gram = tuple(words[i:i + n])
             if all(w in STOPWORDS for w in gram):
+                continue
+            # LOCAL DELTA: a single-letter token is a unit fragment after the
+            # number was stripped ("k records s" from "200k records/s").
+            if any(len(w) == 1 for w in gram):
                 continue
             grams[gram] += 1
         for gram, count in grams.most_common():

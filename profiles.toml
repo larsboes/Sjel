@@ -196,6 +196,9 @@
 # eight or none. pi materializes them per file, so a single reviewer can be named. That is why the
 # `thesis` profile below deploys academic-writing's skill on every harness and prints the one line
 # to remove when you want its reviewers too.
+#
+# This table applies to every machine. To hold a unit on one machine only, add a [unit_hold]
+# table to that machine's overlay machine.toml (schemas/machine.toml.example).
 
 [unit_hold]
 "*" = ["knowledge/defuddle"]
@@ -278,6 +281,16 @@ packs = ["writing"]
 # that are half its point. Restoring them is removing that one entry from the claude and pi lines.
 # claude cannot do better than all eight or none — it carries the Pack's `agents/` tree as a single
 # unit — while pi materializes them per file, so a single reviewer can be named there.
+
+[[profile]]
+name = "linux-cli"
+description = "Headless Linux: CLI agents only, no dashboard, native app or decks"
+packs = ["*"]
+# 2026-10-26: a Linux machine that runs agents in a terminal and nothing else. `*` rather than a
+# list, so a private overlay's own Packs join without this public file naming them; the except
+# list removes what only a GUI, a front-end codebase or a slide deck uses.
+except = ["coding", "deliberation", "design", "presentations"]
+skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "full"

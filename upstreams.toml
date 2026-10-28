@@ -948,6 +948,24 @@ license = "MIT for source; trademarks, icons and marketing assets excluded and n
 summary = "Browser clipper with Reader, highlights and templates; vendored as the Sjel Clipper, saving into comms"
 why = "AUDITED AND VENDORED 2026-10-28 from 1.7.1-14 (`6d56d618`) into capabilities/comms/clipper, then DETACHED: no .git, no remote; a re-vendor re-applies the deltas below by hand. Every save went through one function, saveToObsidian() in src/utils/obsidian-note-creator.ts, so Reader, persistent highlights, templates, variables, filters, logic and Interpreter stay upstream code and only that call is replaced: src/utils/sjel-destination.ts sends the clip over Chrome native messaging to comms-clip-host, which relays it to comms-server's owner-only Unix socket (comms/src/web_clip_socket.rs), and queues it in browser storage when Sjel does not answer. The Interpreter's provider call is replaced too: for the Sjel provider it sends the prompt to comms, which answers on Sjel's light local role, and templates are pulled from comms and locked in the browser (src/utils/sjel-settings.ts, sjel-lock.ts). Other deltas: Sjel name, description, icons and logo (the Obsidian marks are trademarks), a public `key` that pins the extension id, the nativeMessaging and alarms permissions, a background retry of the queue, Bun in place of npm with defuddle, linkedom, highlight.js, TypeScript and the @types packages held at upstream's lock versions so its fixtures keep matching, and the `youtube` template fixture skipped because it fails upstream at this revision with upstream's own lock. Not taken: assets/ (store marketing), scripts/ (npm publish and locale tooling), xcode/ (the Safari app, with trademarked icons; the Safari stage builds its own wrapper), .github/, README.md and package-lock.json. Permissions reviewed: <all_urls> host access and content scripts are what the highlighter and Reader need on every page; declarativeNetRequest and sidePanel are upstream features kept for parity"
 
+[obsidian-local-rest-api]
+url = "https://github.com/coddingtonbear/obsidian-local-rest-api"
+verdict = "adopt"
+license = "MIT"
+why = "The Obsidian-hosted REST transport for Packs/knowledge/pi-packages/obsidian-access. Sjel keeps the upstream plugin unchanged and calls its authenticated HTTP API; the Pi package owns model identity, C0-C3 admission, agent_access, discovery filtering and bounded tool results. Its built-in MCP endpoint is deliberately not configured because it carries the same vault-wide bearer authority without Sjel's policy boundary. API surface reviewed at 5.3.1 on 2026-09-28: vault CRUD and targeted document operations, simple and JsonLogic search, tags, active-file state, commands, events, binary transfer and signed URLs. No source is vendored"
+
+[yaml-js]
+url = "https://github.com/eemeli/yaml"
+verdict = "adopt"
+license = "ISC"
+why = "Strict YAML frontmatter parsing in obsidian-access. The policy must reject duplicate keys, malformed mappings and non-string class fields before note content reaches a model; a hand-written subset parser would turn syntax edge cases into access decisions. Runtime dependency pinned in that package's bun.lock"
+
+[smol-toml]
+url = "https://github.com/squirrelchat/smol-toml"
+verdict = "adopt"
+license = "BSD-3-Clause"
+why = "Parses the private obsidian-access model policy from the overlay's TOML configuration. TOML is already Sjel's machine-configuration format, and importing one focused parser is less error-prone than a second local parser for arrays of model rule tables. Runtime dependency pinned in that package's bun.lock"
+
 [defuddle]
 url = "https://github.com/kepano/defuddle"
 verdict = "adopt"

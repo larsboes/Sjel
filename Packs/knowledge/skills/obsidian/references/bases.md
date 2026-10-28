@@ -6,8 +6,8 @@
 2. **Define scope**: Add `filters` to select which notes appear (by tag, folder, property, or date)
 3. **Add formulas** (optional): Define computed properties in the `formulas` section
 4. **Configure views**: Add one or more views (`table`, `cards`, `list`, or `map`) with `order` specifying which properties to display
-5. **Validate**: Verify the file is valid YAML with no syntax errors. Check that all referenced properties and formulas exist. Common issues: unquoted strings containing special YAML characters, mismatched quotes in formula expressions, referencing `formula.X` without defining `X` in `formulas`
-6. **Test in Obsidian**: Open the `.base` file in Obsidian to confirm the view renders correctly. If it shows a YAML error, check quoting rules below
+5. **Validate**: In Pi, call `obsidian_base_validate` on the complete draft. It checks strict YAML, view shape, expression types, and undefined `formula.X` references. Outside Pi, use a strict YAML parser and make the same reference check.
+6. **Test in Obsidian**: Open the `.base` file in Obsidian to confirm formulas and plugin-provided layouts render correctly. Static validation cannot execute Obsidian's formula engine.
 
 ## Schema
 
@@ -42,7 +42,7 @@ summaries:
 
 # Define one or more views
 views:
-  - type: table | cards | list | map
+  - type: table | cards | list | kanban | map
     name: "View Name"
     limit: 10                    # Optional: limit results
     groupBy:                     # Optional: group results

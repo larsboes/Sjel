@@ -1,0 +1,94 @@
+#!/bin/bash
+# tools/js-install — install the dependencies of Sjel's Bun trees without rewriting a lockfile.
+#
+#   tools/js-install            every Packs/*/pi-packages/*/ that carries a bun.lock
+#   tools/js-install <dir>...   only those trees
+#
+# Pi loads a Pack's pi-package from where it sits, so its node_modules has to exist before the
+# first session, and nothing else in Sjel puts it there. A missing one surfaces as pi refusing to
+# start ("Cannot find module").
+#
+# The registry is a machine fact. Some machines may only reach npm through a mirror (a corporate
+# package proxy, say). The overlay names that mirror in config/registries.toml:
+#
+#   npm = "https://mirror.example/api/npm/registry.npmjs.org/"
+#
+# Credentials for it stay in ~/.npmrc and never in the overlay or here. With a mirror set, the
+# install runs with `--no-save`: Bun resolves the locked versions through the mirror and leaves
+# bun.lock untouched. A plain install would rewrite every resolved URL to the mirror's host,
+# and that lockfile would publish the machine's mirror. Without a mirror, the install is the
+# same `--frozen-lockfile` CI runs. Either way a lockfile that changes is a failure, and
+# lifecycle scripts stay off (tools/check-bun-install-policy.sh).
+#
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+overlay="${SJEL_OVERLAY_ROOT:-${SJEL_PERSONAL_ROOT:-}}"
+
+registry=""
+if [ -n "$overlay" ] && [ -f "$overlay/config/registries.toml" ]; then
+  registry="$(sed -n 's/^npm[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$overlay/config/registries.toml" | head -n 1)"
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "js-install: bun is not installed (toolchain.toml [bun])" >&2
+  exit 1
+fi
+
+dirs=()
+if [ "$#" -gt 0 ]; then
+  dirs=("$@")
+else
+  for lock in "$SJEL_ROOT"/Packs/*/pi-packages/*/bun.lock; do
+    [ -f "$lock" ] && dirs+=("$(dirname "$lock")")
+  done
+fi
+if [ "${#dirs[@]}" -eq 0 ]; then
+  echo "js-install: no Bun tree to install" >&2
+  exit 1
+fi
+
+if [ -n "$registry" ]; then
+  echo "js-install: registry from the overlay (config/registries.toml); lockfiles stay as committed"
+else
+  echo "js-install: default registry, frozen lockfiles"
+fi
+
+failed=0
+log="$(mktemp)"
+trap 'rm -f "$log"' EXIT
+for dir in "${dirs[@]}"; do
+  dir="$(cd "$dir" 2>/dev/null && pwd)" || { echo "  ✗ $dir: no such directory" >&2; failed=1; continue; }
+  name="${dir#"$SJEL_ROOT"/}"
+  if [ ! -f "$dir/bun.lock" ]; then
+    echo "  ✗ $name: no bun.lock — refusing to resolve an unpinned tree" >&2
+    failed=1
+    continue
+  fi
+  before="$(cksum <"$dir/bun.lock")"
+  if [ -n "$registry" ]; then
+    (cd "$dir" && BUN_CONFIG_REGISTRY="$registry" NPM_CONFIG_REGISTRY="$registry" \
+      bun install --no-save --ignore-scripts) >"$log" 2>&1
+  else
+    (cd "$dir" && bun install --frozen-lockfile --ignore-scripts) >"$log" 2>&1
+  fi
+  status=$?
+  # An unreadable lockfile is not fatal to Bun: it warns and resolves afresh, which would
+  # install versions nobody reviewed. That is a failure here.
+  if grep -qE 'Ignoring lockfile|failed to parse lockfile|UnknownLockfileVersion' "$log"; then
+    echo "  ✗ $name: this bun ($(bun --version)) cannot read the lockfile — upgrade bun (toolchain.toml [bun])" >&2
+    failed=1
+  elif [ "$status" -ne 0 ]; then
+    echo "  ✗ $name: bun install failed" >&2
+    sed 's/^/      /' "$log" | tail -n 5 >&2
+    failed=1
+  elif [ "$(cksum <"$dir/bun.lock")" != "$before" ]; then
+    echo "  ✗ $name: bun.lock changed during install — restore it with git checkout -- $name/bun.lock" >&2
+    failed=1
+  else
+    echo "  ✓ $name"
+  fi
+done
+
+exit "$failed"

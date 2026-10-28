@@ -1,0 +1,4 @@
+name        = "gcp"
+description = "Use Google Cloud CLI tools for authenticated project and service operations."
+skills      = ["gcp"]
+license     = "MIT"

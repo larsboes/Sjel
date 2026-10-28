@@ -126,6 +126,7 @@ with cited-vs-matched data shares and fixes: [references/tells.md](references/te
 ```bash
 python3 scripts/detect_ai_prose.py <file>                      # report + floor score
 python3 scripts/detect_ai_prose.py --register marketing <file> # mute checks the genre allows
+python3 scripts/detect_ai_prose.py --register engineering_log <file> # experiment/incident logs: fixed terms, metric lists
 python3 scripts/detect_ai_prose.py --dialect american <file>   # spelling drift
 python3 scripts/detect_ai_prose.py --baseline <before> <after> # prints the delta
 python3 scripts/detect_ai_prose.py --fail-over 5 <file>        # CI gate, exits 1 over 5

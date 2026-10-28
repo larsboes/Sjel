@@ -1,0 +1,23 @@
+#!/bin/bash
+# pre-commit — the publication gate at the moment a commit can still be refused.
+#
+# CI runs tools/check-publication-hygiene.sh too, but CI has no overlay, so it cannot know the
+# overlay-private markers (config/publication-markers.txt): the names of an employer's internal
+# systems that must never reach public Sjel. Only a local run knows them, and after a push the
+# name is already public. This hook is that local run.
+#
+# Runs only in the Sjel checkout this hook belongs to. The overlay shares tools/githooks/ through
+# core.hooksPath, and its own index names those markers by design.
+#
+# Installed by tools/install.sh via `core.hooksPath`, or linked into .git/hooks/ where a global
+# hooksPath dispatcher is already in place. bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+hook_root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../.." && pwd)"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+[ "$hook_root" = "$repo_root" ] || exit 0
+
+if ! SJEL_PUBLICATION_ROOT="$repo_root" "$repo_root/tools/check-publication-hygiene.sh"; then
+  echo "pre-commit: publication hygiene refused this commit — remove the named content first" >&2
+  exit 1
+fi

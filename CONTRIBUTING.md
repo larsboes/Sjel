@@ -23,7 +23,9 @@ upstream's latest release (#patch-first).
 
 ## Work on one change
 
-Start from current `main` and create a branch named for the change: `<area>-<short-slug>`. Keep
+A small change (a plan or doc update, or a single-commit fix inside one unit) may go straight to
+`main`. Anything larger starts from current `main` on a branch named `<area>-<short-slug>`, in its
+own worktree: `sjel worktree new <area>-<short-slug>`. Keep
 the diff inside one coherent boundary. Put reusable code and doctrine in Sjel; use synthetic fixtures for
 data-shaped tests. Never copy an active overlay or secret value into public work. Workstation paths
 and private logs must also stay out of commits and GitHub text, including screenshots and test
@@ -108,8 +110,8 @@ in CI.
 
 Open a draft pull request first. State the outcome, then bound the exact scope. List every
 completed validation command with its result and name the known limits. Keep separable follow-ups
-out of the pull request rather than widening it. A merge should land one coherent change and
-remain easy to review or revert.
+out of the pull request rather than widening it. A pull request lands as a squash merge: one coherent
+change per commit on `main`, easy to review or revert.
 
 Security findings follow [SECURITY.md](SECURITY.md); never report one in a public issue or pull
 request.

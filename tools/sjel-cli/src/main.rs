@@ -50,6 +50,7 @@ mod time;
 mod toolchain;
 mod ui_packages;
 mod updates;
+mod worktree;
 
 /// A reader that closes the pipe early (`sjel help | head -1`) ends the command, as SIGPIPE ended
 /// the shell scripts this replaced. Rust ignores SIGPIPE and panics on the failed write
@@ -200,6 +201,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
             _ => fail("usage: sjel agent enroll [<name>] | sjel agent tier <name> <pseudonymized|zdr|trusted>"),
         },
         "pack" => pack(root, rest),
+        "worktree" => worktree::run(rest),
         // The public Pack list the marketplace generator reads. No tools/ launcher: its only
         // caller is a generator inside this repository.
         "packs" => packs::list_public(root, rest),

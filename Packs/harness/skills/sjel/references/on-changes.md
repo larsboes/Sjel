@@ -2,32 +2,56 @@
 
 One focused change per commit. **A tracker entry is never a precondition for starting work.**
 
-## Start
+## Choose the path
 
-1. Work on `main`. Until the official release, do not create or switch branches unless the
-   user asks. After the release, feature branches and a `dev` branch replace this rule.
-2. Other agent sessions work in this checkout at the same time. If the tree is dirty, preserve
-   it. Do not reset, clean, stash, revert, or absorb another session's changes.
-3. Touch only the files of your task. If a file you need has another session's uncommitted
+| Change | Path |
+| --- | --- |
+| Small: a plan or doc update, or a single-commit fix inside one unit | Straight to `main` from the primary checkout |
+| A work package: several commits, several files across units, or more than one session | Its own branch and worktree, then a draft PR |
+
+When unsure, take the work-package path. Decided 2026-10-28.
+
+## Work package
+
+1. Create the branch and worktree from current `main`:
+   `sjel worktree new <area>-<slug>`. The worktree is
+   `<primary checkout>/.claude/worktrees/<area>-<slug>`, and it receives the primary checkout's
+   `sjel.local.toml`, `axon.local.toml` and `.claude/settings.local.json`.
+2. Work, commit and run checks only inside that worktree. Its first build compiles into its own
+   `target/`. Never build a release binary into the primary checkout from a worktree: the
+   primary checkout's `target/release/` is what the services run.
+3. Push with `git push -u origin <area>-<slug>` and open a draft PR (CONTRIBUTING.md, "Open the
+   pull request"). Drive CI green, then mark it ready.
+4. The PR lands as a **squash merge**: one commit on `main` per work package, which is the commit
+   the area plan names. The agent merges only when the user said so for that work package or in
+   the current request. Otherwise it stops at a green, ready PR.
+5. After the merge, `sjel worktree remove <area>-<slug>` removes the worktree and the local branch.
+   It refuses uncommitted changes, and commits on no remote unless their PR was merged.
+
+A cloud session receives its branch from the harness (`claude/<name>`). That branch is the
+work-package branch: the session opens a draft PR from it rather than pushing to `main`, even for
+a small change.
+
+## Small change on `main`
+
+1. Other agent sessions can work in the primary checkout at the same time. If the tree is dirty,
+   preserve it. Do not reset, clean, stash, revert, or absorb another session's changes.
+2. Touch only the files of your task. If a file you need has another session's uncommitted
    edits, wait for that commit or ask the user.
+3. Immediately before `git push`, run `git log --oneline origin/main..HEAD` again. A concurrent
+   session can add or amend commits after your last look, and a fast-forward push publishes
+   them silently. Push only what you described.
+4. GitHub prints `Bypassed rule violations for refs/heads/main` on a direct push. That is
+   expected for this path, not a finding.
 
-## Work
+## Every change
 
 - Keep the diff inside one coherent boundary.
 - Stage by path. Never `git add -A` or `git commit -a` in a shared checkout.
 - Write the commit message as the outcome, not the activity.
 - Surface separable discoveries instead of silently widening the change.
 - Run the proportionate checks in `references/on-verification.md`.
-
-## Publish
-
-1. Review the focused diff and final status.
-2. Immediately before `git push`, run `git log --oneline origin/main..HEAD` again. A concurrent
-   session can add or amend commits after your last look, and a fast-forward push publishes
-   them silently. Push only what you described.
-3. Push a small, verified change straight to `main`. GitHub prints
-   `Bypassed rule violations for refs/heads/main`. That is expected until the release, not a
-   finding. Open a PR only when the change wants review.
+- Never rewrite history on a branch another session or the user works on.
 
 ## When an issue is still worth filing
 

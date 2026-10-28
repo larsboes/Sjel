@@ -191,6 +191,24 @@ describe("the vocabulary contains nothing real", () => {
     const known = new Set(VOCABULARY.cities.map((c) => c.name));
     for (const t of VOCABULARY.trips) expect(known.has(t.city)).toBe(true);
   });
+
+  test("every place sits inside a declared city", () => {
+    const known = new Set(VOCABULARY.cities.map((c) => c.name));
+    for (const p of VOCABULARY.pois) {
+      expect(known.has(p.city)).toBe(true);
+      // About 1.5 km at most, so a pin cannot drift into the next town.
+      expect(Math.abs(p.dLat)).toBeLessThan(0.015);
+      expect(Math.abs(p.dLon)).toBeLessThan(0.015);
+    }
+  });
+
+  test("every contact's home and absence name a declared city", () => {
+    const known = new Set(VOCABULARY.cities.map((c) => c.name));
+    for (const c of VOCABULARY.contacts) {
+      expect(known.has(c.homeBase)).toBe(true);
+      if ("away" in c) expect(known.has(c.away.city)).toBe(true);
+    }
+  });
 });
 
 describe("email()", () => {

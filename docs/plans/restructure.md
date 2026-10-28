@@ -175,11 +175,15 @@ The demo site at `larsboes.github.io/Sjel/` goes away with the dashboard. Decide
 technical docs, and a description of what the app is. It comes after the dashboard is deleted,
 at the end of Lane A.
 
-`tools/demo-shots` captures the Mac app against the demo stack in a container, beside a live
-node. Open:
+Screenshots are picked by hand once the GPUI port is done (decided 2026-10-28).
+`sjel demo up | mac <page> | down` (`tools/demo-shots`) captures the Mac app against the demo
+stack in a container, beside a live node. The seed covers trips with held connections, places
+and companions, the feed and Inbox, and mail in every stream, dated relative to the run.
+
+Open:
 
 1. iPhone screenshots. The simulator must join the container's node, not the Mac's live one,
    so the demo stack needs the LAN listener and the `devices` capability.
-2. The seed dates its data around March 2026, so Today, Calendar and Travel show little on a
-   later date.
-3. Finance draws its key hints over the last visible row (`gpui-finance.png` is cropped).
+2. Finance draws its key hints over the last visible row.
+3. Seeded calendar events carry no place, so Calendar groups no trip from them.
+4. `POST /places/api/places` answers 500, not 400, for a `kind` outside its CHECK constraint.

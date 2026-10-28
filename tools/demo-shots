@@ -33,6 +33,8 @@ up() {
   command -v docker >/dev/null || { echo "demo-shots: needs docker (OrbStack)" >&2; exit 1; }
   image
   docker rm -f "$NAME" >/dev/null 2>&1 || true
+  # A marker from an earlier run would read as this run being seeded.
+  rm -f "$SJEL_ROOT/demo/state/seeded"
   # The target and registry volumes keep Linux builds out of the checkout's target/.
   docker run -d --name "$NAME" --cpus "$DEMO_CPUS" \
     -v "$SJEL_ROOT:/src" -v "$NAME-target:/src/target" -v "$NAME-cargo:/usr/local/cargo/registry" \

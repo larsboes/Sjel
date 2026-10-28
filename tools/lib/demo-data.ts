@@ -173,17 +173,38 @@ export const VOCABULARY = {
   /** Real cities, none of them the principal's, with coordinates so a map renders.
    *  `region` is what the trips UI shows next to the name. */
   cities: [
-    { name: "Lisbon", region: "Portugal", latitude: 38.7223, longitude: -9.1393 },
-    { name: "Copenhagen", region: "Denmark", latitude: 55.6761, longitude: 12.5683 },
-    { name: "Kraków", region: "Poland", latitude: 50.0647, longitude: 19.945 },
-    { name: "Turin", region: "Italy", latitude: 45.0703, longitude: 7.6869 },
-    { name: "Ghent", region: "Belgium", latitude: 51.0543, longitude: 3.7174 },
-    { name: "Tallinn", region: "Estonia", latitude: 59.437, longitude: 24.7536 },
+    { name: "Lisbon", region: "Portugal", countryCode: "pt", latitude: 38.7223, longitude: -9.1393 },
+    { name: "Copenhagen", region: "Denmark", countryCode: "dk", latitude: 55.6761, longitude: 12.5683 },
+    { name: "Kraków", region: "Poland", countryCode: "pl", latitude: 50.0647, longitude: 19.945 },
+    { name: "Turin", region: "Italy", countryCode: "it", latitude: 45.0703, longitude: 7.6869 },
+    { name: "Ghent", region: "Belgium", countryCode: "be", latitude: 51.0543, longitude: 3.7174 },
+    { name: "Tallinn", region: "Estonia", countryCode: "ee", latitude: 59.437, longitude: 24.7536 },
+  ],
+
+  /** Invented places inside those cities, for the map. `dLat` and `dLon` offset the city
+   *  centre, so every pin lands in its city without a coordinate of a real business. The
+   *  Ghent names reuse merchants, so a pin and a transaction name the same place. Places stores
+   *  every one as a `venue` (its kind CHECK); `category` rides along as the note. */
+  pois: [
+    { name: "Nordlicht Kaffee", city: "Ghent", category: "cafe", dLat: 0.0021, dLon: -0.0034 },
+    { name: "Markthal Grocers", city: "Ghent", category: "shop", dLat: -0.0042, dLon: 0.0051 },
+    { name: "Hafenbad Schwimmhalle", city: "Ghent", category: "sport", dLat: 0.0083, dLon: 0.0102 },
+    { name: "Buchhandlung Silbe", city: "Ghent", category: "shop", dLat: -0.0015, dLon: -0.0068 },
+    { name: "Casa Azulejo Apartments", city: "Lisbon", category: "stay", dLat: 0.0031, dLon: 0.0044 },
+    { name: "Miradouro Café", city: "Lisbon", category: "cafe", dLat: 0.0058, dLon: -0.0021 },
+    { name: "Harbour Light Museum", city: "Lisbon", category: "museum", dLat: -0.0047, dLon: 0.0089 },
+    { name: "Havn Conference Hall", city: "Copenhagen", category: "venue", dLat: -0.0064, dLon: 0.0112 },
+    { name: "Bryggen Bunks", city: "Copenhagen", category: "stay", dLat: -0.0038, dLon: 0.0057 },
+    { name: "Kanal Bakery", city: "Copenhagen", category: "cafe", dLat: 0.0025, dLon: 0.0031 },
+    { name: "Old Town Rooms", city: "Kraków", category: "stay", dLat: 0.0012, dLon: -0.0026 },
+    { name: "Vistula Book Café", city: "Kraków", category: "cafe", dLat: -0.0051, dLon: 0.0018 },
+    { name: "Porta Coffee Bar", city: "Turin", category: "cafe", dLat: 0.0019, dLon: 0.0027 },
+    { name: "Raekoja Tea Room", city: "Tallinn", category: "cafe", dLat: 0.0009, dLon: -0.0033 },
   ],
 
   /** The demo's home city. One of the above rather than a special case, so nothing in the
    *  corpus is anchored anywhere the real installation is. */
-  home: { name: "Ghent", region: "Belgium", latitude: 51.0543, longitude: 3.7174 },
+  home: { name: "Ghent", region: "Belgium", countryCode: "be", latitude: 51.0543, longitude: 3.7174 },
 
   /** Invented merchants, grouped by the ledger account a transaction from them posts to.
    *  The grouping is what makes the demo's category chart show structure rather than a
@@ -313,6 +334,41 @@ export const VOCABULARY = {
       body: "Before adding a metric, check whether the value is already in the request and simply never read. The instrumentation you skip is the instrumentation you cannot get wrong.",
     },
     {
+      slug: "night-trains-are-back-mostly",
+      title: "Night trains are back, mostly",
+      kind: "reading" as const,
+      summary: "Sleeper routes returned, but the booking windows did not.",
+      body: "A sleeper that sells out ninety days ahead is a product for people who plan. The rest of us read the timetable, find the train, and find it full.",
+    },
+    {
+      slug: "a-calendar-is-a-budget",
+      title: "A calendar is a budget",
+      kind: "reading" as const,
+      summary: "Hours spend like money, and most weeks are overdrawn by Wednesday.",
+      body: "Block the commitments first, then see what is left. The week that looks free on Monday is the week nobody wrote the travel time into.",
+    },
+    {
+      slug: "offline-first-is-a-promise",
+      title: "Offline first is a promise, not a feature",
+      kind: "reading" as const,
+      summary: "An app that works on a train has to decide who wins a conflict.",
+      body: "Sync is easy until two devices disagree. The honest answer is to keep both versions and ask, not to pick the newer clock.",
+    },
+    {
+      slug: "receipts-you-will-need-in-april",
+      title: "The receipts you will need in April",
+      kind: "reading" as const,
+      summary: "Tax season is a search problem you can solve in March.",
+      body: "Most of the documents already arrived by mail. Tagging them when they land costs a second; finding them later costs an evening.",
+    },
+    {
+      slug: "slow-travel-by-rail",
+      title: "Slow travel by rail, with a laptop",
+      kind: "reading" as const,
+      summary: "Six hours on a train is a working day with a better view.",
+      body: "Book the table seat, download the documents before the tunnel, and treat the change of trains as the lunch break it already is.",
+    },
+    {
       slug: "open-call-riverside-build-week",
       title: "Open call: Riverside Build Week",
       kind: "opportunity" as const,
@@ -338,6 +394,48 @@ export const VOCABULARY = {
       body: "Thirty-minute slots, no keynotes, and a strong preference for talks about something that actually ran in production and broke.",
       offsetDays: 72,
       city: "Tallinn",
+    },
+  ],
+
+  /** Things somebody saved for later: Inbox items, written the way `sjel capture` takes them.
+   *  The hashtag sets the tag; a capture with `article` links that article on the demo origin. */
+  captures: [
+    { text: "#buy trail running shoes, half a size up" },
+    { text: "#go Harbour Light Museum when in Lisbon" },
+    { text: "#learn how sleeper reservations open" },
+    { text: "#look", article: "night-trains-are-back-mostly" },
+    { text: "Ask Noor about the Lisbon apartment" },
+  ],
+
+  /** Mail for the Gmail-shaped origin. `sender` becomes an address on the reserved
+   *  documentation domain through email(), `noreply` swaps the local part, so the vocabulary
+   *  holds no address. `daysAgo` dates the thread. `unsubscribe` adds List-Unsubscribe, which
+   *  the rules read. An `invitation` body carries the labels comms reads without a model
+   *  (capabilities/comms/src/mail_events/tickets.rs), so Calendar gets a proposal. Streams
+   *  noted here are what comms' rules decide, plus the two overlay rules tools/demo-up writes. */
+  mail: [
+    { sender: "Mara Velten", subject: "Photos from Kraków", snippet: "Finally sorted them. The one at the river is my favourite.", daysAgo: 0 }, // aktiv
+    { sender: "Juno Halvorsen", subject: "Please confirm: sailing on Saturday", snippet: "Need a yes by Thursday so I can book the boat.", daysAgo: 1 }, // issue (overlay rule)
+    { sender: "Noor Lindqvist", subject: "Lisbon: the flat is free that week", snippet: "Keys are with the neighbour, I will send the code.", daysAgo: 2 }, // aktiv
+    { sender: "Northern Systems Digest", noreply: true, unsubscribe: true, subject: "Weekly digest: operating small systems", snippet: "Five posts on backups that were actually restored.", daysAgo: 1 }, // feed
+    { sender: "Velo Kollektiv", unsubscribe: true, subject: "Spring sale: 20% off a full service", snippet: "Book before the end of the month.", daysAgo: 3 }, // werbung
+    { sender: "Kanto Music", noreply: true, subject: "Your receipt for Kanto Music", snippet: "Monthly plan, 10,99 EUR, paid by card.", daysAgo: 4 }, // belege
+    { sender: "Regiobahn Tickets", noreply: true, subject: "Payment received for your order", snippet: "Thank you, your payment of 38,40 EUR was received.", daysAgo: 6 }, // belege
+    { sender: "City Tax Office", subject: "Tax return: documents still missing", snippet: "Two receipts are missing from your annual return.", daysAgo: 5 }, // steuern (overlay rule)
+    { sender: "Hafenbad Schwimmhalle", unsubscribe: true, subject: "Opening hours over the holidays", snippet: "The pool closes early on two days.", daysAgo: 7 }, // sonstiges
+    {
+      sender: "Havn Systems Summit",
+      subject: "Registration confirmed: Havn Systems Summit",
+      snippet: "You are registered. Event details below.",
+      daysAgo: 8,
+      invitation: { tripCity: "Copenhagen", time: "09:00 - 17:30", location: "Havn Conference Hall, Kanalvej 12, 1058 Copenhagen" },
+    },
+    {
+      sender: "Northern Systems Days",
+      subject: "Invitation: Northern Systems Days",
+      snippet: "Your talk slot is confirmed. Event details below.",
+      daysAgo: 9,
+      invitation: { offsetDays: 72, time: "10:00 - 18:00", location: "Old Harbour Hall, Sadama 5, 10111 Tallinn" },
     },
   ],
 

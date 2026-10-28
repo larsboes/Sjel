@@ -170,6 +170,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // Each launcher owns its overlay resolution and lazy build, so there is one
         // implementation of both.
         "storage" => exec(Command::new(tool("tools/storage/storage")).args(rest)),
+        "demo" => exec(Command::new(tool("tools/demo-shots")).args(rest)),
         "update" => exec(Command::new(tool("tools/updates")).args(rest)),
         // The job names are CI's own: tools/ci-local reads the step list out of
         // .github/workflows/ci.yml, so neither verb can drift from what the push will run.
@@ -236,6 +237,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,
         "testflight" => testflight::USAGE,
+        "demo" => "Usage: sjel demo up | mac <page> [light|dark] [out.png] | down",
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

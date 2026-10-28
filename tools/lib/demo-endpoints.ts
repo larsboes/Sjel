@@ -59,6 +59,12 @@ export interface DemoManifest {
   absent: Record<string, string>;
 }
 
+/** YYYY-MM-DD in the local time zone, which is the day the app calls today. */
+export function localDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoManifest {
   // Bun.TOML under the same documented exception tools/self takes: tools/lib/toml.sh's
   // single-line grep contract cannot express arrays of tables, and this manifest is one.
@@ -69,8 +75,12 @@ export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoMani
       throw new Error(`demo.toml: [demo] ${field} is required`);
     }
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(demo.anchor)) {
-    throw new Error(`demo.toml: [demo] anchor must be YYYY-MM-DD, got ${demo.anchor}`);
+  // SJEL_DEMO_ANCHOR pins the date. tools/demo-up exports it once, so every process of one run
+  // agrees on "today" across midnight.
+  const pinned = process.env.SJEL_DEMO_ANCHOR?.trim();
+  const anchor = pinned || (demo.anchor === "today" ? localDate(new Date()) : demo.anchor);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) {
+    throw new Error(`demo anchor must be YYYY-MM-DD or "today", got ${anchor}`);
   }
   // Loopback only, checked rather than trusted. The demo origin exists so three capabilities
   // can fetch something; an origin pointing off-machine would make the published corpus depend
@@ -107,7 +117,7 @@ export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoMani
 
   return {
     seed: demo.seed,
-    anchor: demo.anchor,
+    anchor,
     label: demo.label,
     origin: demo.origin,
     fixturesDir: raw.fixtures?.dir ?? "demo/fixtures",

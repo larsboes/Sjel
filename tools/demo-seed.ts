@@ -202,7 +202,27 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
         dismissed++;
       }
     }
-    return `${ingested.length} items ingested from the demo origin (${keepers} kept, ${dismissed} dismissed)`;
+    // Review lists what the quality pass flags, so it runs once over what just arrived.
+    await post(ctx.url("/comms/feed/quality/refresh"), {});
+
+    // The Inbox: things saved for later, through the route `sjel capture` and the share sheet use.
+    for (const capture of VOCABULARY.captures) {
+      await post(ctx.url("/comms/captures"), {
+        text: capture.text,
+        url: "article" in capture ? `${ctx.manifest.origin}/articles/${capture.article}` : undefined,
+      });
+    }
+    // Mail: one sweep over the Gmail stand-in (tools/demo-origin, SJEL_COMMS_GMAIL_URL). The rules
+    // classify each thread, and the invitations become Calendar proposals without a model.
+    const sweep = await post<{ fetched?: number; events?: { proposals?: number } }>(
+      ctx.url("/comms/triage/sweep"),
+      { limit: 100 },
+    );
+    if (!sweep.fetched) {
+      throw new Error("the mail sweep fetched nothing. Is SJEL_COMMS_GMAIL_URL set by tools/demo-up?");
+    }
+    return `${ingested.length} items ingested from the demo origin (${keepers} kept, ${dismissed} dismissed), ` +
+      `${VOCABULARY.captures.length} captures, ${sweep.fetched} mails (${sweep.events?.proposals ?? 0} event proposals)`;
   },
 
   async scouting(ctx) {
@@ -240,6 +260,7 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
       longitude: c.longitude,
     });
 
+    let itemCount = 0;
     for (const trip of VOCABULARY.trips) {
       const city = VOCABULARY.cities.find((c) => c.name === trip.city)!;
       const start = addDays(ctx.anchor, trip.offsetDays);
@@ -253,30 +274,130 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
         travelers: ctx.rng.sample(VOCABULARY.people, ctx.rng.int(1, 2)),
         transport_modes: ["train", "walk"],
       });
-      // Two items per plan, so a detail page has an itinerary rather than a header.
-      await post(`${url}/${plan.id}/items`, {
+      // A day-by-day itinerary: the train out and back, the stay, a museum, and a meetup with
+      // whoever lives there. The trains are what the demo's own transit answered for that day
+      // (tools/demo-origin's timetable), held in the plan the way the app holds a connection.
+      const station = (name: string) => VOCABULARY.stations.find((s) => s.name === `${name} Central`)!;
+      const end = addDays(start, trip.nights);
+      let items = 0;
+      const item = async (body: Record<string, unknown>) => {
+        await post(`${url}/${plan.id}/items`, body);
+        items++;
+      };
+      for (const [day, from, to] of [
+        [start, home.name, city.name],
+        [end, city.name, home.name],
+      ] as const) {
+        const found = await get<{ journeys?: unknown[] } | unknown[]>(
+          ctx.url(`/api/search?from=${station(from).id}&to=${station(to).id}&time=${day}T08:00:00`),
+        );
+        const journeys = Array.isArray(found) ? found : (found.journeys ?? []);
+        if (journeys.length === 0) throw new Error(`transit found no train ${from} → ${to} on ${day}`);
+        const journey = journeys[0] as { id?: string };
+        await item({
+          item_type: "transport",
+          day,
+          external_id: `demo-train-${plan.id}-${day}`,
+          title: `Train ${from} → ${to}`,
+          payload: { mode: "train", journey },
+        });
+        if (trip.offsetDays < 0 || day === start) {
+          await item({
+            item_type: "booking",
+            day,
+            external_id: `demo-booking-${plan.id}-${day}`,
+            title: `Ticket ${from} → ${to}`,
+            payload: { provider: "Regiobahn Tickets", order_ref: `DEMO-${ctx.rng.int(100000, 999999)}`, refundable: false },
+          });
+        }
+      }
+      const stay = VOCABULARY.pois.find((p) => p.city === city.name && p.category === "stay");
+      await item({
         item_type: "stay",
         day: start,
         external_id: `demo-stay-${plan.id}`,
-        title: `Apartment near the centre, ${city.name}`,
+        title: stay?.name ?? `Apartment near the centre, ${city.name}`,
         // The declared stay shape: where and when are required, the rest rides along.
         payload: {
           check_in: start,
-          check_out: addDays(start, trip.nights),
-          latitude: city.latitude,
-          longitude: city.longitude,
+          check_out: end,
+          latitude: city.latitude + (stay?.dLat ?? 0),
+          longitude: city.longitude + (stay?.dLon ?? 0),
           currency: "EUR",
+          price_per_night: ctx.rng.int(70, 140),
         },
       });
-      await post(`${url}/${plan.id}/items`, {
+      for (const poi of VOCABULARY.pois.filter((p) => p.city === city.name && p.category !== "stay")) {
+        await item({
+          item_type: "place",
+          day: addDays(start, 1),
+          external_id: `demo-place-${plan.id}-${poi.name}`,
+          title: poi.name,
+          payload: { category: poi.category, latitude: city.latitude + poi.dLat, longitude: city.longitude + poi.dLon },
+        });
+      }
+      // A meetup is an activity whose payload names people in `with` (trips store.rs).
+      const local = VOCABULARY.contacts.find((c) => c.homeBase === city.name);
+      if (local) {
+        await item({
+          item_type: "activity",
+          day: addDays(start, Math.min(2, trip.nights - 1)),
+          external_id: `demo-meetup-${plan.id}`,
+          title: `Dinner with ${local.name.split(" ")[0]}`,
+          payload: { with: [{ person: local.name }], status: trip.offsetDays < 0 ? "done" : "asked" },
+        });
+      }
+      await item({
         item_type: "note",
         day: addDays(start, 1),
         external_id: `demo-note-${plan.id}`,
         title: "Museum is closed on Mondays",
         payload: {},
       });
+      itemCount += items;
     }
-    return `${VOCABULARY.trips.length} plans with itinerary items`;
+    return `${VOCABULARY.trips.length} plans, ${itemCount} itinerary items`;
+  },
+
+  // Pins through the same route the app's place form posts to, with coordinates, so nothing is
+  // geocoded. Companions go in the way a person states them: home cities through the geocoder
+  // (answered by tools/demo-origin), confirmed. An absence stays proposed, so the review has a
+  // decision waiting.
+  async places(ctx) {
+    const create = ctx.url("/places/api/places");
+    for (const poi of VOCABULARY.pois) {
+      const city = VOCABULARY.cities.find((c) => c.name === poi.city)!;
+      await post(create, {
+        name: poi.name,
+        kind: "venue",
+        note: poi.category,
+        city: city.name,
+        country_code: city.countryCode,
+        latitude: Number((city.latitude + poi.dLat).toFixed(5)),
+        longitude: Number((city.longitude + poi.dLon).toFixed(5)),
+      });
+    }
+
+    const stated = ctx.url("/places/api/people/places");
+    const confirm = (id: string) =>
+      ctx.url(`/places/api/people/proposals/${encodeURIComponent(id)}/confirm`);
+    let confirmed = 0;
+    let proposed = 0;
+    for (const c of VOCABULARY.contacts) {
+      const home = await post<{ id: string }>(stated, { person: c.name, city: c.homeBase });
+      await post(confirm(home.id));
+      confirmed++;
+      if ("away" in c) {
+        await post(stated, {
+          person: c.name,
+          city: c.away.city,
+          from: addDays(ctx.anchor, c.away.fromOffset),
+          to: addDays(ctx.anchor, c.away.toOffset),
+        });
+        proposed++;
+      }
+    }
+    return `${VOCABULARY.pois.length} places, ${confirmed} confirmed homes, ${proposed} proposed absences`;
   },
 
   async finance(ctx) {
@@ -387,7 +508,12 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
         factCount++;
       }
     }
-    return `${VOCABULARY.contacts.length} people, ${factCount} place facts`;
+    // The demo's own person, so Calendar knows where home is and never suggests a trip there
+    // (calendar server.rs, home_place reads entities' /api/home).
+    const self = await post<{ id: string }>(create, { kind: "self", name: "Demo Owner", values: {} });
+    await post(facts(self.id), { predicate: "home_base", place: VOCABULARY.home.name });
+    factCount++;
+    return `${VOCABULARY.contacts.length} people and the owner, ${factCount} place facts`;
   },
 };
 

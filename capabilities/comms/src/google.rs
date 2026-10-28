@@ -20,8 +20,44 @@ use serde::Deserialize;
 
 use crate::{CommsError, Result};
 
-const THREADS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/threads";
-const LABELS_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
+const GMAIL_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
+
+/// `SJEL_COMMS_GMAIL_URL` points Gmail calls at a loopback stand-in (`tools/demo-origin`).
+const GMAIL_URL_ENV: &str = "SJEL_COMMS_GMAIL_URL";
+
+/// The Gmail base an override names: `None` when unset, an error when it is not loopback.
+fn gmail_override(value: Option<&str>) -> std::result::Result<Option<String>, String> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let base = value.trim_end_matches('/');
+    let loopback = ["http://127.0.0.1:", "http://localhost:"]
+        .iter()
+        .any(|prefix| base.starts_with(prefix));
+    if loopback {
+        Ok(Some(base.to_owned()))
+    } else {
+        Err(format!(
+            "{GMAIL_URL_ENV} must be http on 127.0.0.1 or localhost"
+        ))
+    }
+}
+
+fn gmail_base() -> String {
+    let value = sjel_config::env_var(GMAIL_URL_ENV).ok();
+    gmail_override(value.as_deref())
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| GMAIL_URL.to_owned())
+}
+
+fn threads_url() -> String {
+    format!("{}/threads", gmail_base())
+}
+
+fn labels_url() -> String {
+    format!("{}/labels", gmail_base())
+}
 
 /// The only label Sjel creates, and the doctrine's stated ceiling: one state
 /// label, no topic labels. `Finance`, `University`, `Newsletters` and friends
@@ -53,7 +89,17 @@ pub const GRANT_ID: &str = "google-comms";
 
 /// An access token for comms' grant: the keychain first, `env_path` while the grant has not
 /// moved there (`libs/sjel-credentials/src/google.rs`). Token values are never logged.
+///
+/// With a loopback `SJEL_COMMS_GMAIL_URL` this returns a placeholder and reads no credential, so
+/// a demo cannot send a real token. Any other override value fails, so nothing is sent at all.
 pub fn access_token(env_path: &Path) -> Result<String> {
+    let value = sjel_config::env_var(GMAIL_URL_ENV).ok();
+    if gmail_override(value.as_deref())
+        .map_err(CommsError::Auth)?
+        .is_some()
+    {
+        return Ok("demo-placeholder".to_owned());
+    }
     sjel_credentials::google::access_token(GRANT_ID, env_path).map_err(CommsError::Auth)
 }
 
@@ -209,7 +255,7 @@ pub fn list_inbox_threads_page(
     }
 
     let response = client()?
-        .get(THREADS_URL)
+        .get(threads_url())
         .bearer_auth(token)
         .query(&query)
         .send()?;
@@ -290,7 +336,7 @@ fn find_header<'a>(headers: &'a [Header], name: &str) -> Option<&'a str> {
 pub fn thread_meta_lookup(token: &str, id: &str) -> Result<Option<ThreadMeta>> {
     std::thread::sleep(THREAD_FETCH_PAUSE);
     let http = client()?;
-    let url = format!("{THREADS_URL}/{id}");
+    let url = format!("{}/{id}", threads_url());
     let resp = http
         .get(&url)
         .bearer_auth(token)
@@ -366,7 +412,7 @@ pub fn thread_body_text(token: &str, id: &str) -> Result<Option<String>> {
     std::thread::sleep(THREAD_FETCH_PAUSE);
     let http = client()?;
     let response = http
-        .get(format!("{THREADS_URL}/{id}"))
+        .get(format!("{}/{id}", threads_url()))
         .bearer_auth(token)
         .query(&[("format", "full")])
         .send()?;
@@ -475,7 +521,7 @@ pub fn apply_thread_action(token: &str, id: &str, action: ThreadAction) -> Resul
     }
 
     let http = client()?;
-    let response = thread_action_request(&http, THREADS_URL, token, id, action).send()?;
+    let response = thread_action_request(&http, &threads_url(), token, id, action).send()?;
 
     if !response.status().is_success() {
         return Err(CommsError::Other(format!(
@@ -513,7 +559,7 @@ struct Label {
 /// a state nobody reviews, which is the whole point of having one.
 pub fn ensure_waiting_label(token: &str) -> Result<String> {
     let http = client()?;
-    let response = http.get(LABELS_URL).bearer_auth(token).send()?;
+    let response = http.get(labels_url()).bearer_auth(token).send()?;
     if !response.status().is_success() {
         return Err(CommsError::Other(format!(
             "Gmail label list failed with HTTP {}",
@@ -531,7 +577,7 @@ pub fn ensure_waiting_label(token: &str) -> Result<String> {
     }
 
     let created = http
-        .post(LABELS_URL)
+        .post(labels_url())
         .bearer_auth(token)
         .json(&serde_json::json!({ "name": WAITING_LABEL }))
         .send()?;
@@ -558,7 +604,7 @@ pub fn set_thread_waiting(token: &str, id: &str, label_id: &str, waiting: bool) 
     }
 
     let http = client()?;
-    let response = waiting_request(&http, THREADS_URL, token, id, label_id, waiting).send()?;
+    let response = waiting_request(&http, &threads_url(), token, id, label_id, waiting).send()?;
     if !response.status().is_success() {
         return Err(CommsError::Other(format!(
             "Gmail waiting {} failed with HTTP {}",
@@ -619,6 +665,24 @@ fn thread_action_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gmail_override_accepts_only_loopback() {
+        assert_eq!(gmail_override(None), Ok(None));
+        assert_eq!(gmail_override(Some("  ")), Ok(None));
+        assert_eq!(
+            gmail_override(Some("http://127.0.0.1:8099/gmail/")),
+            Ok(Some("http://127.0.0.1:8099/gmail".to_owned()))
+        );
+        assert!(gmail_override(Some("http://localhost:8099/gmail")).is_ok());
+        for refused in [
+            "https://gmail.example.org",
+            "http://127.0.0.1.example.org:80",
+            "http://10.0.0.5:8099",
+        ] {
+            assert!(gmail_override(Some(refused)).is_err(), "{refused}");
+        }
+    }
 
     #[test]
     fn header_lookup_is_case_insensitive() {

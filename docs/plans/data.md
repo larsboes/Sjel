@@ -27,10 +27,13 @@ Decisions (2026-10-23):
    Finance, Items, Interior, People, Events, Media, Reflections and Journal have moved. Open:
    Documents, Focus and Personal. Then three follow-ups: `Knowledge/` cites Media sources with 140
    wikilinks Obsidian no longer resolves (the store paths are unchanged, `Atlas/Media/X.md`).
-   `comms` still writes saved items as source notes into the vault's `Resources/Sources/`
-   (`comms/src/projection.rs`). The vault bases and MOCs for the moved folders go, and the vault
-   rules shrink into the `obsidian` skill. Done when the vault holds no non-knowledge note outside
-   `Archive/`.
+   Comms keeps saved feed items in its store; its former vault writeback has been removed. The
+   vault bases and MOCs for the moved folders go, and the vault
+   rules shrink into the `obsidian` skill. Decided 2026-10-28: all non-knowledge material,
+   including `Archive/`, leaves the vault. Preserve unsorted material in Sjel's archive for
+   later import into its owning capabilities; retain source files until each batch and its
+   attachments are verified. Done when the vault holds only knowledge and its required Bases
+   and assets, and all other material is preserved outside the vault.
    `Atlas/Personal/Archive/Schule` (139 notes, 1,279 files): notes to `projects`, PDFs and scans
    to `documents`.
 3. **The journal gets its own capability, later.** Its 353 records, with habits and daily
@@ -42,6 +45,28 @@ Decisions (2026-10-23):
 
 Open:
 
+- **Obsidian cutover.** The new local vault is configured and `scripts/vault contract` passes at
+  `Knowledge/Meta/Vault/Vault-Contract.md`. Every file of the old vault is accounted for:
+  `tools/vault-archive-intake --verify` matches the 3,091 non-knowledge files byte for byte, and
+  `Knowledge/` matches except the added contract and the rewritten `Meta/Vault/Vault.md`. Not
+  carried: `.git`, `.obsidian` and `.smart-env` internals, and 19 dangling plugin-backup
+  symlinks. The vault and scouting services were rebuilt and restarted after the pointer change
+  and report ready. Open:
+  - `vault links --dead` finds 174 link occurrences that resolve in the old vault and not in the
+    new one, 171 of them into material now in the archive (`Atlas/Media` most). Four Knowledge
+    notes embed `Resources/Bases/Focus.base`, whose folder left; `vault bases --strict` fails on
+    it. Each needs an explicit destination.
+  - The new vault is a git repository with no commit and no remote. The intake, its tarball and
+    every vault backup sit on one external drive; the iCloud copy is the only second failure
+    domain. Create and restore a knowledge-vault backup elsewhere.
+  - Review settings, `Knowledge.base`, links and embeds in Obsidian.
+  - Inert old-vault paths remain in the overlay: `SETUP.md`, three `profile_path` entries in
+    `comms-relevance-shadow.json` (no reader), and the two disabled scouting sources, whose
+    globs name folders that left.
+
+  Cutover is complete when the independent backup restores, unresolved links have an explicit
+  destination, and the Obsidian review passes. Keep the iCloud copy unchanged as a historical
+  state.
 - **Every route has an owner that accepts it.** Media, finance and notes files are recorded
   `pending` because those capabilities have no import contract. Done when a run over a real mixed
   folder leaves no `pending` row, no file goes to two owners, and a rerun stores no bytes twice.
@@ -50,6 +75,130 @@ Open:
 - **Media `To Sort/`.** 229 files (53 GB) in `Library/To Sort/` have no reviewed destinations,
   because both structure drafts in the overlay target removed Inbox trees. The categories are a
   human decision. Then `organize` can act.
+
+### Web clipping into Sjel
+
+Decided 2026-10-28: preserve the Obsidian Web Clipper workflow and its full functionality while
+saving directly into Sjel. Existing clippings outside `Knowledge/` are preserved in the unsorted
+archive and imported separately; the knowledge vault is not the clipping inbox.
+
+Prior art: [Obsidian Web Clipper](https://github.com/obsidianmd/obsidian-clipper) is MIT-licensed
+source, excluding its trademarks and marketing assets. Its documented features include page and
+selection capture, persistent highlights, Reader, templates, variables, filters, logic and the
+optional Interpreter. `comms` already accepts captures and `/ingest` accepts submitted content,
+title, author and client provenance. Neither interface establishes full clipper parity. Defuddle
+is already recorded in `upstreams.toml`. `capabilities/comms/axon-clip` already captures a rendered
+page, selection or link into `/ingest` on Chromium browsers, with a popup, shortcuts and context
+menus. It does not provide the upstream reader, highlights or templates. The extension stores its
+configured bearer secret in browser-local storage; a replacement must review that credential
+boundary rather than assume it satisfies the current keychain policy. The clipper is recorded as
+`watch` in `upstreams.toml`; audit it before adopting code.
+
+Initial upstream inspection: main resolved to `6d56d618b00bd970aa738d6a7a61edee27783e81`
+on 2026-10-28. Its Chromium manifest requests all-URL access and registers page content scripts;
+Sjel Clip currently requests `activeTab` and loopback hosts. Its `src/api.ts` exposes a clipping
+and template API with a caller-supplied document parser and destination, a possible reuse seam.
+Neither observation proves the API covers Reader, persistent highlights or Interpreter. Evaluate
+permission scope, dependencies and the full parity matrix before choosing the integration.
+
+#### Initial parity inventory
+
+This inventory uses the upstream revision above, including `src/types/types.ts`, the three browser
+manifests and the [upstream documentation](https://help.obsidian.md/web-clipper). It is not yet an
+exhaustive feature or test inventory. The acceptance checks are required work, not passing tests.
+
+| Surface | Required acceptance check |
+|---|---|
+| Capture | Save a rendered page, selection and URL; retain page metadata and user edits; reopen the saved item. Test authenticated and client-rendered pages, shortcuts, context menus and error feedback. |
+| Reader | Open and close Reader from the supported entry points; retain content, images, headings, code and footnotes; restore font, layout, theme and custom CSS settings. |
+| Highlighter | Select text and page elements, restore highlights on a later visit, search and export them, and test each highlight-to-content mode in Reader and on the live page. |
+| Templates | Import, export, reorder, trigger and edit templates; compare variables, selectors, schema data, filters, conditionals, loops and properties against upstream fixtures. Verify selected text and highlight substitution. |
+| Save behaviors | Preserve create, overwrite, prepend and append semantics, including specific and daily destinations. Define Sjel-owned destinations and conflict handling before implementation; do not silently turn an overwrite into a new capture. Preserve file and clipboard export. |
+| Interpreter | Run prompt variables only when selected by the configured behavior; preserve context and filter semantics and provider/model configuration, with Sjel's data-class and credential rules. Verify both local and configured remote models. |
+| Browser and device | Verify each supported browser build independently. The pinned Chrome manifest requests side panel and declarative network rules; Firefox requests web request blocking; Safari requests native messaging. All three declare broad web hosts. Assess each permission, installation and local transport rather than assuming a shared manifest or a working iPhone path. |
+| Settings and data | Import existing templates and highlights without losing their originals. Preserve highlighter and reader settings and history where possible; verify migration, offline queue recovery, duplicates, and backup restore. |
+
+Upstream exposes `src/api.ts` for extraction and template compilation, while separate Reader,
+highlighter, settings and browser code implement other behavior. Its tests include API, extraction,
+filters, highlighter and template integration tests; passing those alone would not establish
+device-level parity. Its template type also includes `overwrite`, which requires an explicit
+destination and conflict contract. Inspect the remaining source, tests and installed clipper data
+before declaring this matrix exhaustive or choosing between an adapter and a fork.
+
+The present `/ingest` route is not the full-clip persistence contract. It identifies feed items
+by canonical URL, extracts submitted HTML before assigning `raw_content`, updates the existing
+raw extraction and transcript when a later deterministic capture wins, and starts background
+enrichment after storage (`comms/src/media.rs`, `store/feed.rs`, `server/feed.rs`). The server's
+JSON body limit is 2 MiB (`server/main.rs`), and a newly ingested item starts undeclared at `c1`
+(`store.rs`). Consequently, a retry and a second distinct highlight from the same page need
+different identities, and the submitted DOM and user annotations need durable storage before any
+feed projection or enrichment. Large captures need a bounded attachment path and explicit failure
+behavior; raising the global request limit alone does not provide it. Classification and egress
+must be resolved before enabling automatic processing for browser-provided material.
+
+1. **Inventory and parity specification.** Pin an upstream revision and enumerate its features,
+   browser permissions, settings, storage, template formats and tests, including Safari on macOS
+   and iOS. Define a parity matrix against real workflows and existing user templates and
+   highlights. Done when each upstream behavior has a Sjel acceptance test or a named open
+   decision; do not claim full parity from a selected feature list.
+2. **Capture contract.** Define an owned `comms` contract for page content, original URL and
+   metadata, highlights, user edits, templates, attachments and provenance. Preserve original
+   bytes where available, version the payload, make retries idempotent and expose failures.
+   Review data classification, authorization and local-only handling before browser access.
+   Done when retries, attachment recovery and partial failures are tested without duplicate or
+   lost captures. Existing capture and ingest routes remain usable. In progress: an unexposed
+   `comms` store primitive holds versioned JSON under a client retry key, refuses conflicting
+   reuse and records `c2`; it reads a stored clip by its key and does not fetch or enrich. Inline
+   JSON is bounded at 2 MiB. It has no browser route, attachment contract or recovery UI.
+   `cargo check --locked -p sjel-comms --tests` and the two focused
+   storage tests passed; the tests required a scratch Cargo target because cleanup of temporary
+   files under the shared target was denied. A prototype HTTP route passed a local authentication
+   and retry test, but was removed: `sjel-status` proxies the Comms path, so a loopback bind alone
+   does not prove that `c2` content stays on the host. Define and test a host-only transport and
+   agent access policy before exposing a clip route; do not assume origin or client-supplied
+   forwarding headers prove locality.
+3. **Browser integration.** Evaluate a maintained upstream fork against a minimal adapter after
+   the inventory; reuse upstream extraction, Reader and highlighting where feasible. Preserve
+   existing template import/export, URL and schema triggers, variables, filters, logic, and
+   create/append behavior through explicit Sjel destinations. Preserve highlight persistence,
+   search/export, selection and keyboard workflows. Queue safely when Sjel is unavailable.
+   Done when the parity matrix passes on each supported browser and the original workflow can
+   save and reopen a capture without Obsidian.
+4. **Interpreter and Sjel use.** Preserve prompt variables, configurable context, provider/model
+   choices and explicit interpretation; connect to Sjel inference only under its data boundaries.
+   Keep source material and user edits separate from generated results. Add review and routing to
+   owning capabilities with provenance, and allow knowledge to be linked into the vault when
+   warranted. Done when captures can be reviewed and routed without a second canonical copy.
+5. **Migration and end-to-end verification.** Import existing clipper templates and highlights
+   where accessible, and preserve historical clippings and attachments before routing them.
+   Test offline/retry, duplicate submissions, large pages, images, authenticated pages, browser
+   restarts, and backup/restore on Mac and iPhone. Done when a real clip survives capture,
+   restart, review and restore, and no existing clipping is lost.
+
+#### Delivery order
+
+1. Complete the upstream inventory against real templates, highlights and settings. Give every
+   upstream behavior a parity test or a named open decision.
+2. Decide supported browser and device targets and ownership (maintained fork or adapter). Keep
+   the current Chromium capture extension working while the replacement is built.
+3. Specify the `comms` record, host-only authorization, attachment storage, retry identity,
+   duplicate handling, backup and restore. Store source bytes, extracted text, highlights, edits
+   and Interpreter output separately with provenance. Prove browser content cannot leave the host
+   except through an explicit Sjel workflow.
+4. Port or adapt capture, Reader, persistent highlights, template editor and runtime, variables,
+   filters, logic, destinations, settings, import/export and offline queue. Add parity checks from
+   the inventory at each stage; a first capture release is not full support.
+5. Add Interpreter through Sjel inference with explicit invocation, visible provider/model, and
+   preserved source versus generated output. Apply existing data-class and egress rules.
+6. Migrate user templates, highlights, settings and historical clippings with a dry run, counts,
+   idempotent import and restore rehearsal. Keep originals until parity and recovery checks pass.
+7. Run the browser/device matrix, including authenticated and client-rendered pages, offline
+   recovery, browser restart, attachment failure, duplicate retries and backup restore. Retire
+   Obsidian as a clipping destination only after this passes.
+
+Open decisions: the first supported browser and device, exact Sjel mapping for existing-note and
+daily-note template actions, and whether to maintain a fork or a narrow adapter. Resolve these
+after the parity inventory; do not silently drop functionality to make the first release smaller.
 
 ## 2. Formats
 

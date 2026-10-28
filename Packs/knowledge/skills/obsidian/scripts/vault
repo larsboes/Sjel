@@ -5,7 +5,6 @@ Two jobs the model should never do by hand:
 
   root      print the vault path (from the overlay, never hardcoded)
   contract  print the vault contract path, or fail loudly if it is missing
-  sessions  list vault-native session/planning notes with phase + progress
   recall    search Claude Code transcripts by content, cwd, date, or title
 
 `recall` exists because the transcripts already hold everything a capture hook
@@ -77,45 +76,11 @@ def cmd_root(_args) -> None:
 
 
 def cmd_contract(_args) -> None:
-    # Ruled 2026-09-07 (contract §2 conv. 6): the law lives in the umbrella project's
-    # Knowledge-Base/ and graduates to Knowledge/Meta/Vault/ if the umbrella ever archives.
-    # The umbrella folder moved from Projects/Sjel/ to Projects/Sjel/ on 2026-10-08. Check
-    # the current home first, then the former and next homes, so a vault that predates or
-    # outlives either move still answers.
-    candidates = [
-        vault_root() / "Projects/Sjel/Knowledge-Base/Vault-Contract.md",
-        vault_root() / "Projects/Sjel/Knowledge-Base/Vault-Contract.md",
-        vault_root() / "Knowledge/Meta/Vault/Vault-Contract.md",
-        vault_root() / "Projects/Soma/Vault-Contract.md",
-    ]
-    for path in candidates:
-        if path.exists():
-            print(path)
-            return
-    searched = ", ".join(str(p) for p in candidates)
-    die(f"vault contract missing (searched {searched}) — stop and say so; do not improvise structure")
-
-
-def cmd_sessions(args) -> None:
-    """Every vault-native planning note, newest first — the CLI view of Resources/Bases/Sessions.base."""
-    root = vault_root()
-    rows = []
-    for note in root.glob("Projects/*/Sessions/*.md"):
-        text = note.read_text(errors="replace")
-        # Read the whole file, not a fixed window: `principal_stated_goal` is verbatim
-        # and can be long enough to push the closing `---` past any 1-2 KB cap, which
-        # silently dropped such notes (2026-09-09: the harness-deployment plan). The
-        # non-greedy match stops at the first `---` after the opening marker.
-        fm = re.match(r"^---\s*\n(.*?)\n---", text, re.S)
-        meta = dict(re.findall(r"^(\w+):\s*(.+)$", fm.group(1), re.M)) if fm else {}
-        if args.phase and meta.get("phase") != args.phase:
-            continue
-        rows.append((note.stem, meta.get("phase", "?"), meta.get("progress", "?"),
-                     note.parent.parent.name))
-    for stem, phase, progress, project in sorted(rows, reverse=True):
-        print(f"{stem:<52} {phase:<12} {progress:<7} {project}")
-    if not rows:
-        print("(no session notes)", file=sys.stderr)
+    path = vault_root() / "Knowledge/Meta/Vault/Vault-Contract.md"
+    if path.is_file():
+        print(path)
+        return
+    die(f"vault contract missing at {path} — stop and say so; do not improvise structure")
 
 
 def _transcript_meta(path: Path) -> dict:
@@ -199,10 +164,6 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("root").set_defaults(fn=cmd_root)
     sub.add_parser("contract").set_defaults(fn=cmd_contract)
-
-    p = sub.add_parser("sessions")
-    p.add_argument("--phase", choices=["scaffolding", "climbing", "complete"])
-    p.set_defaults(fn=cmd_sessions)
 
     p = sub.add_parser("recall")
     p.add_argument("query", nargs="?", help="substring to search across transcripts")

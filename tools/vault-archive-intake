@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Copy or compare non-knowledge vault files without exposing their names."""
+
+import argparse
+import fnmatch
+import hashlib
+import os
+from pathlib import Path
+import shutil
+import sys
+import unicodedata
+
+ROOT_EXCLUDES = {"Knowledge", ".git", ".obsidian", ".smart-env"}
+PRIVATE_PATTERNS = ("*.env", ".env*", "*.key", "*.pem", "*.p12", "*.pfx", ".secrets*")
+
+
+def excluded(name):
+    return name == "secrets" or any(fnmatch.fnmatchcase(name, p) for p in PRIVATE_PATTERNS)
+
+
+def digest(path):
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.digest()
+
+
+def inventory(root):
+    files = []
+    counts = {"excluded": 0, "symlinks": 0, "special": 0}
+    normalized = set()
+
+    def visit(directory, relative):
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                name = entry.name
+                if (not relative.parts and name in ROOT_EXCLUDES) or excluded(name):
+                    counts["excluded"] += 1
+                    continue
+                if entry.is_symlink():
+                    counts["symlinks"] += 1
+                    continue
+                rel = relative / name
+                key = unicodedata.normalize("NFC", str(rel))
+                if key in normalized:
+                    raise ValueError("source contains Unicode-normalized path collisions")
+                normalized.add(key)
+                if entry.is_dir(follow_symlinks=False):
+                    visit(Path(entry.path), rel)
+                elif entry.is_file(follow_symlinks=False):
+                    files.append(rel)
+                else:
+                    counts["special"] += 1
+
+    visit(root, Path())
+    return files, counts
+
+
+def run(source, destination):
+    source = source.resolve(strict=True)
+    destination = destination.resolve(strict=False)
+    if not source.is_dir() or source == destination or source in destination.parents or destination in source.parents:
+        raise ValueError("source and destination must be separate directories")
+    if destination.exists():
+        raise ValueError("destination must not exist")
+    files, counts = inventory(source)
+    destination.mkdir(mode=0o700)
+    for rel in files:
+        target = destination / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with (source / rel).open("rb") as src:
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+        if digest(source / rel) != digest(target):
+            raise ValueError("checksum verification failed")
+    print(f"verified files: {len(files)}")
+    print(f"excluded entries: {counts['excluded']}; symlinks: {counts['symlinks']}; special entries: {counts['special']}")
+    print("Excluded entries and symlinks require separate preservation and review.")
+
+
+def verify(source, destination):
+    source = source.resolve(strict=True)
+    destination = destination.resolve(strict=True)
+    if not source.is_dir() or not destination.is_dir() or source == destination or source in destination.parents or destination in source.parents:
+        raise ValueError("source and destination must be separate directories")
+    source_files, source_counts = inventory(source)
+    target_files, target_counts = inventory(destination)
+    source_by_key = {unicodedata.normalize("NFC", str(p)): p for p in source_files}
+    target_by_key = {unicodedata.normalize("NFC", str(p)): p for p in target_files}
+    source_keys = source_by_key.keys()
+    target_keys = target_by_key.keys()
+    missing = source_keys - target_keys
+    extra = target_keys - source_keys
+    changed = sum(
+        digest(source / source_by_key[key]) != digest(destination / target_by_key[key])
+        for key in source_keys & target_keys
+    )
+    print(f"source files: {len(source_files)}; destination files: {len(target_files)}")
+    print(f"missing: {len(missing)}; extra: {len(extra)}; changed: {changed}")
+    print(f"source excluded: {source_counts['excluded']}; symlinks: {source_counts['symlinks']}; special: {source_counts['special']}")
+    print(f"destination excluded: {target_counts['excluded']}; symlinks: {target_counts['symlinks']}; special: {target_counts['special']}")
+    if missing or extra or changed or target_counts["excluded"] or target_counts["symlinks"] or target_counts["special"]:
+        raise ValueError("intake differs or contains unverified entries")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verify", action="store_true", help="compare an existing intake without writing")
+    parser.add_argument("source", type=Path)
+    parser.add_argument("destination", type=Path)
+    args = parser.parse_args()
+    try:
+        (verify if args.verify else run)(args.source, args.destination)
+    except (OSError, ValueError) as error:
+        print(f"vault-archive-intake: failed ({type(error).__name__}); source remains unchanged; inspect destination before retrying", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -10,6 +10,23 @@ covers it.
 
 ## Open
 
+- **Vault archive intake.** `tools/vault-archive-intake` copies into a new directory, verifies
+  file bytes and reports excluded entries and symlinks as counts. It does not preserve file
+  metadata, empty directories or excluded paths; the full vault backup remains the recovery
+  source for them. Its read-only verification matched the filtered live vault and archive intake
+  by normalized path and checksum. The copy operation has fixture tests but has not been run
+  against the live vault. Open:
+  an intake-specific backup target that avoids an extra staging copy and records exclusions in
+  its receipt, plus reconciliation of excluded material.
+- **Vault cutover.** The vault, state-mount and backup paths were edited separately in the
+  machine overlay. Smallest change: a cutover command that validates the new vault contract,
+  backup and restore, updates all three paths together, and verifies affected services reload.
+- **Knowledge-vault migration comparison.** The migration used checksum comparisons and an ad hoc
+  Unicode-normalized link comparison to distinguish filename normalization from deleted notes and
+  identify newly unresolved links. The normalized comparison hid five filenames the copy had moved
+  from NFC to NFD, and the agent found them with a second script. Smallest change: a read-only
+  vault comparison that reports normalized path and content differences, names whose raw bytes
+  differ, and links that resolve in the old root and not the new one, without exposing note text.
 - **Runtime status for agents.** `sjel runtime status` answers
   `invalid or missing authentication token` from an agent session. An agent cannot see whether
   On-the-go mode deferred a model call. Workaround: read the defer reason from

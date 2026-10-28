@@ -256,17 +256,41 @@ impl Travel {
                 )
                 .into_any_element();
         };
-        page = page.child(div().text_xl().child(plan.title.clone())).child(
-            div()
-                .text_sm()
-                .text_color(rgb(palette.muted))
-                .child(format!(
-                    "{} – {} · {}",
-                    plan.date_start,
-                    plan.date_end,
-                    plan.status.replace('_', " ")
-                )),
-        );
+        page = page
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_xl().child(plan.title.clone()))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .px_2()
+                            .py(px(2.))
+                            .rounded(px(4.))
+                            .bg(rgba(crate::theme::tint(palette.green, 0x18)))
+                            .border_1()
+                            .border_color(rgba(crate::theme::tint(palette.green, 0x35)))
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(rgb(palette.green))
+                            .child("✓ Offline ready"),
+                    ),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child(format!(
+                        "{} – {} · {}",
+                        plan.date_start,
+                        plan.date_end,
+                        plan.status.replace('_', " ")
+                    )),
+            );
         let section = self.section();
         let mut tabs = div().flex().flex_wrap().gap_1();
         for tab in TripSection::ALL {
@@ -612,6 +636,15 @@ impl Travel {
         let Some(plan) = self.current() else {
             return page.into_any_element();
         };
+        let items: Vec<Item> = self
+            .selected
+            .as_ref()
+            .and_then(|id| self.details.get(id))
+            .and_then(|s| s.value.as_ref())
+            .map(|s| s.details.items.clone())
+            .unwrap_or_default();
+
+        page = page.child(self.readiness_strip(plan, &items));
         page = page
             .child(div().text_sm().child(format!("From {}", plan.origin.name)))
             .child(div().text_sm().child(format!(
@@ -640,6 +673,159 @@ impl Travel {
             page = page.child(self.place_row(i, place, cx));
         }
         page.into_any_element()
+    }
+
+    fn readiness_strip(&self, plan: &sjel_gpui_core::travel::Plan, items: &[Item]) -> AnyElement {
+        let palette = self.palette;
+        let start_date = chrono::NaiveDate::parse_from_str(&plan.date_start, "%Y-%m-%d").ok();
+        let end_date = chrono::NaiveDate::parse_from_str(&plan.date_end, "%Y-%m-%d").ok();
+        let total_nights = match (start_date, end_date) {
+            (Some(s), Some(e)) => (e - s).num_days().max(0) as usize,
+            _ => 0,
+        };
+        let lodging_count = items
+            .iter()
+            .filter(|it| {
+                let ty = it.item_type.to_lowercase();
+                ty.contains("lodging") || ty.contains("stay") || ty.contains("hotel")
+            })
+            .count();
+        let unbooked_stages = plan.stages.iter().filter(|s| s.status != "booked").count();
+        let missing_codes = items
+            .iter()
+            .filter(|it| it.booking_code().is_none())
+            .count();
+
+        let accom_pill = if total_nights == 0 {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(palette.raised))
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("Day trip")
+        } else if lodging_count >= total_nights {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.green))
+                .child(format!("✓ {lodging_count}/{total_nights} nights covered"))
+        } else {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(crate::theme::tint(palette.amber, 0x22)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.amber))
+                .child(format!("⚠ {lodging_count}/{total_nights} nights covered"))
+        };
+
+        let stages_pill = if plan.stages.is_empty() {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(palette.raised))
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("No stages")
+        } else if unbooked_stages == 0 {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.green))
+                .child(format!("✓ All {} stages booked", plan.stages.len()))
+        } else {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(crate::theme::tint(palette.amber, 0x22)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.amber))
+                .child(format!("⚠ {unbooked_stages} unbooked stage(s)"))
+        };
+
+        let codes_pill = if items.is_empty() {
+            div().into_any_element()
+        } else if missing_codes == 0 {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(crate::theme::tint(palette.green, 0x22)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.green))
+                .child(format!("✓ All {} booking codes", items.len()))
+                .into_any_element()
+        } else {
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(6.))
+                .bg(rgba(palette.raised))
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(format!(
+                    "{}/{} booking codes",
+                    items.len() - missing_codes,
+                    items.len()
+                ))
+                .into_any_element()
+        };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.muted))
+                            .child("TRIP READINESS & GAPS"),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("{} – {}", plan.date_start, plan.date_end)),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .child(accom_pill)
+                    .child(stages_pill)
+                    .child(codes_pill),
+            )
+            .into_any_element()
     }
 
     fn trip_calendar_timeline(&self) -> AnyElement {
@@ -790,86 +976,355 @@ impl Travel {
     }
 
     fn itinerary(&self, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
         let mut page = div().flex().flex_col().gap_3();
         let Some(plan) = self.current() else {
             return page.into_any_element();
         };
-        let mut stages: Vec<_> = plan.stages.iter().collect();
-        stages.sort_by_key(|stage| stage.sequence);
-        if stages.is_empty() {
-            page = page.child("No travel stages saved for this trip.");
-        }
-        for (i, stage) in stages.into_iter().enumerate() {
-            let destination = stage.destination.clone();
-            let editing = FormKind::Stage(Some(stage.id.clone()));
-            if let Some(card) = self.form_card(&editing, cx) {
-                page = page.child(card);
-                continue;
-            }
-            let mode = stage
-                .transport_modes
-                .first()
-                .map(|mode| format!(" · {mode}"))
-                .unwrap_or_default();
-            page = page.child(
+
+        page = page
+            .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
-                    .py_2()
+                    .flex_wrap()
+                    .gap_2()
+                    .children(self.form_button("add-stage", "Add stage", FormKind::Stage(None), cx))
+                    .children(self.form_button(
+                        "add-booking",
+                        "Add booking",
+                        FormKind::Booking(None),
+                        cx,
+                    )),
+            )
+            .children(self.form_card(&FormKind::Stage(None), cx))
+            .children(self.form_card(&FormKind::Booking(None), cx));
+
+        let mut stages: Vec<_> = plan.stages.iter().collect();
+        stages.sort_by_key(|stage| stage.sequence);
+
+        let items: Vec<Item> = self
+            .selected
+            .as_ref()
+            .and_then(|id| self.details.get(id))
+            .and_then(|s| s.value.as_ref())
+            .map(|s| s.details.items.clone())
+            .unwrap_or_default();
+
+        let mut days = std::collections::BTreeSet::new();
+        for stage in &stages {
+            if let Some(date) = &stage.date {
+                days.insert(date.clone());
+            }
+        }
+        for item in &items {
+            if let Some(day) = &item.day {
+                days.insert(day.clone());
+            }
+        }
+
+        if stages.is_empty() && items.is_empty() {
+            return page
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("No travel stages or items saved for this trip."),
+                )
+                .into_any_element();
+        }
+
+        let day_filters = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_1()
+            .child(
+                div()
+                    .id("filter-day-all")
+                    .px_2()
+                    .py(px(2.))
+                    .rounded(px(6.))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(self.selected_day_filter.is_none(), |el| {
+                        el.bg(rgba(palette.accent))
+                            .text_color(rgb(0xffffff))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                    })
+                    .when(self.selected_day_filter.is_some(), |el| {
+                        el.bg(rgba(palette.raised)).text_color(rgb(palette.muted))
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.selected_day_filter = None;
+                        cx.notify();
+                    }))
+                    .child("All days"),
+            )
+            .children(days.iter().enumerate().map(|(idx, day_str)| {
+                let this_day = day_str.clone();
+                let active = self.selected_day_filter.as_deref() == Some(day_str.as_str());
+                let short_date = chrono::NaiveDate::parse_from_str(day_str, "%Y-%m-%d")
+                    .ok()
+                    .map(|d| d.format("%b %-d").to_string())
+                    .unwrap_or_else(|| day_str.clone());
+                div()
+                    .id(gpui::SharedString::from(format!("filter-day-{idx}")))
+                    .px_2()
+                    .py(px(2.))
+                    .rounded(px(6.))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(active, |el| {
+                        el.bg(rgba(palette.accent))
+                            .text_color(rgb(0xffffff))
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                    })
+                    .when(!active, |el| {
+                        el.bg(rgba(palette.raised)).text_color(rgb(palette.muted))
+                    })
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.selected_day_filter = Some(this_day.clone());
+                        cx.notify();
+                    }))
+                    .child(format!("Day {} · {}", idx + 1, short_date))
+            }));
+
+        page = page.child(day_filters);
+
+        let filtered_days: Vec<&String> = if let Some(target) = self.selected_day_filter.as_ref() {
+            days.iter().filter(|d| *d == target).collect()
+        } else {
+            days.iter().collect()
+        };
+
+        for day_str in filtered_days {
+            let day_stages: Vec<(usize, &sjel_gpui_core::travel::Stage)> = stages
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.date.as_deref() == Some(day_str.as_str()))
+                .map(|(i, s)| (i, *s))
+                .collect();
+            let day_items: Vec<&Item> = items
+                .iter()
+                .filter(|item| item.day.as_deref() == Some(day_str.as_str()))
+                .collect();
+
+            let mut day_card = div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_3()
+                .rounded(px(10.))
+                .bg(rgba(palette.surface))
+                .border_1()
+                .border_color(rgba(palette.border));
+
+            day_card = day_card.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
                     .border_b_1()
-                    .border_color(rgba(self.palette.border))
+                    .border_color(rgba(palette.border))
+                    .pb_2()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.text))
+                            .child(day_str.clone()),
+                    )
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(self.palette.muted))
+                            .text_color(rgb(palette.muted))
                             .child(format!(
-                                "{} · {}{mode}",
-                                stage.date.as_deref().unwrap_or("Date open"),
-                                stage.status.replace('_', " ")
+                                "{} stage(s) · {} item(s)",
+                                day_stages.len(),
+                                day_items.len()
                             )),
-                    )
-                    .child(div().text_sm().child(format!(
-                        "{} → {}",
-                        stage.origin.name, stage.destination.name
-                    )))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_2()
-                            .child(
-                                self.button(gpui::SharedString::from(format!("stage-map-{i}")))
-                                    .label("Destination on map")
-                                    .disabled(destination.coordinate().is_none())
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.show_stop(destination.clone(), cx)
-                                    })),
-                            )
-                            // A snapshot from before stage ids were read has nothing to address.
-                            .when(!stage.id.is_empty(), |row| {
-                                row.children(self.form_button(
-                                    gpui::SharedString::from(format!("stage-edit-{i}")),
-                                    "Edit",
-                                    editing,
-                                    cx,
-                                ))
-                                .children(self.remove_button(Remove::Stage(stage.id.clone()), cx))
-                            }),
                     ),
             );
+
+            for (stage_idx, (orig_i, stage)) in day_stages.iter().enumerate() {
+                let editing = FormKind::Stage(Some(stage.id.clone()));
+                if let Some(card) = self.form_card(&editing, cx) {
+                    day_card = day_card.child(card);
+                    continue;
+                }
+                let mode = stage
+                    .transport_modes
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "transit".into());
+
+                let destination = stage.destination.clone();
+                let mut stage_row = div().flex().flex_col().gap_1().py_2().child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .px_2()
+                                .py(px(1.5))
+                                .rounded(px(4.))
+                                .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                .border_1()
+                                .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(rgb(palette.accent))
+                                .child(mode.to_uppercase()),
+                        )
+                        .child(div().text_sm().font_weight(gpui::FontWeight::MEDIUM).child(
+                            format!("{} → {}", stage.origin.name, stage.destination.name),
+                        ))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(stage.status.replace('_', " ")),
+                        ),
+                );
+
+                let mut actions = div().flex().flex_wrap().gap_2();
+                actions = actions.child(
+                    self.button(gpui::SharedString::from(format!("stage-map-{orig_i}")))
+                        .ghost()
+                        .label("Map")
+                        .disabled(destination.coordinate().is_none())
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.show_stop(destination.clone(), cx)
+                        })),
+                );
+                if !stage.id.is_empty() {
+                    actions = actions
+                        .children(self.form_button(
+                            gpui::SharedString::from(format!("stage-edit-{orig_i}")),
+                            "Edit",
+                            editing,
+                            cx,
+                        ))
+                        .children(self.remove_button(Remove::Stage(stage.id.clone()), cx));
+                }
+                stage_row = stage_row.child(actions);
+                day_card = day_card.child(stage_row);
+
+                if stage_idx + 1 < day_stages.len() {
+                    let (_, next_stage) = day_stages[stage_idx + 1];
+                    let same_stop = stage.destination.name == next_stage.origin.name;
+                    day_card = day_card.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .px_3()
+                            .py(px(4.))
+                            .rounded(px(6.))
+                            .bg(rgba(palette.raised))
+                            .text_xs()
+                            .child(
+                                div()
+                                    .text_color(rgb(palette.muted))
+                                    .child("Transfer connection:"),
+                            )
+                            .child(
+                                div()
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(rgb(if same_stop {
+                                        palette.green
+                                    } else {
+                                        palette.amber
+                                    }))
+                                    .child(if same_stop {
+                                        format!(
+                                            "At {} (seamless station transfer)",
+                                            stage.destination.name
+                                        )
+                                    } else {
+                                        format!(
+                                            "{} → {} (transfer buffer required)",
+                                            stage.destination.name, next_stage.origin.name
+                                        )
+                                    }),
+                            ),
+                    );
+                }
+            }
+
+            if !day_items.is_empty() {
+                day_card = day_card.child(
+                    div()
+                        .pt_2()
+                        .border_t_1()
+                        .border_color(rgba(palette.border))
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child("Bookings & Activities"),
+                );
+                for item in day_items {
+                    day_card = day_card.child(self.item_row(item, cx));
+                }
+            }
+
+            page = page.child(day_card);
         }
-        page = page
-            .children(self.form_button("add-stage", "Add stage", FormKind::Stage(None), cx))
-            .children(self.form_card(&FormKind::Stage(None), cx));
-        page.child(
-            div()
-                .text_sm()
-                .text_color(rgb(self.palette.muted))
-                .child("Items by day"),
-        )
-        .child(self.saved_items(cx))
-        .into_any_element()
+
+        let undated_stages: Vec<(usize, &sjel_gpui_core::travel::Stage)> = stages
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.date.is_none())
+            .map(|(i, s)| (i, *s))
+            .collect();
+        let undated_items: Vec<&Item> = items.iter().filter(|i| i.day.is_none()).collect();
+
+        if !undated_stages.is_empty() || !undated_items.is_empty() {
+            let mut undated_card = div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_3()
+                .rounded(px(10.))
+                .bg(rgba(palette.surface))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(rgb(palette.muted))
+                        .child("Undated Stages & Items"),
+                );
+            for (orig_i, stage) in undated_stages {
+                let editing = FormKind::Stage(Some(stage.id.clone()));
+                if let Some(card) = self.form_card(&editing, cx) {
+                    undated_card = undated_card.child(card);
+                    continue;
+                }
+                undated_card = undated_card.child(
+                    div()
+                        .py_1()
+                        .child(format!(
+                            "{} → {}",
+                            stage.origin.name, stage.destination.name
+                        ))
+                        .children(self.form_button(
+                            gpui::SharedString::from(format!("stage-edit-{orig_i}")),
+                            "Edit",
+                            editing,
+                            cx,
+                        )),
+                );
+            }
+            for item in undated_items {
+                undated_card = undated_card.child(self.item_row(item, cx));
+            }
+            page = page.child(undated_card);
+        }
+
+        page.into_any_element()
     }
 
     fn saved_items(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -939,6 +1394,17 @@ impl Travel {
             row = row.child(div().text_sm().child(format!("{label}: {value}")));
         }
         let mut actions = div().flex().flex_wrap().gap_2();
+        if let Some(code) = item.booking_code() {
+            let code_str = code.to_owned();
+            actions = actions.child(
+                self.button(gpui::SharedString::from(format!("copy-code-{}", item.id)))
+                    .primary()
+                    .label(format!("Copy code: {code_str}"))
+                    .on_click(cx.listener(move |_view, _, _, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(code_str.clone()));
+                    })),
+            );
+        }
         if let Some(url) = item.source_url() {
             actions = actions.child(
                 self.button(gpui::SharedString::from(format!("open-item-{}", item.id)))
@@ -994,12 +1460,11 @@ fn calendar_agenda(notes: &str, palette: crate::Palette) -> AnyElement {
         .flex()
         .flex_col()
         .gap_1()
-        .children(notes.lines().map(|line| {
-            div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(line.to_owned())
-        }))
+        .child(crate::doc_view::render_markdown(
+            notes,
+            palette,
+            crate::Density::Desktop,
+        ))
         .into_any_element()
 }
 

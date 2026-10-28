@@ -25,7 +25,7 @@ use crate::data::{Remote, Repo};
 use crate::mail::Mail;
 use crate::scout::ScoutingPage;
 use crate::theme::Palette;
-use sjel_gpui_ui::filter_pill;
+use sjel_gpui_ui::{filter_pill, tint};
 
 actions!(
     feed,
@@ -1172,6 +1172,67 @@ impl Feed {
                 .unwrap_or_default()
                 .trim()
                 .to_owned();
+            let score = entry.score();
+            let score_badge = (score > 0.).then(|| {
+                let color = if score >= 0.8 {
+                    palette.green
+                } else if score >= 0.5 {
+                    palette.amber
+                } else {
+                    palette.muted
+                };
+                div()
+                    .px_1p5()
+                    .py(px(0.5))
+                    .rounded(px(3.))
+                    .bg(rgba(tint(color, 0x18)))
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(color))
+                    .child(format!("{:.0}%", score * 100.))
+            });
+            let keep_id = entry.id.clone();
+            let dismiss_id = entry.id.clone();
+            let quick_triage = (entry.status == "new").then(|| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        div()
+                            .id(("feed-quick-keep", i))
+                            .px_2()
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .bg(rgba(tint(palette.green, 0x18)))
+                            .hover(move |s| s.bg(rgba(tint(palette.green, 0x33))))
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.green))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.decide(keep_id.clone(), "keeper", cx);
+                            }))
+                            .child("Keep"),
+                    )
+                    .child(
+                        div()
+                            .id(("feed-quick-dismiss", i))
+                            .px_2()
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .bg(rgba(tint(palette.red, 0x18)))
+                            .hover(move |s| s.bg(rgba(tint(palette.red, 0x33))))
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.red))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.decide(dismiss_id.clone(), "dismissed", cx);
+                            }))
+                            .child("Dismiss"),
+                    )
+            });
             list = list.child(
                 div()
                     .id(("feed-row", i))
@@ -1199,12 +1260,14 @@ impl Feed {
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(title(entry.title.as_deref(), &entry.url)),
                             )
+                            .children(score_badge)
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(rgb(palette.muted))
                                     .child(meta(entry)),
-                            ),
+                            )
+                            .children(quick_triage),
                     )
                     .when(!preview.is_empty(), |el| {
                         el.child(
@@ -2536,7 +2599,11 @@ fn section(label: &str, body: String, palette: Palette) -> gpui_kit::Div {
                 .text_color(rgb(palette.muted))
                 .child(label.to_owned()),
         )
-        .child(div().text_sm().line_height(px(22.)).child(body))
+        .child(sjel_gpui_ui::render_markdown(
+            &body,
+            palette,
+            sjel_gpui_ui::Density::Desktop,
+        ))
 }
 
 #[cfg(test)]

@@ -70,6 +70,8 @@ const PAGE: usize = 200;
 pub struct Mail {
     repo: Repo,
     palette: Option<Palette>,
+    pub density: crate::theme::Density,
+    pub opened_thread: Option<String>,
     pub rows: Remote<Vec<MailProposal>>,
     pub status: StatusFilter,
     pub category: Option<&'static str>,
@@ -90,6 +92,8 @@ impl Mail {
         Self {
             repo,
             palette: None,
+            density: crate::theme::Density::Desktop,
+            opened_thread: None,
             rows: Remote::default(),
             status: StatusFilter::Pending,
             category: None,
@@ -102,6 +106,18 @@ impl Mail {
             focus: cx.focus_handle(),
             focus_next: true,
         }
+    }
+
+    pub fn set_density(&mut self, density: crate::theme::Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
+        }
+    }
+
+    pub fn set_repo(&mut self, repo: Repo, cx: &mut Context<Self>) {
+        self.repo = repo;
+        self.load(cx);
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -173,6 +189,19 @@ impl Mail {
             cx.notify();
         } else {
             self.run(action, ids, cx);
+        }
+    }
+
+    /// Runs `action` on a single specific item (used by mobile triage drawer).
+    fn direct_action(&mut self, id: String, action: MailAction, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        if action.confirmation(1).is_some() {
+            self.pending = Some((action, vec![id]));
+            cx.notify();
+        } else {
+            self.run(action, vec![id], cx);
         }
     }
 
@@ -457,14 +486,41 @@ impl Render for Mail {
             );
         }
 
+        let density_selector = div().flex().items_center().gap_1().children(
+            [
+                crate::theme::Density::Compact,
+                crate::theme::Density::Desktop,
+                crate::theme::Density::Comfortable,
+            ]
+            .into_iter()
+            .map(|d| {
+                let active = self.density == d;
+                Button::new(SharedString::from(format!("mail-density-{}", d.label())))
+                    .xsmall()
+                    .ghost()
+                    .when(active, |b| b.primary())
+                    .label(d.label())
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.set_density(d, cx);
+                    }))
+            }),
+        );
+
         div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(muted(
-                "j/k move · x select · d dismiss · e archive · # trash · w waiting · o Gmail",
-                palette,
-            ))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(muted(
+                        "j/k move · x select · d dismiss · e archive · # trash · w waiting · o Gmail",
+                        palette,
+                    ))
+                    .child(density_selector),
+            )
             .child(statuses)
             .child(categories)
             .when_some(self.notice.clone(), |el, (text, failed)| {
@@ -585,6 +641,8 @@ impl Mail {
     ) -> AnyElement {
         let chosen = self.cursor.as_deref() == Some(m.id.as_str());
         let picked = self.selected.contains(&m.id);
+        let is_mobile = self.density.is_mobile();
+        let is_open = self.opened_thread.as_deref() == Some(m.id.as_str());
         let mut meta = vec![
             m.from_addr
                 .clone()
@@ -609,65 +667,186 @@ impl Mail {
         }
         let select = m.id.clone();
         let toggle = m.id.clone();
-        div()
+        let id_for_triage = m.id.clone();
+        let pad_y = self.density.pad_y();
+        let pad_x = self.density.pad_x();
+
+        let row_item = div()
             .id(("mail-row", i))
             .flex()
-            .gap_2()
-            .px_3()
-            .py_2()
+            .flex_col()
+            .px(pad_x)
+            .py(pad_y)
             .rounded(px(6.))
             .when(chosen, |el| el.bg(rgba(palette.raised)))
             .hover(move |style| style.bg(rgba(palette.raised)))
-            .on_click(cx.listener(move |view, _, window, cx| {
-                view.cursor = Some(select.clone());
-                window.focus(&view.focus, cx);
-                cx.notify();
-            }))
             .child(
                 div()
-                    .id(("mail-pick", i))
-                    .w(px(18.))
-                    .text_sm()
-                    .text_color(rgb(if picked { palette.text } else { palette.muted }))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        cx.stop_propagation();
-                        view.toggle(toggle.clone(), cx);
-                    }))
-                    .child(if picked { "☑" } else { "☐" }),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
+                    .id(("mail-row-head", i))
                     .flex()
-                    .flex_col()
-                    .gap_1()
+                    .items_center()
+                    .gap_2()
+                    .when(is_mobile, |el| el.min_h(self.density.min_touch_target()))
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.cursor = Some(select.clone());
+                        if is_mobile {
+                            if view.opened_thread.as_deref() == Some(select.as_str()) {
+                                view.opened_thread = None;
+                            } else {
+                                view.opened_thread = Some(select.clone());
+                            }
+                        }
+                        window.focus(&view.focus, cx);
+                        cx.notify();
+                    }))
                     .child(
                         div()
-                            .truncate()
+                            .id(("mail-pick", i))
+                            .w(px(18.))
                             .text_sm()
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(m.subject.clone().unwrap_or_else(|| "(No subject)".into())),
+                            .text_color(rgb(if picked { palette.text } else { palette.muted }))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                cx.stop_propagation();
+                                view.toggle(toggle.clone(), cx);
+                            }))
+                            .child(if picked { "☑" } else { "☐" }),
                     )
                     .child(
                         div()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(meta.join(" · ")),
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_sm()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(
+                                        m.subject.clone().unwrap_or_else(|| "(No subject)".into()),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(meta.join(" · ")),
+                            )
+                            .when(!is_mobile && m.snippet.is_some(), |el| {
+                                el.child(
+                                    div()
+                                        .truncate()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(m.snippet.clone().unwrap_or_default()),
+                                )
+                            }),
                     )
-                    .when_some(m.snippet.clone(), |el, snippet| {
+                    .when(is_mobile, |el| {
                         el.child(
                             div()
-                                .truncate()
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
-                                .child(snippet),
+                                .child(if is_open { "▾" } else { "▸" }),
                         )
                     }),
             )
-            .into_any_element()
+            .when(is_mobile && is_open, |el| {
+                let id1 = id_for_triage.clone();
+                let id2 = id_for_triage.clone();
+                let id3 = id_for_triage.clone();
+                let id4 = id_for_triage.clone();
+                let id_cat = id_for_triage.clone();
+                el.child(
+                    div()
+                        .pt_2()
+                        .pb_1()
+                        .pl_6()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .border_t_1()
+                        .border_color(rgba(crate::theme::tint(palette.border, 0x40)))
+                        .when_some(m.snippet.clone(), |drawer, snip| {
+                            drawer.child(div().text_xs().text_color(rgb(palette.text)).child(snip))
+                        })
+                        .child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap_1()
+                                .child(
+                                    Button::new(SharedString::from(format!("mail-row-d-{i}")))
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Dismiss")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.direct_action(
+                                                id1.clone(),
+                                                MailAction::Dismiss,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                                .child(
+                                    Button::new(SharedString::from(format!("mail-row-w-{i}")))
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Waiting")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.direct_action(
+                                                id2.clone(),
+                                                MailAction::Waiting,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                                .child(
+                                    Button::new(SharedString::from(format!("mail-row-e-{i}")))
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Archive")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.direct_action(
+                                                id3.clone(),
+                                                MailAction::Archive,
+                                                cx,
+                                            );
+                                        })),
+                                )
+                                .child(
+                                    Button::new(SharedString::from(format!("mail-row-t-{i}")))
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Trash")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.direct_action(id4.clone(), MailAction::Trash, cx);
+                                        })),
+                                )
+                                .children(CATEGORIES.iter().take(3).map(|(key, label)| {
+                                    let this_id = id_cat.clone();
+                                    Button::new(SharedString::from(format!(
+                                        "mail-row-cat-{key}-{i}"
+                                    )))
+                                    .xsmall()
+                                    .ghost()
+                                    .label(format!("→ {label}"))
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.direct_action(
+                                            this_id.clone(),
+                                            MailAction::Categorize((*key).to_owned()),
+                                            cx,
+                                        );
+                                    }))
+                                })),
+                        ),
+                )
+            });
+
+        row_item.into_any_element()
     }
 }
 

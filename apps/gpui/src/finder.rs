@@ -392,6 +392,7 @@ impl Finder {
     fn agent_send(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         let existing = self.agent.id().map(str::to_owned);
+        let draft_tier = self.agent.draft_tier;
         self.query.clear();
         if let Some((input, _)) = &self.input {
             input.update(cx, |input, cx| input.set_value("", window, cx));
@@ -415,7 +416,7 @@ impl Finder {
                         id,
                         ..Default::default()
                     }),
-                None => shell.agent_create(None).await?,
+                None => shell.agent_create(None, Some(draft_tier)).await?,
             };
             shell.agent_prompt(&session.id, &text).await?;
             let stream = shell.agent_stream(&session.id, 0).await?;
@@ -854,6 +855,66 @@ impl Finder {
                         .child(line.to_owned())
                 }))
         });
+        let is_block = pending.is_block();
+        let border_color = if is_block {
+            palette.red
+        } else {
+            palette.accent
+        };
+        let tag_text = if is_block {
+            match &pending.rule {
+                Some(rule) => format!("blocked by policy · rule {rule}"),
+                None => "blocked by policy".to_owned(),
+            }
+        } else {
+            match &pending.rule {
+                Some(rule) => format!("needs your answer · rule {rule}"),
+                None => "needs your answer".to_owned(),
+            }
+        };
+        let tag_color = if is_block {
+            palette.red
+        } else {
+            palette.accent
+        };
+
+        let allow_button = div()
+            .id("agent-allow")
+            .cursor_pointer()
+            .text_color(rgb(if is_block {
+                palette.amber
+            } else {
+                palette.green
+            }))
+            .on_click(cx.listener(|view, _, _, cx| {
+                view.agent_decide(true, false, cx);
+            }))
+            .child(if is_block {
+                "allow once (override)"
+            } else {
+                "allow once"
+            });
+
+        let allow_session_button = (!is_block).then(|| {
+            div()
+                .id("agent-allow-session")
+                .cursor_pointer()
+                .text_color(rgb(palette.green))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.agent_decide(true, true, cx);
+                }))
+                .child("allow for session")
+        });
+
+        let deny_button = div()
+            .id("agent-deny")
+            .cursor_pointer()
+            .text_color(rgb(palette.red))
+            .on_click(cx.listener(|view, _, _, cx| {
+                view.agent_decide(false, false, cx);
+            }))
+            .child("deny");
+
         div()
             .flex()
             .flex_col()
@@ -864,17 +925,13 @@ impl Finder {
             .rounded(px(8.))
             .bg(rgba(palette.raised))
             .border_1()
-            .border_color(rgba(palette.accent))
+            .border_color(rgba(border_color))
             .child(
                 div()
                     .flex()
                     .gap_2()
                     .text_xs()
-                    .child(
-                        div()
-                            .text_color(rgb(palette.accent))
-                            .child("needs your answer"),
-                    )
+                    .child(div().text_color(rgb(tag_color)).child(tag_text))
                     .child(
                         div()
                             .text_color(rgb(palette.muted))
@@ -894,36 +951,9 @@ impl Finder {
                     .gap_3()
                     .pt_1()
                     .text_xs()
-                    .child(
-                        div()
-                            .id("agent-allow")
-                            .cursor_pointer()
-                            .text_color(rgb(palette.green))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.agent_decide(true, false, cx);
-                            }))
-                            .child("allow once"),
-                    )
-                    .child(
-                        div()
-                            .id("agent-allow-session")
-                            .cursor_pointer()
-                            .text_color(rgb(palette.green))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.agent_decide(true, true, cx);
-                            }))
-                            .child("allow for session"),
-                    )
-                    .child(
-                        div()
-                            .id("agent-deny")
-                            .cursor_pointer()
-                            .text_color(rgb(palette.red))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.agent_decide(false, false, cx);
-                            }))
-                            .child("deny"),
-                    ),
+                    .child(allow_button)
+                    .children(allow_session_button)
+                    .child(deny_button),
             )
             .into_any_element()
     }
@@ -1037,9 +1067,73 @@ impl Finder {
                     .text_color(rgb(palette.muted))
                     .child(match &self.agent.session {
                         Some(session) => {
-                            format!("{} · {}", session.root, session.plugins.join(", "))
+                            let tier = session.tier.as_deref().unwrap_or("project");
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py(px(1.5))
+                                        .rounded(px(4.))
+                                        .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                        .border_1()
+                                        .border_color(rgba(crate::theme::tint(
+                                            palette.accent,
+                                            0x35,
+                                        )))
+                                        .text_color(rgb(palette.accent))
+                                        .child(format!("tier: {tier}")),
+                                )
+                                .child(div().text_color(rgb(palette.muted)).child(format!(
+                                    "{} · {}",
+                                    session.root,
+                                    session.plugins.join(", ")
+                                )))
+                                .into_any_element()
                         }
-                        None => "a new session in the Sjel checkout".to_owned(),
+                        None => {
+                            let draft_tier = self.agent.draft_tier;
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(div().text_color(rgb(palette.muted)).child("tier:"))
+                                .child(tier_chip(
+                                    "sjel",
+                                    draft_tier == "sjel",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent.draft_tier = "sjel";
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(tier_chip(
+                                    "project",
+                                    draft_tier == "project",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent.draft_tier = "project";
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(tier_chip(
+                                    "account",
+                                    draft_tier == "account",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent.draft_tier = "account";
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(
+                                    div()
+                                        .text_color(rgb(palette.muted))
+                                        .child("· in Sjel checkout"),
+                                )
+                                .into_any_element()
+                        }
                     }),
             )
             .child(
@@ -1104,6 +1198,48 @@ impl Finder {
         self.picked = true;
         cx.notify();
     }
+}
+
+fn tier_chip(
+    label: &'static str,
+    active: bool,
+    palette: Palette,
+    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> gpui::AnyElement {
+    let (bg, text_color, border_color) = if active {
+        (
+            rgba(crate::theme::tint(palette.accent, 0x24)),
+            rgb(palette.accent),
+            rgba(crate::theme::tint(palette.accent, 0x50)),
+        )
+    } else {
+        (
+            rgba(palette.raised),
+            rgb(palette.muted),
+            rgba(palette.border),
+        )
+    };
+    div()
+        .id(SharedString::from(format!("tier-{label}")))
+        .flex()
+        .items_center()
+        .px_2()
+        .py(px(1.5))
+        .rounded(px(4.))
+        .cursor_pointer()
+        .bg(bg)
+        .border_1()
+        .border_color(border_color)
+        .text_xs()
+        .font_weight(if active {
+            gpui::FontWeight::SEMIBOLD
+        } else {
+            gpui::FontWeight::NORMAL
+        })
+        .text_color(text_color)
+        .on_click(on_click)
+        .child(label)
+        .into_any_element()
 }
 
 /// The first `count` lines of a tool result, with a count when there is more.

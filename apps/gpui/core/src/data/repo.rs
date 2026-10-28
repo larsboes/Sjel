@@ -657,8 +657,22 @@ impl Repo {
 
     /// Adds a task to a project.
     pub async fn add_task(&self, project: &str, title: &str) -> ShellResult<()> {
+        self.add_task_with_details(project, title, None, None).await
+    }
+
+    /// Adds a task with optional due date and priority to a project.
+    pub async fn add_task_with_details(
+        &self,
+        project: &str,
+        title: &str,
+        due: Option<&str>,
+        priority: Option<u8>,
+    ) -> ShellResult<()> {
         let Some(replica) = &self.replica else {
-            return self.shell()?.add_task(project, title).await;
+            return self
+                .shell()?
+                .add_task_with_details(project, title, due, priority)
+                .await;
         };
         let path = task_path(project, SystemTime::now());
         replica
@@ -666,6 +680,12 @@ impl Repo {
             .save_record(project, &path, "task", title, "")
             .await
             .map_err(store_error)?;
+        if let Some(due) = due {
+            let _ = replica.store.set_task_due(&path, due).await;
+        }
+        if let Some(p) = priority {
+            let _ = replica.store.set_task_priority(&path, p).await;
+        }
         (replica.wrote)();
         Ok(())
     }

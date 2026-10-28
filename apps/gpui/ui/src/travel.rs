@@ -92,6 +92,7 @@ pub struct Travel {
     presence_loaded: bool,
     presence_again: bool,
     compact_map: bool,
+    selected_day_filter: Option<String>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
     vector: Option<vector::VectorMap>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -162,6 +163,7 @@ impl Travel {
             presence_loaded: false,
             presence_again: false,
             compact_map: false,
+            selected_day_filter: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
             vector: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]

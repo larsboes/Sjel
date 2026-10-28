@@ -39,6 +39,16 @@ impl Item {
         .collect()
     }
 
+    pub fn booking_code(&self) -> Option<&str> {
+        self.payload
+            .get("order_ref")
+            .or_else(|| self.payload.get("booking_code"))
+            .or_else(|| self.payload.get("reference"))
+            .or_else(|| self.payload.get("pnr"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+    }
+
     pub fn source_url(&self) -> Option<reqwest::Url> {
         let url = self.payload.get("url")?.as_str()?;
         let url = reqwest::Url::parse(url).ok()?;

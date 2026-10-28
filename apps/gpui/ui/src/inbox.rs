@@ -20,6 +20,7 @@ use sjel_gpui_core::capture::{self, Draft, TAGS};
 use sjel_gpui_core::shell;
 use sjel_gpui_core::store::{LocalCapture, TursoStore};
 
+use crate::theme::tint;
 use crate::{Density, Palette};
 
 /// What the page asks its host to do. The host owns the sync and the keyboard.
@@ -296,6 +297,43 @@ impl Inbox {
     fn capture_row(&self, capture: &LocalCapture, index: usize) -> AnyElement {
         let palette = self.palette;
         let refusal = self.refusal_of(capture);
+        let tag_pill = match capture.tag.as_deref() {
+            Some(tag) => {
+                let tag_color = match tag {
+                    "todo" | "task" => palette.accent,
+                    "idea" => palette.amber,
+                    "place" | "go" => palette.green,
+                    "buy" | "price" => palette.accent,
+                    _ => palette.muted,
+                };
+                div()
+                    .px_1p5()
+                    .py(px(0.5))
+                    .rounded(px(3.))
+                    .bg(rgba(tint(tag_color, 0x18)))
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(tag_color))
+                    .child(format!("#{tag}"))
+            }
+            None => div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child("no tag"),
+        };
+        let url_line = capture.url.as_deref().and_then(|url| {
+            if capture.text.as_deref() != Some(url) {
+                Some(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.accent))
+                        .truncate()
+                        .child(url.to_string()),
+                )
+            } else {
+                None
+            }
+        });
         // The state is a sentence of the Mac's and can be long, so it goes in the column under the
         // title rather than beside the tag: a row that pushes its own text off the card is a row
         // nobody can read.
@@ -312,22 +350,31 @@ impl Inbox {
                     .truncate()
                     .child(capture.label()),
             )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                        match capture.tag.as_deref() {
-                            Some(tag) => format!("#{tag}"),
-                            None => "no tag".to_owned(),
-                        },
-                    ))
-                    .when(refusal.is_none(), |line| {
-                        let (state, colour) = state_of(capture, palette);
-                        line.child(div().text_xs().text_color(rgb(colour)).child(state))
-                    }),
-            );
+            .children(url_line)
+            .child(div().flex().items_center().gap_2().child(tag_pill).when(
+                refusal.is_none(),
+                |line| {
+                    let (state, colour) = state_of(capture, palette);
+                    line.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .px_1p5()
+                            .py(px(0.5))
+                            .rounded_full()
+                            .bg(rgba(tint(colour, 0x18)))
+                            .child(div().size(px(5.)).rounded_full().bg(rgb(colour)))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(colour))
+                                    .child(state),
+                            ),
+                    )
+                },
+            ));
         if let Some(reason) = refusal {
             // The Mac said no. It is said here, on the row, because that is where the capture is
             // and where the person can do something about it.
@@ -352,9 +399,9 @@ impl Inbox {
                     div()
                         .flex_none()
                         .px_2()
-                        .py(px(2.))
-                        .rounded(px(6.))
-                        .bg(rgba(palette.raised))
+                        .py(px(1.5))
+                        .rounded(px(4.))
+                        .bg(rgba(tint(palette.raised, 0x66)))
                         .border_1()
                         .border_color(rgba(palette.border))
                         .text_xs()

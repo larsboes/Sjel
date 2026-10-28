@@ -236,6 +236,13 @@ impl Extension for ApprovalGate {
                 ))
             }
         };
+        let decision = self.classify(call);
+        let rule = decision.as_ref().map(|d| d.rule);
+        let class = decision.as_ref().map(|d| match d.class {
+            Class::Block => "block",
+            Class::Ask => "ask",
+            Class::Allow => "allow",
+        });
         self.grants.note_pending(&id, key(call));
         self.log.push(json!({
             "type": "needs_approval",
@@ -244,6 +251,8 @@ impl Extension for ApprovalGate {
             "arguments": cap(&call.function.arguments, PREVIEW_LIMIT),
             "preview": preview,
             "diff": changes,
+            "rule": rule,
+            "class": class,
         }));
 
         let started = Instant::now();

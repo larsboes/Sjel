@@ -41,9 +41,17 @@ pub struct Pending {
     pub preview: String,
     /// The lines that will change, when the call changes a file.
     pub diff: Option<String>,
+    pub rule: Option<String>,
+    pub class: Option<String>,
 }
 
-#[derive(Default)]
+impl Pending {
+    pub fn is_block(&self) -> bool {
+        self.class.as_deref() == Some("block")
+            || self.rule.as_ref().map_or(false, |r| r.starts_with('B'))
+    }
+}
+
 pub struct AgentRun {
     /// The session this panel is attached to.
     pub session: Option<Session>,
@@ -59,6 +67,25 @@ pub struct AgentRun {
     /// Sessions available from the capability, newest first.
     pub sessions: Vec<Session>,
     pub sessions_loading: bool,
+    /// Tier selected for the next session if none is open.
+    pub draft_tier: &'static str,
+}
+
+impl Default for AgentRun {
+    fn default() -> Self {
+        Self {
+            session: None,
+            rows: Vec::new(),
+            pending: None,
+            error: None,
+            running: false,
+            last_seq: 0,
+            truncated: false,
+            sessions: Vec::new(),
+            sessions_loading: false,
+            draft_tier: "project",
+        }
+    }
 }
 
 impl AgentRun {
@@ -157,8 +184,26 @@ impl AgentRun {
                         name: event.name,
                         preview: event.preview,
                         diff: event.diff,
+                        rule: event.rule,
+                        class: event.class,
                     });
                 }
+            }
+            "blocked" => {
+                let rule_suffix = event
+                    .rule
+                    .as_deref()
+                    .map(|r| format!(" · rule {r}"))
+                    .unwrap_or_default();
+                let reason = if let Some(reason) = event.reason.filter(|r| !r.is_empty()) {
+                    reason
+                } else if !event.name.is_empty() {
+                    format!("{} blocked", event.name)
+                } else {
+                    "blocked by policy".to_owned()
+                };
+                self.rows
+                    .push(Row::Notice(format!("policy block{rule_suffix}: {reason}")));
             }
             "approved" => {
                 self.pending = None;
@@ -321,6 +366,7 @@ mod tests {
         });
         let pending = run.pending.clone().expect("a call is waiting");
         assert_eq!(pending.preview, "cargo test");
+        assert!(!pending.is_block());
         assert!(run.busy(), "a waiting call is a busy run");
         assert!(run.status().contains("waiting on you · bash"));
 

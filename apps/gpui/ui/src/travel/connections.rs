@@ -600,6 +600,19 @@ impl Travel {
                     }))
                     .child(muted(connections::duration(journey.total_duration_minutes)))
                     .child(muted(changes))
+                    .when(journey.changes() == 0, |el| {
+                        el.child(
+                            div()
+                                .px_1p5()
+                                .py(px(1.))
+                                .rounded(px(4.))
+                                .bg(rgba(crate::theme::tint(palette.green, 0x20)))
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(rgb(palette.green))
+                                .child("Direct"),
+                        )
+                    })
                     .when(cancelled, |el| {
                         el.child(
                             div()
@@ -627,7 +640,29 @@ impl Travel {
             )
             .child(muted(trains));
         if expanded {
-            for leg in &journey.legs {
+            for (idx, leg) in journey.legs.iter().enumerate() {
+                if idx > 0 {
+                    let prev_arr = &journey.legs[idx - 1].arrival_time;
+                    let next_dep = &leg.departure_time;
+                    let buffer_text = match (
+                        chrono::DateTime::parse_from_rfc3339(prev_arr),
+                        chrono::DateTime::parse_from_rfc3339(next_dep),
+                    ) {
+                        (Ok(a), Ok(d)) => {
+                            let mins = (d - a).num_minutes();
+                            format!("Transfer buffer: {mins} min")
+                        }
+                        _ => "Transfer".into(),
+                    };
+                    row = row.child(
+                        div()
+                            .pl_6()
+                            .py(px(1.))
+                            .text_xs()
+                            .text_color(rgb(palette.accent))
+                            .child(format!("↳ {buffer_text}")),
+                    );
+                }
                 let mut parts = vec![
                     format!(
                         "{} {} → {} {}",

@@ -46,6 +46,12 @@ pub enum TodayEvent {
     Refresh,
     /// A task was written here and is waiting for the Mac, so the host may sync now.
     Wrote,
+    /// The person tapped quick capture on Today to record a note, link, or task.
+    Capture,
+    /// The person tapped the People & Places shortcut.
+    People,
+    /// The person tapped the Documents shortcut.
+    Documents,
 }
 
 /// The phone's landing page.
@@ -712,6 +718,110 @@ impl Today {
             )
             .into_any_element()
     }
+
+    /// Quick-capture entry point and 1-tap shortcuts to People & Documents.
+    fn quick_capture_bar(&self, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .id("today-quick-capture")
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .px_4()
+                    .py_2()
+                    .min_h(self.density.min_touch_target())
+                    .rounded(px(10.))
+                    .bg(rgba(crate::theme::tint(palette.raised, 0x90)))
+                    .border_1()
+                    .border_color(rgba(crate::theme::tint(palette.border, 0x40)))
+                    .cursor_pointer()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|_, _, _, cx| cx.emit(TodayEvent::Capture)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .text_sm()
+                            .text_color(rgb(palette.muted))
+                            .child("✎")
+                            .child("Capture note, link or task…"),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .px_2()
+                            .py(px(2.))
+                            .rounded(px(6.))
+                            .bg(rgb(palette.accent))
+                            .text_color(rgb(0xffffff))
+                            .child("+ New"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .id("today-open-people")
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .gap_1()
+                            .py(px(6.))
+                            .min_h(self.density.min_touch_target())
+                            .rounded(px(8.))
+                            .bg(rgba(palette.surface))
+                            .border_1()
+                            .border_color(rgba(crate::theme::tint(palette.border, 0x40)))
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.text))
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|_, _, _, cx| cx.emit(TodayEvent::People)),
+                            )
+                            .child("👤 People & Places"),
+                    )
+                    .child(
+                        div()
+                            .id("today-open-documents")
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .gap_1()
+                            .py(px(6.))
+                            .min_h(self.density.min_touch_target())
+                            .rounded(px(8.))
+                            .bg(rgba(palette.surface))
+                            .border_1()
+                            .border_color(rgba(crate::theme::tint(palette.border, 0x40)))
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.text))
+                            .cursor_pointer()
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|_, _, _, cx| cx.emit(TodayEvent::Documents)),
+                            )
+                            .child("📄 Documents"),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
 /// The due date in the width a phone row can spare: `Overdue` when it has passed, else `30 Sep`.
@@ -754,7 +864,8 @@ impl Render for Today {
             .flex_col()
             .gap_4()
             .text_color(rgb(palette.text))
-            .child(self.header(cx));
+            .child(self.header(cx))
+            .child(self.quick_capture_bar(cx));
 
         let Some(view) = view else {
             // Nothing has been read yet. One sentence, not three empty sections that look like

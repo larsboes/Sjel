@@ -727,6 +727,23 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
       expect(textOf(r)).not.toMatch(/CONTESTED/);
     });
 
+    test("thinking and confidence are taken before the reveal and reported", async () => {
+      const RIGHT = "\x1b[C";
+      const LEFT = "\x1b[D";
+      const r = await run("quiz", Q, ["t", ..."A, since B fails", "\r", RIGHT, RIGHT, RIGHT, LEFT, "1", "\r"]);
+      const a = r.details.answers[0];
+      expect(a.thinking).toBe("A, since B fails");
+      expect(a.confidence).toBe(60);
+      expect(textOf(r)).toMatch(/confidence 60% — thinking: A, since B fails/);
+    });
+
+    test("an untouched confidence stays unset, not 50", async () => {
+      const r = await run("quiz", Q, ["1", "\r"]);
+      expect(r.details.answers[0].confidence).toBeNull();
+      expect(r.details.answers[0].thinking).toBeNull();
+      expect(textOf(r)).not.toMatch(/confidence/);
+    });
+
     test("review mode renders the revised verdict and takes an acceptance", async () => {
       const r = await run("quiz",
         { topic: "t", mode: "review", reviews: [{ id: "q1", prompt: "Which?", chosen: "B", correct: "A", accepted: true, reason: "you were right" }] },

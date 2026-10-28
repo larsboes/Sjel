@@ -628,7 +628,13 @@ interface QuizAnswer {
 	selectedIndex: number | null; // null = "I don't know"
 	correct: boolean;
 	idk: boolean;
-	/** Why the user chose it. Null when they chose not to say. */
+	/** What the user thought before committing. Typed before the reveal, so the answer has not
+	 * shaped it yet. Null when they wrote nothing. */
+	thinking: string | null;
+	/** The user's probability (0-100) that their answer is right. Null when unset, which is not
+	 * the same as 50. */
+	confidence: number | null;
+	/** Their reaction after the reveal. Null when they chose not to say. */
 	note: string | null;
 	/** The user disputes the grading. A widget cannot host a model turn, so this is what carries
 	 * the dispute into the conversation, where the discussion actually happens. */
@@ -737,6 +743,10 @@ async function runQuiz(
 		let revealed = false;
 		/** The reveal's second phase: the user is typing why they chose it. */
 		let notePhase = false;
+		/** Before the reveal: the user is typing their thinking. */
+		let thinkingPhase = false;
+		let thinking: string | null = null;
+		let confidence: number | null = null;
 		const cache = new ScreenCache();
 		const answers: QuizAnswer[] = [];
 		const editor = new Editor(tui, editorTheme(theme));
@@ -768,6 +778,8 @@ async function runQuiz(
 				selectedIndex: idk ? null : optionIndex,
 				correct: !idk && optionIndex === q.correctIndex,
 				idk,
+				thinking,
+				confidence,
 				note: null,
 				contested: false,
 			});
@@ -782,16 +794,25 @@ async function runQuiz(
 
 		editor.onChange = () => refresh();
 		editor.onSubmit = (value) => {
-			const answer = currentAnswer();
-			if (answer) answer.note = value.trim().length > 0 ? value.trim() : null;
+			const text = value.trim().length > 0 ? value.trim() : null;
+			if (thinkingPhase) {
+				thinking = text;
+			} else {
+				const answer = currentAnswer();
+				if (answer) answer.note = text;
+			}
 			editor.setText("");
 			notePhase = false;
+			thinkingPhase = false;
 			refresh();
 		};
 
 		function advance() {
 			editor.setText("");
 			notePhase = false;
+			thinkingPhase = false;
+			thinking = null;
+			confidence = null;
 			if (qIndex < questions.length - 1) {
 				qIndex++;
 				optionIndex = 0;
@@ -804,10 +825,11 @@ async function runQuiz(
 		}
 
 		function handleInput(data: string) {
-			if (notePhase) {
+			if (notePhase || thinkingPhase) {
 				if (matchesKey(data, Key.escape)) {
 					editor.setText("");
 					notePhase = false;
+					thinkingPhase = false;
 					refresh();
 					return;
 				}
@@ -840,6 +862,23 @@ async function runQuiz(
 					return;
 				}
 				if (matchesKey(data, Key.enter) || data === " ") advance();
+				return;
+			}
+			if (data === "t") {
+				thinkingPhase = true;
+				editor.setText(thinking ?? "");
+				refresh();
+				return;
+			}
+			// The first step from unset lands on 50 in either direction.
+			if (matchesKey(data, Key.right)) {
+				confidence = Math.min(100, (confidence ?? 40) + 10);
+				refresh();
+				return;
+			}
+			if (matchesKey(data, Key.left)) {
+				confidence = Math.max(0, (confidence ?? 60) - 10);
+				refresh();
 				return;
 			}
 			const opts = currentOptions();
@@ -951,8 +990,19 @@ async function runQuiz(
 							: "Enter/Space for next · n add a reason · c contest · Esc to stop";
 				}
 				win.focus(from, body.length - 1);
+			} else if (thinkingPhase) {
+				const from = body.length;
+				addPrefixed(body, w, " ", theme.fg("dim", "Think out loud — Enter to save · Esc to cancel"));
+				for (const editorLine of editor.render(w)) body.push(editorLine);
+				win.focus(from, body.length - 1);
+				hint = "";
 			} else {
-				hint = "↑↓ or 1-9 · Enter to answer · Esc to stop";
+				const conf = confidence === null ? "confidence: not set" : `confidence: ${confidence}%`;
+				addPrefixed(body, w, " ", theme.fg("muted", conf));
+				if (thinking) {
+					addPrefixed(body, w, " ", theme.fg("dim", `your thinking: ${thinking.replace(/\s*\n\s*/g, " / ")}`));
+				}
+				hint = "↑↓ or 1-9 · Enter to answer · t think · ←→ confidence · Esc to stop";
 			}
 
 			const foot: string[] = [];
@@ -977,9 +1027,11 @@ async function runQuiz(
 		const q = questions.find((x) => x.id === a.id);
 		const chosen = a.idk ? "I don't know" : (q?.options[a.selectedIndex ?? 0] ?? "?");
 		const verdict = a.correct ? "CORRECT" : a.idk ? "IDK" : `INCORRECT (correct: ${q?.options[q.correctIndex]})`;
-		const note = a.note ? ` — reason: ${a.note.replace(/\s*\n\s*/g, " / ")}` : "";
+		const confidence = a.confidence === null ? "" : ` — confidence ${a.confidence}%`;
+		const thinking = a.thinking ? ` — thinking: ${a.thinking.replace(/\s*\n\s*/g, " / ")}` : "";
+		const note = a.note ? ` — after reveal: ${a.note.replace(/\s*\n\s*/g, " / ")}` : "";
 		const contested = a.contested ? " — CONTESTED" : "";
-		return `${a.id}: "${chosen}" — ${verdict}${contested}${note}`;
+		return `${a.id}: "${chosen}" — ${verdict}${confidence}${contested}${thinking}${note}`;
 	});
 	const score = result.answers.filter((a) => a.correct).length;
 	const contested = result.answers.filter((a) => a.contested);
@@ -1586,7 +1638,7 @@ export default function questions(pi: ExtensionAPI) {
 		name: "quiz",
 		label: "Quiz",
 		description:
-			"Ask the user graded multiple-choice questions with immediate right/wrong feedback. Use during learning sessions: to probe the edge of the user's understanding (broad → specific, binary-searching each dependency strand) and to verify understanding after each teaching step. Each question carries its correct answer and an explanation; the widget grades on selection and always offers 'I don't know'. After a wrong answer the user can add why they chose it and mark the grading contested; the result says which were contested. Settle a contest with mode: 'review' — pass the model's revised verdict and the widget renders it for the user to accept or push back on, so a disputed answer becomes a short exchange instead of a mark that stands because nobody argued. Returns per-question results (correct / incorrect / IDK, plus note and contested), or per-review outcomes in review mode.",
+			"Ask the user graded multiple-choice questions with immediate right/wrong feedback. Use during learning sessions: to probe the edge of the user's understanding (broad → specific, binary-searching each dependency strand) and to verify understanding after each teaching step. Each question carries its correct answer and an explanation; the widget grades on selection and always offers 'I don't know'. Before answering, the user can type their thinking and set a confidence (0-100); both are the primary data on how they reason, so read them, not only the verdict. After a wrong answer the user can add why they chose it and mark the grading contested; the result says which were contested. Settle a contest with mode: 'review' — pass the model's revised verdict and the widget renders it for the user to accept or push back on, so a disputed answer becomes a short exchange instead of a mark that stands because nobody argued. Returns per-question results (correct / incorrect / IDK, plus confidence, thinking, after-reveal note and contested), or per-review outcomes in review mode.",
 		promptSnippet: "Ask graded multiple-choice questions and grade them on the spot",
 		promptGuidelines: [
 			"Use quiz to measure what a learner already holds: give every question its correct answer and a one-to-three sentence explanation, and always add the 'I don't know' escape by leaving it out of the options.",

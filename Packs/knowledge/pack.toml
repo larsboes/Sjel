@@ -4,8 +4,8 @@
 # enough to fire instead of the skill that gates writes on the vault contract, so they
 # are references/ inside it now and cannot win a trigger.
 name        = "knowledge"
-description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, taught learning sessions, and clean web capture."
-skills      = ["obsidian", "teach", "defuddle"]
+description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, taught learning sessions, practice on what was taught, and clean web capture."
+skills      = ["obsidian", "teach", "practice", "defuddle"]
 license     = "MIT"
 personal    = ["config/knowledge.toml"]
 links       = ["knowledge-base"]

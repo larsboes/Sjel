@@ -49,6 +49,8 @@ belongs to Priority 1.
 - RoomPlan device validation and the shared capture pipeline ([`scanning.md`](docs/plans/scanning.md)).
 - Imports, formats, the settings surface, adaptive features and the domain backlog
   ([`data.md`](docs/plans/data.md)).
+- Learning in the vault with `teach`, `practice` and claim notes, then practice on the phone
+  ([`learning.md`](docs/plans/learning.md)).
 - UI polish for areas outside Priority 1, and the public site with screenshots, animations, docs
   and a description of the app.
 - A fresh-user Mac and iPhone install ([#235](https://github.com/larsboes/Sjel/issues/235)).

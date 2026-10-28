@@ -20,7 +20,8 @@ The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases.
 ## Ground rules (all phases)
 
 - **Facts must be right.** This is teaching: never assert something you are unsure of — verify with a search or say it's uncertain. Wrong confident teaching is the one unforgivable failure.
-- **Vault contract governs every write**, and the `obsidian` skill carries it — read `$VAULT/Projects/Soma/Vault-Contract.md` if you haven't this session rather than restating it here. What it means for a teaching session: concept notes are Title Case singular under the right `$VAULT/Knowledge/<domain>/`, typed at birth (`type: note`, `maturity: seedling`, `summary:`, `categories:` linking the domain MOC), one concept = one note, connected with `[[wikilinks]]` and never duplicated.
+- **Vault contract governs every write**, and the `obsidian` skill carries it — read the file `scripts/vault contract` prints if you haven't this session rather than restating it here. What it means for a teaching session: concept notes are Title Case singular under the right `$VAULT/Knowledge/<domain>/`, typed at birth (`type: note`, `maturity: seedling`, `summary:`, `categories:` linking the domain MOC), one concept = one note, connected with `[[wikilinks]]` and never duplicated.
+- **The student's thinking is the primary data.** Ask them to think out loud with every answer — typed or dictated, unfiltered — and to give a confidence (0–100 %). Read all of it. One answer is one bit; the reasoning shows the model behind it. A right answer on a confused model is a warning, a wrong answer on sound reasoning is progress. Keep your own turns short so their thinking arrives often.
 - **Link before you write.** Before explaining any concept, `grep`/`find` `$VAULT` for an existing note. Exists and the probe showed the student knows it → just `[[link]]` it. Exists but thin → extend it in place. Missing → create it.
 - **Obsidian renders LaTeX (`$...$`, `$$...$$`) and mermaid natively.** Use both freely in notes. In the terminal, keep math readable as plain text.
 - **Interactive simulations render via the `interactive` plugin.** Use ````interactive```` (or ````html-embed````) for dynamic state machines, queues, pipelines, or Anatomy physical explainer models. Assets live in `$VAULT/Knowledge/<domain>/Assets/<kebab-name>.html`.
@@ -31,7 +32,10 @@ Goal: a detailed map of the student's current understanding on every strand the 
 
 1. Ask what they want to learn and to what depth, if not already clear. Note any context they volunteer about what they already know. Depth is a decision, so the `ask` tool fits it: 2-4 levels with a one-line consequence each, your recommendation marked, and the student's note coming back with the choice. Without the tool, ask it as plain text.
 2. Build the dependency tree of the topic in your head, then **binary-search the edge on each strand** with the `quiz` tool: start broad (does the foundation hold?), then split toward the frontier. 2-4 questions per call, graded, always with explanations. Continue until each strand's edge is located — don't stop at the first wrong answer; find *where* it stops holding. **If a result comes back with a contested answer, settle it before asking another question.** A contest is a claim that the grading was wrong, and the learner's reason is the most informative thing you will get all session: weigh it against your explanation, then call `quiz` with `mode: "review"` and your revised verdict — accepting the reason and restoring full marks when they were right. If they push back on that, call it again. The exchange is the teaching, not an interruption of it. Never let a contest drop because the next question is already queued.
-3. If the `quiz` tool is unavailable (non-interactive, or a harness without the pack's quiz extension), ask numbered questions as text instead.
+3. Pick the question tool by harness:
+   - **pi:** `quiz`. The student types their thinking (`t`) and sets a confidence (`←→`) before answering. The result reports both per answer.
+   - **Claude Code:** `AskUserQuestion`, which does not grade. Per quiz item, send two questions in one round: the item (at most 3 options plus "I don't know") and "Confidence?" (`<25 %`, `~50 %`, `~75 %`, `>90 %`). Tell the student once per session to type their thinking into the note of the option they pick. After the round, grade each item in your reply with its explanation. A contest arrives as prose; settle it in prose before the next question.
+   - **Neither (non-interactive):** ask numbered questions as text and ask for the thinking and a confidence with each answer.
 4. While probing, in parallel where possible, **fact-check anything you'll teach that you're not certain of** (web search if available, or flag as to-verify).
 
 ## Phase 2 — Plan
@@ -46,7 +50,8 @@ Goal: the teaching path, fully reasoned out — from the measured edge to the go
 
 Walk the path **one reasoning step at a time**. Never rush ahead; each step must be digestible alone. Per step:
 
-1. **Explain** the step in the terminal — one idea, built from what's already established. Slow beats complete.
+0. **Predict** — before explaining, point at the problem the current state cannot handle and ask the student what has to come next. It need not be answerable; the attempt is the point. Skip it on wrap-up or pure repair turns, never by habit.
+1. **Explain** the step in the terminal — one idea, built from what's already established. Open by resolving the prediction: what they guessed, what is true, and why. Slow beats complete.
 2. **Write the durable core into the vault**: create/extend the concept's note (contract above) with the clean explanation, `[[links]]` to prerequisites and the primary topic note, and `categories:` for its domain. The note gets the polished knowledge; the terminal gets the pedagogy. Never paste the conversational explanation verbatim into the note.
 3. **Visualize when a picture or simulation carries the idea**:
    - **Static diagrams/geometry**: write an SVG into `$VAULT/Knowledge/<domain>/Assets/`, then verify before embedding — render `qlmanage -t -s 1000 -o /tmp <file>.svg` (or `magick <file>.svg <file>.png`) and *view the PNG* with `read`; fix the SVG if it's wrong or ugly, then embed in the note via `![[name.svg]]`. Never embed an unviewed SVG.
@@ -59,12 +64,13 @@ Walk the path **one reasoning step at a time**. Never rush ahead; each step must
        height: 380
        ```
      - Provide responsive controls (sliders/buttons), live readouts, and clear state transitions.
-4. **Check understanding with `quiz`** — 1-2 questions applying (not recalling) the step. Wrong or IDK → re-explain from a different angle before moving on; adjust the remaining path if the miss reveals a deeper gap. Contested → reconcile it with `mode: "review"` first: a learner who disputes a verdict is engaging more deeply with the material than one who accepts it, and moving on while it stands teaches them that arguing is pointless.
+4. **Check understanding with the question tool from Phase 1** — 1-2 questions applying (not recalling) the step. Wrong or IDK → re-explain from a different angle before moving on; adjust the remaining path if the miss reveals a deeper gap. Contested → reconcile it with `mode: "review"` first: a learner who disputes a verdict is engaging more deeply with the material than one who accepts it, and moving on while it stands teaches them that arguing is pointless.
 5. Questions from the student always take priority over the path.
 
 ## Phase 4 — Close
 
-1. Update each touched note's `maturity:` honestly (taught + verified ≥ `growing`).
-2. Mark the `## Learning Path` graph: nodes covered this session.
-3. Append ONE line to `$VAULT/Knowledge/Meta/Learning Log.md` (create from the existing shape if missing): `- YYYY-MM-DD · <topic> · edge found: <one clause> · notes: [[A]], [[B]] · next: <first uncovered node>`.
-4. Tell the student in the terminal: what they now hold, which notes grew, and the natural next session.
+1. **Extract claims.** Distil what was taught into claim notes per the contract's claim row: one true, self-contained proposition per note under `Knowledge/<domain>/Claims/`. Each `## Because` bullet is one argument whose premises jointly imply the claim; independent arguments are separate bullets. Before creating, search every vault basename and the domain's claims: a paraphrase of an existing claim links to it instead. Premises may be claims from earlier sessions. Show the student the list before writing. A concept note that gets its first claim also gets a `## Claims` section that embeds `![[Knowledge.base#🧩 Claims]]`.
+2. Update each touched note's `maturity:` honestly (taught + verified ≥ `growing`).
+3. Mark the `## Learning Path` graph: nodes covered this session.
+4. Append ONE line to `$VAULT/Knowledge/Meta/Learning Log.md` (create from the existing shape if missing): `- YYYY-MM-DD · <topic> · edge found: <one clause> · notes: [[A]], [[B]] · claims: <count> · next: <first uncovered node>`.
+5. Tell the student in the terminal: what they now hold, which notes grew, and the natural next session — a `practice` session on the new claims, or the next teaching node.

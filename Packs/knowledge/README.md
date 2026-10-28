@@ -13,19 +13,24 @@ into a skill.
 
 ## Skills
 
-- **`obsidian`** — the single entry point for vault work. Resolves the vault,
-  gates every write on `Projects/Soma/Vault-Contract.md`, routes to the syntax it
-  needs, and carries the wiki layer (ingest · synthesize · lint) plus `recall`
-  over past sessions. Syntax lives in `references/` — `markdown`, `bases`,
-  `canvas`, `cli`, `wiki` — read at the point of need, never loaded up front.
+- **`obsidian`** — the single entry point for the knowledge-only vault. Resolves
+  the active vault, gates writes on its contract, routes to the syntax it needs,
+  and carries knowledge ingest, synthesis, lint, and `recall`. Sjel owns
+  operational records and unsorted source material. Syntax lives in
+  `references/` — `markdown`, `bases`, `canvas`, `cli`, `wiki` — read at the
+  point of need, never loaded up front.
 - **`teach`** — one-to-one teaching at the measured edge of the student's
   understanding: probe with graded quizzes, plan a dependency path, teach one
   reasoning step at a time. Every write routes through `obsidian`. The graded
   quizzes come from the pack's `quiz` pi extension; without it (other harnesses,
-  non-interactive runs) the skill falls back to numbered text questions.
-- **`defuddle`** — clean markdown out of a web page. Not vault-coupled itself,
-  but it is what the wiki's ingest path calls, and the Obsidian Web Clipper
-  feeds the same `Clippings/` folder by another route.
+  non-interactive runs) the skill falls back to numbered text questions. Each answer carries
+  the learner's thinking and a confidence, each step opens with a prediction, and a session
+  closes by extracting claim notes (`type: claim`) with their `## Because` arguments.
+- **`practice`** — practice on claims already taught: interleaved problems that never name
+  their target, one hint at a time, and a retest of every miss. Reads claim notes, writes only
+  the Learning Log line.
+- **`defuddle`** — clean markdown out of a web page for review and knowledge
+  extraction. It does not write to the vault or create a clipping inbox.
 
 ## Why one skill instead of eight
 
@@ -59,7 +64,10 @@ user's own reasoning into the document it writes. Question rounds in
 `crystallize` are this tool.
 - **`quiz`** — graded multiple-choice, one question at a time, graded on
 selection with the correct answer and explanation revealed, and "I don't know"
-always offered. Used by `teach` to find the edge and to check each step.
+always offered. Before answering, the learner can type their thinking (`t`) and set a
+confidence (`←→`, unset by default); after the reveal, `n` adds a reaction. Used by `teach` to
+find the edge and to check each step. In Claude Code, `teach` uses `AskUserQuestion` instead:
+the item plus a confidence question per round, the thinking in the option note.
 
 ## Attribution
 
@@ -68,6 +76,11 @@ The syntax references started from [kepano/obsidian-skills](https://github.com/k
 dropped so they cannot win a trigger, and rewritten against this vault as they get touched. They
 are inspiration and starting material, not a pinned vendor copy: there is no re-sync path and no
 obligation to track upstream. `references/wiki.md` is not upstream at all.
+
+`teach` started from [amosblomqvist/learn](https://github.com/amosblomqvist/learn). Its
+prediction step, claim extraction and the `practice` skill paraphrase ideas from
+[amosblomqvist/learnharness](https://github.com/amosblomqvist/learnharness) (AGPL-3.0). No text
+is copied, and the verdict is in `upstreams.toml` (`[learnharness]`).
 
 ## Interactive figures in notes
 

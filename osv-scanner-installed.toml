@@ -384,3 +384,115 @@ reason = "ctutils 0.4.3 generates branches in its Choice mask const fns on widel
 id = "GHSA-rxp7-6hxx-x8q5"
 ignoreUntil = 2027-01-01
 reason = "ip-address <= 10.7.3 strips zone identifiers with /%.*$/ before its 45-character limit, so a long run of `%` characters costs quadratic time (3.9 s of synchronous work for 100,000 of them) and blocks the event loop while rejecting the input. Reach: `npm@12.2.1` (the newest release) > make-fetch-happen > @npmcli/agent > socks-proxy-agent > socks > ip-address 10.7.2, inside npm's own bundled tree; nothing installs that copy separately. Ends when npm bundles ip-address >= 10.7.4, which is npm's call and not this machine's. The snap-happy subtree was re-resolved off 10.7.3 on 2026-10-23."
+
+# ── Found 2026-10-28: zstd, pulldown-cmark, block-buffer and undici ─────────────
+#
+# Every crate below arrives through a published Cargo.lock of the newest release on crates.io:
+# cargo-deny 0.20.2, macmon 0.10.0, tauri-cli 2.12.4 and xberg-cli 1.3.10. Both of the last two
+# were rebuilt on 2026-10-28 on zstd 0.14.3, zstd-safe 8.2.0, zstd-sys 2.1.2 and pulldown-cmark
+# 0.13.5. tauri-cli was rebuilt with `cargo install --force` and no `--locked`. xberg-cli does not
+# compile unlocked (liter_llm added struct fields in a minor release), so it was built from its
+# published lock with `cargo update -p` on those four crates only, then
+# `cargo install --locked --path`. This pass still reads tauri-cli's published lock, so these
+# entries keep it quiet until the maintainers republish. A path install is not inventoried, so
+# this pass does not scan xberg-cli at all until it is reinstalled from crates.io with
+# `cargo install --locked --force xberg-cli` once a release carries the fixed versions.
+#
+# cargo-deny resolves unlocked to zstd 0.13.3 and zstd-safe 7.3.0, still affected; the fixes
+# need zstd 0.14. Reach there: zstd <- spdx 0.13.6, which decompresses the license data
+# compiled into the binary, not input from outside.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0391"
+ignoreUntil = 2027-01-01
+reason = "zstd 0.13.3 and 0.14.2, fixed in 0.14.3: data from an abandoned stream leaks into the next stream on a reused context. Reach: cargo-deny 0.20.2 (zstd 0.13.3 <- spdx, embedded license data), tauri-cli 2.12.4 and xberg-cli 1.3.10 (0.14.2 in the published lock, 0.14.3 in the binaries rebuilt on 2026-10-28). Ends when cargo-deny moves spdx to zstd 0.14.3 and tauri-cli and xberg-cli republish."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0395"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: use-after-free with CParameter::StableInBuffer. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0396"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: Seekable reads a NULL or out-of-bounds seek table. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0397"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: OutBuffer::around_pos exposes uninitialized memory. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0398"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: Seekable::decompress sets a Vec length beyond its capacity. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0399"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: use-after-free through init_using_cdict and init_using_ddict. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0400"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: use-after-free of a dictionary after a one-shot call on a context with an open stream. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0401"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: out-of-bounds read in train_from_buffer when sample sizes overflow. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0402"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: heap buffer overflow in CCtx::try_clone on a multithreaded context. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0403"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: uninitialized memory exposed when streaming decompression of a legacy frame fails. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0404"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: double free in DCtx::try_clone. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0405"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: out-of-bounds read with an out-of-range InBuffer::pos. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0406"
+ignoreUntil = 2027-01-01
+reason = "zstd-safe 7.2.4 and 8.1.0, fixed in 8.2.0: use-after-free when changing a multithreaded context with an unfinished frame. Same reach and same end as RUSTSEC-2026-0391; cargo-deny's unlocked 7.3.0 is still affected."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0410"
+ignoreUntil = 2027-01-01
+reason = "zstd-sys 2.0.16 and 2.1.1, fixed in 2.1.2: the WebAssembly allocator shim corrupts memory on allocation failure. Reach: none on this machine, which builds no wasm target of these tools; an unlocked resolve of all three gives 2.1.2. Same end as RUSTSEC-2026-0391."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0414"
+ignoreUntil = 2027-01-01
+reason = "pulldown-cmark 0.13.4, fixed in 0.13.5: exponential event growth with ENABLE_WIKILINKS. Reach: xberg-cli 1.3.10, whose markdown extractor enables wikilinks, so a crafted Markdown file costs exponential time in a local extraction. The binary rebuilt on 2026-10-28 carries 0.13.5; the published lock still pins 0.13.4. Ends when xberg-cli republishes."
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+ignoreUntil = 2027-01-01
+reason = "block-buffer 0.10.4: a panic caught inside the compress callback leaves the cursor corrupt. Fixed in 0.12.1 only, which needs the digest 0.11 stack; cargo-deny, macmon, tauri-cli and xberg-cli all reach it through digest 0.10, also when resolved unlocked. The callback is the hasher core's own compress function, which does not panic. Same entry as osv-scanner.toml. Ends when their sha2 and md-5 move to digest 0.11."
+
+[[IgnoredVulns]]
+id = "GHSA-2m5v-pch6-74hx"
+ignoreUntil = 2027-01-01
+reason = "undici 6.29.0, fixed in 6.29.1: TLS certificate validation can be bypassed when an Agent drops its tls options. Reach: npm@12.2.1 (the newest release) > node-gyp@13.0.0 > undici, npm's own tree, used when node-gyp downloads Node headers for a native addon build. A MITM on that download is the exposure. Ends when npm ships node-gyp on undici >= 6.29.1."
+
+[[IgnoredVulns]]
+id = "GHSA-9fm3-97px-rjf6"
+ignoreUntil = 2027-01-01
+reason = "undici 6.29.0, fixed in 6.29.1: the WebSocket client buffers automatic PONGs without bound. Same reach and same end as GHSA-2m5v-pch6-74hx; node-gyp opens no WebSocket."
+
+[[IgnoredVulns]]
+id = "GHSA-qrxm-fqhp-jwvm"
+ignoreUntil = 2027-01-01
+reason = "undici 6.29.0, fixed in 6.29.1: denial of service through a TLS 1.2 certificate-changing renegotiation. Same reach and same end as GHSA-2m5v-pch6-74hx."

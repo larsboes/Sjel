@@ -613,6 +613,13 @@ impl Store {
             );
             CREATE INDEX IF NOT EXISTS {prefix}_web_clips_document
                 ON {prefix}_web_clips (document_key, created_at);
+
+            CREATE TABLE IF NOT EXISTS {prefix}_clipper_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                templates TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT ({now})
+            );
             ",
             prefix = prefix,
             now = sjel_store::NOW,

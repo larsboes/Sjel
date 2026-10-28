@@ -10,6 +10,9 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST="${SJEL_DESKTOP_APP_DEST:-$HOME/Applications/Sjel Desktop.app}"
 BUNDLE_ID="dev.sjel.desktop"
 native_maps="${SJEL_GPUI_NATIVE_MAPS:-0}"
+# The overlay root: the app reaches comms' clip socket under it (libs/clip-socket).
+# shellcheck source=../../tools/lib/paths.sh
+. "$APP_DIR/../../tools/lib/paths.sh"
 case "${1:-}" in
   --native-maps) native_maps=1 ;;
   "") ;;
@@ -89,6 +92,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   <key>LSEnvironment</key>
   <dict>
     <key>SJEL_GPUI_NATIVE_MAPS</key><string>$native_maps</string>
+    <key>SJEL_PERSONAL_ROOT</key><string>$SJEL_OVERLAY_ROOT</string>
     <key>PATH</key><string>$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 </dict>

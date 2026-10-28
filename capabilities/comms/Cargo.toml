@@ -100,6 +100,7 @@ base64 = "0.23"
 # is still worth writing down: it says what this crate would need on its own.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
 axum.workspace = true
+sjel-clip-socket = { path = "../../libs/clip-socket" }
 tower-http = { workspace = true, features = ["cors"] }
 
 [lints]

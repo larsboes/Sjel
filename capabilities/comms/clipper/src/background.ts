@@ -8,6 +8,7 @@ import { debugLog } from './utils/debug';
 import { incrementStat } from './utils/storage-utils';
 import { hasStoredHighlights } from './utils/url-utils';
 import { flushSjelQueue } from './utils/sjel-destination';
+import { syncSjelSettings } from './utils/sjel-settings';
 
 const YOUTUBE_EMBED_RULE_ID = 9001;
 const YOUTUBE_INNERTUBE_RULE_ID = 9002;
@@ -1171,13 +1172,18 @@ initialize().catch(error => {
 	console.error('Failed to initialize background script:', error);
 });
 
-// Clips saved while Sjel was unreachable wait in local storage; retry them at browser start
-// and every five minutes.
+// Clips saved while Sjel was unreachable wait in local storage; retry them at browser start,
+// install and every five minutes.
 const SJEL_QUEUE_ALARM = 'sjel-queue';
 browser.alarms.create(SJEL_QUEUE_ALARM, { periodInMinutes: 5 });
 browser.alarms.onAlarm.addListener((alarm) => {
-	if (alarm.name === SJEL_QUEUE_ALARM) void flushSjelQueue().catch((error) => console.error('Sjel queue:', error));
+	if (alarm.name === SJEL_QUEUE_ALARM) sjelRound();
 });
-browser.runtime.onStartup.addListener(() => {
+browser.runtime.onStartup.addListener(sjelRound);
+browser.runtime.onInstalled.addListener(sjelRound);
+
+// Sjel owns the templates and the Interpreter model; pull them with every queue round.
+function sjelRound(): void {
 	void flushSjelQueue().catch((error) => console.error('Sjel queue:', error));
-});
+	void syncSjelSettings().catch((error) => console.error('Sjel settings:', error));
+}

@@ -1,3 +1,5 @@
+import { syncSjelSettings, sjelManaged } from '../utils/sjel-settings';
+import { lockManagedSettings } from '../utils/sjel-lock';
 import { 
 	deleteTemplate,
 	duplicateTemplate,
@@ -48,6 +50,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 	async function initializeSettings(): Promise<void> {
 		try {
+			// Pull Sjel's templates before upstream loads them, so the page opens on Sjel's copy.
+			await syncSjelSettings().catch(() => null);
 			await translatePage();
 
 			await initializeGeneralSettings();
@@ -77,6 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 			initializeMenu('more-actions-btn', 'template-actions-menu');
 
 			createIcons({ icons });
+			lockManagedSettings(await sjelManaged());
 
 			// Initialize language selector
 			const languageSelect = document.getElementById('language-select') as HTMLSelectElement;

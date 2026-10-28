@@ -194,6 +194,8 @@ pub enum FeedTab {
     Library,
     Mail,
     Discover,
+    /// Sjel Clipper documents, read over comms' clip socket.
+    Clips,
 }
 
 /// Where a link lands.
@@ -306,6 +308,7 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         "/scout" => return Some(Target::Feed(FeedTab::Discover)),
         "/feed/review" => return Some(Target::Feed(FeedTab::Review)),
         "/feed/library" => return Some(Target::Feed(FeedTab::Library)),
+        "/feed/clips" => return Some(Target::Feed(FeedTab::Clips)),
         _ => {}
     }
     if path_only == "/feed" {
@@ -317,6 +320,7 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         match view.as_deref() {
             Some("discover") => return Some(Target::Feed(FeedTab::Discover)),
             Some("mail") => return Some(Target::Feed(FeedTab::Mail)),
+            Some("clips") => return Some(Target::Feed(FeedTab::Clips)),
             _ => {}
         }
     }

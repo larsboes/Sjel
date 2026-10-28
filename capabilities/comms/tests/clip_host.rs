@@ -4,8 +4,18 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use comms::web_clip_socket::{read_frame, serve, write_frame};
+use comms::web_clip_socket::{read_frame, serve, write_frame, Interpreter};
 use serde_json::json;
+
+struct NoModel;
+impl Interpreter for NoModel {
+    fn describe(&self) -> serde_json::Value {
+        json!({"available": false})
+    }
+    fn interpret(&self, _: &str) -> serde_json::Value {
+        json!({"ok": false, "error": "unconfigured"})
+    }
+}
 
 fn run_host(overlay: &std::path::Path, requests: &[serde_json::Value]) -> Vec<serde_json::Value> {
     let mut child = Command::new(env!("CARGO_BIN_EXE_comms-clip-host"))
@@ -42,7 +52,7 @@ fn chrome_framed_saves_reach_the_store_and_a_missing_server_reads_as_unavailable
     );
 
     let (s, db) = (socket.clone(), overlay.join("comms.db"));
-    std::thread::spawn(move || serve(&s, &db));
+    std::thread::spawn(move || serve(&s, &db, &NoModel));
     let started = std::time::Instant::now();
     while !socket.exists() && started.elapsed().as_secs() < 5 {
         std::thread::sleep(std::time::Duration::from_millis(20));

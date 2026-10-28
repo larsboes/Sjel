@@ -1,0 +1,16 @@
+[package]
+name = "sjel-clip-socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The framed JSON protocol on comms' owner-only clip socket, shared by comms, its native messaging host and the GPUI app."
+publish = false
+
+[lib]
+name = "sjel_clip_socket"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json.workspace = true
+sjel-config = { path = "../sjel-config" }

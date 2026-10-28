@@ -558,8 +558,9 @@ async fn main() {
 
     if let Some(socket) = comms::web_clip_socket::socket_path() {
         let database = cfg.database_path.clone();
+        let interpreter = comms::web_clip_socket::LocalInterpreter(cfg.clone());
         std::thread::spawn(move || {
-            if let Err(error) = comms::web_clip_socket::serve(&socket, &database) {
+            if let Err(error) = comms::web_clip_socket::serve(&socket, &database, &interpreter) {
                 eprintln!("comms-server: clip socket unavailable: {error}");
             }
         });

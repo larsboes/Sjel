@@ -1,3 +1,4 @@
+import { applySjelInterpreter, sjelManaged } from './sjel-settings';
 import browser from './browser-polyfill';
 import { Settings, ModelConfig, PropertyType, HistoryEntry, Provider, Rating } from '../types/types';
 import { debugLog } from './debug';
@@ -221,7 +222,7 @@ export async function loadSettings(): Promise<Settings> {
 		saveBehavior: data.general_settings?.saveBehavior ?? defaultSettings.saveBehavior
 	};
 
-	generalSettings = loadedSettings;
+	generalSettings = applySjelInterpreter(loadedSettings, await sjelManaged());
 	debugLog('Settings', 'Loaded settings:', generalSettings);
 	return generalSettings;
 }

@@ -45,6 +45,20 @@ document, and the document shows the versions folded together:
 Read them back without a browser: `comms clips` lists documents, and `comms clips show <key>`
 prints one.
 
+## Settings Sjel owns
+
+The templates and the Interpreter model belong to Sjel. Edit them in the Sjel app under
+**Settings › Clipper**; saved clips are under **Feed › Clips**.
+
+- `src/utils/sjel-settings.ts` asks comms for its settings at browser start, on install, every
+  five minutes and whenever the settings page opens. A new revision replaces the browser's
+  templates.
+- The first time comms holds no templates, the browser hands over its own, once. After that the
+  browser's template editor and Interpreter settings are read-only (`src/utils/sjel-lock.ts`).
+- The Interpreter sends its prompt to comms, which answers on the light local role of Sjel's
+  inference config, refused when that role is not on hardware the operator owns. The browser
+  keeps no provider key. Reader and highlighter appearance stay per-browser settings.
+
 ## Install
 
 1. `tools/clipper build` builds the extension into `dist/`.
@@ -74,6 +88,4 @@ lock versions so the extraction fixtures keep matching.
 
 - Safari on Mac and iPhone, which needs an app wrapper and signing.
 - Firefox. Its manifest is vendored but not built or tested.
-- Interpreter through Sjel inference. Upstream's Interpreter calls the provider configured in
-  the extension directly; point it at a local model until it routes through Sjel.
 - Review and routing of clips to their owning capabilities.

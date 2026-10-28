@@ -325,6 +325,7 @@ pub struct Workspace {
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
     pub accounts: Entity<crate::accounts::Accounts>,
+    pub clipper_settings: Entity<crate::clipper::ClipperSettings>,
     pub travel: Entity<sjel_gpui_ui::travel::Travel>,
     pub documents: Entity<Documents>,
     pub feed: Entity<Feed>,
@@ -410,6 +411,7 @@ impl Workspace {
         let projects = cx.new(|_| Projects::new(repo.clone()));
         let ask = cx.new(|_| Ask::new(repo.clone()));
         let accounts = cx.new(|_| crate::accounts::Accounts::new(repo.clone()));
+        let clipper_settings = cx.new(|_| crate::clipper::ClipperSettings::new());
         let travel = cx.new(|_| {
             sjel_gpui_ui::travel::Travel::new(
                 repo.shell().ok().map(sjel_gpui_core::travel::Source::Shell),
@@ -522,6 +524,7 @@ impl Workspace {
             projects,
             ask,
             accounts,
+            clipper_settings,
             travel,
             documents,
             feed,

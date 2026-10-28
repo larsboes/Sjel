@@ -20,6 +20,7 @@ use sjel_gpui_core::shell::{
     ShellError,
 };
 
+use crate::clipper::Clips;
 use crate::data::{Remote, Repo};
 use crate::mail::Mail;
 use crate::scout::ScoutingPage;
@@ -115,6 +116,7 @@ pub struct Feed {
     pub tab: Tab,
     pub mail: Entity<Mail>,
     pub discover: Entity<ScoutingPage>,
+    pub clips: Entity<Clips>,
     palette: Option<Palette>,
     pub rows: Remote<Vec<FeedEntry>>,
     pub filter: Filter,
@@ -162,6 +164,7 @@ impl Feed {
         Self {
             mail: cx.new(|cx| Mail::new(repo.clone(), cx)),
             discover: cx.new(|_| ScoutingPage::new(repo.clone())),
+            clips: cx.new(|_| Clips::new()),
             repo,
             tab: Tab::Reading,
             palette: None,
@@ -209,6 +212,8 @@ impl Feed {
             .update(cx, |mail, cx| mail.set_palette(palette, cx));
         self.discover
             .update(cx, |page, cx| page.set_palette(palette, cx));
+        self.clips
+            .update(cx, |page, cx| page.set_palette(palette, cx));
     }
 
     /// Called when the page opens: read the open tab again and give it the keys.
@@ -222,6 +227,7 @@ impl Feed {
             Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.activate(cx)),
             Tab::Discover => self.discover.update(cx, |page, cx| page.load(cx)),
+            Tab::Clips => self.clips.update(cx, |page, cx| page.load(cx)),
         }
     }
 
@@ -233,6 +239,7 @@ impl Feed {
             Tab::Library => self.load_library(cx),
             Tab::Mail => self.mail.update(cx, |mail, cx| mail.load(cx)),
             Tab::Discover => self.discover.update(cx, |page, cx| page.load(cx)),
+            Tab::Clips => self.clips.update(cx, |page, cx| page.load(cx)),
         }
     }
 
@@ -1025,7 +1032,8 @@ impl Render for Feed {
         // The reader draws over Reading, Review and Library, and Escape returns to the tab that
         // opened it. Only then, or on the Reading list, do the Feed keys act: elsewhere they would
         // move a cursor nobody sees.
-        let reading = self.tab == Tab::Reading || (self.tab != Tab::Mail && self.reading.is_some());
+        let reading = self.tab == Tab::Reading
+            || (!matches!(self.tab, Tab::Mail | Tab::Clips) && self.reading.is_some());
         let body = if self.tab == Tab::Mail {
             div()
                 .flex()
@@ -1033,6 +1041,14 @@ impl Render for Feed {
                 .gap_3()
                 .child(self.title_row(cx))
                 .child(self.mail.clone())
+                .into_any_element()
+        } else if self.tab == Tab::Clips {
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(self.title_row(cx))
+                .child(div().flex_1().min_h_0().child(self.clips.clone()))
                 .into_any_element()
         } else if self.tab == Tab::Discover {
             div()
@@ -1240,6 +1256,7 @@ impl Feed {
             .child(tab("Library", Tab::Library, cx))
             .child(tab("Discover", Tab::Discover, cx))
             .child(tab("Mail", Tab::Mail, cx))
+            .child(tab("Clips", Tab::Clips, cx))
             .into_any_element()
     }
 

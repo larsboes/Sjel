@@ -1,3 +1,4 @@
+import { interpretWithSjel, SJEL_PROVIDER_ID } from './sjel-settings';
 import { generalSettings, saveSettings } from './storage-utils';
 import { PromptVariable, Template, ModelConfig, Provider } from '../types/types';
 import { compileTemplate } from './template-compiler';
@@ -43,6 +44,14 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 				return acc;
 			}, {} as { [key: string]: string })
 		};
+
+		if (provider.id === SJEL_PROVIDER_ID) {
+			// Sjel answers on its own local model; the extension holds no provider key.
+			const prompt = `${systemContent}\n\n${promptContext}\n\n${JSON.stringify(promptContent)}`;
+			const answer = await interpretWithSjel(prompt);
+			lastRequestTime = now;
+			return parseLLMResponse(answer, promptVariables);
+		}
 
 		let requestUrl: string;
 		let requestBody: any;

@@ -14,6 +14,7 @@ mod audio;
 mod backup;
 mod calendar_view;
 mod capabilities;
+mod clipper;
 mod context_view;
 mod cv_view;
 mod data;

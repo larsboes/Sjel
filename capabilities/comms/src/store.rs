@@ -808,6 +808,7 @@ fn cloud_job_id(request: &CloudQueueRequest) -> String {
 }
 
 mod captures;
+mod clipper_settings;
 mod cloud;
 mod evaluation;
 mod event_scans;
@@ -851,6 +852,7 @@ pub struct OriginSummary {
 }
 
 pub use captures::{split_tag, Capture, CapturePatch};
+pub use clipper_settings::{ClipperSettings, SettingsError};
 pub use event_scans::MailEventScan;
 use rows::{epoch_now, row_to_feed_full, row_to_feed_list, row_to_triage};
 pub use web_clips::{ClipError, WebClip, WebClipDocument, WebClipInput, WebClipWrite};

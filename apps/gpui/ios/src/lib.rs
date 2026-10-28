@@ -24,7 +24,9 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use serde::Deserialize;
 
-use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton, SharedString, Window};
+use gpui::{
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton, SharedString, Window,
+};
 use sjel_gpui_core::agent::{Event as AgentEvent, Session as AgentSession, Turn as AgentTurn};
 use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
@@ -45,7 +47,7 @@ use sjel_gpui_ui::soundscape::Soundscape;
 use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
-    mobile_tab_bar, step_terminal_font_size, AccentColor, AppearanceSettings, BackgroundTone,
+    mobile_tab_bar, step_terminal_font_size, tint, AccentColor, AppearanceSettings, BackgroundTone,
     Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeMode,
     WindowOpacity, TERMINAL_FONT_SIZES,
 };
@@ -82,6 +84,8 @@ pub enum Tab {
     Travel,
     /// Pairing with a Mac: offered here, never required (research/offline-on-the-phone.md).
     Settings,
+    /// Triage and mail proposals synced from the Mac.
+    Mail,
 }
 
 enum Event {
@@ -362,6 +366,8 @@ pub struct Capabilities {
     calendar: gpui::Entity<Calendar>,
     /// The capture field over the phone's own replica (`sjel_gpui_ui::inbox`).
     inbox: gpui::Entity<Inbox>,
+    /// The Mail triage proposals synced from the Mac (`sjel_gpui_ui::mail`).
+    mail: gpui::Entity<sjel_gpui_ui::mail::Mail>,
     /// The soundscape drawer over the platform-free engine (`sjel_gpui_ui::soundscape`). The device
     /// is the host's (`host/Audio.swift`), started the first time the edge is opened on this seat.
     soundscape: gpui::Entity<Soundscape>,
@@ -379,6 +385,7 @@ pub struct Capabilities {
     agent_input: Option<(gpui::Entity<InputState>, gpui::Subscription)>,
     agent_busy: bool,
     agent_text_streaming: bool,
+    agent_draft_tier: &'static str,
     /// The terminal seat, kept while the app stays in the foreground: closing the edge leaves the
     /// stream attached. Going to the background drops it, so a reattach asks for Face ID.
     terminal: Option<(gpui::Entity<TerminalDeck>, gpui::Subscription)>,
@@ -492,6 +499,13 @@ impl Capabilities {
         // People and Places read the same copy, so one fetch feeds both pages. Refresh asks for a
         // newer copy: there is nothing to sync, because nothing here writes.
         let people = cx.new(|_| People::new(Density::Mobile));
+        let mail = cx.new(|cx| {
+            sjel_gpui_ui::mail::Mail::new(
+                sjel_gpui_core::data::Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp)),
+                cx,
+            )
+        });
+        mail.update(cx, |mail, cx| mail.set_density(Density::Mobile, cx));
         let interior = cx.new(|cx| {
             #[allow(unused_mut)]
             let mut history = RoomPlanHistory::new(None, cx);
@@ -542,6 +556,21 @@ impl Capabilities {
                 }
             }
             TodayEvent::Wrote => view.maybe_sync(cx),
+            TodayEvent::Capture => {
+                view.active_tab = Tab::Inbox;
+                view.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                cx.notify();
+            }
+            TodayEvent::People => {
+                view.active_tab = Tab::People;
+                if view.copy.is_none() && !view.copying {
+                    view.refresh_copy(cx);
+                }
+                cx.notify();
+            }
+            TodayEvent::Documents => {
+                cx.notify();
+            }
         })
         .detach();
         // The register and the card a screenshot needs, for the same reason `SJEL_DAY` exists: a
@@ -1052,6 +1081,7 @@ impl Capabilities {
             agent_input: None,
             agent_busy: false,
             agent_text_streaming: false,
+            agent_draft_tier: "project",
             terminal: None,
             terminal_unlocked: false,
             pinch_base: 1.0,
@@ -1067,6 +1097,7 @@ impl Capabilities {
             people,
             interior,
             inbox,
+            mail,
             soundscape,
             sidebar,
             today,
@@ -1313,6 +1344,7 @@ impl Capabilities {
         };
         let selected = self.agent_selected.clone();
         let events = self.events.clone();
+        let draft_tier = self.agent_draft_tier;
         self.agent_busy = true;
         self.agent_error = None;
         shell::spawn(async move {
@@ -1325,8 +1357,10 @@ impl Capabilities {
                         (id, session.active)
                     }
                     None => {
+                        let body = serde_json::to_vec(&serde_json::json!({ "tier": draft_tier }))
+                            .unwrap_or_default();
                         let session = client
-                            .post::<AgentSession>("/agent/api/agent/sessions", b"{}")
+                            .post::<AgentSession>("/agent/api/agent/sessions", &body)
                             .await?;
                         (session.id, false)
                     }
@@ -1745,6 +1779,50 @@ impl Capabilities {
             }))
             .when(paired, |panel| {
                 panel
+                    .when(selected.is_none(), |panel| {
+                        let draft_tier = self.agent_draft_tier;
+                        panel.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .px_1()
+                                .py_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child("Tier:"),
+                                )
+                                .child(phone_tier_pill(
+                                    "sjel",
+                                    draft_tier == "sjel",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent_draft_tier = "sjel";
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(phone_tier_pill(
+                                    "project",
+                                    draft_tier == "project",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent_draft_tier = "project";
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(phone_tier_pill(
+                                    "account",
+                                    draft_tier == "account",
+                                    palette,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.agent_draft_tier = "account";
+                                        cx.notify();
+                                    }),
+                                )),
+                        )
+                    })
                     .child(div().child(Input::new(&input)))
                     .child(
                         div()
@@ -1800,12 +1878,30 @@ impl Capabilities {
                     )
             })
             .when_some(pending, |panel, pending| {
+                let is_block = pending.class.as_deref() == Some("block")
+                    || pending.rule.as_ref().map_or(false, |r| r.starts_with('B'));
                 let preview = if pending.preview.is_empty() {
                     pending.name.clone()
                 } else {
                     pending.preview.clone()
                 };
                 let diff = pending.diff.clone();
+                let title = if is_block {
+                    match &pending.rule {
+                        Some(rule) => format!("Blocked by policy · rule {rule} · {}", pending.name),
+                        None => format!("Blocked by policy · {}", pending.name),
+                    }
+                } else {
+                    match &pending.rule {
+                        Some(rule) => format!("Approval · rule {rule} · {}", pending.name),
+                        None => format!("Approval · {}", pending.name),
+                    }
+                };
+                let border_col = if is_block {
+                    palette.red
+                } else {
+                    palette.border
+                };
                 panel.child(
                     div()
                         .flex()
@@ -1813,9 +1909,20 @@ impl Capabilities {
                         .gap_2()
                         .rounded(px(8.))
                         .bg(rgb(palette.raised))
+                        .border_1()
+                        .border_color(rgba(border_col))
                         .p_3()
                         .text_color(rgb(palette.text))
-                        .child(format!("Approval · {}", pending.name))
+                        .child(
+                            div()
+                                .text_color(rgb(if is_block {
+                                    palette.red
+                                } else {
+                                    palette.accent
+                                }))
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .child(title),
+                        )
                         .child(preview)
                         .when_some(diff, |card, diff| card.child(div().text_xs().child(diff)))
                         .child(
@@ -1823,7 +1930,11 @@ impl Capabilities {
                                 .flex()
                                 .gap_2()
                                 .child(agent_action_button(
-                                    "Allow once",
+                                    if is_block {
+                                        "Allow once (override)"
+                                    } else {
+                                        "Allow once"
+                                    },
                                     "phone-agent-allow-once",
                                     palette,
                                     cx,
@@ -1831,15 +1942,20 @@ impl Capabilities {
                                         view.agent_control(AgentControl::Approve(true, false), cx)
                                     },
                                 ))
-                                .child(agent_action_button(
-                                    "Allow session",
-                                    "phone-agent-allow-session",
-                                    palette,
-                                    cx,
-                                    |view, cx| {
-                                        view.agent_control(AgentControl::Approve(true, true), cx)
-                                    },
-                                ))
+                                .when(!is_block, |actions| {
+                                    actions.child(agent_action_button(
+                                        "Allow session",
+                                        "phone-agent-allow-session",
+                                        palette,
+                                        cx,
+                                        |view, cx| {
+                                            view.agent_control(
+                                                AgentControl::Approve(true, true),
+                                                cx,
+                                            )
+                                        },
+                                    ))
+                                })
                                 .child(agent_action_button(
                                     "Deny",
                                     "phone-agent-deny",
@@ -2333,6 +2449,7 @@ fn launch_tab() -> Tab {
         "inbox" => Tab::Inbox,
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
+        "mail" => Tab::Mail,
         _ => Tab::Today,
     }
 }
@@ -2380,6 +2497,47 @@ fn format_agent_event(event: &AgentEvent) -> String {
         "stopped" => "Run stopped".to_owned(),
         other => other.to_owned(),
     }
+}
+
+fn phone_tier_pill(
+    label: &'static str,
+    active: bool,
+    palette: Palette,
+    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+    let (bg, text_color, border_color) = if active {
+        (
+            rgba(tint(palette.accent, 0x24)),
+            rgb(palette.accent),
+            rgba(tint(palette.accent, 0x50)),
+        )
+    } else {
+        (
+            rgba(palette.raised),
+            rgb(palette.muted),
+            rgba(palette.border),
+        )
+    };
+    div()
+        .id(SharedString::from(format!("phone-tier-{label}")))
+        .flex()
+        .items_center()
+        .px_2()
+        .py(px(3.))
+        .rounded(px(5.))
+        .cursor_pointer()
+        .bg(bg)
+        .border_1()
+        .border_color(border_color)
+        .text_xs()
+        .font_weight(if active {
+            gpui::FontWeight::SEMIBOLD
+        } else {
+            gpui::FontWeight::NORMAL
+        })
+        .text_color(text_color)
+        .on_click(on_click)
+        .child(label)
 }
 
 fn agent_action_button(
@@ -2663,6 +2821,9 @@ impl Render for Capabilities {
         let is_calendar = self.active_tab == Tab::Calendar;
         let is_people = self.active_tab == Tab::People;
         let is_interior = self.active_tab == Tab::Interior;
+        let is_mail = self.active_tab == Tab::Mail;
+        self.mail
+            .update(cx, |mail, cx| mail.set_palette(palette, cx));
         self.travel
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
         self.calendar
@@ -2705,7 +2866,8 @@ impl Render for Capabilities {
                             || is_travel
                             || is_calendar
                             || is_people
-                            || is_interior,
+                            || is_interior
+                            || is_mail,
                         |page| page.overflow_y_scroll(),
                     )
                     // gpui-mobile raises no keyboard on focus. Only text fields take focus here,
@@ -3134,6 +3296,7 @@ impl Render for Capabilities {
                         )
                     })
                     .when(is_today, |page| page.child(self.today.clone()))
+                    .when(is_mail, |page| page.child(self.mail.clone()))
                     .when(is_inbox, |page| page.child(self.inbox.clone()))
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
@@ -3176,6 +3339,7 @@ impl Render for Capabilities {
                     .when(
                         !is_mac
                             && !is_today
+                            && !is_mail
                             && !is_inbox
                             && !is_travel
                             && !is_calendar
@@ -3267,9 +3431,9 @@ impl Render for Capabilities {
                         badge: if pending > 0 { Some(pending) } else { None },
                     },
                     NavItem {
-                        id: "inbox",
-                        label: "Inbox",
-                        icon: "✎",
+                        id: "mail",
+                        label: "Mail",
+                        icon: "✉",
                         badge: None,
                     },
                     NavItem {
@@ -3279,21 +3443,15 @@ impl Render for Capabilities {
                         badge: None,
                     },
                     NavItem {
-                        id: "people",
-                        label: "People",
-                        icon: "👤",
-                        badge: None,
-                    },
-                    NavItem {
                         id: "travel",
                         label: "Travel",
                         icon: "◎",
                         badge: None,
                     },
                     NavItem {
-                        id: "interior",
-                        label: "Interior",
-                        icon: "⌂",
+                        id: "agent",
+                        label: "Agent",
+                        icon: "⚡",
                         badge: None,
                     },
                 ];
@@ -3302,11 +3460,12 @@ impl Render for Capabilities {
                     // neither lights a tab of its own.
                     Tab::Settings | Tab::Today => "today",
                     Tab::Projects => "today",
-                    Tab::Inbox => "inbox",
+                    Tab::Mail => "mail",
                     Tab::Travel => "travel",
                     Tab::Calendar => "calendar",
-                    Tab::People => "people",
-                    Tab::Interior => "interior",
+                    Tab::Inbox => "today",
+                    Tab::People => "today",
+                    Tab::Interior => "today",
                 };
                 let entity = cx.entity().clone();
                 mobile_tab_bar(
@@ -3318,40 +3477,48 @@ impl Render for Capabilities {
                             if view.active_tab == Tab::Travel {
                                 view.travel.update(cx, |travel, _| travel.deactivate());
                             }
-                            view.active_tab = match id {
-                                "inbox" => Tab::Inbox,
-                                "travel" => Tab::Travel,
-                                "calendar" => Tab::Calendar,
-                                "people" => Tab::People,
-                                "interior" => Tab::Interior,
-                                _ => Tab::Today,
+                            match id {
+                                "mail" => {
+                                    view.active_tab = Tab::Mail;
+                                    view.mail.update(cx, |mail, cx| mail.load(cx));
+                                }
+                                "travel" => {
+                                    view.active_tab = Tab::Travel;
+                                    view.travel.update(cx, |travel, cx| travel.activate(cx));
+                                }
+                                "calendar" => {
+                                    view.active_tab = Tab::Calendar;
+                                    if view.copy.is_none() && !view.copying {
+                                        view.refresh_copy(cx);
+                                    }
+                                }
+                                "agent" => {
+                                    view.open_edge(Seat::Agent, cx);
+                                }
+                                "inbox" => {
+                                    view.active_tab = Tab::Inbox;
+                                    view.inbox.update(cx, |inbox, cx| inbox.load(cx));
+                                }
+                                "people" => {
+                                    view.active_tab = Tab::People;
+                                    if view.copy.is_none() && !view.copying {
+                                        view.refresh_copy(cx);
+                                    }
+                                }
+                                "interior" => {
+                                    view.active_tab = Tab::Interior;
+                                    view.interior.update(cx, |history, cx| history.refresh(cx));
+                                    load_roomplan_archive();
+                                }
+                                _ => {
+                                    view.active_tab = Tab::Today;
+                                    if view.copy.is_none() && !view.copying {
+                                        view.refresh_copy(cx);
+                                    }
+                                }
                             };
-                            if view.active_tab == Tab::Travel {
-                                view.travel.update(cx, |travel, cx| travel.activate(cx));
-                            }
-                            if view.active_tab == Tab::Interior {
-                                view.interior.update(cx, |history, cx| history.refresh(cx));
-                                load_roomplan_archive();
-                            }
-                            // Opening the calendar or the registers with no copy asks for one, so a
-                            // phone that was paired here but never fetched does not have to know to
-                            // tap Refresh.
-                            if view.active_tab == Tab::Inbox {
-                                view.inbox.update(cx, |inbox, cx| inbox.load(cx));
-                            }
-                            // Settings is where the reminder card lives, so the system's own count
-                            // is asked for again as it comes into view rather than drawn from a
-                            // number that was true an hour ago.
                             if view.active_tab == Tab::Settings {
                                 notify::report();
-                            }
-                            if (view.active_tab == Tab::Today
-                                || view.active_tab == Tab::Calendar
-                                || view.active_tab == Tab::People)
-                                && view.copy.is_none()
-                                && !view.copying
-                            {
-                                view.refresh_copy(cx);
                             }
                             cx.notify();
                         });

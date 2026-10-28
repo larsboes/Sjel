@@ -3327,7 +3327,23 @@ impl Shell {
     }
 
     pub async fn add_task(&self, project: &str, title: &str) -> ShellResult<()> {
-        let body = serde_json::json!({ "project": project, "title": title });
+        self.add_task_with_details(project, title, None, None).await
+    }
+
+    pub async fn add_task_with_details(
+        &self,
+        project: &str,
+        title: &str,
+        due: Option<&str>,
+        priority: Option<u8>,
+    ) -> ShellResult<()> {
+        let mut body = serde_json::json!({ "project": project, "title": title });
+        if let Some(due) = due {
+            body["due"] = serde_json::Value::String(due.to_string());
+        }
+        if let Some(p) = priority {
+            body["priority"] = serde_json::Value::Number(p.into());
+        }
         self.send(Method::POST, "/projects/api/tasks", Some(body), 10)
             .await
             .map(drop)

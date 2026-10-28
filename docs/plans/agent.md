@@ -33,6 +33,9 @@ Order:
   minutes.
 - **Clients.** The Mac finder has an `Agent` mode, and the run lives in the right-edge seat. The
   iPhone lists and creates sessions, prompts, steers, follows streams, approves, denies and stops.
+  Both desktop Finder and iPhone agent seat support session tier selection (`sjel | project | account`)
+  and annotate gate approval cards with policy rule ID, displaying a distinct red border and single
+  override button for blocked commands (no session-wide grant).
 
 **Gap.** The capability assembles only `fs, graph, sjel, sql, guard, compaction`
 (`capabilities/agent/src/plugins.rs`). `web`, `subagents`, `mcp`, `skills` and `rust` exist in

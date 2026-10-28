@@ -92,12 +92,44 @@ fn search_box(width: Option<f32>) -> Div {
     }
 }
 
+/// Extracts a clean preview snippet from markdown body text.
+fn extract_note_snippet(content: &str) -> Option<String> {
+    let mut in_frontmatter = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            in_frontmatter = !in_frontmatter;
+            continue;
+        }
+        if in_frontmatter || trimmed.is_empty() {
+            continue;
+        }
+        let clean = trimmed
+            .trim_start_matches('#')
+            .trim_start_matches('-')
+            .trim_start_matches('*')
+            .trim();
+        if !clean.is_empty() {
+            return Some(clean.to_string());
+        }
+    }
+    None
+}
+
 /// What the page tells the app that holds it.
 pub enum ProjectsEvent {
     /// A note's editor opened (`true`) or closed. The phone shows or hides its keyboard.
     Editing(bool),
     /// The person asked to send the blocked writes again. The app owns the sync, so it runs one.
     Retry,
+}
+
+/// What kinds of notes to display in the cross-project notes table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoteKindFilter {
+    All,
+    Hubs,
+    Notes,
 }
 
 pub struct Projects {
@@ -112,6 +144,7 @@ pub struct Projects {
     pub project_section: ProjectSection,
     pub task_filter: TaskFilter,
     pub global_task_filter: TaskFilter,
+    pub note_kind_filter: NoteKindFilter,
     pub show_archived: bool,
     pub search_query: String,
     search_input: Option<(Entity<InputState>, Subscription)>,
@@ -155,6 +188,7 @@ impl Projects {
             project_section: ProjectSection::Note,
             task_filter: TaskFilter::Open,
             global_task_filter: TaskFilter::Open,
+            note_kind_filter: NoteKindFilter::All,
             show_archived: false,
             search_query: String::new(),
             search_input: None,
@@ -714,25 +748,42 @@ impl Projects {
         if let Some((input, _)) = &self.new_task {
             return input.clone();
         }
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("New task…"));
+        let input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("New task… (!1-!3 priority, @today, @tomorrow)")
+        });
         let subscription = cx.subscribe_in(&input, window, |view, input, event, window, cx| {
             if let InputEvent::PressEnter { .. } = event {
-                let title = input.read(cx).value().trim().to_owned();
+                let raw_title = input.read(cx).value().trim().to_owned();
                 let Some(project) = view.project.as_ref().map(|(name, _)| name.clone()) else {
                     return;
                 };
+                if raw_title.is_empty() {
+                    return;
+                }
+                let today = chrono::Local::now().date_naive();
+                let (title, due, priority) = tasks::parse_smart_task_input(&raw_title, today);
                 if title.is_empty() {
                     return;
                 }
                 input.update(cx, |input, cx| input.set_value("", window, cx));
                 let repo = view.repo.clone();
+                let due_clone = due.clone();
+                let priority_clone = priority;
                 data::write_repo(
                     cx,
                     window,
                     view,
                     &repo,
                     data::Press::quiet("Task added."),
-                    move |s| async move { s.add_task(&project, &title).await },
+                    move |s| async move {
+                        s.add_task_with_details(
+                            &project,
+                            &title,
+                            due_clone.as_deref(),
+                            priority_clone,
+                        )
+                        .await
+                    },
                     |this, _, cx| {
                         this.refresh_records(cx);
                         this.load_projects(cx);
@@ -991,10 +1042,60 @@ impl Projects {
                 .filter(|(record, _, _)| record.path == task.path)
                 .map(|(_, input, _)| input.clone());
             let due_cell = match editing {
-                Some(input) => div()
-                    .w(px(cols.due))
-                    .child(Input::new(&input).small())
-                    .into_any_element(),
+                Some(input) => {
+                    let task_rec = task.clone();
+                    let today_date = chrono::Local::now().date_naive();
+                    let today_str = today_date.format("%Y-%m-%d").to_string();
+                    let tomorrow_str = (today_date + chrono::Duration::days(1))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    let week_str = (today_date + chrono::Duration::days(7))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    let chip = |cx: &mut Context<Self>,
+                                chip_id: &'static str,
+                                label: &'static str,
+                                val: String,
+                                rec: ProjectRecord| {
+                        div()
+                            .id((chip_id, index))
+                            .px_1()
+                            .py(px(0.5))
+                            .rounded(px(3.))
+                            .bg(rgba(palette.raised))
+                            .text_xs()
+                            .cursor_pointer()
+                            .hover(move |s| s.text_color(rgb(palette.accent)))
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.set_task_field(&rec, "due", val.clone(), window, cx);
+                                view.due_edit = None;
+                                cx.notify();
+                            }))
+                            .child(label)
+                    };
+                    div()
+                        .w(px(cols.due.max(160.)))
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(Input::new(&input).small())
+                        .child(
+                            div()
+                                .flex()
+                                .gap_1()
+                                .child(chip(cx, "chip-today", "Today", today_str, task_rec.clone()))
+                                .child(chip(
+                                    cx,
+                                    "chip-tmrw",
+                                    "Tmrw",
+                                    tomorrow_str,
+                                    task_rec.clone(),
+                                ))
+                                .child(chip(cx, "chip-7d", "+7d", week_str, task_rec.clone()))
+                                .child(chip(cx, "chip-clear", "Clear", String::new(), task_rec)),
+                        )
+                        .into_any_element()
+                }
                 None => {
                     let edit = task.clone();
                     div()
@@ -1008,6 +1109,25 @@ impl Projects {
                         .into_any_element()
                 }
             };
+            let subtask_badge =
+                tasks::parse_subtask_progress(&task.content).map(|(done, total)| {
+                    div()
+                        .px_1p5()
+                        .py(px(0.5))
+                        .rounded(px(4.))
+                        .bg(rgba(if done == total {
+                            tint(palette.green, 0x22)
+                        } else {
+                            palette.raised
+                        }))
+                        .text_xs()
+                        .text_color(rgb(if done == total {
+                            palette.green
+                        } else {
+                            palette.muted
+                        }))
+                        .child(format!("{done}/{total}"))
+                });
             let cycle = task.clone();
             let priority = task.priority.clamp(1, 3);
             rows.push(
@@ -1032,15 +1152,22 @@ impl Projects {
                             .id(("task", index))
                             .flex_1()
                             .min_w_0()
-                            .truncate()
-                            .text_sm()
+                            .flex()
+                            .items_center()
+                            .gap_2()
                             .cursor_pointer()
-                            .when(task.done, |title| title.line_through())
-                            .hover(move |style| style.text_color(rgb(palette.accent)))
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.open_note(open.path.clone(), true, window, cx)
                             }))
-                            .child(task.title.clone()),
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_sm()
+                                    .when(task.done, |title| title.line_through())
+                                    .hover(move |style| style.text_color(rgb(palette.accent)))
+                                    .child(task.title.clone()),
+                            )
+                            .children(subtask_badge),
                     )
                     .child(due_cell)
                     .child(
@@ -1210,6 +1337,28 @@ impl Projects {
             let proj_name = task.project.clone();
             let due = task.due.clone().filter(|d| !d.is_empty());
             let priority = task.priority.clamp(1, 3);
+            let subtask_badge = task
+                .summary
+                .as_deref()
+                .and_then(tasks::parse_subtask_progress)
+                .map(|(done, total)| {
+                    div()
+                        .px_1p5()
+                        .py(px(0.5))
+                        .rounded(px(4.))
+                        .bg(rgba(if done == total {
+                            tint(palette.green, 0x22)
+                        } else {
+                            palette.raised
+                        }))
+                        .text_xs()
+                        .text_color(rgb(if done == total {
+                            palette.green
+                        } else {
+                            palette.muted
+                        }))
+                        .child(format!("{done}/{total}"))
+                });
             rows.push(
                 row_for_density(cols.density)
                     .id(("all-task-row", index))
@@ -1232,10 +1381,17 @@ impl Projects {
                             .id(("all-task", index))
                             .flex_1()
                             .min_w_0()
-                            .truncate()
-                            .text_sm()
-                            .when(task.done, |title| title.line_through())
-                            .child(task.title.clone()),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_sm()
+                                    .when(task.done, |title| title.line_through())
+                                    .child(task.title.clone()),
+                            )
+                            .children(subtask_badge),
                     )
                     .child(
                         column(cols.project).child(
@@ -1294,6 +1450,9 @@ impl Projects {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let cols = self.columns();
+        let hubs_count = notes.iter().filter(|n| n.kind == "project").count();
+        let regular_count = notes.len().saturating_sub(hubs_count);
+
         let filter_bar = div()
             .flex()
             .items_center()
@@ -1302,10 +1461,39 @@ impl Projects {
             .mb_2()
             .child(
                 div()
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(palette.muted))
-                    .child(format!("{} notes total", notes.len())),
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(filter_pill(
+                        "All",
+                        notes.len(),
+                        self.note_kind_filter == NoteKindFilter::All,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.note_kind_filter = NoteKindFilter::All;
+                            cx.notify();
+                        }),
+                    ))
+                    .child(filter_pill(
+                        "Hubs ★",
+                        hubs_count,
+                        self.note_kind_filter == NoteKindFilter::Hubs,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.note_kind_filter = NoteKindFilter::Hubs;
+                            cx.notify();
+                        }),
+                    ))
+                    .child(filter_pill(
+                        "Notes ≡",
+                        regular_count,
+                        self.note_kind_filter == NoteKindFilter::Notes,
+                        palette,
+                        cx.listener(|view, _, _, cx| {
+                            view.note_kind_filter = NoteKindFilter::Notes;
+                            cx.notify();
+                        }),
+                    )),
             )
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
@@ -1327,10 +1515,16 @@ impl Projects {
         let filtered: Vec<_> = notes
             .iter()
             .filter(|n| {
-                query.is_empty()
-                    || n.title.to_lowercase().contains(query)
-                    || n.project.to_lowercase().contains(query)
-                    || n.path.to_lowercase().contains(query)
+                let matches_kind = match self.note_kind_filter {
+                    NoteKindFilter::All => true,
+                    NoteKindFilter::Hubs => n.kind == "project",
+                    NoteKindFilter::Notes => n.kind != "project",
+                };
+                matches_kind
+                    && (query.is_empty()
+                        || n.title.to_lowercase().contains(query)
+                        || n.project.to_lowercase().contains(query)
+                        || n.path.to_lowercase().contains(query))
             })
             .collect();
 
@@ -1865,6 +2059,7 @@ impl Render for Projects {
                                         .map(|(index, record)| {
                                             let open = record.clone();
                                             let del = record.clone();
+                                            let snippet = extract_note_snippet(&record.content);
                                             row_for_density(cols.density)
                                                 .id(("record", index))
                                                 .group("record-row")
@@ -1902,12 +2097,27 @@ impl Render for Projects {
                                                     div()
                                                         .flex_1()
                                                         .min_w_0()
-                                                        .truncate()
-                                                        .text_sm()
-                                                        .hover(move |s| {
-                                                            s.text_color(rgb(palette.accent))
-                                                        })
-                                                        .child(record.title.clone()),
+                                                        .flex()
+                                                        .flex_col()
+                                                        .gap(px(1.))
+                                                        .child(
+                                                            div()
+                                                                .truncate()
+                                                                .text_sm()
+                                                                .hover(move |s| {
+                                                                    s.text_color(
+                                                                        rgb(palette.accent),
+                                                                    )
+                                                                })
+                                                                .child(record.title.clone()),
+                                                        )
+                                                        .children(snippet.map(|snip| {
+                                                            div()
+                                                                .truncate()
+                                                                .text_xs()
+                                                                .text_color(rgb(palette.muted))
+                                                                .child(snip)
+                                                        })),
                                                 )
                                                 .child(
                                                     div()

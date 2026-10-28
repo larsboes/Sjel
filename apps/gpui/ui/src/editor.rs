@@ -1036,6 +1036,40 @@ impl Render for NoteEditor {
             format!("{est_minutes} min read")
         };
 
+        let total_todos = self
+            .doc
+            .blocks
+            .iter()
+            .filter(|b| matches!(b.kind, Kind::Todo(_)))
+            .count();
+        let done_todos = self
+            .doc
+            .blocks
+            .iter()
+            .filter(|b| matches!(b.kind, Kind::Todo(true)))
+            .count();
+
+        let tasks_badge = (total_todos > 0).then(|| {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .px_1p5()
+                .py(px(0.5))
+                .rounded(px(3.))
+                .bg(rgba(if done_todos == total_todos {
+                    tint(palette.green, 0x22)
+                } else {
+                    palette.raised
+                }))
+                .text_color(rgb(if done_todos == total_todos {
+                    palette.green
+                } else {
+                    palette.muted
+                }))
+                .child(format!("{done_todos}/{total_todos} tasks"))
+        });
+
         let status_badge = div()
             .flex()
             .items_center()
@@ -1061,7 +1095,14 @@ impl Render for NoteEditor {
             .border_b_1()
             .border_color(rgba(palette.border))
             .text_xs()
-            .child(status_badge)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(status_badge)
+                    .children(tasks_badge),
+            )
             .child(
                 div()
                     .flex()
@@ -1074,6 +1115,76 @@ impl Render for NoteEditor {
                     .child(div().w(px(1.)).h(px(10.)).bg(rgba(palette.border)))
                     .child("Esc to close · / for blocks"),
             );
+
+        let headings: Vec<(usize, u8, String)> = self
+            .doc
+            .blocks
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, b)| match b.kind {
+                Kind::Heading(level) => {
+                    let label = b.text.trim();
+                    if !label.is_empty() {
+                        Some((idx, level, label.to_string()))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect();
+
+        let outline_bar = if headings.len() >= 2 {
+            Some(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .py_1()
+                    .overflow_x_hidden()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.muted))
+                            .child("§"),
+                    )
+                    .children(headings.into_iter().map(|(h_idx, level, label)| {
+                        div()
+                            .id(("heading-chip", h_idx))
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .px_2()
+                            .py(px(1.5))
+                            .rounded(px(4.))
+                            .bg(rgba(tint(palette.raised, 0x66)))
+                            .hover(move |s| {
+                                s.bg(rgba(palette.raised)).text_color(rgb(palette.accent))
+                            })
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |editor, _, window, cx| {
+                                editor.focus(h_idx, 0, window, cx);
+                            }))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!("H{level}")),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .truncate()
+                                    .max_w(px(140.))
+                                    .child(label),
+                            )
+                    })),
+            )
+        } else {
+            None
+        };
 
         let editor = cx.entity().downgrade();
         let blocks = block_list(self.list.clone(), move |index, window, cx| {
@@ -1183,6 +1294,7 @@ impl Render for NoteEditor {
             .flex_col()
             .gap_2()
             .child(status_bar)
+            .children(outline_bar)
             .child(blocks)
             .child(footer)
     }

@@ -19,6 +19,8 @@ pub struct Session {
     pub id: String,
     pub root: String,
     #[serde(default)]
+    pub tier: Option<String>,
+    #[serde(default)]
     pub created_at: u64,
     #[serde(default)]
     pub plugins: Vec<String>,
@@ -87,6 +89,12 @@ pub struct Event {
     #[serde(default, rename = "approval_id")]
     pub approval: String,
     #[serde(default)]
+    pub rule: Option<String>,
+    #[serde(default)]
+    pub class: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
     pub input_tokens: u64,
     #[serde(default)]
     pub output_tokens: u64,
@@ -151,10 +159,17 @@ impl Shell {
 
     /// Starts a session. `root` is an absolute path; absent means the checkout the capability
     /// runs from, which is what the finder offers by default.
-    pub async fn agent_create(&self, root: Option<&str>) -> ShellResult<Session> {
+    pub async fn agent_create(
+        &self,
+        root: Option<&str>,
+        tier: Option<&str>,
+    ) -> ShellResult<Session> {
         let mut body = json!({});
         if let Some(root) = root {
             body["root"] = json!(root);
+        }
+        if let Some(tier) = tier {
+            body["tier"] = json!(tier);
         }
         self.json(
             reqwest::Method::POST,

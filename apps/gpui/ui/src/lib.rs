@@ -35,7 +35,7 @@ pub mod theme;
 pub mod today;
 pub mod travel;
 
-pub use doc_view::{render_block, render_doc};
+pub use doc_view::{render_block, render_doc, render_markdown};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 pub use primitives::{
     back_button, card, dot, due_badge, due_status, filter_pill, list, note, placeholder,

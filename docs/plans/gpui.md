@@ -49,19 +49,18 @@ Priority 1 in [`PLAN.md`](../../PLAN.md): the phone is the daily tool for the ag
 travel, documents, mail and calendar. The agent and the terminal are in [`agent.md`](agent.md).
 
 **Tab bar.** The bar holds five items at most (`mobile_tab_bar` in `ui/src/nav.rs`, 64 px per item,
-375 pt on the narrowest iPhone). Today it is `Today | Inbox | Calendar | People | Travel`.
-Proposed: `Today | Mail | Calendar | Travel | Agent`. The Agent tab lists agent sessions and
-terminals. Inbox capture moves to a button on Today and to a share extension. Documents and People
-open from Today, from the finder, and from links in mail and trips. The change is one line in
-`ui/src/nav.rs`.
+375 pt on the narrowest iPhone). Implemented 2026-10-28: `Today | Mail | Calendar | Travel | Agent`.
+The Agent tab triggers the agent seat. Inbox capture lives as a quick-capture bar on Today.
+Documents and People open directly from Today 1-tap shortcuts, finder, and links.
 
-| Area | Today |
-|---|---|
-| Documents | Mac only. The page is still in `src/` because it uses PDFKit through `pdf_kit`. |
-| Mail | Mac only. The Mail page is in `ui/` (`ui/src/mail.rs`). Every write goes through `POST /comms/triage/bulk`. |
-| Calendar | Tab, reads and writes the replica |
-| Travel | Tab with trips and the native map. Saved trip details answer when the Mac is away. Authoring is Mac only. |
-| Capture | Inbox tab with the outbox |
+| Area | Status | Notes |
+|---|---|---|
+| Documents | Mac only / mobile shortcut | PDFKit in `src/`. 1-tap shortcut on Today. |
+| Mail | Shared compact + mobile drawer | `ui/src/mail.rs` density toggle (Compact/Desktop/Comfortable), mobile 44pt touch targets, expandable message snippet drawer with direct triage (Dismiss, Waiting, Archive, Trash, Categorize). |
+| Calendar | Tab (replica + copy) | 24-hour day time grid with live red now-line, hour rail tapping to open Composer, Google & iCloud sync status mark. |
+| Travel | Tab | Grouped Day cards, transfer connection buffer badges, one-tap booking code copy chips, and offline-ready marks. |
+| Agent | Tab + Edge Seat | Agent session tier picker (`sjel | project | account`), policy block cards with rule ID & single override. |
+| Capture | Today quick-capture bar | Quick-capture bar + People & Places and Documents 1-tap shortcuts on Today landing page. |
 
 ### What may live on the phone
 
@@ -277,6 +276,12 @@ inside this list is by use.
 - **Finance.** A six-month spending and income chart. A keyboard category picker.
 - **People.** Interaction history: notes that mention the person, with dates.
 - **Inventory.** State history and layout impact preview (from Work Package 26).
+- **Travel, Tasks, Notes & Feed UI/UX upgrades (2026-10-28).**
+  - *Shared Markdown Block Reader:* `render_markdown` and `styled_inline` in `doc_view.rs` wired across Feed reader and Travel agenda.
+  - *Travel Readiness & Day Filter:* Coverage readiness strip (nights, missing booking codes), quick day pill filter (`All days | Day N`), direct/buffer transfer badges.
+  - *Projects & Tasks Power-Up:* 1-click due preset chips (`Today`, `Tmrw`, `+7d`, `Clear`), subtask progress badges (`done/total`), smart task input syntax (`!1`-`!3`, `@today`, `@tomorrow`, `@YYYY-MM-DD`).
+  - *Notes & Editor Outline:* Note kind filter chips (`All | Hubs ★ | Notes ≡`), 2-line snippet preview under titles, editor task completion badge, and clickable heading jump outline (`§ H1/H2...`).
+  - *Feed & Inbox Triage:* Feed row evaluation score badges, inline 1-click triage buttons (`Keep | Dismiss`), formatted Inbox capture cards with status pills and tag badges (`#task`, `#idea`, `#place`, `#price`).
 
 ## 8. Rules for a session that takes a work package
 

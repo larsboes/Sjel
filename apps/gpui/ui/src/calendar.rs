@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use chrono::{Datelike, Duration, Local, NaiveDate};
+use chrono::{Datelike, Duration, Local, NaiveDate, Timelike};
 use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, EventEmitter, MouseButton, Render,
     SharedString, Subscription, Window,
@@ -56,14 +56,19 @@ pub enum Origin {
     Unread,
 }
 
-/// The new-entry form: a title, and the two choices a thumb reaches without a second screen.
-///
-/// A time picker is deliberately absent: a timed entry here is `09:00`–`10:00` on the open day and
-/// is corrected on the Mac, which has the room for it. Guessing hours on a phone is worse than two
-/// taps on a keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DayViewMode {
+    #[default]
+    List,
+    Grid,
+}
+
+/// The new-entry form: a title, times, and commitment chips.
 struct Composer {
     input: Entity<InputState>,
     all_day: bool,
+    start: String,
+    end: String,
     commitment: &'static str,
     /// The listener that saves on Enter, held for as long as the form is open.
     _subscription: Subscription,
@@ -99,6 +104,7 @@ pub struct Calendar {
     note: Option<SharedString>,
     palette: Palette,
     density: Density,
+    pub view_mode: DayViewMode,
     /// Bumped per read, so a slow answer for a week the person has left cannot replace the week
     /// they are looking at.
     generation: u64,
@@ -132,6 +138,7 @@ impl Calendar {
             note: None,
             palette: Palette::light(),
             density,
+            view_mode: DayViewMode::default(),
             generation: 0,
         }
     }
@@ -282,17 +289,23 @@ impl Calendar {
     /// The line under the title: where this week came from, and whether it can be changed here.
     fn source_line(&self) -> Option<String> {
         match self.origin {
-            Origin::Store => Some("Your own store · sends itself when your Mac answers".to_owned()),
-            Origin::Copy => self
-                .copy
-                .as_ref()
-                .map(|copy| format!("Copy from {} · read-only", copy.manifest().built_label())),
+            Origin::Store => Some("Your store · Google & iCloud synced".to_owned()),
+            Origin::Copy => self.copy.as_ref().map(|copy| {
+                format!(
+                    "Copy from {} · Google & iCloud synced",
+                    copy.manifest().built_label()
+                )
+            }),
             Origin::Unread => None,
         }
     }
 
     /// Opens the new-entry form on the day on screen, with the keyboard asked for.
     fn open_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_composer_at(9, window, cx);
+    }
+
+    fn open_composer_at(&mut self, hour: u32, window: &mut Window, cx: &mut Context<Self>) {
         if !self.writable() || self.composer.is_some() {
             return;
         }
@@ -303,9 +316,13 @@ impl Calendar {
             }
         });
         input.update(cx, |input, cx| input.focus(window, cx));
+        let start = format!("{hour:02}:00");
+        let end = format!("{:02}:00", (hour + 1).min(23));
         self.composer = Some(Composer {
             input,
             all_day: false,
+            start,
+            end,
             commitment: "planned",
             _subscription: subscription,
         });
@@ -333,12 +350,11 @@ impl Calendar {
         let Some(store) = self.store.clone() else {
             return;
         };
-        // A timed entry here is nine to ten on the open day; the Mac is where an hour is picked.
         let draft = Draft {
             title: composer.input.read(cx).value().to_string(),
             day: self.day,
-            start: "09:00".to_owned(),
-            end: "10:00".to_owned(),
+            start: composer.start.clone(),
+            end: composer.end.clone(),
             all_day: composer.all_day,
             kind: "event".to_owned(),
             commitment: composer.commitment.to_owned(),
@@ -701,10 +717,14 @@ impl Calendar {
             })
             .collect();
         let all_day = composer.all_day;
-        let when_button = |label: &'static str, day: bool| {
+        let time_range: SharedString = format!("{}–{}", composer.start, composer.end).into();
+        let when_button = |label: SharedString, day: bool| {
             let on = all_day == day;
             div()
-                .id(SharedString::from(format!("calendar-form-{label}")))
+                .id(SharedString::from(format!(
+                    "calendar-form-{}",
+                    if day { "all-day" } else { "timed" }
+                )))
                 .flex_1()
                 .py(px(8.))
                 .flex()
@@ -742,8 +762,8 @@ impl Calendar {
                 div()
                     .flex()
                     .gap_2()
-                    .child(when_button("All day", true))
-                    .child(when_button("09:00–10:00", false)),
+                    .child(when_button("All day".into(), true))
+                    .child(when_button(time_range, false)),
             )
             .child(div().flex().gap_2().children(commitment_chips))
             .when_some(form_error, |card, why| {
@@ -797,6 +817,131 @@ impl Calendar {
             )
             .into_any_element()
     }
+
+    fn render_time_grid(&self, day: NaiveDate, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let today = Local::now().date_naive();
+        let is_today = day == today;
+        let now = Local::now().time();
+        let now_minutes = now.hour() * 60 + now.minute();
+        let entries = self.entries_of_day();
+        let hour_height = 44.0;
+
+        let mut grid = div()
+            .relative()
+            .flex()
+            .flex_col()
+            .rounded(px(12.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .overflow_hidden();
+
+        for hour in 0..24 {
+            let hour_start = hour * 60;
+            let hour_end = (hour + 1) * 60;
+            let hour_entries: Vec<&CalendarEntry> = entries
+                .iter()
+                .filter(|e| {
+                    if e.all_day {
+                        return false;
+                    }
+                    if let Some((start_h, start_m)) = parse_time(&e.starts_at) {
+                        let mins = start_h * 60 + start_m;
+                        mins >= hour_start && mins < hour_end
+                    } else {
+                        false
+                    }
+                })
+                .copied()
+                .collect();
+
+            let writable = self.writable();
+            let mut slot = div()
+                .flex()
+                .items_start()
+                .min_h(px(hour_height))
+                .border_t_1()
+                .border_color(rgba(palette.border))
+                .when(writable, |slot| {
+                    slot.cursor_pointer().on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |view, _, window, cx| {
+                            view.open_composer_at(hour, window, cx);
+                        }),
+                    )
+                })
+                .child(
+                    div()
+                        .w(px(52.))
+                        .flex_none()
+                        .px_2()
+                        .py_1()
+                        .text_xs()
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(rgb(palette.muted))
+                        .child(format!("{hour:02}:00")),
+                );
+
+            let mut events_col = div().flex_1().flex().flex_col().gap_1().py_1().pr_2();
+            for entry in hour_entries {
+                let rail = calendar::kind_color(&entry.kind);
+                let time = calendar::time_label(entry, day);
+                events_col = events_col.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .p_1()
+                        .rounded(px(4.))
+                        .bg(rgba(palette.raised))
+                        .child(div().w(px(3.)).h(px(18.)).rounded_full().bg(rgb(rail)))
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(rgb(palette.text))
+                                .child(entry.title.clone()),
+                        )
+                        .child(div().text_xs().text_color(rgb(palette.muted)).child(time)),
+                );
+            }
+            slot = slot.child(events_col);
+            grid = grid.child(slot);
+        }
+
+        if is_today {
+            let now_offset = (now_minutes as f32 / 60.0) * hour_height;
+            grid = grid.child(
+                div()
+                    .absolute()
+                    .top(px(now_offset))
+                    .left(px(52.))
+                    .right_0()
+                    .h(px(2.))
+                    .bg(rgb(palette.red))
+                    .child(
+                        div()
+                            .absolute()
+                            .left(px(-4.))
+                            .top(px(-3.))
+                            .size(px(8.))
+                            .rounded_full()
+                            .bg(rgb(palette.red)),
+                    ),
+            );
+        }
+
+        grid.into_any_element()
+    }
+}
+
+fn parse_time(text: &str) -> Option<(u32, u32)> {
+    let time_part = text.split('T').nth(1).unwrap_or(text);
+    let mut parts = time_part.split(':');
+    let h: u32 = parts.next()?.parse().ok()?;
+    let m: u32 = parts.next()?.parse().ok()?;
+    Some((h, m))
 }
 
 impl Render for Calendar {
@@ -839,6 +984,58 @@ impl Render for Calendar {
         let refresh = self.refresh_button(cx);
         let composer = self.composer_card(window, cx);
         let to_today = cx.entity().clone();
+        let mode_toggle = div()
+            .flex()
+            .items_center()
+            .rounded(px(6.))
+            .bg(rgba(palette.border))
+            .p(px(2.))
+            .child(
+                div()
+                    .id("view-mode-list")
+                    .cursor_pointer()
+                    .px_2()
+                    .py(px(2.))
+                    .rounded(px(4.))
+                    .when(self.view_mode == DayViewMode::List, |b| {
+                        b.bg(rgb(palette.accent)).text_color(rgb(0xffffff))
+                    })
+                    .when(self.view_mode != DayViewMode::List, |b| {
+                        b.text_color(rgb(palette.muted))
+                    })
+                    .text_xs()
+                    .child("List")
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _, _, cx| {
+                            view.view_mode = DayViewMode::List;
+                            cx.notify();
+                        }),
+                    ),
+            )
+            .child(
+                div()
+                    .id("view-mode-grid")
+                    .cursor_pointer()
+                    .px_2()
+                    .py(px(2.))
+                    .rounded(px(4.))
+                    .when(self.view_mode == DayViewMode::Grid, |b| {
+                        b.bg(rgb(palette.accent)).text_color(rgb(0xffffff))
+                    })
+                    .when(self.view_mode != DayViewMode::Grid, |b| {
+                        b.text_color(rgb(palette.muted))
+                    })
+                    .text_xs()
+                    .child("24h Grid")
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|view, _, _, cx| {
+                            view.view_mode = DayViewMode::Grid;
+                            cx.notify();
+                        }),
+                    ),
+            );
 
         div()
             .flex()
@@ -895,6 +1092,7 @@ impl Render for Calendar {
                                         ),
                                 )
                             })
+                            .child(mode_toggle)
                             .child(refresh),
                     ),
             )
@@ -963,30 +1161,35 @@ impl Render for Calendar {
                         ),
                 )
             })
-            .when_some(empty_line, |page, line| {
-                page.child(div().text_sm().text_color(rgb(palette.muted)).child(line))
+            .when(self.view_mode == DayViewMode::List, |page| {
+                page.when_some(empty_line, |page, line| {
+                    page.child(div().text_sm().text_color(rgb(palette.muted)).child(line))
+                })
+                .when(count > 0, |page| {
+                    page.child(
+                        div()
+                            .rounded(px(12.))
+                            .bg(rgba(palette.surface))
+                            .flex()
+                            .flex_col()
+                            .overflow_hidden()
+                            .children(rows),
+                    )
+                })
+                .when(count > 0, |page| {
+                    page.child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(match count {
+                                1 => "1 entry".to_owned(),
+                                other => format!("{other} entries"),
+                            }),
+                    )
+                })
             })
-            .when(count > 0, |page| {
-                page.child(
-                    div()
-                        .rounded(px(12.))
-                        .bg(rgba(palette.surface))
-                        .flex()
-                        .flex_col()
-                        .overflow_hidden()
-                        .children(rows),
-                )
-            })
-            .when(count > 0, |page| {
-                page.child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(match count {
-                            1 => "1 entry".to_owned(),
-                            other => format!("{other} entries"),
-                        }),
-                )
+            .when(self.view_mode == DayViewMode::Grid, |page| {
+                page.child(self.render_time_grid(day, cx))
             })
     }
 }

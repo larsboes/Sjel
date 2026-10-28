@@ -10,6 +10,10 @@ covers it.
 
 ## Open
 
+- **Pack sync ignores the active profile's skill narrowing.** `tools/packs-claude sync harness`
+  deployed `trim` and `harness-sync` while the active profile (`repository`) names only `sjel`
+  for that Pack. Workaround: re-run `tools/packs-claude use <profile>`. Smallest change: `sync`
+  reads the last activated profile from the ledger and refreshes only the units it selects.
 - **Runtime status for agents.** `sjel runtime status` answers
   `invalid or missing authentication token` from an agent session. An agent cannot see whether
   On-the-go mode deferred a model call. Workaround: read the defer reason from

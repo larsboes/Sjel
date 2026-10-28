@@ -252,6 +252,14 @@ skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" =
 # `use` verb therefore still applies here as recorded: declined, on this host.
 
 [[profile]]
+name = "repository"
+description = "Work on this repository from a cloud container: code, UI, orientation, focus, review"
+packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing"]
+# Default of tools/cloud-session-start. AGENTS.md names sjel and attention-control; coding and
+# design carry the Rust, GPUI and UI skills that repository work uses.
+skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", "unslop"] }
+
+[[profile]]
 name = "thesis"
 description = "DSR thesis and paper work: draft, critique and cite-check academic prose"
 packs = ["writing"]

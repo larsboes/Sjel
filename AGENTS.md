@@ -32,8 +32,8 @@ Always:
   [`docs/plans/tooling.md`](docs/plans/tooling.md) in its format. Do not leave the script only in
   `/tmp` or in the session.
 - Write a durable rule or decision into the repository: code, the skill that owns it, the area
-  plan in `docs/plans/`, or this file. Never into agent memory. On this machine, the untracked
-  `.claude/settings.json` sets `autoMemoryEnabled: false`.
+  plan in `docs/plans/`, or this file. Never into agent memory. The tracked `.claude/settings.json`
+  sets `autoMemoryEnabled: false`. Machine-specific settings go in `.claude/settings.local.json`.
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.

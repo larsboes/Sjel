@@ -40,6 +40,31 @@ const CONTEXT: [&str; 4] = [
     "Systems (systems.toml)",
 ];
 
+/// Sections that read a deployment: the overlay, machine.toml, services, data and backups. A
+/// repository checkout has none of these, so each reports itself skipped rather than failing.
+const DEPLOYMENT: [&str; 20] = [
+    "Machine identity",
+    "Global Bun/npm install policy",
+    "Local inference roles (tools/model-check --local)",
+    "AI assistant integrations",
+    "Claude Code settings (sjel claude)",
+    "Copilot guard hook (sjel copilot)",
+    "Capabilities (enabled set)",
+    "Capabilities (external references)",
+    "Boot persistence (autostart + schedule set)",
+    "Scheduled producers (did they run)",
+    "Shared store (SQLite)",
+    "State mounts",
+    "Tailnet identity gate (SJEL_TAILNET_OPERATOR)",
+    "Vault pointers (stored paths that must resolve)",
+    "Data freshness (declared contracts)",
+    "Backups (receipts, and the archives they name)",
+    "Remote backups (receipts served on the tailnet)",
+    "Host patch (capabilities/host-patch)",
+    "Container refresh (capabilities/container-refresh)",
+    "Build artifacts (PRD §9 R6)",
+];
+
 fn entries() -> Vec<Entry> {
     use Entry::{One, Packs};
     vec![
@@ -117,7 +142,12 @@ fn render(entry: &Entry, ctx: &mut Ctx) {
     let name = match entry {
         Entry::One(name, f) => {
             ctx.line(format!("\n{name}"));
-            f(ctx);
+            match ctx.repository {
+                Some(_) if DEPLOYMENT.contains(name) => {
+                    ctx.ok("skipped — repository checkout, no deployment to check");
+                }
+                _ => f(ctx),
+            }
             *name
         }
         Entry::Packs => {
@@ -327,9 +357,15 @@ fn overlay(ctx: &mut Ctx) {
         if o.source == "axon.toml" || o.source == "sjel.toml" {
             ctx.warn("no local configuration (sjel.local.toml / axon.local.toml) — this machine is running on the shipped default; run tools/install.sh to pin it");
         }
+    } else if let Some(signal) = pure::repository_checkout_signal(|k| std::env::var(k).ok()) {
+        ctx.repository = Some(signal);
+        ctx.ok(format!(
+            "repository checkout ({signal}) — no overlay at {}, deployment sections skipped",
+            ctx.overlay_path
+        ));
     } else {
         let msg = format!(
-            "overlay declared (from {}) but missing at {} — run tools/install.sh",
+            "overlay declared (from {}) but missing at {} — run tools/install.sh, or set SJEL_CHECKOUT=repository for a development checkout",
             o.source, ctx.overlay_path
         );
         ctx.bad(msg);
@@ -2788,5 +2824,26 @@ pub fn print_version(root: &Path, online: bool) {
         Some((a, b)) => println!(
             "  diverged from origin/main ({a} ahead, {b} behind) — merge before tools/update.sh"
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{entries, Entry, CONTEXT, DEPLOYMENT};
+
+    #[test]
+    fn every_deployment_section_names_a_real_section_after_the_overlay() {
+        let names: Vec<&str> = entries()
+            .iter()
+            .filter_map(|e| match e {
+                Entry::One(name, _) => Some(*name),
+                Entry::Packs => None,
+            })
+            .collect();
+        for d in DEPLOYMENT {
+            assert!(names.contains(&d), "{d} is not a doctor section");
+        }
+        // The overlay section decides repository mode, so it can never be skipped by it.
+        assert!(!DEPLOYMENT.contains(&CONTEXT[0]));
     }
 }

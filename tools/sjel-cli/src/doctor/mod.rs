@@ -47,6 +47,9 @@ pub struct Ctx {
     /// systems.toml, in file order.
     pub systems: Vec<(String, toml::Value)>,
     pub online: bool,
+    /// Set when there is no overlay and the environment names this a development checkout.
+    /// Deployment sections then report themselves skipped.
+    pub repository: Option<&'static str>,
     pub failed: u32,
     pub out: String,
 }
@@ -113,6 +116,7 @@ pub fn run(args: &[String]) -> ExitCode {
         mounts: Vec::new(),
         systems: Vec::new(),
         online: has("--online"),
+        repository: None,
         failed: 0,
         out: String::new(),
     };

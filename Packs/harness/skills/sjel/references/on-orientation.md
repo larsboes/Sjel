@@ -15,7 +15,9 @@ Graphify only for symbol-level traversal when a current graph is available.
 Before you conclude that Sjel does not do something, read `capabilities = [...]` in the
 overlay's `config/machine.toml` (resolved by `tools/lib/paths.sh`) and list
 `<overlay>/capabilities/`. Many capabilities live only in the overlay, so a search of this
-repository gives false negatives.
+repository gives false negatives. In a repository checkout (a cloud container, where `tools/doctor`
+reports "repository checkout" and skips deployment sections) there is no overlay to read: state
+that the overlay was unavailable instead of concluding that Sjel lacks the capability.
 
 State the intended file and change scope before editing. Do not absorb nearby cleanup merely
 because doctor, status, or a search exposed it.

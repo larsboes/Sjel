@@ -141,13 +141,20 @@ jobs:
       # machine whose shell exports it, so the suite read the operator's overlay instead of its
       # own fixtures. It now calls isolate_sjel_env like the other scratch-root suites and
       # passes in both places (PRD defect D7).
+      # In parallel, one per CPU. Each suite works in its own mktemp root; logs print in order after.
       - name: shell tests
         run: |
           set -uo pipefail
+          logs="$(mktemp -d)"
+          jobs="$(getconf _NPROCESSORS_ONLN)"
+          printf '%s\n' tools/*.test.sh | xargs -P "$jobs" -I{} bash -c \
+            'n="$(basename "$1")"; bash "$1" > "$2/$n.log" 2>&1 || : > "$2/$n.failed"' _ {} "$logs"
           failed=""
           for t in tools/*.test.sh; do
+            n="$(basename "$t")"
             echo "::group::$t"
-            bash "$t" || failed="$failed $t"
+            cat "$logs/$n.log"
+            [ ! -e "$logs/$n.failed" ] || failed="$failed $t"
             echo "::endgroup::"
           done
           if [ -n "$failed" ]; then

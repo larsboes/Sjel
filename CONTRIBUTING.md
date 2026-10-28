@@ -77,8 +77,8 @@ cargo test --workspace --locked -- db_tests::
 ~~~
 
 `sjel check` (`tools/ci-local fast`) runs the quick subset of CI for the current change, in
-parallel: `cargo fmt`, the repo gates, clippy on the affected crates, and the tests beside changed
-files. The pre-push hook runs it; `SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs
+parallel: `cargo fmt`, the repo gates, clippy and `cargo test` on the affected crates, and the
+tests beside changed files. The pre-push hook runs it; `SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs
 the full suite.
 
 `tools/ci-local list` identifies CI jobs that can be replayed locally. `tools/ci-local run

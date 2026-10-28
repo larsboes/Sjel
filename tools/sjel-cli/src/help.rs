@@ -214,8 +214,8 @@ stale, so `tools/ci-local list` prints what each job will actually run.
 
   gates   the repo-gates job — the file-based checks, in CI's order
   test    the bun-tests job — `bun test` from the root, then every tools/*.test.sh
-  check   the quick subset for this change, in parallel: fmt, repo gates, clippy on the
-          affected crates, tests beside changed files. The pre-push hook runs it.
+  check   the quick subset for this change, in parallel: fmt, repo gates, clippy and cargo
+          test on the affected crates, tests beside changed files. The pre-push hook runs it.
 
 Every step runs even after one fails. Exit 1 means a step failed.
 Rust is deliberately not here: run `sjel cargo test --workspace --locked`.

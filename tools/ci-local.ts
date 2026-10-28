@@ -30,7 +30,8 @@ const HELP = `tools/ci-local — run a CI job's steps on this machine, read from
   tools/ci-local list [--json]     every job in ci.yml, and whether it runs here
   tools/ci-local run <job>...      run each named job's \`run:\` steps, in order
   tools/ci-local fast              the quick subset for this change, in parallel: fmt, repo
-                                   gates, clippy on affected crates, tests beside changed files
+                                   gates, clippy and cargo test on affected crates, tests beside
+                                   changed files
 
   --root <dir>                     the checkout to read and run in (default: this one)
   --base <ref>                     fast: compare against this ref (default: origin/main)

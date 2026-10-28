@@ -56,7 +56,7 @@ function rustInput(file: string): boolean {
 }
 
 /**
- * The quick local subset of CI for a change. Full CI still runs on every push; this only
+ * The local subset of CI for a change. Full CI still runs on every push; this only
  * catches the cheap failures before it. Every doubt about Rust widens clippy to the workspace.
  */
 export function fastPlan(files: string[], deleted: boolean, packages: Package[], exists: (path: string) => boolean) {
@@ -68,7 +68,7 @@ export function fastPlan(files: string[], deleted: boolean, packages: Package[],
 
   const rust = files.filter(rustInput);
   if (rust.length === 0 && !deleted) {
-    skipped.push("clippy: no root-workspace Rust input changed");
+    skipped.push("clippy and cargo test: no root-workspace Rust input changed");
   } else {
     const impact = deleted
       ? { mode: "all" as const, packages: [], reasons: ["a deleted or renamed input"] }
@@ -78,6 +78,13 @@ export function fastPlan(files: string[], deleted: boolean, packages: Package[],
       name: "clippy",
       cmd: ["tools/cargo-hermetic", "clippy", ...scope, "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"],
       reason: impact.mode === "all" ? `workspace: ${impact.reasons[0]}` : impact.packages.join(", "),
+    });
+    // Same scope as clippy. Tests that read repository files at run time can still fail only
+    // in CI's full run; this catches the compile and unit failures first.
+    checks.push({
+      name: "cargo test",
+      cmd: ["tools/cargo-hermetic", "test", ...scope, "--locked"],
+      reason: impact.mode === "all" ? "workspace" : impact.packages.join(", "),
     });
   }
 
@@ -94,7 +101,7 @@ export function fastPlan(files: string[], deleted: boolean, packages: Package[],
   if (!bun.size && !shell.size) skipped.push("bun and shell tests: none beside a changed file");
 
   if (files.some((f) => f.startsWith("apps/gpui/"))) skipped.push("gpui: CI's platform matrix checks it");
-  skipped.push("cargo test and ui-check: CI runs them in full");
+  skipped.push("ui-check: CI runs it in full");
   return { checks, skipped };
 }
 

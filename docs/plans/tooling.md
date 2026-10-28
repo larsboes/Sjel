@@ -95,7 +95,8 @@ covers it.
   package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
   files and reports the existing GPUI input match. Runtime file reads are not modeled.
   `fastPlan` in the same file drives `sjel check` and the pre-push hook: fmt, repo gates, clippy
-  on affected crates, and tests beside changed files. Open work:
+  and cargo test on affected crates, and tests beside changed files. CI runs `tools/*.test.sh`
+  in parallel. Open work:
   1. CI reports separate Rust test compilation and execution resource usage and target size.
      Pages uses the same main-only dependency cache policy as CI. `bun-tests`, `ui-check` and
      `repo-gates` share a `sjel-cli-release` cache; measure their step times once main has saved

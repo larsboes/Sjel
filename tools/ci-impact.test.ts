@@ -106,6 +106,7 @@ test("fast plan: docs-only change skips clippy, Rust change scopes it, deletion 
   const none = () => false;
   const names = (p: ReturnType<typeof fastPlan>) => p.checks.map((c) => c.name);
   expect(names(fastPlan(["docs/x.md"], false, packages, none))).toEqual(["cargo fmt", "repo gates"]);
+  expect(names(fastPlan(["libs/base/src/lib.rs"], false, packages, none))).toContain("cargo test");
   const scoped = fastPlan(["libs/base/src/lib.rs"], false, packages, none).checks.find((c) => c.name === "clippy")!;
   expect(scoped.cmd).toContain("-p");
   expect(scoped.cmd).not.toContain("--workspace");

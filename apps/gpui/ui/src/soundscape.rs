@@ -22,7 +22,7 @@ use gpui::{
 use sjel_gpui_core::soundscape::{self, Control, LayerName, Playback, Preset, Visual};
 
 use crate::theme::SoundscapePrefs;
-use crate::{Density, Palette};
+use crate::Palette;
 
 /// One cell of a level bar. Ten steps is a hundredth of a value without a keyboard.
 const STEPS: usize = 10;
@@ -46,18 +46,12 @@ pub struct Soundscape {
     device: Option<SharedString>,
     error: Option<SharedString>,
     palette: Palette,
-    density: Density,
     /// Counts renders between two frames asked for, so the meter redraws at a fifth of the rate.
     tick: usize,
 }
 
 impl Soundscape {
-    pub fn new(
-        control: Arc<Control>,
-        visual: Arc<Visual>,
-        prefs: SoundscapePrefs,
-        density: Density,
-    ) -> Self {
+    pub fn new(control: Arc<Control>, visual: Arc<Visual>, prefs: SoundscapePrefs) -> Self {
         // The remembered preset and volume are written to the conductor here, not on the first
         // render: the device may already be open when the drawer is built.
         control.set_volume(prefs.volume.clamp(0., 1.));
@@ -71,7 +65,6 @@ impl Soundscape {
             device: None,
             error: None,
             palette: Palette::dark(),
-            density,
             tick: 0,
         }
     }
@@ -496,7 +489,7 @@ mod tests {
             volume: 0.2,
         };
         let made = control.clone();
-        let view = cx.new(|_| Soundscape::new(made, visual, prefs.clone(), Density::Mobile));
+        let view = cx.new(|_| Soundscape::new(made, visual, prefs.clone()));
         cx.run_until_parked();
         assert_eq!(control.preset(), Preset::Lofi, "the conductor has it");
         assert!((control.volume() - 0.2).abs() < f32::EPSILON);

@@ -575,8 +575,7 @@ impl Capabilities {
         // and a volume before any sound exists. Its settings are the ones the last launch left; the
         // edge's own open state and seat are the sidebar's.
         let (control, visual) = audio::parts();
-        let soundscape =
-            cx.new(|_| Soundscape::new(control, visual, SoundscapePrefs::load(), Density::Mobile));
+        let soundscape = cx.new(|_| Soundscape::new(control, visual, SoundscapePrefs::load()));
         let mut sidebar = Sidebar::load();
         // `SJEL_SIDEBAR=soundscape|activity` opens the edge at launch, the way `SJEL_TAB` opens a tab:
         // a screenshot of a panel no hand opened still has to be possible. `SJEL_SOUNDSCAPE=1` still

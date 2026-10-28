@@ -1,0 +1,108 @@
+{
+	"manifest_version": 3,
+	"default_locale": "en",
+	"name": "Sjel Clipper",
+	"homepage_url": "https://github.com/larsboes/Sjel/tree/main/capabilities/comms/clipper",
+	"version": "1.7.1",
+	"version_name": "1.7.1-sjel.1",
+	"description": "Save and highlight web pages into Sjel, on this Mac. Based on Obsidian Web Clipper 1.7.1.",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqbBzMuZ1mqem3gaAjUUl3fREdfWV7r59ot8FdQxo/u00X8pbN5k7m3K0QiYP4ILvLUGcViF3Z50+hp2oP6Kl9l48AB5pnkJMV6MZLn/7gQqN/Yz7k4PprxgMKkEt+IwHE0KD7yHtkYUDb6C8kUIEOBYFWJt8hF9+lYmyJYs92hSUf0d90uF8iuURExoW/f9Eadj3jTmMjWgVrkGWzh7arh5I2/cJso1Em5wQmG+24Q3VYIhqgiaDAdyBWlz9orC248YoBZZgALr5lWrbAjjMmauWInKUetTZcPtviiZED9FCPU3Tgu327Zbj+yxDnyqR0s4whpyxLvTaE8Wqa+riMwIDAQAB",
+	"permissions": [
+		"activeTab",
+		"clipboardWrite",
+		"commands",
+		"contextMenus",
+		"sidePanel",
+		"storage",
+		"scripting",
+		"declarativeNetRequest",
+		"nativeMessaging",
+		"alarms"
+	],
+	"host_permissions": [
+		"<all_urls>",
+		"http://*/*",
+		"https://*/*"
+	],
+	"action": {
+		"default_popup": "popup.html"
+	},
+	"side_panel": {
+		"default_path": "side-panel.html"
+	},
+	"options_ui": {
+		"page": "settings.html",
+		"open_in_tab": true
+	},
+	"icons": {
+		"16": "icons/icon16.png",
+		"48": "icons/icon48.png",
+		"128": "icons/icon128.png"
+	},
+	"background": {
+		"service_worker": "background.js"
+	},
+	"content_scripts": [
+		{
+			"matches": [
+				"http://*/*",
+				"https://*/*"
+			],
+			"js": [
+				"content-loader.js"
+			]
+		}
+	],
+	"web_accessible_resources": [
+		{
+			"resources": [
+				"reader.css",
+				"reader-script.js",
+				"browser-polyfill.min.js",
+				"style.css",
+				"side-panel.html",
+				"flatten-shadow-dom.js",
+				"highlighter.css"
+			],
+			"extension_ids": [
+				"*"
+			],
+			"matches": [
+				"*://*/*"
+			]
+		}
+	],
+	"content_security_policy": {
+		"extension_pages": "script-src 'self'; object-src 'self'"
+	},
+	"commands": {
+		"_execute_action": {
+			"suggested_key": {
+				"default": "Ctrl+Shift+O",
+				"mac": "Command+Shift+O"
+			},
+			"description": "__MSG_commandOpenClipper__"
+		},
+		"quick_clip": {
+			"suggested_key": {
+				"default": "Alt+Shift+O",
+				"mac": "Alt+Shift+O"
+			},
+			"description": "__MSG_commandQuickClip__"
+		},
+		"toggle_highlighter": {
+			"suggested_key": {
+				"default": "Alt+Shift+H",
+				"mac": "Alt+Shift+H"
+			},
+			"description": "__MSG_commandToggleHighlighter__"
+		},
+		"toggle_reader": {
+			"suggested_key": {
+				"default": "Alt+Shift+R",
+				"mac": "Alt+Shift+R"
+			},
+			"description": "__MSG_commandToggleReader__"
+		}
+	}
+}

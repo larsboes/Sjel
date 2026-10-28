@@ -6,7 +6,7 @@ packages belong here. So do watched-repository changes, news, useful articles an
 signals such as scholarships, hackathons, calls for papers or events. The extractors
 implemented today are the current ingestion set, not the boundary of that contract.
 
-The capability currently has two ingestion paths:
+The capability currently has four ingestion paths:
 
 1. **Gmail-as-router (read-only sweep, explicit reviewed actions).** Sweeps your inbox threads, classifies
    each into a stream (`aktiv`, `issue`, `feed`, `werbung`, `belege`, `steuern`,
@@ -24,6 +24,10 @@ The capability currently has two ingestion paths:
    non-personal defaults are daily GitHub Trending plus recent `cs.AI`, `cs.LG`
    and `cs.CL`; an explicit `feed_sources: []` disables them. Personal arXiv
    queries belong in the private overlay.
+4. **Browser clips.** The [Sjel Clipper](clipper/README.md) saves a page, selection or
+   template output with its highlights through native messaging and a local Unix socket
+   (`src/web_clip_socket.rs`) into versioned clip documents (`store/web_clips.rs`), held at `c2`
+   with no enrichment or cloud call.
 
 Mirrors `capabilities/scouting`'s shape: a `comms` library plus two binaries
 (`comms` CLI, `comms-server` HTTP API), a blocking SQLite client, config resolved
@@ -531,19 +535,15 @@ traveler names or itinerary items. A plan change alters the evaluation context r
 normal refreshes therefore evaluate changed context once and skip it thereafter. Changing a
 Feed status alone still does not invalidate the evaluation.
 
-Obsidian has three bounded roles:
+Obsidian is a read-only source for explicitly configured links:
 
 - The HTTP scanner reads only exact Markdown files declared in private configuration. A
   source may require an exact heading; when that heading is missing it returns zero candidates
   and never falls back to the full note. Frontmatter, fenced code, inline-code URLs, image
   targets, private-network hosts and credential-looking URLs are excluded. Scanning does not
   fetch anything. Each candidate still needs an explicit import.
-- **The feed library projects into `Resources/Sources/`.** Saving an item writes a note;
-  unsaving removes it. The contract is below.
-- The older CLI keeper export can write a distilled reading note for an explicitly kept
-  item when `keeper_export_dir` is configured. It is the ad-hoc exporter PRD Q49 replaces:
-  unset in this host's overlay, superseded by the projection above, and left in place rather
-  than removed in a commit about something else.
+- The optional keeper export writes a distilled reading note only to an explicitly configured
+  directory. It does not project the feed library into the vault.
 - `comms keep <id>` resolves a MAIL id as well. Until it did, a mail had no way out of the
   Inbox except staying in it, so the Information lane was declared rather than real. The note
   carries subject, sender, date, a Gmail permalink, the stream and the data class. It never
@@ -553,79 +553,6 @@ Obsidian has three bounded roles:
   explicit approval, and folding it in here would archive as a side effect of filing.
 
 No path here is the Trips importer, edits TELOS, or scans Scouting's opportunity notes.
-
-### The feed library in the vault
-
-PRD Q49 (2026-08-27) ruled one shared machine→vault bridge rather than an exporter per
-capability, and named the feed library as its first consumer. The mechanism is
-`libs/markdown-root/src/projection.rs`; `src/projection.rs` here declares only the shape.
-
-**What is projected.** Every feed item with `status = 'keeper'` — the whole library, with no
-time window, because `/feed/library` is the durable collection and a windowed query would
-delete a note the moment its item aged out. One note per item, at
-`Resources/Sources/<title>.md`.
-
-**When.** Two triggers and no schedule:
-
-| Trigger | Covers |
-|---|---|
-| A layer on `comms-server`'s write routes, after a `2xx` | every save and unsave through the dashboard |
-| `comms export-sources [--dry-run]` | the repair, and the first run on a host; works with the server down |
-
-The layer runs after the response, in a spawned task, behind a lock. A vault failure is
-logged and the request still succeeds: a durable row must never be traded for a reachable
-vault. What the layer does *not* catch is enrichment — a summary that arrives from the
-background drain comes from no request, so the note carries it after the next mutation or the
-next `comms export-sources`.
-
-**Why the folder is treated more carefully than `Resources/Sjel/`.** Q49 sends this bridge
-into the folder the Sources consolidation is building: humans write there, `Clippings/` merges
-in, and `Atlas/Media`'s V3 survivors move across. Three guards follow, and each has a test:
-
-1. A file whose projection header does not name `comms` as its owner is never written and
-   never deleted. That covers a human's note and another capability's projection alike.
-2. A refused name is not worked around. When a human's note holds the name, the item gets no
-   note rather than a near-miss file beside it — a second note about one source is what the
-   consolidation removes. This is Q31's promotion, and the run reports every refusal.
-3. The sweep considers `Resources/Sources/*.md` and nothing else, and removes only files
-   carrying comms' header. Unsaving deletes the machine's note, never the human's.
-
-Two saved items whose titles reduce to one file name both take an id suffix, so neither name
-depends on iteration order.
-
-**What the frontmatter carries**, under vault rule V2 — *a key must name its reader before it
-may be written*:
-
-| Key | Value | Reader |
-|---|---|---|
-| `type` | `source` | the Source template's own first key |
-| `format` | the item's kind as a word `Atlas/Media` already uses | `Media.base`'s Format column and `format_emoji` |
-| `status` | `backlog` | all four of `Media.base`'s table views filter on it |
-| `author` | the row's author, when present | `Media.base`'s Author / Creator |
-| `url` | the saved link | the Source template declares it; it is the way back to the thing |
-| `created` | the item's ingest day | the key the ten `Clippings/` notes already use |
-| `axon_feed_id` | the row id | the sweep, and the argument `comms dismiss <id>` takes |
-| `axon_projection_version` | `1` | a later generator, recognising output it cannot produce |
-
-The title is the file name, not a key — `Media.base` renders `file.name` as Title. `format`
-maps each feed kind to a word measured in `Atlas/Media`: article (11 notes), thread (7),
-paper (6), repo (2), video (1). A `mail` item gets no `format`, because the vault has no word
-for one and inventing a value nothing groups by is worse than omitting the key. `summary` is
-the one reader-having key left unwritten: the body carries the summary verbatim, live
-summaries run 484–1,293 characters, and a paragraph that size in a YAML scalar buries the
-note. `data_class`, `stream`, `content_status` and the provenance columns have no vault
-reader and stay in the store.
-
-**The saved date exists now, and this note still does not render it.** `set_feed_status`
-writes a `kept` row into `comms_feed_interactions` in the same transaction as the status
-change, so the moment a link was saved is kept — it was not before. What the frontmatter
-should carry is a separate decision about the note: `created` is still the day the item was
-ingested, which is earlier than the save and sometimes by weeks. The fact is now available to
-whoever takes that decision; it is no longer a column and a migration.
-
-**No `Resources/Sources/` Base exists yet.** `Media.base` still filters
-`file.inFolder("Atlas/Media")`, so these notes are queryable only by folder until the
-consolidation repoints it. That is a vault-side chore, and this projection does not do it.
 
 ## Why this shape: one local inference server, then native Apple where it earns the seam
 
@@ -740,20 +667,16 @@ a proposal in Sjel changes only local state and is labelled accordingly.
 comms sweep [--limit N=25] [--dry-run]   # read-only inbox triage proposals
 comms ingest <url>                       # ingest any supported URL (see Extractors)
 comms feed [--stream news|media] [--days N=7] [--include-dismissed]
-comms keep <id> | dismiss <id>           # feed item: set status (+ export if configured)
-                                         # mail: write the distilled note; no Gmail write
+comms keep <id> | dismiss <id>           # update local status; optional keeper export
 comms summarize --pending                # retry summaries for items that lack one
-comms export-sources [--dry-run]         # reconcile the feed library with Resources/Sources/
+comms clips [--limit N=20]               # Sjel Clipper documents, via comms-server's socket
+comms clips show <document-key>          # one clip document's current Markdown
 comms --help
 ```
 
 `comms keep <id>` additionally writes a distilled markdown note (title, URL,
 date, summary — never the raw transcript) when `keeper_export_dir` is
 configured, refusing to overwrite an existing file.
-
-`comms export-sources` writes every saved item into the configured vault and removes the
-notes of items no longer saved. It needs `obsidian.root` and nothing else, and it is the
-path to use when the server is down or has never run — see "The feed library in the vault".
 
 Media ingest shells out to `yt-dlp` (metadata + subtitles) via argument arrays
 only, downloads subtitles into a temp dir that is always removed, and never
@@ -1004,9 +927,9 @@ Routes:
   items and evaluate only missing or revision-stale rows against the configured TELOS lenses.
   The response separates `considered`, `evaluated` and `skipped_current`. `force:true` is an
   explicit maintenance override, not the dashboard default.
-- `POST /feed/:id/status` `{"status":"keeper"|"dismissed"|"new"}` → sets a feed
-  item's status (validated). `keeper` is a save and the other two are an unsave, so this
-  route is also what adds and removes a note in `Resources/Sources/`
+- `POST /feed/:id/status` `{"status":"keeper"|"dismissed"|"new"}` → updates a feed
+  item's status (validated). `keeper` saves the item in Comms; the other two change its
+  local state.
 - `POST /ingest` `{"url":"..."}` → `201` with the stored item, or `400` with a
   reader-facing `error`. Answers as soon as the item is stored and summarizes
   behind the response, so a fresh item legitimately comes back with
@@ -1140,9 +1063,7 @@ while `summary`, `current_focus` and `category_affinity` remain reader-facing me
 `ingest_allowed_origins[]` (exact `scheme://host:port` strings that `/ingest` may fetch even
 though they resolve inside this machine; **empty by default and on every real machine**, and an
 entry clears that one origin rather than the host — see "Extractors"),
-`obsidian {root}` (the vault the feed library projects into; absent leaves the bridge off,
-and the same block shape as `trips.json`). See
-`comms.config.example.json`. Nothing personal lives in this repo — sender
+See `comms.config.example.json`. Nothing personal lives in this repo — sender
 addresses and personal rules belong in the overlay.
 
 Every HTTP route except `/health` and `/ready` requires the shared token referenced

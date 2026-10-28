@@ -601,6 +601,18 @@ impl Store {
                 created_at TEXT NOT NULL DEFAULT ({now}),
                 CHECK (text IS NOT NULL OR url IS NOT NULL)
             );
+
+            CREATE TABLE IF NOT EXISTS {prefix}_web_clips (
+                request_id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                document_key TEXT NOT NULL,
+                behavior TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                data_class TEXT NOT NULL DEFAULT 'c2' CHECK (data_class = 'c2'),
+                created_at TEXT NOT NULL DEFAULT ({now})
+            );
+            CREATE INDEX IF NOT EXISTS {prefix}_web_clips_document
+                ON {prefix}_web_clips (document_key, created_at);
             ",
             prefix = prefix,
             now = sjel_store::NOW,

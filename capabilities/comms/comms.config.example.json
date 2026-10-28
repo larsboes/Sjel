@@ -48,8 +48,6 @@
   "_comment_keeper_export_dir": "Optional directory. When set, `comms keep <id>` also writes a distilled markdown note (title, url, date, summary — never the raw transcript). Leave unset to disable export.",
   "keeper_export_dir": "",
 
-  "_comment_obsidian": "Optional Obsidian vault the feed library projects into (PRD Q49). Same block shape as trips.json. When set, every saved item (status 'keeper') becomes one note in Resources/Sources/ and unsaving removes it; `comms export-sources` reconciles the folder with the server down. Absent leaves the bridge off — no vault, no writes. This is a write destination bounded to one folder, unlike vault_link_sources below, which refuses a root because it reads.",
-  "obsidian": { "root": "" },
 
   "_comment_inference": "Comms asks the shared inference.json for the 'summarization', 'embedding' and 'reranking' roles. Backend URLs, model ids, prefixes and key-file references belong in <overlay>/config/inference.json, never here. A missing reranker preserves semantic scores; a missing embedding role degrades to explicitly labelled lexical relevance.",
   "_comment_relevance": "General Feed personalization. profile_paths accepts exact Markdown files or non-recursive directories of focus lenses. Embedding selects lens candidates; reranking scores those query-document pairs.",

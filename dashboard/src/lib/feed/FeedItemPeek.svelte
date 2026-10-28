@@ -22,7 +22,7 @@
 
   const statusOptions = [
     { value: "new", label: "New" },
-    { value: "keeper", label: "Kept in Obsidian" },
+    { value: "keeper", label: "Kept" },
     { value: "dismissed", label: "Dismissed" },
   ];
 
@@ -40,15 +40,6 @@
     });
   }
 
-  const obsidianSafeTitle = $derived(
-    (entry.title || "Untitled")
-      .replace(/[/\\?%*:|"<>]/g, "-")
-      .trim(),
-  );
-
-  const obsidianVaultUrl = $derived(
-    `obsidian://open?vault=Knowledge-Base&file=${encodeURIComponent(`Resources/Sources/${obsidianSafeTitle}`)}`,
-  );
 </script>
 
 <SidePeek
@@ -85,22 +76,6 @@
     {/if}
   </div>
 
-  {#if entry.status === "keeper"}
-    <div class="obsidian-join">
-      <div class="join-header">
-        <Icon name="book" size={14} />
-        <strong>Obsidian Vault Note</strong>
-      </div>
-      <p class="join-desc">
-        Projected into <code>Resources/Sources/{obsidianSafeTitle}.md</code>
-      </p>
-      <a href={obsidianVaultUrl} class="obsidian-btn">
-        <Icon name="external" size={12} />
-        Open in Obsidian
-      </a>
-    </div>
-  {/if}
-
   {#if entry.summary}
     <div class="section">
       <h3 class="section-title">Summary</h3>
@@ -126,7 +101,7 @@
             onclick={() => onSetStatus(entry.id, "keeper")}
           >
             <Icon name="check" size={13} />
-            Keep in Obsidian
+            Keep
           </button>
           <button
             type="button"
@@ -161,7 +136,7 @@
             disabled={busy}
             onclick={() => onSetStatus(entry.id, "keeper")}
           >
-            Keep in Obsidian
+            Keep
           </button>
           <button
             type="button"
@@ -194,49 +169,6 @@
     flex-direction: column;
     border-bottom: 1px solid var(--card-border);
     margin-bottom: var(--space-3);
-  }
-
-  .obsidian-join {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3);
-    margin-bottom: var(--space-3);
-  }
-
-  .join-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xs);
-    color: var(--text-primary);
-  }
-
-  .join-desc {
-    margin: var(--space-1) 0 var(--space-2);
-    font-size: var(--text-2xs);
-    color: var(--text-secondary);
-  }
-
-  .join-desc code {
-    font-family: var(--font-mono);
-    background: var(--surface);
-    padding: 0.1rem 0.3rem;
-    border-radius: var(--radius-sm);
-  }
-
-  .obsidian-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: var(--text-xs);
-    color: var(--accent);
-    text-decoration: none;
-    font-weight: 500;
-  }
-
-  .obsidian-btn:hover {
-    text-decoration: underline;
   }
 
   .section {

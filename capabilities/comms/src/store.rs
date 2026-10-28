@@ -818,6 +818,7 @@ mod origins;
 mod rows;
 mod source_state;
 mod triage;
+mod web_clips;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedOrigin {
@@ -852,6 +853,7 @@ pub struct OriginSummary {
 pub use captures::{split_tag, Capture, CapturePatch};
 pub use event_scans::MailEventScan;
 use rows::{epoch_now, row_to_feed_full, row_to_feed_list, row_to_triage};
+pub use web_clips::{ClipError, WebClip, WebClipDocument, WebClipInput, WebClipWrite};
 
 #[cfg(test)]
 mod unit_tests {

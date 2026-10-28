@@ -242,14 +242,6 @@ fn default_feed_sources() -> Vec<FeedSourceConfig> {
     ]
 }
 
-/// The vault root the library projection writes into. Same JSON shape as
-/// `trips.json`'s `obsidian` block, deliberately: an operator configuring the
-/// second bridge should be writing the block they already wrote for the first.
-#[derive(Debug, Clone, Deserialize)]
-struct FileObsidian {
-    root: String,
-}
-
 #[derive(Debug, Clone, Deserialize, Default)]
 struct FileConfig {
     google_env_path: Option<String>,
@@ -266,7 +258,6 @@ struct FileConfig {
     #[serde(default)]
     rules: Vec<Rule>,
     keeper_export_dir: Option<String>,
-    obsidian: Option<FileObsidian>,
     relevance: Option<RelevanceConfig>,
     travel_context: Option<TravelContextConfig>,
     calendar_context: Option<CalendarContextConfig>,
@@ -388,18 +379,6 @@ pub struct Config {
     pub rules: Vec<Rule>,
     /// Optional directory to export distilled keeper notes into on `comms keep`.
     pub keeper_export_dir: Option<PathBuf>,
-    /// The Obsidian vault the feed library projects into (PRD Q49). `None`
-    /// leaves the bridge off, which is what an unconfigured host wants: no
-    /// vault, no writes, and the rows are still the record.
-    ///
-    /// This *is* a vault root, unlike `vault_link_sources` two fields down, and
-    /// the difference is direction. That field refuses a root because comms
-    /// reads there and a recursive read would sweep up Scratchpad credentials.
-    /// This one is a write destination, and what bounds it is not the root but
-    /// `projection::DIR`: one folder, files carrying comms' own header, and
-    /// `MarkdownRoot` proving every path stays inside the root before a byte is
-    /// written.
-    pub obsidian_root: Option<PathBuf>,
     pub relevance: RelevanceConfig,
     pub travel_context: TravelContextConfig,
     pub calendar_context: CalendarContextConfig,
@@ -544,15 +523,6 @@ impl Config {
             .and_then(parse_quiet_hours);
         let inference = InferenceConfig::load(sjel_config::overlay_config);
         let keeper_export_dir = file.keeper_export_dir.map(|p| expand_tilde(&p));
-        // An empty root reads as "not configured", not as the current directory.
-        // `comms.config.example.json` ships every optional string blank, so a copied
-        // template must leave the bridge off rather than log a failed export after
-        // every mutation.
-        let obsidian_root = file
-            .obsidian
-            .map(|o| o.root)
-            .filter(|root| !root.trim().is_empty())
-            .map(|root| expand_tilde(&root));
         let mut relevance = file.relevance.unwrap_or_default();
         relevance.profile_paths = relevance
             .profile_paths
@@ -613,7 +583,6 @@ impl Config {
             inference,
             rules: file.rules,
             keeper_export_dir,
-            obsidian_root,
             relevance,
             travel_context,
             calendar_context,

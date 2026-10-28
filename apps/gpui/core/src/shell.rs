@@ -5327,6 +5327,16 @@ fn cached_token(cache: &Mutex<Option<String>>) -> ShellResult<String> {
     if let Some(token) = cached.as_ref() {
         return Ok(token.clone());
     }
+    // A demo node's throwaway token comes from a file (`tools/demo-shots`), never the Keychain.
+    if let Some(path) = std::env::var_os("SJEL_INBOUND_TOKEN_FILE") {
+        let token = std::fs::read_to_string(path).map_err(|_| ShellError::NotSetUp)?;
+        let token = token.trim();
+        if token.is_empty() {
+            return Err(ShellError::NotSetUp);
+        }
+        *cached = Some(token.to_owned());
+        return Ok(token.to_owned());
+    }
     let user = std::env::var("USER").map_err(|_| ShellError::NotSetUp)?;
     let output = Command::new("/usr/bin/security")
         .args([

@@ -174,3 +174,12 @@ The demo site at `larsboes.github.io/Sjel/` goes away with the dashboard. Decide
 (D2): a new site replaces it, with screenshots and animations of the GPUI app, the
 technical docs, and a description of what the app is. It comes after the dashboard is deleted,
 at the end of Lane A.
+
+`tools/demo-shots` captures the Mac app against the demo stack in a container, beside a live
+node. Open:
+
+1. iPhone screenshots. The simulator must join the container's node, not the Mac's live one,
+   so the demo stack needs the LAN listener and the `devices` capability.
+2. The seed dates its data around March 2026, so Today, Calendar and Travel show little on a
+   later date.
+3. Finance draws its key hints over the last visible row (`gpui-finance.png` is cropped).

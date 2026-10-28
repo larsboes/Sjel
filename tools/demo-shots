@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# tools/demo-shots — screenshots of the GPUI app on synthetic data, next to a live node.
+#
+# tools/demo-up needs the ports a real installation uses, so this runs it in a Docker container
+# (OrbStack or Docker Desktop) and publishes only sjel-status, on DEMO_PORT. The app built from
+# this checkout talks to that port. The app also reads local files directly (the shared SQLite
+# store, the overlay, files under HOME), so it starts with an empty environment, a throwaway
+# HOME, the demo overlay and a snapshot of the demo store. Each capture targets the process
+# named sjel-gpui that this script started, never the installed Sjel Desktop.
+#
+#   tools/demo-shots up                      build, start and seed the demo node
+#   tools/demo-shots mac <page> [light|dark] [out.png]   capture one page of the Mac app
+#   tools/demo-shots down                    stop the node
+set -euo pipefail
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SJEL_ROOT="$(cd "$_here/.." && pwd)"
+NAME="sjel-demo-shots"
+DEMO_PORT="${SJEL_DEMO_SHOTS_PORT:-18082}"
+# A cold build of the demo capabilities takes every core it gets. Cap it.
+DEMO_CPUS="${SJEL_DEMO_SHOTS_CPUS:-3}"
+
+image() {
+  docker build -q -t "$NAME" - >/dev/null <<'DOCKERFILE'
+FROM rust:1-bookworm
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+RUN apt-get update && apt-get install -y --no-install-recommends lsof socat \
+    && rm -rf /var/lib/apt/lists/*
+DOCKERFILE
+}
+
+up() {
+  command -v docker >/dev/null || { echo "demo-shots: needs docker (OrbStack)" >&2; exit 1; }
+  image
+  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  # The target and registry volumes keep Linux builds out of the checkout's target/.
+  docker run -d --name "$NAME" --cpus "$DEMO_CPUS" \
+    -v "$SJEL_ROOT:/src" -v "$NAME-target:/src/target" -v "$NAME-cargo:/usr/local/cargo/registry" \
+    -p "127.0.0.1:$DEMO_PORT:$DEMO_PORT" -w /src "$NAME" bash -c '
+      set -euo pipefail
+      mkdir -p "$HOME/.axon-overlay/config"
+      printf "os = \"linux\"\ncontainer_runtime = \"docker\"\ncapabilities = []\n" \
+        > "$HOME/.axon-overlay/config/machine.toml"
+      # Start, seed and record. The capabilities stay up afterwards.
+      tools/demo-up
+      touch demo/state/seeded
+      # sjel-status binds loopback inside the container.
+      exec socat TCP-LISTEN:'"$DEMO_PORT"',fork,reuseaddr TCP:127.0.0.1:8082' >/dev/null
+  echo "demo-shots: building and seeding in $NAME (docker logs -f $NAME)"
+  until [ -f "$SJEL_ROOT/demo/state/seeded" ]; do
+    docker ps -q -f "name=^$NAME$" | grep -q . || { docker logs --tail 40 "$NAME" >&2; exit 1; }
+    sleep 5
+  done
+  echo "demo-shots: demo node on http://127.0.0.1:$DEMO_PORT"
+}
+
+# The CGWindowID of the largest on-screen window owned by <pid>.
+window_of() {
+  osascript -l JavaScript - "$1" <<'JXA'
+ObjC.import('CoreGraphics');
+function run(argv) {
+  const pid = Number(argv[0]);
+  const windows = ObjC.deepUnwrap(ObjC.castRefToObject(
+    $.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0)));
+  let best = null, area = 0;
+  for (const w of windows) {
+    if (w.kCGWindowOwnerPID !== pid) continue;
+    const a = w.kCGWindowBounds.Width * w.kCGWindowBounds.Height;
+    if (a > area) { area = a; best = w.kCGWindowNumber; }
+  }
+  return best === null ? '' : String(best);
+}
+JXA
+}
+
+mac() {
+  local page="${1:?usage: demo-shots mac <page> [light|dark] [out.png]}" appearance="${2:-}"
+  local out="${3:-${TMPDIR:-/tmp}/sjel-demo-$page${appearance:+-$appearance}.png}"
+  curl -fsS -o /dev/null "http://127.0.0.1:$DEMO_PORT/health" \
+    || { echo "demo-shots: no demo node on $DEMO_PORT. Run tools/demo-shots up." >&2; exit 1; }
+  # The same shared cache apps/gpui/install uses.
+  if [ -d "$HOME/.cargo-target" ] && [ -z "${CARGO_TARGET_DIR:-}" ]; then
+    export CARGO_TARGET_DIR="$HOME/.cargo-target"
+  fi
+  (cd "$SJEL_ROOT/apps/gpui" && cargo build --release --quiet)
+  local bin
+  bin="$(cd "$SJEL_ROOT/apps/gpui" && cargo metadata --no-deps --format-version 1 \
+    | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')/release/sjel-gpui"
+  local home="${TMPDIR:-/tmp}/sjel-demo-shots-home"
+  rm -rf "$home" && mkdir -p "$home"
+  sqlite3 "$SJEL_ROOT/demo/state/axon.db" ".backup '$home/axon.db'"
+  env -i HOME="$home" USER="$USER" PATH=/usr/bin:/bin TMPDIR="$home" LANG=en_US.UTF-8 \
+    SJEL_STATUS_URL="http://127.0.0.1:$DEMO_PORT" \
+    SJEL_INBOUND_TOKEN_FILE="$SJEL_ROOT/demo/state/comms-api-secret" \
+    SJEL_PERSONAL_ROOT="$SJEL_ROOT/demo/overlay" SJEL_OVERLAY_ROOT="$SJEL_ROOT/demo/overlay" \
+    SJEL_DB_PATH="$home/axon.db" SJEL_CONFIG_DIR="$home/config" SJEL_NOTES_DIR="$home/notes" \
+    SJEL_REPLICA_PATH="$home/replica.db" \
+    SJEL_GPUI_NO_ACTIVATE=1 SJEL_GPUI_FLOAT=1 SJEL_GPUI_NO_AUDIO=1 SJEL_GPUI_NO_SAVE=1 SJEL_GPUI_OPAQUE=1 \
+    SJEL_GPUI_OPEN="sjel://$page" ${appearance:+SJEL_GPUI_APPEARANCE=$appearance} \
+    "$bin" >"$home/app.log" 2>&1 &
+  local pid=$! id=""
+  trap 'kill "$pid" 2>/dev/null || true' RETURN
+  for _ in $(seq 40); do id="$(window_of "$pid")"; [ -n "$id" ] && break; sleep 0.25; done
+  [ -n "$id" ] || { echo "demo-shots: the app opened no window" >&2; return 1; }
+  [ "$(pgrep -x sjel-gpui | wc -l | tr -d ' ')" = 1 ] \
+    || { echo "demo-shots: another sjel-gpui runs, refusing to capture" >&2; return 1; }
+  sleep "${SJEL_DEMO_SHOTS_SETTLE:-4}"
+  local shot
+  shot="$(cd "$home" && interceptor --ws macos screenshot --app sjel-gpui --save --format png \
+    | sed -n 's/.*"filePath": "\([^"]*\)".*/\1/p')"
+  [ -n "$shot" ] || { echo "demo-shots: the capture failed" >&2; return 1; }
+  mv "$shot" "$out"
+  echo "$out"
+}
+
+down() {
+  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  rm -f "$SJEL_ROOT/demo/state/seeded"
+  echo "demo-shots: stopped"
+}
+
+case "${1:-}" in
+  up) up ;;
+  mac) shift; mac "$@" ;;
+  down) down ;;
+  *) echo "usage: demo-shots up | mac <page> [light|dark] [out.png] | down" >&2; exit 2 ;;
+esac

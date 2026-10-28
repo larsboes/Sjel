@@ -575,7 +575,8 @@ editor only; the table always writes.
 
 The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can point
 to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or
-localhost.
+localhost. `SJEL_INBOUND_TOKEN_FILE` reads the token from a file instead of the Keychain.
+`tools/demo-shots` uses both to run the app against a demo node on synthetic data.
 
 ```sh
 cd apps/gpui

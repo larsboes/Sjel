@@ -10,6 +10,13 @@ covers it.
 
 ## Open
 
+- **A test that stages files in the shared checkout.** `tools/sjel-cli`'s `ui_packages` tests create
+  `package.json` and `bun.lock` at the repository root and call `git add` and `git rm --cached` to
+  observe trackedness. In a worktree that mutates the index of the checkout under test, so a
+  `pre-push` run failed on its own side effects and left staged additions and deletions behind.
+  The failure is order-dependent: `cargo test -p sjel-cli` alone passed 399 tests. Smallest change:
+  run those cases inside a temporary git repository instead of the checkout.
+
 - **A launchd unit whose capability manifest is gone.** `com.sjel.tailscaled` runs
   `/opt/homebrew/opt/tailscale/bin/tailscaled` with `--statedir=<overlay>/secrets/tailscale-sjel`,
   and that userspace daemon is the tailnet node `sjel` that reaches `homepi`, the remote backup

@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changedFiles, rustImpact, type Package } from "./ci-impact.ts";
+import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
   { name: "base", dir: "libs/base", dependencies: [] },
@@ -76,7 +77,27 @@ test("collects committed renames as a deletion and an addition", () => {
     const changes = changedFiles(root, base, false);
     expect([...changes.files].sort()).toEqual(["new.rs", "old.rs"]);
     expect([...changes.deleted]).toEqual(["old.rs"]);
+    expect(decide(root, base)).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("aggregate fails for a failed, missing or unexpectedly skipped job", async () => {
+  const workflow = Bun.YAML.parse(await Bun.file(join(import.meta.dir, "../.github/workflows/ci.yml")).text()) as any;
+  const script = workflow.jobs.verification.steps[0].run;
+  const good = {
+    CHANGES: "success", RUST_QUALITY: "success", CARGO_TESTS: "success", BUN_TESTS: "success",
+    UI_CHECK: "success", REPO_GATES: "success", GPUI_SELECTED: "true", GPUI: "success",
+  };
+  const run = (overrides: Record<string, string>) => Bun.spawnSync(["bash", "-e", "-c", script], {
+    env: { ...process.env, ...good, ...overrides },
+    stdout: "pipe", stderr: "pipe",
+  }).exitCode;
+  expect(run({})).toBe(0);
+  expect(run({ GPUI_SELECTED: "false", GPUI: "skipped" })).toBe(0);
+  expect(run({ BUN_TESTS: "failure" })).toBe(1);
+  expect(run({ CHANGES: "skipped" })).toBe(1);
+  expect(run({ GPUI_SELECTED: "true", GPUI: "skipped" })).toBe(1);
+  expect(run({ GPUI_SELECTED: "", GPUI: "skipped" })).toBe(1);
 });

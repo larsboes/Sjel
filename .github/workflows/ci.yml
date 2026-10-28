@@ -431,3 +431,31 @@ jobs:
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android24-clang" >> "$GITHUB_ENV"
       - name: cargo check
         run: ${{ matrix.check }}
+
+  verification:
+    name: verification result
+    if: always()
+    needs: [changes, rust-quality, cargo-tests, bun-tests, ui-check, repo-gates, gpui-targets]
+    runs-on: ubuntu-latest
+    env:
+      CHANGES: ${{ needs.changes.result }}
+      RUST_QUALITY: ${{ needs.rust-quality.result }}
+      CARGO_TESTS: ${{ needs.cargo-tests.result }}
+      BUN_TESTS: ${{ needs.bun-tests.result }}
+      UI_CHECK: ${{ needs.ui-check.result }}
+      REPO_GATES: ${{ needs.repo-gates.result }}
+      GPUI: ${{ needs.gpui-targets.result }}
+      GPUI_SELECTED: ${{ needs.changes.outputs.gpui }}
+    steps:
+      - name: Verify job results
+        run: |
+          for result in "$CHANGES" "$RUST_QUALITY" "$CARGO_TESTS" "$BUN_TESTS" "$UI_CHECK" "$REPO_GATES"; do
+            if [ "$result" != success ]; then
+              echo "A required job did not succeed: $result" >&2
+              exit 1
+            fi
+          done
+          case "$GPUI_SELECTED:$GPUI" in
+            true:success|false:skipped) ;;
+            *) echo "GPUI selection/result mismatch: $GPUI_SELECTED:$GPUI" >&2; exit 1 ;;
+          esac

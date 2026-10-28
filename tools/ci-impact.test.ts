@@ -85,6 +85,8 @@ test("collects committed renames as a deletion and an addition", () => {
 
 test("aggregate fails for a failed, missing or unexpectedly skipped job", async () => {
   const workflow = Bun.YAML.parse(await Bun.file(join(import.meta.dir, "../.github/workflows/ci.yml")).text()) as any;
+  expect(workflow.jobs.verification.if).toBe("always()");
+  expect(workflow.jobs.verification.needs).toEqual(["changes", "rust-quality", "cargo-tests", "bun-tests", "ui-check", "repo-gates", "gpui-targets"]);
   const script = workflow.jobs.verification.steps[0].run;
   const good = {
     CHANGES: "success", RUST_QUALITY: "success", CARGO_TESTS: "success", BUN_TESTS: "success",

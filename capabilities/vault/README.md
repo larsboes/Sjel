@@ -8,6 +8,7 @@ vault links  [--root PATH] [--json] [--dead] [--inbound FOLDER]
 vault lint   [--root PATH] [--json] [--carrying KEY]
 vault class  [--root PATH] [--json] [--only c2] [--list]
 vault bases  [--root PATH] [--json] [--strict]
+vault compare --root PATH --against PATH [--json] [--list]
 ```
 
 The root is a personal fact and never lives in this repo. It comes from the
@@ -15,6 +16,14 @@ overlay's `config/knowledge.toml` (`vault_root = "..."`), or from `--root`. The
 server takes the same path from the same file and has no `--root`: a service
 resolving its own root from an argument would be a second declaration of where
 the vault is.
+
+Link resolution compares names in Unicode NFC form. Canonically equivalent names
+that identify multiple files remain ambiguous.
+
+`compare` counts newly unresolved link occurrences in unchanged notes shared by two vaults.
+It reports counts only, excludes changed or ambiguous note paths, and refuses unreadable notes.
+The excluded destination-note count makes the comparison's coverage explicit.
+`--list` includes the source path and target for each occurrence; these may be private.
 
 ## `class` — which notes hold whose facts
 

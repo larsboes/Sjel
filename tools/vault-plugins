@@ -17,9 +17,7 @@ get_vault_root() {
     echo "$VAULT_ROOT"
     return
   fi
-  python3 "$SJEL_ROOT/Packs/knowledge/skills/obsidian/scripts/vault" root 2>/dev/null || {
-    echo "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Knowledge-Base"
-  }
+  python3 "$SJEL_ROOT/Packs/knowledge/skills/obsidian/scripts/vault" root
 }
 
 build_plugin() {

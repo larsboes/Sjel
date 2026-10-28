@@ -60,6 +60,7 @@
 use std::collections::HashMap;
 
 use serde::Serialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::note::Note;
 
@@ -124,7 +125,7 @@ fn note_shaped(target: &str) -> bool {
 }
 
 fn key(s: &str) -> String {
-    s.to_lowercase()
+    s.to_lowercase().nfc().collect()
 }
 
 /// `target` as an address, read from the folder of the note that carries the link.
@@ -162,7 +163,7 @@ fn relative_to(source_id: &str, target: &str) -> Option<String> {
 /// identity: the path from the vault root, or the file name alone.
 struct NoteIndex {
     by_basename: HashMap<String, Vec<usize>>,
-    by_id: HashMap<String, usize>,
+    by_id: HashMap<String, Vec<usize>>,
 }
 
 /// What each of the three rungs answered, kept apart rather than folded to the first hit.
@@ -186,10 +187,13 @@ impl NoteRungs {
 impl NoteIndex {
     fn build(notes: &[Note]) -> Self {
         let mut by_basename: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut by_id: HashMap<String, usize> = HashMap::new();
+        let mut by_id: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, n) in notes.iter().enumerate() {
             by_basename.entry(key(&n.basename)).or_default().push(i);
-            by_id.insert(key(n.id.trim_end_matches(".md")), i);
+            by_id
+                .entry(key(n.id.trim_end_matches(".md")))
+                .or_default()
+                .push(i);
         }
         Self { by_basename, by_id }
     }
@@ -204,11 +208,14 @@ impl NoteIndex {
                 .then(|| {
                     self.by_id
                         .get(&key(target.trim_end_matches(".md")))
-                        .copied()
+                        .and_then(|v| (v.len() == 1).then(|| v[0]))
                 })
                 .flatten(),
-            by_relative: relative_to(source_id, target)
-                .and_then(|rel| self.by_id.get(&key(rel.trim_end_matches(".md"))).copied()),
+            by_relative: relative_to(source_id, target).and_then(|rel| {
+                self.by_id
+                    .get(&key(rel.trim_end_matches(".md")))
+                    .and_then(|v| (v.len() == 1).then(|| v[0]))
+            }),
             by_name: self
                 .by_basename
                 .get(&key(base.trim_end_matches(".md")))
@@ -249,10 +256,10 @@ pub fn report(notes: &[Note], attachments: &[String], include_dead: bool) -> Lin
 
     // The same two identities, for files that are not notes. An extension is NOT trimmed: a
     // link to `Dokumente.base` names that file and not a note called `Dokumente`.
-    let mut attachment_by_path: HashMap<String, ()> = HashMap::new();
+    let mut attachment_by_path: HashMap<String, usize> = HashMap::new();
     let mut attachment_by_name: HashMap<String, usize> = HashMap::new();
     for id in attachments {
-        attachment_by_path.insert(key(id), ());
+        *attachment_by_path.entry(key(id)).or_default() += 1;
         let base = id.rsplit('/').next().unwrap_or(id);
         *attachment_by_name.entry(key(base)).or_default() += 1;
     }
@@ -283,10 +290,10 @@ pub fn report(notes: &[Note], attachments: &[String], include_dead: bool) -> Lin
             } = index.rungs(&n.id, &target);
 
             // The same three rungs against the files that are not notes.
-            let file_by_path = attachment_by_path.contains_key(&key(&target));
+            let file_by_path = attachment_by_path.get(&key(&target)) == Some(&1);
             let file_by_relative = relative
                 .as_deref()
-                .is_some_and(|rel| attachment_by_path.contains_key(&key(rel)));
+                .is_some_and(|rel| attachment_by_path.get(&key(rel)) == Some(&1));
             // An ambiguous basename is not a resolution, the same rule the note index above
             // applies: two files with one name mean the link names neither.
             let file_by_name = attachment_by_name.get(&key(base)) == Some(&1);
@@ -387,6 +394,29 @@ pub fn inbound(notes: &[Note], folder: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_unicode_names_resolve_and_collisions_remain_ambiguous() {
+        let notes = vec![
+            note("Notes/Café.md", ""),
+            note("Hub.md", "[[Caf\u{65}\u{301}]]"),
+        ];
+        assert_eq!(report(&notes, &[], true).links_dead, 0);
+        let collisions = vec![
+            note("Notes/Café.md", ""),
+            note("Notes/Caf\u{65}\u{301}.md", ""),
+            note("Hub.md", "[[Notes/Café]]"),
+        ];
+        assert_eq!(report(&collisions, &[], true).links_dead, 1);
+        let attachments = vec![
+            "Files/Café.pdf".to_string(),
+            "Files/Caf\u{65}\u{301}.pdf".to_string(),
+        ];
+        assert_eq!(
+            report(&[note("Hub.md", "[[Files/Café.pdf]]")], &attachments, true).links_dead,
+            1
+        );
+    }
 
     fn note(id: &str, body: &str) -> Note {
         Note {

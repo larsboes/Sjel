@@ -37,6 +37,7 @@
 
 // The modules live in the library beside this binary, so `vault-server` reads
 // notes through the same loader rather than a second copy of it.
+use unicode_normalization::UnicodeNormalization;
 use vault::{bases, class, graph, lint, note};
 
 fn flag(args: &[String], name: &str) -> Option<String> {
@@ -64,6 +65,7 @@ fn main() {
              \n\
              usage:\n  \
                vault links [--root PATH] [--json] [--dead] [--inbound FOLDER]\n  \
+               vault compare --root PATH --against PATH [--json] [--list]\n  \
                vault lint  [--root PATH] [--json] [--carrying KEY]\n  \
                vault class [--root PATH] [--json] [--only c2] [--list]\n  \
                vault bases [--root PATH] [--json] [--strict]\n\
@@ -73,10 +75,85 @@ fn main() {
         std::process::exit(if cmd.is_empty() { 1 } else { 0 });
     }
 
+    if cmd == "compare" && flag(&args, "--root").is_none() {
+        die("compare requires --root PATH");
+    }
     let root = note::resolve_root(flag(&args, "--root")).unwrap_or_else(|e| die(e));
     let (notes, problems) = note::load_all(&root).unwrap_or_else(|e| die(e));
 
     match cmd {
+        "compare" => {
+            use std::collections::{HashMap, HashSet};
+            let other = note::resolve_root(Some(
+                flag(&args, "--against").unwrap_or_else(|| die("compare requires --against PATH")),
+            ))
+            .unwrap_or_else(|e| die(e));
+            let (other_notes, other_problems) = note::load_all(&other).unwrap_or_else(|e| die(e));
+            if !problems.is_empty() || !other_problems.is_empty() {
+                die("compare refused: one or both vaults contain unreadable or malformed notes");
+            }
+            let normalize = |s: &str| s.to_lowercase().nfc().collect::<String>();
+            let mut originals: HashMap<String, Vec<&str>> = HashMap::new();
+            for n in &notes {
+                originals.entry(normalize(&n.id)).or_default().push(&n.text);
+            }
+            let mut copies: HashMap<String, Vec<&str>> = HashMap::new();
+            for n in &other_notes {
+                copies.entry(normalize(&n.id)).or_default().push(&n.text);
+            }
+            let unchanged: HashSet<String> = originals
+                .iter()
+                .filter_map(|(id, text)| {
+                    let other = copies.get(id)?;
+                    (text.len() == 1 && other.len() == 1 && text[0] == other[0]).then(|| id.clone())
+                })
+                .collect();
+            let attachments = |r: &markdown_root::MarkdownRoot| -> Vec<String> {
+                r.files_recursive()
+                    .unwrap_or_else(|e| die(e))
+                    .iter()
+                    .filter(|p| p.extension().and_then(|e| e.to_str()) != Some("md"))
+                    .filter_map(|p| r.relative_id(p))
+                    .collect()
+            };
+            let before = graph::report(&notes, &attachments(&root), true);
+            let after = graph::report(&other_notes, &attachments(&other), true);
+            let mut old = HashMap::<(String, String, bool), usize>::new();
+            for d in before.dead {
+                *old.entry((normalize(&d.from), normalize(&d.target), d.in_frontmatter))
+                    .or_default() += 1;
+            }
+            let mut newly_dead = 0;
+            let mut details = Vec::new();
+            for d in after.dead {
+                let id = normalize(&d.from);
+                if !unchanged.contains(&id) {
+                    continue;
+                }
+                let key = (id, normalize(&d.target), d.in_frontmatter);
+                match old.get_mut(&key) {
+                    Some(count) if *count > 0 => *count -= 1,
+                    _ => {
+                        newly_dead += 1;
+                        if has(&args, "--list") {
+                            details.push(d);
+                        }
+                    }
+                }
+            }
+            let mut result = serde_json::json!({"unchanged_notes": unchanged.len(), "source_notes": notes.len(), "destination_notes": other_notes.len(), "destination_notes_excluded": other_notes.len() - unchanged.len(), "newly_unresolved_occurrences": newly_dead});
+            if has(&args, "--list") {
+                result["newly_unresolved"] = serde_json::json!(details);
+            }
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or_default()
+                );
+            } else {
+                println!("{result}");
+            }
+        }
         "links" => {
             if let Some(folder) = flag(&args, "--inbound") {
                 let targets = graph::inbound(&notes, &folder);

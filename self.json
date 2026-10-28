@@ -48,6 +48,10 @@
       "kind": "lib"
     },
     {
+      "name": "clip-socket",
+      "kind": "lib"
+    },
+    {
       "name": "coding",
       "kind": "pack"
     },
@@ -828,6 +832,26 @@
       ],
       "evidence": [
         "capabilities/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "clip-socket",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "libs/clip-socket/Cargo.toml"
+      ]
+    },
+    {
+      "from": "comms",
+      "to": "clip-socket",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/comms/Cargo.toml"
       ]
     },
     {

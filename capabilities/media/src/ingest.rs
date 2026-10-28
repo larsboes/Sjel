@@ -1094,7 +1094,15 @@ mod db_tests {
             "owned partial copy is removed after checking source bytes"
         );
         let lock = fs::File::open(root.join(".media-incoming/.lock")).unwrap();
-        lock.try_lock().unwrap();
+        // Another test's fork can hold the lock's file description until its exec.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while lock.try_lock().is_err() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the ingest lock stayed held"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         assert!(
             ingest(&ledger, &opts).is_err(),
             "a live ingest excludes recovery"

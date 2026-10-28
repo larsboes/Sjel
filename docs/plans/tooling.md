@@ -93,21 +93,19 @@ covers it.
 - **Selective verification and build resources.** `tools/ci-impact.ts` plans the root Cargo
   workspace's packages for a change: the owner of each changed file, every package whose sources
   name the file's path (runtime reads, modeled from path literals), and their reverse
-  dependencies. Workspace-wide inputs select every package. `fastPlan` in the same file drives
+  dependencies. Workspace-wide inputs select every package. A file that no package owns or names
+  selects none (decided 2026-10-29). `fastPlan` in the same file drives
   `sjel check` and the pre-push hook. The `cargo test` job compares the plan with the packages
   that failed on every pull request and writes misses to the run summary; it skips nothing.
   `tools/ci-impact-backtest.ts` replays CI history the same way. `bun-tests`, `ui-check` and
   `repo-gates` share a `sjel-cli-release` cache, and CI runs `tools/*.test.sh` in parallel.
   Open work:
-  1. Decide whether a file that no package owns or names selects no Rust package, as the planner
-     does now, or widens to every package. The second is safe and saves nothing on documentation
-     changes.
-  2. Enforce on pull requests only after the shadow step reports no miss over a period of real
+  1. Enforce on pull requests only after the shadow step reports no miss over a period of real
      pull requests. Main keeps the complete suite. The ruleset requires the five existing checks;
      test the `verification result` aggregate before making it required.
-  3. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
+  2. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
      gates.
-  4. Measure local target-directory growth and cache transfer, and benchmark bounded local
+  3. Measure local target-directory growth and cache transfer, and benchmark bounded local
      parallelism. Set defaults only from measurements.
   Done when local and CI use the same validated planner, full main checks remain green, and
   measurements show the cost and savings.

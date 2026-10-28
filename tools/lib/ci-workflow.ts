@@ -44,7 +44,7 @@ export interface WorkflowJob {
  */
 export const RUNS_HERE: Record<string, string> = {
   "repo-gates": "every step is a file-based gate: no network, no build, no write into the checkout",
-  "bun-tests": "bun test and tools/*.test.sh, which build their own scratch roots under /tmp",
+  "bun-tests": "installs locked dependencies in the checkout, then runs bun and shell tests",
 };
 
 /**
@@ -81,11 +81,17 @@ export const UNCLASSIFIED =
  */
 export function parseJobs(yamlText: string): WorkflowJob[] {
   const doc = Bun.YAML.parse(yamlText) as {
+    env?: unknown;
+    defaults?: unknown;
     jobs?: Record<
       string,
       {
         name?: string;
-        steps?: Array<{ name?: string; run?: string; uses?: string; "working-directory"?: string }>;
+        env?: unknown;
+        defaults?: unknown;
+        if?: unknown;
+        steps?: Array<{ name?: string; run?: string; uses?: string; "working-directory"?: string; if?: unknown; env?: unknown; shell?: unknown; "continue-on-error"?: unknown }>;
+
       }
     >;
   };
@@ -93,8 +99,14 @@ export function parseJobs(yamlText: string): WorkflowJob[] {
   if (!jobs || typeof jobs !== "object") throw new Error("workflow declares no jobs");
   return Object.entries(jobs).map(([id, job]) => {
     const steps: WorkflowStep[] = [];
+    let unsupported = doc.env !== undefined || doc.defaults !== undefined || job.env !== undefined || job.defaults !== undefined || job.if !== undefined
+      ? "workflow or job environment, defaults, or condition cannot be replayed faithfully"
+      : null;
     for (const [i, step] of (job?.steps ?? []).entries()) {
       if (typeof step?.run === "string") {
+        if (step.if !== undefined || step.env !== undefined || step.shell !== undefined || step["continue-on-error"] !== undefined || step.run.includes("${{")) {
+          unsupported = `step ${i + 1} has execution settings that cannot be replayed faithfully`;
+        }
         const workingDirectory = step["working-directory"];
         steps.push({
           name: step.name ?? step.run.split("\n")[0],
@@ -109,7 +121,7 @@ export function parseJobs(yamlText: string): WorkflowJob[] {
       id,
       label: job?.name ?? id,
       steps,
-      refusal: id in RUNS_HERE ? null : (REFUSED[id] ?? UNCLASSIFIED),
+      refusal: id in RUNS_HERE ? unsupported : (REFUSED[id] ?? UNCLASSIFIED),
     };
   });
 }

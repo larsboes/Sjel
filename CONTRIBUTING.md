@@ -76,6 +76,13 @@ its own. Run them alone with:
 cargo test --workspace --locked -- db_tests::
 ~~~
 
+`tools/ci-local list` identifies CI jobs that can be replayed locally. `tools/ci-local run
+repo-gates` and `tools/ci-local run bun-tests` read their scripts from the CI workflow; action
+setup is not replayed, and the Bun job installs locked dependencies in the checkout. The runner
+refuses jobs with conditions, environment, shell settings or expressions it cannot reproduce. Rust tests use `tools/cargo-hermetic`
+to isolate the local overlay and build output. CI uses disposable Linux runners; GPUI also checks
+other native platforms and the UI job creates a disposable overlay.
+
 For a lower-concurrency local Rust test run, Cargo and the test harness accept independent limits:
 
 ~~~sh

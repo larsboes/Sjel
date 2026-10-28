@@ -1,8 +1,8 @@
 <!-- human-voice: ignore-start rule_of_three -->
-<!-- This file enumerates real sets constantly (the four things the spine owns, the three
-     surfaces of the control app, the log kinds security covers). Several flagged "triads" are
-     four-item lists the check reads as three. Shortening them would delete information to move
-     a score, so the category is muted here deliberately. Every other check stays live. -->
+<!-- This file enumerates real sets constantly (the four data classes, the capability groups,
+     the parts of the stack that are not Rust yet). Several flagged "triads" are four-item lists
+     the check reads as three. Shortening them would delete information to move a score, so the
+     category is muted here deliberately. Every other check stays live. -->
 
 <p align="center"><img alt="Sjel" src=".github/assets/sjel-hedgehog.png" width="340"></p>
 
@@ -13,35 +13,26 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://larsboes.github.io/Sjel/"><img alt="Live demo" src="https://img.shields.io/badge/demo-live-0a7d8c"></a>
 </p>
 
 <p align="center">
-  <img alt="Sjel's travel hub on a desktop, from the live demo" src=".github/assets/travel.png" width="72%" title="Travel hub, live demo, synthetic data">
-  &nbsp;
-  <img alt="Sjel's travel hub on a phone, from the live demo" src=".github/assets/phone.png" width="22%">
-</p>
-
-<p align="center"><sub>Screenshots: the travel hub in the live demo, synthetic data.</sub></p>
-
-<p align="center">
-  <a href="https://larsboes.github.io/Sjel/">Live demo</a> ·
-  <a href="#try-it">Try it</a> ·
+  <a href="#where-it-stands">Where it stands</a> ·
   <a href="#how-it-works">How it works</a> ·
+  <a href="#install">Install</a> ·
   <a href="#measured">Measured</a> ·
   <a href="research/README.md">Research</a> ·
-  <a href="PLAN.md">Plan</a> ·
-
+  <a href="PLAN.md">Plan</a>
 </p>
 
 ## What it is
 
 Sjel stores the facts of one person's or one household's life as typed data: people, places,
-trips, money, home and calendar. The data stays on hardware the household controls. Screens show
-that data, and an assistant works on it.
+trips, money, home and calendar. The data stays on hardware the household controls. One native
+app on the Mac and the iPhone shows that data, and an assistant works on it.
 
-Sjel has a core and optional capabilities. Public capabilities live in this repository; private
-ones may live in a deployment overlay. Each installation enables the capabilities it needs.
+Sjel has a core and optional capabilities. A capability is a small local service with its own
+store and HTTP routes. Public capabilities live in this repository, and private ones may live in a
+deployment overlay. Each installation enables the capabilities it needs.
 
 ## Why I built it
 
@@ -64,40 +55,63 @@ wanted features fast
 What's left has good ideas, some well-built parts and some sloppy ones. I want to clean it up.
 Expect AI-polished text throughout, because I trust my drafts more after an AI pass.
 
+## Where it stands
+
+Sjel is moving to one native Rust app. Decided 2026-10-22: the
+[GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) client in
+[`apps/gpui`](apps/gpui/README.md) is the one app on macOS and iOS. The SvelteKit and Tauri
+dashboard in `dashboard/` retires, and it gets no new features. Linux, Windows and Android come
+later from the same code.
+
+| Part | Today |
+|---|---|
+| Mac app | 21 of the dashboard's 25 main routes are ported. Travel, Map, Inventory and Wishlist are partly ported ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
+| iPhone app | The same GPUI code inside a UIKit host, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
+| Dashboard | Still builds and still serves as a fallback. It is deleted after the gates in [`gpui.md` §3](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes) pass. |
+| Web demo | Goes with the dashboard. A new public page with screenshots of the native app replaces it ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
+| Capabilities | 27 of the 49 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. `knowledge-graph` is a Bun server. |
+
+Not everything becomes Rust. The menu bar companion and the CloudKit relay in `apps/mac` are
+Swift, and so is the iOS host that owns the window. The `tools/` scripts are a mix of shell and
+TypeScript.
+
+The phone is the current priority ([`PLAN.md`](PLAN.md#priority-1-the-phone-app-used-every-day)).
+It should be the daily tool for six areas: the Sjel agent, other coding agents through a terminal
+on the Mac, travel, documents, mail and calendar. After that, the repository shrinks into one
+workspace with flat `crates/` ([`restructure.md`](docs/plans/restructure.md)).
+
 ## Two surfaces: calm on the glass, open in the terminal
 
-Sjel is designed with two deliberate surfaces:
-
-1. **On the glass, the intended experience**: Apple-like simplicity for daily life. Guided device pairing via QR code,
-   one-tap local intelligence tuning that auto-detects hardware and quantizations, and zero
-   terminal friction for household members. Node setup still requires an operator; the
-   [installation workflow](docs/operations/index.md#install-a-shell-only-node) describes the current steps.
-2. **Under the hood**: A completely open, scriptable node. Every capability serves a live route
-   manifest (`GET /routes`), speaks typed JSON over loopback HTTP, and stores state in queryable
-   SQLite files. Developers and operators can drive every workflow from the terminal (`sjel`,
-   `sjel capability call`), plug in local models, or automate tasks via standard UNIX tools
-   without touching the browser.
+1. **On the glass.** The native app is for daily life. A phone joins the Mac from a card that
+   appears when both are on the same network, and nobody in the household needs a terminal. Node
+   setup still needs an operator. The
+   [installation workflow](docs/operations/index.md#install-a-shell-only-node) lists the steps.
+2. **Under the hood.** Every capability serves a live route manifest (`GET /routes`), speaks typed
+   JSON over loopback HTTP, and keeps its state in SQLite. Every workflow runs from the terminal
+   too (`sjel`, `sjel capability call`), and local models plug in the same way.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  phone["iPhone app<br/>offline copy"] -- "signed requests<br/>same Wi-Fi · Tailscale · own server" --> node
-  web["Web browser"] --> node
+  phone["iPhone app (GPUI)<br/>local copy"] -- "signed requests<br/>same Wi-Fi · Tailscale · own server" --> node
+  mac["Mac app (GPUI)"] -- "loopback HTTP" --> node
   subgraph node["Node: a Mac or Linux machine"]
     core["Core<br/>entities · devices · data classes · pseudonymizer"]
-    ext["Extensions<br/>travel · money · people · home · calendar"]
+    ext["Capabilities<br/>travel · money · people · home · calendar · agent"]
   end
   node -- "device model → Mac model → fixed rules" --> models["Models"]
 ```
 
 1. One node, a Mac or a Linux machine, holds the data and accepts every write. Other devices send
-   changes to it. A phone edit made on an old copy is refused, and the phone shows both versions.
-2. A phone pairs once. It signs every request with its own key, whichever connection it uses.
+   changes to it. When the phone and the Mac both edit a note, the Mac refuses the phone's write,
+   and the phone keeps its text for the user to resolve.
+2. A phone pairs once. It signs every request with a key in its Keychain, whichever connection it
+   uses.
 3. Every value has a data class: Public, Mine, Others (facts about other people) or Secret. A class
    goes up by itself. Only a person, with a written reason, can lower it.
 4. Data about other people never reaches a cloud model (`libs/content-item`, `cloud_admission`).
-5. Home shows only what still waits for a decision.
+5. Today shows only what still waits for a decision.
 
 ## Design rule: clever inside, easy outside
 
@@ -117,22 +131,20 @@ smart. Using and maintaining it may not require that smartness.
 | Feature | State |
 |---|---|
 | Typed people, places, trips, money, home and calendar, with a source on every value | Built |
-| iPhone app with an offline copy, paired by device key | Client, outbox and pairing paths implemented; clean-device onboarding and offline timing remain unmeasured. See [dashboard contracts](dashboard/README.md). |
-| Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented; listener, credentials and deployment setup are required. |
-| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate; [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
+| Native Mac app (GPUI) | Built. Most pages are ported. See [Where it stands](#where-it-stands). |
+| Native iPhone app (GPUI) with a local copy, paired by device key | Built and on TestFlight. Tabs: Today, Inbox, Calendar, People, Travel. Documents and Mail are planned. Offline timing is not measured. |
+| Sjel agent on the phone: sessions, approvals, three access tiers, a command policy | Built, not yet tested on a device ([`agent.md`](docs/plans/agent.md)). |
+| Terminal on the Mac from the phone, behind Face ID | Built, not yet tested on a device. |
+| Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented. Listener, credentials and deployment setup are required. |
+| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
-| Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented; available models depend on the device and configured services. |
-| Assistant that proposes actions and asks before anything that leaves Sjel or cannot be undone | Partly built. Agent writes follow the configured per-capability mode; confirmation is not a universal default. The drawer sends unrouted questions down the model ladder. |
-| Mac app | Menu bar companion in `apps/mac`; native desktop and iOS work in [the GPUI workspace](apps/gpui/README.md). The web dashboard remains available. |
-| Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives, Calendar packages and native iOS archives. First-run setup, app package installation and clean-user acceptance remain open in the ISA. See [release preparation](docs/operations/index.md#release-preparation-and-later-testing). |
+| Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented. Available models depend on the device and configured services. |
+| Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives and native iOS archives. First-run setup and a clean-user install remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
 | iCloud connection, encrypted by Sjel | Relay built and tested (`apps/mac`). Nothing syncs through it yet. |
 
-## Try it
+## Install
 
-The [live demo](https://larsboes.github.io/Sjel/) runs the web interface on synthetic data. No
-install needed.
-
-To prepare a source-based node installation on macOS or Linux:
+There is no packaged release yet. To prepare a source-based node on macOS or Linux:
 
 ~~~sh
 git clone https://github.com/larsboes/Sjel.git
@@ -141,10 +153,19 @@ tools/install.sh
 ~~~
 
 Setup creates or connects private configuration outside this repository and offers capability
-selection. It does not complete browser login or guarantee a built, running dashboard. Follow
-the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node) for
-prerequisites, the web build, authentication, startup and reboot checks. Optional capabilities
-are enabled separately; enabling one does not start it or remove unused code from the checkout.
+selection. Follow the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
+for prerequisites, authentication, startup and reboot checks. Enabling an optional capability does
+not start it or remove unused code from the checkout.
+
+Then build the Mac app:
+
+~~~sh
+cd apps/gpui
+./install    # ~/Applications/Sjel Desktop.app
+~~~
+
+The iPhone app is on TestFlight for invited testers. `apps/gpui/ios/run-sim` runs it in the iOS
+Simulator. See [the GPUI README](apps/gpui/README.md#workspace-and-the-ios-app).
 
 ## Measured
 
@@ -155,48 +176,50 @@ Each number names the command that reproduces it.
 | Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p sjel-comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
 | Redaction recall, destructive path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | the same command without `--pseudonymized` |
 | Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
+| Mac app start and memory | First frame under 10 ms, about 100 MB resident, against about 220–300 MB for the Tauri and WKWebView pair | `SJEL_GPUI_FRAMES` and `ps -o rss=`, see `apps/gpui/src/frames.rs` |
 
 The redaction corpus (24 fixtures) lives in the private settings, so its two rows cannot be re-run
 from a public clone. The relevance corpus is public
-(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3. Offline use and pairing
-time are not measured yet.
+(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3. The Mac app numbers
+have no recorded date. Offline use and pairing time are not measured yet.
 
-Run `sjel test` and `cargo test --workspace --locked` for current test results; this page does
+Run `sjel test` and `cargo test --workspace --locked` for current test results. This page does
 not establish that the current checkout passes. See [installation footprint](docs/operations/index.md#installation-footprint)
 for the measured shell artifacts and what that inventory excludes.
 
 ## Structure
 
-An extension is a directory under `capabilities/` with a `service.toml`. `sjel capability list`
+A capability is a directory under `capabilities/` with a `service.toml`. `sjel capability list`
 shows the ones on this machine.
 
 | Part | Contents |
 |---|---|
-| Core | `capabilities/entities`, `capabilities/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server`, `dashboard/src/lib/intelligence` |
+| Core | `capabilities/entities`, `capabilities/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server` |
+| Apps | `apps/gpui` (Mac and iPhone, Rust and GPUI), `apps/mac` (Swift menu bar and CloudKit relay), `dashboard` (SvelteKit and Tauri, retiring) |
+| Agent | `agent`, `assistant`, `agentbox`, `packs` |
 | Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |
 | Money | `finance`, `finance-prices` |
-| Home | `interior`, `soundscape` |
-| Time and knowledge | `calendar`, `comms`, `knowledge-base`, `knowledge-graph`, `vault` |
-| Machines | `host-patch`, `host-watch`, `host-net`, `macmon`, `backup`, `container-refresh` |
-| Interfaces | `dashboard` (web and iPhone), `sjel-status` (the node's web server) |
+| Home | `inventory`, `interior`, `soundscape` |
+| Time and knowledge | `calendar`, `projects`, `comms`, `documents`, `knowledge-base`, `knowledge-graph`, `vault` |
+| Machines | `sjel-status` (the node's HTTP host), `host-patch`, `host-watch`, `host-net`, `macmon`, `backup`, `software` |
 
 ## Scope
 
 - **One household, one node.** Each household runs its own Sjel node. Its members use paired
   devices, and one operator runs the node.
 - **Devices reach the node directly**, over the same Wi-Fi, Tailscale or the household's own
-  HTTPS server. Sjel polls outside services; none of them calls in.
+  HTTPS server. Sjel polls outside services. None of them calls in.
 - **The models the devices already have.** A task runs on the device's model, then the Mac's,
   then fixed rules ([product rule 1](CONTRIBUTING.md#product-rules)). A cloud model receives only
   what rule 4 admits.
 - **Structured facts and the work on them.** Sjel stores people, places, trips, money, home,
-  calendar, projects and tasks. Prose stays in Obsidian and photos stay in the photo library;
+  calendar, projects and tasks. Prose stays in Obsidian and photos stay in the photo library.
   Sjel links to them.
 - **Other services through their own authorization**, an API token or an OAuth grant, kept in the
   user's secret store.
 - **First-party capabilities**, from this repository or the deployment's own overlay.
-- **Platforms:** macOS, Linux and iOS.
+- **Platforms:** macOS and iOS for the app. The node also runs on Linux.
 
 ## Research
 

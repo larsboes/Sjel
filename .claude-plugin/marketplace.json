@@ -26,6 +26,10 @@
       "source": "design"
     },
     {
+      "name": "gcp",
+      "source": "gcp"
+    },
+    {
       "name": "harness",
       "source": "harness"
     },
@@ -40,6 +44,14 @@
     {
       "name": "security",
       "source": "security"
+    },
+    {
+      "name": "system-tools",
+      "source": "system-tools"
+    },
+    {
+      "name": "technical-precision",
+      "source": "technical-precision"
     },
     {
       "name": "writing",

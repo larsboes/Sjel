@@ -1,0 +1,9 @@
+{
+  "name": "gcp",
+  "description": "Use Google Cloud CLI tools for authenticated project and service operations.",
+  "author": {
+    "name": "Lars Boes",
+    "url": "https://github.com/larsboes/Sjel"
+  },
+  "license": "MIT"
+}

@@ -68,6 +68,8 @@ struct Options {
 /// What this machine's enabled set satisfies, resolved once per run.
 #[derive(Debug, Default)]
 struct Deployment {
+    /// An overlay exists on disk. A repository-only checkout has none.
+    overlay: bool,
     capabilities: Vec<String>,
     /// `capability-field:` names some enabled capability declares, in discovery order. The
     /// order is what the report's header line prints, so it is kept rather than sorted.
@@ -425,6 +427,7 @@ fn resolve_deployment(
         }
     }
     Deployment {
+        overlay: paths.overlay_root.as_deref().is_some_and(Path::is_dir),
         capabilities,
         active_fields,
     }
@@ -447,6 +450,9 @@ fn entry_scope(needed_by: &[String], workflow: &str, d: &Deployment) -> Option<S
             // requirement is that the capability exists here at all. Added after macmon was
             // enabled without its binary and this check reported 0 missing throughout.
             d.capabilities.iter().any(|a| a == c)
+        } else if s == "overlay" {
+            // Tools that provision or read a deployment, such as the secret store's CLI.
+            d.overlay
         } else if s == "core" {
             true
         } else {
@@ -591,6 +597,7 @@ mod tests {
 
     fn deployment(caps: &[&str], fields: &[&str]) -> Deployment {
         Deployment {
+            overlay: true,
             capabilities: caps.iter().map(|s| (*s).to_owned()).collect(),
             active_fields: fields.iter().map(|s| (*s).to_owned()).collect(),
         }
@@ -599,6 +606,14 @@ mod tests {
     fn scope(tokens: &[&str], workflow: &str, d: &Deployment) -> Option<String> {
         let v: Vec<String> = tokens.iter().map(|s| (*s).to_owned()).collect();
         entry_scope(&v, workflow, d)
+    }
+
+    #[test]
+    fn the_overlay_scope_follows_whether_an_overlay_exists() {
+        let mut d = deployment(&[], &[]);
+        assert_eq!(scope(&["overlay"], "", &d), None);
+        d.overlay = false;
+        assert_eq!(scope(&["overlay"], "", &d).as_deref(), Some("overlay"));
     }
 
     #[test]

@@ -1,0 +1,39 @@
+#!/bin/bash
+# tools/cloud-session-start — prepare a cloud agent container for work on this repository.
+#
+# Runs from the SessionStart hook in .claude/settings.json. Does nothing outside a cloud
+# session (CLAUDE_CODE_REMOTE=true), so a workstation is never changed by it. Idempotent:
+# each step checks before it acts, and a failed step is reported without stopping the others.
+#
+#   1. Installs the required host tools the container image lacks (toolchain.toml).
+#   2. Deploys the Pack profile in SJEL_CLOUD_PROFILE (default: repository) to Claude Code.
+#
+# The doctor recognises the container itself as a repository checkout (no overlay).
+# Progress goes to stderr: SessionStart stdout becomes session context.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
+
+[ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+failed=0
+say() { echo "cloud-session-start: $*" >&2; }
+
+if ! command -v fd >/dev/null 2>&1; then
+  if ! command -v fdfind >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq >/dev/null 2>&1
+    apt-get install -y -qq fd-find >/dev/null 2>&1 || { say "fd-find install failed"; failed=1; }
+  fi
+  if command -v fdfind >/dev/null 2>&1; then
+    mkdir -p "$HOME/.local/bin" && ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+  fi
+fi
+
+profile="${SJEL_CLOUD_PROFILE:-repository}"
+if ! "$SJEL_ROOT/tools/packs-claude" use "$profile" >/dev/null; then
+  say "Pack profile '$profile' did not deploy; run tools/packs-claude use $profile"
+  failed=1
+fi
+
+[ "$failed" -eq 0 ] && say "ready (Pack profile: $profile)"
+exit 0

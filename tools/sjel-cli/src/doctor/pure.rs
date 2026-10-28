@@ -79,6 +79,7 @@ pub fn is_sweep_exempt(rel: &str, text: &str) -> bool {
         "tools/lib/paths.sh"
             | "tools/install.sh"
             | "tools/doctor.test.ts"
+            | "tools/check-publication-hygiene.test.sh"
             | "tools/sjel-cli/src/doctor/pure.rs"
     ) {
         return true;
@@ -89,6 +90,22 @@ pub fn is_sweep_exempt(rel: &str, text: &str) -> bool {
     static P: OnceLock<Regex> = OnceLock::new();
     let head: Vec<&str> = text.split('\n').take(6).collect();
     re(&P, r"(?i)auto-generated\b").is_match(&head.join("\n"))
+}
+
+/// Why this checkout counts as repository-only: no overlay, and the environment names itself a
+/// development checkout. `None` keeps a missing overlay a failure, so a deployment that lost its
+/// overlay never passes as a development checkout.
+pub fn repository_checkout_signal(var: impl Fn(&str) -> Option<String>) -> Option<&'static str> {
+    let is = |name: &str, want: &str| var(name).is_some_and(|v| v.trim() == want);
+    if is("SJEL_CHECKOUT", "repository") {
+        Some("SJEL_CHECKOUT=repository")
+    } else if is("CLAUDE_CODE_REMOTE", "true") {
+        Some("CLAUDE_CODE_REMOTE=true")
+    } else if is("CI", "true") {
+        Some("CI=true")
+    } else {
+        None
+    }
 }
 
 /// The prefixes a why-block reference may be written against, derived from tracked files: an
@@ -1525,6 +1542,34 @@ mod tests {
         );
     }
 
+    // ---- repositoryCheckoutSignal
+
+    #[test]
+    fn a_development_environment_names_itself_and_nothing_else_does() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| {
+                pairs
+                    .iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| (*v).to_owned())
+            }
+        };
+        assert_eq!(repository_checkout_signal(env(&[])), None);
+        assert_eq!(
+            repository_checkout_signal(env(&[("CLAUDE_CODE_REMOTE", "true")])),
+            Some("CLAUDE_CODE_REMOTE=true")
+        );
+        assert_eq!(
+            repository_checkout_signal(env(&[("CI", "true"), ("SJEL_CHECKOUT", "repository")])),
+            Some("SJEL_CHECKOUT=repository")
+        );
+        assert_eq!(repository_checkout_signal(env(&[("CI", "1")])), None);
+        assert_eq!(
+            repository_checkout_signal(env(&[("SJEL_CHECKOUT", "deployment")])),
+            None
+        );
+    }
+
     // ---- isSweepExempt, whyBlockBases
 
     #[test]
@@ -1546,6 +1591,7 @@ mod tests {
             "tools/lib/paths.sh",
             "tools/install.sh",
             "tools/doctor.test.ts",
+            "tools/check-publication-hygiene.test.sh",
         ] {
             assert!(is_sweep_exempt(f, "~/Developer/example-overlay"));
         }

@@ -24,6 +24,7 @@ Check a change before pushing it:
   gates                          Run CI's repo gates here, from CI's own definition
   test                           Run CI's bun test and every tools/*.test.sh
   cargo <args...>                Run cargo against a scratch target dir and a scratch overlay
+  worktree new|list|remove       One branch and worktree per work package
 
 Operate capabilities:
   distribution verify <archive> --sha256 <digest>  Verify a release capability package without installing

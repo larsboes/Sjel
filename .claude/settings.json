@@ -1,0 +1,15 @@
+{
+  "autoMemoryEnabled": false,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/tools/cloud-session-start"
+          }
+        ]
+      }
+    ]
+  }
+}

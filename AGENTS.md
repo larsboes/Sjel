@@ -16,9 +16,10 @@ Before editing:
 
 Always:
 
-- Work directly on `main` until the official release. Do not create or switch branches unless
-  asked.
-- Other agent sessions edit this checkout at the same time. Never stash, revert, or overwrite
+- A small change goes straight to `main`. A work package gets its own branch and worktree
+  (`sjel worktree new <area>-<slug>`) and a draft PR that lands as a squash merge. Merge only when
+  the user said so. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
+- Other agent sessions edit the primary checkout at the same time. Never stash, revert, or overwrite
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never
   generate, expose, or change a secret without explicit authorization.
@@ -32,8 +33,8 @@ Always:
   [`docs/plans/tooling.md`](docs/plans/tooling.md) in its format. Do not leave the script only in
   `/tmp` or in the session.
 - Write a durable rule or decision into the repository: code, the skill that owns it, the area
-  plan in `docs/plans/`, or this file. Never into agent memory. On this machine, the untracked
-  `.claude/settings.json` sets `autoMemoryEnabled: false`.
+  plan in `docs/plans/`, or this file. Never into agent memory. The tracked `.claude/settings.json`
+  sets `autoMemoryEnabled: false`. Machine-specific settings go in `.claude/settings.local.json`.
 - Format replies for low cognitive load, per the `attention-control` skill: the result and its
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.

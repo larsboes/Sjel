@@ -872,16 +872,6 @@
     },
     {
       "from": "comms",
-      "to": "markdown-root",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/comms/Cargo.toml"
-      ]
-    },
-    {
-      "from": "comms",
       "to": "pseudonymize",
       "kinds": [
         "cargo-dep"
@@ -2889,6 +2879,10 @@
       "verdict": "quarry"
     },
     {
+      "name": "obsidian-web-clipper",
+      "verdict": "adopt"
+    },
+    {
       "name": "ocrs",
       "verdict": "inspiration"
     },
@@ -3029,10 +3023,6 @@
       "verdict": "reject"
     },
     {
-      "name": "serde_yaml_ng",
-      "verdict": "adopt"
-    },
-    {
       "name": "sha2",
       "verdict": "adopt"
     },
@@ -3162,6 +3152,10 @@
     },
     {
       "name": "yahoo-finance-chart",
+      "verdict": "adopt"
+    },
+    {
+      "name": "yaml_serde",
       "verdict": "adopt"
     },
     {

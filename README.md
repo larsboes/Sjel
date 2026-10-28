@@ -16,18 +16,6 @@
 </p>
 
 <p align="center">
-  <img alt="Finance in the Sjel Mac app, synthetic data" src=".github/assets/gpui-finance.png" width="90%">
-</p>
-
-<p align="center">
-  <img alt="People in the Sjel Mac app, synthetic data" src=".github/assets/gpui-people.png" width="44%">
-  &nbsp;
-  <img alt="The feed in the Sjel Mac app, synthetic data" src=".github/assets/gpui-feed.png" width="44%">
-</p>
-
-<p align="center"><sub>The GPUI Mac app on synthetic data from <code>tools/demo-shots</code>.</sub></p>
-
-<p align="center">
   <a href="#where-it-stands">Where it stands</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#install">Install</a> ·

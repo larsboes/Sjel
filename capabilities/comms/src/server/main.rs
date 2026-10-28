@@ -235,6 +235,16 @@ const ROUTES: &[route_manifest::Route] = &[
     r("POST", "/triage/sweep", "Pull one Gmail page; locally propose grounded calendar events and paid-receipt Finance candidates."),
     r(
         "POST",
+        "/triage/mail-evidence/replay",
+        "Mail evidence replay is disabled pending privacy validation.",
+    ),
+    r(
+        "GET",
+        "/triage/mail-evidence/status",
+        "Count indexed mail evidence scan outcomes without message content.",
+    ),
+    r(
+        "POST",
         "/triage/events/replay",
         "Replay up to 20 selected mail IDs through local grounded event analysis.",
     ),
@@ -458,6 +468,14 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route("/feed/{id}/data-class", post(feed_data_class_handler))
         .route("/triage/sweep", post(triage_sweep_handler))
         .route("/triage/events/replay", post(triage_events_replay_handler))
+        .route(
+            "/triage/mail-evidence/replay",
+            post(triage_mail_evidence_replay_handler),
+        )
+        .route(
+            "/triage/mail-evidence/status",
+            get(triage_mail_evidence_status_handler),
+        )
         .route("/triage/relevance/refresh", post(triage_relevance_handler))
         .route("/triage/redact", post(triage_redact_handler))
         .route(
@@ -542,7 +560,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("POST", "/feed/{id}/data-class"),
         ],
         get_writes: &[],
-        closed: &[],
+        closed: &[("POST", "/triage/mail-evidence/replay")],
     };
 
 #[tokio::main]
@@ -1076,5 +1094,6 @@ mod route_manifest_tests {
     fn the_manifest_covers_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("main.rs"), super::ROUTES);
         assert!(missing.is_empty(), "served but undocumented: {missing:?}");
+        assert!(super::AGENT_ROUTES.closes("POST", "/triage/mail-evidence/replay"));
     }
 }

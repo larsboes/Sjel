@@ -89,6 +89,12 @@ pub(super) struct EventReplayBody {
     ids: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct MailEvidenceReplayBody {
+    ids: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub(super) struct EventStatusQuery {
     ids: String,
@@ -220,6 +226,37 @@ pub(super) async fn triage_events_replay_handler(
     match result {
         Ok(Ok(report)) => (StatusCode::OK, Json(json!({"events":report}))),
         _ => error_response(StatusCode::INTERNAL_SERVER_ERROR, "event replay failed"),
+    }
+}
+
+pub(super) async fn triage_mail_evidence_replay_handler(
+    Json(body): Json<MailEvidenceReplayBody>,
+) -> HttpResponse {
+    if !comms::mail_evidence_scan::valid_batch(&body.ids) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "ids must contain 1 to 50 unique provider IDs",
+        );
+    }
+    error_response(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "mail evidence scanning is disabled pending privacy and retry validation",
+    )
+}
+
+pub(super) async fn triage_mail_evidence_status_handler() -> HttpResponse {
+    let result = tokio::task::spawn_blocking(move || {
+        let cfg = Config::load();
+        let store = Store::open(&cfg.database_path).map_err(|_| ())?;
+        store.mail_evidence_counts().map_err(|_| ())
+    })
+    .await;
+    match result {
+        Ok(Ok(counts)) => (StatusCode::OK, Json(json!({"mail_evidence": counts}))),
+        _ => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "mail evidence status unavailable",
+        ),
     }
 }
 
@@ -1896,6 +1933,32 @@ pub(super) async fn triage_reconcile_handler() -> HttpResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn mail_evidence_replay_rejects_invalid_batches_without_io() {
+        for ids in [
+            vec![],
+            vec!["same".to_string(), "same".to_string()],
+            vec!["invalid/id".to_string()],
+            (0..51).map(|n| format!("id{n}")).collect(),
+        ] {
+            let (status, _) =
+                triage_mail_evidence_replay_handler(Json(MailEvidenceReplayBody { ids })).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+        assert!(comms::mail_evidence_scan::valid_batch(
+            &(0..50).map(|n| format!("id{n}")).collect::<Vec<_>>()
+        ));
+        let (status, _) = triage_mail_evidence_replay_handler(Json(MailEvidenceReplayBody {
+            ids: vec!["valid-id".into()],
+        }))
+        .await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            serde_json::from_str::<MailEvidenceReplayBody>(r#"{"ids":["a"],"extra":true}"#)
+                .is_err()
+        );
+    }
 
     /// A temp file this test owns. The live store is never opened here: the
     /// rows below are fixtures, and `refresh_one_triage_class` writes.

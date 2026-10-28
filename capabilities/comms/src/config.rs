@@ -108,6 +108,22 @@ impl Default for FinanceContextConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
+pub struct InventoryContextConfig {
+    pub base_url: String,
+    pub timeout_ms: u64,
+}
+
+impl Default for InventoryContextConfig {
+    fn default() -> Self {
+        Self {
+            base_url: "http://127.0.0.1:8101".into(),
+            timeout_ms: 2_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct ProjectsContextConfig {
     /// Projects owns its tasks. Comms reads the tasks that carry a `watch` property and
     /// writes a matched mail through Projects' record routes (`task_links`).
@@ -263,6 +279,7 @@ struct FileConfig {
     calendar_context: Option<CalendarContextConfig>,
     finance_context: Option<FinanceContextConfig>,
     projects_context: Option<ProjectsContextConfig>,
+    inventory_context: Option<InventoryContextConfig>,
     #[serde(default)]
     vault_link_sources: Vec<VaultLinkSourceConfig>,
     feed_sources: Option<Vec<FeedSourceConfig>>,
@@ -384,6 +401,7 @@ pub struct Config {
     pub calendar_context: CalendarContextConfig,
     pub finance_context: FinanceContextConfig,
     pub projects_context: ProjectsContextConfig,
+    pub inventory_context: InventoryContextConfig,
     /// Explicit Markdown link sources. This is intentionally not a vault root:
     /// Scratchpad and other notes can contain credentials and admin URLs.
     pub vault_link_sources: Vec<VaultLinkSourceConfig>,
@@ -561,6 +579,7 @@ impl Config {
         let calendar_context = file.calendar_context.unwrap_or_default();
         let finance_context = file.finance_context.unwrap_or_default();
         let projects_context = file.projects_context.unwrap_or_default();
+        let inventory_context = file.inventory_context.unwrap_or_default();
         let quality_flags = file.quality_flags.unwrap_or_default();
         // Deliberately not `unwrap_or_default()`: "the operator has not decided"
         // and "the operator decided no" have to stay distinguishable, because
@@ -588,6 +607,7 @@ impl Config {
             calendar_context,
             finance_context,
             projects_context,
+            inventory_context,
             vault_link_sources,
             feed_sources,
             quality_flags,

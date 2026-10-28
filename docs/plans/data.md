@@ -4,6 +4,53 @@ Every file has one owner and one way in. Facts have one shape wherever they are 
 models and keys the machine depends on are visible from one place. After Lane A's restructure in
 [`PLAN.md`](../../PLAN.md).
 
+## Mail evidence for projects and inventory
+
+Decided 2026-10-28: scan existing indexed mail and new mail for evidence relevant to projects
+and household inventory. Recognition produces proposals, not direct changes. Delivery can
+suggest an item is owned; an order or shipment alone cannot. Cancellations and returns need
+review rather than silently changing an item.
+
+Project proposals target an existing project and can suggest evidence and task changes. They
+must not complete or reopen a task without approval. A project may link to a confirmed inventory
+item; a part or repair message is not by itself evidence of a new appliance. Inventory proposals
+can suggest a new item or a match to an existing item. Ambiguous matches require review.
+
+Comms analyzes eligible content locally and sends the owning capability a minimal source
+reference, short supporting excerpt and extracted fields. Do not persist full mail bodies. Apply
+existing data-class boundaries: c2 stays local and c3 never enters a prompt. The owner validates,
+stages and reviews each proposal, and applies approved changes through its own contract. Retain
+provenance, protect against stale target revisions and make repeated scans idempotent across
+messages and multi-item orders. The existing task watch in `capabilities/comms/src/task_links.rs`
+writes directly and is not the review queue.
+
+**Done when:** an existing-mail backfill and subsequent sweeps surface reviewable project and
+inventory proposals; approval or rejection survives retries; delivery, cancellation and return
+are distinguished; an approved project update links the right inventory item without creating a
+duplicate. Synthetic tests cover duplicate messages, multiple order lines, ambiguous matches,
+stale edits and c2/c3 boundaries. Gmail stores triage at thread level; classify each message
+before prompting, and honor a stricter thread-level classification. Verify the end-to-end flow
+with real eligible mail locally; no such verification has run yet.
+
+**Built:** the review queues and contracts. Comms stages nothing on its own yet.
+
+- Inventory stages source-linked proposals and keeps a reviewed decision. Delivery can create an
+owned item; a match records provenance against the item and state revisions the reviewer saw.
+`inv:` references are reversible and resolve through Inventory's own endpoint.
+- Projects stages evidence against an existing live project, appends a reviewed excerpt into a
+chosen record atomically with the decision, and stores reviewer-confirmed `inv:` links that
+answer `GET /api/links`.
+- The GPUI app reviews both queues and adds or removes project–inventory links; nothing is applied
+without an explicit decision.
+
+**Open:** scanning and replay are disabled. The scanner classifies the whole message body, refuses
+`c3` before any prompt, re-checks the indexed class before handoff and deduplicates quoted lines.
+Still open: prompt context for project names is not class-filtered, because `/api/projects`
+exposes no data class; a class change between that check and the owner write is not atomic; and no
+real-mail or end-to-end validation has run. Inventory items do not carry a data class, so a `c2`
+proposal can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on a
+`c1` record. Enable scanning only after those gaps are closed.
+
 ## 1. Import
 
 Measured 2026-10-23 with `sjel-import plan /Volumes/Extreme/archive` (25,348 entries) and the

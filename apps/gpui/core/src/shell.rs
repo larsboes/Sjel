@@ -689,6 +689,104 @@ pub struct ProjectRecord {
     pub priority: u8,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectMailProposal {
+    pub id: i64,
+    pub version: i64,
+    pub project: String,
+    pub title: String,
+    pub evidence: String,
+    pub source_id: String,
+    pub data_class: String,
+    pub task_suggestion: Option<String>,
+    pub status: String,
+}
+
+impl ProjectMailProposal {
+    pub fn gmail_url(&self) -> Option<String> {
+        let mut parts = self.source_id.split(':');
+        let (Some("mail"), Some("v1"), Some(thread), Some(message), None) = (
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+        ) else {
+            return None;
+        };
+        let valid = |id: &str| {
+            !id.is_empty()
+                && id.len() <= 120
+                && id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+        };
+        (valid(thread) && valid(message))
+            .then(|| format!("https://mail.google.com/mail/u/0/#all/{thread}"))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectMailPage {
+    pub proposals: Vec<ProjectMailProposal>,
+    pub limit: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectMailTarget {
+    pub path: String,
+    pub title: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectInventoryLink {
+    pub record_path: String,
+    pub item_ref: String,
+    pub verified_revision: i64,
+    pub reviewed_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectLinkRecord {
+    pub path: String,
+    pub title: String,
+    pub content: String,
+    pub updated_at: String,
+    pub kind: String,
+    pub archived: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct InventoryIdentity {
+    pub typed_ref: String,
+    pub raw_id: String,
+    pub revision: i64,
+    pub state: Option<String>,
+}
+
+pub fn inventory_reference(id: &str) -> Option<String> {
+    if id.is_empty() || id.len() > 256 {
+        return None;
+    }
+    const HEX: &[u8] = b"0123456789abcdef";
+    let mut result = String::with_capacity(4 + id.len() * 2);
+    result.push_str("inv:");
+    for byte in id.bytes() {
+        result.push(HEX[(byte >> 4) as usize] as char);
+        result.push(HEX[(byte & 15) as usize] as char);
+    }
+    Some(result)
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectMailDecision {
+    pub applied: bool,
+    pub rendered: bool,
+    pub target_path: Option<String>,
+    pub render_error: Option<String>,
+}
+
 /// One task across projects (`GET /projects/api/tasks`, and the reply to every task write).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct GlobalTask {
@@ -3184,6 +3282,92 @@ impl Shell {
         .map(drop)
     }
 
+    pub async fn project_inventory_links(
+        &self,
+        path: &str,
+    ) -> ShellResult<Vec<ProjectInventoryLink>> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            links: Vec<ProjectInventoryLink>,
+        }
+        let path = with_query("/projects/api/inventory-links", &[("path", path)]);
+        let result: Envelope = self.json(Method::GET, &path, None, 10).await?;
+        Ok(result.links)
+    }
+
+    pub async fn project_link_record(&self, path: &str) -> ShellResult<ProjectLinkRecord> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            record: ProjectLinkRecord,
+        }
+        let path = with_query("/projects/api/record", &[("path", path)]);
+        let result: Envelope = self.json(Method::GET, &path, None, 10).await?;
+        Ok(result.record)
+    }
+
+    pub async fn inventory_identity(&self, reference: &str) -> ShellResult<InventoryIdentity> {
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["inventory", "api", "item-refs", reference]);
+        self.json(Method::GET, url.path(), None, 10).await
+    }
+
+    pub async fn project_inventory_link_decision(
+        &self,
+        remove: bool,
+        project: &str,
+        record: &ProjectLinkRecord,
+        item_ref: &str,
+    ) -> ShellResult<bool> {
+        #[derive(Deserialize)]
+        struct Result {
+            changed: bool,
+        }
+        let path = if remove {
+            "/projects/api/inventory-links/remove"
+        } else {
+            "/projects/api/inventory-links"
+        };
+        let result: Result = self.json(Method::POST, path, Some(serde_json::json!({"project": project, "path": record.path, "base": record.content, "updated_at": record.updated_at, "item_ref": item_ref, "reviewed": true})), 10).await?;
+        Ok(result.changed)
+    }
+
+    pub async fn project_mail_proposals(
+        &self,
+        before: Option<i64>,
+    ) -> ShellResult<ProjectMailPage> {
+        let path = before.map_or_else(
+            || "/projects/api/mail-proposals".to_owned(),
+            |id| format!("/projects/api/mail-proposals?before={id}"),
+        );
+        self.json(Method::GET, &path, None, 10).await
+    }
+
+    pub async fn project_mail_target(&self, path: &str) -> ShellResult<ProjectMailTarget> {
+        #[derive(Deserialize)]
+        struct One {
+            record: ProjectMailTarget,
+        }
+        let path = with_query("/projects/api/record", &[("path", path)]);
+        let one: One = self.json(Method::GET, &path, None, 10).await?;
+        Ok(one.record)
+    }
+
+    pub async fn project_mail_decision(
+        &self,
+        id: i64,
+        body: serde_json::Value,
+    ) -> ShellResult<ProjectMailDecision> {
+        self.json(
+            Method::POST,
+            &format!("/projects/api/mail-proposals/{id}/decision"),
+            Some(body),
+            10,
+        )
+        .await
+    }
+
     pub async fn projects(&self) -> ShellResult<Vec<ProjectSummary>> {
         #[derive(Deserialize)]
         struct List {
@@ -3513,6 +3697,41 @@ impl Shell {
 
     pub async fn software_apps(&self) -> ShellResult<SoftwareApps> {
         self.json(Method::GET, "/software/api/apps", None, 10).await
+    }
+
+    pub async fn inventory_mail_proposals(
+        &self,
+    ) -> ShellResult<Vec<crate::inventory::MailProposal>> {
+        let result: crate::inventory::MailProposals = self
+            .json(Method::GET, "/inventory/api/mail-proposals", None, 10)
+            .await?;
+        Ok(result.proposals)
+    }
+
+    pub async fn inventory_mail_snapshot(
+        &self,
+        id: &str,
+    ) -> ShellResult<crate::inventory::MailMatchSnapshot> {
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["inventory", "api", "items", id, "mail-match-snapshot"]);
+        self.json(Method::GET, url.path(), None, 10).await
+    }
+
+    pub async fn inventory_mail_decision(
+        &self,
+        id: i64,
+        body: serde_json::Value,
+    ) -> ShellResult<()> {
+        self.send(
+            Method::POST,
+            &format!("/inventory/api/mail-proposals/{id}/decision"),
+            Some(body),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     pub async fn inventory_rows(&self) -> ShellResult<Vec<crate::inventory::InventoryRow>> {
@@ -5643,6 +5862,45 @@ pub(crate) fn error_text(body: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_inventory_link_types_require_review_revisions() {
+        assert_eq!(inventory_reference("a:é").as_deref(), Some("inv:613ac3a9"));
+        assert!(inventory_reference("").is_none());
+        assert!(inventory_reference(&"x".repeat(257)).is_none());
+        let record: ProjectLinkRecord = serde_json::from_value(serde_json::json!({"path":"P/P.md","title":"P","content":"  exact\n","updated_at":"stamp","kind":"project","archived":false})).unwrap();
+        assert_eq!(record.content, "  exact\n");
+        assert!(serde_json::from_value::<ProjectLinkRecord>(serde_json::json!({"path":"P/P.md","title":"P","content":"x","kind":"project","archived":false})).is_err());
+        let link: ProjectInventoryLink = serde_json::from_value(serde_json::json!({"record_path":"P/P.md","item_ref":"inv:61","verified_revision":4,"reviewed_at":"stamp","provenance":"operator_review"})).unwrap();
+        assert_eq!(link.item_ref, "inv:61");
+    }
+
+    #[test]
+    fn project_mail_contract_preserves_content_and_render_failure() {
+        let page: ProjectMailPage = serde_json::from_value(serde_json::json!({"limit": 500, "proposals": [{
+            "id": 8, "version": 1, "project": "P", "title": "T", "evidence": "quoted\ntext",
+            "source_id": "mail:v1:thread-1:message_2", "data_class": "c2", "task_suggestion": "follow up", "status": "pending"
+        }]})).unwrap();
+        assert_eq!(
+            page.proposals[0].gmail_url().as_deref(),
+            Some("https://mail.google.com/mail/u/0/#all/thread-1")
+        );
+        let mut proposal = page.proposals[0].clone();
+        proposal.source_id = "mail:v1:../evil:message".into();
+        assert!(proposal.gmail_url().is_none());
+        let target: ProjectMailTarget = serde_json::from_value(
+            serde_json::json!({"path":"P/P.md", "title":"P", "content":"  base\n"}),
+        )
+        .unwrap();
+        assert_eq!(target.content, "  base\n");
+        assert!(serde_json::from_value::<ProjectMailTarget>(
+            serde_json::json!({"path":"P/P.md", "title":"P"})
+        )
+        .is_err());
+        let result: ProjectMailDecision = serde_json::from_value(serde_json::json!({"applied": true, "rendered": false, "target_path":"P/P.md", "render_error":"disk full"})).unwrap();
+        assert!(result.applied && !result.rendered);
+        assert_eq!(result.render_error.as_deref(), Some("disk full"));
+    }
 
     #[test]
     fn a_refusal_keeps_its_reason_in_json_or_text() {

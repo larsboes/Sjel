@@ -1,9 +1,10 @@
 //! The Projects page: pick a project, view tasks and notes, edit them in place.
 
+use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::{Sizable, WindowExt};
+use gpui_kit::component::{Disableable, Sizable, WindowExt};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FontWeight, SharedString,
     Subscription, Window,
@@ -19,7 +20,8 @@ use crate::tasks::{self, TaskFilter};
 use crate::theme::{tint, Density, Palette};
 use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
-    self, GlobalNote, GlobalTask, ProjectRecord, ProjectSummary, ShellError,
+    self, GlobalNote, GlobalTask, ProjectInventoryLink, ProjectLinkRecord, ProjectMailProposal,
+    ProjectMailTarget, ProjectRecord, ProjectSummary, ShellError,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,6 +36,15 @@ pub enum ProjectSection {
     Note,
     Tasks,
     Notes,
+    MailReview,
+    InventoryLinks,
+}
+
+struct LinkReview {
+    record: ProjectLinkRecord,
+    item_ref: String,
+    item_label: String,
+    remove: bool,
 }
 
 /// The widths the record tables give their columns. `None` drops the column: a phone is too
@@ -152,6 +163,21 @@ pub struct Projects {
     notes_search_input: Option<(Entity<InputState>, Subscription)>,
     /// The open project and its records. The records carry no content: the editor reads one.
     project: Option<(String, Remote<Vec<ProjectRecord>>)>,
+    mail: Remote<Vec<ProjectMailProposal>>,
+    mail_cursor: Option<i64>,
+    mail_more: bool,
+    mail_selected: Option<ProjectMailProposal>,
+    mail_target: Option<ProjectMailTarget>,
+    mail_target_loading: bool,
+    mail_busy: bool,
+    mail_message: Option<String>,
+    link_path: Option<String>,
+    links: Remote<Vec<ProjectInventoryLink>>,
+    link_items: Remote<Vec<sjel_gpui_core::inventory::InventoryRow>>,
+    link_review: Option<LinkReview>,
+    link_busy: bool,
+    link_message: Option<String>,
+    link_generation: u64,
     editor: Option<Entity<NoteEditor>>,
     /// The note being read before its editor can open.
     opening: Option<String>,
@@ -195,6 +221,21 @@ impl Projects {
             notes_search_query: String::new(),
             notes_search_input: None,
             project: None,
+            mail: Remote::default(),
+            mail_cursor: None,
+            mail_more: false,
+            mail_selected: None,
+            mail_target: None,
+            mail_target_loading: false,
+            mail_busy: false,
+            mail_message: None,
+            link_path: None,
+            links: Remote::default(),
+            link_items: Remote::default(),
+            link_review: None,
+            link_busy: false,
+            link_message: None,
+            link_generation: 0,
             editor: None,
             opening: None,
             failed: None,
@@ -439,6 +480,19 @@ impl Projects {
 
     pub fn open_project(&mut self, name: String, cx: &mut Context<Self>) {
         self.project = Some((name.clone(), Remote::new_loading()));
+        self.mail = Remote::default();
+        self.mail_cursor = None;
+        self.mail_more = false;
+        self.mail_selected = None;
+        self.mail_target = None;
+        self.mail_message = None;
+        self.link_generation = self.link_generation.wrapping_add(1);
+        self.link_path = None;
+        self.link_review = None;
+        self.links = Remote::default();
+        self.link_items = Remote::default();
+        self.link_busy = false;
+        self.link_message = None;
         self.project_section = ProjectSection::Note;
         self.editor = None;
         self.opening = None;
@@ -458,6 +512,732 @@ impl Projects {
             });
         })
         .detach();
+    }
+
+    fn load_project_mail(&mut self, more: bool, cx: &mut Context<Self>) {
+        if self.mail.loading || self.mail_busy {
+            return;
+        }
+        let Some((project, _)) = &self.project else {
+            return;
+        };
+        let project = project.clone();
+        let before = if more { self.mail_cursor } else { None };
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                let error = if self.repo.is_replica() {
+                    ShellError::Store("Mail review needs an owner-authenticated local shell, which is unavailable on this device.".into())
+                } else {
+                    error
+                };
+                self.mail.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        self.mail.loading = true;
+        self.mail.error = None;
+        if !more {
+            self.mail.value = None;
+            self.mail_cursor = None;
+            self.mail_more = false;
+        }
+        let work = shell::run(async move { shell.project_mail_proposals(before).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str()) {
+                    return;
+                }
+                match result {
+                    Ok(page) => {
+                        view.mail_more = page.limit > 0 && page.proposals.len() == page.limit;
+                        view.mail_cursor = page.proposals.last().map(|p| p.id);
+                        let mut proposals = if more {
+                            view.mail.value.take().unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        };
+                        proposals.extend(
+                            page.proposals
+                                .into_iter()
+                                .filter(|p| p.project == project && p.status == "pending"),
+                        );
+                        view.mail.settle(Ok(proposals));
+                    }
+                    Err(error) => view.mail.settle(Err(error)),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn select_mail_target(&mut self, path: String, cx: &mut Context<Self>) {
+        if self.mail_busy || self.mail_target_loading {
+            return;
+        }
+        let Some(proposal) = &self.mail_selected else {
+            return;
+        };
+        let proposal_id = proposal.id;
+        let project = proposal.project.clone();
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.mail_message = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        self.mail_target = None;
+        self.mail_target_loading = true;
+        self.mail_message = None;
+        let work = shell::run(async move { shell.project_mail_target(&path).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.mail_target_loading = false;
+                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str())
+                    || view.mail_selected.as_ref().map(|p| p.id) != Some(proposal_id)
+                {
+                    cx.notify();
+                    return;
+                }
+                match result {
+                    Ok(target) => view.mail_target = Some(target),
+                    Err(error) => {
+                        view.mail_message = Some(format!("Could not read target: {error}"))
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn decide_project_mail(&mut self, approve: bool, cx: &mut Context<Self>) {
+        if self.mail_busy
+            || self.mail.loading
+            || self.mail_target_loading
+            || self.mail.error.is_some()
+        {
+            return;
+        }
+        let Some(proposal) = &self.mail_selected else {
+            return;
+        };
+        let body = if approve {
+            let Some(target) = &self.mail_target else {
+                self.mail_message = Some("Select and review an existing target first.".into());
+                cx.notify();
+                return;
+            };
+            serde_json::json!({"version": proposal.version, "decision": "approve", "target_path": target.path, "base": target.content})
+        } else {
+            serde_json::json!({"version": proposal.version, "decision": "reject"})
+        };
+        let project = proposal.project.clone();
+        let id = proposal.id;
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.mail_message = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        self.mail_busy = true;
+        self.mail_message = None;
+        let work = shell::run(async move { shell.project_mail_decision(id, body).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.mail_busy = false;
+                if let Ok(outcome) = &result {
+                    if let Some(path) = &outcome.target_path { view.repo.notes().forget(path); }
+                }
+                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str()) { cx.notify(); return; }
+                match result {
+                    Ok(outcome) => {
+                        view.mail_selected = None;
+                        view.mail_target = None;
+                        view.mail_message = Some(if outcome.applied && !outcome.rendered {
+                            format!("Evidence was saved, but rendering failed: {}", outcome.render_error.as_deref().unwrap_or("unknown rendering error"))
+                        } else if outcome.applied { "Evidence approved and saved. The suggested task was not created.".into() }
+                        else if !approve { "Proposal rejected.".into() }
+                        else { "The server did not report an applied approval. Refresh before reviewing again.".into() });
+                        view.refresh_records(cx);
+                        view.load_project_mail(false, cx);
+                    }
+                    Err(error @ ShellError::Refused(409, _)) => {
+                        view.mail_selected = None;
+                        view.mail_target = None;
+                        view.mail_message = Some(format!("Decision refused: {error}. Refresh and review the proposal and target again."));
+                        view.load_project_mail(false, cx);
+                    }
+                    Err(error) => {
+                        view.mail_selected = None;
+                        view.mail_target = None;
+                        view.mail_message = Some(format!("Decision result unavailable: {error}. The server may have applied it; refresh before retrying."));
+                        view.load_project_mail(false, cx);
+                    },
+                }
+                cx.notify();
+            });
+        }).detach();
+        cx.notify();
+    }
+
+    fn render_project_mail(
+        &self,
+        records: &Remote<Vec<ProjectRecord>>,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_3()
+            .child(div().text_lg().child("Mail review"));
+        if self.mail.loading {
+            body = body.child("Loading mail proposals…");
+        }
+        if let Some(error) = &self.mail.error {
+            body = body
+                .child(
+                    div()
+                        .text_color(rgb(palette.red))
+                        .child(format!("Could not load mail proposals: {error}")),
+                )
+                .child(
+                    Button::new("project-mail-retry")
+                        .small()
+                        .label("Retry")
+                        .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(false, cx))),
+                );
+        }
+        if let Some(message) = &self.mail_message {
+            body = body.child(div().text_sm().child(message.clone()));
+        }
+        if let Some(proposal) = &self.mail_selected {
+            let mut detail = div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_3()
+                .border_1()
+                .border_color(rgba(palette.border))
+                .child(
+                    div()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(proposal.title.clone()),
+                )
+                .child(format!(
+                    "Classification: {} · Version: {}",
+                    proposal.data_class, proposal.version
+                ))
+                .child(format!("Source: {}", proposal.source_id))
+                .child("Evidence (exact)")
+                .child(proposal.evidence.clone())
+                .child(format!(
+                    "Task suggestion (not applied): {}",
+                    proposal.task_suggestion.as_deref().unwrap_or("none")
+                ));
+            if let Some(url) = proposal.gmail_url() {
+                detail = detail.child(
+                    Button::new("project-mail-source")
+                        .small()
+                        .label("Open source in Gmail")
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                );
+            }
+            detail = detail.child("Select an existing project record:");
+            if records.loading {
+                detail = detail.child("Loading project records…");
+            }
+            if let Some(error) = &records.error {
+                detail = detail.child(format!("Could not load records: {error}"));
+            }
+            if let Some(rows) = &records.value {
+                for record in rows {
+                    let path = record.path.clone();
+                    detail = detail.child(
+                        Button::new(format!("mail-target-{path}"))
+                            .small()
+                            .label(format!("{} · {}", record.title, record.path))
+                            .disabled(self.mail_busy || self.mail_target_loading)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.select_mail_target(path.clone(), cx)
+                            })),
+                    );
+                }
+                if rows.is_empty() {
+                    detail = detail.child("No existing records are available.");
+                }
+            }
+            if self.mail_target_loading {
+                detail = detail.child("Loading the target's exact content…");
+            }
+            if let Some(target) = &self.mail_target {
+                detail = detail
+                    .child(format!(
+                        "Selected target: {} · {}",
+                        target.title, target.path
+                    ))
+                    .child("Exact current content (approval requires this unchanged):")
+                    .child(target.content.clone())
+                    .child(
+                        Button::new("project-mail-approve")
+                            .small()
+                            .primary()
+                            .label("Confirm approval and append evidence")
+                            .disabled(
+                                self.mail_busy || self.mail.loading || self.mail.error.is_some(),
+                            )
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.decide_project_mail(true, cx)),
+                            ),
+                    );
+            }
+            detail = detail
+                .child(
+                    Button::new("project-mail-reject")
+                        .small()
+                        .label("Reject proposal")
+                        .disabled(self.mail_busy || self.mail.loading || self.mail.error.is_some())
+                        .on_click(
+                            cx.listener(|view, _, _, cx| view.decide_project_mail(false, cx)),
+                        ),
+                )
+                .child(
+                    Button::new("project-mail-close")
+                        .small()
+                        .ghost()
+                        .label("Close review")
+                        .disabled(self.mail_busy || self.mail_target_loading)
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.mail_selected = None;
+                            view.mail_target = None;
+                            cx.notify();
+                        })),
+                );
+            body = body.child(detail);
+        }
+        if let Some(proposals) = &self.mail.value {
+            if proposals.is_empty() {
+                body = body.child(if self.mail_more {
+                    "No proposals for this project on the pages loaded so far."
+                } else {
+                    "No mail proposals need review."
+                });
+            }
+            for proposal in proposals {
+                let selected = proposal.clone();
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(format!("{} · {}", proposal.title, proposal.data_class))
+                        .child(
+                            Button::new(format!("project-mail-review-{}", proposal.id))
+                                .small()
+                                .label("Review")
+                                .disabled(self.mail_busy || self.mail_target_loading)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.mail_selected = Some(selected.clone());
+                                    view.mail_target = None;
+                                    view.mail_message = None;
+                                    cx.notify();
+                                })),
+                        ),
+                );
+            }
+            if self.mail_more {
+                body = body.child(
+                    Button::new("project-mail-more")
+                        .small()
+                        .label("Load older proposals")
+                        .disabled(self.mail.loading || self.mail_busy)
+                        .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(true, cx))),
+                );
+            }
+        }
+        div()
+            .id("project-mail-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .child(body)
+            .into_any_element()
+    }
+
+    fn select_link_record(&mut self, path: String, cx: &mut Context<Self>) {
+        if self.link_busy {
+            return;
+        }
+        self.link_generation = self.link_generation.wrapping_add(1);
+        let generation = self.link_generation;
+        self.link_path = Some(path.clone());
+        self.link_review = None;
+        self.link_message = None;
+        self.links = Remote::new_loading();
+        self.link_items = Remote::new_loading();
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                let error = if self.repo.is_replica() {
+                    ShellError::Store("Inventory linking needs an owner-authenticated local shell, unavailable on this device.".into())
+                } else {
+                    error
+                };
+                self.links.settle(Err(error.clone()));
+                self.link_items.settle(Err(error));
+                cx.notify();
+                return;
+            }
+        };
+        let work = shell::run(async move {
+            let (links, items) =
+                futures::join!(shell.project_inventory_links(&path), shell.inventory_rows());
+            (links, items)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |view, cx| {
+                if view.link_generation != generation {
+                    return;
+                }
+                let (links, items) =
+                    result.unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
+                view.links.settle(links);
+                view.link_items.settle(items);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn review_inventory_link(
+        &mut self,
+        item_ref: String,
+        label: String,
+        raw_id: Option<String>,
+        remove: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.link_busy {
+            return;
+        }
+        let Some(path) = self.link_path.clone() else {
+            return;
+        };
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.link_message = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        self.link_generation = self.link_generation.wrapping_add(1);
+        let generation = self.link_generation;
+        self.link_busy = true;
+        self.link_review = None;
+        self.link_message = None;
+        let request_ref = item_ref.clone();
+        let work = shell::run(async move {
+            let record = shell.project_link_record(&path).await?;
+            if record.path != path
+                || record.kind != "project"
+                || record.archived
+                || record.updated_at.is_empty()
+            {
+                return Err(ShellError::Refused(
+                    409,
+                    Some("The project record is not a live project or has no revision.".into()),
+                ));
+            }
+            if !remove {
+                let identity = shell.inventory_identity(&request_ref).await?;
+                if identity.typed_ref != request_ref
+                    || Some(identity.raw_id) != raw_id
+                    || identity.revision < 1
+                {
+                    return Err(ShellError::Refused(
+                        409,
+                        Some("Inventory identity did not match the selected item.".into()),
+                    ));
+                }
+                if identity.state.as_deref() != Some("owned") {
+                    return Err(ShellError::Refused(
+                        409,
+                        Some("The selected Inventory item is not owned.".into()),
+                    ));
+                }
+            }
+            Ok(record)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.link_generation != generation {
+                    return;
+                }
+                view.link_busy = false;
+                match result {
+                    Ok(record) => {
+                        view.link_review = Some(LinkReview {
+                            record,
+                            item_ref,
+                            item_label: label,
+                            remove,
+                        })
+                    }
+                    Err(error) => {
+                        view.link_message = Some(format!("Could not prepare review: {error}"))
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn confirm_inventory_link(&mut self, cx: &mut Context<Self>) {
+        if self.link_busy {
+            return;
+        }
+        let (Some((project, _)), Some(review)) = (&self.project, &self.link_review) else {
+            return;
+        };
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.link_message = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        let project = project.clone();
+        let record = review.record.clone();
+        let path = record.path.clone();
+        let item_ref = review.item_ref.clone();
+        let remove = review.remove;
+        let generation = self.link_generation;
+        self.link_busy = true;
+        self.link_message = None;
+        let work = shell::run(async move {
+            shell
+                .project_inventory_link_decision(remove, &project, &record, &item_ref)
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.link_generation != generation { return; }
+                view.link_busy = false;
+                view.link_review = None;
+                match result {
+                    Ok(changed) => {
+                        view.select_link_record(path, cx);
+                        view.link_message = Some(if changed { if remove { "Link removed." } else { "Link added after Inventory verification." } } else { "No change; the link was already in that state." }.into());
+                    }
+                    Err(error @ ShellError::Refused(_, _)) => {
+                        view.link_message = Some(format!("Link decision refused: {error}. Review again before retrying."));
+                    }
+                    Err(error) => {
+                        view.select_link_record(path, cx);
+                        view.link_message = Some(format!("Link result unavailable: {error}. The server may have applied it; check the refreshed links before retrying."));
+                    },
+                }
+                cx.notify();
+            });
+        }).detach();
+        cx.notify();
+    }
+
+    fn render_inventory_links(
+        &self,
+        records: &Remote<Vec<ProjectRecord>>,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_3()
+            .child(div().text_lg().child("Project inventory links"))
+            .child("Choose a project record. Links are never inferred or created automatically.");
+        if self.repo.is_replica() && self.repo.shell().is_err() {
+            body = body.child("Inventory linking needs an owner-authenticated local shell, unavailable on this device.");
+        }
+        if records.loading {
+            body = body.child("Loading project records…");
+        }
+        if let Some(error) = &records.error {
+            body = body.child(format!("Could not load project records: {error}"));
+        }
+        if let Some(rows) = &records.value {
+            let hubs: Vec<_> = rows.iter().filter(|r| r.kind == "project").collect();
+            if hubs.is_empty() {
+                body = body.child("No project record is available to link.");
+            }
+            for row in hubs {
+                let path = row.path.clone();
+                body = body.child(
+                    Button::new(format!("link-record-{path}"))
+                        .small()
+                        .label(format!("{} · {}", row.title, row.path))
+                        .disabled(self.link_busy)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.select_link_record(path.clone(), cx)
+                        })),
+                );
+            }
+        }
+        if let Some(path) = &self.link_path {
+            body = body.child(format!("Selected project record: {path}"));
+            if self.links.loading || self.link_items.loading {
+                body = body.child("Loading links and Inventory…");
+            }
+            if let Some(error) = &self.links.error {
+                body = body.child(
+                    div()
+                        .text_color(rgb(palette.red))
+                        .child(format!("Could not load links: {error}")),
+                );
+            }
+            if let Some(error) = &self.link_items.error {
+                body = body.child(
+                    div()
+                        .text_color(rgb(palette.red))
+                        .child(format!("Could not load Inventory: {error}")),
+                );
+            }
+            let refresh_path = path.clone();
+            body = body.child(
+                Button::new("link-refresh")
+                    .small()
+                    .label("Refresh links and Inventory")
+                    .disabled(self.link_busy)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.select_link_record(refresh_path.clone(), cx)
+                    })),
+            );
+            if let Some(message) = &self.link_message {
+                body = body.child(div().text_sm().child(message.clone()));
+            }
+            if let Some(links) = &self.links.value {
+                body = body.child("Existing links (current Inventory state not checked):");
+                if links.is_empty() {
+                    body = body.child("No links for this record.");
+                }
+                for link in links {
+                    let item_ref = link.item_ref.clone();
+                    let label = self
+                        .link_items
+                        .value
+                        .as_ref()
+                        .and_then(|items| {
+                            items.iter().find(|row| {
+                                shell::inventory_reference(&row.item.id).as_deref()
+                                    == Some(item_ref.as_str())
+                            })
+                        })
+                        .map(|row| row.item.label.clone())
+                        .unwrap_or_else(|| "Inventory item unavailable".into());
+                    let label_review = label.clone();
+                    body = body.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(format!(
+                                "{label} · {} · last verified revision {}",
+                                link.item_ref, link.verified_revision
+                            ))
+                            .child(
+                                Button::new(format!("link-remove-{}", link.item_ref))
+                                    .small()
+                                    .label("Review removal")
+                                    .disabled(self.link_busy)
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.review_inventory_link(
+                                            item_ref.clone(),
+                                            label_review.clone(),
+                                            None,
+                                            true,
+                                            cx,
+                                        )
+                                    })),
+                            ),
+                    );
+                }
+            }
+            if let Some(items) = &self.link_items.value {
+                body = body.child("Choose an owned Inventory item:");
+                let owned: Vec<_> = items
+                    .iter()
+                    .filter(|row| row.state.as_deref() == Some("owned"))
+                    .collect();
+                if owned.is_empty() {
+                    body = body.child("No owned Inventory items are available.");
+                }
+                for row in owned {
+                    let Some(item_ref) = shell::inventory_reference(&row.item.id) else {
+                        continue;
+                    };
+                    let id = row.item.id.clone();
+                    let label = row.item.label.clone();
+                    body = body.child(
+                        Button::new(format!("link-item-{item_ref}"))
+                            .small()
+                            .label(format!("{} · {}", label, id))
+                            .disabled(self.link_busy)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.review_inventory_link(
+                                    item_ref.clone(),
+                                    format!("{} · {}", label, id),
+                                    Some(id.clone()),
+                                    false,
+                                    cx,
+                                )
+                            })),
+                    );
+                }
+            }
+            if self.link_busy {
+                body = body.child("Checking or saving…");
+            }
+            if let Some(review) = &self.link_review {
+                body = body.child(div().flex().flex_col().gap_2().p_3().border_1().border_color(rgba(palette.border))
+                    .child(if review.remove { "Confirm removal" } else { "Confirm link" })
+                    .child(format!("Project record: {} · {}", review.record.title, review.record.path))
+                    .child(format!("Inventory: {} · {}", review.item_label, review.item_ref))
+                    .child(if review.remove { "Removal does not check whether the Inventory item still exists." } else { "Inventory was checked as owned. The server checks again when you confirm." })
+                    .child(format!("Project revision: {}", review.record.updated_at))
+                    .child(Button::new("link-confirm").small().primary().label(if review.remove { "Confirm removal" } else { "Confirm link" }).disabled(self.link_busy)
+                        .on_click(cx.listener(|view, _, _, cx| view.confirm_inventory_link(cx))))
+                    .child(Button::new("link-cancel").small().ghost().label("Cancel").disabled(self.link_busy)
+                        .on_click(cx.listener(|view, _, _, cx| { view.link_review = None; cx.notify(); }))));
+            }
+        }
+        div()
+            .id("project-links-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .child(body)
+            .into_any_element()
     }
 
     fn create_project_note(
@@ -1766,6 +2546,9 @@ impl Render for Projects {
                 .flex()
                 .items_center()
                 .justify_between()
+                .when(self.density == Density::Mobile, |el| {
+                    el.flex_col().items_start().gap_2()
+                })
                 .mb_3()
                 .child(
                     div()
@@ -1793,6 +2576,7 @@ impl Render for Projects {
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap_1()
                         .p(px(2.))
@@ -1875,6 +2659,33 @@ impl Render for Projects {
                                     }
                                 }))
                                 .child(format!("Notes ({supporting_notes_count})")),
+                        )
+                        .child(
+                            Button::new("sec-mail-review")
+                                .small()
+                                .ghost()
+                                .label("Mail review")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    if view.project_section != ProjectSection::MailReview {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::MailReview;
+                                        view.load_project_mail(false, cx);
+                                        cx.notify();
+                                    }
+                                })),
+                        )
+                        .child(
+                            Button::new("sec-inventory-links")
+                                .small()
+                                .ghost()
+                                .label("Inventory links")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    if view.project_section != ProjectSection::InventoryLinks {
+                                        view.put_away_editor(cx);
+                                        view.project_section = ProjectSection::InventoryLinks;
+                                        cx.notify();
+                                    }
+                                })),
                         ),
                 );
 
@@ -1961,6 +2772,8 @@ impl Render for Projects {
                         placeholder(240.).into_any_element()
                     }
                 }
+                ProjectSection::MailReview => self.render_project_mail(records, palette, cx),
+                ProjectSection::InventoryLinks => self.render_inventory_links(records, palette, cx),
                 ProjectSection::Tasks => match (&records.value, &records.error) {
                     (_, Some(error)) => note(error.to_string(), palette.red).into_any_element(),
                     (None, None) => placeholder(240.).into_any_element(),
@@ -2571,6 +3384,92 @@ mod tests {
                 "a landed write takes its band with it"
             );
         });
+    }
+
+    #[gpui::test]
+    fn project_inventory_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)))
+                    .with_density(Density::Mobile);
+                let hub = ProjectRecord {
+                    kind: "project".into(),
+                    ..record()
+                };
+                projects.project = Some((
+                    "P".into(),
+                    Remote {
+                        value: Some(vec![hub]),
+                        ..Remote::default()
+                    },
+                ));
+                projects.link_path = Some("P/Plan.md".into());
+                projects.links.value = Some(vec![ProjectInventoryLink {
+                    record_path: "P/Plan.md".into(),
+                    item_ref: "inv:61".into(),
+                    verified_revision: 2,
+                    reviewed_at: "stamp".into(),
+                }]);
+                projects.link_review = Some(LinkReview {
+                    record: ProjectLinkRecord {
+                        path: "P/Plan.md".into(),
+                        title: "Plan".into(),
+                        content: "exact".into(),
+                        updated_at: "stamp".into(),
+                        kind: "project".into(),
+                        archived: false,
+                    },
+                    item_ref: "inv:61".into(),
+                    item_label: "Item".into(),
+                    remove: true,
+                });
+                projects.project_section = ProjectSection::InventoryLinks;
+                projects
+            });
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn project_mail_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)))
+                    .with_density(Density::Mobile);
+                projects.project = Some((
+                    "P".into(),
+                    Remote {
+                        value: Some(vec![record()]),
+                        ..Remote::default()
+                    },
+                ));
+                let proposal = ProjectMailProposal {
+                    id: 1,
+                    version: 1,
+                    project: "P".into(),
+                    title: "Evidence".into(),
+                    evidence: "quoted\ntext".into(),
+                    source_id: "mail:v1:thread:message".into(),
+                    data_class: "c2".into(),
+                    task_suggestion: Some("Follow up".into()),
+                    status: "pending".into(),
+                };
+                projects.mail.value = Some(vec![proposal.clone()]);
+                projects.mail_selected = Some(proposal);
+                projects.mail_target = Some(ProjectMailTarget {
+                    path: "P/Plan.md".into(),
+                    title: "Plan".into(),
+                    content: "  exact\n".into(),
+                });
+                projects.project_section = ProjectSection::MailReview;
+                projects
+            });
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
     }
 
     #[gpui::test]

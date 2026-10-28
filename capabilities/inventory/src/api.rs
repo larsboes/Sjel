@@ -12,6 +12,7 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 #[path = "sync.rs"]
 mod sync;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -60,6 +61,33 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
     r("GET", "/routes", "This catalogue."),
     r("GET", "/api/inventory", "Every entry with its state."),
+    r(
+        "GET",
+        "/api/item-refs/{reference}",
+        "Resolve a canonical Inventory item reference.",
+    ),
+    r(
+        "GET",
+        "/api/mail-proposals",
+        "Mail proposals and retained decisions.",
+    ),
+    r(
+        "GET",
+        "/api/items/{id}/mail-match-snapshot",
+        "Item and current state revisions for a reviewed mail match.",
+    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/mail-proposals",
+        summary: "Stage bounded mail evidence without changing inventory.",
+        request_schema: Some(route_manifest::schema_of::<crate::mail_proposals::Stage>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/mail-proposals/{id}/decision",
+        summary: "Decide at a proposal version; match an owned item or create only on delivery.",
+        request_schema: Some(route_manifest::schema_of::<crate::mail_proposals::Decision>),
+    },
     r(
         "GET",
         "/api/wishlist",
@@ -164,6 +192,24 @@ async fn api_inventory(State(s): State<Arc<AppState>>) -> Result<impl IntoRespon
         )
         .collect();
     Ok(Json(out))
+}
+
+async fn api_item_ref(
+    State(s): State<Arc<AppState>>,
+    Path(reference): Path<String>,
+) -> Result<impl IntoResponse, HttpError> {
+    let id = crate::identity::decode_item_ref(&reference)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let st = store(&s)?;
+    let conn = st.borrow_connection().map_err(boom)?;
+    let result: Option<(i64, Option<String>)> = conn.query_row(
+        "SELECT i.revision, (SELECT state FROM inventory_item_state WHERE item_id=i.id ORDER BY since DESC, id DESC LIMIT 1) FROM inventory_item i WHERE i.id=?1",
+        [&id], |row| Ok((row.get(0)?, row.get(1)?)),
+    ).optional().map_err(boom)?;
+    let (revision, state) = result.ok_or((StatusCode::NOT_FOUND, "item not found".into()))?;
+    Ok(Json(
+        serde_json::json!({"typed_ref": reference, "raw_id": id, "revision": revision, "state": state}),
+    ))
 }
 
 /// The open wishlist and what it costs in monthly balances.
@@ -698,6 +744,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/health", get(health))
         .route("/routes", get(routes))
         .route("/api/inventory", get(api_inventory))
+        .route("/api/item-refs/{reference}", get(api_item_ref))
+        .route(
+            "/api/mail-proposals",
+            get(crate::mail_proposals::list)
+                .post(crate::mail_proposals::stage)
+                .layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/api/mail-proposals/{id}/decision",
+            post(crate::mail_proposals::decide).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
         .route("/api/wishlist", get(api_wishlist))
         .route(
             "/api/wish-groups",
@@ -705,6 +762,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/wish-groups/{id}", delete(api_delete_wish_group))
         .route("/api/wish-groups/{id}/items", put(api_put_wish_group_items))
+        .route(
+            "/api/items/{id}/mail-match-snapshot",
+            get(crate::mail_proposals::snapshot),
+        )
         .route("/api/items", post(api_post_item))
         .route("/api/items/{id}", put(api_put_item).patch(api_patch_item))
         .route(
@@ -721,6 +782,18 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
+const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
+    sjel_server::agent_policy::AgentRoutes {
+        closed: &[
+            ("GET", "/api/mail-proposals"),
+            ("GET", "/api/item-refs/{reference}"),
+            ("GET", "/api/items/{id}/mail-match-snapshot"),
+            ("POST", "/api/mail-proposals"),
+            ("POST", "/api/mail-proposals/{id}/decision"),
+        ],
+        ..sjel_server::agent_policy::AgentRoutes::NONE
+    };
+
 pub async fn serve() {
     let port: u16 = sjel_config::env_var("SJEL_PORT")
         .ok()
@@ -733,11 +806,24 @@ pub async fn serve() {
         device_store,
         database,
     });
-    sjel_server::serve_local("inventory", port, build_router(state)).await;
+    sjel_server::serve_local_with("inventory", port, build_router(state), AGENT_ROUTES).await;
 }
 
 #[cfg(test)]
 mod route_manifest_tests {
+    #[test]
+    fn mail_routes_are_closed_to_agent_tokens() {
+        for (method, path) in [
+            ("GET", "/api/mail-proposals"),
+            ("GET", "/api/item-refs/inv:61"),
+            ("POST", "/api/mail-proposals"),
+            ("POST", "/api/mail-proposals/1/decision"),
+            ("GET", "/api/items/lamp/mail-match-snapshot"),
+        ] {
+            assert!(super::AGENT_ROUTES.closes(method, path), "{method} {path}");
+        }
+    }
+
     #[test]
     fn the_catalogue_names_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("api.rs"), super::ROUTES);

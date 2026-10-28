@@ -79,6 +79,25 @@ written back into a journal entry.
   `done`, `reopen`, `set`, `attach`, `remove`, `normalize`, `import`, `freeze-vault`, `verify`,
   `render`.
 
+## Inventory references
+
+Projects owns reviewed references to Inventory items. `GET /api/inventory-links?path=` lists
+references held by one project record. `GET /api/links?to=inv:<hex>` returns the backreferences
+in the [typed links contract](../../docs/capabilities/links.md). A project record's link ID is
+`project:<lowercase hex of its UTF-8 path>`.
+
+`POST /api/inventory-links` and `POST /api/inventory-links/remove` take `project`, `path`,
+`base` (the exact record content), `updated_at` (the record's write timestamp), `item_ref`, and
+`reviewed: true`. Both refuse stale or non-live project records. Adding asks Inventory over
+credentialed loopback whether the exact canonical reference exists and is owned. Removing needs
+no Inventory connection. Duplicate adds and removes report `changed: false`. Agent tokens cannot
+use these routes.
+
+A stored reference records the Inventory revision and time checked at review. It is not a
+live-existence guarantee: Inventory can change after its response and before or after the Projects
+transaction. Reads do not recheck Inventory. The reference ledger is in the shared database, not
+in rendered markdown; a database backup is required to restore it.
+
 ## Task schema
 
 A task's `status` is `open`, `doing`, `waiting` or `done`. `done:` follows `status`; setting

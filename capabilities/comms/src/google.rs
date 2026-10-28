@@ -289,6 +289,8 @@ struct ThreadDetail {
 #[derive(Deserialize)]
 struct MessageDetail {
     #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
     snippet: Option<String>,
     #[serde(rename = "labelIds", default)]
     label_ids: Vec<String>,
@@ -440,6 +442,78 @@ pub fn thread_body_text(token: &str, id: &str) -> Result<Option<String>> {
         })
         .filter(|text| !text.is_empty());
     Ok(text)
+}
+
+/// A message body and its stable Gmail identifier, kept only for local analysis.
+pub struct ThreadMessageBody {
+    pub id: String,
+    pub from_addr: Option<String>,
+    pub subject: Option<String>,
+    pub snippet: Option<String>,
+    pub text: String,
+}
+
+fn message_bodies(detail: ThreadDetail) -> Result<Vec<ThreadMessageBody>> {
+    const MESSAGE_LIMIT: usize = 100;
+    if detail.messages.len() > MESSAGE_LIMIT {
+        return Err(CommsError::Other("thread exceeds message limit".into()));
+    }
+    let mut bodies = Vec::new();
+    for message in detail.messages {
+        let id = message
+            .id
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| CommsError::Other("thread message has no identifier".into()))?;
+        let payload = message
+            .payload
+            .as_ref()
+            .ok_or_else(|| CommsError::Other("thread message has no payload".into()))?;
+        let text = collect_part(payload, "text/plain")
+            .or_else(|| {
+                collect_part(payload, "text/html")
+                    .map(|html| crate::extraction::html_to_lines(&html))
+            })
+            .map(|text| text.trim().to_string())
+            .filter(|text| !text.is_empty())
+            .ok_or_else(|| CommsError::Other("thread message has no readable text".into()))?;
+        if text.chars().count() > BODY_TEXT_CAP {
+            return Err(CommsError::Other(
+                "thread message exceeds text limit".into(),
+            ));
+        }
+        bodies.push(ThreadMessageBody {
+            id,
+            from_addr: find_header(&payload.headers, "From").map(str::to_string),
+            subject: find_header(&payload.headers, "Subject").map(str::to_string),
+            snippet: message.snippet,
+            text,
+        });
+    }
+    Ok(bodies)
+}
+
+/// Fetch each message in a thread for bounded local analysis.
+///
+/// # Errors
+/// Returns an error if Gmail cannot be reached, the response is invalid, or the
+/// thread exceeds the message limit. A missing thread returns `None`.
+pub fn thread_message_bodies(token: &str, id: &str) -> Result<Option<Vec<ThreadMessageBody>>> {
+    std::thread::sleep(THREAD_FETCH_PAUSE);
+    let response = client()?
+        .get(format!("{}/{id}", threads_url()))
+        .bearer_auth(token)
+        .query(&[("format", "full")])
+        .send()?;
+    if is_missing_thread_status(response.status().as_u16()) {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(CommsError::Other(format!(
+            "thread body failed with HTTP {}",
+            response.status()
+        )));
+    }
+    message_bodies(response.json()?).map(Some)
 }
 
 /// Depth-first search for the first part of a MIME type, decoded.
@@ -665,6 +739,39 @@ fn thread_action_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn message_bodies_keep_distinct_message_ids() {
+        let detail: ThreadDetail = serde_json::from_str(
+            r#"{"messages":[
+            {"id":"first","snippet":"summary","payload":{"headers":[{"name":"From","value":"sender@example.test"},{"name":"Subject","value":"Order"}],"mimeType":"text/plain","body":{"data":"T3JkZXJlZA"}}},
+            {"id":"second","payload":{"mimeType":"text/plain","body":{"data":"RGVsaXZlcmVk"}}}
+        ]}"#,
+        )
+        .unwrap();
+        let bodies = message_bodies(detail).unwrap();
+        assert_eq!(bodies.len(), 2);
+        assert_eq!((&*bodies[0].id, &*bodies[0].text), ("first", "Ordered"));
+        assert_eq!(bodies[0].from_addr.as_deref(), Some("sender@example.test"));
+        assert_eq!(bodies[0].subject.as_deref(), Some("Order"));
+        assert_eq!(bodies[0].snippet.as_deref(), Some("summary"));
+        assert_eq!((&*bodies[1].id, &*bodies[1].text), ("second", "Delivered"));
+    }
+
+    #[test]
+    fn message_bodies_refuse_missing_ids_and_oversized_threads() {
+        let missing: ThreadDetail = serde_json::from_str(r#"{"messages":[{}]}"#).unwrap();
+        assert!(message_bodies(missing).is_err());
+        let unreadable: ThreadDetail = serde_json::from_str(
+            r#"{"messages":[{"id":"first","payload":{"mimeType":"application/pdf"}}]}"#,
+        )
+        .unwrap();
+        assert!(message_bodies(unreadable).is_err());
+        let oversized: ThreadDetail = serde_json::from_value(serde_json::json!({
+            "messages": (0..101).map(|i| serde_json::json!({"id": i.to_string()})).collect::<Vec<_>>()
+        })).unwrap();
+        assert!(message_bodies(oversized).is_err());
+    }
 
     #[test]
     fn gmail_override_accepts_only_loopback() {

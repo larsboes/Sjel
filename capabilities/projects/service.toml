@@ -9,6 +9,7 @@ port           = "8103"
 health_path    = "/health"
 ready_path     = "/ready"
 proxy_api_only = "true"
+links_to       = ["inv"]
 imports        = ["markdown", "attachments"]
 exports        = ["markdown", "json"]
 backup_paths   = ["data/projects"]

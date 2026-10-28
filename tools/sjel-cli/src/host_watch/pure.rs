@@ -427,6 +427,54 @@ pub fn net_finding(report: Option<&NetReport>) -> Option<Finding> {
     })
 }
 
+/// The `version` object of `host-net tailnet --json`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TailnetVersion {
+    pub running: String,
+    pub upstream: Option<String>,
+    #[serde(default)]
+    pub behind: bool,
+}
+
+/// `host-net tailnet --json`, of which only the version matters here.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TailnetReport {
+    #[serde(default)]
+    pub version: TailnetVersion,
+}
+
+/// One finding for every tailscaled on this host that runs an older release than upstream.
+///
+/// host-net owns the comparison. This reads its `behind` verdict and names the nodes.
+pub fn tailnet_finding(nodes: &[(String, TailnetReport)]) -> Option<Finding> {
+    let behind: Vec<String> = nodes
+        .iter()
+        .filter(|(_, r)| r.version.behind)
+        .map(|(node, r)| {
+            format!(
+                "{node}: running {}, newest {}",
+                r.version.running,
+                r.version.upstream.as_deref().unwrap_or("?")
+            )
+        })
+        .collect();
+    if behind.is_empty() {
+        return None;
+    }
+    Some(Finding {
+        key: "net:tailscale-outdated".to_owned(),
+        title: format!(
+            "{} tailscaled node(s) behind the newest release",
+            behind.len()
+        ),
+        note: format!(
+            "{}\n\nUpdate the package, then restart the daemon: an upgrade does not replace the \
+             running process.\nInspect: host-net tailnet",
+            behind.join("\n")
+        ),
+    })
+}
+
 /// One row per RUN of a condition, not one per check and not one forever.
 ///
 /// The unique index on an open `key` collapses repeats, which is most of the job. What it cannot
@@ -921,5 +969,26 @@ mod tests {
         )))
         .expect("a finding");
         assert!(f.title.ends_with("(a, b, c, …)"), "{}", f.title);
+    }
+
+    #[test]
+    fn tailnet_finding_names_only_the_nodes_behind() {
+        let node = |running: &str, behind: bool| TailnetReport {
+            version: TailnetVersion {
+                running: running.into(),
+                upstream: Some("1.104.4".into()),
+                behind,
+            },
+        };
+        assert!(tailnet_finding(&[("default".into(), node("1.104.4", false))]).is_none());
+        let f = tailnet_finding(&[
+            ("default".into(), node("1.104.4", false)),
+            ("sjel".into(), node("1.104.2", true)),
+        ])
+        .expect("one node is behind");
+        assert_eq!(f.key, "net:tailscale-outdated");
+        assert!(f.title.starts_with("1 tailscaled"));
+        assert!(f.note.starts_with("sjel: running 1.104.2, newest 1.104.4"));
+        assert!(!f.note.contains("default"));
     }
 }

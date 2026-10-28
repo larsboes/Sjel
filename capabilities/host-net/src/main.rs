@@ -6,7 +6,8 @@
 //! Exit codes, which `tools/host-watch` and any other caller depend on:
 //!
 //! * `0` — checked, and everything matched.
-//! * `1` — checked, and something is exposed that the policy does not account for.
+//! * `1` — checked, and something is exposed that the policy does not account for, or
+//!   (`tailnet`) the running tailscaled is older than the newest release on its track.
 //! * `2` — could not check: a usage error, no policy file, an unsupported platform, or a
 //!   required command that is missing or refused. Two rather than three because `tools/audit`
 //!   and `capabilities/host-firewall/host-firewall` both already spell "usage or setup error"
@@ -28,13 +29,16 @@ const HELP: &str = "host-net — what this host exposes to the network, read wit
 
   host-net listen [--json]     every listening socket, with the scope its bind reaches (default)
   host-net firewall [--json]   the application firewall's switches and its stale app rules
-  host-net tailnet [--json]    tailnet posture: backend, shields, key expiry, tailnet lock
+  host-net tailnet [--json] [--socket=PATH]
+                               tailnet posture: backend, shields, key expiry, tailnet lock,
+                               and the running version against the newest release
   host-net check [--json]      wildcard listeners the policy does not account for
   host-net -h                  this help
 
 Policy: <overlay>/config/host-net-policy.toml — see schemas/host-net-policy.toml.example.
 
-Exit: 0 = matched the policy, 1 = unexpected exposure, 2 = could not check.
+Exit: 0 = matched the policy, 1 = unexpected exposure or an outdated tailscaled,
+      2 = could not check.
 ";
 
 const EXIT_MATCHED: u8 = 0;
@@ -48,9 +52,10 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let json = args.iter().any(|a| a == "--json");
+    let socket = args.iter().find_map(|a| a.strip_prefix("--socket="));
     if let Some(bad) = args
         .iter()
-        .find(|a| a.starts_with('-') && a.as_str() != "--json")
+        .find(|a| a.starts_with('-') && a.as_str() != "--json" && !a.starts_with("--socket="))
     {
         eprintln!("host-net: unknown flag '{bad}'\n\n{HELP}");
         return ExitCode::from(EXIT_CANNOT_CHECK);
@@ -63,7 +68,7 @@ fn main() -> ExitCode {
     let result = match verb {
         "listen" => cmd_listen(json),
         "firewall" => cmd_firewall(json),
-        "tailnet" => cmd_tailnet(json),
+        "tailnet" => cmd_tailnet(json, socket),
         "check" => cmd_check(json),
         other => Err(format!("unknown command '{other}'\n\n{HELP}")),
     };
@@ -210,15 +215,22 @@ fn cmd_firewall(json: bool) -> Result<u8, String> {
     Ok(0)
 }
 
-fn cmd_tailnet(json: bool) -> Result<u8, String> {
-    let report = tailnet::collect()?;
+fn cmd_tailnet(json: bool, socket: Option<&str>) -> Result<u8, String> {
+    let report = tailnet::collect(socket)?;
+    // --json still carries the verdict in the exit code, as `check` does.
+    let verdict = if report.version.behind {
+        EXIT_UNEXPECTED
+    } else {
+        EXIT_MATCHED
+    };
     if json {
         println!(
             "{}",
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
         );
-        return Ok(0);
+        return Ok(verdict);
     }
+    let v = &report.version;
     let p = &report.prefs;
     let yesno = |v: Option<bool>| match v {
         Some(true) => "yes".to_string(),
@@ -228,6 +240,14 @@ fn cmd_tailnet(json: bool) -> Result<u8, String> {
     print_table(&[
         vec!["FACT".into(), "VALUE".into()],
         vec!["backend".into(), report.backend_state.clone()],
+        vec![
+            "version running".into(),
+            match (&v.upstream, v.behind) {
+                (Some(u), true) => format!("{} (BEHIND {u})", v.running),
+                (Some(_), false) => format!("{} (current)", v.running),
+                (None, _) => format!("{} (newest release unknown)", v.running),
+            },
+        ],
         vec!["tun up".into(), yesno(report.tun)],
         vec!["want running".into(), yesno(p.want_running)],
         vec!["shields up".into(), yesno(p.shields_up)],
@@ -283,7 +303,12 @@ fn cmd_tailnet(json: bool) -> Result<u8, String> {
             "Tailnet lock trusts exactly one signing key: losing it locks new nodes out for good."
         );
     }
-    Ok(0)
+    if v.behind {
+        println!(
+            "The running tailscaled is older than the newest release: update it, then restart the daemon."
+        );
+    }
+    Ok(verdict)
 }
 
 fn cmd_check(json: bool) -> Result<u8, String> {

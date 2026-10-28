@@ -1,5 +1,5 @@
-//! The tailnet's posture, as three unprivileged reads: `tailscale status --json`,
-//! `tailscale debug prefs` and `tailscale lock status`.
+//! The tailnet's posture, as four unprivileged reads: `tailscale status --json`,
+//! `tailscale debug prefs`, `tailscale lock status` and `tailscale version --upstream --json`.
 //!
 //! # Nothing here prints a key
 //!
@@ -38,6 +38,17 @@ pub struct Lock {
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
+pub struct Version {
+    /// The daemon's version from `status --json`. A package upgrade replaces the binary but
+    /// not the running process, so the CLI's own version can be newer than this.
+    pub running: String,
+    /// The newest release on the node's track, from pkgs.tailscale.com. `None` when that read
+    /// failed, for example offline.
+    pub upstream: Option<String>,
+    pub behind: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct TailnetReport {
     pub backend_state: String,
     pub tun: Option<bool>,
@@ -49,6 +60,7 @@ pub struct TailnetReport {
     pub self_key_expires: bool,
     pub prefs: Prefs,
     pub lock: Lock,
+    pub version: Version,
 }
 
 fn as_bool(v: &Value, key: &str) -> Option<bool> {
@@ -84,6 +96,15 @@ pub fn parse_status(text: &str) -> Result<TailnetReport, String> {
             .unwrap_or("unknown")
             .to_string(),
         tun: as_bool(&v, "TUN"),
+        version: Version {
+            running: v
+                .get("Version")
+                .and_then(Value::as_str)
+                .and_then(|s| s.split('-').next())
+                .unwrap_or("unknown")
+                .to_string(),
+            ..Default::default()
+        },
         self_key_expires: v
             .get("Self")
             .and_then(|s| s.get("KeyExpiry"))
@@ -152,18 +173,58 @@ pub fn parse_lock(text: &str) -> Lock {
     lock
 }
 
-/// Read the tailnet. Both `debug prefs` and `lock status` are optional: a node that is not
-/// signed in still has a `status`, and a report that refuses to print anything because one of
-/// three reads failed is less useful than one that says which part is missing.
-pub fn collect() -> Result<TailnetReport, String> {
-    let status = capture("tailscale", &["status", "--json"])?;
+/// Parse `tailscale version --upstream --json` down to the `upstream` field.
+pub fn parse_upstream(text: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(text).ok()?;
+    v.get("upstream")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// `1.104.2` → `(1, 104, 2)`. Anything after a `-` is build metadata and ignored.
+fn triple(version: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = version.split('-').next()?.split('.').map(str::parse::<u64>);
+    Some((
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+    ))
+}
+
+/// True only when both versions parse and the running one is lower. An unknown upstream is
+/// never "behind": the report shows it as unknown instead.
+pub fn is_behind(running: &str, upstream: Option<&str>) -> bool {
+    match (triple(running), upstream.and_then(triple)) {
+        (Some(r), Some(u)) => r < u,
+        _ => false,
+    }
+}
+
+/// Read the tailnet. Only `status` is required: a node that is not signed in still has one,
+/// and a report that refuses to print because an optional read failed is less useful than one
+/// that says which part is missing.
+///
+/// `socket` selects a tailscaled other than the default one, for a host that runs two.
+pub fn collect(socket: Option<&str>) -> Result<TailnetReport, String> {
+    let flag = socket.map(|s| format!("--socket={s}"));
+    let run = |args: &[&str]| {
+        let mut all: Vec<&str> = flag.iter().map(String::as_str).collect();
+        all.extend_from_slice(args);
+        capture("tailscale", &all)
+    };
+    let status = run(&["status", "--json"])?;
     let mut report = parse_status(&status)?;
-    if let Ok(text) = capture("tailscale", &["debug", "prefs"]) {
+    if let Ok(text) = run(&["debug", "prefs"]) {
         report.prefs = parse_prefs(&text).unwrap_or_default();
     }
-    if let Ok(text) = capture("tailscale", &["lock", "status"]) {
+    if let Ok(text) = run(&["lock", "status"]) {
         report.lock = parse_lock(&text);
     }
+    if let Ok(text) = run(&["version", "--upstream", "--json"]) {
+        report.version.upstream = parse_upstream(&text);
+    }
+    report.version.behind = is_behind(&report.version.running, report.version.upstream.as_deref());
     Ok(report)
 }
 
@@ -209,6 +270,32 @@ mod tests {
             !rendered.contains("tlpub:"),
             "no key material leaves this parser"
         );
+    }
+
+    #[test]
+    fn the_running_version_comes_from_status_without_build_metadata() {
+        assert_eq!(parse_status(STATUS).unwrap().version.running, "1.0.0");
+    }
+
+    #[test]
+    fn behind_compares_numerically_and_never_guesses() {
+        assert!(is_behind("1.104.2", Some("1.104.4")));
+        assert!(
+            is_behind("1.98.9", Some("1.104.0")),
+            "98 < 104, not \"9\" > \"1\""
+        );
+        assert!(!is_behind("1.104.4", Some("1.104.4")));
+        assert!(!is_behind("1.106.0", Some("1.104.4")));
+        assert!(!is_behind("1.104.2", None));
+        assert!(!is_behind("unknown", Some("1.104.4")));
+    }
+
+    #[test]
+    fn upstream_is_read_from_version_json() {
+        let text = r#"{"majorMinorPatch":"1.104.2","short":"1.104.2","upstream":"1.104.4"}"#;
+        assert_eq!(parse_upstream(text).as_deref(), Some("1.104.4"));
+        assert_eq!(parse_upstream(r#"{"short":"1.104.2"}"#), None);
+        assert_eq!(parse_upstream("not json"), None);
     }
 
     #[test]

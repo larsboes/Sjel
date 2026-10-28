@@ -30,7 +30,9 @@ root-owned pids without sudo.
 ```sh
 host-net listen [--json]     # every listening socket and the scope its bind reaches (default)
 host-net firewall [--json]   # the application firewall's switches and its stale app rules
-host-net tailnet [--json]    # tailnet posture: backend, shields, key expiry, tailnet lock
+host-net tailnet [--json] [--socket=PATH]
+                             # tailnet posture: backend, shields, key expiry, tailnet lock,
+                             # and the running tailscaled version against the newest release
 host-net check [--json]      # wildcard listeners the overlay policy does not account for
 ```
 
@@ -42,7 +44,7 @@ The CLI is on PATH automatically — `capabilities/shell/init.zsh` sweeps for
 | Code | Meaning |
 |---|---|
 | 0 | checked, and everything matched the policy |
-| 1 | checked, and something is exposed that the policy does not account for |
+| 1 | checked, and something is exposed that the policy does not account for, or (`tailnet`) the running tailscaled is older than the newest release on its track |
 | 2 | could not check: usage error, no policy file, unsupported platform, or a required command missing or refused |
 
 2 rather than 3 for "a required command is missing". `tools/audit` and
@@ -93,6 +95,16 @@ It calls the built binary at `target/release/host-net-cli`, never the launcher i
 directory. The launcher builds on first use, and an hourly scheduled job with the ability to
 start a `cargo build` is a surprise nobody asked for. A host that has never built it files
 nothing and says so once on stderr.
+
+It also runs `host-net tailnet --json` for each tailscaled on the host: the default one, and the
+user-level `sjel` node when its socket exists (`tools/setup-tailnet-shell.sh`). Every node
+whose `version.behind` is true goes into one finding keyed `net:tailscale-outdated`.
+
+`version.running` comes from `status --json`, which is the daemon's version, not the CLI's. A
+package upgrade replaces the binary and leaves the old process running, so only the daemon's
+version says what is exposed. `version.upstream` comes from `tailscale version --upstream`,
+which asks pkgs.tailscale.com. When that read fails, the version is reported as unknown and is
+never flagged.
 
 ## Why this shape: read-only, netstat-first, no manifest
 
@@ -147,7 +159,8 @@ home path, and a real `--listapps` dump on this machine is full of them.
 
 ## Verification
 
-`cargo test -p sjel-host-net` — 26 parser tests over the fixtures. The one that matters most is
+`cargo test -p sjel-host-net` — the parser tests over the fixtures. The one that matters most is
 `a_root_owned_listener_survives_the_join`: swap the implementation back to unprivileged `lsof`
 and that row disappears, which is the whole reason this capability reads `netstat`.
-`tools/sjel-cli/src/host_watch/pure.rs` covers the folding of `check --json` into a single finding.
+`tools/sjel-cli/src/host_watch/pure.rs` covers the folding of `check --json` and
+`tailnet --json` into one finding each.

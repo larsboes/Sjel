@@ -39,6 +39,10 @@ wrong with it would be a finding nobody needed, which is how a watcher gets mute
 class breakdown stays what it already was — what `sysmon storage` tells you
 once you are already looking.
 
+**Outdated tailscaled.** Delegated to `host-net tailnet --json`, once for each tailscaled on
+the host. One finding keyed `net:tailscale-outdated` names every node whose running daemon is
+older than the newest release. See `capabilities/host-net/README.md` ("How host-watch uses it").
+
 **Unexpected network exposure.** Delegated whole to `host-net check --json`, the same shape
 the disk half already has: `capabilities/host-net` owns the scope rule, the netstat parsing and
 the overlay policy of expected wildcard listeners, and this reads its verdict and adds nothing.

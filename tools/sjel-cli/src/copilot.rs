@@ -374,6 +374,14 @@ fn collect_drift(existing: &Value, baseline: &Value, prefix: &str, paths: &mut V
     }
 }
 
+fn write_json(path: &Path, value: &Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+    }
+    let text = serde_json::to_string_pretty(value).map_err(|error| error.to_string())?;
+    fs::write(path, format!("{text}\n")).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::drift_paths;
@@ -402,12 +410,4 @@ mod tests {
         let existing = json!({"sandbox": {"enabled": false}});
         assert_eq!(drift_paths(&existing, &baseline), vec!["sandbox.enabled"]);
     }
-}
-
-fn write_json(path: &Path, value: &Value) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
-    }
-    let text = serde_json::to_string_pretty(value).map_err(|error| error.to_string())?;
-    fs::write(path, format!("{text}\n")).map_err(|error| format!("{}: {error}", path.display()))
 }

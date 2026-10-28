@@ -81,6 +81,17 @@ describe("parseJobs", () => {
     expect("workingDirectory" in jobs[0].steps[0]).toBe(false);
   });
 
+  test("refuses a classified job when execution semantics cannot be replayed", () => {
+    for (const setting of ["if: false", "env: { MODE: ci }", "shell: python", "continue-on-error: true"]) {
+      const jobs = parseJobs(workflow(`  repo-gates:\n    steps:\n      - run: echo ok\n        ${setting}\n`));
+      expect(jobs[0].refusal).toContain("cannot be replayed faithfully");
+    }
+    const expression = parseJobs(workflow("  repo-gates:\n    steps:\n      - run: echo '${{ github.ref }}'\n"));
+    expect(expression[0].refusal).toContain("cannot be replayed faithfully");
+    const environment = parseJobs("env: { MODE: ci }\n" + workflow("  repo-gates:\n    steps:\n      - run: echo ok\n"));
+    expect(environment[0].refusal).toContain("cannot be replayed faithfully");
+  });
+
   test("a workflow with no jobs throws rather than reporting an empty set", () => {
     expect(() => parseJobs("name: CI\non: [push]\n")).toThrow("declares no jobs");
   });

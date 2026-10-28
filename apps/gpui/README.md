@@ -293,9 +293,9 @@ the store, the tasks and the notes answer with the Mac out of range. Every local
 logged in `_offline_mutations`, and `core/src/sync.rs` replays that log at the Mac once the pairing
 is live: the queued writes go out oldest first, then every live project is listed without its
 contents and only the records whose `updated_at` moved are read in full. A record with an unsent
-local edit is skipped by the pull, and a record the Mac no longer has is deleted here. Two edits of
-the same note are settled in the phone's favour: the queued text is replayed over the Mac's version
-on the 409 and the report counts it, so nothing typed offline is lost. A note made on the phone in
+local edit is skipped by the pull, and a record the Mac no longer has is deleted here. When both
+sides edit a note, the Mac refuses the phone's write; the phone keeps its text and queued write for
+the user to resolve. A note made on the phone in
 a project the Mac does not have yet creates that project first. The sync runs when the pairing
 answers at launch, after every local write, and on the Sync button; a phone that has not reached
 the Mac this launch never starts one, because its queue is the only copy of those edits.

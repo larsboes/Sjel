@@ -18,6 +18,10 @@
       "kind": "capability"
     },
     {
+      "name": "archive",
+      "kind": "capability"
+    },
+    {
       "name": "assistant",
       "kind": "capability",
       "service": {
@@ -2803,6 +2807,10 @@
       "verdict": "adopt"
     },
     {
+      "name": "learnharness",
+      "verdict": "quarry"
+    },
+    {
       "name": "libsql",
       "verdict": "adopt"
     },
@@ -3136,6 +3144,10 @@
     },
     {
       "name": "typst",
+      "verdict": "adopt"
+    },
+    {
+      "name": "unicode-normalization",
       "verdict": "adopt"
     },
     {

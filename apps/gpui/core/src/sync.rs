@@ -14,9 +14,7 @@
 //!    with an unsent local write is skipped: the phone's text is newer than anything the Mac can
 //!    answer with. A record the Mac no longer has is deleted here.
 //!
-//! Two edits of the same note are settled by the queue: the phone's text is replayed over the
-//! Mac's version and the report counts it, so nothing typed offline is lost. The Mac's version is
-//! what the two sides agree on afterwards, because the pull then reads it back.
+//! Conflicting edits remain queued on the phone until the user resolves them.
 //!
 //! Nothing here holds a GPUI type or a socket: [`Host`] is one request, `DeviceClient` is the real
 //! one, and the tests answer with their own.
@@ -137,8 +135,6 @@ pub struct Report {
     pub pushed: usize,
     /// Of those, records the Mac had never had.
     pub created: usize,
-    /// Queued writes whose note the Mac had changed too. The phone's text was replayed over it.
-    pub conflicts: usize,
     /// Records the Mac changed and this device now holds.
     pub pulled: usize,
     /// Records the Mac no longer had, deleted here.
@@ -160,12 +156,6 @@ impl Report {
         }
         if self.created > 0 {
             parts.push(format!("{} new on the Mac", self.created));
-        }
-        if self.conflicts > 0 {
-            parts.push(format!(
-                "{} edited on both sides, this device's text won",
-                self.conflicts
-            ));
         }
         if self.pulled > 0 {
             parts.push(format!("{} updated from the Mac", self.pulled));
@@ -390,29 +380,6 @@ async fn save<H: Host>(
                 .await
                 .map_err(|e| e.to_string())?;
             return Ok(());
-        }
-        if reply.status == 409 {
-            // Both sides moved. The phone's text is what the person typed offline, so it is
-            // replayed over the Mac's version rather than dropped; the pull reads the result back.
-            let current = reply
-                .json()
-                .and_then(|body| body["current"].as_str().map(str::to_owned))
-                .unwrap_or_default();
-            let retry = post(
-                host,
-                RECORD,
-                json!({ "path": path, "content": content, "base": current }),
-            )
-            .await?;
-            if retry.ok() {
-                report.conflicts += 1;
-                store
-                    .mark_synced(path, content)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                return Ok(());
-            }
-            return Err(retry.refused());
         }
         if !reply.missing() {
             return Err(reply.refused());
@@ -1695,7 +1662,6 @@ mod tests {
             let report = run(&store, &fake).await.expect("sync");
             assert_eq!(report.pushed, 1, "{report:?}");
             assert_eq!(report.created, 1, "{report:?}");
-            assert_eq!(report.conflicts, 0, "{report:?}");
             assert_eq!(report.pulled, 0, "the record it just wrote is in step");
             assert!(report.kept.is_empty(), "{report:?}");
             assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
@@ -1723,7 +1689,7 @@ mod tests {
     }
 
     #[test]
-    fn a_note_edited_on_both_sides_replays_the_phones_text() {
+    fn a_note_edited_on_both_sides_keeps_the_phone_write_queued() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1764,29 +1730,27 @@ mod tests {
                     "current": "mac edit",
                 }),
             );
-            fake.on(
-                "POST",
-                RECORD,
-                200,
-                json!({ "path": "Inbox/Plan.md", "kind": "note" }),
-            );
             fake.on("GET", PROJECTS, 200, projects(&[]));
 
             let report = run(&store, &fake).await.expect("sync");
-            assert_eq!(report.pushed, 1, "{report:?}");
-            assert_eq!(report.conflicts, 1, "{report:?}");
-            assert_eq!(report.kept.len(), 0, "{report:?}");
+            assert_eq!(report.pushed, 0, "{report:?}");
+            assert_eq!(report.refused.len(), 1, "{report:?}");
+            assert!(report.refused[0].reason.contains("changed since"));
 
             let writes = fake.bodies_to(RECORD);
-            assert_eq!(writes.len(), 2, "{writes:?}");
+            assert_eq!(writes.len(), 1, "{writes:?}");
             assert_eq!(writes[0]["base"], json!("old"));
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
             assert_eq!(
-                writes[1]["base"],
-                json!("mac edit"),
-                "replayed over the Mac"
+                store
+                    .fetch_record("Inbox/Plan.md")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .content,
+                "offline edit"
             );
-            assert_eq!(writes[1]["content"], json!("offline edit"));
-            assert!(report.summary().contains("this device's text won"));
+            assert_eq!(store.refusals().await.unwrap().len(), 1);
         });
     }
 

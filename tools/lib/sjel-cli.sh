@@ -62,5 +62,17 @@ sjel_cli_exec() {
       fi
     fi
   fi
+  if [ "${1:-}" = service-runner.sh ] && [ "${3:-}" = sqld ]; then
+    case "${2:-}" in
+      start|resume|restart|recreate)
+        local protocol
+        if ! protocol="$("$bin" --service-runner-protocol 2>/dev/null)" || \
+          [ "$protocol" != sjel-service-runner-sqld-rotation-v1 ]; then
+          echo "$sub: sqld start refused: sjel-cli lacks the rotation guard protocol; rebuild or repair the CLI" >&2
+          exit 2
+        fi
+        ;;
+    esac
+  fi
   exec "$bin" "$@"
 }

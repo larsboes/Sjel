@@ -32,6 +32,7 @@ use serde::Serialize;
 use crate::paths::Paths;
 
 mod mint;
+mod rotation;
 mod turso;
 
 const HELP: &str = "\
@@ -58,6 +59,17 @@ sjel setup — what this machine still needs, and what applying it would do.
 
   sjel setup verify [component] [--json]
       Ask the primary itself whether the credential works. Exits 1 when a check fails.
+
+  sjel setup rotate turso --confirm
+      Replace the signing key of the primary this machine hosts. A person, at a terminal, typing a
+      confirmation phrase: every token signed by the old key stops working and every client needs
+      reprovisioning. Refuses unless the primary is stopped, has no boot persistence loaded and no
+      unfinished rotation is recorded. Proves the new key against a disposable sqld, then removes
+      the inhibit marker; on any failure the marker stays and this exits nonzero.
+
+  sjel setup rotate recover
+      Report an unfinished rotation from its journal and the public key file. Reads files only,
+      clears nothing, and stays inhibited.
 
 Components are `turso` (embedded replicas of a remote Turso primary). A step with a kind is gone
 rather than kept for a case nothing produces: every step in a plan is a write this tool makes, so
@@ -436,6 +448,23 @@ pub fn run(rest: &[String]) -> ExitCode {
                 ExitCode::SUCCESS
             }
         }
+        // Rotation is its own surface, not a component verb: it answers for the signing key rather
+        // than for a plan, and it is the one verb here that a person has to be at to run.
+        "rotate" => {
+            let only_confirm = !json
+                && url.is_none()
+                && interval_secs.is_none()
+                && !token_stdin
+                && mint_days.is_none()
+                && !remint
+                && !host_here;
+            if !only_confirm {
+                return usage(
+                    "rotate takes --confirm alone: it is not a plan and it applies no settings",
+                );
+            }
+            rotation::run(&words[1..], confirm)
+        }
         other => usage(&format!("unknown verb '{other}'")),
     }
 }
@@ -470,6 +499,7 @@ fn usage(message: &str) -> ExitCode {
         "Usage: sjel setup [plan|apply|verify] [component] [--confirm] [--url <url>] \
          [--interval-secs <n>] [--token-stdin] [--json]"
     );
+    eprintln!("       sjel setup rotate turso --confirm | recover");
     ExitCode::from(2)
 }
 

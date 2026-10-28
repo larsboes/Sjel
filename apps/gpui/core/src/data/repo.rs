@@ -180,21 +180,15 @@ async fn open_local(path: &Path) -> Option<libsql::Connection> {
 /// because measuring the held connection needs a database that is not in memory.
 #[allow(dead_code)]
 fn configured_db_path() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("SJEL_DB_PATH") {
-        let path = PathBuf::from(p);
-        if path.exists() {
-            return Some(path);
-        }
-    }
-    for var in ["SJEL_OVERLAY_ROOT", "SJEL_PERSONAL_ROOT"] {
-        if let Ok(overlay) = std::env::var(var) {
-            let candidate = PathBuf::from(overlay).join("data/axon/axon.db");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
+    let configured = std::env::var("SJEL_DB_PATH")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let path = if configured.is_some() || sjel_config::overlay_root().is_some() {
+        sjel_config::database_path()
+    } else {
+        PathBuf::from(std::env::var("SJEL_OVERLAY_ROOT").ok()?).join("data/axon/axon.db")
+    };
+    path.is_file().then_some(path)
 }
 
 impl Repo {

@@ -1,0 +1,9 @@
+kind = "data"
+name = "archive"
+
+# Set [capability.archive] backup_source_root to the parent of archive.
+backup_paths = ["archive"]
+backup_target = "backup-target"
+backup_retain = "2"
+backup_advise_days = "1"
+backup_stale_days = "2"

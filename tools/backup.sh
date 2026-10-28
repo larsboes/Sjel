@@ -19,11 +19,12 @@ set -euo pipefail
 # Stream mode is a machine-initiated pull contract: stdout must contain archive bytes
 # and nothing else, including output from sourced helpers. Preserve the caller's stdout
 # on fd 3 before loading any helper, and route every normal message to stderr.
-case "$#:${1:-}" in
-  2:--stream)
+for arg in "$@"; do
+  if [ "$arg" = --stream ]; then
     if [ "${SJEL_BACKUP_LOCK_PID:-}" != "$$" ]; then exec 3>&1 1>&2; fi
-    ;;
-esac
+    break
+  fi
+done
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"                 # SJEL_ROOT, SJEL_PERSONAL_ROOT, toml_*
@@ -33,11 +34,12 @@ source "$TOOLS_DIR/lib/external-ref.sh"          # capability_provider — whose
 # interactive shell (shared with init.zsh). No-op if the app isn't running.
 source "$TOOLS_DIR/lib/bw-agent.sh" 9>&- 2>/dev/null || true
 
-usage() { echo "usage: backup.sh [--no-prune] [--target <id>] <capability> | --stream <capability>" >&2; exit 1; }
+usage() { echo "usage: backup.sh [--no-prune] [--target <id>] <capability> | --stream [--source-root <path>] <capability>" >&2; exit 1; }
 BACKUP_ARGS=("$@")
 NO_PRUNE=0
 STREAM=0
 TARGET_FLAG=""
+SOURCE_FLAG=""
 CAP=""
 # A flag loop rather than the fixed-arity `case` this replaced, because
 # `--target` is a third axis: capabilities/backup drives one run per capability
@@ -50,6 +52,9 @@ while [ $# -gt 0 ]; do
     --target)
       [ $# -ge 2 ] || usage
       TARGET_FLAG="$2"; shift 2 ;;
+    --source-root)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      SOURCE_FLAG="$2"; shift 2 ;;
     -*) usage ;;
     *)
       [ -z "$CAP" ] || usage
@@ -57,6 +62,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$CAP" ] || usage
+if [ -n "$SOURCE_FLAG" ] && [ "$STREAM" -ne 1 ]; then
+  echo "backup.sh: --source-root requires --stream so an override cannot replace the configured backup receipt" >&2
+  exit 1
+fi
 # Stream mode has no destination to choose and no retention to apply, so
 # combining it with either flag is a caller mistake rather than a no-op.
 if [ "$STREAM" -eq 1 ] && { [ "$NO_PRUNE" -eq 1 ] || [ -n "$TARGET_FLAG" ]; }; then
@@ -113,6 +122,10 @@ SQLITE_REL="$(toml_get backup_sqlite "$MANIFEST")"
 # connection IS on one host, which is the condition SQLite's WAL requires and the exact
 # one a virtiofs bind mount fails (the cold-copy block below carries that story).
 SQLITE_ONLINE_REL="$(toml_get backup_sqlite_online "$MANIFEST")"
+if [ -n "$SOURCE_FLAG" ] && { [ -n "$SQLITE_REL" ] || [ -n "$SQLITE_ONLINE_REL" ]; }; then
+  echo "backup.sh: --source-root does not apply to SQLite backup sources" >&2
+  exit 1
+fi
 # The container name, read with the other manifest fields rather than inside the branch
 # that uses it: a variable defined in the branch that happens to run first is a trap for
 # the second.
@@ -151,6 +164,11 @@ for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do EXCLUDE_ARGS+=(--exclude "$x"); don
 # Same per-machine override seam as [capability.<name>] port in tools/service-runner.sh.
 SRC_ROOT="$SJEL_PERSONAL_ROOT"
 SRC_ROOT_DECL="$(toml_get_in "capability.$CAP" backup_source_root "$SJEL_MACHINE_TOML")"
+if [ -n "$SOURCE_FLAG" ]; then SRC_ROOT_DECL="$SOURCE_FLAG"; fi
+if [ "$CAP" = archive ] && [ -z "$SRC_ROOT_DECL" ]; then
+  echo "backup.sh: [capability.archive] backup_source_root is required" >&2
+  exit 1
+fi
 if [ -n "$SRC_ROOT_DECL" ]; then
   case "$SRC_ROOT_DECL" in "~/"*) SRC_ROOT_DECL="$HOME/${SRC_ROOT_DECL#\~/}" ;; esac
   case "$SRC_ROOT_DECL" in
@@ -250,12 +268,17 @@ if [ -n "$SQLITE_REL" ]; then
   command -v sqlite3 >/dev/null 2>&1 || {
     echo "backup.sh: sqlite3 is required to verify a cold SQLite backup" >&2; exit 1; }
 fi
-# The same preconditions, and one more: here sqlite3 TAKES the copy as well as verifying
-# it. A deployment that moved its database with SJEL_DB_PATH and left the manifest behind
-# fails on the missing source rather than shipping an archive of nothing.
+# sqlite3 takes and verifies the live copy. The store uses the same explicit database
+# override as its readers; the archive retains the manifest's restore path.
 if [ -n "$SQLITE_ONLINE_REL" ]; then
-  [ -f "$SJEL_PERSONAL_ROOT/$SQLITE_ONLINE_REL" ] || {
-    echo "backup.sh: declared SQLite database is missing: $SQLITE_ONLINE_REL" >&2; exit 1; }
+  db_src="$SJEL_PERSONAL_ROOT/$SQLITE_ONLINE_REL"
+  db_configured="${SJEL_DB_PATH:-}"
+  if [ "$CAP" = store ] && [ -n "${db_configured//[[:space:]]/}" ]; then
+    case "$db_configured" in "~/"*) db_configured="$HOME/${db_configured#\~/}" ;; esac
+    db_src="$db_configured"
+  fi
+  [ -f "$db_src" ] || {
+    echo "backup.sh: declared SQLite database is missing: $db_src" >&2; exit 1; }
   command -v sqlite3 >/dev/null 2>&1 || {
     echo "backup.sh: sqlite3 is required to take and verify a live SQLite backup" >&2; exit 1; }
 fi
@@ -545,7 +568,6 @@ fi
 # are, which is what makes the same command safe here and dangerous there.
 if [ -n "$SQLITE_ONLINE_REL" ]; then
   echo "→ live sqlite copy: $SQLITE_ONLINE_REL"
-  db_src="$SJEL_PERSONAL_ROOT/$SQLITE_ONLINE_REL"
   db_dst="$STAGE/$SQLITE_ONLINE_REL"; mkdir -p "$(dirname "$db_dst")"
   rm -f "$db_dst" "$db_dst-wal" "$db_dst-shm"
 

@@ -495,6 +495,40 @@ expect_fail_with "resume failure is explicit" "CRITICAL: failed to resume" "$BAC
 source_after="$(file_sha256 "$OVERLAY/data/vaultwarden/data/db.sqlite3")"
 [ "$source_before" = "$source_after" ] || fail "synthetic live database was modified"
 
+# The archive must never fall back to an unrelated overlay directory.
+mkdir -p "$FIXTURE/capabilities/archive" "$OVERLAY/archive"
+cat > "$FIXTURE/capabilities/archive/service.toml" <<'MANIFEST'
+kind = "data"
+name = "archive"
+backup_paths = ["archive"]
+backup_target = "synthetic-target"
+backup_retain = "2"
+MANIFEST
+printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["archive"]\n' \
+  > "$OVERLAY/config/machine.toml"
+reset_run
+expect_fail_with "archive requires an explicit source root" "backup_source_root is required" "$BACKUP" archive
+mkdir -p "$SCRATCH/archive-source/archive" "$SCRATCH/remote/archive"
+printf 'PRESERVED\n' > "$SCRATCH/archive-source/archive/note.md"
+printf '\n[capability.archive]\nbackup_source_root = "%s"\n' "$SCRATCH/archive-source" \
+  >> "$OVERLAY/config/machine.toml"
+reset_run
+export MOCK_TIMESTAMP=20260105T020202Z
+expect_pass "archive uses its configured source root" "$BACKUP" archive
+archive_file="$(find "$SCRATCH/remote/archive" -name 'archive-*.tar.gz' | head -1)"
+[ "$(tar -xOzf "$archive_file" ./archive/note.md)" = 'PRESERVED' ] \
+  || fail "archive backup did not contain the configured source"
+mkdir -p "$SCRATCH/alternate-source/archive"
+printf 'ALTERNATE\n' > "$SCRATCH/alternate-source/archive/note.md"
+reset_run
+expect_fail_with "source override cannot replace a configured receipt" "requires --stream" \
+  "$BACKUP" --source-root "$SCRATCH/alternate-source" archive
+reset_run
+"$BACKUP" --stream --source-root "$SCRATCH/alternate-source" archive > "$SCRATCH/archive-stream.tar.gz" \
+  || fail "archive source override stream failed"
+[ "$(tar -xOzf "$SCRATCH/archive-stream.tar.gz" ./archive/note.md)" = 'ALTERNATE' ] \
+  || fail "archive stream did not contain the overridden source"
+
 # --- backup_sqlite_online: the copy taken while every reader still has the file open -------
 # capabilities/store's contract (PRD Q45). The two properties that separate it from the cold
 # one above are asserted directly, because getting either wrong is silent: it must NOT stop
@@ -513,8 +547,30 @@ printf 'SHARED DATABASE\n' > "$OVERLAY/data/axon/axon.db"
 printf 'write-ahead log\n' > "$OVERLAY/data/axon/axon.db-wal"
 
 reset_run
+expect_fail_with "source root cannot override a SQLite source" "does not apply to SQLite" \
+  "$BACKUP" --stream --source-root "$SCRATCH/alternate-source" store
+
+reset_run
+printf 'OTHER DATABASE\n' > "$SCRATCH/other.db"
+export SJEL_DB_PATH="$SCRATCH/other.db"
+export MOCK_TIMESTAMP=20260105T030303Z
+expect_pass "store backs up the configured database" "$BACKUP" store
+configured_archive="$(find "$SCRATCH/remote/store" -name 'store-*.tar.gz' | head -1)"
+[ "$(tar -xOzf "$configured_archive" ./data/axon/axon.db)" = 'OTHER DATABASE' ] \
+  || fail "store backup did not contain the configured database"
+unset SJEL_DB_PATH
+rm -rf "$SCRATCH/remote/store"; mkdir -p "$SCRATCH/remote/store"
+export SJEL_DB_PATH="$SCRATCH/missing.db"
+expect_fail_with "store refuses a missing configured database" "declared SQLite database is missing" "$BACKUP" store
+[ -z "$(find "$SCRATCH/remote/store" -mindepth 1 -print -quit)" ] \
+  || fail "a missing configured database shipped an archive"
+unset SJEL_DB_PATH
+
+reset_run
 export MOCK_TIMESTAMP=20260106T030303Z
+export SJEL_DB_PATH="$OVERLAY/data/axon/axon.db"
 expect_pass "live sqlite backup" "$BACKUP" store
+unset SJEL_DB_PATH
 if grep -q '^service:' "$MOCK_LOG"; then
   fail "the live copy held the service down; log said: $(tr '\n' '|' < "$MOCK_LOG")"
 fi

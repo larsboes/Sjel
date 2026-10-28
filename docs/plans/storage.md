@@ -47,6 +47,76 @@ capabilities spans two table prefixes, and it is a migration helper.
   decision: key custody, process access, replication, backups, output scrubbing.
 - **Data on the phone** follows the rules in [`gpui.md`](gpui.md#what-may-live-on-the-phone):
   online first, offline only what the user chose, no second writer (2026-10-25).
+- **Personal data is outside Git repositories** (2026-10-26). Private configuration remains in
+  the overlay; databases, capability files and unsorted archives move to a separate local data
+  root. The knowledge-only vault remains a separate directory under the developer workspace, with
+  its own fresh Git history and no remote until configured. Only selected data is kept on the
+  phone. External-drive backups may be unencrypted for now.
+
+### Local data and knowledge-vault migration
+
+The existing overlay contains both configuration and data. A separate data root is not yet a
+runtime contract. On 2026-10-28 the vault pointer, state mount and backup source were switched to
+the knowledge-only copy. A backup of that copy and a backup of the original vault both passed
+isolated restores. The original vault and its history remain in place. The new vault lacks the
+contract required by the Obsidian skill; service reload, Obsidian rendering, link resolution and
+complete preservation of non-knowledge files remain to be verified before migration is complete.
+On 2026-10-28, `vault compare` found 174 newly unresolved link occurrences across 1,156
+unchanged destination notes; 64 explicitly target `Atlas/Media/` and 121 occur in frontmatter.
+Those categories overlap. The comparison excludes changed or ambiguous notes; none of the 1,156
+destination notes was excluded in this run. Account for the broken references before cutover is
+complete.
+The machine overlay's Comms projection and two missing link sources no longer point at the old
+vault. Five missing relevance-profile paths were cleared, so relevance has no personal lenses
+until replacements are configured. All five names were found in two archive copies with matching
+bytes, but archive membership does not establish that those lenses are current; they were not
+reactivated. Reconcile them with the `operator-profile` owner and the Focus import before restoring
+relevance. `operator-profile` was not present in the enabled capability registry in this check.
+Interior now uses its existing overlay data fallback instead
+of a missing vault assets path. Stale vault roots in Trips and Finance configuration were cleared;
+their current config loaders do not use those roots. Runtime reload and Interior asset resolution
+remain unverified. Historical backup configs and retired LifeOS files still contain old paths.
+The obsolete Notability-to-vault helper now refuses to run rather than writing into the retired
+vault; its source files remain for the Sjel import work in `data.md`.
+`tools/service-runner.sh status` reported both Vault and Scouting as stopped while their health
+endpoints answered. Their running process ownership and loaded configuration must be established
+before a restart; health alone does not prove the configured vault changed.
+An rsync checksum dry run on 2026-10-28 compared the original vault against the existing archive
+snapshot, excluding `Knowledge/`, application state, Git history and secret-pattern paths. It
+reported 87,091 bytes of source files needing transfer. This is a partial comparison, not evidence
+that the snapshot contains every non-knowledge file; the full original-vault backup remains intact.
+An additive archive intake on 2026-10-28 copied 3,091 files from the original vault, excluding
+`Knowledge/`, Git, Obsidian and Smart Environment state, symlinks and secret-pattern paths. An
+rsync checksum dry run reported zero bytes needing transfer within that scope. The excluded
+material remains in the original vault and its prior full backup; it has not been reconciled.
+The intake tool's independent checksum comparison found 3,091 files on each side, zero missing,
+extra or changed files, four excluded source entries, and no included symlinks or special entries.
+The four excluded entries are the root knowledge, Git, Obsidian and Smart Environment trees;
+their contents were not inspected by this comparison.
+The archive capability was enabled for a backup attempt, then disabled after staging failed on
+filesystem-denied paths and cleanup reported permission errors. The expanded archive has no
+verified new backup; the earlier archive backup and original-vault backup remain in place.
+The filtered intake alone was streamed to a separate archive on 2026-10-28 and restored in
+isolation. On 2026-10-28, the restored tree matched all 3,091 source files by normalized path and
+SHA-256, with no missing, extra or changed files. The backup command exited nonzero because
+staging cleanup failed. The intake and its backup are on
+the same external drive and do not protect against loss of that drive. The earlier statement
+about the expanded archive refers to the whole archive, not this filtered intake.
+
+1. Add a configurable data root outside both repositories; migrate each owner without changing
+   its records, verify database and file copies, and keep the overlay for private configuration.
+2. Give the unsorted archive an independent backup contract and prove an isolated restore. Do
+   not treat an offline phone copy as the archive backup. Audit tracked overlay data privately;
+   removal from Git tracking alone does not remove prior history.
+3. Preserve the knowledge tree, required Bases and assets in the separate vault. Resolve or
+   explicitly account for links to material moving to Sjel. Compare source and destination with
+   Unicode-normalized paths; do not use a deleting sync to resolve normalization differences.
+4. Review Obsidian settings and verify Bases, embeds and links in Obsidian. Update the vault
+   pointer, state mount and backup source together only after a new-vault backup and restore pass.
+   Keep the original vault until cutover is verified. Fail plugin deployment closed if vault
+   resolution fails.
+5. Fresh Git history starts without a remote; review files and ignore rules before the first
+   commit or remote. The retained original history can contain non-knowledge material.
 
 ## 3. Phone standalone
 

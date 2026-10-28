@@ -138,9 +138,9 @@ archive is impossible. The removable external copy is manual and outside this sc
   here for the reason it was *wrong* for vaultwarden on 2026-07-25 (`tools/backup.sh`): SQLite's
   WAL coordinates readers and writers through shared memory and requires every connection on one
   host, and every reader of this file is a host process with no virtiofs mount in between.
-- **The backup contract names a path, and `SJEL_DB_PATH` can move the file out from under it.**
-  A deployment that sets it must update `backup_sqlite_online` too. `tools/backup.sh` refuses to
-  run on a missing source rather than shipping an archive of nothing, so the mistake is loud.
+- **The backup contract names the restore path.** `tools/backup.sh` uses `SJEL_DB_PATH` for the
+  source when set. The backup process must receive the same setting as the database consumers.
+  It refuses to run on a missing source rather than shipping an archive of nothing.
 - **Timestamps are TEXT in one canonical 29-character format** (`sjel_store::NOW`). Two widths in
   one column stop `ORDER BY` being time order; `libs/sjel-store/README.md` has the format and the
   translation table, and every capability writes through that constant rather than its own.

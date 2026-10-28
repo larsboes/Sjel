@@ -466,7 +466,10 @@ mod tests {
         let scratch = Scratch::new();
         scratch.plant("dashboard", Plant::checkable());
         scratch.plant(".claude/worktrees/my-branch/dashboard", Plant::checkable());
-        scratch.plant(".claude/worktrees/other/capabilities/x/ui", Plant::checkable());
+        scratch.plant(
+            ".claude/worktrees/other/capabilities/x/ui",
+            Plant::checkable(),
+        );
         assert_eq!(
             discover(&scratch.0)
                 .into_iter()

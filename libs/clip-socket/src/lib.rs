@@ -65,6 +65,7 @@ pub fn write_frame(output: &mut impl Write, message: &Value) -> std::io::Result<
 
 /// Relay one request to the server's socket and return its answer. An absent or refusing
 /// socket is `unavailable`, which the extension treats as "queue and retry".
+#[cfg(unix)]
 pub fn relay(socket: &Path, request: &Value) -> Value {
     let attempt = || -> std::io::Result<Value> {
         let mut stream = std::os::unix::net::UnixStream::connect(socket)?;
@@ -73,6 +74,12 @@ pub fn relay(socket: &Path, request: &Value) -> Value {
         read_frame(&mut stream)?.ok_or_else(|| std::io::ErrorKind::UnexpectedEof.into())
     };
     attempt().unwrap_or_else(|_| json!({ "ok": false, "error": "unavailable" }))
+}
+
+/// std has no Unix socket off Unix, so the clip socket is always `unavailable` there.
+#[cfg(not(unix))]
+pub fn relay(_socket: &Path, _request: &Value) -> Value {
+    json!({ "ok": false, "error": "unavailable" })
 }
 
 #[cfg(test)]

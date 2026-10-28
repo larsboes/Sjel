@@ -85,23 +85,10 @@ jobs:
       - name: self.json is current
         run: tools/self check
 
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: cargo-registry-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            cargo-registry-${{ runner.os }}-
-
-      - name: Cache cargo target
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
-        with:
-          path: target
-          key: cargo-target-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            cargo-target-${{ runner.os }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # An "Install the pinned ledger engine" step stood here until 2026-08-28, when PRD Q50
       # retired hledger. It downloaded the upstreams.toml pin so the demo would not be built

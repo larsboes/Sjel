@@ -51,22 +51,20 @@ Open:
   `Knowledge/` matches except the added contract and the rewritten `Meta/Vault/Vault.md`. Not
   carried: `.git`, `.obsidian` and `.smart-env` internals, and 19 dangling plugin-backup
   symlinks. The vault and scouting services were rebuilt and restarted after the pointer change
-  and report ready. Open:
-  - `vault links --dead` finds 174 link occurrences that resolve in the old vault and not in the
-    new one, 171 of them into material now in the archive (`Atlas/Media` most). Four Knowledge
-    notes embed `Resources/Bases/Focus.base`, whose folder left; `vault bases --strict` fails on
-    it. Each needs an explicit destination.
-  - The new vault is a git repository with no commit and no remote. The intake, its tarball and
-    every vault backup sit on one external drive; the iCloud copy is the only second failure
-    domain. Create and restore a knowledge-vault backup elsewhere.
+  and report ready. The 171 links into archived material are plain text now, `Focus.base` and
+  its four embeds are gone, and `vault bases --strict` passes. The vault is a private repository,
+  `github.com/larsboes/Knowledge-Base`; a fresh clone matched all 1,225 tracked files. Open:
   - Review settings, `Knowledge.base`, links and embeds in Obsidian.
+  - `vault links` counts links inside fenced code blocks, which Obsidian does not resolve. The
+    three remaining newly dead links are the `Document.pdf` syntax examples in
+    `Knowledge/Meta/Vault/Obsidian Embed Files.md`.
   - Inert old-vault paths remain in the overlay: `SETUP.md`, three `profile_path` entries in
-    `comms-relevance-shadow.json` (no reader), and the two disabled scouting sources, whose
-    globs name folders that left.
+    `comms-relevance-shadow.json` (no reader), the two disabled scouting sources, whose globs
+    name folders that left, and the `knowledge-base` state mount in `machine.toml`, which still
+    describes a homepi bare repository.
 
-  Cutover is complete when the independent backup restores, unresolved links have an explicit
-  destination, and the Obsidian review passes. Keep the iCloud copy unchanged as a historical
-  state.
+  Cutover is complete when the Obsidian review passes. Keep the iCloud copy unchanged as a
+  historical state.
 - **Every route has an owner that accepts it.** Media, finance and notes files are recorded
   `pending` because those capabilities have no import contract. Done when a run over a real mixed
   folder leaves no `pending` row, no file goes to two owners, and a rerun stores no bytes twice.

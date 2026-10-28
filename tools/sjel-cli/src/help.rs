@@ -22,6 +22,7 @@ Discover Sjel:
   demo up|mac <page>|down        Run the demo stack in a container and screenshot the app on it
 
 Check a change before pushing it:
+  check                          Run the quick CI subset for this change (pre-push runs it)
   gates                          Run CI's repo gates here, from CI's own definition
   test                           Run CI's bun test and every tools/*.test.sh
   cargo <args...>                Run cargo against a scratch target dir and a scratch overlay
@@ -205,7 +206,7 @@ Classes for --only:
 Report exits 1 when something is stale. Apply exits 1 when there was nothing to do.
 The --json payload is the stable surface a UI reads; see src/updates/ in this crate."#;
 
-pub const GATES: &str = r#"Usage: sjel gates | sjel test
+pub const GATES: &str = r#"Usage: sjel gates | sjel test | sjel check [--base <ref>] [--committed]
 
 Both replay one job of .github/workflows/ci.yml here, reading the step list out of that
 file. No gate is named here on purpose: a second copy of the list is a copy that goes
@@ -213,6 +214,8 @@ stale, so `tools/ci-local list` prints what each job will actually run.
 
   gates   the repo-gates job — the file-based checks, in CI's order
   test    the bun-tests job — `bun test` from the root, then every tools/*.test.sh
+  check   the quick subset for this change, in parallel: fmt, repo gates, clippy on the
+          affected crates, tests beside changed files. The pre-push hook runs it.
 
 Every step runs even after one fails. Exit 1 means a step failed.
 Rust is deliberately not here: run `sjel cargo test --workspace --locked`.

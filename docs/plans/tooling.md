@@ -93,9 +93,13 @@ covers it.
 - **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
   candidate in pull-request CI without changing the full checks. It maps Rust source changes to
   package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
-  files and reports the existing GPUI input match. Runtime file reads are not modeled. Open work:
+  files and reports the existing GPUI input match. Runtime file reads are not modeled.
+  `fastPlan` in the same file drives `sjel check` and the pre-push hook: fmt, repo gates, clippy
+  on affected crates, and tests beside changed files. Open work:
   1. CI reports separate Rust test compilation and execution resource usage and target size.
-     Pages uses the same main-only dependency cache policy as CI.
+     Pages uses the same main-only dependency cache policy as CI. `bun-tests`, `ui-check` and
+     `repo-gates` share a `sjel-cli-release` cache; measure their step times once main has saved
+     it.
      Measure cache restore/save time and bytes and local target-directory growth for
      documentation, leaf crate, shared crate, UI and lockfile changes. Use existing storage
      reporting; do not clean a running deployment target.

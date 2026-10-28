@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, rustImpact, type Package } from "./ci-impact.ts";
+import { changedFiles, fastPlan, rustImpact, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -100,4 +100,23 @@ test("aggregate fails for a failed, missing or unexpectedly skipped job", async 
   expect(run({ CHANGES: "skipped" })).toBe(1);
   expect(run({ GPUI_SELECTED: "true", GPUI: "skipped" })).toBe(1);
   expect(run({ GPUI_SELECTED: "", GPUI: "skipped" })).toBe(1);
+});
+
+test("fast plan: docs-only change skips clippy, Rust change scopes it, deletion widens it", () => {
+  const none = () => false;
+  const names = (p: ReturnType<typeof fastPlan>) => p.checks.map((c) => c.name);
+  expect(names(fastPlan(["docs/x.md"], false, packages, none))).toEqual(["cargo fmt", "repo gates"]);
+  const scoped = fastPlan(["libs/base/src/lib.rs"], false, packages, none).checks.find((c) => c.name === "clippy")!;
+  expect(scoped.cmd).toContain("-p");
+  expect(scoped.cmd).not.toContain("--workspace");
+  expect(fastPlan(["Cargo.lock"], false, packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
+  expect(fastPlan(["docs/x.md"], true, packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
+  expect(names(fastPlan(["apps/gpui/src/main.rs"], false, packages, none))).not.toContain("clippy");
+});
+
+test("fast plan: picks tests beside changed files", () => {
+  const exists = (p: string) => ["tools/x.test.ts", "tools/x.test.sh"].includes(p);
+  const plan = fastPlan(["tools/x.ts", "tools/x"], false, packages, exists);
+  expect(plan.checks.find((c) => c.name === "bun test")!.cmd).toEqual(["bun", "test", "./tools/x.test.ts"]);
+  expect(plan.checks.map((c) => c.name)).toContain("tools/x.test.sh");
 });

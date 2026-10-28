@@ -23,13 +23,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { parseJobs, type WorkflowJob, type WorkflowStep } from "./lib/ci-workflow.ts";
+import { changedFiles, fastPlan, rootPackages } from "./ci-impact.ts";
 
 const HELP = `tools/ci-local — run a CI job's steps on this machine, read from ci.yml.
 
   tools/ci-local list [--json]     every job in ci.yml, and whether it runs here
   tools/ci-local run <job>...      run each named job's \`run:\` steps, in order
+  tools/ci-local fast              the quick subset for this change, in parallel: fmt, repo
+                                   gates, clippy on affected crates, tests beside changed files
 
   --root <dir>                     the checkout to read and run in (default: this one)
+  --base <ref>                     fast: compare against this ref (default: origin/main)
+  --committed                      fast: ignore uncommitted and untracked files
 
 Every step runs even after one fails, so one red gate does not hide the rest.
 Exit 0 = all passed, 1 = a step failed, 2 = usage or a refused job.`;
@@ -125,6 +130,41 @@ if (cmd === "list") {
     else for (const step of job.steps) console.log(`  ${"".padEnd(14)}   ${step.name}`);
   }
   process.exit(0);
+}
+
+if (cmd === "fast") {
+  const baseAt = argv.indexOf("--base");
+  const base = baseAt === -1 ? "origin/main" : argv[baseAt + 1];
+  if (!base || base.startsWith("-")) {
+    console.error("tools/ci-local: --base needs a commit");
+    process.exit(2);
+  }
+  const { files, deleted } = changedFiles(root, base, !argv.includes("--committed"));
+  const plan = fastPlan([...files].sort(), deleted.size > 0, rootPackages(root), (p) => existsSync(join(root, p)));
+  console.log(`ci-local fast: ${files.size} changed file(s) against ${base}\n`);
+  for (const c of plan.checks) console.log(`  run   ${c.name.padEnd(28)} ${c.reason}`);
+  for (const s of plan.skipped) console.log(`  skip  ${s}`);
+  console.log("");
+
+  // In parallel, with output held until a check ends, so two logs never interleave.
+  const wallStart = Bun.nanoseconds();
+  const outcomes = await Promise.all(plan.checks.map(async (c) => {
+    const started = Bun.nanoseconds();
+    const proc = Bun.spawn({ cmd: c.cmd, cwd: root, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+    const ms = Math.round((Bun.nanoseconds() - started) / 1e6);
+    console.log(`--- ${c.name}: ${code === 0 ? "ok" : "FAILED"}  ${secs(ms)}`);
+    if (code !== 0) console.log(out + err);
+    return { step: c.name, ok: code === 0, ms };
+  }));
+  const failed = outcomes.filter((r) => !r.ok);
+  const wall = secs(Math.round((Bun.nanoseconds() - wallStart) / 1e6));
+  if (failed.length === 0) {
+    console.log(`\nci-local fast: ${outcomes.length} checks passed in ${wall}. CI still runs the full suite.`);
+    process.exit(0);
+  }
+  console.error(`\nci-local fast: ${failed.length} of ${outcomes.length} checks FAILED in ${wall}: ${failed.map((f) => f.step).join(", ")}`);
+  process.exit(1);
 }
 
 if (cmd !== "run") {

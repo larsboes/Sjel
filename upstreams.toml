@@ -952,18 +952,21 @@ why = "AUDITED AND VENDORED 2026-10-28 from 1.7.1-14 (`6d56d618`) into capabilit
 url = "https://github.com/coddingtonbear/obsidian-local-rest-api"
 verdict = "adopt"
 license = "MIT"
+summary = "The Obsidian REST plugin obsidian-access calls, unchanged and unvendored"
 why = "The Obsidian-hosted REST transport for Packs/knowledge/pi-packages/obsidian-access. Sjel keeps the upstream plugin unchanged and calls its authenticated HTTP API; the Pi package owns model identity, C0-C3 admission, agent_access, discovery filtering and bounded tool results. Its built-in MCP endpoint is deliberately not configured because it carries the same vault-wide bearer authority without Sjel's policy boundary. API surface reviewed at 5.3.1 on 2026-09-28: vault CRUD and targeted document operations, simple and JsonLogic search, tags, active-file state, commands, events, binary transfer and signed URLs. No source is vendored"
 
 [yaml-js]
 url = "https://github.com/eemeli/yaml"
 verdict = "adopt"
 license = "ISC"
+summary = "YAML frontmatter parser for obsidian-access, strict enough to refuse duplicates"
 why = "Strict YAML frontmatter parsing in obsidian-access. The policy must reject duplicate keys, malformed mappings and non-string class fields before note content reaches a model; a hand-written subset parser would turn syntax edge cases into access decisions. Runtime dependency pinned in that package's bun.lock"
 
 [smol-toml]
 url = "https://github.com/squirrelchat/smol-toml"
 verdict = "adopt"
 license = "BSD-3-Clause"
+summary = "TOML parser for obsidian-access's model policy in the overlay"
 why = "Parses the private obsidian-access model policy from the overlay's TOML configuration. TOML is already Sjel's machine-configuration format, and importing one focused parser is less error-prone than a second local parser for arrays of model rule tables. Runtime dependency pinned in that package's bun.lock"
 
 [defuddle]

@@ -16,6 +16,11 @@ const SKIP_DIRS: &[&str] = &[
     "node_modules",
     "target",
 ];
+
+/// Repository-relative trees that are a different checkout of this repository, not content of
+/// it. A worktree carries its own index, so its packages are untracked *here* by construction; this
+/// gate would call every one of them a violation. Each worktree runs this gate against itself.
+const SKIP_TREES: &[&str] = &[".claude/worktrees"];
 const LOCKFILES: &[&str] = &["bun.lock", "bun.lockb"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,7 +49,7 @@ struct UiPackage {
 }
 
 fn package_dirs(root: &Path) -> Vec<PathBuf> {
-    fn walk(dir: &Path, found: &mut Vec<PathBuf>) {
+    fn walk(root: &Path, dir: &Path, found: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
             return;
         };
@@ -59,14 +64,20 @@ fn package_dirs(root: &Path) -> Vec<PathBuf> {
             let Ok(kind) = entry.file_type() else {
                 continue;
             };
-            if kind.is_dir() && !SKIP_DIRS.contains(&entry.file_name().to_string_lossy().as_ref()) {
-                walk(&entry.path(), found);
+            if !kind.is_dir() || SKIP_DIRS.contains(&entry.file_name().to_string_lossy().as_ref()) {
+                continue;
             }
+            let path = entry.path();
+            let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy();
+            if SKIP_TREES.iter().any(|tree| *tree == rel) {
+                continue;
+            }
+            walk(root, &path, found);
         }
     }
 
     let mut found = Vec::new();
-    walk(root, &mut found);
+    walk(root, root, &mut found);
     found.sort();
     found
 }
@@ -439,6 +450,23 @@ mod tests {
         scratch.plant("dashboard/node_modules/svelte", Plant::checkable());
         scratch.plant("dashboard/.svelte-kit/output", Plant::checkable());
         scratch.plant("dashboard/dist/vendor", Plant::checkable());
+        assert_eq!(
+            discover(&scratch.0)
+                .into_iter()
+                .map(|package| package.dir)
+                .collect::<Vec<_>>(),
+            ["dashboard"]
+        );
+    }
+
+    /// A worktree is a second checkout with its own index, so its packages are untracked in the
+    /// primary one by construction. Judging them here reports every open branch as a violation.
+    #[test]
+    fn a_worktree_under_claude_is_not_discovered() {
+        let scratch = Scratch::new();
+        scratch.plant("dashboard", Plant::checkable());
+        scratch.plant(".claude/worktrees/my-branch/dashboard", Plant::checkable());
+        scratch.plant(".claude/worktrees/other/capabilities/x/ui", Plant::checkable());
         assert_eq!(
             discover(&scratch.0)
                 .into_iter()

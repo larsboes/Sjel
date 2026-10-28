@@ -49,8 +49,8 @@ mod pure;
 use crate::paths::Paths;
 use pure::{
     classify_processes, credential_finding, decide_emission, decide_resolutions, net_finding,
-    parse_ps_output, storage_finding, Emission, Finding, FindingRow, NetReport, Proc,
-    StorageReport, WatchPolicy,
+    parse_ps_output, storage_finding, tailnet_finding, Emission, Finding, FindingRow, NetReport,
+    Proc, StorageReport, TailnetReport, WatchPolicy,
 };
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -140,12 +140,13 @@ pub fn run(argv: &[String]) -> ExitCode {
 
     // All at once, as `Promise.all` did: the wall cost is storage's `du`/`df` and it is
     // almost entirely I/O wait, so running them in series would add the two cheap ones to it.
-    let (procs, storage, net, credentials) = std::thread::scope(|scope| {
+    let (procs, storage, net, credentials, tailnet) = std::thread::scope(|scope| {
         let ps = scope.spawn(run_ps);
         let st = scope.spawn(|| run_storage(&root));
         let hn = scope.spawn(|| run_host_net(&root));
         let cr = scope.spawn(|| credential_findings(&root));
-        (ps.join(), st.join(), hn.join(), cr.join())
+        let tn = scope.spawn(|| run_tailnet(&root));
+        (ps.join(), st.join(), hn.join(), cr.join(), tn.join())
     });
     let procs: Vec<Proc> = match procs {
         Ok(Ok(procs)) => procs,
@@ -159,6 +160,7 @@ pub fn run(argv: &[String]) -> ExitCode {
     findings.extend(storage.as_ref().and_then(storage_finding));
     findings.extend(net_finding(net.as_ref()));
     findings.extend(credentials.unwrap_or_default());
+    findings.extend(tailnet_finding(&tailnet.unwrap_or_default()));
 
     if as_json {
         let mut values: Vec<serde_json::Value> = proc_findings
@@ -320,6 +322,46 @@ fn run_host_net(root: &Path) -> Option<NetReport> {
             None
         }
     }
+}
+
+/// `host-net tailnet --json` for each tailscaled on this host: the default one, and the
+/// user-level `sjel` node when its socket exists (`tools/setup-tailnet-shell.sh` owns that path).
+/// A node that cannot be read is skipped and named on stderr.
+fn run_tailnet(root: &Path) -> Vec<(String, TailnetReport)> {
+    let bin = host_net_binary(root);
+    if !bin.is_file() {
+        return Vec::new();
+    }
+    let mut nodes: Vec<(String, Option<String>)> = vec![("default".into(), None)];
+    if let Some(sock) = sjel_config::overlay_root()
+        .map(|o| o.join("secrets/tailscale-sjel/tailscaled.sock"))
+        .filter(|p| p.exists())
+    {
+        nodes.push(("sjel".into(), Some(format!("--socket={}", sock.display()))));
+    }
+    nodes
+        .into_iter()
+        .filter_map(|(name, socket)| {
+            let mut cmd = Command::new(&bin);
+            cmd.args(["tailnet", "--json"]).args(socket);
+            match cmd.output() {
+                Ok(out) => match serde_json::from_slice::<TailnetReport>(&out.stdout) {
+                    Ok(report) => Some((name, report)),
+                    Err(_) => {
+                        eprintln!(
+                            "host-watch: host-net tailnet --json unreadable for {name} (exit {})",
+                            out.status.code().unwrap_or(-1)
+                        );
+                        None
+                    }
+                },
+                Err(e) => {
+                    eprintln!("host-watch: host-net tailnet could not run for {name}: {e}");
+                    None
+                }
+            }
+        })
+        .collect()
 }
 
 /// `<root>/target/release/host-net-cli`, or the same path under `CARGO_TARGET_DIR` when this

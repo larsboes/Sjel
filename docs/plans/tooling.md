@@ -10,6 +10,15 @@ covers it.
 
 ## Open
 
+- **Package state of other hosts.** `tools/host-patch.sh` and `tools/doctor` cover only the
+  machine they run on. Checking a Linux host on the tailnet for pending updates took a manual
+  `ssh <host> apt list --upgradable`. Smallest change: a doctor line that runs that read over SSH
+  for each host the overlay names, and reports the count and whether a reboot is required.
+- **Daemons that outlive their upgrade.** `tools/host-patch.sh` upgrades a binary but does not
+  restart the process that runs it, so a long-running daemon keeps the old code. An uninstalled
+  Homebrew formula also left its launchd job running a deleted binary. `host-net tailnet` now
+  catches this for tailscaled only. Smallest change: after the upgrade step, report each
+  launchd job whose executable changed or was deleted since the job started.
 - **Vault archive intake.** `tools/vault-archive-intake` copies into a new directory, verifies
   file bytes and reports excluded entries and symlinks as counts. It does not preserve file
   metadata, empty directories or excluded paths; the full vault backup remains the recovery

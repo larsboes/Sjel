@@ -2,7 +2,7 @@
 
 use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, Result};
 
-/// PDF, through [xberg](https://github.com/xberg-io/xberg) (`=1.3.6`).
+/// PDF, through [xberg](https://github.com/xberg-io/xberg) (`=1.3.10`).
 ///
 /// Registered for `Pdf` only. xberg reads HTML too and returns more text than
 /// `Builtin` on every URL in the recorded benchmark, but it is an extractor and
@@ -27,7 +27,7 @@ pub struct Xberg;
 
 impl Extractor for Xberg {
     fn name(&self) -> &'static str {
-        "xberg-1.3.6"
+        "xberg-1.3.10"
     }
 
     fn handles(&self, class: InputClass) -> bool {
@@ -59,8 +59,8 @@ impl Extractor for Xberg {
         // and text recovered from a scan is a different answer from text read
         // out of the file, for anything that later doubts the content.
         let producer: &'static str = match document.extraction_method {
-            Some(::xberg::ExtractionMethod::Ocr) => "xberg-1.3.6/ocr",
-            Some(::xberg::ExtractionMethod::Mixed) => "xberg-1.3.6/mixed",
+            Some(::xberg::ExtractionMethod::Ocr) => "xberg-1.3.10/ocr",
+            Some(::xberg::ExtractionMethod::Mixed) => "xberg-1.3.10/mixed",
             _ => self.name(),
         };
 
@@ -162,7 +162,7 @@ mod tests {
             out.text
         );
         assert!(
-            out.producer.starts_with("xberg-1.3.6"),
+            out.producer.starts_with("xberg-1.3.10"),
             "producer must name the extractor: {}",
             out.producer
         );
@@ -182,7 +182,7 @@ mod tests {
         let error = Xberg
             .extract(&Document::html(b"<p>hi</p>"))
             .expect_err("xberg is registered for pdf only");
-        assert_eq!(error.to_string(), "xberg-1.3.6 does not read html input");
+        assert_eq!(error.to_string(), "xberg-1.3.10 does not read html input");
     }
 
     /// The smallest PDF that carries one line of extractable text.

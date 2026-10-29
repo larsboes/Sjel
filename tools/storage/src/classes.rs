@@ -566,21 +566,20 @@ mod tests {
         // The measured failure (2026-10-29): `rm -rf ~/.cargo-target/debug` exited 1 on
         // `Directory not empty` after deleting 82 GB of an 88 GB class, and the run reported
         // `6.4 GB freed, 1 refused` — the class was dropped from the total whole, so the reader
-        // was told nothing had happened. A file that cannot be removed reproduces the shape.
+        // was told nothing had happened.
+        //
+        // A directory nothing may be removed from reproduces the shape. The mode is used rather
+        // than `chflags`, which would be macOS-only: this suite runs on the Linux runner too.
+        use std::os::unix::fs::PermissionsExt;
+
         let root = crate::testutil::tempdir("classes-partial");
         let full = root.join("full");
-        std::fs::create_dir_all(&full).unwrap();
+        let blocked = full.join("blocked");
+        std::fs::create_dir_all(&blocked).unwrap();
         std::fs::write(full.join("removable"), vec![0u8; 64 * 1024]).unwrap();
-        let locked = full.join("locked");
-        std::fs::write(&locked, vec![0u8; 64 * 1024]).unwrap();
-        let flag = |args: &[&str]| {
-            std::process::Command::new("chflags")
-                .args(args)
-                .status()
-                .expect("chflags")
-                .success()
-        };
-        assert!(flag(&["uchg", &locked.to_string_lossy()]), "chflags uchg");
+        std::fs::write(blocked.join("entry"), vec![0u8; 64 * 1024]).unwrap();
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o555))
+            .expect("make the subdirectory unremovable");
 
         let a = Authority::default();
         let guard = Guard::new(&a, &root, &root, false);
@@ -605,8 +604,11 @@ mod tests {
             "more was freed than existed: {:?}",
             out.lines
         );
-        // The half that survived is what was measured, so the file is really still there.
-        assert!(locked.exists(), "the locked file went anyway");
+        // The half that survived is what was measured, so it is really still there.
+        assert!(
+            blocked.join("entry").exists(),
+            "the blocked file went anyway"
+        );
         assert!(!full.join("removable").exists(), "the free file survived");
         assert!(
             out.lines
@@ -616,10 +618,7 @@ mod tests {
             out.lines
         );
 
-        assert!(
-            flag(&["noschg", &locked.to_string_lossy()]),
-            "chflags noschg"
-        );
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755)).ok();
         std::fs::remove_dir_all(&root).ok();
     }
 

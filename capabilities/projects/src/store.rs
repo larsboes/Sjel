@@ -76,6 +76,20 @@ pub struct MailDecisionOutcome {
     pub render_error: Option<String>,
 }
 
+/// One mail thread's prefix, `mail:v1:<thread>:`, so a withdrawal never spans threads.
+pub fn mail_thread_prefix(prefix: &str) -> bool {
+    prefix
+        .strip_prefix("mail:v1:")
+        .and_then(|rest| rest.strip_suffix(':'))
+        .is_some_and(|thread| {
+            !thread.is_empty()
+                && thread.len() <= 120
+                && thread
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        })
+}
+
 impl MailProposalInput {
     pub fn validate(&self) -> Result<(), &'static str> {
         for (value, max) in [
@@ -179,6 +193,17 @@ impl Projects {
             return Ok(None);
         }
         Ok(Some(proposal))
+    }
+
+    /// Delete every pending or rejected proposal from one thread, for example after the thread
+    /// became c3. Approved proposals stay: a reviewer already accepted their evidence.
+    pub async fn withdraw_mail_thread(&self, source_prefix: &str) -> Fallible<u64> {
+        if !mail_thread_prefix(source_prefix) {
+            return Err("source_prefix must be mail:v1:<thread>:".into());
+        }
+        let conn = self.db.connect().await?;
+        // substr, not LIKE: `_` is a LIKE wildcard and is valid in a thread ID.
+        Ok(conn.execute("DELETE FROM projects_mail_proposals WHERE substr(source_id, 1, length(?1)) = ?1 AND status IN ('pending', 'rejected')", [source_prefix]).await?)
     }
 
     pub async fn mail_proposals(&self, before: i64) -> Fallible<Vec<MailProposal>> {

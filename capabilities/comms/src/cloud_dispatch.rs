@@ -187,7 +187,7 @@ pub fn digest(
 /// a key one provider requires another is entitled to answer 400 on.
 ///
 /// Overrides are applied last, so a role can deliberately replace something the task set.
-fn apply_role_conventions(role: &ResolvedRole, body: &mut serde_json::Value) {
+pub(crate) fn apply_role_conventions(role: &ResolvedRole, body: &mut serde_json::Value) {
     let Some(object) = body.as_object_mut() else {
         return;
     };

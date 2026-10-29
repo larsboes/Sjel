@@ -22,6 +22,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
         closed: &[
             ("GET", "/api/mail-proposals"),
             ("POST", "/api/mail-proposals"),
+            ("POST", "/api/mail-proposals/withdraw"),
             ("POST", "/api/mail-proposals/{id}/decision"),
             ("GET", "/api/inventory-links"),
             ("POST", "/api/inventory-links"),
@@ -40,6 +41,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route { method: "POST", path: "/api/inventory-links/remove", summary: "Remove a reviewed Inventory reference with a record revision check.", request_schema: Some(route_manifest::schema_of::<InventoryLinkDecision>) },
     route_manifest::get("GET", "/api/mail-proposals", "List up to 500 mail proposals, newest first; ?before= is an exclusive id cursor."),
     route_manifest::Route { method: "POST", path: "/api/mail-proposals", summary: "Stage project mail evidence without changing a project.", request_schema: Some(route_manifest::schema_of::<projects::store::MailProposalInput>) },
+    route_manifest::Route { method: "POST", path: "/api/mail-proposals/withdraw", summary: "Delete pending and rejected proposals of one mail thread.", request_schema: Some(route_manifest::schema_of::<MailWithdraw>) },
     route_manifest::Route { method: "POST", path: "/api/mail-proposals/{id}/decision", summary: "Reject a pending version, or approve it against a selected record and exact base content.", request_schema: Some(route_manifest::schema_of::<MailDecision>) },
     route_manifest::get(
         "GET",
@@ -49,7 +51,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get(
         "GET",
         "/api/projects",
-        "Every project with its open and done task counts and its note count.",
+        "Every project with its open and done task counts, its note count and its strictest record class.",
     ),
     route_manifest::get(
         "GET",
@@ -255,6 +257,9 @@ struct ProjectSummary {
     open: usize,
     done: usize,
     notes: usize,
+    /// The strictest class of the project's records, so a reader can keep the name out of a
+    /// context that class may not enter.
+    data_class: String,
 }
 
 struct ApiError(StatusCode, String);
@@ -468,6 +473,29 @@ async fn stage_mail_proposal(
     Ok(Json(json!({"proposal": proposal})))
 }
 
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MailWithdraw {
+    source_prefix: String,
+}
+
+async fn withdraw_mail_proposals(
+    State(projects): State<Shared>,
+    Json(body): Json<MailWithdraw>,
+) -> Result<Json<Value>, ApiError> {
+    if !projects::store::mail_thread_prefix(&body.source_prefix) {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "source_prefix must be mail:v1:<thread>:".into(),
+        ));
+    }
+    let withdrawn = projects
+        .withdraw_mail_thread(&body.source_prefix)
+        .await
+        .map_err(|e| api_error(false, e))?;
+    Ok(Json(json!({ "withdrawn": withdrawn })))
+}
+
 async fn list_mail_proposals(
     State(projects): State<Shared>,
     Query(query): Query<MailQuery>,
@@ -549,12 +577,15 @@ async fn list_projects(State(projects): State<Shared>) -> Result<Json<Value>, Ap
                 summaries.push(ProjectSummary {
                     name: r.project.clone(),
                     archived: r.archived,
+                    data_class: "c0".into(),
                     ..Default::default()
                 });
                 summaries.len() - 1
             }
         };
         let s = &mut summaries[index];
+        // Class literals order by strictness: c0 < c1 < c2 < c3.
+        s.data_class = s.data_class.clone().max(ops::classify_record(&r).value);
         match (r.kind, r.done) {
             (Kind::Task, false) => s.open += 1,
             (Kind::Task, true) => s.done += 1,
@@ -816,6 +847,10 @@ fn router(projects: Shared) -> Router {
             get(list_mail_proposals).post(stage_mail_proposal),
         )
         .route(
+            "/api/mail-proposals/withdraw",
+            post(withdraw_mail_proposals),
+        )
+        .route(
             "/api/mail-proposals/{id}/decision",
             post(decide_mail_proposal),
         )
@@ -874,6 +909,7 @@ mod tests {
         assert!(AGENT_ROUTES.closes("GET", "/api/mail-proposals"));
         assert!(AGENT_ROUTES.closes("POST", "/api/mail-proposals"));
         assert!(AGENT_ROUTES.closes("POST", "/api/mail-proposals/7/decision"));
+        assert!(AGENT_ROUTES.closes("POST", "/api/mail-proposals/withdraw"));
         for (method, path) in [
             ("GET", "/api/links"),
             ("GET", "/api/inventory-links"),
@@ -1304,6 +1340,81 @@ mod tests {
         let (_, listed) = call(&router, get("/api/mail-proposals")).await;
         assert_eq!(listed["proposals"][0]["status"], "pending");
         assert_eq!(listed["proposals"][0]["version"], 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn project_list_carries_class_and_withdraw_purges_one_thread() {
+        let dir = std::env::temp_dir().join(format!(
+            "sjel-projects-mail-withdraw-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            .await
+            .unwrap();
+        let router = router(Arc::new(projects));
+        call(&router, post("/api/projects", json!({"name":"W"}))).await;
+        let class = |listed: Value| listed["projects"][0]["data_class"].clone();
+        assert_eq!(class(call(&router, get("/api/projects")).await.1), "c1");
+        let (status, _) = call(
+            &router,
+            post(
+                "/api/record/property",
+                json!({"path":"W/W.md","key":"class","value":"c3"}),
+            ),
+        )
+        .await;
+        assert!(status.is_success());
+        assert_eq!(class(call(&router, get("/api/projects")).await.1), "c3");
+
+        let stage = |source: &str, line: &str| json!({"source_id":source,"line_id":line,"event":"project_evidence","project":"W","title":"t","evidence":"e","data_class":"c1"});
+        let mut ids = Vec::new();
+        for (source, line) in [
+            ("mail:v1:t_1:m", "a"),
+            ("mail:v1:t_1:m", "b"),
+            ("mail:v1:tx1:m", "c"),
+        ] {
+            let (_, staged) = call(&router, post("/api/mail-proposals", stage(source, line))).await;
+            ids.push(staged["proposal"]["id"].as_i64().unwrap());
+        }
+        call(
+            &router,
+            post(
+                &format!("/api/mail-proposals/{}/decision", ids[1]),
+                json!({"version":1,"decision":"reject"}),
+            ),
+        )
+        .await;
+        for bad in ["mail:v1:", "mail:v1:t_1", "other:t_1:"] {
+            let (status, _) = call(
+                &router,
+                post("/api/mail-proposals/withdraw", json!({"source_prefix":bad})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        }
+        let (status, body) = call(
+            &router,
+            post(
+                "/api/mail-proposals/withdraw",
+                json!({"source_prefix":"mail:v1:t_1:"}),
+            ),
+        )
+        .await;
+        assert_eq!(
+            (status, body["withdrawn"].clone()),
+            (StatusCode::OK, json!(2))
+        );
+        let (_, listed) = call(&router, get("/api/mail-proposals")).await;
+        let left: Vec<_> = listed["proposals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["id"].as_i64().unwrap())
+            .collect();
+        assert_eq!(left, vec![ids[2]]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

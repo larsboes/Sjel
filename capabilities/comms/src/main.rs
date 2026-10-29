@@ -82,6 +82,18 @@ fn print_help() {
     println!("                                  fallback row, `label` and `urgency_band` EMPTY.");
     println!("                                  Fill both by hand BEFORE reading any model");
     println!("                                  output. Refuses to overwrite without --force.");
+    println!(
+        "  mail evidence <thread-id>...     extract project and inventory evidence from up to"
+    );
+    println!("       [--inventory URL]          50 indexed threads with the local model and stage");
+    println!("       [--projects URL]           it as owner proposals. Explicit and operator-run;");
+    println!(
+        "                                  the HTTP replay route stays disabled. Prints counts"
+    );
+    println!("                                  and thread IDs, never mail content. The URLs are");
+    println!("                                  loopback origins and default to comms.json.");
+    println!("       [--role NAME]              a loopback inference role with max_input_tokens;");
+    println!("                                  default summarization_light.");
     println!("  digest corpus --out <path>      write the judgement skeleton for the frozen");
     println!("       [--per-producer N]         digest-quality corpus: N generated digests per");
     println!("       [--force]                  rung, `faithful` and `useful_band` EMPTY. The");
@@ -903,6 +915,40 @@ fn fixtures_len(corpus: &serde_json::Value) -> usize {
 /// It writes into the OVERLAY, never into this repository. The rows carry real subjects and
 /// snippets — already redacted for c2 and c3 at intake, which is why they may be written at
 /// all — and `capabilities/comms/eval/README.md` names the destination.
+fn cmd_mail_evidence(args: &[String], cfg: &Config) {
+    let mut cfg = cfg.clone();
+    if let Some(url) = arg_after(args, "--projects") {
+        cfg.projects_context.base_url = url.clone();
+    }
+    let inventory = arg_after(args, "--inventory")
+        .cloned()
+        .unwrap_or_else(|| cfg.inventory_context.base_url.clone());
+    let mut ids = Vec::new();
+    let mut rest = args[3..].iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--inventory" | "--projects" | "--role" => {
+                rest.next();
+            }
+            id => ids.push(id.to_owned()),
+        }
+    }
+    if !comms::mail_evidence_scan::valid_batch(&ids) {
+        eprintln!("error: usage: comms mail evidence <thread-id>... [--inventory URL] [--projects URL] [--role NAME]");
+        eprintln!("       1 to 50 unique provider IDs");
+        std::process::exit(2);
+    }
+    let role = arg_after(args, "--role").map(String::as_str);
+    let report = comms::mail_evidence_scan::scan(&runtime_status(), &cfg, &inventory, role, &ids);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&report).expect("report serializes")
+    );
+    if report.failed > 0 {
+        std::process::exit(1);
+    }
+}
+
 fn cmd_mail_corpus(args: &[String], cfg: &Config) {
     let Some(out) = arg_after(args, "--out") else {
         eprintln!("error: usage: comms mail corpus --out <path> [--force]");
@@ -1033,6 +1079,7 @@ fn cmd_mail(args: &[String], cfg: &Config) {
     match args.get(2).map(String::as_str) {
         Some("classify") => {}
         Some("corpus") => return cmd_mail_corpus(args, cfg),
+        Some("evidence") => return cmd_mail_evidence(args, cfg),
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
             eprintln!("              comms mail corpus --out <path> [--force]\n");

@@ -128,6 +128,47 @@ pub async fn stage(
     Ok(Json(serde_json::to_value(proposal).map_err(internal)?))
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Withdraw {
+    source_prefix: String,
+}
+
+/// One mail thread's prefix, `mail:v1:<thread>:`, so a withdrawal never spans threads.
+fn thread_prefix(prefix: &str) -> bool {
+    prefix
+        .strip_prefix("mail:v1:")
+        .and_then(|rest| rest.strip_suffix(':'))
+        .is_some_and(|thread| {
+            !thread.is_empty()
+                && thread.len() <= 120
+                && thread
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        })
+}
+
+/// Delete every undecided or rejected proposal from one thread, for example after the thread
+/// became c3. Approved and matched proposals stay: a reviewer already accepted their evidence.
+pub async fn withdraw(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Withdraw>,
+) -> Result<Json<serde_json::Value>, Error> {
+    if !thread_prefix(&body.source_prefix) {
+        return Err(invalid("source_prefix must be mail:v1:<thread>:"));
+    }
+    let store = Store::open(&state.database).map_err(internal)?;
+    let conn = store.borrow_connection().map_err(internal)?;
+    // substr, not LIKE: `_` is a LIKE wildcard and is valid in a thread ID.
+    let withdrawn = conn
+        .execute(
+            "DELETE FROM inventory_mail_proposal WHERE substr(source_id, 1, length(?1)) = ?1 AND (decision IS NULL OR decision = 'reject')",
+            [&body.source_prefix],
+        )
+        .map_err(internal)?;
+    Ok(Json(serde_json::json!({ "withdrawn": withdrawn })))
+}
+
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, Error> {
     let store = Store::open(&state.database).map_err(internal)?;
     let conn = store.borrow_connection().map_err(internal)?;

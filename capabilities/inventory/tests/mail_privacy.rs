@@ -105,3 +105,75 @@ async fn c2_proposals_are_reviewable_and_matchable_but_cannot_create_items() {
     }
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn withdraw_purges_one_threads_unapproved_proposals() {
+    let path =
+        std::env::temp_dir().join(format!("inventory-mail-withdraw-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let router = build_router(Arc::new(AppState {
+        device_store: devices::store::DevicesStore::open(&path).unwrap(),
+        database: path.clone(),
+    }));
+    let stage = |source: &str, line: &str| json!({"source_id":source,"line_id":line,"event":"delivered","title":format!("Lamp {line}"),"evidence":"delivered","data_class":"c1"});
+    let mut ids = Vec::new();
+    for (source, line) in [
+        ("mail:v1:t_1:m", "a"),
+        ("mail:v1:t_1:m", "b"),
+        ("mail:v1:t_1:m", "c"),
+        ("mail:v1:tx1:m", "d"),
+    ] {
+        ids.push(
+            send(&router, "POST", "/api/mail-proposals", stage(source, line))
+                .await
+                .1["id"]
+                .clone(),
+        );
+    }
+    let decide = |id: &Value| format!("/api/mail-proposals/{id}/decision");
+    send(
+        &router,
+        "POST",
+        &decide(&ids[1]),
+        json!({"version":1,"action":"reject"}),
+    )
+    .await;
+    send(
+        &router,
+        "POST",
+        &decide(&ids[2]),
+        json!({"version":1,"action":"approve","item_id":"lamp","title":"Lamp c"}),
+    )
+    .await;
+    for bad in ["mail:v1:", "mail:v1:t_1", "mail:v1:t:1:", "other:t_1:"] {
+        let (status, _) = send(
+            &router,
+            "POST",
+            "/api/mail-proposals/withdraw",
+            json!({"source_prefix":bad}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let (status, body) = send(
+        &router,
+        "POST",
+        "/api/mail-proposals/withdraw",
+        json!({"source_prefix":"mail:v1:t_1:"}),
+    )
+    .await;
+    assert_eq!(
+        (status, body["withdrawn"].clone()),
+        (StatusCode::OK, json!(2))
+    );
+    let (_, left) = send(&router, "GET", "/api/mail-proposals", Value::Null).await;
+    let left: Vec<_> = left["proposals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].clone())
+        .collect();
+    // The approved line stays; the `_` in `t_1` does not match `tx1` as a wildcard.
+    assert_eq!(left, vec![ids[3].clone(), ids[2].clone()]);
+    let _ = std::fs::remove_file(path);
+}

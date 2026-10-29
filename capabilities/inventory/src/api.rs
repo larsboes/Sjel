@@ -84,6 +84,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
+        path: "/api/mail-proposals/withdraw",
+        summary: "Delete undecided and rejected proposals of one mail thread.",
+        request_schema: Some(route_manifest::schema_of::<crate::mail_proposals::Withdraw>),
+    },
+    route_manifest::Route {
+        method: "POST",
         path: "/api/mail-proposals/{id}/decision",
         summary: "Decide at a proposal version; match an owned item or create only on delivery.",
         request_schema: Some(route_manifest::schema_of::<crate::mail_proposals::Decision>),
@@ -752,6 +758,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .layer(axum::extract::DefaultBodyLimit::max(4096)),
         )
         .route(
+            "/api/mail-proposals/withdraw",
+            post(crate::mail_proposals::withdraw).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
+        .route(
             "/api/mail-proposals/{id}/decision",
             post(crate::mail_proposals::decide).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )
@@ -789,6 +799,7 @@ const AGENT_ROUTES: sjel_server::agent_policy::AgentRoutes =
             ("GET", "/api/item-refs/{reference}"),
             ("GET", "/api/items/{id}/mail-match-snapshot"),
             ("POST", "/api/mail-proposals"),
+            ("POST", "/api/mail-proposals/withdraw"),
             ("POST", "/api/mail-proposals/{id}/decision"),
         ],
         ..sjel_server::agent_policy::AgentRoutes::NONE
@@ -817,6 +828,7 @@ mod route_manifest_tests {
             ("GET", "/api/mail-proposals"),
             ("GET", "/api/item-refs/inv:61"),
             ("POST", "/api/mail-proposals"),
+            ("POST", "/api/mail-proposals/withdraw"),
             ("POST", "/api/mail-proposals/1/decision"),
             ("GET", "/api/items/lamp/mail-match-snapshot"),
         ] {

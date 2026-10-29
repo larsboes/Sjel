@@ -54,6 +54,7 @@ German columns next to the renamed ones.
 | `GET`, `POST /api/items/{id}/state` | the state history, or append a change |
 | `POST /api/sync` | signed mutations from a paired phone |
 | `GET`, `POST /api/mail-proposals` | list or stage mail evidence without changing an item |
+| `POST /api/mail-proposals/withdraw` | delete undecided and rejected proposals of one mail thread, `{"source_prefix":"mail:v1:<thread>:"}` |
 | `POST /api/mail-proposals/{id}/decision` | reject, create a delivered item, or match an existing owned item after review |
 | `GET /api/items/{id}/mail-match-snapshot` | read the item and state revisions needed for a reviewed match |
 | `GET /api/item-refs/{reference}` | resolve a typed item reference and current state |

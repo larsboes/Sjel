@@ -56,7 +56,8 @@ written back into a journal entry.
 - `GET /api/tasks?status=open|done`: tasks of live projects. Decision-ladder band 620 reads it;
   the shape is the one the retired vault task reader served. Two keys are added: `project`, the
   folder, and `fields`, every frontmatter key with lists flattened to `a, b`.
-- `GET /api/projects`, `GET /api/project?name=`: the list and one project's records.
+- `GET /api/projects`, `GET /api/project?name=`: the list and one project's records. Each listed
+  project carries `data_class`, the strictest class of its records.
   `content=false` leaves every record's content out, for a reader that draws a list of titles
   and reads the one record it opens; a project of 185 notes is 55 KB that way and 2.0 MB with
   the content in. Every record of these two reads also carries `updated_at`, the moment its row

@@ -43,13 +43,31 @@ answer `GET /api/links`.
 - The GPUI app reviews both queues and adds or removes project–inventory links; nothing is applied
 without an explicit decision.
 
-**Open:** scanning and replay are disabled. The scanner classifies the whole message body, refuses
-`c3` before any prompt, re-checks the indexed class before handoff and deduplicates quoted lines.
-Still open: prompt context for project names is not class-filtered, because `/api/projects`
-exposes no data class; a class change between that check and the owner write is not atomic; and no
-real-mail or end-to-end validation has run. Inventory items do not carry a data class, so a `c2`
-proposal can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on a
-`c1` record. Enable scanning only after those gaps are closed.
+- The scanner classifies the whole message body, refuses `c3` before any prompt and deduplicates
+quoted lines. `/api/projects` reports each project's strictest record class; the scanner leaves
+`c3` project names out of the prompt and fails closed on an unknown class.
+- Both owners serve `POST /api/mail-proposals/withdraw`, which deletes one thread's undecided and
+rejected proposals. The scanner withdraws a thread when it refuses it as `c3`, and when the
+indexed class changed during the handoff. A failed withdrawal keeps the thread in the retry list.
+
+- The parser checks each model row on its own and drops a row that breaks a rule; the report
+counts drops by rule. A mail longer than the model window is cut at line ends and prompted piece
+by piece. `comms mail evidence <ids> [--role NAME]` runs an explicit scan from the CLI and
+applies the role's `chat_template_kwargs` and `request_overrides`.
+
+**Real-mail run:** 10 indexed threads (2 Miele, 8 Amazon) against a copy of the database. The
+`c3` one-time-password mail and an out-for-delivery mail whose body classified `c3` were refused; the
+withdrawal reached both owners. Zero proposals staged. With `summarization_light`
+(`apple-foundationmodel`, 4096 tokens) and with Qwen3.5-4B (thinking off), every returned row
+broke a grounding rule: event outside the vocabulary, title not an exact substring of its quote,
+order number outside the quote, extra fields. Qwen with thinking on spends the reply budget and
+ends at `finish_reason: length`.
+
+**Open:** scanning and replay are disabled. No local model tried so far yields grounded rows on
+real mail; the model or the prompt has to change before the scan is useful. Inventory
+items do not carry a data class, so a `c2` proposal can be reviewed or matched but cannot create an
+item. Projects refuses `c2` evidence on a `c1` record. An approved proposal is not withdrawn when
+its thread later becomes `c3`; its evidence is already in the reviewed record.
 
 ## 1. Import
 

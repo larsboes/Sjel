@@ -75,6 +75,15 @@ delivery can be reviewed or matched but cannot create an item. Projects refuses 
 a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
 evidence is already in the reviewed record. No project proposal has staged from real mail.
 
+**Idea, not scheduled:** align extracted evidence with a cloud model without sending mail. Local
+extraction keeps the mail; a cloud role receives only the extracted product title and candidate
+names (inventory items, `c0` or `c1` projects) and answers which candidate it belongs to. Sjel
+applies the rest locally. Measure local alignment on real mail that matches an existing item or
+project first; build this only if local matching fails. It needs two decisions: whether the
+owner's own name as recipient keeps a mail `c1` instead of `c2`, and whether an automatic
+title-only derivative may skip the per-document preview approval of
+`capabilities/comms/src/cloud_derivative.rs`. Class gate: `content_item::cloud_admission`.
+
 ## 1. Import
 
 Measured 2026-10-23 with `sjel-import plan /Volumes/Extreme/archive` (25,348 entries) and the

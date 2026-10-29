@@ -17,6 +17,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 use crate::guard::{Caller, Guard};
+use crate::inuse::{self, Usage};
 use crate::measure::{fmt_bytes, size_of, Walk};
 use crate::policy::{expand_glob, is_applicable, reclaim_argv, Policy, StorageClass};
 use crate::reclaim::Outcome;
@@ -131,6 +132,76 @@ fn step_line(step: &Step) -> String {
     }
 }
 
+/// How long a class held only by a running build is waited for, and the interval between looks.
+///
+/// A debug build of this workspace is minutes rather than hours, so this covers the lock a build
+/// has left rather than a whole build. Giving up here is not a lost night: the schedule comes
+/// round again with nothing held.
+const BUILD_RELEASE_WAIT: Duration = Duration::from_secs(600);
+const BUILD_RELEASE_POLL: Duration = Duration::from_secs(15);
+
+/// The commands that release the directory on their own, when the build they are in finishes.
+///
+/// `cargo` and `rustc` are the build itself; `clippy-driver` and `rustdoc` are runs of it.
+/// `rust-analyzer` is deliberately absent: it holds `debug/` for as long as the editor is open,
+/// which is the shape of a server rather than of a build.
+const TRANSIENT_HOLDERS: [&str; 4] = ["cargo", "rustc", "clippy-driver", "rustdoc"];
+
+/// Whether a hold is one a job may wait out.
+///
+/// Every holder has to be the build itself. One server in the list is enough to make the whole
+/// wait pointless, and the answer is the reason this is a separate function from the sleeping:
+/// it is the rule, and the rule is what a fixture can pin down.
+fn worth_waiting_for(holders: &[inuse::Holder]) -> bool {
+    !holders.is_empty()
+        && holders
+            .iter()
+            .all(|h| TRANSIENT_HOLDERS.contains(&h.command.as_str()))
+}
+
+/// `guard.check`, retried for as long as a build — and only a build — is what holds the path.
+///
+/// The refusal this exists for is on record: `/tmp/sjel-cargo-trim-schedule.log` at 00:54 on
+/// 2026-10-29, where `~/.cargo-target/debug` was held by a live `cargo` and `rustc`, the run
+/// refused both the class and its nested incremental path, and the cache stayed at 1.6× its cap
+/// until a person reclaimed by hand. The guard was right; the job was given one moment to act
+/// and no other.
+///
+/// A holder that will not lift is not worth waiting for. A `*-server` exec'ing its own image out
+/// of `debug/` — which this machine has done — holds the directory until an operator stops it,
+/// so a wait entered on that would sit here until its own deadline to report what the first
+/// answer already said.
+///
+/// A dry run never waits: it reports the plan the next real run would follow, and a report that
+/// slept would be a report nobody runs.
+fn check_settling(guard: &Guard, path: &Path, dry_run: bool) -> Result<PathBuf, String> {
+    let first = guard.check(path, Caller::Policy);
+    if dry_run || first.is_ok() {
+        return first;
+    }
+    let err = first.err().unwrap_or_default();
+    let deadline = SystemTime::now() + BUILD_RELEASE_WAIT;
+    loop {
+        match inuse::usage(path) {
+            // Every holder lifts on its own, so the wait is worth having.
+            Usage::Held(holders) if worth_waiting_for(&holders) => {}
+            // Nothing holds it any more. The guard refused on a snapshot that has stopped being
+            // true, so ask it again rather than trusting the older answer.
+            Usage::Free => return guard.check(path, Caller::Policy),
+            // A holder that will not lift, or a question that cannot be asked. Both are
+            // answers, and neither is a reason to sleep.
+            _ => return Err(err),
+        }
+        if SystemTime::now() >= deadline {
+            return Err(format!(
+                "{err}\n             waited {}s for the build holding it and it did not finish",
+                BUILD_RELEASE_WAIT.as_secs()
+            ));
+        }
+        std::thread::sleep(BUILD_RELEASE_POLL);
+    }
+}
+
 /// Act on the policy's classes. Every refusal is decided before anything is removed, so a dry
 /// run reports the plan that would really run.
 pub fn run(
@@ -174,7 +245,7 @@ pub fn run(
             {
                 continue;
             }
-            match guard.check(Path::new(path), Caller::Policy) {
+            match check_settling(guard, Path::new(path), dry_run) {
                 Ok(real) => allowed.push(real.to_string_lossy().into_owned()),
                 Err(why) => {
                     // Prefixed like every other line: a bare refusal reads as one of the plan's
@@ -228,9 +299,28 @@ pub fn run(
                 lines.push(format!("             {}", step_line(&step).trim()));
             }
             Err(why) => {
-                // A removal that did not happen is not freed bytes, so it never reaches the
-                // total — the same rule the checkout half follows.
-                lines.push(format!("  failed   {why}"));
+                // A refusal frees nothing, but a *partial* removal is not a refusal and must not
+                // be reported as one. `rm -rf` exits 1 on `Directory not empty` after deleting the
+                // bulk of a tree, which is exactly what anything re-creating entries mid-delete
+                // produces — a build, or Spotlight indexing what is being removed. Measuring the
+                // class again is what separates the two: on 2026-10-29 a run reported 6.4 GB freed
+                // while 88 GB had actually gone, because the class was dropped from the total
+                // whole.
+                let after = size_of(&allowed).bytes;
+                let freed = step.bytes.saturating_sub(after);
+                if freed == 0 {
+                    // A removal that did not happen is not freed bytes, so it never reaches the
+                    // total — the same rule the checkout half follows.
+                    lines.push(format!("  failed   {why}"));
+                } else {
+                    bytes += freed;
+                    lines.push(format!(
+                        "  {:>9}  {} — removed before the command failed, the rest is still there",
+                        fmt_bytes(freed),
+                        step.class.name
+                    ));
+                    lines.push(format!("  failed   {why}"));
+                }
                 refused += 1;
             }
         }
@@ -469,5 +559,99 @@ mod tests {
         assert_eq!(aged_entries(&root, 0).len(), 2);
         // A century of age keeps everything, so the filter is on mtime and not on the walk.
         assert!(aged_entries(&root, 36_500).is_empty());
+    }
+
+    #[test]
+    fn a_removal_that_fails_partway_reports_what_it_freed() {
+        // The measured failure (2026-10-29): `rm -rf ~/.cargo-target/debug` exited 1 on
+        // `Directory not empty` after deleting 82 GB of an 88 GB class, and the run reported
+        // `6.4 GB freed, 1 refused` — the class was dropped from the total whole, so the reader
+        // was told nothing had happened.
+        //
+        // A directory nothing may be removed from reproduces the shape. The mode is used rather
+        // than `chflags`, which would be macOS-only: this suite runs on the Linux runner too.
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = crate::testutil::tempdir("classes-partial");
+        let full = root.join("full");
+        let blocked = full.join("blocked");
+        std::fs::create_dir_all(&blocked).unwrap();
+        std::fs::write(full.join("removable"), vec![0u8; 64 * 1024]).unwrap();
+        std::fs::write(blocked.join("entry"), vec![0u8; 64 * 1024]).unwrap();
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o555))
+            .expect("make the subdirectory unremovable");
+
+        let a = Authority::default();
+        let guard = Guard::new(&a, &root, &root, false);
+        let before = crate::measure::size_of(&[full.to_string_lossy().into_owned()]).bytes;
+        let paths = vec![full.to_string_lossy().into_owned()];
+        let m = vec![Measured {
+            class: class("name = \"c\"\npaths = [\"/t\"]\napply = true\nreclaim = \"rm -rf\"\n"),
+            paths: paths.clone(),
+            bytes: before,
+            complete: true,
+            error: String::new(),
+        }];
+
+        let out = run(&m, &guard, false, None, false);
+
+        // The command did fail, and that is still a refusal for the exit code.
+        assert_eq!(out.refused, 1, "{:?}", out.lines);
+        // ...but the bytes it did free are reported rather than discarded.
+        assert!(out.bytes > 0, "freed bytes were discarded: {:?}", out.lines);
+        assert!(
+            out.bytes < before,
+            "more was freed than existed: {:?}",
+            out.lines
+        );
+        // The half that survived is what was measured, so it is really still there.
+        assert!(
+            blocked.join("entry").exists(),
+            "the blocked file went anyway"
+        );
+        assert!(!full.join("removable").exists(), "the free file survived");
+        assert!(
+            out.lines
+                .iter()
+                .any(|l| l.contains("removed before the command failed")),
+            "the partial removal was not named: {:?}",
+            out.lines
+        );
+
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755)).ok();
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    fn holder(command: &str) -> inuse::Holder {
+        inuse::Holder {
+            pid: 1,
+            command: command.to_string(),
+            kind: "txt".to_string(),
+            file: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_hold_is_worth_waiting_for_only_when_every_holder_is_the_build() {
+        // The pair on record from the run this wait exists for: `~/.cargo-target/debug` held by
+        // a live `cargo` and the `rustc` it started, at 00:53 on 2026-10-29.
+        assert!(worth_waiting_for(&[holder("cargo"), holder("rustc")]));
+        assert!(worth_waiting_for(&[holder("clippy-driver")]));
+
+        // A server exec'ing its own image out of `debug/` releases it when an operator stops
+        // it. This machine has done exactly that, and a job that slept for it would report the
+        // first answer ten minutes later.
+        assert!(!worth_waiting_for(&[holder("projects-server")]));
+        assert!(!worth_waiting_for(&[
+            holder("cargo"),
+            holder("projects-server")
+        ]));
+
+        // `rust-analyzer` reads as a build and is not one: it holds the directory for as long
+        // as the editor is open, which is the shape of a server.
+        assert!(!worth_waiting_for(&[holder("rust-analyzer")]));
+
+        // Nothing holding it is not a hold to wait out; the caller asks the guard again.
+        assert!(!worth_waiting_for(&[]));
     }
 }

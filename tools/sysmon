@@ -30,7 +30,7 @@ HELP="tools/sysmon — system resource overview.
 
   tools/sysmon              interactive TUI (bottom) — CPU/mem/disk/net/proc
   tools/sysmon power         Apple Silicon power/thermal TUI (macmon), arm64 only
-  tools/sysmon report        one-shot text snapshot — load, top CPU/mem, memory, swap, disk
+  tools/sysmon report        one-shot text snapshot — verdict, load, top CPU/mem, memory, swap, disk
   tools/sysmon storage       what is filling the disk and what is reclaimable
   tools/sysmon -h            this help
 "
@@ -44,9 +44,115 @@ need_bin() {  # need_bin <bin-on-PATH> <crate-name>
   fi
 }
 
+# The four sections below answer "what are the numbers". None answered "which of these is the
+# problem", which is the question somebody with a slow Mac is actually asking, and answering it
+# by hand means knowing to run storage, host-watch and macmon as well. This ranks them.
+#
+# Disk is ranked first because it is the only one of the three with a command that changes it,
+# and because a nearly-full APFS volume slows everything else rather than only itself.
+#
+# Nothing here measures anything the sections below do not: the disk figures are one `df`, the
+# load is the kernel's own average, and the memory signal is the pressure level rather than a
+# decomposition -- so this cannot drift from the numbers printed underneath it.
+pressure_label() {
+  case "${1:-1}" in
+    4|3) echo critical ;;
+    2)   echo warn ;;
+    *)   echo normal ;;
+  esac
+}
+
+verdict() {
+  local target="/" cores load1 dfree_gb pressure over key rest policy warn_gb crit_gb breached
+  [ -d /System/Volumes/Data ] && target="/System/Volumes/Data"
+  cores="$(sysctl -n hw.ncpu 2>/dev/null || echo 1)"
+  load1="$(sysctl -n vm.loadavg | awk '{print $2}')"
+  # Gibibytes, so this compares against the policy in the unit the policy is written in:
+  # `tools/storage` reads `GB` as 1024³, and `df -g` reports in exactly those blocks.
+  dfree_gb="$(df -g "$target" 2>/dev/null | tail -1 | awk '{print $4}')"
+  # An unreadable `df` is not zero free space. The disk half of this verdict is skipped rather
+  # than announced, for the reason `tools/storage` refuses on a probe it could not run.
+  case "$dfree_gb" in
+    ''|*[!0-9]*) dfree_gb="" ;;
+  esac
+  pressure="$(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null || echo 1)"
+  over="$(awk -v l="${load1:-0}" -v c="$cores" 'BEGIN { print (l > c) ? 1 : 0 }')"
+
+  # The disk thresholds are the overlay policy's, read the same way tools/storage reads them,
+  # rather than a percentage invented here. Two thresholds would drift, and the policy already
+  # owns this question: `schemas/storage-policy.toml.example` is the contract. No policy and no
+  # overlay means there is no declared line to breach, so this names no disk finding at all
+  # rather than guessing one.
+  #
+  # `toml_get_in` unquotes a quoted value and returns an unquoted one as the whole `key = value`
+  # line, which is the right answer for a string field and not one for a number, so the value is
+  # cut at the `=` here. Either way a non-numeric result leaves the threshold unset.
+  policy="${SJEL_OVERLAY_ROOT:-}/config/storage-policy.toml"
+  warn_gb=""
+  crit_gb=""
+  if [ -f "$policy" ]; then
+    warn_gb="$(toml_get_in thresholds free_warn_gb "$policy" 2>/dev/null | sed -E 's/^[^=]*=[[:space:]]*//' | head -1)"
+    crit_gb="$(toml_get_in thresholds free_critical_gb "$policy" 2>/dev/null | sed -E 's/^[^=]*=[[:space:]]*//' | head -1)"
+    case "$warn_gb" in ''|*[!0-9.]*) warn_gb="" ;; esac
+    case "$crit_gb" in ''|*[!0-9.]*) crit_gb="" ;; esac
+  fi
+
+  # One primary, in that order. A load under the core count is work finishing, not a
+  # shortage, so it is only a finding above it.
+  key=""
+  breached=""
+  if [ -n "$dfree_gb" ] && [ -n "$crit_gb" ] && [ "$dfree_gb" -lt "${crit_gb%%.*}" ]; then
+    key="disk"
+    breached="${crit_gb}G critical line"
+  elif [ -n "$dfree_gb" ] && [ -n "$warn_gb" ] && [ "$dfree_gb" -lt "${warn_gb%%.*}" ]; then
+    key="disk"
+    breached="${warn_gb}G line"
+  fi
+  [ -z "$key" ] && [ "$over" = "1" ] && key="cpu"
+  [ -z "$key" ] && [ "$pressure" -ge 2 ] && key="memory"
+
+  echo "Verdict"
+  case "$key" in
+    disk)
+      echo "  disk is the one to fix — ${dfree_gb}G free, under the policy's ${breached}; \`tools/sysmon storage\` names each class and what is reclaimable"
+      ;;
+    cpu)
+      echo "  cpu is the one to look at — load ${load1} on ${cores} cores; the Top CPU list below says who"
+      ;;
+    memory)
+      echo "  memory is the one to look at — pressure $(pressure_label "$pressure"); see Top memory below"
+      ;;
+    *)
+      if [ -z "$dfree_gb" ]; then
+        echo "  nothing breached a line — load ${load1} on ${cores} cores, memory pressure $(pressure_label "$pressure") (disk not read)"
+      elif [ -n "$warn_gb" ]; then
+        echo "  nothing breached a line — ${dfree_gb}G free (the policy's line is ${warn_gb}G), load ${load1} on ${cores} cores, memory pressure $(pressure_label "$pressure")"
+      else
+        echo "  nothing breached a line — ${dfree_gb}G free, load ${load1} on ${cores} cores, memory pressure $(pressure_label "$pressure")"
+      fi
+      echo
+      return
+      ;;
+  esac
+
+  # What was ruled out, so a clean line is evidence rather than an omission.
+  rest=""
+  [ "$key" != "disk" ] && [ -n "$dfree_gb" ] && rest="${dfree_gb}G free on disk"
+  if [ "$key" != "cpu" ]; then
+    rest="${rest:+$rest · }load ${load1} on ${cores} cores"
+  fi
+  if [ "$key" != "memory" ]; then
+    rest="${rest:+$rest · }memory pressure $(pressure_label "$pressure")"
+  fi
+  echo "  not the cause: $rest"
+  echo
+}
+
 report() {
   echo "Sjel sysmon report · $(date '+%Y-%m-%d %H:%M:%S %Z')"
   echo
+
+  verdict
 
   echo "Load & uptime"
   uptime | sed 's/^/  /'

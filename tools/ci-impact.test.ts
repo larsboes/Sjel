@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, failedPackages, fastPlan, namedPaths, rustImpact, type Package } from "./ci-impact.ts";
+import { changedFiles, failedPackages, fastPlan, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -158,4 +158,10 @@ test("failedPackages names a failing test binary's package and a crate that did 
     "error: could not compile `sjel-comms` (lib test) due to 1 previous error",
   ].join("\n");
   expect(failedPackages(log, targets)).toEqual(["sjel-cli", "sjel-comms"]);
+});
+
+test("testScope: all is the workspace, a candidate names packages, none is empty", () => {
+  expect(testScope(rustImpact(["Cargo.lock"], packages))).toBe("--workspace");
+  expect(testScope(rustImpact(["libs/other/src/lib.rs"], packages))).toBe("-p other");
+  expect(testScope(rustImpact(["docs/x.md"], packages))).toBe("");
 });

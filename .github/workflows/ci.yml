@@ -77,32 +77,40 @@ jobs:
       - name: Install ExifTool
         run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
 
-      - name: Compile Rust tests (resource baseline)
-        run: /usr/bin/time -v cargo test --workspace --locked --no-run
-
-      - name: Run Rust tests (resource baseline)
-        run: |
-          set -o pipefail
-          /usr/bin/time -v cargo test --workspace --locked --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
-
-      # Shadow only: compare the planner's package set with what failed. A miss is a failing
-      # package the plan skipped; enforcement waits on none (docs/plans/tooling.md).
+      # A pull request tests the packages tools/ci-impact.ts selects: owners of changed files,
+      # packages whose sources name them, and reverse dependencies. Main, and any planner
+      # doubt, tests the whole workspace (docs/plans/tooling.md).
       - name: Set up Bun
-        if: always() && github.event_name == 'pull_request'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
-      - name: Rust impact shadow
-        if: always() && github.event_name == 'pull_request'
+      - name: Select packages
+        id: plan
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          {
-            echo '### Rust impact shadow'
-            echo '```json'
-            bun run tools/ci-impact.ts --base "$BASE" --failures "$RUNNER_TEMP/cargo-test.log"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$BASE" ]; then
+            bun run tools/ci-impact.ts --scope --base "$BASE" >> "$GITHUB_OUTPUT"
+          else
+            echo "scope=--workspace" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compile Rust tests (resource baseline)
+        if: steps.plan.outputs.scope != ''
+        env:
+          SCOPE: ${{ steps.plan.outputs.scope }}
+        # $SCOPE is unquoted on purpose: it is a list of cargo arguments.
+        run: /usr/bin/time -v cargo test $SCOPE --locked --no-run
+
+      - name: Run Rust tests (resource baseline)
+        if: steps.plan.outputs.scope != ''
+        env:
+          SCOPE: ${{ steps.plan.outputs.scope }}
+        run: /usr/bin/time -v cargo test $SCOPE --locked --no-fail-fast
+
+      - name: No Rust package selected
+        if: steps.plan.outputs.scope == ''
+        run: echo "No Rust package owns or names a changed file, so no Rust test runs. Main runs the full suite."
 
       - name: Report Rust build storage
         if: always()

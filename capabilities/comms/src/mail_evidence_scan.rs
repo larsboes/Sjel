@@ -17,6 +17,8 @@ use crate::{
 };
 
 pub const MAX_THREADS: usize = 50;
+/// The inference role a scan uses when none is named.
+pub const DEFAULT_ROLE: &str = "mail_evidence";
 const REPLY_TOKENS: u32 = 1200;
 const MAX_PROJECT_RESPONSE: u64 = 128 * 1024;
 
@@ -375,8 +377,9 @@ fn withdraw(owners: [(&reqwest::blocking::Client, &str); 2], thread: &str) -> Re
 }
 
 /// Explicitly analyze indexed thread IDs, without recording progress. The inventory URL
-/// must be a literal HTTP loopback origin. `role` names an inference role, else the light
-/// summarization role; it must be loopback and declare `max_input_tokens`. Retry failed IDs; owner writes are idempotent.
+/// must be a literal HTTP loopback origin. `role` names an inference role, else
+/// [`DEFAULT_ROLE`], else the light summarization role; it must be loopback and declare
+/// `max_input_tokens`. Retry failed IDs; owner writes are idempotent.
 /// Runs blocking I/O and must not be called on an async executor thread.
 pub fn scan(
     runtime: &sjel_runtime::Status,
@@ -404,7 +407,10 @@ pub fn scan(
         let client = client(cfg.projects_context.timeout_ms).map_err(|_| "owner_config")?;
         let role = match role {
             Some(name) => cfg.inference.role(name),
-            None => cfg.light_summarization_role(),
+            None => cfg
+                .inference
+                .role(DEFAULT_ROLE)
+                .or_else(|| cfg.light_summarization_role()),
         }
         .filter(|r| r.is_loopback() && r.max_input_tokens.is_some())
         .ok_or("local_model_config")?;

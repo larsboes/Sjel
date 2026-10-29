@@ -94,7 +94,7 @@ fn print_help() {
     println!("                                  The URLs are loopback origins and default to");
     println!("                                  comms.json.");
     println!("       [--role NAME]              a loopback inference role with max_input_tokens;");
-    println!("                                  default summarization_light.");
+    println!("                                  default mail_evidence, else summarization_light.");
     println!("       [--show]                   also print each prompted mail text and the raw");
     println!("                                  model reply to stderr. Private content: for an");
     println!("                                  operator at the terminal only. c3 is never shown.");

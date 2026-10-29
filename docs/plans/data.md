@@ -68,8 +68,8 @@ both owners. The two Miele mails (questions to the manufacturer) and a sign-in n
 proposal. `summarization_light` (`apple-foundationmodel`, 4096 tokens) staged nothing: its rows
 broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`.
 
-**Open:** scanning and replay are disabled. The overlay has no role for this scan yet; the run
-used a `mail_evidence` role in a scratch copy of `inference.json`. Every Amazon mail classifies
+**Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
+overlay defines one, else `summarization_light`. Every Amazon mail classifies
 `c2` because it names the recipient, and Inventory items carry no data class, so a `c2`
 delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
 a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its

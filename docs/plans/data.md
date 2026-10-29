@@ -51,23 +51,29 @@ rejected proposals. The scanner withdraws a thread when it refuses it as `c3`, a
 indexed class changed during the handoff. A failed withdrawal keeps the thread in the retry list.
 
 - The parser checks each model row on its own and drops a row that breaks a rule; the report
-counts drops by rule. A mail longer than the model window is cut at line ends and prompted piece
-by piece. `comms mail evidence <ids> [--role NAME]` runs an explicit scan from the CLI and
-applies the role's `chat_template_kwargs` and `request_overrides`.
+counts drops by rule. Quotes match the mail by words, not by whitespace. A `delivered` row carries
+a `claim`: one quoted mail line of more than one word that states the delivery, so a progress-bar
+label such as "Zugestellt" is not a claim. Message text has `\n` line ends and no runs of blank
+lines. A mail longer than the model window is cut at line ends. Requests use `temperature: 0`
+and the role's `chat_template_kwargs` and `request_overrides`, so a repeat scan quotes the same
+lines and stages nothing new.
+- `comms mail evidence <ids> [--role NAME] [--show]` runs an explicit scan from the CLI. `--show`
+prints the prompted mail text and raw replies for an operator; `c3` is refused before it.
 
-**Real-mail run:** 10 indexed threads (2 Miele, 8 Amazon) against a copy of the database. The
-`c3` one-time-password mail and an out-for-delivery mail whose body classified `c3` were refused; the
-withdrawal reached both owners. Zero proposals staged. With `summarization_light`
-(`apple-foundationmodel`, 4096 tokens) and with Qwen3.5-4B (thinking off), every returned row
-broke a grounding rule: event outside the vocabulary, title not an exact substring of its quote,
-order number outside the quote, extra fields. Qwen with thinking on spends the reply budget and
-ends at `finish_reason: length`.
+**Real-mail run:** 10 indexed threads (2 Miele, 8 Amazon) against a copy of the database, with
+Qwen3.5-4B on omlx and `enable_thinking: false`. Order, shipment, cancellation and two deliveries
+staged as one proposal each; a repeat run staged nothing new. The `c3` one-time-password mail
+and an out-for-delivery mail whose body classified `c3` were refused, and the withdrawal reached
+both owners. The two Miele mails (questions to the manufacturer) and a sign-in notice produced no
+proposal. `summarization_light` (`apple-foundationmodel`, 4096 tokens) staged nothing: its rows
+broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`.
 
-**Open:** scanning and replay are disabled. No local model tried so far yields grounded rows on
-real mail; the model or the prompt has to change before the scan is useful. Inventory
-items do not carry a data class, so a `c2` proposal can be reviewed or matched but cannot create an
-item. Projects refuses `c2` evidence on a `c1` record. An approved proposal is not withdrawn when
-its thread later becomes `c3`; its evidence is already in the reviewed record.
+**Open:** scanning and replay are disabled. The overlay has no role for this scan yet; the run
+used a `mail_evidence` role in a scratch copy of `inference.json`. Every Amazon mail classifies
+`c2` because it names the recipient, and Inventory items carry no data class, so a `c2`
+delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
+a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
+evidence is already in the reviewed record. No project proposal has staged from real mail.
 
 ## 1. Import
 

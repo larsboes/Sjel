@@ -90,10 +90,14 @@ fn print_help() {
     println!(
         "                                  the HTTP replay route stays disabled. Prints counts"
     );
-    println!("                                  and thread IDs, never mail content. The URLs are");
-    println!("                                  loopback origins and default to comms.json.");
+    println!("                                  and thread IDs; mail content only with --show.");
+    println!("                                  The URLs are loopback origins and default to");
+    println!("                                  comms.json.");
     println!("       [--role NAME]              a loopback inference role with max_input_tokens;");
     println!("                                  default summarization_light.");
+    println!("       [--show]                   also print each prompted mail text and the raw");
+    println!("                                  model reply to stderr. Private content: for an");
+    println!("                                  operator at the terminal only. c3 is never shown.");
     println!("  digest corpus --out <path>      write the judgement skeleton for the frozen");
     println!("       [--per-producer N]         digest-quality corpus: N generated digests per");
     println!("       [--force]                  rung, `faithful` and `useful_band` EMPTY. The");
@@ -930,6 +934,7 @@ fn cmd_mail_evidence(args: &[String], cfg: &Config) {
             "--inventory" | "--projects" | "--role" => {
                 rest.next();
             }
+            "--show" => {}
             id => ids.push(id.to_owned()),
         }
     }
@@ -939,7 +944,9 @@ fn cmd_mail_evidence(args: &[String], cfg: &Config) {
         std::process::exit(2);
     }
     let role = arg_after(args, "--role").map(String::as_str);
-    let report = comms::mail_evidence_scan::scan(&runtime_status(), &cfg, &inventory, role, &ids);
+    let show = args.iter().any(|a| a == "--show");
+    let report =
+        comms::mail_evidence_scan::scan(&runtime_status(), &cfg, &inventory, role, show, &ids);
     println!(
         "{}",
         serde_json::to_string_pretty(&report).expect("report serializes")

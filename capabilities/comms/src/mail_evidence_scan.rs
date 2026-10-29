@@ -198,6 +198,8 @@ struct Extraction<'a> {
     class: &'a str,
     text: &'a str,
     source: &'a str,
+    /// Print the mail text and the raw reply to stderr. Operator inspection only.
+    show: bool,
 }
 
 fn model(
@@ -212,6 +214,7 @@ fn model(
         class,
         text,
         source,
+        show,
     } = *extraction;
     role.runtime_admission_with(runtime)
         .map_err(|_| "runtime_busy")?;
@@ -252,7 +255,8 @@ fn model(
     .no_proxy()
     .build()
     .map_err(|_| "local_model")?;
-    let mut body = serde_json::json!({"model": target.model, "messages": [{"role": "user", "content": request}], "max_tokens": REPLY_TOKENS, "stream": false});
+    let mut body = serde_json::json!({"model": target.model, "messages": [{"role": "user", "content": request}], "max_tokens": REPLY_TOKENS, "temperature": 0, "stream": false});
+    // Greedy decoding, so a repeated scan quotes the same span and the owner sees the same line.
     crate::cloud_dispatch::apply_role_conventions(role, &mut body);
     let mut call = http.post(endpoint).json(&body);
     if let Some(key) = &target.api_key {
@@ -284,6 +288,9 @@ fn model(
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
         .ok_or("local_model_empty")?;
+    if show {
+        eprintln!("=== {source} {stage:?} {class}\n--- mail text\n{text}\n--- reply\n{answer}\n");
+    }
     mail_evidence::parse(stage, source, class, text, projects, answer.trim()).map_err(|e| {
         match (stage, e) {
             (Stage::Inventory, mail_evidence::EvidenceError::Response) => "inventory_response",
@@ -376,6 +383,7 @@ pub fn scan(
     cfg: &Config,
     inventory_base_url: &str,
     role: Option<&str>,
+    show: bool,
     ids: &[String],
 ) -> ScanReport {
     let mut report = ScanReport::default();
@@ -505,6 +513,7 @@ pub fn scan(
                         class,
                         text,
                         source: &source,
+                        show,
                     };
                     match model(runtime, cfg, &role, &extraction, names) {
                         Ok(parsed) => {

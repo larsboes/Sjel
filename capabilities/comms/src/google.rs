@@ -453,6 +453,27 @@ pub struct ThreadMessageBody {
     pub text: String,
 }
 
+/// `\n` line ends, no trailing spaces, and at most one blank line in a row. Mail is CRLF on
+/// the wire and HTML layout leaves runs of empty lines; neither carries meaning.
+fn unix_lines(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut blank = false;
+    for line in text.lines().map(str::trim_end) {
+        if line.is_empty() {
+            if blank {
+                continue;
+            }
+            blank = true;
+        } else {
+            blank = false;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.truncate(out.trim_end().len());
+    out
+}
+
 fn message_bodies(detail: ThreadDetail) -> Result<Vec<ThreadMessageBody>> {
     const MESSAGE_LIMIT: usize = 100;
     if detail.messages.len() > MESSAGE_LIMIT {
@@ -473,7 +494,7 @@ fn message_bodies(detail: ThreadDetail) -> Result<Vec<ThreadMessageBody>> {
                 collect_part(payload, "text/html")
                     .map(|html| crate::extraction::html_to_lines(&html))
             })
-            .map(|text| text.trim().to_string())
+            .map(|text| unix_lines(text.trim()))
             .filter(|text| !text.is_empty())
             .ok_or_else(|| CommsError::Other("thread message has no readable text".into()))?;
         if text.chars().count() > BODY_TEXT_CAP {
@@ -756,6 +777,18 @@ mod tests {
         assert_eq!(bodies[0].subject.as_deref(), Some("Order"));
         assert_eq!(bodies[0].snippet.as_deref(), Some("summary"));
         assert_eq!((&*bodies[1].id, &*bodies[1].text), ("second", "Delivered"));
+    }
+
+    #[test]
+    fn message_bodies_use_unix_line_ends() {
+        let detail: ThreadDetail = serde_json::from_str(
+            r#"{"messages":[{"id":"m","payload":{"mimeType":"text/plain","body":{"data":"TGluZSBvbmUgIA0KDQoNCg0KTGluZSB0d28NCg"}}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            message_bodies(detail).unwrap()[0].text,
+            "Line one\n\nLine two"
+        );
     }
 
     #[test]

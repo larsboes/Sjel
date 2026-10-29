@@ -141,8 +141,8 @@ for pi in TypeScript, with the case table in `command-policy/cases.toml` (every 
 evasion case above). It implements the rule table above: cards are reserved for harmful classes,
 so writes inside the scope, unknown programs and interpreters run without one.
 
-**The Rust classifier is the same table.** `Policy` reads a fixture's home directory and writable
-roots (`with_home`, `with_writable`) instead of the machine's, and
+**The Rust classifier is the same table** (built `b0d94cae`). `Policy` reads a fixture's home
+directory and writable roots (`with_home`, `with_writable`) instead of the machine's, and
 `libs/agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
 rules to drift from. All 115 command cases and 5 write cases pass in both. The second table
 (`libs/agent/tests/policy_cases.toml`) is deleted. `capabilities/agent/src/gate.rs` says what the

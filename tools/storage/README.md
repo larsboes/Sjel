@@ -82,6 +82,12 @@ Exit 0 means nothing is over a threshold. Exit 1 means something is: free space 
 `free_critical_gb`, an R6 ratio above 3×, or a reclaim path that had to be refused. Exit 2 means
 it could not measure — a usage error, or no overlay policy to read for a scope that needs one.
 
+A reclaim command that fails is refused, but a command that fails *partway* is measured again and
+reports the bytes it did free, then still exits 1. `rm -rf` exits 1 on `Directory not empty` after
+deleting the bulk of a tree, which is what anything re-creating entries mid-delete produces — a
+build, or Spotlight indexing what is going away. Treating that as a whole-class failure reported
+`6.4 GB freed` for a run that had freed 88 GB.
+
 ### The size axis
 
 `cap_gb` gates `reclaim`: a capped class acts only when it is measured above the cap, and a class

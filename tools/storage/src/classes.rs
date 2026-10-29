@@ -299,9 +299,28 @@ pub fn run(
                 lines.push(format!("             {}", step_line(&step).trim()));
             }
             Err(why) => {
-                // A removal that did not happen is not freed bytes, so it never reaches the
-                // total — the same rule the checkout half follows.
-                lines.push(format!("  failed   {why}"));
+                // A refusal frees nothing, but a *partial* removal is not a refusal and must not
+                // be reported as one. `rm -rf` exits 1 on `Directory not empty` after deleting the
+                // bulk of a tree, which is exactly what anything re-creating entries mid-delete
+                // produces — a build, or Spotlight indexing what is being removed. Measuring the
+                // class again is what separates the two: on 2026-10-29 a run reported 6.4 GB freed
+                // while 88 GB had actually gone, because the class was dropped from the total
+                // whole.
+                let after = size_of(&allowed).bytes;
+                let freed = step.bytes.saturating_sub(after);
+                if freed == 0 {
+                    // A removal that did not happen is not freed bytes, so it never reaches the
+                    // total — the same rule the checkout half follows.
+                    lines.push(format!("  failed   {why}"));
+                } else {
+                    bytes += freed;
+                    lines.push(format!(
+                        "  {:>9}  {} — removed before the command failed, the rest is still there",
+                        fmt_bytes(freed),
+                        step.class.name
+                    ));
+                    lines.push(format!("  failed   {why}"));
+                }
                 refused += 1;
             }
         }
@@ -540,6 +559,68 @@ mod tests {
         assert_eq!(aged_entries(&root, 0).len(), 2);
         // A century of age keeps everything, so the filter is on mtime and not on the walk.
         assert!(aged_entries(&root, 36_500).is_empty());
+    }
+
+    #[test]
+    fn a_removal_that_fails_partway_reports_what_it_freed() {
+        // The measured failure (2026-10-29): `rm -rf ~/.cargo-target/debug` exited 1 on
+        // `Directory not empty` after deleting 82 GB of an 88 GB class, and the run reported
+        // `6.4 GB freed, 1 refused` — the class was dropped from the total whole, so the reader
+        // was told nothing had happened. A file that cannot be removed reproduces the shape.
+        let root = crate::testutil::tempdir("classes-partial");
+        let full = root.join("full");
+        std::fs::create_dir_all(&full).unwrap();
+        std::fs::write(full.join("removable"), vec![0u8; 64 * 1024]).unwrap();
+        let locked = full.join("locked");
+        std::fs::write(&locked, vec![0u8; 64 * 1024]).unwrap();
+        let flag = |args: &[&str]| {
+            std::process::Command::new("chflags")
+                .args(args)
+                .status()
+                .expect("chflags")
+                .success()
+        };
+        assert!(flag(&["uchg", &locked.to_string_lossy()]), "chflags uchg");
+
+        let a = Authority::default();
+        let guard = Guard::new(&a, &root, &root, false);
+        let before = crate::measure::size_of(&[full.to_string_lossy().into_owned()]).bytes;
+        let paths = vec![full.to_string_lossy().into_owned()];
+        let m = vec![Measured {
+            class: class("name = \"c\"\npaths = [\"/t\"]\napply = true\nreclaim = \"rm -rf\"\n"),
+            paths: paths.clone(),
+            bytes: before,
+            complete: true,
+            error: String::new(),
+        }];
+
+        let out = run(&m, &guard, false, None, false);
+
+        // The command did fail, and that is still a refusal for the exit code.
+        assert_eq!(out.refused, 1, "{:?}", out.lines);
+        // ...but the bytes it did free are reported rather than discarded.
+        assert!(out.bytes > 0, "freed bytes were discarded: {:?}", out.lines);
+        assert!(
+            out.bytes < before,
+            "more was freed than existed: {:?}",
+            out.lines
+        );
+        // The half that survived is what was measured, so the file is really still there.
+        assert!(locked.exists(), "the locked file went anyway");
+        assert!(!full.join("removable").exists(), "the free file survived");
+        assert!(
+            out.lines
+                .iter()
+                .any(|l| l.contains("removed before the command failed")),
+            "the partial removal was not named: {:?}",
+            out.lines
+        );
+
+        assert!(
+            flag(&["noschg", &locked.to_string_lossy()]),
+            "chflags noschg"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     fn holder(command: &str) -> inuse::Holder {

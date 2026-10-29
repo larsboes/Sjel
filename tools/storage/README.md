@@ -278,6 +278,14 @@ already made, so the reader is given the reason and a way to disagree:
   cannot run refuses too, because "could not ask" must not read as "nothing is using it" — and the
   process asking is subtracted from its own answer, so a run does not refuse itself.
 
+  One such hold is waited out rather than refused. When every holder is the build that is writing
+  there — `cargo`, `rustc`, `clippy-driver`, `rustdoc` — `reclaim` polls until they exit and then
+  re-asks the guard, for up to ten minutes. A build releases the directory on its own, so refusing
+  on it costs a scheduled run a whole interval, which on a machine that builds all day is most
+  runs. Any other holder is refused at once: a `*-server` executing its own image out of the
+  directory, or `rust-analyzer`, holds it until a person stops it, and no job can wait that out.
+  `--dry-run` never waits, because it reports the plan the next real run would follow.
+
 And one it will not do at all: run a reclaim command for a class the policy marked report-only, or
 run a bare `rm -rf` when nothing was measured. A policy string is data, not code, and the one case
 where it reaches a shell substitutes only the paths this tool measured.

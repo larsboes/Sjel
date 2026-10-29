@@ -112,6 +112,15 @@ covers it.
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:
   `sjel backup status|runs [--limit N]` over the existing routes.
+- **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
+  undeclared-connections sweep derives the repos that count as "self" from the *basename* of the
+  checkout (`tools/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is
+  `basename(ctx.root)`), which is `Sjel` in the primary checkout and `host-health-reclaim-retry` in
+  a worktree. Every tracked path naming this repository then reads as a reference to a sibling
+  repo with no `systems.toml` entry, so a worktree fails three checks that pass on `main` and the
+  same three files are named regardless of what was edited. Smallest change: resolve self from
+  `git rev-parse --show-toplevel` plus the *common* git dir (`git rev-parse --git-common-dir`), so a
+  worktree inherits the primary's identity instead of its own directory name.
 
 ## Done
 

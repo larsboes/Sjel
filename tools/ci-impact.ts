@@ -139,6 +139,12 @@ export function fastPlan(files: string[], deleted: string[], packages: Package[]
   return { checks, skipped };
 }
 
+/** Cargo package arguments for an impact: `--workspace`, `-p` per package, or "" for none. */
+export function testScope(impact: Impact): string {
+  if (impact.mode === "all") return "--workspace";
+  return impact.packages.map((p) => `-p ${p}`).join(" ");
+}
+
 /** The root workspace's packages, their in-workspace dependencies and the paths they name. */
 export function rootPackages(root: string): Package[] {
   const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1"], root));
@@ -245,9 +251,29 @@ function main() {
   console.log(JSON.stringify({ shadow: true, base: base ?? null, local, files: changed, rust: impact, gpui, ...shadow, note: "Rust is a candidate only; full CI remains required. Runtime reads are modeled from path literals in package sources." }, null, 2));
 }
 
+// --scope: the `cargo test` package arguments for $GITHUB_OUTPUT. Any error, and a missing
+// base, runs the whole workspace.
+function scope() {
+  const root = resolve(import.meta.dir, "..");
+  const baseAt = Bun.argv.indexOf("--base");
+  const base = baseAt < 0 ? "" : Bun.argv[baseAt + 1] ?? "";
+  if (!base || base.startsWith("--")) return { scope: "--workspace", reason: "no base commit" };
+  const { files, deleted } = changedFiles(root, base, false);
+  const impact = rustImpact([...files].sort(), rootPackages(root), [...deleted].sort());
+  const reason = impact.mode === "all" ? impact.reasons[0] : `${impact.packages.length} of ${impact.packages.length + impact.skipped.length} packages`;
+  return { scope: testScope(impact), reason };
+}
+
 if (import.meta.main) {
-  try { main(); } catch (error) {
-    console.error(`ci-impact: ${error}; full checks remain required`);
-    process.exitCode = 1;
+  if (Bun.argv.includes("--scope")) {
+    let out = { scope: "--workspace", reason: "" };
+    try { out = scope(); } catch (error) { out.reason = `planner failed: ${error}`; }
+    console.error(`ci-impact: cargo test ${out.scope || "(no package)"}: ${out.reason}`);
+    console.log(`scope=${out.scope}`);
+  } else {
+    try { main(); } catch (error) {
+      console.error(`ci-impact: ${error}; full checks remain required`);
+      process.exitCode = 1;
+    }
   }
 }

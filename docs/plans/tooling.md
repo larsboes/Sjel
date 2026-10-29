@@ -95,14 +95,13 @@ covers it.
   name the file's path (runtime reads, modeled from path literals), and their reverse
   dependencies. Workspace-wide inputs select every package. A file that no package owns or names
   selects none (decided 2026-10-29). `fastPlan` in the same file drives
-  `sjel check` and the pre-push hook. The `cargo test` job compares the plan with the packages
-  that failed on every pull request and writes misses to the run summary; it skips nothing.
-  `tools/ci-impact-backtest.ts` replays CI history the same way. `bun-tests`, `ui-check` and
+  `sjel check` and the pre-push hook. On a pull request, the `cargo test` job tests only the
+  selected packages; main and any planner error test the whole workspace.
+  `tools/ci-impact-backtest.ts` replays CI history and reports a failing package a plan skipped. `bun-tests`, `ui-check` and
   `repo-gates` share a `sjel-cli-release` cache, and CI runs `tools/*.test.sh` in parallel.
   Open work:
-  1. Enforce on pull requests only after the shadow step reports no miss over a period of real
-     pull requests. Main keeps the complete suite. The ruleset requires the five existing checks;
-     test the `verification result` aggregate before making it required.
+  1. Run the backtest after a few weeks of enforced pull requests. A main run that fails in a
+     package the pull request's plan skipped is a miss: repair the planner, or widen.
   2. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
      gates.
   3. Measure local target-directory growth and cache transfer, and benchmark bounded local

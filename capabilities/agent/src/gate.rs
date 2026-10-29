@@ -302,9 +302,11 @@ impl Extension for ApprovalGate {
     /// `bash` did not run.
     fn system(&self, prompt: &mut String) {
         prompt.push_str(
-            "\n\nEvery tool that writes or runs a command needs the owner's explicit permission, \
-             asked one call at a time. A refused call comes back as a result explaining why; do \
-             not retry it. Read-only tools never ask.",
+            "\n\nA read, a build, and a write inside the session's scope run without asking. A \
+             change to git history, branches or remotes, a package, a process or container, a \
+             remote host, or a write under the home directory outside the scope asks first, one \
+             call at a time. A refused call comes back as a result explaining why; do not retry \
+             it, and do not look for another command that has the same effect.",
         );
     }
 }
@@ -469,16 +471,27 @@ mod tests {
     }
 
     #[test]
-    fn a_write_outside_the_scope_is_blocked_before_the_card() {
-        let dir = scratch("write-block");
+    fn a_write_under_home_outside_the_scope_asks_and_one_outside_home_does_not() {
+        let dir = scratch("write-scope");
         let gate = gate(&dir);
+        // Step 4: a write under `$HOME` and outside the scope is the card, so with nowhere to
+        // record a decision it is refused rather than run.
         let Verdict::Deny(reason) = gate.tool_call(&call(
             "write",
-            json!({"path": "/etc/hosts", "content": "x"}),
+            json!({"path": "~/.config/sjel/notes.txt", "content": "x"}),
         )) else {
-            panic!("a write outside the scope ran");
+            panic!("a write under home outside the scope ran");
         };
-        assert!(reason.contains("rule B1"), "{reason}");
+        assert!(reason.contains("cannot ask for permission"), "{reason}");
+
+        // Outside `$HOME` is not a card at all: the table allows it (R4).
+        assert_eq!(
+            gate.tool_call(&call(
+                "write",
+                json!({"path": "/etc/hosts", "content": "x"}),
+            )),
+            Verdict::Allow
+        );
     }
 
     #[test]
@@ -538,7 +551,7 @@ mod tests {
         let dir = scratch("system");
         let mut prompt = String::from("base");
         gate(&dir).system(&mut prompt);
-        assert!(prompt.contains("needs the owner's explicit permission"));
-        assert!(prompt.contains("Read-only tools never ask"));
+        assert!(prompt.contains("run without asking"), "{prompt}");
+        assert!(prompt.contains("do not retry"), "{prompt}");
     }
 }

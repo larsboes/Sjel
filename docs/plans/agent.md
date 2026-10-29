@@ -125,11 +125,14 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 - `libs/agent/src/ext/policy.rs`: the classifier, so the CLI and the capability share one rule
   set. `capabilities/agent/src/gate.rs` reads the class: Allow skips the card, Ask shows it, and
   Block shows the separate card with the rule ID.
-- `libs/agent/tests/policy_cases.toml`: at least one case per rule ID, plus evasion cases that
-  must never be Allow: `r''m -rf x`, `
-m -rf x`, `env rm -rf x`, `command rm -rf x`,
-  `$(echo rm) -rf x`, `bash -c "rm -rf ~"`, `echo x | xargs rm -rf`, `find . -exec rm -rf {} +`,
-  `ls; rm -rf x`, and `cat x > ../outside`.
+- `Packs/security/extensions/command-policy/cases.toml`: the one table both implementations are
+  held to — a case per rule ID, the evasions that must never be Allow (`r''m -rf x`, `\rm -rf
+  x`, `env rm -rf x`, `command rm -rf x`, `$(echo rm) -rf x`, `bash -c "rm -rf ~"`, `echo x |
+  xargs rm -rf`, `find . -exec rm -rf {} +`, `ls; rm -rf x`), and the `[[write]]` cases. Each is
+  written against a fixture scope — a synthetic `$HOME`, a project directory inside it, and the
+  temp directory writable — so a case means the same on every machine.
+  `tools/command-policy.test.ts` runs it against the pi extension,
+  `libs/agent/tests/policy_cases.rs` against the Rust one.
 - Done when every case passes, the gate shows the rule ID on each card, and one week of real use
   gives a prompt rate (below).
 
@@ -138,27 +141,23 @@ for pi in TypeScript, with the case table in `command-policy/cases.toml` (every 
 evasion case above). It implements the rule table above: cards are reserved for harmful classes,
 so writes inside the scope, unknown programs and interpreters run without one.
 
-**Open: the Rust classifier still implements the previous table.** The committed
-`libs/agent/src/ext/policy.rs` and `libs/agent/tests/policy_cases.toml` ask about every in-scope
-write and every unknown program (old A1 and A6) and block writes outside the scope. An uncommitted
-port of the table above exists in a working tree. Against the shared `command-policy/cases.toml`
-(fixture home a synthetic `$HOME`, scope a `proj` directory inside it) it misses 13 of 120 cases, 5 of them Allow where the table
-says Block: `timeout 5 nice -n 10 rm -fr`, `X=1 rm -r`, `rm -rf` inside a `for` loop, `busybox
-rm -rf`, `secret-tool lookup`. The rest are rule IDs (`R1` vs `R4`) and `bun`, `uv run`, `go test`.
-Finish the port, point `libs/agent/tests/policy_cases.rs` at the shared table with
-`Policy::with_home` so it does not depend on the machine's `$HOME`, remove the second table, and
-update `capabilities/agent/src/gate.rs` tests that use a command which now runs without a card.
-Done when the Rust and pi tests pass against the one table.
+**The Rust classifier is the same table.** `Policy` reads a fixture's home directory and writable
+roots (`with_home`, `with_writable`) instead of the machine's, and
+`libs/agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
+rules to drift from. All 115 command cases and 5 write cases pass in both. The second table
+(`libs/agent/tests/policy_cases.toml`) is deleted. `capabilities/agent/src/gate.rs` says what the
+three classes now cost a run — a read, a build and an in-scope write run without a card — and its
+approval fixture asks through a redirect whose target is computed at run time (A1), which is the
+write that still reaches a card.
 
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
 Built (6622b21e): `libs/agent/src/ext/policy.rs` holds the classifier and the rule table, and
-`libs/agent/tests/policy_cases.toml` holds one case per rule plus the evasion list, run by
-`tests/policy_cases.rs`. `capabilities/agent/src/gate.rs` reads the class: Allow runs without a
-card, Block is refused before any card, Ask is the card as before, and each decision is logged
-with its rule ID on the call log. Open: §5's separate Block card that can allow one call, the A6
-classifier for unknown programs, and the measures below, none of which have run.
+`capabilities/agent/src/gate.rs` reads the class: Allow runs without a card, Block is refused
+before any card, Ask is the card as before, and each decision is logged with its rule ID on the
+call log. Open: §5's separate Block card that can allow one call, the A6 classifier for unknown
+programs, and the measures below, none of which have run.
 
 **Measures for the policy.**
 

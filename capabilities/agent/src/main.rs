@@ -1073,7 +1073,9 @@ mod tests {
         let thread = std::thread::spawn(move || {
             let mut second_request = None;
             for (index, response) in [
-                json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_write","type":"function","function":{"name":"write","arguments":r#"{"path":"result.txt","content":"written by tool"}"#}}]}}]}),
+                // A dynamic redirect target is the one write that still asks (A1), so the turn
+                // reaches the approval gate and writes the file once it is allowed.
+                json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_write","type":"function","function":{"name":"bash","arguments":r#"{"command":"out=result.txt; printf 'written by tool' > \"$out\""}"#}}]}}]}),
                 json!({"choices":[{"index":0,"delta":{"content":"The file was written."}}]}),
             ]
             .into_iter()
@@ -1104,7 +1106,7 @@ mod tests {
                         message["role"] == "tool"
                             && message["content"]
                                 .as_str()
-                                .is_some_and(|content| content.contains("wrote 15 bytes to"))
+                                .is_some_and(|content| content.contains("exit code 0"))
                     })
                 }),
                 "tool result was not sent to the model: {request}"

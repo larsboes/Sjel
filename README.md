@@ -8,11 +8,14 @@
 
 <h1 align="center">Sjel</h1>
 
-<p align="center"><b>One household's people, places, trips, money, home and calendar, on devices the household owns, with one assistant that works on that data.</b></p>
+<p align="center"><b>A private layer under the tools you already use. It connects the areas of your life and keeps them on your own machines.</b></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <a href="https://github.com/larsboes/Sjel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/larsboes/Sjel/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.rust-lang.org"><img alt="Rust" src="https://img.shields.io/badge/Rust-black?logo=rust"></a>
+  <a href="https://github.com/zed-industries/zed/tree/main/crates/gpui"><img alt="UI: GPUI" src="https://img.shields.io/badge/UI-GPUI-blue"></a>
+  <a href="apps/gpui/README.md"><img alt="Platforms: macOS, iOS" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20iOS-lightgrey"></a>
 </p>
 
 <p align="center">

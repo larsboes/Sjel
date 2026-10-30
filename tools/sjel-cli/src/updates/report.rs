@@ -23,8 +23,6 @@ pub enum Owner {
     Scheduled,
     #[serde(rename = "manual")]
     Manual,
-    #[serde(rename = "unowned")]
-    Unowned,
     #[serde(rename = "self")]
     SelfManaged,
 }
@@ -34,7 +32,6 @@ impl Owner {
         match self {
             Owner::Scheduled => "scheduled",
             Owner::Manual => "manual",
-            Owner::Unowned => "unowned",
             Owner::SelfManaged => "self",
         }
     }
@@ -109,6 +106,22 @@ pub static SURFACES: &[Surface] = &[
         why: "the declared tag is a channel and the digest is the fact (ISA.md C4); reported from its receipt and never pulled here",
     },
     Surface {
+        id: "cargo",
+        title: "cargo-installed binaries",
+        owner: Owner::Scheduled,
+        owner_detail: "capabilities/host-patch · 24h, through `tools/updates apply`",
+        actionable: true,
+        why: "`cargo install` has no update verb and no register; toolchain.toml names the install path for [macmon] and nothing named an update path",
+    },
+    Surface {
+        id: "npm",
+        title: "npm global packages",
+        owner: Owner::Scheduled,
+        owner_detail: "capabilities/host-patch · 24h, through `tools/updates apply`",
+        actionable: true,
+        why: "the harnesses self-update but the packages beside them do not, and nothing ran `npm outdated -g`",
+    },
+    Surface {
         id: "graphify",
         title: "graphify harness integration",
         owner: Owner::Manual,
@@ -131,22 +144,6 @@ pub static SURFACES: &[Surface] = &[
         owner_detail: "tools/update.sh",
         actionable: false,
         why: "fast-forward only, and a diverged checkout is left alone with instructions rather than discarded",
-    },
-    Surface {
-        id: "cargo",
-        title: "cargo-installed binaries",
-        owner: Owner::Unowned,
-        owner_detail: "nothing — this tool moves them",
-        actionable: true,
-        why: "`cargo install` has no update verb and no register; toolchain.toml names the install path for [macmon] and nothing named an update path",
-    },
-    Surface {
-        id: "npm",
-        title: "npm global packages",
-        owner: Owner::Unowned,
-        owner_detail: "nothing — this tool moves them",
-        actionable: true,
-        why: "the harnesses self-update but the packages beside them do not, and nothing ran `npm outdated -g`",
     },
     Surface {
         id: "vendor",
@@ -1075,7 +1072,6 @@ fn heading(owner: Owner) -> &'static str {
     match owner {
         Owner::Scheduled => "Managed by a scheduled job",
         Owner::Manual => "Manual — a verb exists, nothing schedules it",
-        Owner::Unowned => "Unowned — nothing moves these",
         Owner::SelfManaged => "Self-managed — the vendor updates these",
     }
 }
@@ -2080,7 +2076,7 @@ mod tests {
                 r.surface, r.name
             );
         }
-        assert!(table_text.contains("Unowned — nothing moves these"));
+        assert!(table_text.contains("Managed by a scheduled job"));
         let json = serde_json::from_str::<serde_json::Value>(&render_json(
             &report.rows,
             &report.generated_at,
@@ -2095,18 +2091,14 @@ mod tests {
     }
 
     #[test]
-    fn every_surface_has_an_owner_and_a_reason_and_the_two_unowned_ones_are_actionable() {
+    fn every_surface_has_an_owner_and_a_reason_and_the_ones_this_tool_moves_are_actionable() {
         for s in SURFACES {
             assert!(s.why.len() > 10);
             assert!(s.owner_detail.len() > 3);
         }
-        let unowned: Vec<&str> = SURFACES
-            .iter()
-            .filter(|s| s.owner == Owner::Unowned)
-            .map(|s| s.id)
-            .collect();
-        assert_eq!(unowned, vec!["cargo", "npm"]);
-        for s in SURFACES.iter().filter(|s| s.owner == Owner::Unowned) {
+        for id in ["cargo", "npm"] {
+            let s = surface(id).unwrap();
+            assert_eq!(s.owner, Owner::Scheduled);
             assert!(s.actionable);
         }
         for s in SURFACES.iter().filter(|s| s.owner == Owner::SelfManaged) {

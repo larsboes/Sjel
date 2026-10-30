@@ -22,6 +22,14 @@ SJEL_ROOT="$(cd "$_lib/../.." && pwd)"
 export SJEL_ROOT
 source "$_lib/toml.sh"
 
+# A launchd job starts with PATH=/usr/bin:/bin:/usr/sbin:/sbin. A script that runs a package
+# manager's binaries puts these in front: "${SJEL_TOOL_DIRS:+$SJEL_TOOL_DIRS:}$PATH".
+SJEL_TOOL_DIRS=""
+if [ -f "$_lib/tool-dirs" ]; then
+  SJEL_TOOL_DIRS="$(sed -e '/^#/d' -e '/^$/d' -e "s|^~|$HOME|" "$_lib/tool-dirs" | paste -sd: -)"
+fi
+export SJEL_TOOL_DIRS
+
 _overlay_raw=""
 # An already-exported SJEL_OVERLAY_ROOT wins over both files. This is the only way to point a
 # single shell at a different deployment without editing something — sjel.local.toml is the

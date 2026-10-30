@@ -49,7 +49,7 @@ _here="$(cd "$(dirname "$0")" && pwd)"
 # caller's PATH alone, for a host with its own layout and for tools/container-refresh.test.sh,
 # which plants a PATH to prove what the script does with and without a runtime.
 if [ -z "${SJEL_CONTAINER_REFRESH_KEEP_PATH:-}" ]; then
-  PATH="$HOME/.orbstack/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH"
+  PATH="${SJEL_TOOL_DIRS:+$SJEL_TOOL_DIRS:}$PATH"
   export PATH
 fi
 

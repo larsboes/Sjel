@@ -42,8 +42,9 @@ const CONTEXT: [&str; 4] = [
 
 /// Sections that read a deployment: the overlay, machine.toml, services, data and backups. A
 /// repository checkout has none of these, so each reports itself skipped rather than failing.
-const DEPLOYMENT: [&str; 20] = [
+const DEPLOYMENT: [&str; 21] = [
     "Machine identity",
+    "Shadowed binaries (tools/lib/tool-dirs)",
     "Global Bun/npm install policy",
     "Local inference roles (tools/model-check --local)",
     "AI assistant integrations",
@@ -71,6 +72,7 @@ fn entries() -> Vec<Entry> {
         One("Overlay", overlay),
         One("Machine identity", machine_identity),
         One("Host toolchain (tools/toolchain-check)", host_toolchain),
+        One("Shadowed binaries (tools/lib/tool-dirs)", shadowed_binaries),
         One("Global Bun/npm install policy", bun_policy),
         One(
             "Local inference roles (tools/model-check --local)",
@@ -522,6 +524,56 @@ fn host_toolchain(ctx: &mut Ctx) {
     }
     if na > 0 {
         ctx.ok("scoped to this machine — 'tools/toolchain-check --workflow backup|restore|audit|build' before running one");
+    }
+}
+
+/// A command name in two tool directories has two owners: PATH order decides which copy runs,
+/// and the manager that upgrades one copy never touches the other.
+fn shadowed_binaries(ctx: &mut Ctx) {
+    use std::os::unix::fs::PermissionsExt;
+    let list = ctx.root.join("tools/lib/tool-dirs");
+    let Ok(text) = std::fs::read_to_string(&list) else {
+        ctx.warn(format!("{} is missing", list.display()));
+        return;
+    };
+    let dirs: Vec<String> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(expand_home)
+        .collect();
+    let mut found = Vec::new();
+    for dir in &dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file) = std::fs::canonicalize(entry.path()) else {
+                continue;
+            };
+            let executable = std::fs::metadata(&file)
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+            if executable {
+                found.push((
+                    entry.file_name().to_string_lossy().into_owned(),
+                    file.display().to_string(),
+                ));
+            }
+        }
+    }
+    let shadowed = pure::shadowed(&found);
+    if shadowed.is_empty() {
+        ctx.ok(format!(
+            "each command name has one owner across {} directories",
+            dirs.len()
+        ));
+    }
+    for (name, files) in shadowed {
+        ctx.warn(format!(
+            "{name} has {} owners, and a job runs the first: {}",
+            files.len(),
+            files.join(" · ")
+        ));
     }
 }
 

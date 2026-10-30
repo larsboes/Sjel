@@ -1,0 +1,10 @@
+# The directories package managers install into, in the order a Sjel job searches them.
+# tools/lib/paths.sh exports them as SJEL_TOOL_DIRS. tools/doctor reports a command name that
+# resolves to different files in two of them.
+~/.orbstack/bin
+/opt/homebrew/bin
+/opt/homebrew/sbin
+/usr/local/bin
+~/.cargo/bin
+~/.bun/bin
+~/.local/bin

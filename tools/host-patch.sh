@@ -37,13 +37,13 @@ _here="$(cd "$(dirname "$0")" && pwd)"
 # launchd hands a job PATH=/usr/bin:/bin:/usr/sbin:/sbin (plus tools/, from the rendered unit).
 # None of the package managers live there, so the first scheduled run on 2026-09-02 skipped
 # every step and reported "scanner-missing" for an audit whose scanners were installed. The
-# managers' homes are fixed by their installers, so they are named here rather than left to
-# whichever shell started the job: Homebrew (arm64 and Intel), rustup, and uv's tool shims.
+# managers' homes are fixed by their installers, so they are listed once rather than left to
+# whichever shell started the job: the list in tools/lib/tool-dirs.
 # SJEL_HOST_PATCH_KEEP_PATH=1 leaves the caller's PATH alone — for a host with its own layout,
 # and for tools/host-patch.test.sh, which plants a PATH to prove what the script does without
 # each manager.
 if [ -z "${SJEL_HOST_PATCH_KEEP_PATH:-}" ]; then
-  PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+  PATH="${SJEL_TOOL_DIRS:+$SJEL_TOOL_DIRS:}$PATH"
   export PATH
 fi
 

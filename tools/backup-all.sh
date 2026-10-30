@@ -62,7 +62,7 @@ esac
 # still fires when bun is genuinely absent: this widens the search, it does not assume an
 # answer. host-patch.sh and container-refresh.sh prepend the same directories for the same
 # reason.
-PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+PATH="${SJEL_TOOL_DIRS:+$SJEL_TOOL_DIRS:}$PATH"
 export PATH
 
 BUN="${SJEL_BUN:-bun}"

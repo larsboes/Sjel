@@ -52,6 +52,35 @@
 # pass runs at `--verbosity error`, so nothing announced that). The two ids below are what 6.29.0
 # actually trips. Reach is unchanged and was re-measured, not assumed:
 # `npm@12.2.1 > node-gyp@13.0.0 > undici@6.29.0` in `npm ls -g --all`.
+#
+# Third swing, 2026-10-30, and the reason the three entries below are back. `npm` was an alias of
+# the `node` formula, so every node revision bump restored the bundled npm into
+# `/opt/homebrew/lib/node_modules/npm` and undici 6.28.0 returned with it. That happened on
+# 2026-10-24 (the refresh above) and again on 2026-10-30 at 02:18 (`26.13.0` → `26.13.0_1`).
+# The loop is now broken on the executing side rather than documented: npm 12.2.1 is installed at
+# `~/.local` (`npm install -g npm@latest --prefix $HOME/.local`), and `~/.local/bin` precedes
+# `/opt/homebrew/bin` on PATH, so `which npm` answers `~/.local/bin/npm` and Homebrew cannot
+# reach it. Measured by running `brew reinstall node`: the formula's bundle reset to npm 11.20.0
+# while `npm -v` still answered 12.2.1.
+#
+# What these three accept is the OTHER copy. `/opt/homebrew/lib/node_modules/npm` (11.20.0) is
+# still inside the prefix `npm ls -g --all` walks, so its node-gyp and undici are still inventoried
+# even though nothing resolves to them. They end on their own when the node formula's bundled npm
+# reaches 12, which nothing here has to predict.
+[[IgnoredVulns]]
+id = "GHSA-rfgv-xxqx-mfg5"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unrequested WebSocket subprotocol. Reach: skiplisted entirely — the copy is `/opt/homebrew/lib/node_modules/npm` (npm 11.20.0), which no command resolves to since `npm` answers from `~/.local/bin` (12.2.1, re-measured through `brew reinstall node`). Even if it ran, node-gyp imports `Agent`, `EnvHttpProxyAgent`, `RetryAgent` and `fetch` from undici and never `WebSocket`, which is the whole of this advisory. Ends when the node formula ships npm 12."
+
+[[IgnoredVulns]]
+id = "GHSA-3wwx-pv8p-q78v"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unhandled error in WebSocket permessage-deflate decompression. Same inert copy and same end as GHSA-rfgv-xxqx-mfg5, and the same narrowing applies: node-gyp opens no WebSocket, so the decompression path is never entered even by the copy that does run."
+
+[[IgnoredVulns]]
+id = "GHSA-r53p-7pc4-xj5r"
+ignoreUntil = 2027-01-01
+reason = "undici 6.28.0, fixed in 6.28.1: downstream response splitting through the retry interceptor. This is the one of the three that node-gyp could reach — `lib/download.js` imports `RetryAgent` — which is why it rests on inertness rather than on an unused code path. The copy carrying it is `/opt/homebrew/lib/node_modules/npm` (11.20.0), never resolved since npm answers from `~/.local/bin` (12.2.1). The copy that does run carries undici 6.29.0. Ends when the node formula ships npm 12."
 [[IgnoredVulns]]
 id = "GHSA-xjj6-f33q-929c"
 ignoreUntil = 2027-01-01

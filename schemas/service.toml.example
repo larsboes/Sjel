@@ -201,6 +201,16 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # the workspace is. Nothing to compile: omit.
 #                                           # --locked, so a start can never silently resolve a
 #                                           # dependency version the lockfile does not name.
+#                                           #
+#                                           # Where the artifact LANDS is not where this runs. cargo
+#                                           # writes to the target dir of the workspace the manifest
+#                                           # belongs to, so a manifest that passes `--manifest-path`
+#                                           # into another repo gets its binary there, not under this
+#                                           # repo's target/. `command` must name that path — a
+#                                           # ${SJEL_ROOT}/-qualified one when the workspace is Sjel.
+#                                           # Naming the local target/ instead rebuilds one file and
+#                                           # executes another, so the job keeps running whatever
+#                                           # stale binary was left behind.
 # panel_build = ["bun", "run", "build"]
 #                                           # optional, and only for a capability that ships its own
 #                                           # UI. Runs in <capability>/ui/ — fixed by

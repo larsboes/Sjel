@@ -1109,14 +1109,33 @@ fn boot_persistence(ctx: &mut Ctx) {
                     .map(str::to_owned)
             };
             if let Some(c) = cap.filter(|c| !exempt.contains(c) && !enabled.contains(c)) {
-                orphans.push(c);
+                orphans.push((c, dir.join(&f)));
             }
         }
     }
     orphans.sort();
-    for cap in &orphans {
+    for (cap, unit) in &orphans {
+        // A unit with no manifest in either root was not installed from one, so nothing here
+        // knows what depends on it. Name what it runs and do not suggest removing it.
+        let managed = ctx.root.join("capabilities").join(cap).exists()
+            || overlay_dir(ctx).join("capabilities").join(cap).exists();
+        if managed {
+            ctx.warn(format!(
+                "persistence is installed for '{cap}', which this machine does not enable — its watchdog will start it anyway (tools/service-runner.sh remove-persistence {cap})"
+            ));
+            continue;
+        }
+        let unit = unit.to_string_lossy();
+        let args = cmd(
+            "plutil",
+            &["-extract", "ProgramArguments", "json", "-o", "-", &unit],
+        );
+        let program = serde_json::from_str::<Json>(&args.stdout)
+            .ok()
+            .and_then(|v| v.get(0).and_then(Json::as_str).map(str::to_owned))
+            .unwrap_or_else(|| "an unreadable program".to_owned());
         ctx.warn(format!(
-            "persistence is installed for '{cap}', which this machine does not enable — its watchdog will start it anyway (tools/service-runner.sh remove-persistence {cap})"
+            "'{cap}' is unmanaged: {unit} runs {program}, and no capabilities/{cap} manifest exists in either root. Find what depends on it before removing it"
         ));
     }
     if owed == 0 && orphans.is_empty() && !lines.is_empty() {

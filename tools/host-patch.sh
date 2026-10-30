@@ -91,6 +91,16 @@ else
   step uv "uv tool upgrade" uv tool upgrade --all
 fi
 step rustup "rustup update"         rustup update
+# cargo-installed crates and global npm packages have no manager of their own; tools/updates is
+# theirs. After rustup, so a crate builds on today's toolchain. It runs tools/audit too.
+# apply exits 1 for "nothing to do" and 2 for a failed step, so only 2 is a failure here.
+# ponytail: the audit then runs twice per patch run; add a skip flag to apply if that cost shows.
+# shellcheck disable=SC2329  # step calls it
+update_globals() {
+  "$SJEL_ROOT/tools/updates" apply --only cargo,npm --yes
+  [ $? -ne 2 ]
+}
+step "$SJEL_ROOT/tools/updates" "cargo and npm globals" update_globals
 
 echo
 echo "▸ tools/audit"

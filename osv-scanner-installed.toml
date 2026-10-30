@@ -16,16 +16,9 @@
 # So an entry here accepts a known vulnerability, states the reach, and names what ends it. The
 # date is when the acceptance stops, not when a fix is expected.
 #
-# THE COST, stated rather than hidden: the second pass runs with `--verbosity error`, so
-# osv-scanner does not print its "unused ignores" listing for this file — an entry that stops
-# applying (the crate was rebuilt at a newer version, npm re-resolved the tree) is NOT announced.
-# To see which entries still apply, run the pass by hand without that flag:
-#
-#   osv-scanner scan source -r -L <sbom.json> --config osv-scanner-installed.toml <locks-dir>
-#
-# `--verbosity error` itself is not incidental: at the default verbosity this pass also lists the
-# REPOSITORY config's entries as unused, directly under a repository pass that had just used
-# them, which reads as an invitation to delete entries that are load-bearing.
+# The second pass runs at `--verbosity warn`, so `tools/audit` prints osv-scanner's "unused
+# ignores" list for this file on every run. An entry named there no longer matches an installed
+# package: delete it.
 #
 # Reviewed 2026-10-04: 36 findings became 22 when two global npm packages were reinstalled and
 # their subtrees re-resolved (`@mariozechner/snap-happy`, `@modelcontextprotocol/server-github`,
@@ -57,44 +50,34 @@
 # the `node` formula, so every node revision bump restored the bundled npm into
 # `/opt/homebrew/lib/node_modules/npm` and undici 6.28.0 returned with it. That happened on
 # 2026-10-24 (the refresh above) and again on 2026-10-30 at 02:18 (`26.13.0` → `26.13.0_1`).
-# The loop is now broken on the executing side rather than documented: npm 12.2.1 is installed at
-# `~/.local` (`npm install -g npm@latest --prefix $HOME/.local`), and `~/.local/bin` precedes
-# `/opt/homebrew/bin` on PATH, so `which npm` answers `~/.local/bin/npm` and Homebrew cannot
-# reach it. Measured by running `brew reinstall node`: the formula's bundle reset to npm 11.20.0
-# while `npm -v` still answered 12.2.1.
-#
-# What these three accept is the OTHER copy. `/opt/homebrew/lib/node_modules/npm` (11.20.0) is
-# still inside the prefix `npm ls -g --all` walks, so its node-gyp and undici are still inventoried
-# even though nothing resolves to them. They end on their own when the node formula's bundled npm
-# reaches 12, which nothing here has to predict.
+# A second npm at `~/.local` was tried and removed the same day: Homebrew's PATH comes first in
+# `tools/host-patch.sh`, so the daily job and its audit still ran 11.20.0, `npm ls -g` never walked
+# the `~/.local` copy, and nothing upgraded it. One binary has one owner (`tools/host-patch.sh`
+# header), so npm is Homebrew's bundled copy, and the three entries below accept it as the copy
+# that runs. They end when the node formula's bundled npm moves undici past 6.28.0.
 [[IgnoredVulns]]
 id = "GHSA-rfgv-xxqx-mfg5"
 ignoreUntil = 2027-01-01
-reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unrequested WebSocket subprotocol. Reach: skiplisted entirely — the copy is `/opt/homebrew/lib/node_modules/npm` (npm 11.20.0), which no command resolves to since `npm` answers from `~/.local/bin` (12.2.1, re-measured through `brew reinstall node`). Even if it ran, node-gyp imports `Agent`, `EnvHttpProxyAgent`, `RetryAgent` and `fetch` from undici and never `WebSocket`, which is the whole of this advisory. Ends when the node formula ships npm 12."
+reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unrequested WebSocket subprotocol. Reach: `npm@11.20.0` > node-gyp > undici, Homebrew's bundled npm, which is the npm that runs. node-gyp imports `Agent`, `EnvHttpProxyAgent`, `RetryAgent` and `fetch` from undici and never `WebSocket`, which is the whole of this advisory. Ends when the node formula ships npm 12."
 
 [[IgnoredVulns]]
 id = "GHSA-3wwx-pv8p-q78v"
 ignoreUntil = 2027-01-01
-reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unhandled error in WebSocket permessage-deflate decompression. Same inert copy and same end as GHSA-rfgv-xxqx-mfg5, and the same narrowing applies: node-gyp opens no WebSocket, so the decompression path is never entered even by the copy that does run."
+reason = "undici 6.28.0, fixed in 6.28.1: denial of service through an unhandled error in WebSocket permessage-deflate decompression. Same copy and same end as GHSA-rfgv-xxqx-mfg5, and the same narrowing applies: node-gyp opens no WebSocket, so the decompression path is never entered."
 
 [[IgnoredVulns]]
 id = "GHSA-r53p-7pc4-xj5r"
 ignoreUntil = 2027-01-01
-reason = "undici 6.28.0, fixed in 6.28.1: downstream response splitting through the retry interceptor. This is the one of the three that node-gyp could reach — `lib/download.js` imports `RetryAgent` — which is why it rests on inertness rather than on an unused code path. The copy carrying it is `/opt/homebrew/lib/node_modules/npm` (11.20.0), never resolved since npm answers from `~/.local/bin` (12.2.1). The copy that does run carries undici 6.29.0. Ends when the node formula ships npm 12."
+reason = "undici 6.28.0, fixed in 6.28.1: downstream response splitting through the retry interceptor. This is the one of the three that node-gyp could reach — `lib/download.js` imports `RetryAgent` — so the exposure is real but narrow: node-gyp downloads Node headers only when it builds a native addon, from nodejs.org over HTTPS, and response splitting needs a hostile or broken upstream on that path. Ends when the node formula ships npm 12."
 [[IgnoredVulns]]
 id = "GHSA-xjj6-f33q-929c"
 ignoreUntil = 2027-01-01
-reason = "undici 6.29.0, fixed in 6.29.1: `fetch()` aborts the Node.js process when a server answers with more than five content codings and closes before the body. Reach: `npm@12.2.1` > node-gyp > undici, npm's own dependency tree, so what is exposed is a registry or tarball host's response to npm itself — the one undici path this machine actually exercises, which is why it is dated rather than dismissed. Nothing here installs that copy separately; the only fix is a newer node-gyp, which is npm's call. Ends when npm ships undici >= 6.29.1."
+reason = "undici 6.29.0, fixed in 6.29.1: `fetch()` aborts the Node.js process when a server answers with more than five content codings and closes before the body. Reach: `npm@11.20.0` (Homebrew's bundled npm) > node-gyp > undici 6.28.0, which the advisory's range below 6.29.1 also covers, npm's own dependency tree, so what is exposed is a registry or tarball host's response to npm itself — the one undici path this machine actually exercises, which is why it is dated rather than dismissed. Nothing here installs that copy separately; the only fix is a newer node-gyp, which is npm's call. Ends when npm ships undici >= 6.29.1."
 
 [[IgnoredVulns]]
 id = "GHSA-4qv8-2p9j-2685"
 ignoreUntil = 2027-01-01
 reason = "undici 6.29.0, fixed in 6.29.1: unbounded memory in the `EventSource` parser when a peer sends many tiny `data:` fields with no blank separator. Same reach and same end as GHSA-xjj6-f33q-929c, with one narrowing that matters: npm's registry traffic uses `fetch()`, not `EventSource`, so nothing npm does on this machine reaches the parser. Dated anyway because it rides the same pin, and the next npm move is what ends both."
-
-[[IgnoredVulns]]
-id = "GHSA-ch52-4w7c-c8xp"
-ignoreUntil = 2027-01-01
-reason = "http-cache-semantics 4.2.0 max-stale handling can disclose a cached response across users. NO FIXED VERSION EXISTS — osv names none — so there is no version to move to even if the parent could be changed. Reach: `npm@12.2.0` > make-fetch-happen > http-cache-semantics, in npm's own dependency tree. The exposure is a shared HTTP cache returning another user's entry; npm's registry fetches are its own, unauthenticated, and this machine's npm traffic does not pass through a shared cache it does not control. Ends when the package publishes a fix and npm adopts it, or when npm drops the dependency."
 
 [[IgnoredVulns]]
 id = "GHSA-6j4f-fj2g-mc7p"
@@ -124,34 +107,12 @@ reason = "ip-address 10.5.0, a second advisory against the same version, fixed i
 [[IgnoredVulns]]
 id = "GHSA-h3mg-xc3c-68pw"
 ignoreUntil = 2027-01-01
-reason = "ip-address 10.5.0, a third advisory against the same version, fixed in 10.7.1. Same reach as GHSA-2vr4-cq9g-pvrc, and a later fixed version, so it stops applying on its own date. Watch for npm shipping 10.5.1 first: this entry would then be the only ip-address line still blocking, and the `--verbosity error` cost above is exactly why nothing would tell you."
+reason = "ip-address 10.5.0, a third advisory against the same version, fixed in 10.7.1. Same reach as GHSA-2vr4-cq9g-pvrc, and a later fixed version, so it stops applying on its own date."
 
 [[IgnoredVulns]]
 id = "GHSA-j6r3-76f7-8jcv"
 ignoreUntil = 2027-01-01
 reason = "ip-address 10.5.0, a fourth advisory against the same version, fixed in 10.7.1. Same reach and same end as GHSA-h3mg-xc3c-68pw."
-
-# ── A global npm package that is private ─────────────────────────────────────────
-#
-# simple-git 3.30.0 is pulled by a package installed outside any registry, so `npm update` cannot
-# reach it (npm answers 404 for the name) and reinstalling is not possible from here. The fix
-# DOES exist and the range allows it: that package declares `simple-git: ^3.28.0`, so rebuilding
-# it against the current registry resolves 3.36.0 and these three entries end. That is why these
-# carry the shortest date in this file: it is the one class here a person can close today.
-[[IgnoredVulns]]
-id = "GHSA-hffm-xvc3-vprc"
-ignoreUntil = 2026-11-01
-reason = "simple-git 3.30.0 remote code execution, fixed in 3.36.0. Reach: simple-git 3.30.0 is in the nested node_modules of a global package (version `0.0.27-PP`) that is not published to any registry, so no install command here can move it: `npm update -g` answers E404 for the name, and the tree has no global lockfile to re-resolve. The exposure is real and is command execution, bounded by what that tool is pointed at — it shells out to git, so untrusted input reaching it is the trigger. Ends when that package is rebuilt or reinstalled against `simple-git >= 3.36.0`, which its declared range already allows."
-
-[[IgnoredVulns]]
-id = "GHSA-r275-fr43-pm7q"
-ignoreUntil = 2026-11-01
-reason = "simple-git 3.30.0, a second remote code execution advisory, fixed in 3.32.3 — a blockUnsafeOperationsPlugin bypass through a case-insensitive `protocol.allow` config key. Same reach, same trigger, same end as GHSA-hffm-xvc3-vprc."
-
-[[IgnoredVulns]]
-id = "GHSA-jcxm-m3jx-f287"
-ignoreUntil = 2026-11-01
-reason = "simple-git 3.30.0, a third advisory, command execution via an option-parsing bypass, fixed in 3.32.0. Same reach and same end as GHSA-hffm-xvc3-vprc."
 
 # ── The repo config's informational exceptions, as this pass reaches them ────────
 #
@@ -189,19 +150,9 @@ ignoreUntil = 2027-01-01
 reason = "rustls 0.23.40 accepts TLS 1.3 handshake messages across encryption-level boundaries, fixed in 0.23.45. Reach: the published lock of cargo-deny 0.20.2, installed at its latest release, so no upgrade moves it. cargo-deny is referenced by nothing in this repository — it is not Sjel's, and the honest options are that its own upgrade brings a newer rustls or it is uninstalled. Ends when cargo-deny republishes, or when it is removed."
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2020-0095"
-ignoreUntil = 2027-01-01
-reason = "The difference crate 2.0.0 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, which is at its latest stable release (a 3.0.0 alpha exists and is not adopted). Ends when tauri-cli republishes or is dropped."
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2023-0071"
 ignoreUntil = 2027-01-01
 reason = "The Marvin attack: potential RSA key recovery through timing sidechannels in rsa 0.9.10. No fixed version exists upstream. Reach: the published lock of tauri-cli 2.12.1, a build tool for the app, at its latest stable release. The exposure is on the app-signing path rather than on a server that answers network requests. Ends when tauri-cli republishes against a fixed rsa, which upstream has not provided, or when the tool is dropped. This is the one entry here whose fix does not exist at all rather than being out of reach."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0134"
-ignoreUntil = 2027-01-01
-reason = "rustls-pemfile 2.2.0 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, at its latest stable release. Ends when tauri-cli republishes or is dropped."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0206"
@@ -234,41 +185,6 @@ id = "RUSTSEC-2026-0387"
 ignoreUntil = 2027-01-01
 reason = "crypto-bigint 0.5.5 in `tauri-cli@2.12.4`'s published lock, fixed in 0.7.6: subtraction, zero counting, division and Montgomery multiplication could take secret-dependent branches depending on compiler and CPU. Reach: build tool only, and the crate is used there for key and signature *encoding*, not for an operation whose timing an attacker on the other end of a network can sample. Ends when tauri-cli republishes against a fixed crypto-bigint."
 
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0338"
-ignoreUntil = 2027-01-01
-reason = "quinn-proto 0.11.15, fixed in 0.11.18, the QUIC implementation under reqwest. Reach: the published locks of `tauri-cli@2.12.2` and `xberg-cli@1.3.10`, quinn-proto <- quinn <- reqwest in each. Both are build tools, so what is exposed is a connection one of them makes, not one Sjel serves. Ends when either crate republishes against a fixed quinn-proto."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0339"
-ignoreUntil = 2027-01-01
-reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0340"
-ignoreUntil = 2027-01-01
-reason = "quinn-proto 0.11.15, fixed in 0.11.18. Same reach and same end as RUSTSEC-2026-0338."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0341"
-ignoreUntil = 2027-01-01
-reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0342"
-ignoreUntil = 2027-01-01
-reason = "quinn-proto 0.11.15, fixed in 0.11.17. Same reach and same end as RUSTSEC-2026-0338."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0344"
-ignoreUntil = 2027-01-01
-reason = "ruzstd 0.7.3, fixed in 0.9.1, a zstd decoder. Reach: the published lock of `tauri-cli@2.12.2`, ruzstd <- object <- apple-codesign (and backtrace), so it decompresses an object or debug section of a binary tauri-cli is reading or signing — tauri-cli's own input, not Sjel's. Ends when tauri-cli republishes with object on ruzstd >= 0.9.1."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2024-0449"
-ignoreUntil = 2027-01-01
-reason = "Unmaintained unsafe-libyaml 0.2.11, no fixed version, runtime. Type INFO, not a vulnerability: the unsoundness, RUSTSEC-2023-0075, was fixed in 0.2.10 and both crates are well past it. Reach: `tauri-cli@2.12.2` (unsafe-libyaml <- serde_yaml 0.9.34+deprecated <- apple-codesign) and `xberg-cli@1.3.10` (<- serde_yaml_ng <- xberg). Accepted for the same reason as in osv-scanner.toml, and immovable here for the same reason: the version is the parent's published pin. Ends when apple-codesign or xberg drops the deprecated serde_yaml."
-
 # ── rustls 0.23.40 and 0.23.45, four advisories all fixed in 0.23.46 ──────────────────
 #
 # All four arrive through the published lock of a crate `cargo install --locked` resolves,
@@ -290,11 +206,6 @@ ignoreUntil = 2027-01-01
 reason = "The `Debug` impls on `Tls12ClientSessionValue`/`Tls13ClientSessionValue` printed the TLS 1.2 master secret or TLS 1.3 resumption PSK, fixed in 0.23.46 (CVSS AV:L/AC:H/PR:H/UI:R — local, high privilege, user interaction). The trigger is printing one of those values, and no log line in cargo-deny, xberg-cli or tauri-cli formats a session value, so this is a latent exposure rather than one a connection reaches. Ends with the rustls version, per the note above."
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0347"
-ignoreUntil = 2027-01-01
-reason = "Buffered application data sent to the outer server after an ECH rejection, fixed in 0.23.46 (AV:L/AC:L/PR:H/UI:N, C:L). The trigger is an ECH-negotiated session, and ECH is opt-in in rustls: these three tools build a default client and set no ECH config. Stated as an accepted exposure and not as a measured one — the ECH config of each tool was not read. Ends with the rustls version."
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0348"
 ignoreUntil = 2027-01-01
 reason = "Brotli certificate decompression can allocate up to 1 GiB before authentication, fixed in 0.23.46 (AV:N/AC:H/PR:N/UI:N, A:L). Reach: a TLS connection one of the three tools makes to a registry or CDN, where the server compresses its certificate chain. It needs rustls's brotli certificate support compiled in — whether these published locks enable that feature was not read, so this is an accepted exposure with a reasoned reach. Ends with the rustls version."
@@ -303,49 +214,6 @@ reason = "Brotli certificate decompression can allocate up to 1 GiB before authe
 id = "RUSTSEC-2026-0349"
 ignoreUntil = 2027-01-01
 reason = "An unauthenticated ServerHello can downgrade later connections to classical key exchange, fixed in 0.23.46 (AV:N/AC:H/PR:N/UI:N, C:L). Reach: an active MITM on a connection one of the three tools makes, which is exactly the access a network attacker has to a build tool fetching a registry. Ends with the rustls version."
-
-# ── zip 2.4.2, 8.0.0 and 8.6.0, and the one caller that reaches the vulnerable API ────────
-#
-# All three zip advisories are against `extract()`, which writes entries to disk carrying Unix
-# permissions and symlinks. Measured 2026-10-18 by reading the published sources of every crate
-# installed here that depends on zip:
-#
-#   * tauri-cli 2.12.2, src/mobile/android/mod.rs:561 — `zip::ZipArchive::new(Cursor::new(body))`
-#     then `zip.extract(extract_path)`, where `body` is the HTTP response from CMDLINE_TOOLS_URL
-#     (dl.google.com over TLS, read under a 200 MB limit). 2.12.3 still calls it. This is the one
-#     caller in anything installed here that reaches the affected API, and it runs only from an
-#     Android command, whose environment setup downloads the Android command-line tools.
-#     dashboard/src-tauri/gen/ holds `apple` and `schemas` and no `android`, so nothing in this
-#     repository has ever run it.
-#   * tauri-bundler 2.10.2 (tauri-cli 2.12.2's pin): the only reader is `extract_zip` in
-#     src/utils/http_utils.rs, which is `#[allow(dead_code)]` and hand-rolls the walk —
-#     `by_index`, `enclosed_name()`, then `File::create` + `write_all`. It applies no Unix mode
-#     and creates no symlink, so 0367 and 0369 have nothing to act on there, and calling
-#     `enclosed_name()` first is the defence 0368 describes the absence of. Its other use of zip
-#     is `ZipWriter`, writing the updater archive.
-#   * xberg 1.3.9 and 1.3.10, src/extraction/docx/parser.rs:2227 — `ZipArchive::new` over a
-#     `Cursor` on the caller's bytes, then `by_name` + `read_to_string` under
-#     MAX_UNCOMPRESSED_FILE_SIZE. `extract()`, `ZipStreamReader`, `unix_mode` and `chmod` appear
-#     nowhere in the crate, so transit handing the body of `POST /api/tickets/extract` to the
-#     xberg CLI — an attacker's .docx is a zip — does not reach the affected API.
-#
-# Installing the available tauri-cli 2.12.3 drops the 2.4.2 instance but still ships 8.0.0, and
-# xberg-cli 1.3.10 still ships 8.6.0, so no install clears these IDs. Ends when tauri-cli or
-# xberg-cli publishes against zip >= 9.0.0.
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0367"
-ignoreUntil = 2027-01-01
-reason = "SUID/SGID bits preserved during ZIP extraction, a privilege-escalation path fixed in 9.0.0 (CVSS 7.3, AV:L/AC:L/PR:L/UI:R, C:H/I:H/A:H). Reach: the `tauri android` command-line-tools extraction above, and the archive would have to carry SUID/SGID entries, so the source (dl.google.com over TLS) must be hostile or MITM'd. tauri-bundler's own reader applies no Unix mode at all. Ends with the zip version."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0368"
-ignoreUntil = 2027-01-01
-reason = "`ZipArchive::extract` creates symbolic links whose targets are outside the destination directory, fixed in 9.0.0 (osv names no CVSS). Same reach as RUSTSEC-2026-0367, through the same `tauri android` call. The nearest other reader, tauri-bundler's dead `extract_zip`, calls `enclosed_name()` before writing and creates no symlink, so it is not an affected caller. Ends with the zip version."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0369"
-ignoreUntil = 2027-01-01
-reason = "`ZipStreamReader::extract` and `ZipArchive::extract` apply Unix permissions through symlinks without confining the target, fixed in 9.0.0 (CVSS 9.1, AV:N/AC:L/PR:N/UI:N, I:H/A:H). Same reach as RUSTSEC-2026-0368, and the highest score in this file: the rating assumes an unauthenticated network caller can supply the archive, which here means a hostile or compromised dl.google.com or a MITM on that download — not a caller of Sjel, since the only entry point is the `tauri android` toolchain fetch. Ends with the zip version, or by not using `tauri android` on this machine at all."
 
 # ── Inside tauri-cli's own dependency tree ───────────────────────────────────────
 #
@@ -368,7 +236,6 @@ id = "GHSA-h37v-hp6w-2pp8"
 ignoreUntil = 2027-01-01
 reason = "ml-dsa 0.0.4 encoding issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
 
-
 # Certificate trust, not code execution: the two tools below bundle a root store or verifier that
 # still trusts distrusted emSign intermediates. Both are already the newest release on crates.io
 # (checked 2026-10-22), and `cargo install --locked` reads the Cargo.lock published inside each
@@ -377,20 +244,11 @@ reason = "ml-dsa 0.0.4 encoding issue. Same reach and same end as RUSTSEC-2025-0
 # given a URL (not verified beyond its --help). Exploiting either needs a certificate chained to a
 # distrusted emSign intermediate plus a network position to present it. Ends when the maintainer
 # republishes with rustls-webpki >= 0.103.16 and webpki-roots / webpki-root-certs >= 1.0.10.
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0382"
-ignoreUntil = 2026-12-01
-reason = "rustls-webpki 0.103.13 (cargo-deny 0.20.2) and 0.103.15 (xberg-cli 1.3.10) may accept distrusted intermediates. Both crates are the newest release; their embedded Cargo.lock pins it. Reach and end: see the comment above."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0381"
 ignoreUntil = 2026-12-01
 reason = "webpki-roots 1.0.7 (cargo-deny 0.20.2) and 1.0.9 (xberg-cli 1.3.10) bundle the emSign ECC Root CA - G3. Same reach and end as RUSTSEC-2026-0382."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0383"
-ignoreUntil = 2026-12-01
-reason = "webpki-root-certs 1.0.9 (xberg-cli 1.3.10) bundles the emSign ECC Root CA - G3. Same reach and end as RUSTSEC-2026-0382."
 
 # ── Found 2026-10-23, and what each one's fix would take ──────────────────────────
 #
@@ -404,10 +262,6 @@ reason = "webpki-root-certs 1.0.9 (xberg-cli 1.3.10) bundles the emSign ECC Root
 #
 # Reach for both is a build or extraction tool on this machine, not a listener: neither npm's
 # dependency resolution nor xberg's local extractor accepts a request from the network.
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0385"
-ignoreUntil = 2027-01-01
-reason = "ctutils 0.4.3 generates branches in its Choice mask const fns on widely used platforms, and its u128 comparisons branch on 32-bit targets, so a secret value can leak through a covert channel; fixed in 0.4.4. Reach: xberg-cli 1.3.10's published Cargo.lock, the newest release on crates.io, so `cargo install --locked` cannot move it. xberg is a local document extractor, so what is exposed is a comparison inside a build tool, and which comparisons reach the vulnerable const fns is not established here. Ends when xberg-cli republishes against ctutils >= 0.4.4."
 
 [[IgnoredVulns]]
 id = "GHSA-rxp7-6hxx-x8q5"
@@ -502,11 +356,6 @@ ignoreUntil = 2027-01-01
 reason = "zstd-sys 2.0.16 and 2.1.1, fixed in 2.1.2: the WebAssembly allocator shim corrupts memory on allocation failure. Reach: none on this machine, which builds no wasm target of these tools; an unlocked resolve of all three gives 2.1.2. Same end as RUSTSEC-2026-0391."
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0414"
-ignoreUntil = 2027-01-01
-reason = "pulldown-cmark 0.13.4, fixed in 0.13.5: exponential event growth with ENABLE_WIKILINKS. Reach: xberg-cli 1.3.10, whose markdown extractor enables wikilinks, so a crafted Markdown file costs exponential time in a local extraction. The binary rebuilt on 2026-10-28 carries 0.13.5; the published lock still pins 0.13.4. Ends when xberg-cli republishes."
-
-[[IgnoredVulns]]
 id = "GHSA-qwgh-2vcv-g2f7"
 ignoreUntil = 2027-01-01
 reason = "block-buffer 0.10.4: a panic caught inside the compress callback leaves the cursor corrupt. Fixed in 0.12.1 only, which needs the digest 0.11 stack; cargo-deny, macmon, tauri-cli and xberg-cli all reach it through digest 0.10, also when resolved unlocked. The callback is the hasher core's own compress function, which does not panic. Same entry as osv-scanner.toml. Ends when their sha2 and md-5 move to digest 0.11."
@@ -514,7 +363,7 @@ reason = "block-buffer 0.10.4: a panic caught inside the compress callback leave
 [[IgnoredVulns]]
 id = "GHSA-2m5v-pch6-74hx"
 ignoreUntil = 2027-01-01
-reason = "undici 6.29.0, fixed in 6.29.1: TLS certificate validation can be bypassed when an Agent drops its tls options. Reach: npm@12.2.1 (the newest release) > node-gyp@13.0.0 > undici, npm's own tree, used when node-gyp downloads Node headers for a native addon build. A MITM on that download is the exposure. Ends when npm ships node-gyp on undici >= 6.29.1."
+reason = "undici 6.29.0, fixed in 6.29.1: TLS certificate validation can be bypassed when an Agent drops its tls options. Reach: npm@11.20.0 (Homebrew's bundled npm) > node-gyp > undici 6.28.0, which the advisory's range below 6.29.1 also covers, npm's own tree, used when node-gyp downloads Node headers for a native addon build. A MITM on that download is the exposure. Ends when npm ships node-gyp on undici >= 6.29.1."
 
 [[IgnoredVulns]]
 id = "GHSA-9fm3-97px-rjf6"

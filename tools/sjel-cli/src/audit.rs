@@ -374,15 +374,9 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
             // above, and each is named in the finding's SOURCE column, so a transitive hit says
             // which installed crate carries it.
             //
-            // `--verbosity error` deliberately silences the "unused ignores" listing, which this
-            // pass would otherwise print directly under a repository pass that had just used
-            // those entries — reading as an invitation to delete ones that are load-bearing.
-            //
-            // The cost is live as of 2026-10-04 and is stated in `osv-scanner-installed.toml`'s
-            // own header rather than hidden here: that file's entries DO cover installed
-            // packages, so an entry that stops applying — a crate rebuilt at a newer version, a
-            // tree npm re-resolved — is not announced. The header carries the by-hand command
-            // that lists which entries still apply.
+            // `--verbosity warn` keeps osv-scanner's "unused ignores" listing and drops the
+            // per-entry "filtered out" lines. An entry that stops applying is then named on
+            // every run instead of hiding until the advisory swings back.
             //
             // That file exists because the two passes have opposite policies. The repository
             // scan keeps `osv-scanner.toml`, whose rule is that a known vulnerability stays
@@ -395,7 +389,7 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
                     .arg(&bom_path)
                     .arg("--config")
                     .arg(root.join("osv-scanner-installed.toml"))
-                    .args(["--verbosity", "error"])
+                    .args(["--verbosity", "warn"])
                     .arg(&locks_dir)
                     .status(),
             );

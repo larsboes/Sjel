@@ -543,12 +543,16 @@ fn shadowed_binaries(ctx: &mut Ctx) {
         .map(expand_home)
         .collect();
     let mut found = Vec::new();
+    let mut dangling = Vec::new();
     for dir in &dirs {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;
         };
         for entry in entries.flatten() {
             let Ok(file) = std::fs::canonicalize(entry.path()) else {
+                if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+                    dangling.push(entry.path().display().to_string());
+                }
                 continue;
             };
             let executable = std::fs::metadata(&file)
@@ -562,7 +566,10 @@ fn shadowed_binaries(ctx: &mut Ctx) {
         }
     }
     let shadowed = pure::shadowed(&found);
-    if shadowed.is_empty() {
+    for link in &dangling {
+        ctx.warn(format!("{link} is a link to a file that is gone"));
+    }
+    if shadowed.is_empty() && dangling.is_empty() {
         ctx.ok(format!(
             "each command name has one owner across {} directories",
             dirs.len()

@@ -1996,7 +1996,16 @@ fn backups(ctx: &mut Ctx) {
                         // Silent when a later run succeeded: the age line below already reports
                         // the backup, and repeating a resolved failure is how a real one stops
                         // being read.
-                        if !pure::attempt_superseded(at_epoch, at) {
+                        let attempt_target = a.get("target").and_then(Json::as_str).unwrap_or("");
+                        if pure::attempt_superseded(at_epoch, at) {
+                        } else if let Some(volume) = unmounted_volume(&targets, attempt_target) {
+                            // backup.sh refuses an absent volume on purpose. The receipt's age
+                            // above turns red once that makes the backup overdue.
+                            ctx.warn(format!(
+                                "{name} — the last attempt could not run: {} is not mounted",
+                                volume.display()
+                            ));
+                        } else {
                             ctx.bad(format!(
                                 "{name} — {}",
                                 pure::attempt_finding(exit, at_epoch, detail, now)
@@ -2064,16 +2073,14 @@ fn backups(ctx: &mut Ctx) {
             ));
             continue;
         }
-        let dest = std::path::PathBuf::from(expand_home(raw));
-        let volume: std::path::PathBuf = dest.components().take(3).collect();
-        if dest.starts_with("/Volumes") && !volume.exists() {
+        if let Some(volume) = unmounted_volume(&targets, &target_id) {
             ctx.warn(format!(
                 "{name} — {tarball}: {} is not mounted, so the archive cannot be verified",
                 volume.display()
             ));
             continue;
         }
-        let archive = dest.join(&name).join(&tarball);
+        let archive = Path::new(&expand_home(raw)).join(&name).join(&tarball);
         let meta = std::fs::metadata(&archive).ok();
         let flags = if meta.is_some() && cfg!(target_os = "macos") {
             let o = capture(Command::new("stat").arg("-f").arg("%Sf").arg(&archive));
@@ -2368,6 +2375,17 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
     }
 
     Ok(sections)
+}
+
+/// The `/Volumes/<name>` a local backup target's path lives on, when that volume is not mounted.
+fn unmounted_volume(targets: &toml::Table, id: &str) -> Option<PathBuf> {
+    let target = targets.get(id)?.as_table()?;
+    if target.get("kind").and_then(toml::Value::as_str) != Some("local") {
+        return None;
+    }
+    let dest = PathBuf::from(expand_home(target.get("path")?.as_str()?));
+    let volume: PathBuf = dest.components().take(3).collect();
+    (dest.starts_with("/Volumes") && !volume.exists()).then_some(volume)
 }
 
 /// The deploy and sync commands an operator is told to run for one harness. Every harness but

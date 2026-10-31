@@ -349,7 +349,7 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
         components.is_some() && write_sbom(&bom_path, components.as_deref().unwrap_or(&[]));
     let locks = match &components {
         Some(c) => copy_lockfiles(&locks_dir, c),
-        None => 0,
+        None => CrateLocks::default(),
     };
 
     match &components {
@@ -368,9 +368,22 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
         }
         Some(c) => {
             println!(
-                "  · {} installed package(s) and {locks} crate lockfile(s)",
-                scanned_rows(c).len()
+                "  · {} installed package(s) and {} crate lockfile(s)",
+                scanned_rows(c).len(),
+                locks.copied
             );
+            // Named, not counted, and a setup error rather than a finding: a crate whose
+            // published lockfile survived nowhere is not evidence that it is clean, and the
+            // count above would otherwise read as coverage of it.
+            if !locks.unscanned.is_empty() {
+                println!(
+                    "  ⚠ no published Cargo.lock for {} — not scanned: {}",
+                    locks.unscanned.len(),
+                    locks.unscanned.join(", ")
+                );
+                println!("  · `cargo install <name>` writes both copies back");
+                r.setup = true;
+            }
             // `-L`, not the deprecated `--sbom`: 2.6.0 accepts a CycloneDX file under either name
             // and prefers `-L`. `-r` over the lockfile directory walks only the copies made
             // above, and each is named in the finding's SOURCE column, so a transitive hit says
@@ -490,41 +503,88 @@ fn write_sbom(path: &Path, components: &[Component]) -> bool {
     std::fs::write(path, sbom(components).to_string()).is_ok()
 }
 
+/// What the crate half of the second pass read, and what it could not.
+#[derive(Default)]
+struct CrateLocks {
+    copied: usize,
+    /// `name-version` per installed crate with no published `Cargo.lock` anywhere, so the pass
+    /// can say which crates it did not cover instead of folding them into its total.
+    unscanned: Vec<String>,
+}
+
 /// An installed crate's transitive tree is the `Cargo.lock` published inside it, because `cargo
 /// install --locked` — the command `tools/updates` plans — resolves exactly that file. Read
 /// rather than re-resolved, so what is scanned is what is installed. Copied into a directory per
 /// crate because osv-scanner identifies a lockfile by its NAME, and each copy is its own half of
 /// the scan.
-fn copy_lockfiles(locks_dir: &Path, components: &[Component]) -> usize {
-    let Some(cargo_home) = cargo_home() else {
-        return 0;
-    };
-    let src = cargo_home.join("registry").join("src");
+fn copy_lockfiles(locks_dir: &Path, components: &[Component]) -> CrateLocks {
+    let cargo_home = cargo_home();
+    let mut unscanned = Vec::new();
     for c in components.iter().filter(|c| c.ecosystem == "crates.io") {
         let crate_dir = format!("{}-{}", c.name, c.version);
-        let Ok(registries) = std::fs::read_dir(&src) else {
-            continue;
-        };
-        for registry in registries.flatten() {
-            let lock = registry.path().join(&crate_dir).join("Cargo.lock");
-            if !lock.is_file() {
-                continue;
-            }
+        let lock = cargo_home
+            .as_deref()
+            .and_then(|home| published_lock(home, &crate_dir));
+        let copied = lock.is_some_and(|bytes| {
             let dest = locks_dir.join(&crate_dir);
-            if std::fs::create_dir_all(&dest).is_ok() {
-                let _ = std::fs::copy(&lock, dest.join("Cargo.lock"));
-            }
+            std::fs::create_dir_all(&dest).is_ok()
+                && std::fs::write(dest.join("Cargo.lock"), bytes).is_ok()
+        });
+        if !copied {
+            unscanned.push(crate_dir);
         }
     }
     // Counted from the tree, not from the copies: a crate version present in two registry source
     // directories writes the same one destination, and the script counted files with `find`.
-    match std::fs::read_dir(locks_dir) {
+    let copied = match std::fs::read_dir(locks_dir) {
         Ok(entries) => entries
             .flatten()
             .filter(|e| e.path().join("Cargo.lock").is_file())
             .count(),
         Err(_) => 0,
+    };
+    CrateLocks { copied, unscanned }
+}
+
+/// The `Cargo.lock` published inside one installed crate, from whichever copy survived.
+///
+/// `cargo install` leaves two copies: the extracted source under `registry/src`, and the
+/// `.crate` archive under `registry/cache`. The source is the one that goes missing — a cache
+/// trim takes it and leaves the archive — so a pass that read only the source covered no crate
+/// at all on this machine and reported clean over all of them. The archive is read through
+/// `tar -xzO` into memory rather than extracted, because nothing here needs a second tree on
+/// disk to look at it.
+fn published_lock(cargo_home: &Path, crate_dir: &str) -> Option<Vec<u8>> {
+    let registry = cargo_home.join("registry");
+    if let Ok(sources) = std::fs::read_dir(registry.join("src")) {
+        for source in sources.flatten() {
+            if let Ok(bytes) = std::fs::read(source.path().join(crate_dir).join("Cargo.lock")) {
+                return Some(bytes);
+            }
+        }
     }
+    let Ok(archives) = std::fs::read_dir(registry.join("cache")) else {
+        return None;
+    };
+    for cache in archives.flatten() {
+        let archive = cache.path().join(format!("{crate_dir}.crate"));
+        if !archive.is_file() {
+            continue;
+        }
+        let Ok(out) = Command::new("tar")
+            .arg("-xzOf")
+            .arg(&archive)
+            .arg(format!("{crate_dir}/Cargo.lock"))
+            .stderr(Stdio::null())
+            .output()
+        else {
+            continue;
+        };
+        if out.status.success() && !out.stdout.is_empty() {
+            return Some(out.stdout);
+        }
+    }
+    None
 }
 
 /// `${CARGO_HOME:-$HOME/.cargo}`.

@@ -41,6 +41,9 @@ GLOBALS_INVENTORY='{"inventory":[
   {"ecosystem":"crates.io","name":"macmon","version":"0.8.2"},
   {"ecosystem":"npm","name":"@sinclair/typebox","version":"0.34.52"},
   {"ecosystem":"brew","name":"jq","version":"1.7.1"}]}'
+# One crate whose source directory was trimmed away and one whose lockfile survived nowhere.
+ARCHIVE_INVENTORY='{"inventory":[{"ecosystem":"crates.io","name":"toolbox","version":"1.2.3"}]}'
+UNSCANNED_INVENTORY='{"inventory":[{"ecosystem":"crates.io","name":"ghost","version":"3.3.3"}]}'
 cat > "$PRIMARY/tools/updates" <<'STUB'
 #!/bin/sh
 printf '%s\n' "${SJEL_AUDIT_UPDATES_JSON:-}"
@@ -59,6 +62,15 @@ printf '%s\n' '# planted so the lockfile-copying half of the pass has a file to 
 mkdir -p "$CARGO_HOME_FIXTURE/registry/src/index.crates.io-test/absent-9.9.9"
 printf '%s\n' '# an uninstalled crate: reaching this would report a version nobody has' \
   > "$CARGO_HOME_FIXTURE/registry/src/index.crates.io-test/absent-9.9.9/Cargo.lock"
+# A crate whose source directory is gone and whose published archive is not. The archive is the
+# copy a cache trim leaves behind, and the one the pass has to fall back to.
+mkdir -p "$SCRATCH/archive-src/toolbox-1.2.3" \
+  "$CARGO_HOME_FIXTURE/registry/cache/index.crates.io-test"
+printf '%s\n' '# planted inside the published archive' \
+  > "$SCRATCH/archive-src/toolbox-1.2.3/Cargo.lock"
+(cd "$SCRATCH/archive-src" &&
+  tar -czf "$CARGO_HOME_FIXTURE/registry/cache/index.crates.io-test/toolbox-1.2.3.crate" \
+    toolbox-1.2.3)
 
 git init -q "$PRIMARY"
 git -C "$PRIMARY" -c user.name=Sjel -c user.email=axon@example.invalid \
@@ -265,6 +277,38 @@ grep -F 'vulnerabilities found above' "$SCRATCH/globals-finding.out" >/dev/null 
   echo "FAIL: the global finding was not reported" >&2
   exit 1
 }
+
+# The published archive under registry/cache is read when registry/src is gone. Without this the
+# pass covered no installed crate at all and reported clean over all of them.
+run_globals_audit "$ARCHIVE_INVENTORY" >"$SCRATCH/archive.out" 2>&1 || {
+  cat "$SCRATCH/archive.out"
+  echo "FAIL: a crate with only its published archive was not scanned" >&2
+  exit 1
+}
+grep -F '1 crate lockfile(s)' "$SCRATCH/archive.out" >/dev/null || {
+  cat "$SCRATCH/archive.out"
+  echo "FAIL: the archived Cargo.lock was not found" >&2
+  exit 1
+}
+
+# A crate whose lockfile survived nowhere is named and makes the run a setup error: the count of
+# scanned crates must never stand for a crate nobody looked at.
+run_globals_audit "$UNSCANNED_INVENTORY" >"$SCRATCH/unscanned.out" 2>&1
+unscanned_rc=$?
+[ "$unscanned_rc" -eq 2 ] || {
+  cat "$SCRATCH/unscanned.out"
+  echo "FAIL: an unscannable crate must exit 2, got $unscanned_rc" >&2
+  exit 1
+}
+grep -F 'not scanned: ghost-3.3.3' "$SCRATCH/unscanned.out" >/dev/null || {
+  cat "$SCRATCH/unscanned.out"
+  echo "FAIL: the crate nobody scanned was not named" >&2
+  exit 1
+}
+if grep -F 'vulnerabilities found above' "$SCRATCH/unscanned.out" >/dev/null; then
+  echo "FAIL: an unscanned crate was reported as a finding" >&2
+  exit 1
+fi
 
 # An inventory that cannot be read is a setup error — never clean, and never a finding. This is
 # the same distinction the missing-scanner case makes: an audit that did not run proves nothing.

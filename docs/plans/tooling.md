@@ -14,11 +14,11 @@ covers it.
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
   profile's 7 skills to 14. Workaround: re-run `tools/harnesses use lean --harness pi`, which also
   rewrites the agent files. Smallest change: `deploy` keeps the active profile's skill subset.
-- **Installed crates whose source was collected.** The audit's globals pass reads each installed
-  crate's `Cargo.lock` from `~/.cargo/registry/src`. Cargo's cache cleanup had removed the source
-  of all four installed crates, so the pass scanned 0 crate lockfiles and reported clean. A check
-  of `ls ~/.cargo/registry/src/*/` found the gap. Smallest change: fetch a missing crate source
-  before the scan, or report each installed crate without a lockfile as not scanned.
+- **Installed crates whose source was collected.** `tools/audit` reads each installed crate's
+  `Cargo.lock` from `~/.cargo/registry/src`, and a cache trim can take that whole tree while
+  leaving `registry/cache`, so the globals pass scanned 0 crate lockfiles and reported clean.
+  Smallest change: fetch a missing crate source before the scan, or report each installed crate
+  without a lockfile as not scanned.
 - **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
   refused to report success because an orphan still held the declared port. `lsof` identified
   the listener; the sandbox refused a direct signal. Smallest change: let the runner identify
@@ -121,6 +121,9 @@ covers it.
 
 ## Done
 
+- `tools/audit` reads an installed crate's published `Cargo.lock` from the `.crate` archive in
+  `~/.cargo/registry/cache` when the extracted `registry/src` copy is gone, and names every crate
+  whose lockfile survived nowhere as not scanned, which exits 2 rather than reporting clean.
 - `tools/model-check --role <role> --probe` sends one request to one role with its configured key
   and never prints the key. A prompt file is not supported. The probe uses a fixed prompt.
 - `sjel capability mail events [replay] <id>...` reads safe per-mail event scan states and

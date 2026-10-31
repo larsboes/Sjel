@@ -88,10 +88,29 @@ jobs:
     steps:
       - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Rust is the slow language. Skip it when the change touches no Rust source, manifest or
+      # this workflow. The weekly schedule, a new branch, and any doubt run it.
+      - name: Decide whether the change reaches ${{ matrix.language }}
+        id: scope
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$LANGUAGE" != rust ] || [ "$EVENT" = schedule ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null \
+            || git diff --name-only "$BASE" HEAD | grep -qE '\.rs$|(^|/)Cargo\.(toml|lock)$|^rust-toolchain\.toml$|^\.github/workflows/codeql\.yml$'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          else
+            echo run=false >> "$GITHUB_OUTPUT"
+          fi
 
       # Pinned by commit sha like every other action here, and the comment names the release the
       # sha belongs to so a bump is reviewable as a version change rather than as a hash swap.
       - name: Initialize CodeQL
+        if: steps.scope.outputs.run == 'true'
         uses: github/codeql-action/init@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         with:
           languages: ${{ matrix.language }}
@@ -110,6 +129,7 @@ jobs:
           queries: security-extended
 
       - name: Analyze
+        if: steps.scope.outputs.run == 'true'
         uses: github/codeql-action/analyze@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         with:
           category: "/language:${{ matrix.language }}"

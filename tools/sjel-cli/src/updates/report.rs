@@ -23,8 +23,6 @@ pub enum Owner {
     Scheduled,
     #[serde(rename = "manual")]
     Manual,
-    #[serde(rename = "unowned")]
-    Unowned,
     #[serde(rename = "self")]
     SelfManaged,
 }
@@ -34,7 +32,6 @@ impl Owner {
         match self {
             Owner::Scheduled => "scheduled",
             Owner::Manual => "manual",
-            Owner::Unowned => "unowned",
             Owner::SelfManaged => "self",
         }
     }
@@ -109,6 +106,22 @@ pub static SURFACES: &[Surface] = &[
         why: "the declared tag is a channel and the digest is the fact (ISA.md C4); reported from its receipt and never pulled here",
     },
     Surface {
+        id: "cargo",
+        title: "cargo-installed binaries",
+        owner: Owner::Scheduled,
+        owner_detail: "capabilities/host-patch · 24h, through `tools/updates apply`",
+        actionable: true,
+        why: "`cargo install` has no update verb and no register; toolchain.toml names the install path for [macmon] and nothing named an update path",
+    },
+    Surface {
+        id: "npm",
+        title: "npm global packages",
+        owner: Owner::Scheduled,
+        owner_detail: "capabilities/host-patch · 24h, through `tools/updates apply`",
+        actionable: true,
+        why: "the harnesses self-update but the packages beside them do not, and nothing ran `npm outdated -g`",
+    },
+    Surface {
         id: "graphify",
         title: "graphify harness integration",
         owner: Owner::Manual,
@@ -131,22 +144,6 @@ pub static SURFACES: &[Surface] = &[
         owner_detail: "tools/update.sh",
         actionable: false,
         why: "fast-forward only, and a diverged checkout is left alone with instructions rather than discarded",
-    },
-    Surface {
-        id: "cargo",
-        title: "cargo-installed binaries",
-        owner: Owner::Unowned,
-        owner_detail: "nothing — this tool moves them",
-        actionable: true,
-        why: "`cargo install` has no update verb and no register; toolchain.toml names the install path for [macmon] and nothing named an update path",
-    },
-    Surface {
-        id: "npm",
-        title: "npm global packages",
-        owner: Owner::Unowned,
-        owner_detail: "nothing — this tool moves them",
-        actionable: true,
-        why: "the harnesses self-update but the packages beside them do not, and nothing ran `npm outdated -g`",
     },
     Surface {
         id: "vendor",
@@ -785,6 +782,12 @@ pub fn gather_npm(ctx: &Ctx, brew_formulae: &std::collections::BTreeSet<String>)
     tree.installed
         .iter()
         .map(|p| {
+            if brew_bundles_npm(&p.name, brew_formulae) {
+                return Row::new("npm", Status::Current)
+                    .name(&p.name)
+                    .installed(&p.version)
+                    .note("bundled with Homebrew's node formula — `brew upgrade node` moves it");
+            }
             // The shadowing check: a global npm package whose name is also a brew formula can put
             // two binaries under one name on PATH. It is a hint to check, not a claim they are
             // the same project: npm's `uv` and brew's `uv` are unrelated packages.
@@ -872,6 +875,12 @@ pub fn gather_npm(ctx: &Ctx, brew_formulae: &std::collections::BTreeSet<String>)
             row
         })
         .collect()
+}
+
+/// Homebrew's node formula bundles npm into the same global prefix. `npm install -g npm` over it
+/// gives one binary two owners, and the next node revision puts the bundled copy back.
+fn brew_bundles_npm(name: &str, brew_formulae: &std::collections::BTreeSet<String>) -> bool {
+    name == "npm" && brew_formulae.contains("node")
 }
 
 /// The top-level global package a nested node belongs to, read from the `location` npm prints.
@@ -1036,7 +1045,11 @@ pub fn build_report(ctx: &Ctx) -> Report {
     let npm_rows = gather_npm(ctx, &brew_formulae);
     // The owners the subtree scan attributes to. Taken from the rows just gathered rather than
     // asked of npm again, so the two halves cannot disagree about what is installed at the top.
-    let npm_owners: Vec<String> = npm_rows.iter().map(|r| r.name.clone()).collect();
+    let npm_owners: Vec<String> = npm_rows
+        .iter()
+        .map(|r| r.name.clone())
+        .filter(|n| !brew_bundles_npm(n, &brew_formulae))
+        .collect();
     rows.extend(npm_rows);
     rows.extend(npm_subtrees_behind(ctx, &npm_owners));
     rows.extend(gather_vendor(ctx));
@@ -1059,7 +1072,6 @@ fn heading(owner: Owner) -> &'static str {
     match owner {
         Owner::Scheduled => "Managed by a scheduled job",
         Owner::Manual => "Manual — a verb exists, nothing schedules it",
-        Owner::Unowned => "Unowned — nothing moves these",
         Owner::SelfManaged => "Self-managed — the vendor updates these",
     }
 }
@@ -1574,6 +1586,25 @@ mod tests {
     }
 
     #[test]
+    fn npm_bundled_with_brew_node_is_current_and_carries_no_action() {
+        let fake = Fake::new(&[
+            (
+                "npm ls -g",
+                r#"{"dependencies":{"npm":{"version":"11.20.0"}}}"#,
+            ),
+            (
+                "npm outdated -g",
+                r#"{"npm":{"current":"11.20.0","latest":"12.2.1"}}"#,
+            ),
+        ]);
+        let with_node = gather_npm(&ctx(&fake, false), &parse_brew_formulae("node\n"));
+        assert_eq!(row(&with_node, "npm").status, Status::Current);
+        assert!(row(&with_node, "npm").action.is_none());
+        let without = gather_npm(&ctx(&fake, false), &Default::default());
+        assert_eq!(row(&without, "npm").status, Status::Stale);
+    }
+
+    #[test]
     fn a_name_that_is_also_a_brew_formula_is_flagged_to_check_path() {
         let fake = Fake::new(&[("npm ls -g", NPM_INSTALLED), ("npm outdated -g", "{}")]);
         let formulae = parse_brew_formulae("uv\njq\nnettle\n");
@@ -2051,7 +2082,7 @@ mod tests {
                 r.surface, r.name
             );
         }
-        assert!(table_text.contains("Unowned — nothing moves these"));
+        assert!(table_text.contains("Managed by a scheduled job"));
         let json = serde_json::from_str::<serde_json::Value>(&render_json(
             &report.rows,
             &report.generated_at,
@@ -2066,18 +2097,14 @@ mod tests {
     }
 
     #[test]
-    fn every_surface_has_an_owner_and_a_reason_and_the_two_unowned_ones_are_actionable() {
+    fn every_surface_has_an_owner_and_a_reason_and_the_ones_this_tool_moves_are_actionable() {
         for s in SURFACES {
             assert!(s.why.len() > 10);
             assert!(s.owner_detail.len() > 3);
         }
-        let unowned: Vec<&str> = SURFACES
-            .iter()
-            .filter(|s| s.owner == Owner::Unowned)
-            .map(|s| s.id)
-            .collect();
-        assert_eq!(unowned, vec!["cargo", "npm"]);
-        for s in SURFACES.iter().filter(|s| s.owner == Owner::Unowned) {
+        for id in ["cargo", "npm"] {
+            let s = surface(id).unwrap();
+            assert_eq!(s.owner, Owner::Scheduled);
             assert!(s.actionable);
         }
         for s in SURFACES.iter().filter(|s| s.owner == Owner::SelfManaged) {

@@ -687,6 +687,29 @@ pub fn backup_age_state(age: Option<i64>, advise: f64, stale: f64) -> AgeState {
     AgeState::Ok
 }
 
+/// Each command name that resolves to two or more different files, with those files in the
+/// order they were found. `found` is (name, resolved file) in search order. One binary has one
+/// owner (`tools/host-patch.sh` header), so every name returned has two.
+pub fn shadowed(found: &[(String, String)]) -> Vec<(String, Vec<String>)> {
+    let mut by_name: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+    for (name, file) in found {
+        let files = by_name.entry(name).or_default();
+        if !files.contains(&file.as_str()) {
+            files.push(file);
+        }
+    }
+    by_name
+        .into_iter()
+        .filter(|(_, files)| files.len() > 1)
+        .map(|(name, files)| {
+            (
+                name.to_owned(),
+                files.into_iter().map(str::to_owned).collect(),
+            )
+        })
+        .collect()
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Level {
     Ok,
@@ -1154,6 +1177,32 @@ async fn main() {
         assert_eq!(
             find_production_listener_constructs(source),
             ["axum::serve", "TcpListener::bind"]
+        );
+    }
+
+    #[test]
+    fn a_name_with_two_files_is_shadowed_and_a_symlink_to_one_file_is_not() {
+        let found = |rows: &[(&str, &str)]| -> Vec<(String, String)> {
+            rows.iter()
+                .map(|(n, f)| (n.to_string(), f.to_string()))
+                .collect()
+        };
+        let rows = found(&[
+            ("docker", "/a/orbstack/docker"),
+            ("docker", "/a/orbstack/docker"),
+            ("npm", "/brew/npm-cli.js"),
+            ("jq", "/brew/jq"),
+            ("npm", "/home/.local/npm-cli.js"),
+        ]);
+        assert_eq!(
+            super::shadowed(&rows),
+            [(
+                "npm".to_string(),
+                vec![
+                    "/brew/npm-cli.js".to_string(),
+                    "/home/.local/npm-cli.js".to_string()
+                ]
+            )]
         );
     }
 

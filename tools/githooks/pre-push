@@ -59,7 +59,11 @@ if ! command -v bun >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
   echo "pre-push: bun or cargo is missing — local checks NOT run" >&2
   exit 0
 fi
-if ! "$repo_root/tools/ci-local" fast >&2; then
+# Git exports GIT_DIR and its siblings to a hook. Tests that build scratch repositories would
+# then act on this one, so the checks run without them.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+if ! (cd "$repo_root" && tools/ci-local fast) >&2; then
   echo "pre-push: local checks failed. Fix them, or push with SJEL_SKIP_PUSH_CHECKS=1 when the failure is not yours" >&2
   exit 1
 fi

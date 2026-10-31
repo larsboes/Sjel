@@ -59,6 +59,7 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
+    "minimatch": "^11.0.1",
     "undici": "^8.12.3"
   },
   "peerDependencies": {

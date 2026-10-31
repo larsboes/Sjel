@@ -977,8 +977,12 @@ mod tests {
     #[test]
     fn a_terminal_does_not_inherit_the_capabilitys_environment() {
         std::env::set_var("SJEL_TERMINAL_TEST_TOKEN", "must-not-travel");
-        let (_terminals, terminal) = run("env", "env");
-        let seen = read_until(&terminal, |seen| seen.contains("PATH="));
+        // Read to an end marker: `env` prints in no fixed order, so stopping at one variable
+        // can stop before another arrives.
+        let (_terminals, terminal) = run("env", "env; echo env-listed");
+        let seen = read_until(&terminal, |seen| {
+            seen.contains("env-listed\n") || seen.contains("env-listed\r")
+        });
         assert!(
             !seen.contains("SJEL_TERMINAL_TEST_TOKEN"),
             "the capability's environment reached the shell: {seen}"

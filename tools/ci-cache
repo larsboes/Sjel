@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Thin launcher: the logic lives in ci-cache.ts.
+_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bun run "$_here/ci-cache.ts" "$@"

@@ -191,6 +191,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
                 .args(rest),
         ),
         "check" => exec(Command::new(tool("tools/ci-local")).arg("fast").args(rest)),
+        "ci-cache" => exec(Command::new(tool("tools/ci-cache")).args(rest)),
         "cargo" => exec(Command::new(tool("tools/cargo-hermetic")).args(rest)),
         "capability" => capability::command(root, rest),
         "capture" => capability::command(root, &[&["capture".to_string()], rest].concat()),
@@ -240,6 +241,9 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "mirror" => help::MIRROR,
         "setup" => help::SETUP,
         "gates" | "test" | "check" => help::GATES,
+        "ci-cache" => {
+            "Usage: sjel ci-cache [prune [--apply]]  (prune without --apply deletes nothing)"
+        }
         "cargo" => help::CARGO,
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,

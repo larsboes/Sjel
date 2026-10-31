@@ -1002,7 +1002,17 @@ mod tests {
         let first = lock(&scratch.paths).unwrap();
         assert!(lock(&scratch.paths).is_err());
         drop(first);
-        assert!(lock(&scratch.paths).is_ok());
+        // A child another test forks while `first` is open shares its file description until
+        // exec, and flock belongs to the description. So release is waited for, not assumed
+        // to be instant.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while lock(&scratch.paths).is_err() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the lock was never released"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 
     #[cfg(unix)]

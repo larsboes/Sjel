@@ -42,8 +42,9 @@ const CONTEXT: [&str; 4] = [
 
 /// Sections that read a deployment: the overlay, machine.toml, services, data and backups. A
 /// repository checkout has none of these, so each reports itself skipped rather than failing.
-const DEPLOYMENT: [&str; 20] = [
+const DEPLOYMENT: [&str; 21] = [
     "Machine identity",
+    "Shadowed binaries (tools/lib/tool-dirs)",
     "Global Bun/npm install policy",
     "Local inference roles (tools/model-check --local)",
     "AI assistant integrations",
@@ -71,6 +72,7 @@ fn entries() -> Vec<Entry> {
         One("Overlay", overlay),
         One("Machine identity", machine_identity),
         One("Host toolchain (tools/toolchain-check)", host_toolchain),
+        One("Shadowed binaries (tools/lib/tool-dirs)", shadowed_binaries),
         One("Global Bun/npm install policy", bun_policy),
         One(
             "Local inference roles (tools/model-check --local)",
@@ -522,6 +524,63 @@ fn host_toolchain(ctx: &mut Ctx) {
     }
     if na > 0 {
         ctx.ok("scoped to this machine — 'tools/toolchain-check --workflow backup|restore|audit|build' before running one");
+    }
+}
+
+/// A command name in two tool directories has two owners: PATH order decides which copy runs,
+/// and the manager that upgrades one copy never touches the other.
+fn shadowed_binaries(ctx: &mut Ctx) {
+    use std::os::unix::fs::PermissionsExt;
+    let list = ctx.root.join("tools/lib/tool-dirs");
+    let Ok(text) = std::fs::read_to_string(&list) else {
+        ctx.warn(format!("{} is missing", list.display()));
+        return;
+    };
+    let dirs: Vec<String> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(expand_home)
+        .collect();
+    let mut found = Vec::new();
+    let mut dangling = Vec::new();
+    for dir in &dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file) = std::fs::canonicalize(entry.path()) else {
+                if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+                    dangling.push(entry.path().display().to_string());
+                }
+                continue;
+            };
+            let executable = std::fs::metadata(&file)
+                .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+            if executable {
+                found.push((
+                    entry.file_name().to_string_lossy().into_owned(),
+                    file.display().to_string(),
+                ));
+            }
+        }
+    }
+    let shadowed = pure::shadowed(&found);
+    for link in &dangling {
+        ctx.warn(format!("{link} is a link to a file that is gone"));
+    }
+    if shadowed.is_empty() && dangling.is_empty() {
+        ctx.ok(format!(
+            "each command name has one owner across {} directories",
+            dirs.len()
+        ));
+    }
+    for (name, files) in shadowed {
+        ctx.warn(format!(
+            "{name} has {} owners, and a job runs the first: {}",
+            files.len(),
+            files.join(" · ")
+        ));
     }
 }
 
@@ -1057,14 +1116,33 @@ fn boot_persistence(ctx: &mut Ctx) {
                     .map(str::to_owned)
             };
             if let Some(c) = cap.filter(|c| !exempt.contains(c) && !enabled.contains(c)) {
-                orphans.push(c);
+                orphans.push((c, dir.join(&f)));
             }
         }
     }
     orphans.sort();
-    for cap in &orphans {
+    for (cap, unit) in &orphans {
+        // A unit with no manifest in either root was not installed from one, so nothing here
+        // knows what depends on it. Name what it runs and do not suggest removing it.
+        let managed = ctx.root.join("capabilities").join(cap).exists()
+            || overlay_dir(ctx).join("capabilities").join(cap).exists();
+        if managed {
+            ctx.warn(format!(
+                "persistence is installed for '{cap}', which this machine does not enable — its watchdog will start it anyway (tools/service-runner.sh remove-persistence {cap})"
+            ));
+            continue;
+        }
+        let unit = unit.to_string_lossy();
+        let args = cmd(
+            "plutil",
+            &["-extract", "ProgramArguments", "json", "-o", "-", &unit],
+        );
+        let program = serde_json::from_str::<Json>(&args.stdout)
+            .ok()
+            .and_then(|v| v.get(0).and_then(Json::as_str).map(str::to_owned))
+            .unwrap_or_else(|| "an unreadable program".to_owned());
         ctx.warn(format!(
-            "persistence is installed for '{cap}', which this machine does not enable — its watchdog will start it anyway (tools/service-runner.sh remove-persistence {cap})"
+            "'{cap}' is unmanaged: {unit} runs {program}, and no capabilities/{cap} manifest exists in either root. Find what depends on it before removing it"
         ));
     }
     if owed == 0 && orphans.is_empty() && !lines.is_empty() {
@@ -1918,7 +1996,16 @@ fn backups(ctx: &mut Ctx) {
                         // Silent when a later run succeeded: the age line below already reports
                         // the backup, and repeating a resolved failure is how a real one stops
                         // being read.
-                        if !pure::attempt_superseded(at_epoch, at) {
+                        let attempt_target = a.get("target").and_then(Json::as_str).unwrap_or("");
+                        if pure::attempt_superseded(at_epoch, at) {
+                        } else if let Some(volume) = unmounted_volume(&targets, attempt_target) {
+                            // backup.sh refuses an absent volume on purpose. The receipt's age
+                            // above turns red once that makes the backup overdue.
+                            ctx.warn(format!(
+                                "{name} — the last attempt could not run: {} is not mounted",
+                                volume.display()
+                            ));
+                        } else {
                             ctx.bad(format!(
                                 "{name} — {}",
                                 pure::attempt_finding(exit, at_epoch, detail, now)
@@ -1983,6 +2070,13 @@ fn backups(ctx: &mut Ctx) {
         if raw.is_empty() {
             ctx.warn(format!(
                 "{name} — target '{target_id}' is kind=local and declares no path"
+            ));
+            continue;
+        }
+        if let Some(volume) = unmounted_volume(&targets, &target_id) {
+            ctx.warn(format!(
+                "{name} — {tarball}: {} is not mounted, so the archive cannot be verified",
+                volume.display()
             ));
             continue;
         }
@@ -2283,26 +2377,30 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
     Ok(sections)
 }
 
-/// The deploy and sync commands an operator is told to run for one harness.
+/// The `/Volumes/<name>` a local backup target's path lives on, when that volume is not mounted.
+fn unmounted_volume(targets: &toml::Table, id: &str) -> Option<PathBuf> {
+    let target = targets.get(id)?.as_table()?;
+    if target.get("kind").and_then(toml::Value::as_str) != Some("local") {
+        return None;
+    }
+    let dest = PathBuf::from(expand_home(target.get("path")?.as_str()?));
+    let volume: PathBuf = dest.components().take(3).collect();
+    (dest.starts_with("/Volumes") && !volume.exists()).then_some(volume)
+}
+
+/// The deploy and sync commands an operator is told to run for one harness. Every harness but
+/// Claude has a `tools/packs-<id>` launcher with `deploy` and `sync` verbs.
 fn pack_commands(id: &str, pack: &str) -> (String, String) {
-    match id {
-        "claude" => (
+    if id == "claude" {
+        return (
             format!("tools/packs.sh link {pack}"),
             format!("tools/packs-claude sync {pack}"),
-        ),
-        "codex" => (
-            format!("tools/packs-codex deploy {pack}"),
-            format!("tools/packs-codex sync {pack}"),
-        ),
-        "opencode" => (
-            format!("tools/packs-opencode deploy {pack}"),
-            format!("tools/packs-opencode sync {pack}"),
-        ),
-        _ => (
-            format!("tools/packs-pi deploy {pack}"),
-            format!("tools/packs-pi sync {pack}"),
-        ),
+        );
     }
+    (
+        format!("tools/packs-{id} deploy {pack}"),
+        format!("tools/packs-{id} sync {pack}"),
+    )
 }
 
 fn doctrine_freshness(ctx: &mut Ctx) {

@@ -700,6 +700,8 @@ mod tests {
 
     #[test]
     fn expand_tilde_uses_home() {
+        let _env = env_lock();
+        let _home = EnvGuard::take("HOME");
         std::env::set_var("HOME", "/tmp/fake-home");
         assert_eq!(expand_tilde("~/foo"), PathBuf::from("/tmp/fake-home/foo"));
         assert_eq!(expand_tilde("/abs/path"), PathBuf::from("/abs/path"));
@@ -722,6 +724,7 @@ mod tests {
     /// file, because places joins mail against it.
     #[test]
     fn the_store_path_comes_from_the_deployment_not_from_comms_json() {
+        let _env = env_lock();
         // Cleared first: with the host's overlay vars in scope, the path both
         // sides resolve is the deployed axon.db. No test may name the live
         // store, even to compare a `PathBuf`.
@@ -742,6 +745,13 @@ mod tests {
     /// left every later store test resolving the fallback connection string
     /// instead of the overlay's real one, and eight of them failed against a
     /// perfectly healthy Postgres.
+    /// The environment is process-wide and tests run in parallel, so every test that changes
+    /// it holds this lock until its guards have restored what they took.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     struct EnvGuard(Vec<(String, Option<String>)>);
 
     impl EnvGuard {
@@ -774,6 +784,7 @@ mod tests {
 
     #[test]
     fn load_with_no_env_and_no_file_uses_defaults() {
+        let _env = env_lock();
         let _config = EnvGuard::take("SJEL_COMMS_CONFIG");
         let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");
         let cfg = Config::load();

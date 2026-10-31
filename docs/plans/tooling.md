@@ -10,25 +10,6 @@ covers it.
 
 ## Open
 
-- **A test that stages files in the shared checkout.** `tools/sjel-cli`'s `ui_packages` tests create
-  `package.json` and `bun.lock` at the repository root and call `git add` and `git rm --cached` to
-  observe trackedness. In a worktree that mutates the index of the checkout under test, so a
-  `pre-push` run failed on its own side effects and left staged additions and deletions behind.
-  The failure is order-dependent: `cargo test -p sjel-cli` alone passed 399 tests. Smallest change:
-  run those cases inside a temporary git repository instead of the checkout.
-
-- **A launchd unit whose capability manifest is gone.** `com.sjel.tailscaled` runs
-  `/opt/homebrew/opt/tailscale/bin/tailscaled` with `--statedir=<overlay>/secrets/tailscale-sjel`,
-  and that userspace daemon is the tailnet node `sjel` that reaches `homepi`, the remote backup
-  host. No `capabilities/tailscaled` manifest exists in either root, so `doctor` reports an orphan
-  unit for a capability this machine does not enable and suggests `remove-persistence tailscaled` —
-  which would drop the remote backup path at the next boot. Acting on that advice needs a check
-  that asks what the unit serves, not only whether the enabled set names it. Smallest change: have
-  the boot-persistence check report a unit with no manifest as `unmanaged` with its command line,
-  and refuse the removal suggestion while another capability's declared remote depends on it.
-- **CI cache inventory.** Inspecting Actions cache sizes and removing a merged pull request's
-  unreachable cache required GitHub API calls. Add a read-only `sjel` cache report with a
-  separately invoked cleanup for caches tied to closed pull requests and a dry run.
 - **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
   refused to report success because an orphan still held the declared port. `lsof` identified
   the listener; the sandbox refused a direct signal. Smallest change: let the runner identify
@@ -97,38 +78,37 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
-- **Selective verification and build resources.** `tools/ci-impact.ts` reports a Rust package
-  candidate in pull-request CI without changing the full checks. It maps Rust source changes to
-  package owners and reverse dependencies; `--local` includes staged, unstaged and untracked
-  files and reports the existing GPUI input match. Runtime file reads are not modeled.
-  `fastPlan` in the same file drives `sjel check` and the pre-push hook: fmt, repo gates, clippy
-  and cargo test on affected crates, and tests beside changed files. CI runs `tools/*.test.sh`
-  in parallel. Open work:
-  1. CI reports separate Rust test compilation and execution resource usage and target size.
-     Pages uses the same main-only dependency cache policy as CI. `bun-tests`, `ui-check` and
-     `repo-gates` share a `sjel-cli-release` cache; measure their step times once main has saved
-     it.
-     Measure cache restore/save time and bytes and local target-directory growth for
-     documentation, leaf crate, shared crate, UI and lockfile changes. Use existing storage
-     reporting; do not clean a running deployment target.
-  2. Extend the shared planner to cover both Cargo workspaces, feature
-     and target combinations, build scripts, generated inputs, runtime file reads, Bun and shell
-     tests, UI packages and repository gates. Unknown inputs, missing metadata, renames and
-     deletions must widen the plan. Report each selected and skipped check with its reason.
-  3. Compare candidate selections against full PR checks in shadow mode, including tests that
-     deliberately break cross-package and runtime-file dependencies. Record misses and repair
-     them before enabling selective enforcement. Main continues to run the complete suite.
-  4. The `verification result` job aggregates planner and job results, including the selected GPUI
-     matrix. The main ruleset still requires the five existing checks; test the aggregate in CI
-     before making it required. Confirm merge-queue behavior before changing required checks.
-  5. Benchmark bounded local parallelism and cache retention against wall time, CPU, peak memory,
-     disk and cache transfer. Set defaults only from measurements; keep controls reversible.
-  Done when local and CI use the same validated planner, every unclassified input runs the full
-  relevant checks, full main checks remain green, and measurements show the cost and savings.
+- **Selective verification and build resources.** `tools/ci-impact.ts` plans the root Cargo
+  workspace's packages for a change: the owner of each changed file, every package whose sources
+  name the file's path (runtime reads, modeled from path literals), and their reverse
+  dependencies. Workspace-wide inputs select every package. A file that no package owns or names
+  selects none (decided 2026-10-29). `fastPlan` in the same file drives
+  `sjel check` and the pre-push hook. On a pull request, the `cargo test` job tests only the
+  selected packages; main and any planner error test the whole workspace.
+  `tools/ci-impact-backtest.ts` replays CI history and reports a failing package a plan skipped. `bun-tests`, `ui-check` and
+  `repo-gates` share a `sjel-cli-release` cache, and CI runs `tools/*.test.sh` in parallel.
+  Open work:
+  1. Run the backtest after a few weeks of enforced pull requests. A main run that fails in a
+     package the pull request's plan skipped is a miss: repair the planner, or widen.
+  2. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
+     gates.
+  3. Measure local target-directory growth and cache transfer, and benchmark bounded local
+     parallelism. Set defaults only from measurements.
+  Done when local and CI use the same validated planner, full main checks remain green, and
+  measurements show the cost and savings.
 - **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:
   `sjel backup status|runs [--limit N]` over the existing routes.
+- **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
+  undeclared-connections sweep derives the repos that count as "self" from the *basename* of the
+  checkout (`tools/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is
+  `basename(ctx.root)`), which is `Sjel` in the primary checkout and `host-health-reclaim-retry` in
+  a worktree. Every tracked path naming this repository then reads as a reference to a sibling
+  repo with no `systems.toml` entry, so a worktree fails three checks that pass on `main` and the
+  same three files are named regardless of what was edited. Smallest change: resolve self from
+  `git rev-parse --show-toplevel` plus the *common* git dir (`git rev-parse --git-common-dir`), so a
+  worktree inherits the primary's identity instead of its own directory name.
 
 ## Done
 
@@ -141,3 +121,12 @@ covers it.
 - `tools/harnesses` and `tools/doctor` read a `[unit_hold]` table from the overlay's machine.toml
   and merge it with `profiles.toml`'s, so one machine can hold a unit back without changing the
   shared file.
+- `tools/doctor` reports a launchd unit with no capability manifest in either root as unmanaged,
+  names the program it runs, and does not suggest `remove-persistence`. Before, it suggested
+  removing `com.sjel.tailscaled`, which the remote backups use.
+- `tools/doctor` warns about a command name with two owners across `tools/lib/tool-dirs`, which
+  `host-patch.sh`, `backup-all.sh` and `container-refresh.sh` now share as their PATH prefix.
+- `tools/audit` prints the exceptions in `osv-scanner-installed.toml` that match nothing installed.
+- `sjel ci-cache` reports the Actions caches against the 10 GB limit and marks the dead ones:
+  superseded by a more recently restored entry with the same key prefix, or tied to a closed pull
+  request. `sjel ci-cache prune` previews the deletion and `--apply` performs it.

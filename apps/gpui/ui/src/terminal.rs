@@ -812,6 +812,11 @@ impl TerminalView {
                 self.peer.exit_signal = signal;
                 true
             }
+            Update::Command(shell) => {
+                // The shell's own report, from marks in the same bytes the grid just drew.
+                self.peer.shell = shell;
+                true
+            }
         }
     }
 
@@ -1125,13 +1130,11 @@ impl TerminalView {
         let status: SharedString = match (self.problem.as_ref(), self.peer.ending()) {
             (Some(problem), _) => problem.clone(),
             (None, Some(ending)) => ending.into(),
-            (None, None) => {
-                if self.screen.scrolled() == 0 {
-                    "live".into()
-                } else {
-                    format!("{} lines back", self.screen.scrolled()).into()
-                }
-            }
+            (None, None) => match (self.screen.scrolled(), self.peer.command()) {
+                (0, Some(command)) => format!("live · {command}").into(),
+                (scrolled @ 1.., _) => format!("{scrolled} lines back").into(),
+                _ => "live".into(),
+            },
         };
         let ended = !self.peer.alive || self.closing;
         div()

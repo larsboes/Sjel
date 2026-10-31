@@ -1,0 +1,40 @@
+# Sourced in place of the user's own .zshenv: this directory is ZDOTDIR for the login shell Sjel
+# starts. It puts the user's ZDOTDIR back first, so their configuration and everything it starts
+# resolve the way they do in any other terminal.
+if [[ -n "${SJEL_ZDOTDIR+x}" ]]; then
+  builtin export ZDOTDIR="$SJEL_ZDOTDIR"
+  builtin unset SJEL_ZDOTDIR
+else
+  builtin unset ZDOTDIR
+fi
+
+# A shell that runs one command has no prompt to mark, and a login shell reads this file too.
+[[ -o interactive ]] || return 0
+
+# The user's own environment file runs first: it may set fpath or PATH, and zsh ignores a missing
+# one the same way.
+builtin typeset -g _sjel_dotdir=${ZDOTDIR-$HOME}
+if [[ -r "$_sjel_dotdir/.zshenv" ]]; then
+  builtin source -- "$_sjel_dotdir/.zshenv"
+fi
+builtin unset _sjel_dotdir
+
+# OSC 133 marks the prompt (A), the command line (B), its output (C) and the end of the command
+# with its exit code (D). The Mac reads them from the bytes the pty already carries, so a reader
+# that never sees the screen can say how a command ended.
+function _sjel_mark_output_started {
+  builtin typeset -g _sjel_command_ran=1
+  builtin print -rn -- $'\e]133;B\e\\\e]133;C\e\\'
+}
+
+function _sjel_mark_prompt {
+  builtin typeset -i _sjel_status=$?
+  if [[ -n "${_sjel_command_ran-}" ]]; then
+    builtin unset _sjel_command_ran
+    builtin print -rn -- $'\e]133;D;'"$_sjel_status"$'\e\\'
+  fi
+  builtin print -rn -- $'\e]133;A\e\\'
+}
+
+preexec_functions+=(_sjel_mark_output_started)
+precmd_functions+=(_sjel_mark_prompt)

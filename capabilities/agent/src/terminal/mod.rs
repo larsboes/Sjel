@@ -11,6 +11,8 @@
 //! the code. Everything a reader needs is kept here — a ring of the raw output, so a client that
 //! reattaches reads from its last byte offset instead of restarting the program.
 
+mod marks;
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -22,6 +24,9 @@ use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, Pt
 use serde_json::{json, Value};
 
 use crate::session::{new_id, now_secs};
+
+pub use marks::Marks;
+use marks::Tracker;
 
 /// How much raw output one terminal keeps for a client that reattaches. A shell scrolls past this
 /// in a long session; the client is told the oldest offset it can still ask for.
@@ -122,14 +127,6 @@ impl Presets {
         presets
     }
 
-    /// The presets this machine has, from the overlay, or the defaults.
-    pub fn configured() -> Self {
-        sjel_config::overlay_config("agent.toml")
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .map(|text| Self::parse(&text))
-            .unwrap_or_else(Self::defaults)
-    }
-
     pub fn command(&self, name: &str) -> Option<&str> {
         self.commands
             .iter()
@@ -146,6 +143,64 @@ impl Presets {
 }
 
 impl Default for Presets {
+    fn default() -> Self {
+        Self::defaults()
+    }
+}
+
+/// The zsh shim a login shell is pointed at with `ZDOTDIR`. It puts the user's own `ZDOTDIR` back
+/// before their configuration runs, then marks each command with OSC 133.
+const ZSH_SHIM: &str = include_str!("../../assets/shell/zsh/zshenv");
+
+/// What the overlay says about terminals.
+#[derive(Clone, Debug)]
+pub struct Settings {
+    presets: Presets,
+    shell_integration: bool,
+}
+
+impl Settings {
+    /// The defaults: the five presets, and the login shell marked.
+    pub fn defaults() -> Self {
+        Self {
+            presets: Presets::defaults(),
+            shell_integration: true,
+        }
+    }
+
+    /// [`Settings::defaults`] overlaid with `[terminal]` and `[terminal.presets]` from `text`.
+    ///
+    /// Shell integration is on unless `shell_integration = false` says otherwise: an exit code
+    /// out of the box, and one key for an operator whose own zsh setup objects to the shim.
+    pub fn parse(text: &str) -> Self {
+        let shell_integration = toml::from_str::<toml::Value>(text)
+            .ok()
+            .and_then(|value| value.get("terminal")?.get("shell_integration")?.as_bool())
+            .unwrap_or(true);
+        Self {
+            presets: Presets::parse(text),
+            shell_integration,
+        }
+    }
+
+    /// The settings this machine has, from the overlay, or the defaults.
+    pub fn configured() -> Self {
+        sjel_config::overlay_config("agent.toml")
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map(|text| Self::parse(&text))
+            .unwrap_or_else(Self::defaults)
+    }
+
+    pub fn presets(&self) -> &Presets {
+        &self.presets
+    }
+
+    pub fn shell_integration(&self) -> bool {
+        self.shell_integration
+    }
+}
+
+impl Default for Settings {
     fn default() -> Self {
         Self::defaults()
     }
@@ -212,21 +267,30 @@ pub fn folders(home: &Path) -> Vec<String> {
 pub struct Terminals {
     live: Mutex<HashMap<String, Arc<Terminal>>>,
     audit: PathBuf,
-    presets: Presets,
+    settings: Settings,
+    /// The directory a login shell is pointed at, when shell integration is on and was written.
+    shim: Option<PathBuf>,
 }
 
 impl Terminals {
-    pub fn new(audit: PathBuf, presets: Presets) -> Self {
+    pub fn new(audit: PathBuf, settings: Settings) -> Self {
+        let shim = if settings.shell_integration() {
+            install_shim(&audit)
+        } else {
+            None
+        };
         Self {
             live: Mutex::new(HashMap::new()),
             audit,
-            presets,
+            settings,
+            shim,
         }
     }
 
     /// The preset names a client may open, in the overlay's order.
     pub fn preset_names(&self) -> Vec<String> {
-        self.presets
+        self.settings
+            .presets()
             .names()
             .into_iter()
             .map(str::to_owned)
@@ -251,13 +315,14 @@ impl Terminals {
     pub fn open(&self, request: Open<'_>) -> Result<Arc<Terminal>, Refusal> {
         let preset = request.preset.trim();
         let command = self
-            .presets
+            .settings
+            .presets()
             .command(preset)
             .map(str::to_owned)
             .ok_or_else(|| {
                 Refusal::BadRequest(format!(
                     "unknown preset `{preset}`. This machine has: {}",
-                    self.presets.names().join(", ")
+                    self.settings.presets().names().join(", ")
                 ))
             })?;
         let cwd = working_directory(request.cwd)?;
@@ -277,7 +342,8 @@ impl Terminals {
         let pair = system
             .openpty(size)
             .map_err(|error| Refusal::Failed(format!("no pty: {error}")))?;
-        let builder = command_builder(&command, &cwd);
+        let shim = shim_for(&command, self.shim.as_deref());
+        let builder = command_builder(&command, &cwd, shim);
         let child = pair
             .slave
             .spawn_command(builder)
@@ -314,8 +380,10 @@ impl Terminals {
             group,
             exited: AtomicBool::new(false),
             status: Mutex::new(None),
+            marks: Mutex::new(Tracker::default()),
             audit: self.audit.clone(),
             started_by: request.client.to_owned(),
+            integrated: shim.is_some(),
         });
         terminal.audit_line("start", None);
 
@@ -431,8 +499,12 @@ pub struct Terminal {
     group: Option<i32>,
     exited: AtomicBool,
     status: Mutex<Option<End>>,
+    /// What the shell's marks say, fed from the same bytes that fill the ring.
+    marks: Mutex<Tracker>,
     audit: PathBuf,
     started_by: String,
+    /// Whether the login shell was started with the shim, which is what the audit line records.
+    integrated: bool,
 }
 
 /// How a terminal ended.
@@ -466,7 +538,13 @@ impl Terminal {
             "exit_code": end.as_ref().map(|end| end.code),
             "exit_signal": end.as_ref().and_then(|end| end.signal.clone()),
             "clients": self.clients.load(Ordering::SeqCst),
+            "shell": self.marks(),
         })
+    }
+
+    /// What the shell's own marks say about the command it is running.
+    pub fn marks(&self) -> Marks {
+        self.lock_marks().marks().clone()
     }
 
     /// The byte offset a fresh client starts from: the oldest output still held.
@@ -562,9 +640,12 @@ impl Terminal {
     }
 
     fn append(&self, data: &[u8]) {
+        let at = now_secs() as i64;
+        // The marks travel in the same bytes, so they are read once, on the way in, rather than
+        // again for every client that attaches later.
+        self.lock_marks().feed(data, at);
         self.lock_output().append(data);
-        self.last_output_at
-            .store(now_secs() as i64, Ordering::SeqCst);
+        self.last_output_at.store(at, Ordering::SeqCst);
         self.subscribers.wake();
     }
 
@@ -597,6 +678,7 @@ impl Terminal {
             "client": self.started_by,
             "event": event,
             "exit_code": exit_code,
+            "shell_integration": self.integrated,
         });
         let Some(parent) = self.audit.parent() else {
             return;
@@ -622,6 +704,12 @@ impl Terminal {
 
     fn lock_status(&self) -> std::sync::MutexGuard<'_, Option<End>> {
         self.status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn lock_marks(&self) -> std::sync::MutexGuard<'_, Tracker> {
+        self.marks
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -726,7 +814,7 @@ impl Subscribers {
 }
 
 /// The login shell, then a preset's command inside it so `PATH` matches an interactive terminal.
-fn command_builder(command: &str, cwd: &Path) -> CommandBuilder {
+fn command_builder(command: &str, cwd: &Path, shim: Option<&Path>) -> CommandBuilder {
     let shell = login_shell();
     let mut builder = CommandBuilder::new(&shell);
     builder.arg("-l");
@@ -745,8 +833,42 @@ fn command_builder(command: &str, cwd: &Path) -> CommandBuilder {
     builder.env("SHELL", &shell);
     builder.env("TERM", "xterm-256color");
     builder.env("COLORTERM", "truecolor");
+    if let Some(shim) = shim {
+        // `ZDOTDIR` is how zsh is told where to start reading its configuration, and
+        // `SJEL_ZDOTDIR` is the value the shim puts back before the user's own files run.
+        if let Some(original) = std::env::var_os("ZDOTDIR") {
+            builder.env("SJEL_ZDOTDIR", original);
+        }
+        builder.env("ZDOTDIR", shim);
+    }
     builder.cwd(cwd);
     builder
+}
+
+/// The shim an interactive login shell is started with, and `None` for a preset that runs one
+/// program: that shell has no prompt of its own to mark.
+fn shim_for<'a>(command: &str, shim: Option<&'a Path>) -> Option<&'a Path> {
+    if command.is_empty() {
+        shim
+    } else {
+        None
+    }
+}
+
+/// Writes the shim beside the audit file and answers the directory to point `ZDOTDIR` at.
+///
+/// A file that cannot be written is not a reason to refuse a terminal: the shell opens, draws its
+/// prompt, and reports no marks. `None` says so.
+fn install_shim(audit: &Path) -> Option<PathBuf> {
+    let dir = audit.parent()?.join("shell").join("zsh");
+    std::fs::create_dir_all(&dir).ok()?;
+    let file = dir.join(".zshenv");
+    if std::fs::read_to_string(&file).ok().as_deref() != Some(ZSH_SHIM)
+        && std::fs::write(&file, ZSH_SHIM).is_err()
+    {
+        return None;
+    }
+    Some(dir)
 }
 
 fn login_shell() -> String {
@@ -901,8 +1023,8 @@ mod tests {
     }
 
     fn run(name: &str, command: &str) -> (Terminals, Arc<Terminal>) {
-        let presets = Presets::parse(&format!("[terminal.presets]\necho = {command:?}\n"));
-        let terminals = Terminals::new(audit_path(name), presets);
+        let settings = Settings::parse(&format!("[terminal.presets]\necho = {command:?}\n"));
+        let terminals = Terminals::new(audit_path(name), settings);
         let cwd = std::env::var("HOME").unwrap();
         let terminal = terminals
             .open(Open {
@@ -1038,8 +1160,8 @@ mod tests {
 
     #[tokio::test]
     async fn the_limit_and_the_idle_sweep_are_enforced() {
-        let presets = Presets::parse("[terminal.presets]\nsleepy = \"sleep 30\"\n");
-        let terminals = Terminals::new(audit_path("limit"), presets);
+        let settings = Settings::parse("[terminal.presets]\nsleepy = \"sleep 30\"\n");
+        let terminals = Terminals::new(audit_path("limit"), settings);
         let cwd = std::env::var("HOME").unwrap();
         let mut open = Vec::new();
         for _ in 0..MAX_TERMINALS {
@@ -1120,6 +1242,7 @@ mod tests {
             "alive",
             "exit_code",
             "clients",
+            "shell",
         ] {
             assert!(listed[0].get(key).is_some(), "no {key} in {}", listed[0]);
         }
@@ -1127,5 +1250,94 @@ mod tests {
         assert_eq!(listed[0]["alive"], true);
         terminal.detach();
         assert_eq!(terminals.list()[0]["clients"], 0);
+    }
+
+    #[test]
+    fn shell_integration_is_on_unless_the_overlay_turns_it_off() {
+        assert!(Settings::defaults().shell_integration());
+        assert!(Settings::parse("[terminal.presets]\nshell = \"\"\n").shell_integration());
+        assert!(!Settings::parse("[terminal]\nshell_integration = false\n").shell_integration());
+    }
+
+    #[test]
+    fn the_shim_is_written_beside_the_audit_file_unless_it_is_off() {
+        let audit = audit_path("shim");
+        let terminals = Terminals::new(audit.clone(), Settings::defaults());
+        let shim = audit.parent().unwrap().join("shell/zsh");
+        let written = std::fs::read_to_string(shim.join(".zshenv")).unwrap();
+        assert!(written.contains("133;D;"), "{written}");
+        assert_eq!(terminals.shim.as_deref(), Some(shim.as_path()));
+
+        // The off switch writes nothing, so a user's own zsh configuration is untouched.
+        let off = audit_path("shim-off");
+        let disabled = Terminals::new(
+            off.clone(),
+            Settings::parse("[terminal]\nshell_integration = false\n"),
+        );
+        assert!(disabled.shim.is_none());
+        assert!(!off.parent().unwrap().join("shell/zsh/.zshenv").exists());
+    }
+
+    #[test]
+    fn a_command_that_marks_its_end_reports_how_it_ended() {
+        // What the shim prints, without a shell in the way: a command that exits 3.
+        let (_terminals, terminal) = run(
+            "marks",
+            "printf '\\033]133;A\\033\\\\\\033]133;B\\033\\\\\\033]133;C\\033\\\\done\\n\\033]133;D;3\\033\\\\'",
+        );
+        read_until(&terminal, |seen| seen.contains("done"));
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while terminal.marks().last_exit_code.is_none() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the terminal never reported the command's end: {:?}",
+                terminal.marks()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let marks = terminal.marks();
+        assert!(marks.integration, "{marks:?}");
+        assert!(!marks.running, "{marks:?}");
+        assert_eq!(marks.last_exit_code, Some(3));
+    }
+
+    #[test]
+    fn the_login_shell_marks_its_own_commands() {
+        // The shim is zsh's: on a Mac that is the login shell, and anywhere else this says so.
+        if !login_shell().ends_with("zsh") {
+            return;
+        }
+        let terminals = Terminals::new(audit_path("zsh"), Settings::defaults());
+        let home = std::env::var("HOME").unwrap();
+        let terminal = terminals
+            .open(Open {
+                preset: "shell",
+                cwd: Some(&home),
+                cols: 80,
+                rows: 24,
+                client: "test",
+            })
+            .expect("the login shell starts");
+        read_until(&terminal, |seen| seen.contains("133;A"));
+
+        terminal.write(b"false\n").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while terminal.marks().last_exit_code.is_none() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "zsh never reported the command's end: {:?}",
+                terminal.marks()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(terminal.marks().last_exit_code, Some(1));
+
+        // The shim put the user's own ZDOTDIR back, so their configuration sees what it expects.
+        terminal
+            .write(b"print -r -- \"ZD-${ZDOTDIR-unset}\"\n")
+            .unwrap();
+        read_until(&terminal, |seen| seen.contains("ZD-unset"));
+        terminal.write(b"exit\n").unwrap();
+        wait_until_exited(&terminal);
     }
 }

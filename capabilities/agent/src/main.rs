@@ -809,8 +809,14 @@ async fn terminal_stream(
     // when the reader goes away, however it goes away.
     let attached = Attached(Arc::clone(&terminal));
     let events = stream::unfold(
-        (cursor, receiver, attached, false),
-        |(mut cursor, mut receiver, attached, finished)| async move {
+        (
+            cursor,
+            receiver,
+            attached,
+            false,
+            terminal::Marks::default(),
+        ),
+        |(mut cursor, mut receiver, attached, finished, mut told)| async move {
             if finished {
                 return None;
             }
@@ -825,7 +831,7 @@ async fn terminal_stream(
                                     .event("truncated")
                                     .data(json!({ "first_offset": first_offset }).to_string()),
                             ),
-                            (first_offset, receiver, attached, true),
+                            (first_offset, receiver, attached, true, told),
                         ));
                     }
                     ReadOutcome::Output { offset, bytes } if !bytes.is_empty() => {
@@ -836,16 +842,28 @@ async fn terminal_stream(
                         });
                         return Some((
                             Ok(SseEvent::default().event("output").data(data.to_string())),
-                            (cursor, receiver, attached, false),
+                            (cursor, receiver, attached, false, told),
                         ));
                     }
                     ReadOutcome::Output { .. } => {}
+                }
+                // A mark moved since this reader was last told, so it says so — once, and only
+                // when the state actually changed.
+                let marks = attached.0.marks();
+                if marks != told {
+                    told = marks.clone();
+                    return Some((
+                        Ok(SseEvent::default()
+                            .event("command")
+                            .data(json!(marks).to_string())),
+                        (cursor, receiver, attached, false, told),
+                    ));
                 }
                 if !attached.0.alive() {
                     let exit = terminal::exit_event(&attached.0);
                     return Some((
                         Ok(SseEvent::default().event("exit").data(exit.to_string())),
-                        (cursor, receiver, attached, true),
+                        (cursor, receiver, attached, true, told),
                     ));
                 }
                 // A wake that never comes means every reader of the log is gone.
@@ -994,7 +1012,7 @@ async fn main() {
     }
     let terminals = Arc::new(Terminals::new(
         terminals_audit(),
-        terminal::Presets::configured(),
+        terminal::Settings::configured(),
     ));
     tokio::spawn(Terminals::reap_forever(Arc::clone(&terminals)));
     let state = Arc::new(AppState {
@@ -1169,7 +1187,7 @@ mod tests {
             dir: PathBuf::new(),
             terminals: Arc::new(Terminals::new(
                 std::env::temp_dir().join("sjel-agent-test-terminals.jsonl"),
-                terminal::Presets::defaults(),
+                terminal::Settings::defaults(),
             )),
         });
         // `run_turn` is the same blocking worker the capability starts after accepting a prompt.
@@ -1193,7 +1211,7 @@ mod tests {
             dir: overlay.path.join("data/agent/sessions"),
             terminals: Arc::new(Terminals::new(
                 overlay.path.join("data/agent/terminals.jsonl"),
-                terminal::Presets::defaults(),
+                terminal::Settings::defaults(),
             )),
         });
         let _ = approve(
@@ -1328,7 +1346,7 @@ mod tests {
             dir: dir.clone(),
             terminals: Arc::new(Terminals::new(
                 dir.join("terminals.jsonl"),
-                terminal::Presets::defaults(),
+                terminal::Settings::defaults(),
             )),
         });
         let ask = |tier: Option<&str>, root: Option<&std::path::Path>, plugins: Option<&[&str]>| {
@@ -1377,8 +1395,8 @@ mod tests {
     /// The route layer around the pty: open, list, type into it, resize it, end it.
     #[tokio::test]
     async fn a_terminal_route_opens_types_resizes_and_closes() {
-        let presets =
-            terminal::Presets::parse("[terminal.presets]\nprobe = \"printf probe-ok\\n\"\n");
+        let settings =
+            terminal::Settings::parse("[terminal.presets]\nprobe = \"printf probe-ok\\n\"\n");
         let state = Arc::new(AppState {
             sessions: Mutex::new(HashMap::new()),
             dir: std::env::temp_dir().join("sjel-agent-route-test"),
@@ -1387,7 +1405,7 @@ mod tests {
                     "sjel-agent-route-audit-{}.jsonl",
                     std::process::id()
                 )),
-                presets,
+                settings,
             )),
         });
 

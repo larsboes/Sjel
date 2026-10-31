@@ -56,6 +56,25 @@ pub struct Terminal {
     /// How many streams are attached, this client included.
     #[serde(default)]
     pub clients: usize,
+    /// What the shell's own marks say about the command it is running.
+    #[serde(default)]
+    pub shell: CommandMarks,
+}
+
+/// What a shell with shell integration reports about its commands, from OSC 133 marks.
+///
+/// A shell without integration leaves every field at its default, and `integration` is how a
+/// reader tells "no command has ended yet" from "this shell says nothing".
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct CommandMarks {
+    #[serde(default)]
+    pub integration: bool,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub last_exit_code: Option<i32>,
+    #[serde(default)]
+    pub last_finished_at: Option<i64>,
 }
 
 impl Terminal {
@@ -89,6 +108,24 @@ impl Terminal {
             (None, None) => "ended".to_owned(),
         })
     }
+
+    /// What the shell says about the command it is running, for a status line beside `live`.
+    ///
+    /// A command that ended well says nothing: the prompt is back, and that is the signal. One
+    /// that failed keeps its code, and one that is still running says so, so a long build on the
+    /// phone reports itself without anyone reading the screen.
+    pub fn command(&self) -> Option<String> {
+        if !self.shell.integration {
+            return None;
+        }
+        if self.shell.running {
+            return Some("running".to_owned());
+        }
+        match self.shell.last_exit_code {
+            Some(0) | None => None,
+            Some(code) => Some(format!("exit {code}")),
+        }
+    }
 }
 
 /// What one frame of a terminal's stream carried.
@@ -101,6 +138,8 @@ pub enum Update {
     Truncated { first_offset: u64 },
     /// The program ended. The stream closes after this frame.
     Exit { code: i32, signal: Option<String> },
+    /// The shell's own marks moved: a command started or ended.
+    Command(CommandMarks),
 }
 
 /// What a new terminal can be, as `GET /api/agent/terminals/options` answers: the preset names,
@@ -396,7 +435,7 @@ fn frames(response: reqwest::Response) -> UnboundedReceiver<Update> {
                 let Some(update) = update_from(&frame.event, &frame.data) else {
                     continue;
                 };
-                let ended = !matches!(update, Update::Output { .. });
+                let ended = !matches!(update, Update::Output { .. } | Update::Command(_));
                 if to.unbounded_send(update).is_err() || ended {
                     return;
                 }
@@ -451,6 +490,7 @@ fn update_from(event: &str, data: &str) -> Option<Update> {
                 signal: exit.signal,
             })
         }
+        "command" => Some(Update::Command(serde_json::from_str(data).ok()?)),
         _ => None,
     }
 }
@@ -535,6 +575,57 @@ mod tests {
                 signal: None
             })
         );
+    }
+
+    #[test]
+    fn a_command_frame_carries_how_the_shell_says_the_command_ended() {
+        assert_eq!(
+            update_from(
+                "command",
+                r#"{"integration":true,"running":false,"last_exit_code":1,"last_finished_at":1700000000}"#
+            ),
+            Some(Update::Command(CommandMarks {
+                integration: true,
+                running: false,
+                last_exit_code: Some(1),
+                last_finished_at: Some(1_700_000_000),
+            }))
+        );
+    }
+
+    #[test]
+    fn a_status_line_says_what_a_command_did_and_stays_quiet_when_all_is_well() {
+        let mut terminal = Terminal::default();
+        assert_eq!(terminal.command(), None, "no marks, nothing to say");
+
+        terminal.shell = CommandMarks {
+            integration: true,
+            running: true,
+            ..CommandMarks::default()
+        };
+        assert_eq!(terminal.command().as_deref(), Some("running"));
+
+        terminal.shell = CommandMarks {
+            integration: true,
+            last_exit_code: Some(0),
+            ..CommandMarks::default()
+        };
+        assert_eq!(
+            terminal.command(),
+            None,
+            "a command that worked says nothing"
+        );
+
+        terminal.shell = CommandMarks {
+            integration: true,
+            last_exit_code: Some(2),
+            ..CommandMarks::default()
+        };
+        assert_eq!(terminal.command().as_deref(), Some("exit 2"));
+
+        terminal.shell = CommandMarks::default();
+        terminal.alive = false;
+        assert_eq!(terminal.ending().as_deref(), Some("ended"));
     }
 
     #[test]

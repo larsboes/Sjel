@@ -26,6 +26,7 @@ Check a change before pushing it:
   gates                          Run CI's repo gates here, from CI's own definition
   test                           Run CI's bun test and every tools/*.test.sh
   cargo <args...>                Run cargo against a scratch target dir and a scratch overlay
+  ci-cache [prune [--apply]]     The Actions caches against the 10 GB limit, and the dead ones
   worktree new|list|remove       One branch and worktree per work package
 
 Operate capabilities:

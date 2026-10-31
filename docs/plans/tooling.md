@@ -10,9 +10,6 @@ covers it.
 
 ## Open
 
-- **CI cache inventory.** Inspecting Actions cache sizes and removing a merged pull request's
-  unreachable cache required GitHub API calls. Add a read-only `sjel` cache report with a
-  separately invoked cleanup for caches tied to closed pull requests and a dry run.
 - **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
   refused to report success because an orphan still held the declared port. `lsof` identified
   the listener; the sandbox refused a direct signal. Smallest change: let the runner identify
@@ -130,3 +127,6 @@ covers it.
 - `tools/doctor` warns about a command name with two owners across `tools/lib/tool-dirs`, which
   `host-patch.sh`, `backup-all.sh` and `container-refresh.sh` now share as their PATH prefix.
 - `tools/audit` prints the exceptions in `osv-scanner-installed.toml` that match nothing installed.
+- `sjel ci-cache` reports the Actions caches against the 10 GB limit and marks the dead ones:
+  superseded by a more recently restored entry with the same key prefix, or tied to a closed pull
+  request. `sjel ci-cache prune` previews the deletion and `--apply` performs it.

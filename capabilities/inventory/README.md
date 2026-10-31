@@ -23,6 +23,7 @@ The dashboard pages are `/inventory` and `/wishlist`.
 | `inventory_item` | one row per thing: sizes in cm, money in cents, clothing and gear fields |
 | `inventory_item_state` | `owned`, `wanted` or `gone`, appended over time; a bought wish is a second row |
 | `inventory_sync_operation` | operation ids already applied from a phone, so a retry is not applied twice |
+| `inventory_mail_proposal` | source-linked mail evidence and reviewed decisions |
 
 `kind` is `piece` (a thing), `slot` (a need with target sizes and no product yet) or `gear`.
 
@@ -52,10 +53,20 @@ German columns next to the renamed ones.
 | `PATCH /api/items/{id}` | change the named fields; `null` clears one, an unknown field is refused |
 | `GET`, `POST /api/items/{id}/state` | the state history, or append a change |
 | `POST /api/sync` | signed mutations from a paired phone |
+| `GET`, `POST /api/mail-proposals` | list or stage mail evidence without changing an item |
+| `POST /api/mail-proposals/withdraw` | delete undecided and rejected proposals of one mail thread, `{"source_prefix":"mail:v1:<thread>:"}` |
+| `POST /api/mail-proposals/{id}/decision` | reject, create a delivered item, or match an existing owned item after review |
+| `GET /api/items/{id}/mail-match-snapshot` | read the item and state revisions needed for a reviewed match |
+| `GET /api/item-refs/{reference}` | resolve a typed item reference and current state |
 
-Every write raises the row's `revision` and returns it as `ETag`. A client that sends the revision
+Item field writes raise the row's `revision` and return it as `ETag`. A client that sends the revision
 it read as `If-Match` gets `409` with the current row when another device wrote in between, and
 nothing is overwritten.
+
+Mail proposals retain a source reference and a short excerpt. A reviewed delivery can create an
+owned item; a match checks both item and state revisions. Inventory items do not retain a data
+class, so a `c2` proposal cannot create an item. It can be rejected or matched without changing
+the item. Proposal routes are closed to agent tokens.
 
 ## Imports and the vault
 

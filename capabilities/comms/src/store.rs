@@ -812,6 +812,8 @@ mod clipper_settings;
 mod cloud;
 mod evaluation;
 mod event_scans;
+mod mail_evidence;
+pub use mail_evidence::{MailEvidenceCounts, MailEvidenceOutcome, MailEvidenceWork};
 mod feed;
 mod feedback;
 mod migrations;

@@ -4,6 +4,86 @@ Every file has one owner and one way in. Facts have one shape wherever they are 
 models and keys the machine depends on are visible from one place. After Lane A's restructure in
 [`PLAN.md`](../../PLAN.md).
 
+## Mail evidence for projects and inventory
+
+Decided 2026-10-28: scan existing indexed mail and new mail for evidence relevant to projects
+and household inventory. Recognition produces proposals, not direct changes. Delivery can
+suggest an item is owned; an order or shipment alone cannot. Cancellations and returns need
+review rather than silently changing an item.
+
+Project proposals target an existing project and can suggest evidence and task changes. They
+must not complete or reopen a task without approval. A project may link to a confirmed inventory
+item; a part or repair message is not by itself evidence of a new appliance. Inventory proposals
+can suggest a new item or a match to an existing item. Ambiguous matches require review.
+
+Comms analyzes eligible content locally and sends the owning capability a minimal source
+reference, short supporting excerpt and extracted fields. Do not persist full mail bodies. Apply
+existing data-class boundaries: c2 stays local and c3 never enters a prompt. The owner validates,
+stages and reviews each proposal, and applies approved changes through its own contract. Retain
+provenance, protect against stale target revisions and make repeated scans idempotent across
+messages and multi-item orders. The existing task watch in `capabilities/comms/src/task_links.rs`
+writes directly and is not the review queue.
+
+**Done when:** an existing-mail backfill and subsequent sweeps surface reviewable project and
+inventory proposals; approval or rejection survives retries; delivery, cancellation and return
+are distinguished; an approved project update links the right inventory item without creating a
+duplicate. Synthetic tests cover duplicate messages, multiple order lines, ambiguous matches,
+stale edits and c2/c3 boundaries. Gmail stores triage at thread level; classify each message
+before prompting, and honor a stricter thread-level classification. Verify the end-to-end flow
+with real eligible mail locally; no such verification has run yet.
+
+**Built:** the review queues and contracts. Comms stages nothing on its own yet.
+
+- Inventory stages source-linked proposals and keeps a reviewed decision. Delivery can create an
+owned item; a match records provenance against the item and state revisions the reviewer saw.
+`inv:` references are reversible and resolve through Inventory's own endpoint.
+- Projects stages evidence against an existing live project, appends a reviewed excerpt into a
+chosen record atomically with the decision, and stores reviewer-confirmed `inv:` links that
+answer `GET /api/links`.
+- The GPUI app reviews both queues and adds or removes project–inventory links; nothing is applied
+without an explicit decision.
+
+- The scanner classifies the whole message body, refuses `c3` before any prompt and deduplicates
+quoted lines. `/api/projects` reports each project's strictest record class; the scanner leaves
+`c3` project names out of the prompt and fails closed on an unknown class.
+- Both owners serve `POST /api/mail-proposals/withdraw`, which deletes one thread's undecided and
+rejected proposals. The scanner withdraws a thread when it refuses it as `c3`, and when the
+indexed class changed during the handoff. A failed withdrawal keeps the thread in the retry list.
+
+- The parser checks each model row on its own and drops a row that breaks a rule; the report
+counts drops by rule. Quotes match the mail by words, not by whitespace. A `delivered` row carries
+a `claim`: one quoted mail line of more than one word that states the delivery, so a progress-bar
+label such as "Zugestellt" is not a claim. Message text has `\n` line ends and no runs of blank
+lines. A mail longer than the model window is cut at line ends. Requests use `temperature: 0`
+and the role's `chat_template_kwargs` and `request_overrides`, so a repeat scan quotes the same
+lines and stages nothing new.
+- `comms mail evidence <ids> [--role NAME] [--show]` runs an explicit scan from the CLI. `--show`
+prints the prompted mail text and raw replies for an operator; `c3` is refused before it.
+
+**Real-mail run:** 10 indexed threads (2 Miele, 8 Amazon) against a copy of the database, with
+Qwen3.5-4B on omlx and `enable_thinking: false`. Order, shipment, cancellation and two deliveries
+staged as one proposal each; a repeat run staged nothing new. The `c3` one-time-password mail
+and an out-for-delivery mail whose body classified `c3` were refused, and the withdrawal reached
+both owners. The two Miele mails (questions to the manufacturer) and a sign-in notice produced no
+proposal. `summarization_light` (`apple-foundationmodel`, 4096 tokens) staged nothing: its rows
+broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`.
+
+**Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
+overlay defines one, else `summarization_light`. Every Amazon mail classifies
+`c2` because it names the recipient, and Inventory items carry no data class, so a `c2`
+delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
+a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
+evidence is already in the reviewed record. No project proposal has staged from real mail.
+
+**Idea, not scheduled:** align extracted evidence with a cloud model without sending mail. Local
+extraction keeps the mail; a cloud role receives only the extracted product title and candidate
+names (inventory items, `c0` or `c1` projects) and answers which candidate it belongs to. Sjel
+applies the rest locally. Measure local alignment on real mail that matches an existing item or
+project first; build this only if local matching fails. It needs two decisions: whether the
+owner's own name as recipient keeps a mail `c1` instead of `c2`, and whether an automatic
+title-only derivative may skip the per-document preview approval of
+`capabilities/comms/src/cloud_derivative.rs`. Class gate: `content_item::cloud_admission`.
+
 ## 1. Import
 
 Measured 2026-10-23 with `sjel-import plan /Volumes/Extreme/archive` (25,348 entries) and the

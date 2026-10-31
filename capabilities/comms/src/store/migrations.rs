@@ -87,6 +87,17 @@ impl Store {
             "
             {triage_items}
 
+            CREATE TABLE IF NOT EXISTS {prefix}_mail_evidence_scans (
+                triage_id TEXT PRIMARY KEY REFERENCES {prefix}_triage_items(id) ON DELETE CASCADE,
+                internal_date_ms INTEGER,
+                data_class TEXT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ('completed','refused','failed')),
+                failure_count INTEGER NOT NULL DEFAULT 0 CHECK (failure_count >= 0),
+                retry_at TEXT,
+                CHECK ((state = 'failed' AND retry_at IS NOT NULL AND failure_count > 0)
+                    OR (state != 'failed' AND retry_at IS NULL AND failure_count = 0))
+            );
+
             CREATE TABLE IF NOT EXISTS {prefix}_mail_event_scans (
                 triage_id TEXT PRIMARY KEY REFERENCES {prefix}_triage_items(id) ON DELETE CASCADE,
                 candidate INTEGER NOT NULL CHECK (candidate IN (0,1)),

@@ -4,6 +4,14 @@ Comms ingests observed information and serves the shared reader contract. The
 [capability README](../../capabilities/comms/README.md) explains its scope; the schema and policy
 implementation below define what a reader or inference caller may assume.
 
+## Mail evidence for Projects and Inventory
+
+Mail evidence scanning is disabled pending privacy and retry validation. The replay route returns
+`503`; the scheduled inbox sweep does not run it. `GET /triage/mail-evidence/status` reports
+aggregate receipts. Projects and Inventory can stage source-linked proposals without changing
+records; the user reviews each proposed action through its owner. Proposal and replay routes are
+closed to agent tokens.
+
 ## 1. Unified content schema (`content-item-v2`)
 
 [`schemas/content-item.schema.json`](../../schemas/content-item.schema.json) defines the canonical

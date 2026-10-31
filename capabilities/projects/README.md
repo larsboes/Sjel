@@ -56,7 +56,8 @@ written back into a journal entry.
 - `GET /api/tasks?status=open|done`: tasks of live projects. Decision-ladder band 620 reads it;
   the shape is the one the retired vault task reader served. Two keys are added: `project`, the
   folder, and `fields`, every frontmatter key with lists flattened to `a, b`.
-- `GET /api/projects`, `GET /api/project?name=`: the list and one project's records.
+- `GET /api/projects`, `GET /api/project?name=`: the list and one project's records. Each listed
+  project carries `data_class`, the strictest class of its records.
   `content=false` leaves every record's content out, for a reader that draws a list of titles
   and reads the one record it opens; a project of 185 notes is 55 KB that way and 2.0 MB with
   the content in. Every record of these two reads also carries `updated_at`, the moment its row
@@ -78,6 +79,25 @@ written back into a journal entry.
 - CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`),
   `done`, `reopen`, `set`, `attach`, `remove`, `normalize`, `import`, `freeze-vault`, `verify`,
   `render`.
+
+## Inventory references
+
+Projects owns reviewed references to Inventory items. `GET /api/inventory-links?path=` lists
+references held by one project record. `GET /api/links?to=inv:<hex>` returns the backreferences
+in the [typed links contract](../../docs/capabilities/links.md). A project record's link ID is
+`project:<lowercase hex of its UTF-8 path>`.
+
+`POST /api/inventory-links` and `POST /api/inventory-links/remove` take `project`, `path`,
+`base` (the exact record content), `updated_at` (the record's write timestamp), `item_ref`, and
+`reviewed: true`. Both refuse stale or non-live project records. Adding asks Inventory over
+credentialed loopback whether the exact canonical reference exists and is owned. Removing needs
+no Inventory connection. Duplicate adds and removes report `changed: false`. Agent tokens cannot
+use these routes.
+
+A stored reference records the Inventory revision and time checked at review. It is not a
+live-existence guarantee: Inventory can change after its response and before or after the Projects
+transaction. Reads do not recheck Inventory. The reference ledger is in the shared database, not
+in rendered markdown; a database backup is required to restore it.
 
 ## Task schema
 

@@ -1756,6 +1756,16 @@
     },
     {
       "from": "projects",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
       "to": "markdown-root",
       "kinds": [
         "cargo-dep"
@@ -1777,6 +1787,16 @@
     {
       "from": "projects",
       "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],

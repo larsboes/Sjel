@@ -7,6 +7,8 @@
 
 pub mod api;
 pub mod budget;
+pub mod identity;
 pub mod import;
 pub mod intake;
+mod mail_proposals;
 pub mod store;

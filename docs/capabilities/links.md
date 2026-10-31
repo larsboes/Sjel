@@ -20,11 +20,17 @@ Every linkable id is typed `<kind>:<rest>`:
 | `ent` | entities | `ent:<hex>` |
 | `evt` | events | `evt:<hex>` |
 | `fin:tx` | finance, `fin:tx:<source_id>` | `fin:tx:<sha256>` |
+| `inv` | inventory, lowercase hex of the UTF-8 item ID | `inv:613a62` |
+| `project` | projects, lowercase hex of the UTF-8 record path | `project:612f622e6d64` |
 
 `Sjel-links` parses `<kind>:<rest>` and refuses an id with no `:` or an empty kind. A finance
 row without a `source_id` has no linkable id: `/api/links` does not serve it, and the response
 counts what it left out (`unlinkable`), so a short list is never a silent one. The positional
 `fin` projection `id` stays as the row key and is never linked to.
+
+Inventory reference IDs encode 1–256 UTF-8 bytes. Longer existing item IDs remain available
+through the raw-ID API but cannot be linked through this contract. Projects verifies the selected
+item is owned when a link is added; the saved reference does not guarantee its later state.
 
 `stable_id(kind, identity)` lives in `sjel-links` because the places migration needs it;
 `new_id(kind)` is added with the first capability that moves its own minter. Trips and calendar

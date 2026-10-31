@@ -20,6 +20,61 @@ impl InventoryState {
     }
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct MailProposal {
+    pub id: i64,
+    pub source_id: String,
+    pub line_id: String,
+    pub event: String,
+    pub title: String,
+    pub evidence: String,
+    pub data_class: String,
+    pub order_ref: Option<String>,
+    pub version: i64,
+    pub decision: Option<String>,
+    pub item_id: Option<String>,
+}
+
+impl MailProposal {
+    pub fn gmail_url(&self) -> Option<String> {
+        let mut parts = self.source_id.split(':');
+        let (Some("mail"), Some("v1"), Some(thread), Some(message), None) = (
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+        ) else {
+            return None;
+        };
+        let valid = |id: &str| {
+            !id.is_empty()
+                && id.len() <= 120
+                && id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+        };
+        if !valid(thread) || !valid(message) {
+            return None;
+        }
+        Some(format!("https://mail.google.com/mail/u/0/#all/{thread}"))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MailProposals {
+    pub proposals: Vec<MailProposal>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MailMatchSnapshot {
+    pub item_id: String,
+    pub title: String,
+    pub item_revision: i64,
+    pub state: Option<String>,
+    pub state_id: Option<i64>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct NewInventoryItem {
     pub id: String,
@@ -294,6 +349,32 @@ pub fn months_to_pay(open_cents: i64, balance: &MonthlyBalance) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mail_source_url_only_uses_validated_references() {
+        let proposal = |source: &str| {
+            serde_json::from_value::<MailProposal>(serde_json::json!({
+                "id": 1, "source_id": source, "line_id": "1", "event": "delivered",
+                "title": "item", "evidence": "exact", "data_class": "c2", "order_ref": null,
+                "version": 1, "decision": null, "item_id": null
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            proposal("mail:v1:thread-1:message_2")
+                .gmail_url()
+                .as_deref(),
+            Some("https://mail.google.com/mail/u/0/#all/thread-1")
+        );
+        for bad in [
+            "mail:v1:../bad:message",
+            "mail:v1:thread:message:extra",
+            "mail:v1:thread:",
+            "other:v1:thread:message",
+        ] {
+            assert!(proposal(bad).gmail_url().is_none());
+        }
+    }
 
     #[test]
     fn test_format_cents() {

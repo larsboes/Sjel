@@ -25,10 +25,13 @@ chrono.workspace = true
 content-item = { path = "../../libs/content-item" }
 markdown-root = { path = "../../libs/markdown-root" }
 route-manifest = { path = "../../libs/route-manifest" }
+reqwest.workspace = true
 schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../../libs/sjel-config" }
+sjel-http = { path = "../../libs/sjel-http" }
+sjel-links = { path = "../../libs/links" }
 sjel-server = { path = "../../libs/sjel-server" }
 # LibSQL, not `sjel-store`: the second capability cut over (PLAN.md Phase 4). The rows stay in the
 # shared file, and the app that already reads them directly (`apps/gpui` over raw `libsql`) now

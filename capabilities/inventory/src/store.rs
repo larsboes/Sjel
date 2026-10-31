@@ -651,6 +651,14 @@ impl Store {
             );
             CREATE INDEX IF NOT EXISTS {prefix}_idx_state_item
                 ON {prefix}_item_state(item_id, since DESC);
+            CREATE TABLE IF NOT EXISTS {prefix}_mail_proposal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id TEXT NOT NULL, line_id TEXT NOT NULL, event TEXT NOT NULL,
+                title TEXT NOT NULL, evidence TEXT NOT NULL, data_class TEXT NOT NULL,
+                order_ref TEXT, version INTEGER NOT NULL DEFAULT 1,
+                decision TEXT, item_id TEXT, approved_title TEXT,
+                UNIQUE(source_id, line_id, event)
+            );
             CREATE TABLE IF NOT EXISTS {prefix}_sync_operation (
                 operation_id TEXT PRIMARY KEY,
                 revision INTEGER NOT NULL,
@@ -673,6 +681,18 @@ impl Store {
             ",
             prefix = prefix
         ))?;
+        for column in ["matched_item_revision", "matched_state_id"] {
+            let present: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+                params![format!("{prefix}_mail_proposal"), column],
+                |row| row.get(0),
+            )?;
+            if present == 0 {
+                conn.execute_batch(&format!(
+                    "ALTER TABLE {prefix}_mail_proposal ADD COLUMN {column} INTEGER"
+                ))?;
+            }
+        }
         // Columns added after the first schema, oldest first. All before `widen_kind_check`,
         // which copies `ITEM_COLUMNS` and needs each of them to exist.
         for (column, typ) in [

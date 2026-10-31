@@ -485,6 +485,17 @@ pub fn sync_pack(config: &DeployConfig, pack: &str) -> Result<Vec<String>, Strin
         if !state.packs.contains_key(pack) {
             return Err(format!("{pack}: not deployed; deploy it first"));
         }
+        // The recorded profile's selection bounds what sync refreshes. A unit it leaves out is
+        // stale here, so a unit an earlier unfiltered sync wrote is removed again.
+        let units: Vec<Unit> = match recorded_profile_units(config, &state)?
+            .and_then(|p| p.units.get(pack).cloned())
+        {
+            Some(keys) => units
+                .into_iter()
+                .filter(|u| keys.contains(&u.key))
+                .collect(),
+            None => units,
+        };
         let desired: BTreeSet<String> = units.iter().map(|u| u.key.clone()).collect();
         let mut messages = held_messages(pack, &config.adapter, &held_here, &sources);
         let mut failures: Vec<String> = Vec::new();
@@ -1395,6 +1406,49 @@ fn profile_unit_keys(
         .collect())
 }
 
+/// The profile a ledger records, with the unit keys it selects from each of its Packs.
+pub struct RecordedProfile {
+    pub name: String,
+    pub units: BTreeMap<String, BTreeSet<String>>,
+}
+
+/// What the profile recorded in `state` selects. `None` when no profile is recorded or
+/// `profiles.toml` no longer names it, which leaves every Pack unnarrowed.
+///
+/// # Errors
+/// `profiles.toml` does not parse, or the profile no longer resolves against the Packs.
+pub fn recorded_profile_units(
+    config: &DeployConfig,
+    state: &State,
+) -> Result<Option<RecordedProfile>, String> {
+    let Some(name) = &state.profile else {
+        return Ok(None);
+    };
+    let Some(profile) = read_profiles(config)?.into_iter().find(|p| &p.name == name) else {
+        return Ok(None);
+    };
+    let subsets = resolve_profile_skills(config, &profile)?;
+    let mut units = BTreeMap::new();
+    for pack in resolve_profile_packs(config, &profile)? {
+        let subset = subsets.get(&pack).cloned().flatten();
+        let keys = profile_unit_keys(config, &pack, subset.as_ref())?;
+        units.insert(pack, keys);
+    }
+    Ok(Some(RecordedProfile {
+        name: name.clone(),
+        units,
+    }))
+}
+
+fn record_profile(config: &DeployConfig, name: &str) -> Result<(), String> {
+    let mut state = read_state(config)?;
+    if state.profile.as_deref() != Some(name) {
+        state.profile = Some(name.to_owned());
+        write_state(config, &state)?;
+    }
+    Ok(())
+}
+
 pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<String>, String> {
     with_state_lock(config, || {
         let target_packs: BTreeSet<String> = resolve_profile_packs(config, profile)?
@@ -1451,6 +1505,7 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
             .collect();
 
         if to_remove.is_empty() && to_deploy.is_empty() && narrowed.is_empty() {
+            record_profile(config, &profile.name)?;
             messages.push("  → already current".to_owned());
             return Ok(messages);
         }
@@ -1506,6 +1561,7 @@ pub fn activate_profile(config: &DeployConfig, profile: &Profile) -> Result<Vec<
                 }
             }
         }
+        record_profile(config, &profile.name)?;
         Ok(messages)
     })
 }
@@ -1989,6 +2045,79 @@ mod tests {
         assert!(
             messages.iter().any(|m| m.contains("already current")),
             "{messages:?}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// `sync` used to install every skill of a Pack, so after `use` narrowed one it put the left-out
+    /// skills straight back. It now refreshes what the recorded profile selects, and removes a
+    /// left-out unit an earlier unfiltered sync wrote.
+    #[test]
+    fn sync_keeps_a_pack_to_the_recorded_profile() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-harnesses-sync-profile-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let pack = root.join("repo/Packs/demo");
+        for name in ["alpha", "beta"] {
+            fs::create_dir_all(pack.join("skills").join(name)).unwrap();
+            fs::write(
+                pack.join("skills").join(name).join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: does a thing\n---\n\nbody\n"),
+            )
+            .unwrap();
+        }
+        fs::write(
+            pack.join("pack.toml"),
+            "name = \"demo\"\ndescription = \"test\"\nskills = [\"alpha\", \"beta\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[[profile]]\nname = \"narrow\"\ndescription = \"one skill\"\npacks = [\"demo\"]\nskills = { demo = [\"alpha\"] }\n",
+        )
+        .unwrap();
+        let config = DeployConfig {
+            axon_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("dest"),
+            state_file: root.join("state.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        let profile = read_profiles(&config).unwrap().remove(0);
+        activate_profile(&config, &profile).unwrap();
+        assert_eq!(
+            read_state(&config).unwrap().profile.as_deref(),
+            Some("narrow")
+        );
+
+        sync_pack(&config, "demo").unwrap();
+        assert!(config.destination.join("alpha").exists());
+        assert!(
+            !config.destination.join("beta").exists(),
+            "sync must not add a skill the profile leaves out"
+        );
+
+        // A whole-Pack deploy puts beta back; the next sync converges on the profile again.
+        deploy_pack(&config, "demo", None).unwrap();
+        assert!(config.destination.join("beta").exists());
+        sync_pack(&config, "demo").unwrap();
+        assert!(!config.destination.join("beta").exists());
+        let state = read_state(&config).unwrap();
+        assert_eq!(
+            state.profile.as_deref(),
+            Some("narrow"),
+            "sync keeps the record"
+        );
+        assert_eq!(
+            state.packs["demo"].skills.keys().collect::<Vec<_>>(),
+            vec!["alpha"]
         );
         let _ = fs::remove_dir_all(&root);
     }

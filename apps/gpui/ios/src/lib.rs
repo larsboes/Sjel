@@ -2911,63 +2911,73 @@ impl Render for Capabilities {
                         })
                         // The camera is the trusted channel: one scan finds the Mac, pins its
                         // certificate and claims a code, so nothing is compared by eye. The
-                        // Join row below stays for a phone whose camera is unavailable.
-                        .when(self.rows.is_empty(), |sub| {
-                            sub.child(
-                                div()
-                                    .rounded(px(12.))
-                                    .bg(rgb(0xffffff))
-                                    .px_4()
-                                    .py(px(12.))
-                                    .flex()
-                                    .items_center()
-                                    .gap_3()
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .flex_1()
-                                            // Without this the column takes its text's own width,
-                                            // the sentence runs off the card, and the pill beside
-                                            // it is pushed off screen entirely.
-                                            .min_w_0()
-                                            .gap_1()
-                                            .child("Scan your Mac’s code")
-                                            .child(
-                                                div().text_sm().text_color(rgb(0x646b77)).child(
-                                                    "Setup on the Mac shows a square code. \
-                                                         Point this phone at it.",
-                                                ),
-                                            ),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_none()
-                                            .px_4()
-                                            .py(px(8.))
-                                            .rounded(px(8.))
-                                            .text_color(rgb(0xffffff))
-                                            .bg(if self.joining {
-                                                rgb(0x9aa0a6)
+                        // Join row below stays for a phone whose camera is unavailable. A
+                        // connected phone keeps the row to pair again: a new code can carry
+                        // another address, such as the Mac's tailnet one.
+                        .child({
+                            let paired = !self.rows.is_empty();
+                            (div()
+                                .rounded(px(12.))
+                                .bg(rgb(0xffffff))
+                                .px_4()
+                                .py(px(12.))
+                                .flex()
+                                .items_center()
+                                .gap_3()
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .flex_1()
+                                        // Without this the column takes its text's own width,
+                                        // the sentence runs off the card, and the pill beside
+                                        // it is pushed off screen entirely.
+                                        .min_w_0()
+                                        .gap_1()
+                                        .child(if paired {
+                                            "Pair again"
+                                        } else {
+                                            "Scan your Mac’s code"
+                                        })
+                                        .child(div().text_sm().text_color(rgb(0x646b77)).child(
+                                            if paired {
+                                                "Scan a new code from Setup on the Mac, \
+                                                         for example to reach it over the \
+                                                         tailnet. The Mac keeps the old pairing \
+                                                         until you revoke it there."
                                             } else {
-                                                rgb(0x0a84ff)
-                                            })
-                                            .child(if self.joining { "Working…" } else { "Scan" })
-                                            .on_mouse_down(
-                                                MouseButton::Left,
-                                                cx.listener(|view, _, _, cx| {
-                                                    if view.joining {
-                                                        return;
-                                                    }
-                                                    view.status =
-                                                        "Point the camera at the code on your Mac."
-                                                            .into();
-                                                    present_pair_scanner();
-                                                    cx.notify();
-                                                }),
-                                            ),
-                                    ),
-                            )
+                                                "Setup on the Mac shows a square code. \
+                                                         Point this phone at it."
+                                            },
+                                        )),
+                                )
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .px_4()
+                                        .py(px(8.))
+                                        .rounded(px(8.))
+                                        .text_color(rgb(0xffffff))
+                                        .bg(if self.joining {
+                                            rgb(0x9aa0a6)
+                                        } else {
+                                            rgb(0x0a84ff)
+                                        })
+                                        .child(if self.joining { "Working…" } else { "Scan" })
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|view, _, _, cx| {
+                                                if view.joining {
+                                                    return;
+                                                }
+                                                view.status =
+                                                    "Point the camera at the code on your Mac."
+                                                        .into();
+                                                present_pair_scanner();
+                                                cx.notify();
+                                            }),
+                                        ),
+                                ))
                         })
                         .when(!self.found.is_empty() && self.rows.is_empty(), |sub| {
                             sub.child(

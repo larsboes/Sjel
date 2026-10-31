@@ -330,6 +330,16 @@ to interactive keystrokes, so access is the control.
   every glyph on the cell's advance (`force_width`) and one quad per painted background, so a
   fallback-font icon or a wide character keeps its columns.
 
+### Next: shell integration
+
+Open, not specified. Ghostty, kitty and WezTerm mark each prompt and command with OSC 133
+(`A` prompt start, `B` command start, `C` output start, `D;<exit>` command end). With the same
+marks, `capabilities/agent` can read command boundaries and exit codes from the raw stream it
+already holds, and `GET /api/agent/terminals` can report the last command's exit code and end
+time. The phone then shows "finished, exit 1" without parsing the screen. Two facts to settle
+first: whether `alacritty_terminal` 0.26 drops OSC 133 (not checked), and how the `shell` preset
+makes zsh emit the marks without changing the user's own shell configuration.
+
 ### Done when
 
 1. On the Mac, the `shell` preset runs `ls`, a resize redraws `htop` correctly, and scrollback

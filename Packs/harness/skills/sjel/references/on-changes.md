@@ -4,14 +4,15 @@ One focused change per commit. **A tracker entry is never a precondition for sta
 
 ## Choose the path
 
-| Change | Path |
-| --- | --- |
-| Small: a plan or doc update, or a single-commit fix inside one unit | Straight to `main` from the primary checkout |
-| A work package: several commits, several files across units, or more than one session | Its own branch and worktree, then a draft PR |
+Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout. There
+are no work-package branches, worktrees or pull requests. When the plan is done, `main` is tagged
+`v0.1.0`, and the work-package path below applies from then on. Decided 2026-10-31.
 
-When unsure, take the work-package path. Decided 2026-10-28.
+A cloud session receives its branch from the harness (`claude/`, `codex/`, `copilot/` and so on).
+That branch is its work branch: the session opens a draft PR from it rather than pushing to
+`main`.
 
-## Work package
+## Work package (from `v0.1.0`)
 
 1. Create the branch and worktree from current `main`:
    `sjel worktree new <area>-<slug>`. The worktree is
@@ -27,10 +28,6 @@ When unsure, take the work-package path. Decided 2026-10-28.
    the current request. Otherwise it stops at a green, ready PR.
 5. After the merge, `sjel worktree remove <area>-<slug>` removes the worktree and the local branch.
    It refuses uncommitted changes, and commits on no remote unless their PR was merged.
-
-A cloud session receives its branch from the harness (`claude/<name>`). That branch is the
-work-package branch: the session opens a draft PR from it rather than pushing to `main`, even for
-a small change.
 
 ## Small change on `main`
 

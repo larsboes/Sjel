@@ -16,9 +16,9 @@ Before editing:
 
 Always:
 
-- A small change goes straight to `main`. A work package gets its own branch and worktree
-  (`sjel worktree new <area>-<slug>`) and a draft PR that lands as a squash merge. Merge only when
-  the user said so. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
+- Until `PLAN.md` is done, every change goes straight to `main` from the primary checkout: no
+  worktrees, no work-package PRs. They start at `v0.1.0`. Rules:
+  `Packs/harness/skills/sjel/references/on-changes.md`.
 - Other agent sessions edit the primary checkout at the same time. Never stash, revert, or overwrite
   their changes. Touch and stage only the files of your task.
 - Keep private values, machine state, and secrets in the overlay or the OS keychain. Never

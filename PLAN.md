@@ -84,6 +84,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | The phone writes inventory and wishlist next, then People. | 2026-10-25 |
 | `ISA.md` is retired. Its open items moved to the area plans and to issues #245–247. The file is a pointer until no session links to it. | 2026-10-25 |
 | The Mac is not an always-on host. Collection and alerts run on a host independent of it. | 2026-10-27 |
+| Every change goes straight to `main` until this plan is done. Then `main` is tagged `v0.1.0`, and branches, worktrees and PRs start. | 2026-10-31 |
 
 ## Rules for this plan
 

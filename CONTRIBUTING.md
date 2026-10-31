@@ -23,9 +23,8 @@ upstream's latest release (#patch-first).
 
 ## Work on one change
 
-A small change (a plan or doc update, or a single-commit fix inside one unit) may go straight to
-`main`. Anything larger starts from current `main` on a branch named `<area>-<short-slug>`, in its
-own worktree: `sjel worktree new <area>-<short-slug>`. Keep
+Until `PLAN.md` is done, every change goes straight to `main`. Branches, worktrees and pull
+requests start at `v0.1.0`. Rules: `Packs/harness/skills/sjel/references/on-changes.md`. Keep
 the diff inside one coherent boundary. Put reusable code and doctrine in Sjel; use synthetic fixtures for
 data-shaped tests. Never copy an active overlay or secret value into public work. Workstation paths
 and private logs must also stay out of commits and GitHub text, including screenshots and test

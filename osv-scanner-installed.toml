@@ -356,11 +356,6 @@ ignoreUntil = 2027-01-01
 reason = "zstd-sys 2.0.16 and 2.1.1, fixed in 2.1.2: the WebAssembly allocator shim corrupts memory on allocation failure. Reach: none on this machine, which builds no wasm target of these tools; an unlocked resolve of all three gives 2.1.2. Same end as RUSTSEC-2026-0391."
 
 [[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-ignoreUntil = 2027-01-01
-reason = "block-buffer 0.10.4: a panic caught inside the compress callback leaves the cursor corrupt. Fixed in 0.12.1 only, which needs the digest 0.11 stack; cargo-deny, macmon, tauri-cli and xberg-cli all reach it through digest 0.10, also when resolved unlocked. The callback is the hasher core's own compress function, which does not panic. Same entry as osv-scanner.toml. Ends when their sha2 and md-5 move to digest 0.11."
-
-[[IgnoredVulns]]
 id = "GHSA-2m5v-pch6-74hx"
 ignoreUntil = 2027-01-01
 reason = "undici 6.29.0, fixed in 6.29.1: TLS certificate validation can be bypassed when an Agent drops its tls options. Reach: npm@11.20.0 (Homebrew's bundled npm) > node-gyp > undici 6.28.0, which the advisory's range below 6.29.1 also covers, npm's own tree, used when node-gyp downloads Node headers for a native addon build. A MITM on that download is the exposure. Ends when npm ships node-gyp on undici >= 6.29.1."

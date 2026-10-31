@@ -173,6 +173,35 @@ fn validate_identity(
     Ok((normalized_key, fingerprint))
 }
 
+/// The active device registered with this key fingerprint, if there is one.
+fn active_device_with_key(
+    tx: &rusqlite::Transaction<'_>,
+    fingerprint: &str,
+) -> Result<Option<Device>, StoreError> {
+    tx.query_row(
+        "SELECT id, label, platform, algorithm, public_key, fingerprint, status,
+                created_at, last_seen_at, revoked_at
+         FROM devices_devices WHERE fingerprint = ?1 AND status = 'active'",
+        params![fingerprint],
+        |row| {
+            Ok(Device {
+                id: row.get(0)?,
+                label: row.get(1)?,
+                platform: row.get(2)?,
+                algorithm: row.get(3)?,
+                public_key: row.get(4)?,
+                fingerprint: row.get(5)?,
+                status: row.get(6)?,
+                created_at: row.get(7)?,
+                last_seen_at: row.get(8)?,
+                revoked_at: row.get(9)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(db)
+}
+
 /// Registers one device inside the caller's transaction.
 fn insert_device(
     tx: &rusqlite::Transaction<'_>,
@@ -354,15 +383,21 @@ impl DevicesStore {
         if digest_hex(&code.trim().to_ascii_uppercase()) != expected_hash {
             return Err(StoreError::Invalid("pairing code is incorrect".into()));
         }
-        let device = insert_device(
-            &tx,
-            &label,
-            &platform,
-            &algorithm,
-            &normalized_key,
-            &fingerprint,
-            created_at,
-        )?;
+        // A device id derives from its key, so a registered phone that scans a new code, for
+        // example to reach the node at another address, gets its own record back. The code is
+        // the owner's consent, and the record holds nothing the phone does not already know.
+        let device = match active_device_with_key(&tx, &fingerprint)? {
+            Some(device) => device,
+            None => insert_device(
+                &tx,
+                &label,
+                &platform,
+                &algorithm,
+                &normalized_key,
+                &fingerprint,
+                created_at,
+            )?,
+        };
         tx.execute(
             "UPDATE devices_pairing_challenges SET consumed_at = ?2 WHERE id = ?1",
             params![challenge_id, created_at],
@@ -1001,6 +1036,31 @@ mod tests {
             "11".repeat(32),
         );
         assert!(matches!(second, Err(StoreError::Conflict(_))));
+    }
+
+    #[test]
+    fn a_registered_key_claiming_again_gets_its_record_and_a_revoked_one_does_not() {
+        let (_dir, store) = store();
+        let claim = |key: &str| {
+            let challenge = store.create_challenge().unwrap();
+            store.claim(
+                &challenge.challenge_id,
+                &challenge.code,
+                "iPhone".into(),
+                "ios".into(),
+                "ed25519".into(),
+                key.into(),
+            )
+        };
+        let first = claim(&"00".repeat(32)).unwrap();
+        let again = claim(&"00".repeat(32)).unwrap();
+        assert_eq!(again.id, first.id);
+        assert_eq!(store.list().unwrap().len(), 1);
+        store.revoke(&first.id).unwrap();
+        assert!(matches!(
+            claim(&"00".repeat(32)),
+            Err(StoreError::Conflict(_))
+        ));
     }
 
     #[test]

@@ -105,6 +105,8 @@ enum Event {
     /// Mac's Setup page drew: address, certificate pin and one-time code in one string.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     Scanned(String),
+    /// A claim or a join ended without a pairing, and why. Frees the Scan and Join buttons.
+    PairFailed(String),
     /// The camera could not be opened, and why, in the words the person needs.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     ScanFailed(String),
@@ -824,7 +826,7 @@ impl Capabilities {
                                     Err(error) => Err(error),
                                 };
                                 if let Err(error) = outcome {
-                                    let _ = events.unbounded_send(Event::Status(error));
+                                    let _ = events.unbounded_send(Event::PairFailed(error));
                                 }
                             });
                         }
@@ -843,11 +845,11 @@ impl Capabilities {
                                     Err(error) => Err(error),
                                 };
                                 if let Err(error) = outcome {
-                                    let _ = events.unbounded_send(Event::Status(error));
+                                    let _ = events.unbounded_send(Event::PairFailed(error));
                                 }
                             });
                         }
-                        Event::ScanFailed(text) => {
+                        Event::PairFailed(text) | Event::ScanFailed(text) => {
                             view.status = text.into();
                             view.joining = false;
                         }
@@ -2943,8 +2945,8 @@ impl Render for Capabilities {
                                             if paired {
                                                 "Scan a new code from Setup on the Mac, \
                                                          for example to reach it over the \
-                                                         tailnet. The Mac keeps the old pairing \
-                                                         until you revoke it there."
+                                                         tailnet. This phone keeps its \
+                                                         pairing; only the address changes."
                                             } else {
                                                 "Setup on the Mac shows a square code. \
                                                          Point this phone at it."

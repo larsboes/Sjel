@@ -52,8 +52,10 @@ setup page offers beside the Same Wi-Fi name. The host is not authentication. Th
 only the certificate whose SHA-256 is the code's pin (`libs/device-auth/src/pinned.rs`,
 `pinned_tls`), so the certificate needs no name or IP SAN for the address.
 
-A paired phone keeps the scan row as "Pair again". The new code mints a new device record, and the
-phone replaces its saved node with it. The old record stays active until the owner revokes it.
+A paired phone keeps the scan row as "Pair again". A device id derives from its key, so a claim
+whose key is already active consumes the code and returns that same record, and the phone saves
+the code's address in place of the old one. A revoked key stays refused
+(`capabilities/devices/src/store.rs`, `claim`).
 
 On the LAN listener an unregistered device may send exactly three unsigned requests: a claim, a
 join request, and one join request's state (`libs/sjel-server/src/auth.rs`,

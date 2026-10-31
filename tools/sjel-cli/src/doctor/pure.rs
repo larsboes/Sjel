@@ -701,7 +701,12 @@ pub fn shadowed(found: &[(String, String)]) -> Vec<(String, Vec<String>)> {
     by_name
         .into_iter()
         .filter(|(_, files)| files.len() > 1)
-        .map(|(name, files)| (name.to_owned(), files.into_iter().map(str::to_owned).collect()))
+        .map(|(name, files)| {
+            (
+                name.to_owned(),
+                files.into_iter().map(str::to_owned).collect(),
+            )
+        })
         .collect()
 }
 
@@ -1178,7 +1183,9 @@ async fn main() {
     #[test]
     fn a_name_with_two_files_is_shadowed_and_a_symlink_to_one_file_is_not() {
         let found = |rows: &[(&str, &str)]| -> Vec<(String, String)> {
-            rows.iter().map(|(n, f)| (n.to_string(), f.to_string())).collect()
+            rows.iter()
+                .map(|(n, f)| (n.to_string(), f.to_string()))
+                .collect()
         };
         let rows = found(&[
             ("docker", "/a/orbstack/docker"),
@@ -1191,7 +1198,10 @@ async fn main() {
             super::shadowed(&rows),
             [(
                 "npm".to_string(),
-                vec!["/brew/npm-cli.js".to_string(), "/home/.local/npm-cli.js".to_string()]
+                vec![
+                    "/brew/npm-cli.js".to_string(),
+                    "/home/.local/npm-cli.js".to_string()
+                ]
             )]
         );
     }

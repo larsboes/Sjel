@@ -1588,8 +1588,14 @@ mod tests {
     #[test]
     fn npm_bundled_with_brew_node_is_current_and_carries_no_action() {
         let fake = Fake::new(&[
-            ("npm ls -g", r#"{"dependencies":{"npm":{"version":"11.20.0"}}}"#),
-            ("npm outdated -g", r#"{"npm":{"current":"11.20.0","latest":"12.2.1"}}"#),
+            (
+                "npm ls -g",
+                r#"{"dependencies":{"npm":{"version":"11.20.0"}}}"#,
+            ),
+            (
+                "npm outdated -g",
+                r#"{"npm":{"current":"11.20.0","latest":"12.2.1"}}"#,
+            ),
         ]);
         let with_node = gather_npm(&ctx(&fake, false), &parse_brew_formulae("node\n"));
         assert_eq!(row(&with_node, "npm").status, Status::Current);

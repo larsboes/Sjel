@@ -10,6 +10,11 @@ covers it.
 
 ## Open
 
+- **Installed crates whose source was collected.** The audit's globals pass reads each installed
+  crate's `Cargo.lock` from `~/.cargo/registry/src`. Cargo's cache cleanup had removed the source
+  of all four installed crates, so the pass scanned 0 crate lockfiles and reported clean. A check
+  of `ls ~/.cargo/registry/src/*/` found the gap. Smallest change: fetch a missing crate source
+  before the scan, or report each installed crate without a lockfile as not scanned.
 - **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
   refused to report success because an orphan still held the declared port. `lsof` identified
   the listener; the sandbox refused a direct signal. Smallest change: let the runner identify

@@ -340,7 +340,9 @@ fn globals_osv_section(root: &Path, r: &mut Report) {
     // Named `globals.cdx.json`: osv-scanner identifies a lockfile by its name, and `-L` is told
     // which file is the SBOM by where it sits in the argument list.
     let bom_path = dir.join("globals.cdx.json");
+    // osv-scanner refuses a missing path, and no crate may have a lockfile to copy.
     let locks_dir = dir.join("locks");
+    let _ = std::fs::create_dir_all(&locks_dir);
 
     let components = parse_inventory(&inventory);
     let wrote_bom =

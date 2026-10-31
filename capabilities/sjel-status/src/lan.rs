@@ -18,13 +18,34 @@ pub(crate) struct LanInfo {
     pub host: String,
     pub fingerprint: String,
     pub service: &'static str,
+    /// This Mac's tailnet IPv4 address, read per request because Tailscale can start or stop
+    /// while the listener runs. The certificate is pinned, so the address needs no SAN.
+    pub tailnet: Option<String>,
 }
 
 static LAN: OnceLock<LanInfo> = OnceLock::new();
 
 /// What `/api/sjel-status/lan` answers: the listener, or `None` when it is not enabled.
-pub(crate) fn info() -> Option<LanInfo> {
-    LAN.get().cloned()
+pub(crate) async fn info() -> Option<LanInfo> {
+    let mut info = LAN.get().cloned()?;
+    info.tailnet = tailnet_ip().await;
+    Some(info)
+}
+
+/// The first line of `tailscale ip -4`, when it is an IPv4 address.
+async fn tailnet_ip() -> Option<String> {
+    let out = tokio::process::Command::new("tailscale")
+        .args(["ip", "-4"])
+        .output()
+        .await
+        .ok()
+        .filter(|out| out.status.success())?;
+    let line = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()?
+        .trim()
+        .to_string();
+    line.parse::<std::net::Ipv4Addr>().ok().map(|_| line)
 }
 
 /// Starts the listener and the advertisement when the deployment enabled them. Returns at once.
@@ -51,6 +72,7 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
         host: host.clone(),
         fingerprint: identity.fingerprint.clone(),
         service: lan::SERVICE_TYPE,
+        tailnet: None,
     });
     advertise(port, &host, &identity.fingerprint);
     let auth = sjel_server::InboundAuth::from_deployment().with_device_verifier(verifier);

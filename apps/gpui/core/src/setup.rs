@@ -212,6 +212,22 @@ pub struct LanInfo {
     pub fingerprint: String,
     #[serde(default)]
     pub service: String,
+    /// This Mac's tailnet IPv4 address, when Tailscale runs: a phone on the tailnet reaches the
+    /// listener there from anywhere, the same Wi-Fi included.
+    #[serde(default)]
+    pub tailnet: Option<String>,
+}
+
+impl LanInfo {
+    /// The hosts a pairing code can carry, the tailnet address first because it works away from
+    /// home as well as on the same Wi-Fi.
+    pub fn pairing_hosts(&self) -> Vec<String> {
+        self.tailnet
+            .iter()
+            .chain(std::iter::once(&self.host))
+            .cloned()
+            .collect()
+    }
 }
 
 /// What `GET /api/sjel-status/lan` answers: `{"enabled": true, "lan": {...}}`, or `enabled: false`
@@ -269,10 +285,11 @@ pub struct SetupView {
 // ── Pairing code ───────────────────────────────────────────────────────────
 
 /// The code a phone scans: the address, the certificate pin and the one-time code in one string,
-/// so a single scan finds the Mac, pins it and claims the code (`device::PairingQr`).
-pub fn pairing_payload(lan: &LanInfo, challenge: &PairingChallenge) -> String {
+/// so a single scan finds the Mac, pins it and claims the code (`device::PairingQr`). `host` is
+/// one of [`LanInfo::pairing_hosts`].
+pub fn pairing_payload(lan: &LanInfo, host: &str, challenge: &PairingChallenge) -> String {
     crate::device::pairing_qr_payload(&crate::device::PairingQr {
-        host: lan.host.clone(),
+        host: host.to_string(),
         port: lan.port,
         fingerprint: lan.fingerprint.clone(),
         challenge_id: challenge.challenge_id.clone(),
@@ -633,16 +650,21 @@ mod tests {
             host: "lars-mac".into(),
             fingerprint: "ab".repeat(32),
             service: "_sjel._tcp".into(),
+            tailnet: Some("100.116.104.41".into()),
         };
+        assert_eq!(lan.pairing_hosts(), ["100.116.104.41", "lars-mac"]);
         let challenge: PairingChallenge = serde_json::from_str(
             r#"{"protocol_version": "axon-pairing/v1", "challenge_id": "pair_01",
                 "code": "482913abcd", "expires_at": 1761303600,
                 "qr_payload": "{}"}"#,
         )
         .unwrap();
-        let payload = pairing_payload(&lan, &challenge);
+        let payload = pairing_payload(&lan, "lars-mac", &challenge);
         let parsed = crate::device::parse_pairing_qr(&payload).expect("its own code must parse");
         assert_eq!(parsed.host, "lars-mac");
+        let tailnet = pairing_payload(&lan, "100.116.104.41", &challenge);
+        let parsed = crate::device::parse_pairing_qr(&tailnet).expect("a tailnet code must parse");
+        assert_eq!(parsed.host, "100.116.104.41");
         assert_eq!(parsed.port, 8443);
         assert_eq!(parsed.challenge_id, "pair_01");
         assert_eq!(parsed.code, "482913abcd");

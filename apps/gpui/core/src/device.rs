@@ -44,7 +44,8 @@ pub fn pairing_qr_payload(qr: &PairingQr) -> String {
     .to_string()
 }
 
-/// Reads a scanned code with the rules of `parsePairingQr` in `dashboard/src/lib/devices.ts`.
+/// Reads a scanned code. The retired dashboard's `parsePairingQr` refuses a dotted host; this
+/// parser accepts one, so a code can carry the Mac's tailnet address.
 pub fn parse_pairing_qr(content: &str) -> Result<PairingQr, String> {
     #[derive(Deserialize)]
     struct Raw {
@@ -60,11 +61,7 @@ pub fn parse_pairing_qr(content: &str) -> Result<PairingQr, String> {
     if raw.k != QR_KIND {
         return Err("That is not a Sjel pairing code.".into());
     }
-    let host_ok = (1..=63).contains(&raw.h.len())
-        && raw
-            .h
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-');
+    let host_ok = host_ok(&raw.h);
     let fingerprint_ok = raw.f.len() == 64
         && raw
             .f
@@ -85,6 +82,29 @@ pub fn parse_pairing_qr(content: &str) -> Result<PairingQr, String> {
     }
 }
 
+/// A DNS name or an IPv4 literal: at most 253 characters, dot-separated labels of 1 to 63 from
+/// `[A-Za-z0-9-]`. No scheme, path, port or space fits, so the host cannot leave the base URL.
+fn host_ok(host: &str) -> bool {
+    host.len() <= 253
+        && host.split('.').all(|label| {
+            (1..=63).contains(&label.len())
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
+}
+
+/// The listener's base URL for a host from a pairing code. A name without a dot is the Mac's
+/// Bonjour name and gets `.local`; a dotted name or an IP address, such as the Mac's tailnet
+/// address, is used as given.
+pub fn node_base(host: &str, port: u16) -> String {
+    if host.contains('.') {
+        format!("https://{host}:{port}")
+    } else {
+        format!("https://{host}.local:{port}")
+    }
+}
+
 /// The Mac's LAN listener without a code: `<name> <port> <fingerprint>`, the parts of the QR
 /// code that are not secret, under the same rules. Returns the base URL and the pin.
 pub fn parse_join_target(text: &str) -> Result<(String, String), String> {
@@ -97,10 +117,7 @@ pub fn parse_join_target(text: &str) -> Result<(String, String), String> {
         "i": "-", "c": "-",
     });
     let qr = parse_pairing_qr(&qr.to_string())?;
-    Ok((
-        format!("https://{}.local:{}", qr.host, qr.port),
-        qr.fingerprint,
-    ))
+    Ok((node_base(&qr.host, qr.port), qr.fingerprint))
 }
 
 /// The certificate half of the code both screens show while a join waits: the first 16 hex
@@ -177,7 +194,9 @@ pub async fn join_state(base: &str, pin: &str, id: &str) -> Result<JoinRequest, 
 /// The node this device paired with. Nothing in it is secret: the key stays with the platform.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Node {
-    /// `https://<name>.local:<port>`, the LAN listener.
+    /// The listener: `https://<name>.local:<port>` on the same Wi-Fi, or
+    /// `https://<address>:<port>` for a dotted name or IP address such as the tailnet's
+    /// ([`node_base`]).
     pub base: String,
     /// SHA-256 of the listener's certificate, 64 hex characters.
     pub pin: String,
@@ -190,7 +209,7 @@ pub async fn claim(qr: &PairingQr, label: &str, public_key: &str) -> Result<Node
     struct Device {
         id: String,
     }
-    let base = format!("https://{}.local:{}", qr.host, qr.port);
+    let base = node_base(&qr.host, qr.port);
     let client = pinned_client(&qr.fingerprint)?;
     let body = serde_json::json!({
         "challenge_id": qr.challenge_id,
@@ -454,7 +473,9 @@ mod tests {
         let (base, got) = parse_join_target(&format!("lars-mac 8443 {pin}")).unwrap();
         assert_eq!(base, "https://lars-mac.local:8443");
         assert_eq!(got, pin);
-        assert!(parse_join_target(&format!("evil.example 8443 {pin}")).is_err());
+        let (base, _) = parse_join_target(&format!("100.116.104.41 8443 {pin}")).unwrap();
+        assert_eq!(base, "https://100.116.104.41:8443");
+        assert!(parse_join_target(&format!("http://x 8443 {pin}")).is_err());
         assert!(parse_join_target("lars-mac 8443").is_err());
         assert_eq!(comparison_code(&pin), "ABAB ABAB ABAB ABAB");
     }
@@ -464,11 +485,39 @@ mod tests {
         let pin = "ab".repeat(32);
         assert!(parse_pairing_qr("https://example.com").is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 8443, &pin).replace("sjel-pair/1", "x")).is_err());
-        // A dot would let the host leave `.local`.
-        assert!(parse_pairing_qr(&qr("evil.example", 8443, &pin)).is_err());
+        // A host is a name or an address, never part of a URL.
+        for host in [
+            "evil/example",
+            "http://x",
+            "a b",
+            "",
+            ".lars",
+            "lars..mac",
+            "lars:9",
+        ] {
+            assert!(parse_pairing_qr(&qr(host, 8443, &pin)).is_err(), "{host}");
+        }
+        assert!(parse_pairing_qr(&qr(&"a".repeat(64), 8443, &pin)).is_err());
+        assert!(parse_pairing_qr(&qr(&["a"; 128].join("."), 8443, &pin)).is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 0, &pin)).is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 70000, &pin)).is_err());
         assert!(parse_pairing_qr(&qr("lars-mac", 8443, &"AB".repeat(32))).is_err());
+    }
+
+    #[test]
+    fn a_dotted_host_is_used_as_given_and_a_bare_name_gets_local() {
+        let pin = "ab".repeat(32);
+        for host in ["100.116.104.41", "lars-mac.example.ts.net"] {
+            let parsed = parse_pairing_qr(&qr(host, 8443, &pin)).expect(host);
+            assert_eq!(
+                node_base(&parsed.host, parsed.port),
+                format!("https://{host}:8443")
+            );
+        }
+        assert_eq!(
+            node_base("Lars-Mac-2", 8443),
+            "https://Lars-Mac-2.local:8443"
+        );
     }
 
     #[test]

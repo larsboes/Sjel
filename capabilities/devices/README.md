@@ -43,6 +43,15 @@ Mac over Bonjour and asks to join, and the Mac's dashboard asks the owner to all
 show the same code: the Mac's certificate half, which a relay cannot forge, and the key half,
 which tells this phone's request from any other.
 
+The QR code's host (`h`) and the join target's host are a DNS name or an IPv4 address: at most
+253 characters, in dot-separated labels of 1 to 63 characters from `[A-Za-z0-9-]`
+(`apps/gpui/core/src/device.rs`, `parse_pairing_qr`). A host without a dot is the Mac's Bonjour
+name, and the phone connects to `<host>.local`. A dotted host is used as given. Example: the
+Mac's tailnet address, which `GET /api/sjel-status/lan` reports as `tailnet` and the native
+setup page offers beside the Same Wi-Fi name. The host is not authentication. The phone accepts
+only the certificate whose SHA-256 is the code's pin (`libs/device-auth/src/pinned.rs`,
+`pinned_tls`), so the certificate needs no name or IP SAN for the address.
+
 On the LAN listener an unregistered device may send exactly three unsigned requests: a claim, a
 join request, and one join request's state (`libs/sjel-server/src/auth.rs`,
 `unsigned_pairing_route`). The phone leaves those three unsigned (`dashboard/src-tauri/src/mac_bridge.rs`,

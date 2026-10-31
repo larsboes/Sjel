@@ -48,6 +48,8 @@ pub struct SetupPage {
     challenge_payload: Option<String>,
     challenge_matrix: Option<QrMatrix>,
     challenge_error: Option<String>,
+    /// The host the code carries, one of `LanInfo::pairing_hosts`. `None` takes the first.
+    pairing_host: Option<String>,
     /// The device whose revoke is waiting for a second press.
     confirming_revoke: Option<String>,
 
@@ -75,6 +77,7 @@ impl SetupPage {
             challenge_payload: None,
             challenge_matrix: None,
             challenge_error: None,
+            pairing_host: None,
             confirming_revoke: None,
 
             url_input: None,
@@ -321,32 +324,48 @@ impl SetupPage {
                     cx.notify();
                     return;
                 };
-                let lan = this.setup.value.as_ref().and_then(|view| view.lan.clone());
-                this.challenge = Some(challenge.clone());
-                this.challenge_payload = None;
-                this.challenge_matrix = None;
-                match lan {
-                    Some(lan) => {
-                        let payload = pairing_payload(&lan, &challenge);
-                        match qr_matrix(&payload) {
-                            Ok(matrix) => {
-                                this.challenge_matrix = Some(matrix);
-                                this.challenge_payload = Some(payload);
-                            }
-                            Err(error) => this.challenge_error = Some(error),
-                        }
-                    }
-                    None => {
-                        this.challenge_error = Some(
-                            "This node has no Same Wi-Fi listener, so a phone cannot scan a code \
-                             for it. The one-time code below can still be typed by hand."
-                                .to_string(),
-                        );
-                    }
-                }
+                this.challenge = Some(challenge);
+                this.draw_code();
                 cx.notify();
             },
         );
+    }
+
+    /// The host the next code carries: the one picked on this page while the listener still
+    /// offers it, else the listener's first.
+    fn pairing_host(&self, lan: &LanInfo) -> Option<String> {
+        let hosts = lan.pairing_hosts();
+        self.pairing_host
+            .clone()
+            .filter(|host| hosts.contains(host))
+            .or_else(|| hosts.into_iter().next())
+    }
+
+    /// Draws the code being shown for the picked host. A new host redraws the same one-time code.
+    fn draw_code(&mut self) {
+        self.challenge_payload = None;
+        self.challenge_matrix = None;
+        self.challenge_error = None;
+        let Some(challenge) = self.challenge.as_ref() else {
+            return;
+        };
+        let lan = self.setup.value.as_ref().and_then(|view| view.lan.as_ref());
+        let Some((lan, host)) = lan.and_then(|lan| Some((lan, self.pairing_host(lan)?))) else {
+            self.challenge_error = Some(
+                "This node has no Same Wi-Fi listener, so a phone cannot scan a code \
+                 for it. The one-time code below can still be typed by hand."
+                    .to_string(),
+            );
+            return;
+        };
+        let payload = pairing_payload(lan, &host, challenge);
+        match qr_matrix(&payload) {
+            Ok(matrix) => {
+                self.challenge_matrix = Some(matrix);
+                self.challenge_payload = Some(payload);
+            }
+            Err(error) => self.challenge_error = Some(error),
+        }
     }
 
     /// Revokes one device's key at the node. The record stays: what was trusted, and until when.
@@ -823,7 +842,7 @@ impl SetupPage {
 
         // ── The listener a phone can reach ───────────────────────────────────
         let (reachable, listener_body) = match (&view.lan, &view.lan_error) {
-            (Some(lan), _) => (true, listener_line(lan, palette)),
+            (Some(lan), _) => (true, self.listener_picker(lan, palette, cx)),
             (None, Some(error)) => (
                 false,
                 note(
@@ -1356,26 +1375,59 @@ impl SetupPage {
     }
 }
 
-/// The listener, in the one line a person needs to recognise this Mac.
-fn listener_line(lan: &LanInfo, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap(px(10.0))
-        .child(
-            div()
-                .text_size(px(12.0))
-                .font_family(".AppleSystemUIFontMonospaced")
-                .text_color(rgb(palette.text))
-                .child(format!("{}.local:{}", lan.host, lan.port)),
-        )
-        .child(
+impl SetupPage {
+    /// The listener's addresses, one per button, and the certificate pin. The pressed address is
+    /// the one the code carries; a single address shows as a plain line.
+    fn listener_picker(
+        &self,
+        lan: &LanInfo,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hosts = lan.pairing_hosts();
+        let picked = self.pairing_host(lan);
+        let address = |host: &str| {
+            let base = sjel_gpui_core::device::node_base(host, lan.port);
+            base.trim_start_matches("https://").to_string()
+        };
+        let mut row = div().flex().items_center().gap(px(8.0));
+        if hosts.len() == 1 {
+            row = row.child(
+                div()
+                    .text_size(px(12.0))
+                    .font_family(".AppleSystemUIFontMonospaced")
+                    .text_color(rgb(palette.text))
+                    .child(address(&hosts[0])),
+            );
+        } else {
+            for (index, host) in hosts.into_iter().enumerate() {
+                let label = if lan.tailnet.as_deref() == Some(host.as_str()) {
+                    format!("Tailnet {}", address(&host))
+                } else {
+                    format!("Same Wi-Fi {}", address(&host))
+                };
+                let active = picked.as_deref() == Some(host.as_str());
+                row = row.child(
+                    Button::new(("pairing-host", index))
+                        .small()
+                        .when(!active, |b| b.ghost())
+                        .label(label)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.pairing_host = Some(host.clone());
+                            this.draw_code();
+                            cx.notify();
+                        })),
+                );
+            }
+        }
+        row.child(
             div()
                 .text_size(px(11.0))
                 .text_color(rgb(palette.muted))
                 .child(format!("certificate pin {}", short_pin(&lan.fingerprint))),
         )
         .into_any_element()
+    }
 }
 
 /// The column names of the trusted-device table, so the values below them are never unlabelled.

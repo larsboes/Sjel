@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# apps/gpui/ios/run-device <udid> — build the iOS app signed for development, install it on a
+# paired iPhone and launch it. The simulator is `run-sim`; TestFlight is `sjel testflight ship`.
+#
+# The build is `tools/distribution/ios-archive --team`, with the team from
+# ~/.appstoreconnect/team_id as `sjel testflight` reads it. The build number is the commit count.
+# The app's data container, and so its pairing, survives the install.
+set -euo pipefail
+[ "$#" -eq 1 ] || { echo "usage: apps/gpui/ios/run-device <udid>" >&2; exit 2; }
+udid="$1"
+[[ "$udid" =~ ^[0-9A-Fa-f-]{25,40}$ ]] || { echo "ios/run-device: not a device UDID: $udid" >&2; exit 2; }
+[ "$(uname -s)" = Darwin ] || { echo "ios/run-device: macOS only" >&2; exit 1; }
+
+IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$IOS_DIR/../../.." && pwd)"
+team="$(tr -d '[:space:]' < "$HOME/.appstoreconnect/team_id")"
+version="$(sed -n 's/^ *CFBundleShortVersionString: *//p' "$IOS_DIR/host/project.yml")"
+build="$(git -C "$root" rev-list --count HEAD)"
+out="$(mktemp -d "${TMPDIR:-/tmp}/sjel-ios-device.XXXXXX")"
+rmdir "$out"
+
+"$root/tools/distribution/ios-archive" --version "$version" --build "$build" --team "$team" --out "$out"
+app="$out/Sjel.xcarchive/Products/Applications/SjelIOS.app"
+[ -d "$app" ] || { echo "ios/run-device: the archive has no app at $app" >&2; exit 1; }
+xcrun devicectl device install app --device "$udid" "$app"
+xcrun devicectl device process launch --device "$udid" --terminate-existing dev.sjel.ios
+echo "installed $version ($build) on $udid from $out"

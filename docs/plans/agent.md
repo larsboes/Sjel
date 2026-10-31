@@ -365,7 +365,11 @@ blocked, see [`gpui.md`](gpui.md#open).
 
 1. **Desktop.** `⌘K` → `Agent`. Create and reopen a session, stream a reply, approve once, grant
    for the session, deny, stop. The Systems approval view and the seat show the same decision.
-2. **iPhone.** Pair through the QR flow. The seat lists saved and active sessions. Start a
+2. **iPhone.** Pair through the QR flow. The setup page offers the Mac's tailnet address beside
+   the Same Wi-Fi name, so the phone can pair for use away from home.
+   `apps/gpui/ios/run-device <udid>` installs a development build. Not run yet: a phone scan of
+   the tailnet code. The tailnet ACL from the phone to port 8443 has not been tested. The seat
+   lists saved and active sessions. Start a
    session on the phone and send a follow-up. The Mac shelf shows the same transcript.
 3. **Cross-device.** Follow a Mac run on the phone. Cut and restore the connection, then check
    sequence resume and the transcript reload after `truncated`. Decide from each client in turn,

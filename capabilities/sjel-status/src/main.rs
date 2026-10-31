@@ -439,10 +439,10 @@ async fn main() {
     tokio::join!(local, tailnet);
 }
 
-/// The local-network listener, for the pairing screen: its port, host and the certificate
-/// fingerprint a phone pins. `{"enabled": false}` when the deployment has not enabled it.
+/// The local-network listener, for the pairing screen: its port, host, tailnet address and the
+/// certificate fingerprint a phone pins. `{"enabled": false}` when the deployment has not enabled it.
 async fn lan_handler() -> Json<Value> {
-    match lan::info() {
+    match lan::info().await {
         Some(info) => Json(json!({ "enabled": true, "lan": info })),
         None => Json(json!({ "enabled": false })),
     }

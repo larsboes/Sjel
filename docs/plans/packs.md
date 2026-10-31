@@ -15,8 +15,13 @@ drifting copies.
   materialized copies. pi gets registry entries (`pi_settings.rs`).
 - **Ledgers.** One per harness under `~/.local/state/axon/pack-deployments/`, owned and backed up by
   `capabilities/packs`. A ledger records each unit, its Pack and the installed digest.
-- **Profiles.** 7 in `profiles.toml`. `use <profile>` replaces a harness's set with the profile's
-  units. `[unit_hold]` keeps named units off named harnesses.
+- **Profiles.** 8 in `profiles.toml`. `use <profile>` replaces a harness's set with the profile's
+  units. `[unit_hold]` keeps named units off named harnesses. pi runs `lean` (7 skills), because
+  its default model is a small one.
+- **Agent model tiers on pi.** A Pack agent's Claude `model:` tier maps to a pi model through
+  `[tiers]` in the overlay's `config/pi-models.toml` (`harnesses/agentfile.rs`). An unmapped tier
+  is dropped and the agent inherits the session model. The `review` agent (`opus`) is how a small
+  session model gets its work checked by a stronger one.
 - **Project level.** Nothing is deployed per project. `.claude/skills/` is gitignored for
   third-party installs (`.gitignore`). Cloud sessions get Packs through `tools/cloud-session-start`,
   which runs `tools/packs-claude use repository` into the container's user-level root

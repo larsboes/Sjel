@@ -36,8 +36,9 @@ pub type Files = BTreeMap<String, DesiredFile>;
 /// An adapter's extra validation of an assembled unit: codex checks `agents/openai.yaml`.
 pub type AdapterValidator = fn(&Files, &str) -> Result<(), String>;
 
-/// A flat-file unit's byte rewrite on the way out: pi's agent-file translation.
-pub type Transform = fn(&str, &str) -> Result<String, String>;
+/// A flat-file unit's byte rewrite on the way out: pi's agent-file translation. It receives the
+/// file text, a label for errors, and the repository root.
+pub type Transform = fn(&str, &str, &Path) -> Result<String, String>;
 
 #[derive(Debug, Clone)]
 pub struct DesiredFile {
@@ -618,7 +619,9 @@ pub fn desired_files(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<F
         {
             let text = fs::read_to_string(&file.absolute_path)
                 .map_err(|e| format!("{}: {e}", file.absolute_path.display()))?;
-            file.content = Some(transform(&text, &format!("{pack}/{}", unit.key))?.into_bytes());
+            file.content = Some(
+                transform(&text, &format!("{pack}/{}", unit.key), &config.axon_root)?.into_bytes(),
+            );
         }
         return Ok(Files::from([(file.relative_path.clone(), file)]));
     }

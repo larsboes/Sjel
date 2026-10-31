@@ -10,6 +10,10 @@ covers it.
 
 ## Open
 
+- **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
+  to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
+  profile's 7 skills to 14. Workaround: re-run `tools/harnesses use lean --harness pi`, which also
+  rewrites the agent files. Smallest change: `deploy` keeps the active profile's skill subset.
 - **Installed crates whose source was collected.** The audit's globals pass reads each installed
   crate's `Cargo.lock` from `~/.cargo/registry/src`. Cargo's cache cleanup had removed the source
   of all four installed crates, so the pass scanned 0 crate lockfiles and reported clean. A check

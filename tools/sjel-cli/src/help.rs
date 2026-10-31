@@ -5,7 +5,7 @@ pub const USAGE: &str = r#"Usage: sjel <command> [arguments]
 
 Discover Sjel:
   help [command]                 Show commands or one command's usage
-  search <words...>              Search commands, tools, capabilities, and Packs
+  search <words...>              Search commands, tools, capabilities, Packs and code
   doctor                          Check this Sjel installation
   setup [plan|apply|verify] [component]
                                  What this machine still needs, and what applying it would do

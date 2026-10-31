@@ -1,13 +1,13 @@
-//! `sjel search <words...>` — commands, tools, capabilities and Packs, and a verdict.
+//! `sjel search <words...>` — commands, tools, capabilities, Packs and code, and a verdict.
 //!
-//! Moved from the bash launcher, tools/lib/tool-index.sh and tools/lib/capability-index.sh on
-//! 2026-10-02. Matching is a case-insensitive substring test of the whole query, as `grep -iF`
-//! was. A search that matches nothing exits 1 and says so on stderr: a search that cannot say
-//! "no" is one whose silence a caller has to guess at.
+//! Commands, tools, capabilities and Packs match on a case-insensitive substring of the whole
+//! query, as `grep -iF` did. Code matches when every query word appears in one entry: a tracked
+//! Rust file's path and leading `//!` block, a crate's `Cargo.toml` name and description, or a
+//! README's path and headings. A search that matches nothing exits 1 and says so on stderr.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 
 use crate::capability;
 use crate::help::USAGE;
@@ -55,11 +55,27 @@ pub fn run(root: &Path, words: &[String]) -> ExitCode {
         found = true;
     }
 
+    println!("\nCode:");
+    let terms: Vec<String> = words.iter().map(|w| w.to_lowercase()).collect();
+    let hits = search_code(&code_index(root), &terms);
+    for row in hits.iter().take(CODE_ROWS) {
+        println!("{row}");
+        found = true;
+    }
+    if hits.len() > CODE_ROWS {
+        println!(
+            "  … {} more. Add a word to narrow the search.",
+            hits.len() - CODE_ROWS
+        );
+    }
+
     if found {
         ExitCode::SUCCESS
     } else {
         println!();
-        eprintln!("sjel: nothing matches '{query}' in commands, tools, capabilities or Packs.");
+        eprintln!(
+            "sjel: nothing matches '{query}' in commands, tools, capabilities, Packs or code."
+        );
         ExitCode::from(1)
     }
 }
@@ -71,6 +87,136 @@ fn packs(root: &Path) -> String {
         Ok(packs) => packs.into_iter().map(|pack| format!("{pack}\n")).collect(),
         Err(_) => String::new(),
     }
+}
+
+// ---- code -----------------------------------------------------------------------------------
+
+/// How many code rows one search prints. A longer list costs a small model context it then has
+/// to read past.
+const CODE_ROWS: usize = 15;
+
+/// One searchable entry: a tracked path, all the text it is matched on, and the part shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeEntry {
+    pub path: String,
+    pub text: String,
+    pub summary: String,
+}
+
+/// Every tracked Rust file, `Cargo.toml` and README, with the text that describes it.
+fn code_index(root: &Path) -> Vec<CodeEntry> {
+    let Ok(out) = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z", "--", "*.rs", "*Cargo.toml", "*README.md"])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|p| !p.is_empty())
+        .filter_map(|path| {
+            let body = fs::read_to_string(root.join(path)).ok()?;
+            let (text, summary) = if path.ends_with(".rs") {
+                let doc = module_doc(&body);
+                (doc.join(" "), doc.first().cloned().unwrap_or_default())
+            } else if path.ends_with("Cargo.toml") {
+                let text = crate_description(&body);
+                (text.clone(), text)
+            } else {
+                let text = readme_headings(&body);
+                (text.clone(), text)
+            };
+            Some(CodeEntry {
+                path: path.to_owned(),
+                text,
+                summary,
+            })
+        })
+        .collect()
+}
+
+/// A file's leading `//!` doc comment, one string per paragraph.
+fn module_doc(body: &str) -> Vec<String> {
+    let mut paragraphs: Vec<String> = Vec::new();
+    let mut current: Vec<&str> = Vec::new();
+    for line in body.lines() {
+        let Some(rest) = line.trim_start().strip_prefix("//!") else {
+            break;
+        };
+        let rest = rest.trim();
+        if rest.is_empty() {
+            if !current.is_empty() {
+                paragraphs.push(current.join(" "));
+                current.clear();
+            }
+            continue;
+        }
+        current.push(rest);
+    }
+    if !current.is_empty() {
+        paragraphs.push(current.join(" "));
+    }
+    paragraphs
+}
+
+/// `name — description` from a `[package]` table.
+fn crate_description(body: &str) -> String {
+    let Ok(value) = body.parse::<toml::Table>() else {
+        return String::new();
+    };
+    let package = value.get("package");
+    let field = |key: &str| {
+        package
+            .and_then(|p| p.get(key))
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (name, description) = (field("name"), field("description"));
+    if name.is_empty() {
+        return String::new();
+    }
+    format!("{name} — {description}")
+}
+
+/// A README's headings, joined by " · ".
+fn readme_headings(body: &str) -> String {
+    body.lines()
+        .filter(|l| l.starts_with('#'))
+        .map(|l| l.trim_start_matches('#').trim())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// Entries holding every term, ranked by how many terms the path itself holds.
+pub fn search_code(index: &[CodeEntry], terms: &[String]) -> Vec<String> {
+    let mut hits: Vec<(usize, &CodeEntry)> = index
+        .iter()
+        .filter_map(|e| {
+            let path = e.path.to_lowercase();
+            let all = format!("{path} {}", e.text.to_lowercase());
+            terms.iter().all(|t| all.contains(t.as_str())).then(|| {
+                (
+                    terms.iter().filter(|t| path.contains(t.as_str())).count(),
+                    e,
+                )
+            })
+        })
+        .collect();
+    hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.path.cmp(&b.1.path)));
+    hits.into_iter()
+        .map(|(_, e)| {
+            let text: String = e.summary.chars().take(100).collect();
+            let more = if e.summary.chars().count() > 100 {
+                "…"
+            } else {
+                ""
+            };
+            format!("  {}  {text}{more}", e.path)
+        })
+        .collect()
 }
 
 // ---- tools ----------------------------------------------------------------------------------
@@ -378,6 +524,60 @@ pub fn search_capabilities(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_matches_every_word_across_path_and_doc_and_ranks_path_hits_first() {
+        let index = vec![
+            CodeEntry {
+                path: "capabilities/agent/src/terminal/marks.rs".into(),
+                text: "What a shell's marks say: the exit code of the last command.".into(),
+                summary: String::new(),
+            },
+            CodeEntry {
+                path: "libs/exit/src/lib.rs".into(),
+                text: "Exit code helpers for a terminal session.".into(),
+                summary: String::new(),
+            },
+            CodeEntry {
+                path: "libs/other/src/lib.rs".into(),
+                text: "A terminal, but nothing else.".into(),
+                summary: String::new(),
+            },
+        ];
+        let terms = ["terminal".to_owned(), "exit".to_owned(), "code".to_owned()];
+        let hits = search_code(&index, &terms);
+        assert_eq!(hits.len(), 2, "{hits:?}");
+        assert!(hits[0].contains("terminal/marks.rs"), "{hits:?}");
+        assert!(hits[1].contains("libs/exit/src/lib.rs"), "{hits:?}");
+    }
+
+    #[test]
+    fn a_module_doc_is_its_first_paragraph_and_a_crate_is_its_description() {
+        assert_eq!(
+            module_doc("//! First line\n//! second.\n//!\n//! Then this.\nuse x;\n"),
+            vec!["First line second.", "Then this."]
+        );
+        assert!(module_doc("use x;\n//! late\n").is_empty());
+        assert_eq!(
+            crate_description("[package]\nname = \"a\"\ndescription = \"does b\"\n"),
+            "a — does b"
+        );
+        assert_eq!(crate_description("[workspace]\n"), "");
+        assert_eq!(readme_headings("# T\ntext\n## U\n"), "T · U");
+    }
+
+    #[test]
+    fn the_real_checkout_finds_the_terminal_marks_by_their_doc() {
+        let hits = search_code(
+            &code_index(&real_root()),
+            &["terminal".to_owned(), "exit".to_owned(), "code".to_owned()],
+        );
+        assert!(
+            hits.iter()
+                .any(|h| h.contains("capabilities/agent/src/terminal/marks.rs")),
+            "{hits:?}"
+        );
+    }
 
     // Moved from tools/tool-index.test.sh and tools/capability-index.test.sh: the same
     // fixtures, the same assertions, and the same two checks against the real checkout.

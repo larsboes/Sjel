@@ -255,6 +255,12 @@ skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" =
 # `use` verb therefore still applies here as recorded: declined, on this host.
 
 [[profile]]
+name = "lean"
+description = "Small models: few skills, so each turn carries less to choose from"
+packs = ["harness", "coding", "security", "cognitive-load", "deliberation", "knowledge"]
+skills = { "harness" = ["sjel"], "coding" = ["prior-art", "effective-rust", "gpui"], "security" = [], "cognitive-load" = ["attention-control"], "deliberation" = ["root-cause"], "knowledge" = ["obsidian"] }
+
+[[profile]]
 name = "repository"
 description = "Work on this repository from a cloud container: code, UI, orientation, focus, review"
 packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing"]

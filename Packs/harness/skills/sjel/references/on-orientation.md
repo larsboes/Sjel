@@ -8,8 +8,10 @@ Run this sequence before planning, reviewing, or editing:
 3. Run `tools/axon-context on [unit-or-path]`.
 4. Read only the paths it returns plus the reference selected in `SKILL.md`.
 
-Use `tools/self explain <unit>` for ownership and local coupling, and `tools/self coupling` for a
-relationship question. Use `rg` and tracked source for exact implementation evidence.
+Use `sjel search <words>` to find the file that owns a concept: every word must appear in the
+file's path or its leading doc comment. Use `tools/self explain <unit>` for ownership and local
+coupling, and `tools/self coupling` for a relationship question. Use `rg` and tracked source for
+exact implementation evidence.
 
 Before you conclude that Sjel does not do something, read `capabilities = [...]` in the
 overlay's `config/machine.toml` (resolved by `tools/lib/paths.sh`) and list

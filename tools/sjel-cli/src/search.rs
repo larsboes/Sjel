@@ -222,8 +222,7 @@ fn readme_summary(dir: &Path) -> String {
 
 /// `r("METHOD", "/path", "description")` calls in a capability's Rust and TypeScript sources,
 /// as `METHOD /path  description`. That call form is what route manifests use
-/// (libs/route-manifest), and capabilities/knowledge-graph/server.ts writes its routes that way
-/// so this index can read them.
+/// (libs/route-manifest).
 fn routes(dir: &Path) -> Vec<String> {
     let mut files = Vec::new();
     collect_sources(dir, &mut files);

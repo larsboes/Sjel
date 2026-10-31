@@ -57,7 +57,7 @@ Under it, each harness lists what sits at its destination that no Pack owns:
 | Kind | What it means | What to do |
 |---|---|---|
 | `copy` | An ordinary directory nobody claims | A `promote` candidate. Read it first. |
-| `external` | Carries `.git`, `.graphify_version` or similar | **Never promote.** Another installer owns it and re-syncs from its own remote; a copy in Sjel is a fork that will silently pin it. Record it in `upstreams.toml` instead. |
+| `external` | Carries `.git` or a similar installer marker | **Never promote.** Another installer owns it and re-syncs from its own remote; a copy in Sjel is a fork that will silently pin it. Record it in `upstreams.toml` instead. |
 | `symlink` | Points into a product install | **Never promote.** The target is the install; an upgrade updates it. |
 
 **3 — Resolve drift first.** `tools/harnesses drift [<pack>] [--diff]` names the differing files and

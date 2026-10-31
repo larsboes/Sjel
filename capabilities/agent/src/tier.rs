@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// What a session may reach.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tier {
-    /// Sjel's own data: capability routes, the graph and read-only SQL. No shell, no writes.
+    /// Sjel's own data: capability routes and read-only SQL. No shell, no writes.
     Sjel,
     /// One checkout: the coding tools, inside a root under `$HOME`.
     Project,
@@ -46,8 +46,8 @@ impl Tier {
     /// `subagents` join the coding tiers when §4's port reaches them into this capability.
     pub fn plugins(self) -> Vec<String> {
         let names: &[&str] = match self {
-            Tier::Sjel => &["sjel", "graph", "sql", "guard", "compaction"],
-            Tier::Project | Tier::Account => &["fs", "graph", "sjel", "sql", "guard", "compaction"],
+            Tier::Sjel => &["sjel", "sql", "guard", "compaction"],
+            Tier::Project | Tier::Account => &["fs", "sjel", "sql", "guard", "compaction"],
         };
         names.iter().map(|name| (*name).to_owned()).collect()
     }

@@ -24,10 +24,7 @@ Stop at the first rung that holds:
      ```bash
      Packs/coding/skills/prior-art/scripts/search-prior-art "<concept_or_symbol>"
      ```
-   - Query the knowledge graph:
-     ```bash
-     graphify query "<concept_or_symbol>"
-     ```
+   - Find the command, tool or capability that owns it: `sjel search "<concept>"`.
    - Check `upstreams.toml` for prior verdicts, evaluations, or rejected prior art.
 
 3. **Standard library?**
@@ -61,8 +58,8 @@ To run a prior-art investigation:
 # 1. Search symbols, paths, crates, and upstreams:
 Packs/coding/skills/prior-art/scripts/search-prior-art "<query>"
 
-# 2. Check architecture knowledge graph:
-graphify query "<query>"
+# 2. Find the owning command, tool or capability:
+sjel search "<query>"
 
 # 3. Check for related decisions in ISA or PRD:
 grep -in -C 2 "<query>" PLAN.md docs/plans/*.md ARCHITECTURE.md

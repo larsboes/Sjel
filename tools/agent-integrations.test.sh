@@ -2,147 +2,45 @@
 set -euo pipefail
 
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SJEL_ROOT="$(cd "$TOOLS_DIR/.." && pwd)"
 SCRIPT="$TOOLS_DIR/agent-integrations.sh"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home"
-export SJEL_TEST_UV_LOG="$tmp/uv.log"
-export PATH="$tmp/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-mkdir -p "$HOME/.config/opencode" "$tmp/bin"
-
-cat > "$tmp/bin/uv" <<'STUB'
-#!/bin/bash
-set -euo pipefail
-printf '%s|%s\n' "$PWD" "$*" >> "$SJEL_TEST_UV_LOG"
-if [ "${SJEL_TEST_UV_FAIL:-0}" = 1 ]; then
-  exit 19
-fi
-platform="${*: -1}"
-if [ "$platform" = opencode ]; then
-  mkdir -p .opencode/skills/graphify .opencode/plugins
-  printf '%s\n' '// graphify fixture skill' > .opencode/skills/graphify/.keep
-  printf '%s\n' '// graphify fixture plugin' > .opencode/plugins/graphify.js
-fi
-STUB
-chmod +x "$tmp/bin/uv"
-
-cat > "$tmp/bin/opencode" <<'STUB'
-#!/bin/bash
-if [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
-  echo "opencode 0.0.0"
-else
-  exit 0
-fi
-STUB
-chmod +x "$tmp/bin/opencode"
-
-# The gate stand-in: the release tools/intake approved.
-cat > "$tmp/bin/intake" <<'STUB'
-#!/bin/bash
-[ "$1" = version ] && [ "$2" = graphify ] && [ "${SJEL_TEST_NO_APPROVAL:-0}" != 1 ] && { echo 9.9.9; exit 0; }
-exit 1
-STUB
-chmod +x "$tmp/bin/intake"
-export SJEL_INTAKE="$tmp/bin/intake"
-
-# upstreams.toml carries no `pin` since Q77 (2026-09-02). The version comes from tools/intake,
-# which records the release this machine read, not from the register.
-if grep -q '^pin = ' "$SJEL_ROOT/upstreams.toml"; then
-  echo "upstreams.toml still declares a pin — this script must not resolve one" >&2
-  exit 1
-fi
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+mkdir -p "$HOME/.claude"
 
 list_output="$($SCRIPT list)"
 case "$list_output" in
-  *"Configured on this machine:"*) ;;
-  *) echo "list did not distinguish configured state" >&2; exit 1 ;;
+  *"interceptor"*"Configured on this machine: claude"*) ;;
+  *) echo "list did not name interceptor and the configured harness" >&2; exit 1 ;;
 esac
 
-machine_output="$($SCRIPT status --machine)"
-echo "$machine_output" | grep -q '^opencode|runnable|' || {
-  echo "status --machine did not report opencode as runnable" >&2
-  exit 1
-}
+json="$($SCRIPT status --json)"
+printf '%s' "$json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+upstreams = [i["upstream"] for i in data["integrations"]]
+assert upstreams == ["interceptor"], upstreams
+row = data["integrations"][0]["harnesses"][0]
+assert row["state"] == "missing", row
+assert "graph_state" not in row, row
+'
 
-$SCRIPT install opencode
-plugin="$HOME/.config/opencode/plugins/graphify.js"
-test -s "$plugin"
-grep -q 'graphify' "$plugin"
-grep -Fq "tool run --from graphifyy==9.9.9 graphify install --platform opencode" "$SJEL_TEST_UV_LOG"
+machine="$($SCRIPT status --machine)"; machine="${machine%%$'\n'*}"
+fields="$(printf '%s' "$machine" | awk -F'|' '{print NF}')"
+[ "$fields" = 14 ] || { echo "status --machine row has $fields fields, not 14: $machine" >&2; exit 1; }
 
-scratch="$(head -n 1 "$SJEL_TEST_UV_LOG" | cut -d '|' -f 1)"
-test "$scratch" != "$SJEL_ROOT"
-test ! -e "$scratch"
-
-first="$(cksum "$plugin")"
-$SCRIPT install opencode
-test "$(cksum "$plugin")" = "$first"
-
-machine_output="$($SCRIPT status --machine)"
-echo "$machine_output" | grep -q '^opencode|integrated|' || {
-  echo "status --machine did not report opencode as integrated after install" >&2
-  exit 1
-}
-
-# The marker records the DATE the files were taken from upstream, so it must be one.
-marker="$HOME/.config/opencode/.graphify-upstream-installed"
-grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' "$marker" || {
-  echo "the install marker does not carry an install date: $(cat "$marker")" >&2
-  exit 1
-}
-
-# Installed files with no marker are of unknown provenance — an older mechanism, a hand copy,
-# or an install that died before writing it — and re-running the installer is the answer to
-# all three. That is what 'stale' means since Q77; it compared against a pin before.
-rm -f "$marker"
-machine_output="$($SCRIPT status --machine)"
-echo "$machine_output" | grep -q '^opencode|stale|' || {
-  echo "status --machine did not report unmarked integration files as stale" >&2
-  exit 1
-}
-
-printf '%s\n' '// known-good graphify plugin' > "$plugin"
-before="$(cksum "$plugin")"
-if SJEL_TEST_UV_FAIL=1 $SCRIPT install opencode >/dev/null 2>&1; then
-  echo "failed upstream install unexpectedly succeeded" >&2
+if $SCRIPT install claude 2>"$tmp/err"; then
+  echo "install without an upstream must fail" >&2
   exit 1
 fi
-test "$(cksum "$plugin")" = "$before"
+grep -q 'usage: agent-integrations.sh install <upstream>' "$tmp/err"
 
-if $SCRIPT install unknown-harness >/dev/null 2>&1; then
-  echo "unknown harness unexpectedly succeeded" >&2
+if $SCRIPT update nothing 2>"$tmp/err"; then
+  echo "update of an unknown upstream must fail" >&2
   exit 1
 fi
+grep -q "unknown upstream 'nothing'" "$tmp/err"
 
-cat > "$tmp/bin/pi" <<'STUB'
-#!/bin/bash
-printf '%s\n' "$*" >> "$SJEL_TEST_UV_LOG"
-exit "${SJEL_TEST_PI_EXIT:-0}"
-STUB
-chmod +x "$tmp/bin/pi"
-
-printf '%s\n' "$list_output" | grep -Fq 'install accordion pi'
-$SCRIPT install accordion pi
-grep -Fxq 'install npm:@a-fig/accordion' "$SJEL_TEST_UV_LOG"
-if $SCRIPT install accordion claude >/dev/null 2>&1; then
-  echo "Accordion accepted an unsupported harness" >&2
-  exit 1
-fi
-if SJEL_TEST_PI_EXIT=23 $SCRIPT install accordion pi; then
-  echo "failed Pi install unexpectedly succeeded" >&2
-  exit 1
-fi
-
-
-# Without an approved release nothing is installed, and uv is never reached.
-: > "$SJEL_TEST_UV_LOG"
-if SJEL_TEST_NO_APPROVAL=1 $SCRIPT install opencode 2>"$tmp/err"; then
-  echo "install ran without an approved graphify release" >&2
-  exit 1
-fi
-grep -q 'tools/intake check graphify' "$tmp/err"
-test ! -s "$SJEL_TEST_UV_LOG"
-
-echo "agent-integrations tests passed"
+echo "agent-integrations.test.sh: ok"

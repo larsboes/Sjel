@@ -55,7 +55,7 @@ harness_verdict() { # -> "<verdict>\t<mechanism-or-reason>"
     codex|opencode)
       printf 'unsupported\tno path-deny mechanism verified in this repository. Nothing here enforces a protected path for this harness, so nothing here may claim one' ;;
     copilot)
-      printf 'unsupported\tthe Sjel guard (tools/templates/copilot/hooks/sjel-guard.sh, written by `sjel copilot apply`) matches BASH COMMANDS — rm, git commit, git push — and answers permissionDecision deny. Copilot exposes no path-deny setting, so no protected PATH is enforced here: a read of a protected path still reaches the model. Copilot joined the roster on 2026-10-24 when graphify and interceptor started shipping for it' ;;
+      printf 'unsupported\tthe Sjel guard (tools/templates/copilot/hooks/sjel-guard.sh, written by `sjel copilot apply`) matches BASH COMMANDS — rm, git commit, git push — and answers permissionDecision deny. Copilot exposes no path-deny setting, so no protected PATH is enforced here: a read of a protected path still reaches the model. Copilot joined the roster on 2026-10-24 when interceptor started shipping for it' ;;
     *)
       printf 'unsupported\tunknown harness — no verdict recorded, which is itself a finding' ;;
   esac

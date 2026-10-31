@@ -152,7 +152,7 @@ const HELP: &str = "sjel update — every piece of software installed outside th
   sjel update -h
 
 Classes for --only:
-  brew uv rustup containers graphify interceptor checkout cargo npm vendor
+  brew uv rustup containers interceptor checkout cargo npm vendor
 
 Report exits 1 when something is stale, 0 when nothing is. Apply exits 1 when there was
 nothing to do (or you declined), 2 when a step failed.";

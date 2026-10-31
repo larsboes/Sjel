@@ -58,21 +58,6 @@ pub struct SelfUpstream {
     pub verdict: String,
 }
 
-/// Knowledge graph telemetry fused into the self-model.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SelfGraphMeta {
-    #[serde(default)]
-    pub present: bool,
-    #[serde(default)]
-    pub nodes: usize,
-    #[serde(default)]
-    pub external: usize,
-    #[serde(default)]
-    pub stale: Vec<String>,
-    #[serde(default)]
-    pub unmatched: Vec<String>,
-}
-
 /// Committed self-model from `self.json`.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SelfModel {
@@ -86,8 +71,6 @@ pub struct SelfModel {
     pub coupling: Vec<SelfCoupling>,
     #[serde(default)]
     pub upstreams: Vec<SelfUpstream>,
-    #[serde(default)]
-    pub graph: Option<SelfGraphMeta>,
 }
 
 /// Response returned by `GET /api/sjel-status/self`.
@@ -230,13 +213,6 @@ mod tests {
                     name: "chrono".into(),
                     verdict: "pass".into(),
                 }],
-                graph: Some(SelfGraphMeta {
-                    present: true,
-                    nodes: 7500,
-                    external: 120,
-                    stale: vec![],
-                    unmatched: vec![],
-                }),
             },
             live,
         }

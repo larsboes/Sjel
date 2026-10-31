@@ -1,5 +1,4 @@
 pub mod compaction;
-pub mod graph;
 pub mod guard;
 pub mod mcp;
 pub mod policy;

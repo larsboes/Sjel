@@ -5,7 +5,7 @@
 //! On 2026-08-05 four concurrent prefills pushed oMLX past its hard memory
 //! watermark and it aborted all four. Two of them were feed digests. Nothing in
 //! Sjel knew the others were running, because the competing consumers are
-//! separate processes: comms-server, graphify, the Pulse DA, anything else that
+//! separate processes: comms-server, the Pulse DA, anything else that
 //! resolves the summarization role. An in-process semaphore bounds one of them
 //! and lets the rest collide exactly as before.
 //!

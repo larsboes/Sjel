@@ -449,8 +449,8 @@ fn trip_json(t: &transit::store::TripRow, legs: &[transit::store::TripLegRow]) -
 
 /// A bounded read says what it left behind. `count` is every trip matching the
 /// filter, `returned` is how many came back, and `truncated` says whether those
-/// two disagree -- borrowed from knowledge-graph's `/api/graph/unit`, for the
-/// same reason: a capped answer that looked complete would read as the whole set.
+/// two disagree, because a capped answer that looked complete would read as the
+/// whole set.
 #[derive(Deserialize)]
 struct TripsQuery {
     session_id: Option<String>,

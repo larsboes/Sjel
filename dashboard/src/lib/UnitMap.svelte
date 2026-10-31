@@ -2,12 +2,8 @@
   /**
    * A force-directed map, drawn as SVG, with no graph library behind it.
    *
-   * The knowledge-graph panel this replaces pulled vis-network from a CDN and
-   * handed it all 6665 graphify nodes at once with `improvedLayout` on. That
-   * layout never converged, so the page rendered a black rectangle -- and the
-   * CDN made a local-first surface depend on unpkg being reachable. Both go
-   * away here: the layout is ~80 lines of Fruchterman-Reingold, and every
-   * caller passes a bounded set (31 units, or one unit's capped file list).
+   * The layout is ~80 lines of Fruchterman-Reingold, and every caller passes a
+   * bounded set (about 31 units), so no graph library or CDN is needed.
    *
    * Deterministic on purpose. The seed layout is a circle indexed by position
    * in the node list, never `Math.random`, so the same graph draws the same
@@ -16,7 +12,7 @@
   export interface MapNode {
     id: string;
     label: string;
-    /** Drives colour. Free-form so both the unit view and the file view can use it. */
+    /** Drives colour: the unit's kind. */
     kind: string;
     /** 0..1, drives radius. Relative within the set the caller passes. */
     weight?: number;
@@ -528,15 +524,6 @@
   .kind-pack {
     --node-fill: #15803d;
   }
-  .kind-file {
-    --node-fill: #0e7490;
-  }
-  .kind-doc {
-    --node-fill: #15803d;
-  }
-  .kind-config {
-    --node-fill: #b45309;
-  }
   :global(:root.dark) .kind-capability {
     --node-fill: #22d3ee;
   }
@@ -548,15 +535,6 @@
   }
   :global(:root.dark) .kind-pack {
     --node-fill: #4ade80;
-  }
-  :global(:root.dark) .kind-file {
-    --node-fill: #22d3ee;
-  }
-  :global(:root.dark) .kind-doc {
-    --node-fill: #4ade80;
-  }
-  :global(:root.dark) .kind-config {
-    --node-fill: #fbbf24;
   }
 
   .ring {

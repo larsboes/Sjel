@@ -48,7 +48,7 @@ export function sections(files: Record<string, string>): Section[] {
   return out;
 }
 
-/** Edges Graphify also extracts: a section contains the deeper sections under it, and a section
+/** Edges between sections: a section contains the deeper sections under it, and a section
  * references a file path or an upstreams.toml row it names. Undirected for expansion. */
 export function edges(all: Section[]): { kind: "contains" | "references"; a: number; b: number }[] {
   const out: { kind: "contains" | "references"; a: number; b: number }[] = [];

@@ -8,14 +8,7 @@
 // Generated, never hand-maintained, for the same reason ARCHITECTURE.md is: a fact that is not in
 // a manifest cannot appear here, so the page cannot drift from the tree.
 //
-// WHAT IS DELIBERATELY NOT RENDERED, and this is the interesting part:
-//
-//   graph.*        node counts and the stale list come from graphify-out/, which is untracked.
-//                  A fresh clone cannot reproduce them, so publishing them would put a number on
-//                  the page that nobody can check — the exact property #7 fixed for ports.
-//   units[].code   same reason: per-unit file and node counts come from that graph.
-//
-// Everything that remains traces to a tracked manifest: service.toml for kind/port/requires,
+// Everything here traces to a tracked manifest: service.toml for kind/port/requires,
 // upstreams.toml for the verdict, and tools/self's own coupling scan over Cargo.toml and
 // source imports.
 //
@@ -167,8 +160,7 @@ ${counts.map(([k, n]) => `    <li><strong>${n}</strong> ${esc(KIND_LABEL[k].toLo
 ${renderUnits(model.units)}
 ${renderCoupling(model.coupling)}
 ${renderUpstreams(model.upstreams)}`,
-    footer: `  <p>Generated from <code>self.json</code> (schema ${esc(model.schema)}, written by <code>${esc(model.generator)}</code>) and rendered by <code>tools/generate-site.ts</code>. Nothing here is hand-maintained.</p>
-  <p>Code-graph counts and the per-unit file counts in <code>self.json</code> are deliberately absent: they come from an untracked artifact, so a fresh clone cannot reproduce them, and a number nobody can check does not belong on a page like this.</p>`,
+    footer: `  <p>Generated from <code>self.json</code> (schema ${esc(model.schema)}, written by <code>${esc(model.generator)}</code>) and rendered by <code>tools/generate-site.ts</code>. Nothing here is hand-maintained.</p>`,
   });
 }
 
@@ -193,11 +185,6 @@ function main(): void {
   const model = JSON.parse(readFileSync(selfPath, "utf8")) as SelfModel;
   // A schema bump means the shape this renderer reads may have moved under it. Fail rather than
   // publish a page built from assumptions about fields that no longer mean what they did.
-  //
-  // Schema 2 (2026-09-29) dropped the per-unit `code` counts and the `graph` block. This renderer
-  // never read either — it refused to publish them, for the reason written above — so the artifact
-  // has caught up with the page rather than the other way round, and every field read below is
-  // unchanged. Only the accepted version moves.
   if (model.schema !== 2) {
     console.error(`generate-site: self.json is schema ${model.schema}, this renderer knows schema 2`);
     process.exit(1);

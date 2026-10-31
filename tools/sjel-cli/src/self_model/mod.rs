@@ -1,5 +1,5 @@
 //! `tools/self` — Sjel's self-model: what this repository contains, what is wired to what, where
-//! each upstream stands, and how much code each unit holds. One committed artifact (`self.json`)
+//! and where each upstream stands. One committed artifact (`self.json`)
 //! plus a query surface over it. Ported from `tools/self.ts` and `tools/lib/self-model.ts` on
 //! 2026-10-04; `model.rs` is the pure half.
 //!
@@ -8,16 +8,15 @@
 //!   committed   structure, provenance and coupling — all derived from tracked files, so two
 //!               runs on an unchanged tree are byte-identical and the artifact survives a fresh
 //!               clone.
-//!   fused       per-unit code counts and the graph accounting (both rolled up from
-//!               `graphify-out/`, which is git-ignored and machine-local), live process health
-//!               (sjel-status owns it) and open issue counts (the tracker owns them).
+//!   fused       live process health (sjel-status owns it) and open issue counts (the tracker
+//!               owns them).
 //!
 //! Nothing fused is ever written into the artifact. `tools/doctor` runs `tools/self check` on
 //! every invocation, which is why this moved: it was a bun start-up inside a Rust tool's path.
 //!
 //!   tools/self generate          regenerate self.json from the working tree
 //!   tools/self status            one row per unit (--online adds open issue counts)
-//!   tools/self explain <unit>    wiring, code size, provenance for one unit
+//!   tools/self explain <unit>    wiring and provenance for one unit
 //!   tools/self coupling          what is compiled into what, with evidence
 //!   tools/self check             is the committed self.json still current?
 //!   tools/self -h                this help
@@ -36,25 +35,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use model::{
-    coupling_from_cargo, coupling_from_rust_path, merge_coupling, roll_up, GraphNode,
-    MergedCoupling, SourceCoupling, UnitKind,
+    coupling_from_cargo, coupling_from_rust_path, merge_coupling, MergedCoupling, SourceCoupling,
+    UnitKind,
 };
 
 const HELP: &str = "\
-tools/self — Sjel's self-model: structure, coupling, provenance, code size.
+tools/self — Sjel's self-model: structure, coupling, provenance.
 
   tools/self generate          regenerate self.json from the working tree
   tools/self status            one row per unit (--online adds open issue counts)
-  tools/self explain <unit>    wiring, code size, provenance for one unit
+  tools/self explain <unit>    wiring and provenance for one unit
   tools/self coupling          what is compiled into what, with evidence
   tools/self check             is the committed self.json still current? (exit 1 if not)
 
   --json                       machine-readable output for status/explain/coupling
   --out <path>                 generate writes there instead of self.json
   --against <path>             check this tree against that artifact instead of self.json
-
-Code size is fused on read from graphify-out/, which is git-ignored: status and explain show it
-where a graph exists, and self.json never carries it. Run tools/graphify.sh to build one.
 ";
 
 /// The artifact's shape. Bump `schema` when a consumer would need to care.
@@ -93,23 +89,6 @@ pub struct Service {
 pub struct Upstream {
     pub name: String,
     pub verdict: String,
-}
-
-/// Per-unit code counts and the graph accounting. Fused on read, never committed.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeLayer {
-    pub by_unit: BTreeMap<String, CodeCount>,
-    pub nodes: usize,
-    pub external: usize,
-    /// Paths the graph still holds a node for and the tree no longer has.
-    pub stale: Vec<String>,
-    pub unmatched: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CodeCount {
-    pub files: usize,
-    pub nodes: usize,
 }
 
 pub fn run(args: &[String]) -> ExitCode {
@@ -279,10 +258,6 @@ fn query(
             .map_err(|error| format!("{}: {error}", self_json.display()))?,
         Err(_) => build(root)?,
     };
-    // Fused on read: absent on any machine that has not built graphify-out/. Status and explain
-    // degrade to a dash rather than to a number nobody can check.
-    let code = read_code_layer(root);
-
     match cmd {
         "coupling" => {
             if want_json {
@@ -322,15 +297,11 @@ fn query(
                     known.join(", ")
                 ));
             };
-            let counts = code
-                .as_ref()
-                .and_then(|layer| layer.by_unit.get(&unit.name));
             if want_json {
                 let payload = ExplainJson {
                     name: &unit.name,
                     kind: &unit.kind,
                     service: unit.service.as_ref(),
-                    code: counts,
                 };
                 println!(
                     "{}",
@@ -339,12 +310,6 @@ fn query(
                 return Ok(0);
             }
             println!("{} ({})", unit.name, unit.kind.as_str());
-            if let Some(counts) = counts {
-                println!(
-                    "  code       {} files, {} graph nodes",
-                    counts.files, counts.nodes
-                );
-            }
             if let Some(service) = &unit.service {
                 let port = service
                     .port
@@ -404,7 +369,6 @@ fn query(
                     units: &model.units,
                     coupling: &model.coupling,
                     upstreams: &model.upstreams,
-                    code: code.as_ref().map(|layer| &layer.by_unit),
                     work: work.as_ref().map(|work| &work.counts),
                 };
                 println!(
@@ -414,33 +378,19 @@ fn query(
                 return Ok(0);
             }
             println!(
-                "Sjel self-model — {} units, {} coupling pairs",
+                "Sjel self-model — {} units, {} coupling pairs\n",
                 model.units.len(),
                 model.coupling.len()
             );
-            match &code {
-                Some(layer) => println!(
-                    "Code graph: {} nodes, {} external, {} stale\n",
-                    layer.nodes,
-                    layer.external,
-                    layer.stale.len()
-                ),
-                None => println!("Code graph: absent (run tools/graphify.sh)\n"),
-            }
             let mut header = format!(
-                "  {:18}{:12}{:>6}{:>7}{:>12}",
-                "unit", "kind", "files", "port", "requires"
+                "  {:18}{:12}{:>7}{:>12}",
+                "unit", "kind", "port", "requires"
             );
             if work.is_some() {
                 header.push_str("   open");
             }
             println!("{header}");
             for unit in &model.units {
-                let files = code
-                    .as_ref()
-                    .and_then(|layer| layer.by_unit.get(&unit.name))
-                    .map(|counts| counts.files.to_string())
-                    .unwrap_or_else(|| "—".to_string());
                 let port = unit
                     .service
                     .as_ref()
@@ -458,10 +408,9 @@ fn query(
                     })
                     .unwrap_or_else(|| "—".to_string());
                 let mut row = format!(
-                    "  {:18}{:12}{:>6}{:>7}{:>12}",
+                    "  {:18}{:12}{:>7}{:>12}",
                     unit.name,
                     unit.kind.as_str(),
-                    files,
                     port,
                     requires
                 );
@@ -476,20 +425,12 @@ fn query(
             if let Some(work) = &work {
                 println!("\n  {} open issues match no unit prefix.", work.unmatched);
             }
-            if let Some(layer) = &code {
-                if !layer.stale.is_empty() {
-                    println!(
-                        "\n  ⚠ {} graph paths no longer exist — run tools/graphify.sh",
-                        layer.stale.len()
-                    );
-                }
-            }
             Ok(0)
         }
     }
 }
 
-/// `status --json` carries the artifact plus the two fused layers.
+/// `status --json` carries the artifact plus the open-issue layer.
 #[derive(Serialize)]
 struct StatusJson<'a> {
     schema: u32,
@@ -497,19 +438,16 @@ struct StatusJson<'a> {
     units: &'a [Unit],
     coupling: &'a [MergedCoupling],
     upstreams: &'a [Upstream],
-    code: Option<&'a BTreeMap<String, CodeCount>>,
     work: Option<&'a BTreeMap<String, usize>>,
 }
 
-/// `explain --json` is the unit with its counts, when a graph exists.
+/// `explain --json` is the unit and its service.
 #[derive(Serialize)]
 struct ExplainJson<'a> {
     name: &'a str,
     kind: &'a UnitKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     service: Option<&'a Service>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    code: Option<&'a CodeCount>,
 }
 
 /// Stable stringify: the struct field order above IS the artifact's key order, so two runs on an
@@ -535,7 +473,7 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Public-safe graph input boundary: only Git-tracked paths may become internal metadata.
+/// Only Git-tracked paths may become committed metadata.
 fn read_tracked_paths(root: &Path) -> BTreeSet<String> {
     git(root, &["ls-files", "-z"])
         .map(|text| {
@@ -651,47 +589,6 @@ fn read_upstreams(root: &Path) -> Vec<Upstream> {
     out
 }
 
-/// The per-unit code counts and the graph accounting, read from `graphify-out/graph.json`.
-///
-/// `SJEL_SELF_GRAPH` is a test seam: the obvious way to probe this rollup is to plant a graph,
-/// and on this machine `graphify-out/` holds a real one that took a run to build, so a test that
-/// wrote there to prove something would destroy the thing it was protecting.
-fn read_code_layer(root: &Path) -> Option<CodeLayer> {
-    let path = std::env::var("SJEL_SELF_GRAPH")
-        .ok()
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("graphify-out").join("graph.json"));
-    let text = fs::read_to_string(path).ok()?;
-    let parsed: Value = serde_json::from_str(&text).ok()?;
-    let nodes: Vec<GraphNode> = parsed
-        .get("nodes")
-        .cloned()
-        .and_then(|nodes| serde_json::from_value(nodes).ok())
-        .unwrap_or_default();
-    let tracked = read_tracked_paths(root);
-    let tracked_predicate = |path: &str| tracked.contains(path);
-    let exists_predicate = |path: &str| root.join(path).exists();
-    let rollup = roll_up(&nodes, &tracked_predicate, &exists_predicate);
-    let mut by_unit = BTreeMap::new();
-    for unit in &rollup.units {
-        by_unit.insert(
-            unit.name.clone(),
-            CodeCount {
-                files: unit.files,
-                nodes: unit.nodes,
-            },
-        );
-    }
-    Some(CodeLayer {
-        by_unit,
-        nodes: rollup.admitted_nodes,
-        external: rollup.buckets.external,
-        stale: rollup.buckets.stale,
-        unmatched: rollup.buckets.unmatched,
-    })
-}
-
 struct Work {
     counts: BTreeMap<String, usize>,
     unmatched: usize,
@@ -744,9 +641,7 @@ fn build(root: &Path) -> Result<SelfModel, String> {
     let tracked = read_tracked_paths(root);
     let declared = read_declared_services(root, &tracked);
 
-    // The unit inventory comes from the tracked tree, never from the code graph: deriving it from
-    // the graph made the whole artifact depend on git-ignored graphify-out/, and a fresh clone
-    // silently collapsed the unit list.
+    // The unit inventory comes from the tracked tree, so a fresh clone sees every unit.
     let mut kind_by_unit: BTreeMap<String, UnitKind> = BTreeMap::new();
     add_unit_dirs(
         root,

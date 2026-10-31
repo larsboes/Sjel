@@ -37,7 +37,7 @@ names the rest.
 | 18 | `/settings` | Ported | `Settings` | behind `Today` | local state |
 | 19 | `/systems` | Ported | `SystemsPage` | none | `sjel-status`, `macmon` |
 | 20 | `/packs` | Ported | `PacksPage` | none | `tools/harnesses` |
-| 21 | `/self` | Ported | `SelfPage` | none | `self.json`, Graphify |
+| 21 | `/self` | Ported | `SelfPage` | none | `self.json` |
 | 22 | `/cv` | Ported | `CvPage` | none | `cv` CLI |
 | 23 | `/media` | Ported | `MediaPage` | none | `media` |
 | 24 | `/research` | Ported | `ResearchPage` | none | `research/`, `upstreams.toml` |

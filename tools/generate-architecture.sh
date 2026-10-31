@@ -261,16 +261,6 @@ rebase_readme_links() {
   echo '```'
   echo
 
-  echo "## Code-level dependency graph (local, on demand)"
-  echo
-  echo "The graph above is manifest-derived and coarse on purpose (Packs/capabilities/images,"
-  echo "not functions). For a real, file-and-function-level code graph, run"
-  echo "\`tools/graphify.sh\` — output lands in \`graphify-out/\`,"
-  echo "git-ignored and never embedded here: graphify's node ids are slugified from this"
-  echo "machine's absolute path, so committing any of it would leak that path into a public"
-  echo "repo. See tools/graphify.sh."
-  echo
-
 } > "$OUT"
 
 echo "wrote $OUT"

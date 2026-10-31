@@ -328,62 +328,6 @@ else
   echo "  Apply them later with: tools/claude-code-config/claude-code-config"
 fi
 
-# 6b) Agent-harness integrations shipped by adopted upstreams (graphify's skill + hook
-# today). Offered here because this is the "AI assistants" region of the install — right
-# after Packs and the Claude Code baseline — and because the alternative is what actually
-# happened before: you run an upstream's own installer by hand, from whatever directory
-# you were standing in, and it writes a project-local integration somewhere it can never
-# fire from. Driving it through this script, from a scratch cwd, is the fix.
-#
-# Detection-driven and non-interactive-safe: with no harness config dir present it prints
-# a line and moves on. Never installs without being asked — `read` is skipped on non-TTY
-# the same way the capability prompt below is.
-echo
-echo "Agent-harness integrations (each upstream's own installer, at its latest release):"
-AI_STATE="$("$TOOLS_DIR/agent-integrations.sh" status --machine)"
-echo "$AI_STATE" | sed 's/^/  /'
-
-AI_INSTALL_TARGETS=()
-AI_INSTALL_COMMANDS=()
-AI_HAS_REAL_GRAPH="no"
-while IFS='|' read -r AI_HARNESS AI_STATE_NAME _ _ _ _ _ _ _ AI_GRAPH_STATE _ _ _ _ AI_INSTALL_COMMAND; do
-  [ -n "$AI_HARNESS" ] || continue
-  if [ "$AI_GRAPH_STATE" = "present" ]; then
-    AI_HAS_REAL_GRAPH="yes"
-  fi
-  if [ "$AI_GRAPH_STATE" != "present" ] || { [ "$AI_STATE_NAME" != "runnable" ] && [ "$AI_STATE_NAME" != "configured" ] && [ "$AI_STATE_NAME" != "stale" ]; }; then
-    continue
-  fi
-  AI_INSTALL_TARGETS+=( "$AI_HARNESS" )
-  [ -n "$AI_INSTALL_COMMAND" ] || AI_INSTALL_COMMAND="tools/agent-integrations.sh install ${AI_HARNESS}"
-  AI_INSTALL_COMMANDS+=( "$AI_INSTALL_COMMAND" )
-done <<< "$AI_STATE"
-
-if [ -t 0 ]; then
-  if [ "${AI_HAS_REAL_GRAPH}" = "yes" ] && [ "${#AI_INSTALL_TARGETS[@]}" -gt 0 ]; then
-    AI_INSTALL_TARGETS_JOINED="${AI_INSTALL_TARGETS[*]}"
-    read -r -p "Install suggested integrations for: [${AI_INSTALL_TARGETS_JOINED}]? [y/N]: " AI_INPUT
-    case "${AI_INPUT:-n}" in
-      y|Y|yes)
-        echo "  Exact commands:"
-        for AI_INSTALL_COMMAND in "${AI_INSTALL_COMMANDS[@]}"; do
-          echo "  - $AI_INSTALL_COMMAND"
-        done
-        "$TOOLS_DIR/agent-integrations.sh" install "${AI_INSTALL_TARGETS[@]}" || \
-          echo "  (integration step failed — re-run: tools/agent-integrations.sh install --all-configured)"
-        ;;
-      *) echo "  Skipped. Later: tools/agent-integrations.sh install --all-configured" ;;
-    esac
-  elif [ "${AI_HAS_REAL_GRAPH}" = "yes" ]; then
-    echo "  No detected or stale assistant harnesses need action."
-  else
-    echo "  Skipped. No real graph detected at graphify-out/graph.json."
-    echo "  Generate a graph first with tools/graphify.sh, then run: tools/agent-integrations.sh install --all-configured"
-  fi
-else
-  echo "  Non-interactive — skipped. Later: tools/agent-integrations.sh install --all-configured"
-fi
-
 # 7) Laptop-wide Bun/npm resolution policy — opt-in because this affects projects outside Sjel.
 # The two Sjel UI trees carry the same 24-hour hold in tracked bunfig.toml files. This optional
 # copy covers other projects on THIS machine and is deliberately hold-only: the Socket scanner

@@ -114,7 +114,6 @@ export interface SelfUnit {
   name: string;
   kind: 'capability' | 'lib' | 'spine' | 'pack' | 'unknown';
   service?: { kind: string; port?: string; requires: string[]; image?: string };
-  code?: { files: number; nodes: number };
 }
 
 /** Compile-time coupling: what is pulled into what. Not `requires`, which is runtime. */
@@ -131,9 +130,6 @@ export interface SelfModel {
   units: SelfUnit[];
   coupling: SelfCoupling[];
   upstreams: Array<{ name: string; verdict: string }>;
-  /** Fused on read by the CLI where graphify-out/ exists; self.json, which this endpoint
-   *  serves as-is, never carries it (tools/sjel-cli/src/self_model/mod.rs). */
-  graph?: { present: boolean; nodes: number; external: number; stale: string[]; unmatched: string[] };
 }
 
 /**
@@ -805,38 +801,6 @@ export const sjelStatus = {
       `/sjel-status/api/sjel-status/capabilities/${encodeURIComponent(name)}/restart`,
       { method: 'POST' },
     ),
-};
-
-/** One graphify node inside a unit: a file or a symbol the extractor found. */
-export interface UnitGraphNode {
-  id: string;
-  label: string;
-  source_file: string;
-  file_type: string;
-  community: number;
-}
-
-/**
- * One unit's slice of the graphify graph, capped by the server.
- *
- * `total` and `truncated` are the honest part of the contract: the full graph
- * is thousands of nodes, a drill-down returns the busiest few hundred, and a
- * reader has to be able to tell a complete unit from a sampled one.
- */
-export interface UnitGraph {
-  unit: string;
-  prefixes: string[];
-  total: number;
-  returned: number;
-  truncated: boolean;
-  cap: number;
-  nodes: UnitGraphNode[];
-  edges: Array<{ from: string; to: string; label?: string }>;
-}
-
-export const knowledgeGraph = {
-  unit: (name: string) =>
-    request<UnitGraph>(`/knowledge-graph/api/graph/unit/${encodeURIComponent(name)}`),
 };
 
 /** One sample from macmon pipe/serve. Every field present on Apple Silicon. */

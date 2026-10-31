@@ -128,15 +128,7 @@ fn spawn_background_refresh() {
 /// behind a button for something that already has one — the two-owners failure `tools/host-patch.sh`
 /// names. `brew`, `uv` and `rustup` ARE here because asking for them delegates straight back to
 /// `tools/host-patch.sh`; the tool never runs a package manager it does not own.
-pub(crate) const APPLY_CLASSES: &[&str] = &[
-    "brew",
-    "uv",
-    "rustup",
-    "graphify",
-    "interceptor",
-    "cargo",
-    "npm",
-];
+pub(crate) const APPLY_CLASSES: &[&str] = &["brew", "uv", "rustup", "interceptor", "cargo", "npm"];
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 pub(crate) struct ApplyRequest {

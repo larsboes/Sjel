@@ -7,9 +7,7 @@
       "kind": "lib",
       "service": {
         "kind": "process",
-        "requires": [
-          "knowledge-graph"
-        ],
+        "requires": [],
         "port": "8108"
       }
     },
@@ -278,15 +276,6 @@
       "service": {
         "kind": "data",
         "requires": []
-      }
-    },
-    {
-      "name": "knowledge-graph",
-      "kind": "capability",
-      "service": {
-        "kind": "process",
-        "requires": [],
-        "port": "4244"
       }
     },
     {
@@ -2796,7 +2785,7 @@
     },
     {
       "name": "graphify",
-      "verdict": "adopt"
+      "verdict": "reject"
     },
     {
       "name": "grype",

@@ -105,9 +105,9 @@ import Testing
     let bridge = NodeBridge(token: CachedToken(read: { .token("t") }))
 
     @Test func aCapabilityNameBecomesOnePathSegment() throws {
-        let request = try #require(bridge.lifecycleRequest("knowledge-graph", false))
+        let request = try #require(bridge.lifecycleRequest("knowledge-base", false))
         #expect(request.httpMethod == "POST")
-        #expect(request.url?.path == "/api/sjel-status/capabilities/knowledge-graph/stop")
+        #expect(request.url?.path == "/api/sjel-status/capabilities/knowledge-base/stop")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer t")
 
         let restart = try #require(bridge.lifecycleRequest("projects", action: "restart"))

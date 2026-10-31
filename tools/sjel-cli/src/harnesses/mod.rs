@@ -858,7 +858,7 @@ struct Stray {
 /// A marker that says some other installer owns this directory. Promoting one of these would
 /// fork it: the clone re-syncs from its own remote and the tool install rewrites the directory
 /// on upgrade.
-const EXTERNAL_MARKERS: [&str; 2] = [".git", ".graphify_version"];
+const EXTERNAL_MARKERS: [&str; 1] = [".git"];
 
 /// Skill directories at a harness destination that no Pack ledger claims.
 fn foreign_at(harness: &Harness) -> Result<Vec<Stray>, String> {

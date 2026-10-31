@@ -242,7 +242,7 @@ Candidates for isolated per-agent databases. None is approved because Turso docu
 |---|---|---|
 | [AgentFS](https://docs.turso.tech/agentfs/introduction) | Per-agent files, KV state, tool-call trace, copy-on-write workspaces | Beta. Check maturity, licence, isolation and backup fit. MCP exposure only through an allowlist. |
 | [AI memory](https://docs.turso.tech/guides/ai-memory) | Durable agent memories with correction history | Measure usefulness and stale-memory correction against current context sources. |
-| [Code indexing](https://docs.turso.tech/guides/code-indexing) | Incremental symbol and chunk index | Only if it fills a measured gap next to Graphify. |
+| [Code indexing](https://docs.turso.tech/guides/code-indexing) | Incremental symbol and chunk index | Only if it fills a measured gap next to `rg` and `sjel search`. |
 | [Content caching](https://docs.turso.tech/guides/content-caching) | Skip rereading unchanged files | Measure tokens saved. A cache never skips a security or freshness check. |
 | [Secrets vault](https://docs.turso.tech/guides/secrets-vault) | Secret metadata and access audit | Values stay in the keychain (§2). |
 

@@ -239,8 +239,8 @@ struct BackendDecl {
     base_url: Option<String>,
     api_key_file: Option<String>,
     api_key_credential_id: Option<String>,
-    /// The backend's OWN model, not a role's. `tools/graphify.sh` reads this when it has no role
-    /// to ask, and nothing checked it until 2026-10-24 — see the backend pass in [`report`].
+    /// The backend's OWN model, not a role's: what a tool reads when it has no role to ask. See
+    /// the backend pass in [`report`].
     model: Option<String>,
 }
 
@@ -357,13 +357,8 @@ pub fn report(opts: &Options, overlay: &Path) -> Result<Outcome, String> {
     // Every model this machine names, in the order a reader wants them: the roles the file declares,
     // then the backends carrying a model of their own.
     //
-    // That second half exists because it was checked by NOTHING. A backend's `model` is what a tool
-    // reads when it has no role to ask, and `tools/graphify.sh` takes its model from exactly there
-    // (`_comment_backends` in inference.json says so in as many words). On 2026-10-24 that field
-    // still named `deepseek-ai/deepseek-v4-flash`, retired 2026-08-07, and nothing noticed for two
-    // and a half months: this tool iterated roles only, and graphify's probe asks the provider's
-    // /models endpoint, which kept answering. The chain picked a dead model, all 126 semantic
-    // chunks failed, and the run wrote a partial graph and exited 1.
+    // A backend's `model` is what a tool reads when it has no role to ask, so a retired model
+    // there fails silently unless this pass checks it too.
     struct Check {
         label: String,
         backend: String,
@@ -922,10 +917,8 @@ impl Checker<'_> {
 mod tests {
     use super::*;
 
-    /// The field that was invisible. A backend's OWN `model` is what a tool reads when it has no
-    /// role to ask, and `tools/graphify.sh` sends exactly this one. On 2026-10-24 it named
-    /// `deepseek-ai/deepseek-v4-flash`, retired 2026-08-07, and nothing in the toolchain had read
-    /// it since: `read_config` did not even parse it, so no amount of checking roles could find it.
+    /// A backend's OWN `model` is what a tool reads when it has no role to ask, so `read_config`
+    /// must parse it or no check of the roles can find a retired one.
     #[test]
     fn read_config_keeps_each_backends_own_model() {
         let root = std::env::temp_dir().join(format!("sjel-model-check-{}", std::process::id()));

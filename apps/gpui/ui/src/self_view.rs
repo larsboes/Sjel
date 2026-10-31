@@ -99,11 +99,6 @@ impl SelfPage {
         let units_count = model.units.len();
         let coupling_count = model.coupling.len();
         let upstreams_count = model.upstreams.len();
-        let graph_nodes = model
-            .graph
-            .as_ref()
-            .map(|g| g.nodes.to_string())
-            .unwrap_or_else(|| "—".into());
 
         let stat_item = |label: &'static str, value: String| {
             div()
@@ -127,7 +122,6 @@ impl SelfPage {
                 .justify_between()
                 .child(stat_item("Units", units_count.to_string()))
                 .child(stat_item("Couplings", coupling_count.to_string()))
-                .child(stat_item("Graph Nodes", graph_nodes))
                 .child(stat_item("Upstreams", upstreams_count.to_string()))
                 .into_any_element(),
             palette,

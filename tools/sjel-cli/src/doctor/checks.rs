@@ -728,11 +728,6 @@ fn integrations(ctx: &mut Ctx) {
                 .unwrap_or_else(|| d.to_owned())
         };
         let name = or("name", "unknown");
-        let upstream = if upstream.is_empty() {
-            "graphify".to_owned()
-        } else {
-            upstream
-        };
         let state = or("state", "unknown");
         let install = or(
             "install_command",
@@ -744,17 +739,13 @@ fn integrations(ctx: &mut Ctx) {
             .filter(|s| !s.is_empty())
             .map(|d| format!(" ({d})"))
             .unwrap_or_default();
-        let graph = or("graph_state", "unknown");
         let command = or("command", "unknown");
         let version = Some(jtext(&item, "command_version"))
             .filter(|s| !s.is_empty())
             .map(|v| format!(" ({v})"))
             .unwrap_or_default();
-        let suffix = format!("graph={graph}; command={command}{version}");
+        let suffix = format!("command={command}{version}");
         match state.as_str() {
-            "integrated" if upstream == "graphify" && graph != "present" => {
-                ctx.warn(format!("{name}: {state}{location}; {suffix}; check graph with tools/graphify.sh"));
-            }
             "integrated" => ctx.ok(format!("{name}: {state}{location}; {suffix}")),
             "runnable" => ctx.warn(format!("{name}: {state}{location}; {suffix}; install with: {install}")),
             "configured" => ctx.warn(format!("{name}: {state}{location}; {suffix}; install command failed partially — check: {install}")),

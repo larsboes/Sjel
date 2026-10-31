@@ -122,14 +122,6 @@ pub static SURFACES: &[Surface] = &[
         why: "the harnesses self-update but the packages beside them do not, and nothing ran `npm outdated -g`",
     },
     Surface {
-        id: "graphify",
-        title: "graphify harness integration",
-        owner: Owner::Manual,
-        owner_detail: "tools/agent-integrations.sh update graphify",
-        actionable: true,
-        why: "the binary is a uv tool and moves nightly; the skill/plugin files upstream's installer wrote into each harness are re-derived only when this verb is run",
-    },
-    Surface {
         id: "interceptor",
         title: "interceptor CLI and skills",
         owner: Owner::Manual,
@@ -460,31 +452,31 @@ pub fn gather_containers(ctx: &Ctx) -> Vec<Row> {
     ))]
 }
 
-/// graphify and interceptor integrations. Both markers record the DATE of the last
+/// The interceptor integration. Its marker records the DATE of the last
 /// re-derivation, never a version (Q77 deleted every pin), so there is nothing to compare — the
 /// row states the date it read. The harness config dirs come from agent-integrations' own JSON
 /// rather than a table here: a second copy of that mapping would drift the day a harness is added.
 pub fn gather_integrations(ctx: &Ctx) -> Vec<Row> {
     let script = format!("{}/tools/agent-integrations.sh", ctx.root);
     if !Path::new(&script).exists() {
-        return vec![Row::new("graphify", Status::Unknown)
+        return vec![Row::new("interceptor", Status::Unknown)
             .name("integration")
             .note("tools/agent-integrations.sh is missing")];
     }
     let res = ctx.run(&[&script, "status", "--json"]);
     if res.code != 0 {
-        return vec![Row::new("graphify", Status::Unknown)
+        return vec![Row::new("interceptor", Status::Unknown)
             .name("integration")
             .note("agent-integrations status failed")];
     }
     let Ok(payload) = serde_json::from_str::<serde_json::Value>(&res.stdout) else {
-        return vec![Row::new("graphify", Status::Unknown)
+        return vec![Row::new("interceptor", Status::Unknown)
             .name("integration")
             .note("agent-integrations emitted no JSON")];
     };
 
     let mut out = Vec::new();
-    for id in ["graphify", "interceptor"] {
+    for id in ["interceptor"] {
         let entry = payload
             .get("integrations")
             .and_then(serde_json::Value::as_array)
@@ -505,11 +497,7 @@ pub fn gather_integrations(ctx: &Ctx) -> Vec<Row> {
             );
             continue;
         }
-        let marker_name = if id == "graphify" {
-            ".graphify-upstream-installed"
-        } else {
-            ".interceptor-skills-axoned"
-        };
+        let marker_name = ".interceptor-skills-axoned";
         let mut oldest_days: Option<i64> = None;
         let mut oldest_date = String::new();
         for h in &harnesses {
@@ -1306,7 +1294,7 @@ pub fn plan_apply(rows: &[Row], only: &[String], ctx: &Ctx, opts: &PlanOpts) -> 
             note: None,
         });
     }
-    for id in ["graphify", "interceptor"] {
+    for id in ["interceptor"] {
         if !wanted(id) || !stale.iter().any(|r| r.surface == id) {
             continue;
         }
@@ -1721,9 +1709,9 @@ mod tests {
             Row::new("npm", Status::Stale)
                 .name("pnpm")
                 .action("npm install -g pnpm@latest"),
-            Row::new("graphify", Status::Stale)
+            Row::new("interceptor", Status::Stale)
                 .name("harness integration")
-                .action("tools/agent-integrations.sh update graphify"),
+                .action("tools/agent-integrations.sh update interceptor"),
         ]
     }
 
@@ -1758,10 +1746,10 @@ mod tests {
         assert_eq!(
             steps
                 .iter()
-                .find(|s| s.surface_id == "graphify")
+                .find(|s| s.surface_id == "interceptor")
                 .unwrap()
                 .argv,
-            vec!["/repo/tools/agent-integrations.sh", "update", "graphify"]
+            vec!["/repo/tools/agent-integrations.sh", "update", "interceptor"]
         );
     }
 

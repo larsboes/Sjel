@@ -10,7 +10,6 @@ does not automatically block unrelated work.
 | Dirty worktree | Preserve all changes, identify ownership, and avoid switching or rewriting overlapping files. |
 | Live capability | Use registry and logs to diagnose; never substitute a remembered port or claim an API check passed. |
 | `tools/self` or stale `self.json` | Read the target manifests and tracked files directly; report the unavailable self-model layer. |
-| Graphify | Use `tools/self`, `rg`, manifests, and source navigation. Graphify is optional. |
 | GitHub metadata | Continue local analysis, mark issue or PR state unverified, and do not infer it from commits. |
 | Build tool or dependency | Run narrower available checks and report exactly what remains unvalidated. |
 | Doctor failure | Treat each finding independently; fix only findings inside the issue scope. |

@@ -1526,10 +1526,7 @@ fn newest_rust_source(root: &Path) -> Option<SystemTime> {
             if kind.is_dir() {
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
-                if matches!(
-                    name.as_ref(),
-                    "target" | "node_modules" | ".git" | "graphify-out"
-                ) {
+                if matches!(name.as_ref(), "target" | "node_modules" | ".git") {
                     continue;
                 }
                 stack.push(entry.path());

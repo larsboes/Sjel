@@ -112,8 +112,6 @@ kind  = "platform"
 local = "yes"
 why   = "Personalization + tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Sjel held a reviewed delta against it until 2026-08-25 and holds none now — see upstreams.toml's [lifeos] entry, which owns the last consumed pin and the reason it stopped. Ideas flow from here into Sjel."
 
-# ---- graphify semantic-extraction backends (tools/graphify.sh) ------------
-
 [ollama]
 url   = "https://ollama.com/"
 kind  = "tool"
@@ -147,7 +145,7 @@ why   = "the OS framework rung 2 of the extraction ladder stands on (PRD Q63 -> 
 url   = "https://opencode.ai/zen/go/v1"
 kind  = "service"
 local = "no"
-why   = "OpenAI-compatible hosted inference, the paid fallback behind nvidia-nim for tools/graphify.sh semantic extraction. NOT free despite the tier name: models.dev lists 24 models on it and zero at zero cost, cheapest gpt-5.6-luna at $0.10/M in and $0.60/M out, which is roughly eight cents for a full extraction over this repo. What it buys over the free tier is context -- several models carry 1M-token windows, so the chunk budget stops being a constraint at all. Endpoint id and model list resolved from models.dev, the same registry opencode itself reads; the account is the existing opencode-go auth. Key via Vaultwarden and tools/materialize-inference-key, never inline."
+why   = "OpenAI-compatible hosted inference, a paid fallback behind nvidia-nim. NOT free despite the tier name: models.dev lists 24 models on it and zero at zero cost, cheapest gpt-5.6-luna at $0.10/M in and $0.60/M out, which is roughly eight cents for a full extraction over this repo. What it buys over the free tier is context -- several models carry 1M-token windows, so the chunk budget stops being a constraint at all. Endpoint id and model list resolved from models.dev, the same registry opencode itself reads; the account is the existing opencode-go auth. Key via Vaultwarden and tools/materialize-inference-key, never inline."
 
 [gemini]
 url   = "https://generativelanguage.googleapis.com/"
@@ -177,4 +175,4 @@ why   = "Free-tier hosted inference (OpenAI-compatible /v1/chat/completions) beh
 url   = "https://build.nvidia.com/"
 kind  = "service"
 local = "no"
-why   = "Free-tier hosted inference (OpenAI-compatible /v1/chat/completions, nvapi- key, 1000 credits, 40 req/min, no card) -- optional cloud fallback for tools/graphify.sh (GRAPHIFY_BACKEND=nvidia) when local model quality isn't enough. Dev/research/eval ToS only, not a production SLA. API key provisioned manually via Vaultwarden, never by an agent -- see tools/graphify.sh."
+why   = "Free-tier hosted inference (OpenAI-compatible /v1/chat/completions, nvapi- key, 1000 credits, 40 req/min, no card) -- optional cloud fallback when local model quality isn't enough. Dev/research/eval ToS only, not a production SLA. API key provisioned manually via Vaultwarden, never by an agent."

@@ -16,4 +16,3 @@ build       = ["cargo", "build", "--locked", "--release", "--bin", "agent-server
 port        = "8108"
 health_path = "/health"
 ready_path  = "/ready"
-requires    = ["knowledge-graph"]

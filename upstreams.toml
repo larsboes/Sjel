@@ -22,8 +22,8 @@
 # AGENT-FACING TOOLING IS THE EXCEPTION (Lars, 2026-10-24). A skill, or the files a tool writes
 #   for agents, lands only after tools/intake reads it: fixed rules decide, a model review on a
 #   c0 role can only add findings, and a held release waits for `tools/intake approve`. That
-#   covers tools/skills add|update and graphify, which runs at the release tools/intake
-#   approved (machine state in ~/.local/state/sjel/intake, not a pin in this file).
+#   covers tools/skills add|update (approval state in ~/.local/state/sjel/intake, not a pin in
+#   this file).
 # Dated documents that cite a version -- the `why` strings below, capabilities/comms/eval/results/,
 #   a capability README quoting an evaluated model revision -- record what was MEASURED on that
 #   date. They are left as written: rewriting a measurement to match a later rule falsifies it.
@@ -501,10 +501,10 @@ why = "RETIRED 2026-08-25 by PRD Q44 with the rest of Bazel. It supplied sh_bina
 
 [graphify]
 url = "https://github.com/Graphify-Labs/graphify"
-verdict = "adopt"
+verdict = "reject"
 license = "Apache-2.0 from 0.9.25 on -- upstream relicensed there, keeping LICENSE-MIT and a NOTICE covering contributions made before it, so releases at or below 0.9.24 are MIT. The 2026-08-06 bump from 0.9.19 crossed that line deliberately; this field named MIT until then and the divergence was recorded in advance precisely so the crossing could not happen silently. Tracking latest since Q77 (2026-09-02) keeps it on the Apache-2.0 side, and a further relicence upstream would land here unannounced -- the licence of a running dependency is now something to re-read, not something a version literal freezes. Neither license raises a compatibility question here -- graphify runs as a separate process under `uv tool run` and is never vendored, so Sjel's own MIT licensing is untouched either way"
-summary = "Code dependency graph tool that Sjel runs for its knowledge graph and agent integrations"
-why = "code-dependency-graph extraction for tools/graphify.sh, and the source of the agent integrations tools/agent-integrations.sh installs. Consumed via `uv tool run --from graphifyy` (CONTRIBUTING.md#language-tooling), which resolves the LATEST release on every run since Q77 (2026-09-02) -- still deliberately NOT the bare `graphify` on PATH, which is a separate global install the interactive graphify skill upgrades for its own purposes and would drag Sjel onto whatever that happens to be; `--from` keeps Sjel's runs in their own ephemeral environment. This row said 'version selection is never just use latest' until Q77, and the measurement below is exactly the cost now accepted: a single-maintainer, fast-moving project (200 PyPI releases; 0.8.44 in June, 0.9.19 in July, 0.9.32 by August) can ship a release that breaks `update <path>` on this repo's mixed code+doc corpus, and nothing holds it back any more. What confirmed 0.9.31 by hand on 2026-08-06 is left below as the record of what that class of defect looks like. On a synthetic two-file corpus 0.9.19 failed deterministically (invalid JSON, 0 non-AST elements, twice) while 0.9.31 and 0.9.34 both produced a clean semantic graph -- a real upstream bug, fixed somewhere in the nine intervening releases. On a real mixed code+doc sample from capabilities/knowledge-graph, 0.9.19 and 0.9.31 were IDENTICAL (19 nodes, 25 edges, 8 non-AST each), so the bug is content-dependent and the bump is a bugfix with no measured regression, not a fix for the corpus-wide zero. What emptied the full graph is a separate open question: a code-only run would produce the same zero, and the wrapper falls back to code-only whenever the backend is unreachable"
+summary = "Code dependency graph tool; removed from Sjel because agents rarely queried it"
+why = "Removed 2026-10-31. Across 77 Claude sessions in this repository, 15 ran a graphify lookup (25 lookups) against 18 graph rebuilds and no MCP calls. On two known questions it ranked the wrong file first and returned mostly unrelated nodes, while grep and `sjel search` answered both. One rebuild took over five minutes and the output held 1.2 GB. `tools/agent-integrations.sh`, `tools/intake check`, the self-model code layer and the knowledge-graph capability went with it."
 
 [asd-ste100-skill]
 url = "https://github.com/danyuchn/asd-ste100-skill"

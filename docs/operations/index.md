@@ -386,7 +386,7 @@ and `bun install` never runs a lifecycle hook (`tools/check-bun-install-policy.s
 path ChainDrop took.
 
 **The second cost, from dropping the versions.** A merely BAD release now lands too. A broken
-`graphify` breaks `tools/graphify.sh` the day it ships, a bad Home Assistant `:stable` is what
+release of a uv tool breaks its caller the day it ships, a bad Home Assistant `:stable` is what
 the house runs by the next morning, and CI can go red for a Bun release nobody here chose. That
 is the trade, not an oversight: a version literal bought a delay and, on this deployment, delay
 was measured to be the more expensive failure. It also never bought reproducibility — a container

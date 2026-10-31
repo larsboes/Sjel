@@ -223,7 +223,7 @@ const ROUTES: &[route_manifest::Route] = &[
     route_manifest::Route {
         method: "POST",
         path: "/api/sjel-status/updates/apply",
-        summary: "Start one class of software moving. Body: { class } from brew, uv, rustup, graphify, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
+        summary: "Start one class of software moving. Body: { class } from brew, uv, rustup, interceptor, cargo, npm. Answers 202 immediately; the tool writes a receipt the next GET carries as lastApply.",
         request_schema: Some(route_manifest::schema_of::<status::ApplyRequest>),
     },
     r("GET", "/api/sjel-status/runtime", "Runtime selection, effective profile, power and On-the-go exceptions."),

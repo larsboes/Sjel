@@ -22,8 +22,7 @@ Say "the gates pass" only after all of these pass: `cargo test --workspace --loc
 `bun test`, every `tools/check-*.sh` gate, and `tools/check-architecture-fresh.sh`. `bun test`
 reaches `tools/*.test.ts`, which includes the four dashboard build gates.
 
-`tools/self check` compares tracked inputs and must pass without Graphify. Counts derived from
-the graph are fused on read and can be stale. Verify a gate claim about `origin/main` in a
+`tools/self check` compares tracked inputs only. Verify a gate claim about `origin/main` in a
 worktree.
 
 For an overlay sweep, use `rg --no-ignore --hidden --follow`. Plain `rg` skips ignored

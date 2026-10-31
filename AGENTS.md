@@ -46,13 +46,6 @@ Always:
   verification first, numbered chunks, exact counts and paths, and manual steps in their own
   block with a time estimate.
 
-## graphify
-
-`graphify-out/` holds a knowledge graph of this repository. For a codebase question, run
-`graphify query "<question>"` first, `graphify path "<A>" "<B>"` for a relationship, and
-`graphify explain "<concept>"` for one concept. Dirty `graphify-out/` files are normal. After a
-code change, run `graphify update .`.
-
 ## Working through the plan
 
 [`PLAN.md`](PLAN.md) orders the work by priority. Each area has one plan in

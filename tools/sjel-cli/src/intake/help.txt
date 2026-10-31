@@ -12,9 +12,6 @@ tools/intake — read third-party agent tooling before it reaches an agent.
   tools/intake approve <dir> --source <name> [--version <v>]
         Records the digest of exactly this copy, after a person read the findings.
   tools/intake version <source>
-        The last approved version (graphify).
-  tools/intake check graphify [--no-review]
-        Installs the newest graphify release into an empty home, gates what it writes for
-        agents against the approved version, and records the version when nothing holds.
+        The last approved version.
 
 Exit codes: 0 passes, 2 holds, 1 is an error. State: ~/.local/state/sjel/intake/.

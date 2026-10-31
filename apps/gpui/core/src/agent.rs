@@ -378,9 +378,7 @@ pub fn tool_summary(name: &str, arguments: &str) -> String {
         "bash" => field("command"),
         "read" | "write" | "edit" | "ls" => field("path"),
         "grep" | "find" => field("pattern").or_else(|| field("glob")),
-        "graph_unit" => field("name"),
-        "graph_search" | "sql" => field("q").or_else(|| field("query")),
-        "graph_node" => field("id"),
+        "sql" => field("q").or_else(|| field("query")),
         _ => None,
     };
     let text = summary.unwrap_or_else(|| trimmed.to_owned());
@@ -481,7 +479,7 @@ mod tests {
             ),
             "src/finder.rs"
         );
-        assert_eq!(tool_summary("graph_unit", r#"{"name":"agent"}"#), "agent");
+        assert_eq!(tool_summary("sql", r#"{"q":"select 1"}"#), "select 1");
         // Not JSON, or a tool this app does not know: the arguments are still shown.
         assert_eq!(tool_summary("mystery", "{\"a\":"), "{\"a\":");
         // Multi-line arguments are one row, not several.

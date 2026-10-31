@@ -261,7 +261,7 @@ Three differences are deliberate.
 
 - The SBOM handed to the second osv-scanner pass is built here instead of by `jq`, so this tool no
   longer needs `jq` — and a missing `jq` can no longer read as an unscanned surface. `jq` keeps
-  its toolchain row: `tools/graphify.sh`, `tools/restore.sh`, the secret setup, `tools/agentbox.test.sh`
+  its toolchain row: `tools/restore.sh`, the secret setup, `tools/agentbox.test.sh`
   and `.github/workflows/security.yml` still pipe JSON through it.
 - JSON object keys are sorted, where `jq` wrote them in the order the filter named them. The
   `components` array keeps the inventory's own order, which is what osv-scanner reads.

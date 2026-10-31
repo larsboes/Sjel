@@ -9,8 +9,7 @@ Run this sequence before planning, reviewing, or editing:
 4. Read only the paths it returns plus the reference selected in `SKILL.md`.
 
 Use `tools/self explain <unit>` for ownership and local coupling, and `tools/self coupling` for a
-relationship question. Use `rg` and tracked source for exact implementation evidence. Use
-Graphify only for symbol-level traversal when a current graph is available.
+relationship question. Use `rg` and tracked source for exact implementation evidence.
 
 Before you conclude that Sjel does not do something, read `capabilities = [...]` in the
 overlay's `config/machine.toml` (resolved by `tools/lib/paths.sh`) and list

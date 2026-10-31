@@ -52,9 +52,6 @@ Use this mode to understand, review, plan, or change the repository.
 | Tests, gates, review, or completion claims | `references/on-verification.md` |
 | Branch, commit, or PR | `references/on-changes.md` |
 
-For symbol-level traversal, use Graphify only when a current graph and Graphify integration
-are present. Treat it as a drill-down after bounded orientation, never as the bootstrap.
-
 ## Invariants
 
 - Preserve unrelated worktree changes and resolve the exact target before editing.

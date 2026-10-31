@@ -42,7 +42,6 @@ system.
 | Plugin | Tools | Where |
 |---|---|---|
 | `fs` | `read write edit bash grep find ls` (`tools::coding(root)`) | In-process ripgrep, 30 KB output budget, 500-entry listings, read-only calls in parallel |
-| `graph` | `graph_unit graph_search graph_node graph_stats` | `libs/agent/src/ext/graph.rs`, over `capabilities/knowledge-graph`: ~200 tokens where `grep` plus reads costs 30 KB |
 | `sql` | `sql` | `src/sql.rs`: one read-only query on the shared database, instead of `bash` + `sqlite3` |
 | `sjel` | `sjel_health`, `calendar_entries`, `projects_list`, `project_records`, `trips_plans` | `libs/agent/src/ext/sjel.rs`, the set `capabilities/assistant` passes |
 | `guard` | `vault_exec`, `vault_keys` | `libs/agent/src/ext/guard.rs`, on by default |
@@ -50,7 +49,7 @@ system.
 
 `fs` and `sql` are the two that cannot live in `libs/agent`: `fs` is the core tool set rather than
 an extension, and `sql` would pull `rusqlite` into every consumer of the library, including the
-CLI. `graph` and `sjel` are pure HTTP over `sjel-http`, which the library already carries.
+CLI. `sjel` is pure HTTP over `sjel-http`, which the library already carries.
 
 The root is session data, not the capability's identity: a session names the working directory it
 was started in, `~/Developer/Sjel` by default, and its conversation is filed under

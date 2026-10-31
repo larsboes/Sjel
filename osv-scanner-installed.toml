@@ -28,7 +28,7 @@
 # Revised the same day, later: `@modelcontextprotocol/server-github` and
 # `@modelcontextprotocol/server-filesystem` were REMOVED from the global tree outright. Neither
 # was registered by any harness on this machine — `~/.pi/agent/mcp.json` holds only `sjel`, and
-# `~/.claude.json` only `graphify` — so nothing depended on them. That ended the one entry below
+# `~/.claude.json` neither — so nothing depended on them. That ended the one entry below
 # that no version could ever move, by removal rather than by a replacement: 23 entries became
 # 22. The one remaining use of `@modelcontextprotocol/*` is the SDK as a LIBRARY inside
 # `Packs/harness/pi-packages/pi-web-access` (`baizhi.ts`, `zai.ts`), which declares a range and

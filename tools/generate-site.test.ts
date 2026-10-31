@@ -81,21 +81,6 @@ describe("renderSite", () => {
     expect([...hosts]).toEqual(["github.com"]);
   });
 
-  // #14: "Every rendered fact traces to a manifest or a generated artifact." The code graph is
-  // neither — graphify-out/ is untracked, so a fresh clone reproduces none of it. A future edit
-  // that helpfully surfaces those numbers would break the criterion silently; this catches it.
-  test("renders nothing sourced from the untracked code graph", () => {
-    const withGraph = renderSite({
-      ...MODEL,
-      // @ts-expect-error — deliberately feeding fields the renderer must ignore
-      graph: { nodes: 5355, present: true, stale: ["tools/lib/publish.sh"], external: 12, unmatched: [] },
-      units: MODEL.units.map((u) => ({ ...u, code: { files: 99, nodes: 1234 } })),
-    });
-    expect(withGraph).not.toContain("5355");
-    expect(withGraph).not.toContain("1234");
-    expect(withGraph).not.toContain("publish.sh");
-  });
-
   test("escapes manifest text rather than trusting it", () => {
     const nasty = renderSite({
       ...MODEL,

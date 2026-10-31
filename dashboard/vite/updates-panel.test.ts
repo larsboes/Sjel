@@ -32,7 +32,7 @@ const report = (over: Partial<UpdatesReport> = {}): UpdatesReport => ({
   lastApply: null,
   surfaces: [
     surface({ id: "brew", owner: "scheduled", title: "Homebrew", actionable: true }),
-    surface({ id: "graphify", owner: "manual", title: "graphify", actionable: true }),
+    surface({ id: "interceptor", owner: "manual", title: "interceptor", actionable: true }),
     surface({ id: "cargo", owner: "unowned", title: "cargo", actionable: true }),
     surface({ id: "npm", owner: "unowned", title: "npm", actionable: true }),
     surface({ id: "vendor", owner: "self", title: "vendor", actionable: false }),

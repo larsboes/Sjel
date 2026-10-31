@@ -11,7 +11,6 @@
 //! tools/intake gate <dir> --source <name> [--against <dir>] [--no-review]
 //! tools/intake approve <dir> --source <name> [--version <v>]
 //! tools/intake version <source>                     the last approved version
-//! tools/intake check graphify                       stage the newest graphify and gate it
 //! ```
 //!
 //! Exit codes: 0 passes, 2 holds, 1 is an error.
@@ -22,8 +21,7 @@ mod rules;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
-use std::time::Duration;
+use std::process::ExitCode;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -47,8 +45,7 @@ pub fn run(args: &[String]) -> ExitCode {
     }
 }
 
-const USAGE: &str =
-    "usage: tools/intake {scan|review|gate|approve|version|check} …  (tools/intake help)";
+const USAGE: &str = "usage: tools/intake {scan|review|gate|approve|version} …  (tools/intake help)";
 
 fn run_inner(args: &[String]) -> Result<u8, String> {
     let Some((verb, rest)) = args.split_first() else {
@@ -104,16 +101,9 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
                     println!("{version}");
                     Ok(0)
                 }
-                None => Err(format!(
-                    "{source} has no approved version. Run: tools/intake check {source}"
-                )),
+                None => Err(format!("{source} has no approved version")),
             }
         }
-        "check" => match opts.positional.first().map(String::as_str) {
-            Some("graphify") => check_graphify(!opts.no_review),
-            Some(other) => Err(format!("check knows graphify only, not `{other}`")),
-            None => Err("check needs a source: tools/intake check graphify".into()),
-        },
         "help" | "-h" | "--help" => {
             println!("{}", include_str!("help.txt"));
             Ok(0)
@@ -509,130 +499,6 @@ fn gate(
         println!("✓ {source}: no finding holds it");
     }
     code
-}
-
-/// The harnesses `tools/agent-integrations.sh` installs graphify into.
-const GRAPHIFY_HARNESSES: &[&str] = &["claude", "opencode", "codex", "pi", "copilot"];
-/// `graphify <harness> install`, which writes into the project rather than the home.
-const GRAPHIFY_PROJECT_INSTALLS: &[&str] = &["claude", "codex", "opencode"];
-
-/// graphify reaches agents through what `graphify install` writes: a skill, hooks and plugin
-/// files. Both versions are installed into an empty home, and the newer one's files are gated
-/// against the approved one's.
-fn check_graphify(review: bool) -> Result<u8, String> {
-    let latest = graphify_latest()?;
-    let approved = Ledger::load()?.version("graphify").map(str::to_owned);
-    if approved.as_deref() == Some(latest.as_str()) {
-        println!("✓ graphify {latest} is the approved version");
-        return Ok(0);
-    }
-    println!(
-        "graphify: approved {}, newest {latest}",
-        approved.as_deref().unwrap_or("none")
-    );
-    let new_dir = stage_graphify(&latest)?;
-    let old = match &approved {
-        Some(version) => Some(read_tree(&stage_graphify(version)?)?),
-        None => None,
-    };
-    let new = read_tree(&new_dir)?;
-    Ok(gate(
-        "graphify",
-        &new_dir,
-        &new,
-        old.as_ref(),
-        review,
-        Some(&latest),
-    ))
-}
-
-fn graphify_latest() -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct Info {
-        version: String,
-    }
-    #[derive(Deserialize)]
-    struct Package {
-        info: Info,
-    }
-    let client = sjel_http::client(sjel_http::Purpose::new("intake"), Duration::from_secs(30))
-        .map_err(|e| format!("could not prepare an HTTP client: {e}"))?;
-    let package: Package = client
-        .get("https://pypi.org/pypi/graphifyy/json")
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .and_then(reqwest::blocking::Response::json)
-        .map_err(|e| format!("PyPI did not answer for graphifyy: {e}"))?;
-    Ok(package.info.version)
-}
-
-/// `<state>/staged/graphify-<version>/{home,project}`, kept so a person can read what was gated.
-fn stage_graphify(version: &str) -> Result<PathBuf, String> {
-    if version.is_empty()
-        || !version
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || ".-+".contains(c))
-    {
-        return Err(format!("refusing an unusual version string `{version}`"));
-    }
-    let root = state_dir()
-        .join("staged")
-        .join(format!("graphify-{version}"));
-    if root.exists() {
-        fs::remove_dir_all(&root).map_err(|e| format!("{}: {e}", root.display()))?;
-    }
-    let home = root.join("home");
-    let project = root.join("project");
-    for dir in [&home, &project] {
-        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    // uv keeps its real cache and interpreters; only what graphify writes lands in the stage.
-    let real_home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-    let uv_cache = std::env::var_os("UV_CACHE_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| real_home.join(".cache").join("uv"));
-    let uv_python = std::env::var_os("UV_PYTHON_INSTALL_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            real_home
-                .join(".local")
-                .join("share")
-                .join("uv")
-                .join("python")
-        });
-    let run = |args: &[&str]| -> Result<(), String> {
-        let status = Command::new("uv")
-            .args([
-                "tool",
-                "run",
-                "--from",
-                &format!("graphifyy=={version}"),
-                "graphify",
-            ])
-            .args(args)
-            .current_dir(&project)
-            .env("HOME", &home)
-            .env("XDG_CONFIG_HOME", home.join(".config"))
-            .env("UV_CACHE_DIR", &uv_cache)
-            .env("UV_PYTHON_INSTALL_DIR", &uv_python)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map_err(|e| format!("could not run uv: {e}"))?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!("graphify {version} {} failed", args.join(" ")))
-        }
-    };
-    for harness in GRAPHIFY_HARNESSES {
-        run(&["install", "--platform", harness])?;
-    }
-    // The project half: the CLAUDE.md and AGENTS.md sections, and the hooks and plugin.
-    for harness in GRAPHIFY_PROJECT_INSTALLS {
-        run(&[harness, "install"])?;
-    }
-    Ok(root)
 }
 
 #[cfg(test)]

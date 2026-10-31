@@ -6,7 +6,7 @@
 // (allowManagedPermissionRulesOnly, allowManagedMcpServersOnly) and an MCP allowlist. That
 // layer was agent-proof — a session could not edit a root-owned file — and it was also
 // per-device, needed sudo for every change, and its MCP allowlist silently blocked this
-// machine's own graphify server from 2026-08-02. The principal's ruling of 2026-10-02 moved
+// machine's own MCP server. The principal's ruling of 2026-10-02 moved
 // the floor to the user level: one file, no root, nothing to grasp twice.
 //
 // The trade is recorded rather than hidden. A user-level file is writable by the agent

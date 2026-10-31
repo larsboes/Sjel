@@ -202,7 +202,7 @@ pub const UPDATE: &str = r#"Usage: sjel update [report|apply] [--json] [--offlin
                     tools/host-patch.sh, the two integrations through their verb
 
 Classes for --only:
-  brew uv rustup containers graphify interceptor checkout cargo npm vendor
+  brew uv rustup containers interceptor checkout cargo npm vendor
 
 Report exits 1 when something is stale. Apply exits 1 when there was nothing to do.
 The --json payload is the stable surface a UI reads; see src/updates/ in this crate."#;

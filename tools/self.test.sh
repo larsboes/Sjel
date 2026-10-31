@@ -1,17 +1,10 @@
 #!/bin/bash
 # End-to-end tests for tools/self's generate and its drift report.
 #
-# The pure rollup is covered by `cargo test -p sjel-cli` (self_model::model). This covers the two
-# things that only exist as behaviour: what `generate` writes on a machine with no code graph, and
-# `check` showing WHAT differs rather than only that something does.
-#
-# The graphless-generate case replaced two refusals on 2026-09-29. `generate` used to refuse when
-# graphify-out/ was absent, because writing would drop the per-unit `code` counts the committed
-# artifact carried (#35) — and `check` narrowed its comparison to the tracked-file layers in
-# exactly that situation, so the drift it reported was the one drift nobody could repair. CI is
-# that machine, and main sat red behind it while eleven armed Dependabot pull requests queued.
-# The counts are fused on read now, so what `generate` writes is the same on every machine. This
-# asserts that, and that the artifact carries no code layer left to drop.
+# The pure core is covered by `cargo test -p sjel-cli` (self_model::model). This covers the two
+# things that only exist as behaviour: what `generate` writes, and `check` showing WHAT differs
+# rather than only that something does. The artifact comes from tracked files only, so it is the
+# same on every machine.
 #
 # Nothing here writes into the checkout. The successful generate is pointed at a scratch path
 # with --out, and the test asserts the tracked self.json is byte-identical afterwards rather
@@ -37,21 +30,20 @@ note_fail() {
 # `--` because the diff lines this asserts on begin with `-`, which grep would read as a flag.
 says() { printf '%s' "$out" | grep -qF -- "$1"; }
 
-# --- generate works with no code graph, and commits no code layer ----------
+# --- generate writes only tracked-file layers ----------------------------------
 #
 # A copy, compared with cmp, rather than a hash: `shasum` is macOS's spelling and
 # `sha1sum` is the GNU one, and this suite runs in both places.
 cp "$ROOT/self.json" "$SCRATCH/self.json.before"
 
-out=$(SJEL_SELF_GRAPH="$SCRATCH/no-graph-here.json" "$SELF" generate --out "$SCRATCH/generated.json" 2>&1)
+out=$("$SELF" generate --out "$SCRATCH/generated.json" 2>&1)
 status=$?
-[ "$status" -eq 0 ] || note_fail "generate must succeed without a code graph, got exit $status"
+[ "$status" -eq 0 ] || note_fail "generate must succeed, got exit $status"
 [ -s "$SCRATCH/generated.json" ] || note_fail "generate --out wrote nothing"
 cmp -s "$SCRATCH/self.json.before" "$ROOT/self.json" ||
   note_fail "generate --out wrote the tracked self.json anyway"
 
-# The property the whole change is about: the artifact must be reproducible from tracked files, so
-# it must not carry a layer that only a graphful machine can produce.
+# The artifact must be reproducible from tracked files, so it carries no machine-local layer.
 if grep -q '"code"' "$SCRATCH/generated.json"; then
   out="$(grep -n '"code"' "$SCRATCH/generated.json" | head -3)"
   note_fail "the generated artifact carries per-unit code counts"
@@ -84,9 +76,8 @@ says "-      \"kind\": \"a-kind-no-unit-has\"" ||
 says "self.json (this tree)" || note_fail "the diff does not label which side is which"
 
 # The committed artifact still passes, so the case above measured drift and not a broken
-# comparison. Without this, a check that failed on everything would look identical. Run with the
-# graph pointed at nothing, because the claim is that this verdict does not depend on one.
-out=$(SJEL_SELF_GRAPH="$SCRATCH/no-graph-here.json" "$SELF" check 2>&1); status=$?
+# comparison. Without this, a check that failed on everything would look identical.
+out=$("$SELF" check 2>&1); status=$?
 [ "$status" -eq 0 ] || note_fail "the committed self.json should pass check, got exit $status"
 says "is current" || note_fail "the passing verdict is missing"
 

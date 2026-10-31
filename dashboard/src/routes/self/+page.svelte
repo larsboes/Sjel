@@ -5,33 +5,21 @@
   import PageHeader from "$lib/PageHeader.svelte";
   import {
     sjelStatus,
-    knowledgeGraph,
     type SelfModelResponse,
     type SelfUnit,
-    type UnitGraph,
   } from "$lib/api";
   import RepoStatusCard from "$lib/RepoStatusCard.svelte";
   import UnitMap, { type MapNode, type MapEdge } from "$lib/UnitMap.svelte";
   import Collection from "$lib/ui/Collection.svelte";
   import type { Field } from "$lib/ui/collection";
 
-  // Two altitudes, one page. The self-model is ~31 units and 16 couplings --
-  // small enough to be a picture, which is the altitude at which Sjel can
-  // actually be explained. graphify's 6.6k-node graph is the drill-down under
-  // it, fetched one unit at a time and capped, never rendered whole. The
-  // knowledge-graph panel that used to live on :4244 did render it whole, which
-  // is why it was a black rectangle; this page is where that view went.
+  // The self-model is ~31 units and 16 couplings -- small enough to be a
+  // picture, which is the altitude at which Sjel can actually be explained.
 
   let data = $state<SelfModelResponse | null>(null);
   let error = $state<string | null>(null);
   let selected = $state<string | null>(null);
 
-  /** Drill-down state: null until a unit is opened at file level. */
-  let inside = $state<UnitGraph | null>(null);
-  let insideError = $state<string | null>(null);
-  let insideLoading = $state(false);
-  /** Which file node is picked inside a unit. Its own selection, not the unit's. */
-  let insideSelected = $state<string | null>(null);
   let lifecycleBusy = $state<string | null>(null);
 
   async function runLifecycle(name: string, action: "start" | "stop" | "restart"): Promise<void> {
@@ -61,11 +49,6 @@
 
   // ── The unit map ──────────────────────────────────────────────────────────
 
-  /** Largest unit by file count, so radius is relative to this repo, not absolute. */
-  const largestUnit = $derived(
-    Math.max(1, ...(model?.units ?? []).map((u) => u.code?.files ?? 0)),
-  );
-
   /**
    * Only coupled units go in the map.
    *
@@ -83,7 +66,7 @@
     id: u.name,
     label: u.name,
     kind: u.kind,
-    weight: (u.code?.files ?? 0) / largestUnit,
+    weight: 0.5,
     state: live[u.name] === true ? "up" : live[u.name] === false ? "down" : null,
   });
 
@@ -97,65 +80,8 @@
     (model?.coupling ?? []).map((c) => ({ from: c.from, to: c.to, label: c.kinds.join(", ") })),
   );
 
-  /** Inside a unit, colour by what the file is rather than by what it belongs to. */
-  function fileKind(fileType: string): string {
-    if (fileType === "doc" || fileType === "markdown") return "doc";
-    if (fileType === "config" || fileType === "json") return "config";
-    return "file";
-  }
-
-  const insideNodes = $derived<MapNode[]>(
-    (inside?.nodes ?? []).map((n) => ({
-      id: n.id,
-      label: n.label,
-      kind: fileKind(n.file_type),
-      weight: 0.3,
-    })),
-  );
-
-  const insideEdges = $derived<MapEdge[]>(
-    (inside?.edges ?? []).map((e) => ({ from: e.from, to: e.to, label: e.label })),
-  );
-
-  /**
-   * Open a unit at file level.
-   *
-   * knowledge-graph starts on demand, so a first call while it is down is the
-   * normal case rather than a fault: ask sjel-status to bring it up, then try
-   * once more. A second failure is reported as itself.
-   */
-  const insideDetail = $derived(
-    insideSelected ? (inside?.nodes.find((n) => n.id === insideSelected) ?? null) : null,
-  );
-
-  async function openInside(unit: string): Promise<void> {
-    insideLoading = true;
-    insideError = null;
-    insideSelected = null;
-    try {
-      inside = await knowledgeGraph.unit(unit);
-    } catch {
-      try {
-        await sjelStatus.start("knowledge-graph");
-        inside = await knowledgeGraph.unit(unit);
-      } catch (e) {
-        inside = null;
-        insideError = e instanceof Error ? e.message : String(e);
-      }
-    } finally {
-      insideLoading = false;
-    }
-  }
-
-  function closeInside(): void {
-    inside = null;
-    insideError = null;
-    insideSelected = null;
-  }
-
   function select(name: string | null): void {
     selected = name;
-    if (inside && inside.unit !== name) closeInside();
   }
 
   /** Outgoing = what this unit compiles in. Incoming = who compiles it in. */
@@ -199,7 +125,6 @@
     },
     { id: "unit", label: "Unit", value: (u) => u.name, cell: unitCell },
     { id: "kind", label: "Kind", kind: "select", width: "7rem", value: (u) => u.kind },
-    { id: "files", label: "Files", kind: "number", width: "5rem", value: (u) => u.code?.files },
     { id: "port", label: "Port", kind: "number", width: "5rem", value: (u) => u.service?.port },
     { id: "requires", label: "Runtime dependencies", value: (u) => u.service?.requires.join(", "), cell: requiresCell },
     { id: "couplings", label: "Couplings", kind: "number", width: "6rem", value: (u) => degree(u.name) || null },
@@ -213,7 +138,7 @@
 <PageHeader
   badge="Self-model"
   title="Sjel about Sjel"
-  desc="What is here, how the units connect, and how large each one is. Generated from tracked files and supplemented with live state."
+  desc="What is here and how the units connect. Generated from tracked files and supplemented with live state."
 />
 
 <!--
@@ -233,18 +158,8 @@
   <ul class="stats">
     <li><b>{model.units.length}</b><span>Units</span></li>
     <li><b>{model.coupling.length}</b><span>Couplings</span></li>
-    <li><b>{model.graph?.present ? model.graph.nodes : "—"}</b><span>Graph nodes</span></li>
     <li><b>{model.upstreams.length}</b><span>Upstreams</span></li>
   </ul>
-
-  {#if model.graph?.stale.length}
-    <p class="err">
-      <Icon name="alert" size={14} />
-      {model.graph.stale.length} graph paths no longer exist — <span class="mono"
-        >tools/graphify.sh</span
-      >
-    </p>
-  {/if}
 
   <!--
     The map is the teaching surface, so it says what it means before it draws.
@@ -252,65 +167,23 @@
     the wrong thing from a picture, confidently.
   -->
   <div class="mapwrap">
-    {#if inside}
-      <p class="maplead">
-        Inside <b>{inside.unit}</b> — one dot per file or symbol graphify extracted, one line
-        per reference between them.
-        {#if inside.truncated}
-          Showing the <b>{inside.returned}</b> most-connected of
-          <b>{inside.total}</b>; the rest are real, just not drawn.
-        {:else}
-          All <b>{inside.returned}</b> of them.
-        {/if}
-        <button class="link" onclick={closeInside}>← back to units</button>
-      </p>
-      <UnitMap
-        nodes={insideNodes}
-        edges={insideEdges}
-        selected={insideSelected}
-        onSelect={(id) => (insideSelected = id)}
-        height={520}
-      />
-      <!--
-        Names are hidden at this density, so a picked node has to say what it
-        is somewhere. This line is that somewhere -- the path matters more than
-        the symbol, because it is what a reader can go open.
-      -->
-      <p class="picked">
-        {#if insideDetail}
-          <b>{insideDetail.label}</b>
-          <span class="mono">{insideDetail.source_file}</span>
-          <span class="tag">{insideDetail.file_type}</span>
-        {:else}
-          Click any dot to name it. Hover reads one out without selecting it.
-        {/if}
-      </p>
-    {:else}
-      <p class="maplead">
-        The <b>{mapNodes.length}</b> units that couple to something, sized by how much code they
-        hold and ringed when this machine has them running. A line means one unit
-        <b>compiles the other in</b> — not that it calls it at runtime. Click to select, drag to
-        move, scroll to zoom.
-      </p>
-      <UnitMap nodes={mapNodes} edges={mapEdges} {selected} onSelect={select} height={460} />
-    {/if}
+    <p class="maplead">
+      The <b>{mapNodes.length}</b> units that couple to something, ringed when this machine has
+      them running. A line means one unit <b>compiles the other in</b> — not that it calls it at
+      runtime. Click to select, drag to move, scroll to zoom.
+    </p>
+    <UnitMap nodes={mapNodes} edges={mapEdges} {selected} onSelect={select} height={460} />
 
     <ul class="legend">
-      {#if inside}
-        <li><span class="swatch kind-file"></span>code</li>
-        <li><span class="swatch kind-doc"></span>docs</li>
-        <li><span class="swatch kind-config"></span>config</li>
-      {:else}
-        <li><span class="swatch kind-capability"></span>capability</li>
-        <li><span class="swatch kind-lib"></span>lib</li>
-        <li><span class="swatch kind-spine"></span>spine</li>
-        <li><span class="swatch kind-pack"></span>pack</li>
-        <li><span class="swatch ring-up"></span>running</li>
-        <li><span class="swatch ring-down"></span>off</li>
-      {/if}
+      <li><span class="swatch kind-capability"></span>capability</li>
+      <li><span class="swatch kind-lib"></span>lib</li>
+      <li><span class="swatch kind-spine"></span>spine</li>
+      <li><span class="swatch kind-pack"></span>pack</li>
+      <li><span class="swatch ring-up"></span>running</li>
+      <li><span class="swatch ring-down"></span>off</li>
     </ul>
 
-    {#if !inside && isolated.length}
+    {#if isolated.length}
       <p class="isolated-lead">
         <b>{isolated.length}</b> units compile nothing in and are compiled into nothing. That is
         the normal state for a self-contained capability, not a gap.
@@ -332,19 +205,6 @@
       <header>
         <strong>{detail.name}</strong>
         <span class="kind">{detail.kind}</span>
-        {#if detail.code}
-          <button
-            class="inside"
-            disabled={insideLoading || inside?.unit === detail.name}
-            onclick={() => openInside(detail.name)}
-          >
-            {#if insideLoading}
-              <Icon name="loader" size={12} /> opening…
-            {:else if inside?.unit === detail.name}
-              open below
-            {:else}
-              Look inside
-            {/if}
           </button>
         {/if}
         {#if detail.service}
@@ -370,16 +230,7 @@
           <Icon name="close" size={13} />
         </button>
       </header>
-      {#if insideError}
-        <p class="err small">
-          <Icon name="alert" size={13} /> knowledge-graph unavailable — {insideError}. Run
-          <span class="mono">tools/graphify.sh</span> if the graph was never built.
-        </p>
-      {/if}
       <dl>
-        {#if detail.code}
-          <div><dt>Code</dt><dd>{detail.code.files} files · {detail.code.nodes} nodes</dd></div>
-        {/if}
         {#if detail.service}
           <div>
             <dt>Service</dt>
@@ -484,16 +335,6 @@
     line-height: 1.55;
     margin: 0 0 0.5rem;
   }
-  .link {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: var(--primary);
-    cursor: pointer;
-    text-decoration: underline;
-  }
-
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -530,28 +371,16 @@
   .legend .kind-pack {
     --swatch: #15803d;
   }
-  .legend .kind-file {
-    --swatch: #0e7490;
-  }
-  .legend .kind-doc {
-    --swatch: #15803d;
-  }
-  .legend .kind-config {
-    --swatch: #b45309;
-  }
-  :global(:root.dark) .legend .kind-capability,
-  :global(:root.dark) .legend .kind-file {
+  :global(:root.dark) .legend .kind-capability {
     --swatch: #22d3ee;
   }
   :global(:root.dark) .legend .kind-lib {
     --swatch: #a78bfa;
   }
-  :global(:root.dark) .legend .kind-spine,
-  :global(:root.dark) .legend .kind-config {
+  :global(:root.dark) .legend .kind-spine {
     --swatch: #fbbf24;
   }
-  :global(:root.dark) .legend .kind-pack,
-  :global(:root.dark) .legend .kind-doc {
+  :global(:root.dark) .legend .kind-pack {
     --swatch: #4ade80;
   }
   .legend .ring-up,
@@ -561,23 +390,6 @@
   }
   .legend .ring-down {
     border-color: var(--warning);
-  }
-
-  .picked {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    margin: 0.5rem 0 0;
-    min-height: 1.2rem;
-  }
-  .picked b {
-    color: var(--text-primary);
-  }
-  .picked .mono {
-    overflow-wrap: anywhere;
   }
 
   .isolated-lead {
@@ -708,7 +520,7 @@
     margin-bottom: 0.6rem;
   }
   /* `.inside` claims the auto margin when it is present, so the close button
-     only takes it when the unit has no code to look inside of. */
+     only takes it when the unit has no service buttons. */
   .detail header .x {
     margin-left: auto;
     background: none;

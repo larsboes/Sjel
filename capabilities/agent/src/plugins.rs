@@ -20,10 +20,10 @@ use crate::session::Grants;
 use crate::sql::Sql;
 
 /// What a run carries when the overlay names nothing.
-pub const DEFAULT: [&str; 6] = ["fs", "graph", "sjel", "sql", "guard", "compaction"];
+pub const DEFAULT: [&str; 5] = ["fs", "sjel", "sql", "guard", "compaction"];
 
 /// Every name this binary can assemble.
-pub const KNOWN: [&str; 6] = ["fs", "graph", "sjel", "sql", "guard", "compaction"];
+pub const KNOWN: [&str; 5] = ["fs", "sjel", "sql", "guard", "compaction"];
 
 const DEFAULT_SHELL_URL: &str = "http://127.0.0.1:8082";
 
@@ -59,11 +59,6 @@ pub fn assemble(
                         .map(|tool| tool.name().to_owned()),
                 );
                 tools.extend(coding);
-            }
-            "graph" => {
-                let graph = ext::graph::Graph::from_env();
-                read_only.extend(graph.tools().iter().map(|tool| tool.name().to_owned()));
-                extensions.push(Box::new(graph));
             }
             "sjel" => {
                 let sjel = ext::sjel::SjelTools::new(
@@ -129,7 +124,7 @@ pub fn configured() -> Vec<String> {
     }
 }
 
-/// `[agent] extensions = ["fs", "graph"]`, and nothing else in the file.
+/// `[agent] extensions = ["fs", "sql"]`, and nothing else in the file.
 fn parse_extensions(text: &str) -> Result<Vec<String>, String> {
     // `toml::from_str`, not `parse`: in toml 1.x a `Value`'s `FromStr` reads one value, and a
     // document starting `[agent]` is a table header rather than an array.
@@ -164,8 +159,8 @@ mod tests {
 
     #[test]
     fn the_config_file_names_the_set_the_cli_names() {
-        let names = parse_extensions("[agent]\nextensions = [\"fs\", \"graph\"]\n").unwrap();
-        assert_eq!(names, ["fs", "graph"]);
+        let names = parse_extensions("[agent]\nextensions = [\"fs\", \"sql\"]\n").unwrap();
+        assert_eq!(names, ["fs", "sql"]);
         assert!(parse_extensions("[agent]\n").unwrap().is_empty());
         assert!(parse_extensions("").unwrap().is_empty());
         assert!(parse_extensions("[agent]\nextensions = [1]\n").is_err());

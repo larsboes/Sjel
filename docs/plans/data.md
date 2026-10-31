@@ -286,15 +286,12 @@ the GPUI Settings tab. No new client, page or CLI verb set.
 - **Next.** The settings section shows key presence only. It should show, per backend, whether its
   model answers, and offer the one-role probe as a button.
 - Shows, in order: each backend with its model, whether the model answers, and whether its key is
-  present. Each role with its backend and model. Then the tool-level selection no role names
-  (`config/graphify.env`).
+  present. Each role with its backend and model.
 - No writes in the first delivery. A write needs a provider-side check and an undo path.
 - Built with the gates from the first commit: a `const ROUTES` manifest, a free `service.toml`
   port, regenerated `ARCHITECTURE.md` and `self.json`.
-- Known obstruction: secrets-guard refuses the tracked `tools/graphify.env.example` by filename.
-  It needs its own issue.
 - Done when one authenticated read names every backend with its model and key state, every role
-  with its backend and model, and the tool-level selection, and a probe proves each model answers.
+  with its backend and model, and a probe proves each model answers.
   It fails if a tracked artifact names a model or key file that the surface does not report, or if
   its verdict for a backend disagrees with `tools/model-check`.
 

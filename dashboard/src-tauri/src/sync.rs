@@ -165,13 +165,11 @@ pub fn is_c1(path: &str) -> bool {
 }
 
 /// The first offline projections beyond the apartment cache. Exact list endpoints avoid
-/// accidentally caching a provider action or an unbounded graph dump.
+/// accidentally caching a provider action.
 pub fn is_offline_projection(path: &str) -> bool {
     let route = route_of(path);
     is_c1(path)
         || OFFLINE_PROJECTION_PATHS.contains(&route)
-        || (route.starts_with("/knowledge-graph/api/graph/unit/")
-            && route.len() > "/knowledge-graph/api/graph/unit/".len())
         || is_trip_offline(path)
 }
 
@@ -2551,15 +2549,12 @@ mod tests {
             "/projects/api/tasks",
             "/vault/api/people",
             "/calendar/api/entries",
-            "/knowledge-graph/api/graph/unit/comms",
             "/trips/api/plans",
         ] {
             assert!(is_offline_projection(path), "{path}");
         }
         for path in [
             "/calendar/api/google/import",
-            "/knowledge-graph/api/graph",
-            "/knowledge-graph/api/graph/stats",
         ] {
             assert!(!is_offline_projection(path), "{path}");
         }

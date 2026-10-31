@@ -699,10 +699,6 @@ file earns its place only when it replaces an existing body of rules and simplif
 maintain a second diagram that can drift. Change its source or generator, regenerate with
 `tools/generate-architecture.sh`, and verify with `tools/check-architecture-fresh.sh`.
 
-Graphify is the optional file-and-symbol view. Its local output remains ignored because node IDs
-encode the scan path. The committed self-model fuses only reproducible layers with that local graph
-and must state when a layer cannot be checked on a fresh clone.
-
 ### Decisions live with their owner
 
 Implemented decisions live in code; reasoning needed to change them lives beside it. Rejected
@@ -792,15 +788,7 @@ the upstream image each declares) are derived straight from
 `sjel.toml`/`upstreams.toml`/`systems.toml`/`Packs/*/pack.toml` — that's the live, generated
 view. Don't hand-edit it, and don't hand-maintain a second diagram somewhere else that it could
 drift from. `tools/check-architecture-fresh.sh` catches drift (fails if a manifest changed and
-nobody regenerated); `tools/generate-architecture.sh` fixes it. For a real,
-file-and-function-level code graph rather than the manifest-derived one, `tools/graphify.sh` —
-output stays local and git-ignored (`graphify-out/`), never embedded here, since its node ids are
-slugified from this machine's absolute path.
-
-Graphify's semantic pass defaults to the same authenticated oMLX server as Comms and maps it
-onto graphify's pinned OpenAI-compatible backend. The script reads oMLX's key from its own
-settings file at call time and falls back to the AST-only update when the local server is not
-reachable; Ollama is an explicit compatibility backend, no longer a second default runtime.
+nobody regenerated); `tools/generate-architecture.sh` fixes it.
 
 Every capability dir carries a **curated, opinionated README**: what this solves, the verdict
 and why-not-the-alternatives, links worth having, and honest personal experience including

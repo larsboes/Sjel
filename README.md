@@ -72,7 +72,7 @@ later from the same code.
 | iPhone app | The same GPUI code inside a UIKit host, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
 | Dashboard | Still builds and still serves as a fallback. It is deleted after the gates in [`gpui.md` §3](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes) pass. |
 | Web demo | Goes with the dashboard. A new public page with screenshots of the native app replaces it ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
-| Capabilities | 27 of the 49 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. `knowledge-graph` is a Bun server. |
+| Capabilities | 27 of the 48 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. |
 
 Not everything becomes Rust. The menu bar companion and the CloudKit relay in `apps/mac` are
 Swift, and so is the iOS host that owns the window. The `tools/` scripts are a mix of shell and
@@ -204,7 +204,7 @@ shows the ones on this machine.
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |
 | Money | `finance`, `finance-prices` |
 | Home | `inventory`, `interior`, `soundscape` |
-| Time and knowledge | `calendar`, `projects`, `comms`, `documents`, `knowledge-base`, `knowledge-graph`, `vault` |
+| Time and knowledge | `calendar`, `projects`, `comms`, `documents`, `knowledge-base`, `vault` |
 | Machines | `sjel-status` (the node's HTTP host), `host-patch`, `host-watch`, `host-net`, `macmon`, `backup`, `software` |
 
 ## Scope

@@ -2064,7 +2064,16 @@ fn backups(ctx: &mut Ctx) {
             ));
             continue;
         }
-        let archive = Path::new(&expand_home(raw)).join(&name).join(&tarball);
+        let dest = std::path::PathBuf::from(expand_home(raw));
+        let volume: std::path::PathBuf = dest.components().take(3).collect();
+        if dest.starts_with("/Volumes") && !volume.exists() {
+            ctx.warn(format!(
+                "{name} — {tarball}: {} is not mounted, so the archive cannot be verified",
+                volume.display()
+            ));
+            continue;
+        }
+        let archive = dest.join(&name).join(&tarball);
         let meta = std::fs::metadata(&archive).ok();
         let flags = if meta.is_some() && cfg!(target_os = "macos") {
             let o = capture(Command::new("stat").arg("-f").arg("%Sf").arg(&archive));

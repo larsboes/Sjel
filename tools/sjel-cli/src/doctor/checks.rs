@@ -2370,26 +2370,19 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
     Ok(sections)
 }
 
-/// The deploy and sync commands an operator is told to run for one harness.
+/// The deploy and sync commands an operator is told to run for one harness. Every harness but
+/// Claude has a `tools/packs-<id>` launcher with `deploy` and `sync` verbs.
 fn pack_commands(id: &str, pack: &str) -> (String, String) {
-    match id {
-        "claude" => (
+    if id == "claude" {
+        return (
             format!("tools/packs.sh link {pack}"),
             format!("tools/packs-claude sync {pack}"),
-        ),
-        "codex" => (
-            format!("tools/packs-codex deploy {pack}"),
-            format!("tools/packs-codex sync {pack}"),
-        ),
-        "opencode" => (
-            format!("tools/packs-opencode deploy {pack}"),
-            format!("tools/packs-opencode sync {pack}"),
-        ),
-        _ => (
-            format!("tools/packs-pi deploy {pack}"),
-            format!("tools/packs-pi sync {pack}"),
-        ),
+        );
     }
+    (
+        format!("tools/packs-{id} deploy {pack}"),
+        format!("tools/packs-{id} sync {pack}"),
+    )
 }
 
 fn doctrine_freshness(ctx: &mut Ctx) {

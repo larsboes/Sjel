@@ -102,6 +102,9 @@ pub struct App {
     pub residual_paths: Vec<String>,
     /// `du` could not read the whole bundle, so `bytes` is a lower bound.
     pub partial: bool,
+    /// The toolchain.toml entry whose binary lives in this bundle. Sjel calls such an app from
+    /// the command line, which Spotlight's last-used date does not record.
+    pub toolchain: Option<String>,
 }
 
 /// A directory under one of [`RESIDUAL_ROOTS`], with its size and the root it came from.
@@ -486,11 +489,34 @@ fn scan_apps(dirs: &[PathBuf], today: i64) -> Vec<App> {
                 residual_bytes: 0,
                 residual_paths: Vec::new(),
                 partial: !sizing.complete,
+                toolchain: None,
             });
         }
     }
     apps.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
     apps
+}
+
+/// `(entry, app)` for every toolchain.toml entry that names the app bundle it is.
+pub fn toolchain_apps(manifest: &str) -> Vec<(String, String)> {
+    let Ok(table) = manifest.parse::<toml::Table>() else {
+        return Vec::new();
+    };
+    table
+        .iter()
+        .filter_map(|(name, entry)| {
+            let app = entry.get("app")?.as_str()?;
+            Some((name.clone(), app.to_string()))
+        })
+        .collect()
+}
+
+/// The entry that names `bundle`'s file name, matched exactly.
+pub fn declared_by(bundle: &Path, apps: &[(String, String)]) -> Option<String> {
+    let file = bundle.file_name()?.to_str()?;
+    apps.iter()
+        .find(|(_, app)| app == file)
+        .map(|(name, _)| name.clone())
 }
 
 /// Lines of a command's stdout, or which of the two kinds of "no" this was.
@@ -668,14 +694,15 @@ impl Inventory {
                 "path": a.path,
                 "bytes": a.bytes,
                 "partial": a.partial,
+                "toolchain": a.toolchain,
                 "bundle_id": a.bundle_id,
                 "last_used": a.last_used.to_json(),
                 "residual_bytes": a.residual_bytes,
                 "residual_paths": a.residual_paths,
             })).collect::<Vec<_>>(),
             "apps_total_bytes": self.apps.iter().map(|a| a.bytes).sum::<u64>(),
-            "idle_bytes": sum(&|a| a.last_used.is_idle(self.idle_days)),
-            "never_bytes": sum(&|a| matches!(a.last_used, LastUsed::Never)),
+            "idle_bytes": sum(&|a| a.toolchain.is_none() && a.last_used.is_idle(self.idle_days)),
+            "never_bytes": sum(&|a| a.toolchain.is_none() && matches!(a.last_used, LastUsed::Never)),
             "unknown_bytes": sum(&|a| matches!(a.last_used, LastUsed::Unknown(_))),
             "residual_total_bytes": self.apps.iter().map(|a| a.residual_bytes).sum::<u64>(),
             "sources": self.sources.iter().map(Source::to_json).collect::<Vec<_>>(),
@@ -697,7 +724,7 @@ impl Inventory {
 }
 
 /// Measure the machine: app bundles, their `~/Library` data, and the package sources.
-pub fn measure(roots: Vec<String>, idle_days: i64) -> Inventory {
+pub fn measure(roots: Vec<String>, idle_days: i64, declared: &[(String, String)]) -> Inventory {
     let home = std::env::var("HOME")
         .ok()
         .filter(|h| !h.is_empty())
@@ -707,6 +734,9 @@ pub fn measure(roots: Vec<String>, idle_days: i64) -> Inventory {
 
     let dirs: Vec<PathBuf> = roots.iter().map(PathBuf::from).collect();
     let mut apps = scan_apps(&dirs, today);
+    for app in &mut apps {
+        app.toolchain = declared_by(Path::new(&app.path), declared);
+    }
     let (residuals, dup_errors) = scan_residuals(&home);
     let unmatched_children = attribute(&mut apps, residuals);
 
@@ -733,6 +763,12 @@ pub fn measure(roots: Vec<String>, idle_days: i64) -> Inventory {
     unmatched.sort_by_key(|r| std::cmp::Reverse(r.bytes));
 
     let mut errors = dup_errors;
+    if declared.is_empty() {
+        errors.push(
+            "toolchain.toml was not read, so an app Sjel calls from the command line can show as unused"
+                .to_string(),
+        );
+    }
     for app in &apps {
         if let LastUsed::Unknown(why) = &app.last_used {
             // One line per distinct reason: twenty apps from one unindexed volume is one
@@ -769,12 +805,17 @@ pub fn print(inventory: &Inventory, top: usize) {
     let idle: Vec<&App> = inventory
         .apps
         .iter()
-        .filter(|a| a.last_used.is_idle(inventory.idle_days))
+        .filter(|a| a.toolchain.is_none() && a.last_used.is_idle(inventory.idle_days))
         .collect();
     let never: Vec<&App> = inventory
         .apps
         .iter()
-        .filter(|a| matches!(a.last_used, LastUsed::Never))
+        .filter(|a| a.toolchain.is_none() && matches!(a.last_used, LastUsed::Never))
+        .collect();
+    let declared: Vec<&App> = inventory
+        .apps
+        .iter()
+        .filter(|a| a.toolchain.is_some())
         .collect();
     let unknown: Vec<&App> = inventory
         .apps
@@ -796,6 +837,17 @@ pub fn print(inventory: &Inventory, top: usize) {
         top,
     );
     print_group("Never used, as far as Spotlight knows", &never, top);
+    if !declared.is_empty() {
+        println!("\nDeclared in toolchain.toml — Sjel runs these from the command line, so Spotlight's date does not count:");
+        for app in &declared {
+            println!(
+                "  {:>9}  {:<24} [{}]",
+                fmt_bytes(app.bytes),
+                app.name,
+                app.toolchain.as_deref().unwrap_or_default()
+            );
+        }
+    }
     print_group(
         "Unknown — the machine did not answer, which is not the same as unused",
         &unknown,
@@ -806,7 +858,8 @@ pub fn print(inventory: &Inventory, top: usize) {
         .apps
         .iter()
         .filter(|a| {
-            !a.last_used.is_idle(inventory.idle_days)
+            a.toolchain.is_none()
+                && !a.last_used.is_idle(inventory.idle_days)
                 && !matches!(a.last_used, LastUsed::Never | LastUsed::Unknown(_))
         })
         .collect();
@@ -953,7 +1006,28 @@ mod tests {
             residual_bytes: 0,
             residual_paths: Vec::new(),
             partial: false,
+            toolchain: None,
         }
+    }
+
+    #[test]
+    fn an_app_toolchain_toml_names_is_declared_and_no_other() {
+        let apps = toolchain_apps(
+            "[libreoffice]\nbin = \"soffice\"\napp = \"LibreOffice.app\"\n[xcode]\napp = \"Xcode.app\"\n[git]\nrequired = \"yes\"\n",
+        );
+        assert_eq!(apps.len(), 2);
+        let at = |name: &str| PathBuf::from(format!("/Applications/{name}"));
+        assert_eq!(
+            declared_by(&at("LibreOffice.app"), &apps).as_deref(),
+            Some("libreoffice")
+        );
+        assert_eq!(
+            declared_by(&at("Xcode.app"), &apps).as_deref(),
+            Some("xcode")
+        );
+        // Zed ships its own git; only a named app counts.
+        assert_eq!(declared_by(&at("Zed.app"), &apps), None);
+        assert_eq!(declared_by(&at("libreoffice.app"), &apps), None);
     }
 
     fn child(name: &str, bytes: u64) -> Child {

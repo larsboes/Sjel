@@ -989,7 +989,12 @@ fn cmd_installed(
         }
     }
 
-    let inventory = installed::measure(roots, idle_days);
+    let apps = repo_root()
+        .ok()
+        .and_then(|r| std::fs::read_to_string(r.join("toolchain.toml")).ok())
+        .map(|t| installed::toolchain_apps(&t))
+        .unwrap_or_default();
+    let inventory = installed::measure(roots, idle_days, &apps);
     if json {
         println!(
             "{}",

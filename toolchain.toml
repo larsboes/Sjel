@@ -21,6 +21,9 @@
 #   why          = one line: what Sjel uses it for.
 #   install_macos / install_linux = the copy-paste install hint for that OS.
 #   bin          = the executable name IF it differs from the section name (e.g. bitwarden-cli → bw).
+#   app          = the macOS app bundle this tool is (e.g. "LibreOffice.app"). `sjel storage
+#                  installed` never reports a named app as idle: Sjel runs it from the command
+#                  line, which Spotlight's last-used date does not record.
 #   os           = "macos" | "linux" — scope the entry to one OS; the checker skips it elsewhere.
 #   upstream     = the upstreams.toml section id, when this tool is also audited code.
 #   min_version / version_cmd = optional FLOOR -- the oldest release Sjel's use of the tool is
@@ -209,6 +212,7 @@ needed_by = ["capability:comms", "capability:scouting"]
 version_cmd = "ollama --version"
 min_version = "0.33.0"
 why = "serves the `embedding` and `summarization` inference roles: capabilities/comms/src/relevance.rs for Feed-TELOS ranking, capabilities/scouting/src/embed.rs for profile vectors, and the strong local digest rung an operator reaches by pressing Regenerate. Absent, both degrade rather than fail -- relevance drops to the deterministic `lexical` control -- which is why this is optional and also exactly why it must be declared: the same silence the macmon and yt-dlp entries above record. It is a systems.toml service ([ollama]), not adopted code, so no `upstream` id: Sjel calls it and builds nothing from it."
+app = "Ollama.app"
 install_macos = "brew install --cask ollama"
 install_linux = "curl -fsSL https://ollama.com/install.sh | sh"
 
@@ -239,8 +243,17 @@ bin = "soffice"
 # (Packs/presentations), whose `scripts/deck render` shells out to `soffice --headless
 # --convert-to pdf` and has no fallback: an unrendered deck is an unverified deck.
 why = "headless LibreOffice is the only renderer the slide-deck skill can use, and rendering is its verification step; `scripts/deck render` fails without it (Packs/presentations). Sjel calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. macOS note: the cask installs a .app and links a `soffice` shim into the Homebrew bin dir, which is what `shutil.which(\"soffice\")` finds; without that shim the binary sits at /Applications/LibreOffice.app/Contents/MacOS/soffice and render reports it as missing."
+app = "LibreOffice.app"
 install_macos = "brew install --cask libreoffice"
 install_linux = "apt-get install -y libreoffice"
+
+[xcode]
+required = "optional"
+bin = "xcodebuild"
+os = "macos"
+app = "Xcode.app"
+why = "builds and archives the iOS app: `tools/distribution/ios-archive`, which `sjel testflight` drives, runs xcodebuild. macOS only; Sjel builds nothing from it, so no `upstream` id."
+install_macos = "xcode-select --install is not enough; install Xcode from the App Store"
 
 # ---- interactive terminal tools (this Mac's shell; absence warns) -----------------------
 #

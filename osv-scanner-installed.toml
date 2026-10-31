@@ -75,6 +75,16 @@ ignoreUntil = 2027-01-01
 reason = "undici 6.29.0, fixed in 6.29.1: `fetch()` aborts the Node.js process when a server answers with more than five content codings and closes before the body. Reach: `npm@11.20.0` (Homebrew's bundled npm) > node-gyp > undici 6.28.0, which the advisory's range below 6.29.1 also covers, npm's own dependency tree, so what is exposed is a registry or tarball host's response to npm itself — the one undici path this machine actually exercises, which is why it is dated rather than dismissed. Nothing here installs that copy separately; the only fix is a newer node-gyp, which is npm's call. Ends when npm ships undici >= 6.29.1."
 
 [[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-01-01
+reason = "minimatch 10.2.5, fixed in 11.0.1: an attacker-controlled glob pattern grows quadratically during preprocessing. Reach: `npm@11.20.0` (Homebrew's bundled npm) > @npmcli/map-workspaces and @tufjs/models > minimatch. npm reads the patterns from this machine's own package.json files and from signed TUF metadata, so no untrusted pattern reaches it. npm@12.2.1, the newest release, still requires minimatch ^10.2.5. The repository's Bun lockfiles override to ^11.0.1 instead. Ends when npm ships minimatch 11."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-01-01
+reason = "glob 13.0.6, fixed in 14.0.2: an aborted async walk keeps reading directories after it rejects. Reach: `npm@11.20.0` (Homebrew's bundled npm) > @npmcli/map-workspaces and node-gyp > glob. The cost is extra local filesystem reads after npm aborts a walk of this machine's own tree; no remote input starts or aborts the walk. npm@12.2.1 still requires glob ^13.0.6. Ends when npm ships glob 14."
+
+[[IgnoredVulns]]
 id = "GHSA-4qv8-2p9j-2685"
 ignoreUntil = 2027-01-01
 reason = "undici 6.29.0, fixed in 6.29.1: unbounded memory in the `EventSource` parser when a peer sends many tiny `data:` fields with no blank separator. Same reach and same end as GHSA-xjj6-f33q-929c, with one narrowing that matters: npm's registry traffic uses `fetch()`, not `EventSource`, so nothing npm does on this machine reaches the parser. Dated anyway because it rides the same pin, and the next npm move is what ends both."

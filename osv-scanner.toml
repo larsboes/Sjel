@@ -45,18 +45,18 @@ reason = "bincode 2.0.1 is unmaintained (RustSec type INFO, no CVE, no affected 
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
-ignoreUntil = 2026-11-01
-reason = "Unmaintained paste proc-macro, build-time only, via parquet 59.1.0 <- punctuality. No affected functions, CVSS, or fixed version. Replacing it means Arrow/Parquet dropping the dependency upstream, not patching a transitive crate here; watch that rather than this ID."
+ignoreUntil = 2027-01-01
+reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach, re-measured 2026-11-01: `apps/gpui/Cargo.lock` only, through `gpui-component 0.7.3 <- gpui-kit 0.7.3`, `metal 0.33.0 <- gpui-pre-apple`, and `pulp 0.22.3 <- exr <- image <- gpui-pre` — all macro expansion over code the build already holds, no runtime input. The root `Cargo.lock` still lists the crate, but `cargo tree -i paste` prints \"nothing to print\" for the workspace at any target: the parquet <- punctuality path this entry used to name no longer reaches it. Ends when those upstreams move to `pastey`, the successor paste names; not a patch a transitive bump here can make."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0192"
-ignoreUntil = 2026-11-01
+ignoreUntil = 2027-01-01
 # "user-supplied" was the wrong half of the sentence, and it is corrected below rather than
 # softened. Transit fetches no PDF: `src/hafas.rs` names three JSON endpoints and nothing else
 # reaches the network, so nothing here arrives by a URL. The bytes arrive two ways, and only one
 # of them is the operator's own file. The other is a request body on a port that, until
 # 2026-09-08, answered any web page the operator had open.
-reason = "Unmaintained ttf-parser, non-optional and runtime-reachable, via lopdf 0.42.0 <- pdf-extract 0.12.0 <- transit (`cargo tree -p sjel-transit -i ttf-parser`, 2026-09-08). Two callers reach the parser: `transit import <file>`, where the file is the operator's own, and the raw body of `POST /api/tickets/extract`, which is whatever the caller sent. The second is why this is untrusted input, and it is more exposed than a file on disk: that route sat under CorsLayer::permissive() with no origin refusal, and it takes `Bytes` rather than a typed body, so a cross-origin simple POST reached the PDF parser with no preflight to stop it. `refuse_foreign_origins` now bounds its callers to the dashboard, the tailnet and non-browser clients. Scouting links transit for adapters/transit_fare.rs and calls no extractor, so it inherits the crate and not the reach. No known vulnerability, no CVSS, no affected function and no fixed version — this is an unmaintained-crate advisory, so the exception stands to its date: if a maintained pdf-extract alternative appears, take it, and keep transit's existing PDF fixtures green across the swap."
+reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in two trees. Transit: via lopdf 0.42.0 <- pdf-extract 0.12.1 <- sjel-transit <- sjel-scouting (`cargo tree -i ttf-parser`, 2026-11-01). Two callers reach the parser: `transit import <file>`, where the file is the operator's own, and the raw body of `POST /api/tickets/extract`, which is whatever the caller sent. The second is why this is untrusted input, and it is more exposed than a file on disk: that route sat under CorsLayer::permissive() with no origin refusal, and it takes `Bytes` rather than a typed body, so a cross-origin simple POST reached the PDF parser with no preflight to stop it. `refuse_foreign_origins` now bounds its callers to the dashboard, the tailnet and non-browser clients. Scouting links transit for adapters/transit_fare.rs and calls no extractor, so it inherits the crate and not the reach. The app: via fontdb 0.23.0, from mermaid-rs-renderer 0.3.1 in sjel-gpui and from usvg 0.46.0 <- gpui-pre — a font database over the app's own bytes, reached when a Mermaid diagram or an SVG icon is laid out, not by a URL. No known vulnerability, no CVSS, no affected function and no fixed version: fontdb 0.23 requires ttf-parser ^0.25, so the end is fontdb or usvg moving off it, or a maintained pdf-extract alternative for transit. If either appears, take it, and keep transit's PDF fixtures and the app's diagram rendering green across the swap."
 
 # The two below reach dashboard/src-tauri/Cargo.lock only through gtk 0.18 <- muda/tao <- tauri,
 # which Tauri pulls in for Linux alone. The app ships for macOS and iOS: `cargo tree -i glib

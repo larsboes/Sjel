@@ -205,8 +205,6 @@
       <header>
         <strong>{detail.name}</strong>
         <span class="kind">{detail.kind}</span>
-          </button>
-        {/if}
         {#if detail.service}
           {@const isUp = live[detail.name] === true}
           <button

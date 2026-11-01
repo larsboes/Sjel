@@ -133,13 +133,13 @@ reason = "ip-address 10.5.0, a fourth advisory against the same version, fixed i
 # installed crate's published lock rather than through a repository lockfile.
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0436"
-ignoreUntil = 2026-11-01
-reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach: the published locks of tauri-cli 2.12.1 and xberg-cli 1.3.0, both installed crates. Same advisory and same date as the entry in osv-scanner.toml; xberg-cli is also a stale install this machine can move (1.3.0 -> 1.3.3), after which this row may stop applying on its own."
+ignoreUntil = 2027-01-01
+reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach, re-measured 2026-11-01: the published lock of `tauri-cli 2.12.4`, the installed build tool; xberg-cli is installed at 1.3.10 and no longer carries it. Same advisory as the entry in osv-scanner.toml, arriving through a build tool rather than this checkout. Ends when tauri-cli republishes against pastey."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0192"
-ignoreUntil = 2026-11-01
-reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in the crate that pulls it. No known vulnerability, no CVSS, no affected function and no fixed version. Reach here: the published lock of tauri-cli 2.12.1. The repository half of this advisory, its callers and what bounds them, is the longer entry in osv-scanner.toml; this row is the same crate arriving through an installed build tool."
+ignoreUntil = 2027-01-01
+reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in the crate that pulls it. No known vulnerability, no CVSS, no affected function and no fixed version. Reach here, re-measured 2026-11-01: the published lock of `tauri-cli 2.12.4`. The repository half of this advisory, its two callers and what bounds them, is the longer entry in osv-scanner.toml; this row is the same crate arriving through an installed build tool."
 
 # ── In the PUBLISHED lock of a crate that is already at its latest release ───────
 #

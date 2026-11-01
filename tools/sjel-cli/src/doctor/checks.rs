@@ -8,9 +8,9 @@ use std::process::Command;
 use regex::Regex;
 use serde_json::Value as Json;
 
-use crate::harnesses::engine::SkillStatus;
+use crate::harnesses::engine::{read_state, SkillStatus};
 use crate::harnesses::mutate::hold_matches;
-use crate::harnesses::mutate::{held_sources, hold_source};
+use crate::harnesses::mutate::{held_sources, hold_source, recorded_profile_units};
 use crate::harnesses::registry::{is_installed, Model, Registry};
 use crate::harnesses::statuses_for;
 
@@ -2198,6 +2198,12 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                 // passing as intent.
                 let held_by = held_sources(&harness.config).unwrap_or_default();
                 let held: std::collections::BTreeSet<String> = held_by.keys().cloned().collect();
+                // A unit the recorded profile leaves out is a choice, not a missing deployment.
+                let recorded = (harness.model == Model::Materialized)
+                    .then(|| read_state(&harness.config).ok())
+                    .flatten()
+                    .and_then(|state| recorded_profile_units(&harness.config, &state).ok())
+                    .flatten();
                 for row in &rows {
                     let label = format!("{}/{}", row.pack, row.skill);
                     if hold_matches(&held, &label) && row.status != SkillStatus::NotDeployed {
@@ -2240,6 +2246,15 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                                 ));
                             } else if harness.model == Model::Registry {
                                 unselected.push(row.pack.clone());
+                            } else if let Some(profile) = recorded.as_ref().filter(|p| {
+                                !p.units
+                                    .get(&row.pack)
+                                    .is_some_and(|keys| keys.contains(&row.skill))
+                            }) {
+                                lines.push((
+                                    Level::Ok,
+                                    format!("{label} not selected by profile '{}'", profile.name),
+                                ));
                             } else {
                                 lines.push((
                                     Level::Warn,
@@ -2382,12 +2397,6 @@ fn unmounted_volume(targets: &toml::Table, id: &str) -> Option<PathBuf> {
 /// The deploy and sync commands an operator is told to run for one harness. Every harness but
 /// Claude has a `tools/packs-<id>` launcher with `deploy` and `sync` verbs.
 fn pack_commands(id: &str, pack: &str) -> (String, String) {
-    if id == "claude" {
-        return (
-            format!("tools/packs.sh link {pack}"),
-            format!("tools/packs-claude sync {pack}"),
-        );
-    }
     (
         format!("tools/packs-{id} deploy {pack}"),
         format!("tools/packs-{id} sync {pack}"),

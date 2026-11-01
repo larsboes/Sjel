@@ -35,17 +35,13 @@ drifting copies.
 
 ## 2. Defects
 
-1. **Sync ignores the profile.** `tools/packs-claude sync harness` deployed `trim` and
-   `harness-sync` while the active profile (`repository`) selects only `sjel` from that Pack.
-   Re-running `use <profile>` restores the set.
-2. **Account copies drift silently.** Nothing in Sjel knows the account-synced copies exist, so
+1. **Account copies drift silently.** Nothing in Sjel knows the account-synced copies exist, so
    the six above drifted with no report. A session cannot tell which `council` is current.
-3. **The doctor judges against every Pack, not the active profile.** In a session on the
-   `repository` profile, the Packs section warns 9 times for units the profile deliberately
-   leaves out. A warning that is expected on every run teaches readers to skip the section.
-4. **The doctor's fix hint names a shim.** `tools/sjel-cli/src/doctor/checks.rs`
-   `pack_commands` prints `tools/packs.sh link <pack>`. `tools/packs.sh` is a compatibility shim
-   over `tools/packs-claude`.
+
+Fixed in `383cb67`: `sync` ignored the profile, the doctor warned for units the profile leaves
+out, and its Claude Code fix hint named the `tools/packs.sh` shim. A ledger now records the
+profile `use` activated, and both read its selection. A ledger written before `383cb67` carries
+no profile until the next `use <profile>` on that machine.
 
 ## 3. Ideas
 
@@ -58,9 +54,7 @@ drifting copies.
 3. **The account as a harness.** Treat the claude.ai account's skill set as a destination with
    its own ledger, so `harnesses status` reports its drift. Upload stays a manual step if no API
    exists for it (unverified).
-4. **Doctor reads the active profile.** A unit outside the active profile is "not selected",
-   not "not deployed", and is not a warning.
-5. **Names that cannot collide.** When the same skill reaches a session through two channels,
+4. **Names that cannot collide.** When the same skill reaches a session through two channels,
    one wins by rule, and the doctor reports the loser.
 
 ## 4. Open decisions
@@ -78,7 +72,7 @@ drifting copies.
 
 | # | Work | Done when |
 |---|---|---|
-| P1 | `sync` refreshes only the units the active profile selects (defect 1). | `use repository`, then `sync harness`, leaves `trim` and `harness-sync` undeployed. Unit test in `tools/sjel-cli/src/harnesses/`. |
-| P2 | The doctor judges Pack state against the active profile and prints the `packs-claude` command (defects 3, 4). | A repository-profile session shows no Pack warnings. A unit removed by hand still warns. |
-| P3 | Report account-synced skills that share a name with a Pack skill, with their drift (defect 2). | In a cloud session, `tools/harnesses status` lists the six names above with "differs". |
+| P1 | Done in `383cb67`: `sync` keeps a Pack to the recorded profile. | Checked in a cloud container. |
+| P2 | Done in `383cb67`: the doctor reports units outside the recorded profile as not selected, and names `tools/packs-claude deploy`. | Checked in a cloud container. Not checked on the Mac: run `tools/packs-claude use full` once there first. |
+| P3 | Report account-synced skills that share a name with a Pack skill, with their drift (defect 1). | In a cloud session, `tools/harnesses status` lists the six names above with "differs". |
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |

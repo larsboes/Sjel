@@ -136,6 +136,9 @@ pub struct State {
     pub destination: String,
     #[serde(default)]
     pub packs: BTreeMap<String, PackRecord>,
+    /// The profile `use` last activated here. `sync` and doctor read its selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -253,6 +256,7 @@ pub fn read_state(config: &DeployConfig) -> Result<State, String> {
             version: 1,
             destination: config.destination.display().to_string(),
             packs: BTreeMap::new(),
+            profile: None,
         });
     }
     let text = fs::read_to_string(&config.state_file).map_err(|e| {

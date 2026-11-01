@@ -140,19 +140,19 @@ export function fastPlan(files: string[], deleted: string[], packages: Package[]
   // Tests named after a changed file: x.test.ts beside x.ts, tools/x.test.sh beside tools/x.
   const bun = new Set<string>();
   const shell = new Set<string>();
-  const outsideBun: string[] = [];
+  const outsideBun = new Set<string>();
   for (const file of files) {
     const stem = file.replace(/\.test\.(ts|sh)$/, "").replace(/\.(ts|sh)$/, "");
     if (exists(`${stem}.test.ts`)) {
       if (discovers(`${stem}.test.ts`)) bun.add(`./${stem}.test.ts`);
-      else outsideBun.push(`${stem}.test.ts`);
+      else outsideBun.add(`${stem}.test.ts`);
     }
     if (exists(`${stem}.test.sh`)) shell.add(`${stem}.test.sh`);
   }
   if (bun.size) checks.push({ name: "bun test", cmd: ["bun", "test", ...[...bun].sort()], reason: `${bun.size} test file(s) beside changed files` });
-  if (outsideBun.length) skipped.push(`bun test: ${outsideBun.sort().join(", ")} beside a changed file, outside Bun's discovery (bunfig.toml [test] pathIgnorePatterns) — those run under their package's own runner`);
+  if (outsideBun.size) skipped.push(`bun test: ${[...outsideBun].sort().join(", ")} beside a changed file, outside Bun's discovery (bunfig.toml [test] pathIgnorePatterns) — those run under their package's own runner`);
   for (const t of [...shell].sort()) checks.push({ name: t, cmd: ["bash", t], reason: "beside a changed file" });
-  if (!bun.size && !shell.size) skipped.push("bun and shell tests: none beside a changed file");
+  if (!bun.size && !shell.size && !outsideBun.size) skipped.push("bun and shell tests: none beside a changed file");
 
   if (files.some((f) => f.startsWith("apps/gpui/"))) skipped.push("gpui: CI's platform matrix checks it");
   skipped.push("ui-check: CI runs it in full");

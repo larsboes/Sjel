@@ -150,9 +150,11 @@ test("fast plan: picks tests beside changed files", () => {
 
 test("fast plan: a test Bun's discovery ignores is skipped by name, not run", () => {
   const exists = (p: string) => p === "capabilities/comms/clipper/src/x.test.ts";
-  const plan = fastPlan(["capabilities/comms/clipper/src/x.ts"], [], packages, exists, () => false);
+  const plan = fastPlan(["capabilities/comms/clipper/src/x.ts", "capabilities/comms/clipper/src/x.test.ts"], [], packages, exists, () => false);
   expect(plan.checks.map((c) => c.name)).not.toContain("bun test");
-  expect(plan.skipped.join("\n")).toContain("capabilities/comms/clipper/src/x.test.ts");
+  const skip = plan.skipped.find((s) => s.includes("capabilities/comms/clipper/src/x.test.ts"))!;
+  expect(skip.match(/x\.test\.ts/g)).toHaveLength(1);
+  expect(plan.skipped.join("\n")).not.toContain("none beside a changed file");
 });
 
 test("bunDiscovers reads bunfig's pathIgnorePatterns and matches at any depth", () => {

@@ -10,9 +10,14 @@ Three horizons, in this order:
 1. **The daily corridor.** Köln Hbf to Bonn on the right bank of the Rhine. A bridge closure moves
    road traffic onto the remaining Rhine crossings, so buses and replacement buses (SEV) on that
    side are unreliable, and rail plus segregated tram routes may arrive earlier despite a longer
-   schedule.
+   schedule. That last point is a hypothesis, not a finding: the rail-and-tram route has three legs
+   and two transfers, and the evidence for it is a few remembered bad commutes. T7 tests it.
 2. **Domestic short trips.** Intercity trips to cities such as Berlin, Munich and Hamburg, often
-   planned at short notice. Long-distance rail is the best-measured part of the data today.
+   planned at short notice. Long-distance rail is the best-measured part of the data today. Here a
+   missed connection costs the most: the next ICE on a route may be one or two hours away, against
+   ten minutes for a tram, so headway (T3) matters more than on the daily corridor. A delay that
+   breaks a connection also lifts a Sparpreis ticket's train binding, so the risk is time, not the
+   fare.
 3. **Spontaneous and international trips.** Trips decided days or hours ahead, including other
    countries, where Sjel has no history and must start from priors and live sources.
 
@@ -66,7 +71,9 @@ rather than guessed.
   independent of the Mac. The Mac merges what that host collected when it wakes.
 - **Store aggregates and the user's own rides. Fetch everything else** (decided 2026-10-27).
   Timetables, live positions, road traffic and map data stay with their providers and are cached
-  with a time-to-live only for an upcoming trip or a watched region.
+  with a time-to-live only for an upcoming trip or a watched region. Estimate, not measured: a
+  watched region of 20 stops × 10 lines × 24 hours × 2 day types at 512 bytes a cell is about
+  5 MB of histograms.
 - **Histograms are the unit of exchange** (decided 2026-10-27). They add, so a collector on any
   host and the Mac can merge in any order without double counting, as long as each batch carries
   an idempotency key. This is what makes an occasionally-connected Mac safe.
@@ -115,6 +122,9 @@ flowchart TD
 6. **Decision.** The objective is P(arrival before the deadline), with the deadline taken from
    the calendar entry the journey serves. The traveller profile (`capabilities/traveler`) sets
    the risk tolerance: a cautious profile optimises a high quantile, a relaxed one the median.
+   The advice is a plan with decision points, not one chain of legs: "take the S19; at Siegburg,
+   switch to the alternative if the 66 is more than X minutes late". A route with cheap fallbacks
+   at its transfers scores higher than its arrival quantile alone would say.
 
 ### Placement (proposed)
 
@@ -152,7 +162,7 @@ These need an answer before the work package that depends on them starts.
 
 | # | Work | Done when |
 |---|---|---|
-| T0 | **Spike: what is observable.** For every line on the pilot corridor (RE5, RB48, S12, S19, Stadtbahn 66 and the right-bank trams, buses 606 and 607, SEV), record over three weekday mornings whether bahn.de and the VRS sources return realtime departures, and whether bahn.de answers from a datacenter address. | A table in this plan: line × source → realtime yes, no or partial, with the probe command. Feeds decision 4.1. |
+| T0 | **Spike: what is observable.** For every line on the pilot corridor (RE5, RB48, S12, S19, Stadtbahn 66 and the right-bank trams, buses 606 and 607, SEV), record over three weekday mornings whether bahn.de and the VRS sources return realtime departures, and whether bahn.de answers from a datacenter address. A Claude Code cloud environment blocks `www.bahn.de` under its default network policy (checked 2026-10-31: `CONNECT` refused by the egress proxy), so the datacenter check needs that host allowed in the environment's network settings, or another datacenter host. | A table in this plan: line × source → realtime yes, no or partial, with the probe command. Feeds decision 4.1. |
 | T1 | **Line-level cells.** Key `punctuality` cells by line where `train_name` carries one, falling back to train type. | `punctuality stats` separates RE5 from other RE lines at Köln Hbf. Existing rail lookups answer unchanged when no line is given. |
 | T2 | **Disruption remarks.** Parse HAFAS remarks into each leg and journey. | A journey with a warning in DB Navigator carries the same remark text in `transit` search output. A fixture test pins the parser. |
 | T3 | **Headway in the score.** Add the expected cost of a missed transfer, P(miss) × time to the next departure of the same line, to the journey result. | Two journeys with equal catch probability but different headways rank differently. Unit test with fixed inputs. |

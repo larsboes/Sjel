@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, failedPackages, fastPlan, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
+import { changedFiles, bunDiscovers, failedPackages, fastPlan, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -146,6 +146,26 @@ test("fast plan: picks tests beside changed files", () => {
   const plan = fastPlan(["tools/x.ts", "tools/x"], [], packages, exists);
   expect(plan.checks.find((c) => c.name === "bun test")!.cmd).toEqual(["bun", "test", "./tools/x.test.ts"]);
   expect(plan.checks.map((c) => c.name)).toContain("tools/x.test.sh");
+});
+
+test("fast plan: a test Bun's discovery ignores is skipped by name, not run", () => {
+  const exists = (p: string) => p === "capabilities/comms/clipper/src/x.test.ts";
+  const plan = fastPlan(["capabilities/comms/clipper/src/x.ts"], [], packages, exists, () => false);
+  expect(plan.checks.map((c) => c.name)).not.toContain("bun test");
+  expect(plan.skipped.join("\n")).toContain("capabilities/comms/clipper/src/x.test.ts");
+});
+
+test("bunDiscovers reads bunfig's pathIgnorePatterns and matches at any depth", () => {
+  const root = mkdtempSync(join(tmpdir(), "ci-impact-"));
+  try {
+    writeFileSync(join(root, "bunfig.toml"), '[test]\npathIgnorePatterns = ["capabilities/comms/clipper/**", "bazel-*/*"]\n');
+    const discovers = bunDiscovers(root);
+    expect(discovers("capabilities/comms/clipper/src/utils/x.test.ts")).toBe(false);
+    expect(discovers("bazel-bin/x.test.ts")).toBe(false);
+    expect(discovers("tools/x.test.ts")).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("failedPackages names a failing test binary's package and a crate that did not compile", () => {

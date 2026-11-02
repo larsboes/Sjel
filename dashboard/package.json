@@ -16,7 +16,7 @@
     "tauri:build": "cargo tauri build",
     "build": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --config ./svelte.config.js && vite build",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsgo --tsconfig ./tsconfig.json --config ./svelte.config.js",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --config ./svelte.config.js && svelte-check --tsgo --tsconfig ./tsconfig.json --config ./svelte.config.js",
     "test": "bun test"
   },
   "dependencies": {

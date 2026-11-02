@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "svelte-kit sync && vite build",
-    "check": "svelte-kit sync && svelte-check --tsgo --tsconfig ./tsconfig.json --config ./svelte.config.js"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --config ./svelte.config.js && svelte-check --tsgo --tsconfig ./tsconfig.json --config ./svelte.config.js"
   },
   "dependencies": {
     "@sveltejs/kit": "^2.70.3",

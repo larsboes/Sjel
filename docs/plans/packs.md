@@ -40,11 +40,16 @@ drifting copies.
 1. **Account copies drift silently.** Nothing in Sjel knows the account-synced copies exist, so
    the six above drifted with no report. A session cannot tell which `council` is current.
 
-2. **Third-party screening does not bind the installed bytes.** `tools/skills add` and `update`
-   stage a copy and call `tools/intake gate`, then upstream's CLI fetches again for installation.
-   A source change between the two fetches can install unread bytes (`tools/skills`). Model-review
-   failure falls back to fixed rules (`tools/sjel-cli/src/intake/mod.rs`). Approval records do not
-   prove that a human reviewed the findings. No general installer containment is enforced.
+2. **Third-party screening now binds the installed bytes (P6).** `tools/skills add` and `update`
+   stage upstream's output once under `~/.local/state/sjel/intake/staged/`, read every staged
+   skill into memory, gate that same snapshot, and publish those bytes with the staged lock
+   entry — there is no second fetch after screening (`tools/sjel-cli/src/intake/skills.rs`).
+   The gate is fail-closed: a missing or failed model review holds the content unless that exact
+   digest was approved, `--no-review` is gone, and an unapproved `--against` baseline is
+   ignored. Snapshots now refuse symlinks, special files, files over 2 MiB and unreadable
+   directories rather than substituting a placeholder. Limits: publication is not
+   crash-atomic across layouts (backups are restored on ordinary failure, the lock is written
+   last), and approval records still do not prove who read the findings.
 3. **External skills bypass Pack profile selection.** Anatomy is globally discovered outside the
    Pack ledger, and application-owned skill symlinks have their own installer. The current scope
    rule in `tools/skills` rejects global non-Pack installs, while `upstreams.toml [anatomy]`
@@ -96,10 +101,10 @@ precedes installer hardening. Anatomy remains unchanged until the external-skill
 | P3 | Report account-synced skills that share a name with a Pack skill, with their drift (defect 1). | In a cloud session, `tools/harnesses status` lists the six names above with "differs". |
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
-| P6 | Bind third-party installation to screened content and define review-failure policy (defect 2). | Add and update install the screened digest even if upstream changes; tests cover held content, review failure and an untrusted baseline. |
+| P6 | Done: bind third-party installation to screened content; review failure holds. | 406 CLI tests and 13 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings. |
 | P7 | Manage approved external skills per harness (defect 3), after decision 4.4. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
 
-Verification: all 401 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy passes. A parallel
+Verification: all 406 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy passes. A parallel
 rerun hit a managed-settings lock failure in
 `pi_config::tests::repeated_apply_retains_first_original_and_is_byte_idempotent`; that test passed
 in isolation. Live `harnesses status` reports no active-unit defects, no knowledge or learning

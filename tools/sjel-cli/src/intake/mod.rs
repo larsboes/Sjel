@@ -8,7 +8,7 @@
 //! ```text
 //! tools/intake scan <dir> [--against <dir>]         the fixed rules only
 //! tools/intake review <dir> [--against <dir>]       the model review only
-//! tools/intake gate <dir> --source <name> [--against <dir>] [--no-review]
+//! tools/intake gate <dir> --source <name> [--against <dir>]
 //! tools/intake approve <dir> --source <name> [--version <v>]
 //! tools/intake version <source>                     the last approved version
 //! ```
@@ -17,6 +17,7 @@
 
 mod review;
 mod rules;
+pub mod skills;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -66,16 +67,24 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
             Ok(verdict(&findings))
         }
         "gate" => {
+            if opts.no_review {
+                return Err("gate requires model review or an exact approval; use scan for fixed rules only".into());
+            }
             let source = opts.source.as_deref().ok_or("gate needs --source <name>")?;
             let (new, old) = opts.trees()?;
-            Ok(gate(
-                source,
-                opts.dir()?,
-                &new,
-                old.as_ref(),
-                !opts.no_review,
-                None,
-            ))
+            let dir = opts.dir()?.to_path_buf();
+            let code = gate_tree(source, Some(&dir), &new, old.as_ref());
+            if code == 0 {
+                if let Some(v) = opts.version.as_deref() {
+                    if let Err(e) =
+                        Ledger::load().and_then(|mut l| l.approve(source, &digest(&new), Some(v)))
+                    {
+                        eprintln!("intake: {e}");
+                        return Ok(1);
+                    }
+                }
+            }
+            Ok(code)
         }
         "approve" => {
             let source = opts
@@ -183,7 +192,7 @@ struct Approval {
     approved_at: String,
 }
 
-fn state_dir() -> PathBuf {
+pub fn state_dir() -> PathBuf {
     std::env::var_os("XDG_STATE_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
@@ -201,7 +210,8 @@ impl Ledger {
         let path = state_dir().join("approved.toml");
         let mut ledger: Ledger = match fs::read_to_string(&path) {
             Ok(text) => toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?,
-            Err(_) => Ledger::default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ledger::default(),
+            Err(e) => return Err(format!("{}: {e}", path.display())),
         };
         ledger.path = path;
         Ok(ledger)
@@ -211,6 +221,10 @@ impl Ledger {
         self.approved
             .iter()
             .any(|a| a.source == source && a.digest == digest)
+    }
+
+    fn baseline<'a>(&self, source: &str, old: Option<&'a Tree>) -> Option<&'a Tree> {
+        old.filter(|tree| self.approved(source, &digest(tree)))
     }
 
     fn version(&self, source: &str) -> Option<&str> {
@@ -236,6 +250,7 @@ impl Ledger {
     }
 }
 
+#[derive(Clone)]
 pub struct TreeFile {
     pub bytes: Vec<u8>,
     pub executable: bool,
@@ -243,9 +258,12 @@ pub struct TreeFile {
 
 pub type Tree = BTreeMap<String, TreeFile>;
 
-/// Every file below `root`, by relative path. A symlink is kept as a file holding its target,
-/// so it is digested and reported rather than followed somewhere unread.
-fn read_tree(root: &Path) -> Result<Tree, String> {
+/// Read bounded regular files; refuse indirect or unreadable content.
+pub fn read_tree(root: &Path) -> Result<Tree, String> {
+    let meta = fs::symlink_metadata(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    if !meta.is_dir() || meta.file_type().is_symlink() {
+        return Err(format!("{}: expected a real directory", root.display()));
+    }
     let mut tree = Tree::new();
     visit(root, root, &mut tree)?;
     Ok(tree)
@@ -254,8 +272,8 @@ fn read_tree(root: &Path) -> Result<Tree, String> {
 fn visit(root: &Path, dir: &Path, tree: &mut Tree) -> Result<(), String> {
     let mut entries: Vec<_> = fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
-        .filter_map(Result::ok)
-        .collect();
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("{}: {e}", dir.display()))?;
     entries.sort_by_key(|e| e.file_name());
     for entry in entries {
         let path = entry.path();
@@ -270,24 +288,17 @@ fn visit(root: &Path, dir: &Path, tree: &mut Tree) -> Result<(), String> {
             .into_owned();
         let meta = fs::symlink_metadata(&path).map_err(|e| format!("{rel}: {e}"))?;
         if meta.file_type().is_symlink() {
-            let target = fs::read_link(&path).map_err(|e| format!("{rel}: {e}"))?;
-            tree.insert(
-                rel,
-                TreeFile {
-                    bytes: format!("symlink -> {}", target.display()).into_bytes(),
-                    executable: false,
-                },
-            );
+            return Err(format!(
+                "{rel}: symlinks cannot be screened as file content"
+            ));
         } else if meta.is_dir() {
             visit(root, &path, tree)?;
+        } else if !meta.is_file() {
+            return Err(format!("{rel}: only regular files can be screened"));
         } else if meta.len() > MAX_FILE_BYTES {
-            tree.insert(
-                rel,
-                TreeFile {
-                    bytes: format!("file of {} bytes, not read", meta.len()).into_bytes(),
-                    executable: false,
-                },
-            );
+            return Err(format!(
+                "{rel}: exceeds the {MAX_FILE_BYTES}-byte screening limit"
+            ));
         } else {
             let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
             tree.insert(
@@ -313,7 +324,7 @@ fn is_executable(_: &fs::Metadata) -> bool {
     false
 }
 
-fn digest(tree: &Tree) -> String {
+pub fn digest(tree: &Tree) -> String {
     let mut hash = Sha256::new();
     for (path, file) in tree {
         hash.update(path.as_bytes());
@@ -440,28 +451,25 @@ fn print_findings(findings: &[Finding]) {
     }
 }
 
-/// The fixed rules, then the model review unless `review` is false or no review role is ready.
-/// An approved digest passes without either: a person already read exactly these bytes.
-fn gate(
-    source: &str,
-    dir: &Path,
-    new: &Tree,
-    old: Option<&Tree>,
-    review: bool,
-    version: Option<&str>,
-) -> u8 {
+/// Require fixed rules and model review unless this exact digest was approved. `dir` names
+/// where the bytes came from, in the hold message only.
+///
+/// The `--against` tree narrows screening only when that exact baseline was approved for the
+/// same source; otherwise the candidate is read in full.
+pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree>) -> u8 {
     let digest = digest(new);
-    match Ledger::load() {
-        Ok(ledger) if ledger.approved(source, &digest) => {
-            println!("✓ {source}: approved before ({digest})");
-            return 0;
-        }
-        Ok(_) => {}
+    let ledger = match Ledger::load() {
+        Ok(ledger) => ledger,
         Err(e) => {
             eprintln!("intake: {e}");
             return 1;
         }
+    };
+    if ledger.approved(source, &digest) {
+        println!("✓ {source}: approved before ({digest})");
+        return 0;
     }
+    let old = ledger.baseline(source, old);
     let changed = changes(new, old).len();
     println!(
         "{source}: {changed} new or changed file(s){}",
@@ -472,33 +480,33 @@ fn gate(
         }
     );
     let mut findings = scan(new, old);
-    if review {
-        match review::run(source, new, old, &findings) {
-            Ok(more) => findings.extend(more),
-            Err(e) => println!("  model review skipped: {e}"),
-        }
-    }
+    let reviewed = review::run(source, new, old, &findings);
+    let code = review_verdict(&mut findings, reviewed);
     print_findings(&findings);
-    let code = verdict(&findings);
     if code == HELD {
-        let version_flag = version
-            .map(|v| format!(" --version {v}"))
+        let at = dir
+            .map(|d| format!(" in {}", d.display()))
             .unwrap_or_default();
         println!(
-            "✗ {source} is held. Read the findings in {}, then approve exactly that copy:\n  tools/intake approve {} --source {source}{version_flag}",
-            dir.display(),
-            dir.display()
+            "✗ {source} is held. Read the findings{at}, then approve exactly that copy:\n  tools/intake approve <dir> --source {source}"
         );
     } else {
-        if let Some(v) = version {
-            if let Err(e) = Ledger::load().and_then(|mut l| l.approve(source, &digest, Some(v))) {
-                eprintln!("intake: {e}");
-                return 1;
-            }
-        }
         println!("✓ {source}: no finding holds it");
     }
     code
+}
+
+fn review_verdict(findings: &mut Vec<Finding>, result: Result<Vec<Finding>, String>) -> u8 {
+    match result {
+        Ok(more) => {
+            findings.extend(more);
+            verdict(findings)
+        }
+        Err(e) => {
+            eprintln!("intake: model review failed; content is held: {e}");
+            HELD
+        }
+    }
 }
 
 #[cfg(test)]

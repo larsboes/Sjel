@@ -1,62 +1,32 @@
 #!/bin/bash
-# tools/skills — install NON-PACK agent skills at the right SCOPE, by driving vercel-labs/skills
-# (`npx skills`) rather than re-implementing it. Drivers, not copies: upstream's CLI owns the
-# package resolution, the per-agent link layout and skills-lock.json.
+# tools/skills — install NON-PACK agent skills at the right scope.
 #
-# ## The scope rule, and why it is enforced rather than documented
+# `add` and `update` are the launcher for tools/sjel-cli/src/intake/skills.rs: upstream's CLI
+# (`npx skills`) runs once, inside a private stage; every staged skill directory is read into
+# memory, gated by tools/intake (fixed rules plus model review, or an exact prior approval),
+# and those same bytes are what gets installed. The project skills-lock.json takes the staged
+# entry verbatim, so remote provenance survives. The gate is fail-closed: content nobody
+# reviewed is held, never installed.
 #
-# A skill reaches an agent from one of two places, and the difference is scope:
-#
-#   system-wide   Sjel Packs, and only Packs, deployed by tools/packs-pi (pi's settings.json
-#                 registry) and tools/packs-claude (materialized copies plus a ledger). These
-#                 load in every session of every project, so one is paid for everywhere.
-#   project-wide  everything else. `npx skills add` installs into the project by default —
-#                 <project>/.agents/skills for pi, <project>/.claude/skills for Claude Code —
-#                 and records a skills-lock.json that `npx skills experimental_install` restores.
-#
-# `--global` is refused here because it is how the second channel gets built. Measured on
-# 2026-10-09: remotion's twelve skills had been installed globally into ~/.agents/skills
-# (2026-10-03), and that directory is ALSO one of pi's automatic global discovery roots
-# (tools/sjel-cli/src/harnesses/pi.rs, discovery_roots), while Sjel was deploying Packs into the
-# same directory for Codex. pi then loaded each name from both, kept the first and warned
-# `name "X" collision` for the loser (pi core/skills.js, addSkills) — and a skill pi does not
-# register silently fell back to the copy, which is how `gpui` came to be loaded from a stale
-# Codex copy after it was added to the coding Pack. Nothing on this machine consumes remotion;
-# the twelve still loaded into every session. One name, one channel.
-#
-# If you really mean a global install, drive the CLI yourself (`npx skills add -g`).
-# `tools/skills audit` reports it, which is the point of having the rule written in code.
-#
-# Usage:
-#   tools/skills add <package> [--skill <name>]... [--agent <id>]...
-#                                 project-scoped install; defaults to agents pi + claude-code
-#   tools/skills list [--global] [--json]    what is installed, in this project or globally
-#   tools/skills audit                       global skills no Sjel Pack owns; exit 1 if any
-#   tools/skills remove [...]                pass-through (global removal allowed)
-#   tools/skills update                      re-reads every locked source through the gate, then updates
-#   tools/skills find [<query>]              pass-through
-#   tools/skills -h | --help
-#
-# Exit 0 = done / nothing to report, 1 = usage, refusal, or audit findings, 2 = held by
-# tools/intake: nothing was installed.
-#
-# `add` and `update` fetch into a stage under ~/.local/state/sjel/intake/staged first, and
-# tools/intake gates each skill against the installed copy. Only a pass installs.
-# bash 3.2-safe (CONTRIBUTING.md#portable-shell): no associative arrays, no `${arr[@]}` on an
-# empty array under `set -u`.
+# The scope rule: system-wide skills are Sjel Packs and only Sjel Packs
+# (tools/packs-pi deploy / tools/packs-claude deploy); everything else installs project-scoped,
+# and `--global` is refused. Full reasoning: Packs/harness/README.md; open work and limits:
+# docs/plans/packs.md.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -u
 
-set -euo pipefail
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+export SJEL_ROOT
+# shellcheck source=tools/lib/toml.sh
+. "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
+# shellcheck source=tools/lib/sjel-cli.sh
+. "$SJEL_ROOT/tools/lib/sjel-cli.sh"
 
 read -r -d '' GLOBAL_RULE <<'EOF' || true
 refusing --global: a system-wide skill must be a Sjel Pack.
 
   deploy a Pack:   tools/packs-pi deploy <pack>      (pi's registry)
                    tools/packs-claude deploy <pack>  (materialized copies + ledger)
-
-  Why: ~/.agents/skills is read by BOTH pi (a global discovery root) and, until 2026-10-09,
-  by Codex as its deployment destination. Two channels for one name means pi keeps the first
-  and warns `name collision` for the loser, and a skill pi does not register silently falls
-  back to the stale copy.
 
   If you mean it anyway: npx skills add <package> -g   (tools/skills audit will report it)
 EOF
@@ -66,11 +36,15 @@ usage() {
 tools/skills — install non-Pack agent skills at the right scope, by driving `npx skills`.
 
   tools/skills add <package> [--skill <name>]... [--agent <id>]...
-                            project-scoped install; defaults to agents pi + claude-code
+                            project-scoped install; defaults to agents pi + claude-code.
+                            Stages once, gates the staged bytes (tools/intake), installs
+                            exactly those bytes, exits 2 when held.
+  tools/skills update      re-stages every source in skills-lock.json, gates it, and
+                            updates only destinations that already hold the skill
   tools/skills list [--global] [--json]
                             what is installed, in this project or globally
-  tools/skills audit        global skills no Sjel Pack owns; exit 1 if any
-  tools/skills remove|update|find [...]
+  tools/skills audit       global skills no Sjel Pack owns; exit 1 if any
+  tools/skills remove|find [...]
                             pass-through to the CLI (global removal allowed)
 
 the scope rule:
@@ -78,137 +52,13 @@ the scope rule:
   system-wide   Sjel Packs, and only Packs: tools/packs-pi deploy <pack>,
                 tools/packs-claude deploy <pack>. These load in every session of
                 every project.
-  project-wide  everything else. `add` installs into <project>/.agents/skills
-                (pi) and <project>/.claude/skills (Claude Code), with a
-                skills-lock.json the CLI can restore from.
+  project-wide  everything else, gated through tools/intake before it installs.
 
-  `--global` is refused: a second channel for one name is what made pi load twelve
-  remotion skills and twenty-one Pack skills from two roots at once, and a skill pi
-  does not register silently falls back to the stale copy. `audit` reports globals.
-
-  See the header of this file for the full reasoning.
+  `--global` is refused. See Packs/harness/README.md for the full reasoning.
 USAGE
 }
 
-die() { printf 'tools/skills: %s\n' "$1" >&2; exit 1; }
-
 cli() { npx --yes skills "$@"; }
-
-TOOLS_DIR="$(cd "$(dirname "$0")" && pwd)"
-# SJEL_INTAKE replaces the gate in tools/skills.test.sh.
-INTAKE="${SJEL_INTAKE:-$TOOLS_DIR/intake}"
-STAGE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/sjel/intake/staged"
-
-# stage_and_gate <root> <package> [--skill <name>]...  -> 0 when every skill passes, else 2.
-# Claude Code's layout is a plain copy, so the stage holds exactly the files the gate reads.
-stage_and_gate() {
-  local root="$1" package="$2" stage dir name held=0 rc
-  shift 2
-  stage="$STAGE_ROOT/skills-$(printf '%s' "$package" | tr -c 'A-Za-z0-9._-' '_')"
-  rm -rf "$stage"
-  mkdir -p "$stage"
-  (cd "$stage" && cli add "$package" "$@" -a claude-code -y >/dev/null) \
-    || die "could not fetch $package into $stage"
-  for dir in "$stage"/.claude/skills/*/; do
-    [ -d "$dir" ] || die "$package staged no skill under $stage/.claude/skills"
-    name="$(basename "$dir")"
-    rc=0
-    "$INTAKE" gate "${dir%/}" --source "skills:$package/$name" \
-      --against "$root/.claude/skills/$name" || rc=$?
-    [ "$rc" -eq 0 ] || held=2
-  done
-  return "$held"
-}
-
-# The project a project-scoped install belongs to: the repository root, so running this from a
-# subdirectory does not scatter .agents/skills and .claude/skills below the root.
-project_root() {
-  local top
-  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  if [ -n "$top" ]; then
-    printf '%s\n' "$top"
-  else
-    pwd
-  fi
-}
-
-cmd_add() {
-  local package="" a
-  local skill_args=() agent_args=()
-  while [ $# -gt 0 ]; do
-    a="$1"
-    shift
-    case "$a" in
-      -g|--global)
-        printf '%s\n' "$GLOBAL_RULE" >&2
-        exit 1
-        ;;
-      -s|--skill)
-        [ $# -gt 0 ] || die "--skill needs a value"
-        skill_args+=(-s "$1")
-        shift
-        ;;
-      -a|--agent)
-        [ $# -gt 0 ] || die "--agent needs a value"
-        agent_args+=(-a "$1")
-        shift
-        ;;
-      -*)
-        die "unknown option for add: $a"
-        ;;
-      *)
-        [ -z "$package" ] || die "add takes one package; got '$package' and '$a'"
-        package="$a"
-        ;;
-    esac
-  done
-  [ -n "$package" ] || die "usage: tools/skills add <package> [--skill <name>]... [--agent <id>]..."
-  # pi reads <project>/.agents/skills; Claude Code reads <project>/.claude/skills. Codex is
-  # deliberately absent: its skills directory is the shared ~/.agents/skills, so a project
-  # install would land global again and rebuild the second channel this tool exists to prevent.
-  if [ "${#agent_args[@]}" -eq 0 ]; then
-    agent_args=(-a pi -a claude-code)
-  fi
-
-  local root
-  root="$(project_root)"
-  printf 'project-scoped install into %s\n' "$root"
-  printf '  pi           -> %s/.agents/skills\n' "$root"
-  printf '  claude-code  -> %s/.claude/skills\n' "$root"
-  printf '  package      %s\n\n' "$package"
-  stage_and_gate "$root" "$package" ${skill_args[@]+"${skill_args[@]}"} \
-    || { printf '\nnothing installed: %s is held.\n' "$package" >&2; exit 2; }
-  (cd "$root" && cli add "$package" ${skill_args[@]+"${skill_args[@]}"} ${agent_args[@]+"${agent_args[@]}"} -y)
-}
-
-# Every source in the project's skills-lock.json goes through the gate before the CLI updates.
-# ponytail: the CLI fetches again after the gate, so a push between the two lands unread;
-# install from the stage instead when the CLI can take a local path for a locked skill.
-cmd_update() {
-  local root lock sources source held=0
-  root="$(project_root)"
-  lock="$root/skills-lock.json"
-  [ -f "$lock" ] || die "no skills-lock.json in $root: nothing project-scoped to update"
-  sources="$(python3 -c 'import json,sys
-for s in sorted({v["source"] for v in json.load(open(sys.argv[1]))["skills"].values()}): print(s)' "$lock")"
-  for source in $sources; do
-    stage_and_gate "$root" "$source" || held=2
-  done
-  [ "$held" -eq 0 ] || { printf '\nnothing updated: a source is held.\n' >&2; exit 2; }
-  (cd "$root" && cli update "$@")
-}
-
-cmd_list() {
-  local args=()
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -g|--global|--json) args+=("$1") ;;
-      *) die "unknown option for list: $1" ;;
-    esac
-    shift
-  done
-  cli list ${args[@]+"${args[@]}"}
-}
 
 # A global skill Sjel does not own is the violation the scope rule names. `source` is the
 # discriminator: the CLI records where it installed a skill from and leaves it null for skills
@@ -246,14 +96,33 @@ for entry in entries:
   return 1
 }
 
+cmd_list() {
+  local args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -g|--global|--json) args+=("$1") ;;
+      *) printf 'tools/skills: unknown option for list: %s\n' "$1" >&2; exit 1 ;;
+    esac
+    shift
+  done
+  cli list ${args[@]+"${args[@]}"}
+}
+
 verb="${1:-}"
 shift || true
 case "$verb" in
-  add) cmd_add "$@" ;;
+  add)
+    for a in "$@"; do
+      case "$a" in
+        -g|--global) printf '%s\n' "$GLOBAL_RULE" >&2; exit 1 ;;
+      esac
+    done
+    sjel_cli_exec skills add "$@"
+    ;;
+  update|upgrade) sjel_cli_exec skills update "$@" ;;
   list|ls) cmd_list "$@" ;;
   audit) cmd_audit "$@" ;;
-  update|upgrade) cmd_update "$@" ;;
   remove|rm|find|init) cli "$verb" "$@" ;;
   -h|--help|help|"") usage ;;
-  *) die "unknown command '$verb' (try: tools/skills --help)" ;;
+  *) printf 'tools/skills: unknown command %s (try: tools/skills --help)\n' "$verb" >&2; exit 1 ;;
 esac

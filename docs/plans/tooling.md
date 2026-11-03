@@ -10,6 +10,19 @@ covers it.
 
 ## Open
 
+- **A coding agent as the intake reviewer.** `tools/intake` reviews on the `intake_review` cloud
+  role, and that role is not configured on this machine, so the gate holds every unapproved
+  install. A registered coding harness could review instead: it reads the staged tree as
+  untrusted data with read-only tools, adds findings, and cannot clear a fixed-rule finding or
+  approve its own output. Smallest change: `tools/intake review --reviewer <harness>` runs on
+  the staged digest and records a receipt naming the harness, model and digest; the exact
+  approval stays a human step. Relates to P6 and P7 in [`packs.md`](packs.md).
+- **One update surface.** `sjel update` reports package classes but no skills,
+  `tools/skills` has no update check, and `tools/harnesses` owns Packs. Smallest change: one
+  `sjel update` entry point that delegates skills to `tools/skills check|update`, Packs to
+  `tools/harnesses`, and the rest to its existing surfaces, with one report. The per-owner
+  verbs stay the implementation; the skill `sjel` carries the route in a reference rather than a
+  second skill.
 - **Read-only global skill update checks.** `tools/skills list --global --json` inventories
   installations but has no update-check verb. The upstream CLI exposes `update` without a
   documented dry-run mode, and `sjel update` reports Interceptor integration state without

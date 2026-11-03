@@ -1,0 +1,658 @@
+//! `tools/skills add|update`: install exactly the bytes the intake gate screened.
+//!
+//! Upstream's CLI owns source resolution, per-agent layouts and lock entries, but it fetches on
+//! every invocation, so a second call after screening can install bytes nobody read. Here it
+//! runs once, inside a private stage: `add <source> --copy` with the requested skills and
+//! agents. Every staged skill directory is read into an in-memory tree, that tree is what the
+//! gate screens, and publication materializes the same tree — the stage is not read again after
+//! screening. The project `skills-lock.json` takes the staged entry verbatim, so remote
+//! provenance survives.
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::process::ExitCode;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::Value;
+
+use super::{digest, gate_tree, read_tree, Tree};
+
+const HELD: u8 = 2;
+/// The agents a project-scoped `add` installs for when none is named.
+const DEFAULT_AGENTS: &[&str] = &["pi", "claude-code"];
+
+pub fn run(args: &[String]) -> ExitCode {
+    match run_inner(args) {
+        Ok(code) => ExitCode::from(code),
+        Err(message) => {
+            eprintln!("skills: {message}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn run_inner(args: &[String]) -> Result<u8, String> {
+    let Some((verb, rest)) = args.split_first() else {
+        return Err(usage().into());
+    };
+    match verb.as_str() {
+        "add" => add(rest),
+        "update" => update(rest),
+        "help" | "-h" | "--help" => {
+            println!("{}", usage());
+            Ok(0)
+        }
+        other => Err(format!("unknown command `{other}`. {}", usage())),
+    }
+}
+
+fn usage() -> &'static str {
+    "usage: skills add <package> [--skill <name>]... [--agent <id>]... | skills update"
+}
+
+/// One screened skill, bound for one agent's project directory.
+struct Job {
+    skill: String,
+    dest: PathBuf,
+    staged: PathBuf,
+    tree: Tree,
+    before: DestState,
+}
+
+/// What occupied the destination before the run, rechecked at publication.
+#[derive(Clone)]
+enum DestState {
+    Absent,
+    Other,
+    Tree(Tree),
+}
+
+fn add(args: &[String]) -> Result<u8, String> {
+    let mut package = String::new();
+    let mut skills: Vec<String> = Vec::new();
+    let mut agents: Vec<String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        let mut value = |flag: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{flag} needs a value"))
+        };
+        match arg.as_str() {
+            "-s" | "--skill" => skills.push(value("--skill")?),
+            "-a" | "--agent" => agents.push(value("--agent")?),
+            "-g" | "--global" => {
+                return Err(
+                    "a system-wide skill must be a Sjel Pack: tools/packs-pi deploy <pack>".into(),
+                )
+            }
+            other if other.starts_with('-') => return Err(format!("unknown option {other}")),
+            other if package.is_empty() => package = other.to_owned(),
+            other => {
+                return Err(format!(
+                    "add takes one package; got '{package}' and '{other}'"
+                ))
+            }
+        }
+    }
+    if package.is_empty() {
+        return Err("add needs a package".into());
+    }
+    if agents.is_empty() {
+        agents = DEFAULT_AGENTS.iter().map(|a| (*a).to_owned()).collect();
+    }
+
+    let project = project_root()?;
+    let stage = fresh_stage("add")?;
+    println!("staging {package} for {}", agents.join(", "));
+    stage_add(&stage, &package, &skills, &agents)?;
+
+    let mut jobs = collect_jobs(&stage, &project)?;
+    if !skills.is_empty() {
+        let wanted: Vec<&str> = skills.iter().map(String::as_str).collect();
+        jobs.retain(|job| wanted.contains(&job.skill.as_str()));
+        for name in wanted {
+            if !jobs.iter().any(|job| job.skill == name) {
+                return Err(format!("{package} staged no skill '{name}'"));
+            }
+        }
+    }
+    if jobs.is_empty() {
+        return Err(format!("{package} staged no skill"));
+    }
+    install(&project, &stage, &jobs, &package)
+}
+
+fn update(args: &[String]) -> Result<u8, String> {
+    if !args.is_empty() {
+        return Err(
+            "update takes no arguments; it refreshes every source in skills-lock.json".into(),
+        );
+    }
+    let project = project_root()?;
+    let lock_path = project.join("skills-lock.json");
+    if !lock_path.is_file() {
+        return Err(format!("no skills-lock.json in {}", project.display()));
+    }
+    let groups =
+        lock_groups(&fs::read_to_string(&lock_path).map_err(|e| lock_error(&lock_path, e))?)?;
+    if groups.is_empty() {
+        return Err("skills-lock.json names no skills".into());
+    }
+
+    let mut jobs: Vec<Job> = Vec::new();
+    // Which source a skill came from, for the gate's approval key.
+    let mut job_sources: BTreeMap<String, String> = BTreeMap::new();
+    let mut locks: Vec<(PathBuf, Vec<String>)> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    for (source, names) in &groups {
+        let stage = fresh_stage("update")?;
+        println!("staging {source} for {}", names.join(", "));
+        stage_add(&stage, source, names, &["*".to_owned()])?;
+        // `-a '*'` staged layouts for agents this project never installed for: only a
+        // destination that already holds the skill is updated.
+        let mut by_name: BTreeMap<String, Vec<Job>> = BTreeMap::new();
+        for job in collect_jobs(&stage, &project)? {
+            if matches!(job.before, DestState::Absent) {
+                continue;
+            }
+            by_name.entry(job.skill.clone()).or_default().push(job);
+        }
+        for name in names {
+            match by_name.remove(name) {
+                Some(mut found) => {
+                    for job in &found {
+                        job_sources.insert(job.skill.clone(), source.clone());
+                    }
+                    jobs.append(&mut found);
+                }
+                None => skipped.push(format!("{source}/{name}: no installed destination")),
+            }
+        }
+        locks.push((stage.join("skills-lock.json"), names.clone()));
+    }
+    for line in &skipped {
+        println!("  skipped {line}");
+    }
+    if jobs.is_empty() {
+        println!("nothing to update");
+        return Ok(0);
+    }
+
+    let mut held = false;
+    let mut error = false;
+    for job in &jobs {
+        let source = job_sources.get(&job.skill).cloned().unwrap_or_default();
+        let key = format!("skills:{source}/{}", job.skill);
+        match gate_tree(&key, Some(&job.staged), &job.tree, baseline(&job.before)) {
+            0 => {}
+            HELD => held = true,
+            _ => error = true,
+        }
+    }
+    if error {
+        return Ok(1);
+    }
+    if held {
+        println!("\nnothing updated: a skill is held");
+        return Ok(HELD);
+    }
+    publish(&jobs)?;
+    for (stage_lock, names) in &locks {
+        let updated: Vec<String> = names
+            .iter()
+            .filter(|n| jobs.iter().any(|job| job.skill == **n))
+            .cloned()
+            .collect();
+        if !updated.is_empty() {
+            merge_lock(&project.join("skills-lock.json"), stage_lock, &updated)?;
+        }
+    }
+    println!("✓ updated {} skill layout(s)", jobs.len());
+    Ok(0)
+}
+
+fn baseline(before: &DestState) -> Option<&Tree> {
+    match before {
+        DestState::Tree(tree) => Some(tree),
+        _ => None,
+    }
+}
+
+/// Gate every staged layout, then publish only what passed.
+fn install(project: &Path, stage: &Path, jobs: &[Job], package: &str) -> Result<u8, String> {
+    let mut held = false;
+    let mut error = false;
+    for job in jobs {
+        let key = format!("skills:{package}/{}", job.skill);
+        match gate_tree(&key, Some(&job.staged), &job.tree, baseline(&job.before)) {
+            0 => {}
+            HELD => held = true,
+            _ => error = true,
+        }
+    }
+    if error {
+        return Ok(1);
+    }
+    if held {
+        println!("\nnothing installed: {package} is held");
+        return Ok(HELD);
+    }
+    let names: Vec<String> = jobs.iter().map(|job| job.skill.clone()).collect();
+    publish(jobs)?;
+    merge_lock(
+        &project.join("skills-lock.json"),
+        &stage.join("skills-lock.json"),
+        &names,
+    )?;
+    println!("✓ installed {} skill layout(s)", jobs.len());
+    Ok(0)
+}
+
+/// The staged layouts: every `<agent-dir>/skills/<name>` the upstream CLI wrote.
+fn collect_jobs(stage: &Path, project: &Path) -> Result<Vec<Job>, String> {
+    let mut jobs = Vec::new();
+    for entry in fs::read_dir(stage).map_err(|e| format!("{}: {e}", stage.display()))? {
+        let entry = entry.map_err(|e| format!("{}: {e}", stage.display()))?;
+        let agent_dir = entry.path();
+        let agent_name = agent_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let skills = agent_dir.join("skills");
+        if !skills.is_dir() {
+            continue;
+        }
+        for skill_entry in
+            fs::read_dir(&skills).map_err(|e| format!("{}: {e}", skills.display()))?
+        {
+            let skill_entry = skill_entry.map_err(|e| format!("{}: {e}", skills.display()))?;
+            let path = skill_entry.path();
+            if !path.join("SKILL.md").is_file() {
+                continue;
+            }
+            let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+                continue;
+            };
+            let dest = project.join(&agent_name).join("skills").join(&name);
+            jobs.push(Job {
+                skill: name,
+                before: dest_state(&dest)?,
+                tree: read_tree(&path)?,
+                staged: path,
+                dest,
+            });
+        }
+    }
+    Ok(jobs)
+}
+
+fn dest_state(dest: &Path) -> Result<DestState, String> {
+    match fs::symlink_metadata(dest) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DestState::Absent),
+        Err(e) => Err(format!("{}: {e}", dest.display())),
+        Ok(meta) if meta.file_type().is_symlink() => Ok(DestState::Other),
+        Ok(_) => Ok(DestState::Tree(read_tree(dest)?)),
+    }
+}
+
+/// Write every screened tree, replacing what was there. Backups are kept beside the stage and
+/// restored on failure; a crash between renames is not covered, and the lock is written last.
+fn publish(jobs: &[Job]) -> Result<(), String> {
+    let backup_dir = fresh_stage("backup")?;
+    let mut done: Vec<(&Path, Option<PathBuf>)> = Vec::new();
+    let result = publish_all(&backup_dir, jobs, &mut done);
+    if let Err(message) = result {
+        for (dest, backup) in done.iter().rev() {
+            let _ = fs::remove_dir_all(dest);
+            if let Some(backup) = backup {
+                let _ = fs::rename(backup, dest);
+            }
+        }
+        return Err(format!("{message}; published layouts were rolled back"));
+    }
+    let _ = fs::remove_dir_all(&backup_dir);
+    Ok(())
+}
+
+fn publish_all<'a>(
+    backup_dir: &Path,
+    jobs: &'a [Job],
+    done: &mut Vec<(&'a Path, Option<PathBuf>)>,
+) -> Result<(), String> {
+    for job in jobs {
+        // The destination must still hold what was screened against.
+        match (&job.before, dest_state(&job.dest)?) {
+            (DestState::Tree(before), DestState::Tree(now)) if digest(before) == digest(&now) => {}
+            (DestState::Absent, DestState::Absent) => {}
+            (DestState::Other, DestState::Other) => {}
+            _ => return Err(format!("{} changed during the run", job.dest.display())),
+        }
+        let agent = job
+            .dest
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let backup = if job.dest.symlink_metadata().is_ok() {
+            let to = backup_dir.join(format!("{agent}-{}", job.skill));
+            fs::rename(&job.dest, &to).map_err(|e| format!("{}: {e}", job.dest.display()))?;
+            Some(to)
+        } else {
+            None
+        };
+        // Recorded before the write, so a failure part-way through still restores the backup.
+        done.push((&job.dest, backup));
+        write_tree(&job.dest, &job.tree)?;
+    }
+    Ok(())
+}
+
+/// Materialize one screened tree. The tree came from `read_tree`, whose keys are directory
+/// entries, so `..` cannot appear; the guard keeps that true even if that changes.
+fn write_tree(dest: &Path, tree: &Tree) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+    for (rel, file) in tree {
+        if Path::new(rel)
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
+            return Err(format!("{rel}: refuses a path outside the skill directory"));
+        }
+        let path = dest.join(rel);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        fs::write(&path, &file.bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mode = if file.executable { 0o755 } else { 0o644 };
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
+/// Replace the named entries with the staged ones, verbatim, keeping every other entry.
+fn merge_lock(project_lock: &Path, stage_lock: &Path, names: &[String]) -> Result<(), String> {
+    let staged: Value = serde_json::from_str(
+        &fs::read_to_string(stage_lock).map_err(|e| lock_error(stage_lock, e))?,
+    )
+    .map_err(|e| format!("{}: {e}", stage_lock.display()))?;
+    let staged_skills = staged["skills"]
+        .as_object()
+        .ok_or_else(|| format!("{}: no skills table", stage_lock.display()))?;
+    let mut lock: Value = match fs::read_to_string(project_lock) {
+        Ok(text) => serde_json::from_str(&text).map_err(|e| lock_error_text(project_lock, e))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            serde_json::json!({"version": 3, "skills": {}})
+        }
+        Err(e) => return Err(lock_error(project_lock, e)),
+    };
+    if lock["skills"].is_null() {
+        lock["skills"] = serde_json::json!({});
+    }
+    let skills = lock["skills"]
+        .as_object_mut()
+        .ok_or_else(|| format!("{}: skills is not a table", project_lock.display()))?;
+    for name in names {
+        let entry = staged_skills
+            .get(name)
+            .ok_or_else(|| format!("{}: no staged entry for '{name}'", stage_lock.display()))?;
+        skills.insert(name.clone(), entry.clone());
+    }
+    let text = serde_json::to_string_pretty(&lock).map_err(|e| e.to_string())?;
+    let tmp = project_lock.with_extension("json.tmp");
+    fs::write(&tmp, format!("{text}\n")).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, project_lock).map_err(|e| format!("{}: {e}", project_lock.display()))?;
+    Ok(())
+}
+
+/// Group locked skills by their source, keeping `sourceUrl` distinctions apart: one stage per
+/// group, staging only the names that group holds.
+fn lock_groups(lock_text: &str) -> Result<Vec<(String, Vec<String>)>, String> {
+    let lock: Value =
+        serde_json::from_str(lock_text).map_err(|e| format!("skills-lock.json: {e}"))?;
+    let skills = lock["skills"]
+        .as_object()
+        .ok_or_else(|| "skills-lock.json: no skills table".to_owned())?;
+    let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
+    for (name, entry) in skills {
+        let source = entry["source"]
+            .as_str()
+            .ok_or_else(|| format!("skills-lock.json: '{name}' has no source"))?
+            .to_owned();
+        let url = entry["sourceUrl"].as_str().unwrap_or_default().to_owned();
+        groups.entry((source, url)).or_default().push(name.clone());
+    }
+    Ok(groups
+        .into_iter()
+        .map(|((source, _), names)| (source, names))
+        .collect())
+}
+
+fn stage_add(
+    stage: &Path,
+    package: &str,
+    skills: &[String],
+    agents: &[String],
+) -> Result<(), String> {
+    let mut args: Vec<String> = vec!["add".into(), package.into()];
+    for skill in skills {
+        args.push("-s".into());
+        args.push(skill.clone());
+    }
+    for agent in agents {
+        args.push("-a".into());
+        args.push(agent.clone());
+    }
+    args.push("--copy".into());
+    args.push("-y".into());
+    let output = Command::new("npx")
+        .arg("--yes")
+        .arg("skills")
+        .args(&args)
+        .current_dir(stage)
+        .output()
+        .map_err(|e| format!("npx skills {}: {e}", args.join(" ")))?;
+    if !output.status.success() {
+        let tail = String::from_utf8_lossy(&output.stderr);
+        let tail: String = tail
+            .lines()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(format!("npx skills {} failed:\n{tail}", args.join(" ")));
+    }
+    Ok(())
+}
+
+fn project_root() -> Result<PathBuf, String> {
+    let root = Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .output()
+        .map_err(|e| format!("git rev-parse: {e}"))?;
+    if root.status.success() {
+        return Ok(PathBuf::from(String::from_utf8_lossy(&root.stdout).trim()));
+    }
+    std::env::current_dir().map_err(|e| format!("cwd: {e}"))
+}
+
+fn fresh_stage(kind: &str) -> Result<PathBuf, String> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let dir = super::state_dir()
+        .join("staged")
+        .join(format!("skills-{kind}-{}-{nanos}", std::process::id()));
+    fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+fn lock_error(path: &Path, e: std::io::Error) -> String {
+    format!("{}: {e}", path.display())
+}
+
+fn lock_error_text(path: &Path, e: serde_json::Error) -> String {
+    format!("{}: {e}", path.display())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::intake::TreeFile;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sjel-skills-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn write_tree_round_trips_bytes_and_the_executable_bit() {
+        let dir = scratch("write");
+        let mut tree = Tree::new();
+        tree.insert(
+            "SKILL.md".into(),
+            TreeFile {
+                bytes: b"body\n".to_vec(),
+                executable: false,
+            },
+        );
+        tree.insert(
+            "scripts/run.sh".into(),
+            TreeFile {
+                bytes: b"echo hi\n".to_vec(),
+                executable: true,
+            },
+        );
+        write_tree(&dir, &tree).unwrap();
+        let read = read_tree(&dir).unwrap();
+        assert_eq!(digest(&read), digest(&tree));
+        let meta = fs::symlink_metadata(dir.join("scripts/run.sh")).unwrap();
+        assert!(meta.permissions().mode() & 0o111 != 0);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn write_tree_refuses_a_escaping_relative_path() {
+        let dir = scratch("escape");
+        let mut tree = Tree::new();
+        tree.insert(
+            "../outside".into(),
+            TreeFile {
+                bytes: b"x".to_vec(),
+                executable: false,
+            },
+        );
+        let err = write_tree(&dir, &tree).unwrap_err();
+        assert!(err.contains("outside the skill directory"), "{err}");
+        assert!(!dir.parent().unwrap().join("outside").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn lock_groups_split_sources_but_keep_their_skills_together() {
+        let lock = r#"{"version":3,"skills":{
+            "a":{"source":"octo/pkg","sourceUrl":"https://github.com/octo/pkg.git"},
+            "b":{"source":"octo/pkg","sourceUrl":"https://github.com/octo/pkg.git"},
+            "c":{"source":"https://example.org/s.git","sourceUrl":"https://example.org/s.git"}
+        }}"#;
+        let groups = lock_groups(lock).unwrap();
+        assert_eq!(groups.len(), 2);
+        let octo = groups.iter().find(|(s, _)| s == "octo/pkg").unwrap();
+        assert_eq!(octo.1, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn merge_lock_replaces_only_the_named_entries_verbatim() {
+        let dir = scratch("merge");
+        let stage = dir.join("stage");
+        fs::create_dir_all(dir.join("project")).unwrap();
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(
+            dir.join("project/skills-lock.json"),
+            r#"{"version":3,"skills":{"old":{"source":"x"},"keep":{"source":"y"}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            stage.join("skills-lock.json"),
+            r#"{"version":3,"skills":{"old":{"source":"z","skillFolderHash":"abc"}}}"#,
+        )
+        .unwrap();
+        let project_lock = dir.join("project/skills-lock.json");
+        merge_lock(
+            &project_lock,
+            &stage.join("skills-lock.json"),
+            &["old".into()],
+        )
+        .unwrap();
+        let merged: Value =
+            serde_json::from_str(&fs::read_to_string(&project_lock).unwrap()).unwrap();
+        assert_eq!(merged["skills"]["old"]["source"], "z");
+        assert_eq!(merged["skills"]["old"]["skillFolderHash"], "abc");
+        assert_eq!(merged["skills"]["keep"]["source"], "y");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn publish_replaces_a_destination_and_refuses_one_that_changed() {
+        let dir = scratch("publish");
+        let project = dir.join("project");
+        let dest = project.join(".claude/skills/demo");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("SKILL.md"), "old").unwrap();
+        let mut tree = Tree::new();
+        tree.insert(
+            "SKILL.md".into(),
+            TreeFile {
+                bytes: b"new".to_vec(),
+                executable: false,
+            },
+        );
+        let job = Job {
+            skill: "demo".into(),
+            dest: dest.clone(),
+            staged: dir.join("staged"),
+            before: DestState::Tree(read_tree(&dest).unwrap()),
+            tree,
+        };
+        publish(&[job]).unwrap();
+        assert_eq!(fs::read_to_string(dest.join("SKILL.md")).unwrap(), "new");
+
+        // A destination that changed since screening aborts and leaves it alone.
+        let before = DestState::Tree(read_tree(&dest).unwrap());
+        fs::write(dest.join("SKILL.md"), "changed after screening").unwrap();
+        let mut tree = Tree::new();
+        tree.insert(
+            "SKILL.md".into(),
+            TreeFile {
+                bytes: b"newer".to_vec(),
+                executable: false,
+            },
+        );
+        let job = Job {
+            skill: "demo".into(),
+            dest: dest.clone(),
+            staged: dir.join("staged"),
+            before,
+            tree,
+        };
+        let err = publish(&[job]).unwrap_err();
+        assert!(err.contains("changed during the run"), "{err}");
+        assert_eq!(
+            fs::read_to_string(dest.join("SKILL.md")).unwrap(),
+            "changed after screening"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+}

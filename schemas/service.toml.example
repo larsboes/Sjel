@@ -152,7 +152,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
                                           # answering `{"last_arrival_at": <epoch seconds>}`, or `null` if
                                           # nothing ever arrived. sjel-status polls it; tools/doctor reports it.
                                           # The path is a convention, not a field, so one shape works for every
-                                          # capability -- same namespace as ytalbum's `/__sjel/idle`. It answers
+                                          # capability -- same namespace as music's `/__sjel/idle`. It answers
                                           # before the inbound gate (libs/sjel-server/src/auth.rs), because one
                                           # integer about WHEN is liveness-shaped and a status page must not
                                           # need every capability's credential to draw itself.

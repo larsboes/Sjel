@@ -52,7 +52,7 @@ fi
 #
 # BOTH roots, because a capability is not less real for living in the overlay. This
 # swept only $SJEL_ROOT until 2026-08-30, so an overlay capability shipping a CLI could
-# never be called by name: `ytalbum` and `interior` were invisible to the shell by
+# never be called by name: `music` and `interior` were invisible to the shell by
 # construction, and the only way to run one was to type its absolute path. The overlay
 # is where a capability goes when it is inseparable from what it is pointed at
 # (CONTRIBUTING.md#placement-guide), which is a statement about privacy, not about whether it

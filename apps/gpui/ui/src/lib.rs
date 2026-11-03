@@ -21,6 +21,7 @@ pub mod interior;
 pub mod inventory;
 pub mod mail;
 pub mod media;
+pub mod music;
 pub mod nav;
 pub mod packs;
 pub mod people;
@@ -41,7 +42,6 @@ pub mod theme;
 pub mod today;
 pub mod travel;
 pub mod web_links;
-pub mod ytalbum;
 
 pub use doc_view::{render_block, render_doc, render_markdown};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};

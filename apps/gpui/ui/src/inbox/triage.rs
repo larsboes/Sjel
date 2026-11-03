@@ -33,8 +33,8 @@ actions!(
         CycleTag,
         /// Open the capture's link in the browser.
         OpenLink,
-        /// Prepare a YouTube capture in ytalbum.
-        OpenYtAlbum,
+        /// Prepare a YouTube capture in music.
+        OpenMusic,
         /// Type a new capture.
         NewCapture,
         /// Edit the capture's text.
@@ -45,7 +45,7 @@ actions!(
 );
 
 pub enum InboxEvent {
-    OpenYtAlbum(String),
+    OpenMusic(String),
 }
 
 impl EventEmitter<InboxEvent> for Inbox {}
@@ -63,7 +63,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("d", Dismiss, Some("CaptureList")),
         KeyBinding::new("t", CycleTag, Some("CaptureList")),
         KeyBinding::new("o", OpenLink, Some("CaptureList")),
-        KeyBinding::new("y", OpenYtAlbum, Some("CaptureList")),
+        KeyBinding::new("y", OpenMusic, Some("CaptureList")),
         KeyBinding::new("n", NewCapture, Some("CaptureList")),
         KeyBinding::new("enter", EditText, Some("CaptureList")),
         KeyBinding::new("u", Restore, Some("CaptureList")),
@@ -405,13 +405,13 @@ impl Inbox {
         }
     }
 
-    fn on_open_ytalbum(&mut self, _: &OpenYtAlbum, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_open_music(&mut self, _: &OpenMusic, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(url) = self
             .selected()
             .and_then(|c| c.url)
             .filter(|url| is_youtube_url(url))
         {
-            cx.emit(InboxEvent::OpenYtAlbum(url));
+            cx.emit(InboxEvent::OpenMusic(url));
         }
     }
 
@@ -454,7 +454,7 @@ impl Render for Inbox {
                     .child("Inbox"),
             )
             .child(muted(
-                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · y ytalbum · n new",
+                "j/k move · r send on · e done · d dismiss · t tag · ↩ edit · u restore · o link · y music · n new",
                 palette,
             ))
             .child(div().flex_1())
@@ -504,7 +504,7 @@ impl Render for Inbox {
             .on_action(cx.listener(Self::on_dismiss))
             .on_action(cx.listener(Self::on_cycle_tag))
             .on_action(cx.listener(Self::on_open_link))
-            .on_action(cx.listener(Self::on_open_ytalbum))
+            .on_action(cx.listener(Self::on_open_music))
             .on_action(cx.listener(Self::on_new_capture))
             .on_action(cx.listener(Self::on_edit_text))
             .on_action(cx.listener(Self::on_restore))
@@ -584,12 +584,12 @@ impl Inbox {
             if capture.url.as_deref().is_some_and(is_youtube_url) {
                 let url = capture.url.clone().unwrap_or_default();
                 actions = actions.child(
-                    Button::new(SharedString::from(format!("inbox-ytalbum-{i}")))
+                    Button::new(SharedString::from(format!("inbox-music-{i}")))
                         .small()
-                        .label("Open ytalbum")
+                        .label("Open music")
                         .disabled(busy)
                         .on_click(cx.listener(move |_, _, _, cx| {
-                            cx.emit(InboxEvent::OpenYtAlbum(url.clone()))
+                            cx.emit(InboxEvent::OpenMusic(url.clone()))
                         })),
                 );
             }

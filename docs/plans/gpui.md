@@ -373,7 +373,7 @@ build was performed for this handoff.
    own, with `cargo test` on core and ui and `ios/run-sim` before and after.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    eleven more modules (`documents`, `feed`, `scout`, `clipper`, `context`, `people::page`,
-   `calendar::page`, `inbox::triage`, `import`, `ytalbum`, `ask`) moved on 2026-11-03 behind
+   `calendar::page`, `inbox::triage`, `import`, `music`, `ask`) moved on 2026-11-03 behind
    `PdfRenderer` and rich clipboard callbacks. Still in `src/`: `capabilities`, `docs` (Mermaid
    renderer), `accounts` and `settings`. A platform call goes behind one small trait in the shell
    (keychain, open URL, audio, notifications, scanner), never as a `cfg` in a page. Run `simplify`

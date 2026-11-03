@@ -561,8 +561,8 @@ impl<'a> Svc<'a> {
     /// renders these) and the on-demand start below. It reached only the unit until 2026-10-04,
     /// so the SAME capability ran with a different environment depending on who started it —
     /// and a capability with `autostart = "false"` never gets a unit at all, so a machine-local
-    /// PATH could not reach it by any route. Measured that day: ytalbum's panel and
-    /// knowledge-graph both died at start under launchd's PATH (`ytalbum: missing required tool
+    /// PATH could not reach it by any route. Measured that day: music's panel and
+    /// knowledge-graph both died at start under launchd's PATH (`music: missing required tool
     /// 'yt-dlp'`, `nohup: bun: No such file or directory`) while the identical command from a
     /// login shell succeeded.
     ///

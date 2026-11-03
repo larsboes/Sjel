@@ -37,7 +37,7 @@ use crate::shell::{
     ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{step_terminal_font_size, AppearanceSettings, GlassStyle, Palette};
-use crate::ytalbum::{YtAlbum, YtAlbumEvent};
+use crate::music::{Music, MusicEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
 use sjel_gpui_core::terminal::Host;
@@ -318,7 +318,7 @@ pub struct Workspace {
     pub documents: Entity<Documents>,
     pub feed: Entity<Feed>,
     pub inbox: Entity<Inbox>,
-    ytalbum_page: Option<(Entity<YtAlbum>, Subscription)>,
+    music_page: Option<(Entity<Music>, Subscription)>,
     _inbox_events: Subscription,
     pub calendar_page: Entity<CalendarPage>,
     pub context_page: Entity<ContextPage>,
@@ -520,7 +520,7 @@ impl Workspace {
             documents,
             feed,
             inbox,
-            ytalbum_page: None,
+            music_page: None,
             _inbox_events: inbox_events,
             calendar_page,
             context_page,
@@ -1280,27 +1280,27 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         match event {
-            InboxEvent::OpenYtAlbum(url) => {
+            InboxEvent::OpenMusic(url) => {
                 let repo = self.repo.clone();
-                let page = cx.new(|cx| YtAlbum::new(repo, url, window, cx));
-                let events = cx.subscribe_in(&page, window, Self::on_ytalbum);
+                let page = cx.new(|cx| Music::new(repo, url, window, cx));
+                let events = cx.subscribe_in(&page, window, Self::on_music);
                 page.update(cx, |view, cx| view.probe(window, cx));
-                self.ytalbum_page = Some((page, events));
+                self.music_page = Some((page, events));
                 cx.notify();
             }
         }
     }
 
-    fn on_ytalbum(
+    fn on_music(
         &mut self,
-        _: &Entity<YtAlbum>,
-        event: &YtAlbumEvent,
+        _: &Entity<Music>,
+        event: &MusicEvent,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
-            YtAlbumEvent::Close => {
-                self.ytalbum_page = None;
+            MusicEvent::Close => {
+                self.music_page = None;
                 cx.notify();
             }
         }
@@ -2044,9 +2044,9 @@ impl Render for Workspace {
                 self.feed.clone().into_any_element()
             }
             Page::Inbox => {
-                if let Some((ytalbum, _)) = &self.ytalbum_page {
-                    ytalbum.update(cx, |view, cx| view.set_palette(palette, cx));
-                    ytalbum.clone().into_any_element()
+                if let Some((music, _)) = &self.music_page {
+                    music.update(cx, |view, cx| view.set_palette(palette, cx));
+                    music.clone().into_any_element()
                 } else {
                     self.inbox
                         .update(cx, |inbox, cx| inbox.set_palette(palette, cx));

@@ -1386,28 +1386,28 @@ enum Payload {
     Bytes(Vec<u8>),
 }
 
-/// Metadata returned by `POST /ytalbum/api/probe`.
+/// Metadata returned by `POST /music/api/probe`.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct YtAlbumProbe {
+pub struct MusicProbe {
     pub title: String,
     pub uploader: String,
     pub duration_hms: String,
     #[serde(default)]
-    pub chapters: Vec<YtAlbumChapter>,
+    pub chapters: Vec<MusicChapter>,
     #[serde(default)]
     pub tracklist_from_chapters: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct YtAlbumChapter {
+pub struct MusicChapter {
     pub start: u64,
     pub title: String,
 }
 
-/// Request and response contract for a ytalbum build.
+/// Request and response contract for a music build.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct YtAlbumJob {
+pub struct MusicJob {
     pub id: String,
     pub album: String,
     pub state: String,
@@ -1422,12 +1422,18 @@ pub struct YtAlbumJob {
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
-pub struct YtAlbumBuild {
+pub struct MusicBuild {
     pub url: String,
+    /// `"song"` imports one track; empty or `"album"` cuts a tracklist.
+    pub mode: String,
     pub album: String,
     pub artist: String,
     pub year: String,
     pub tracklist: String,
+    /// Song mode only: the track title and an optional `M:SS` range.
+    pub title: String,
+    pub start: String,
+    pub end: String,
 }
 
 /// The soundscape playback state (`GET /soundscape/api/soundscape/state`).
@@ -5516,21 +5522,21 @@ impl Shell {
     }
 
     /// Reads a YouTube set's metadata and chapter-derived tracklist without downloading audio.
-    pub async fn ytalbum_probe(&self, url: &str) -> ShellResult<YtAlbumProbe> {
+    pub async fn music_probe(&self, url: &str) -> ShellResult<MusicProbe> {
         self.json(
             Method::POST,
-            "/ytalbum/api/probe",
+            "/music/api/probe",
             Some(serde_json::json!({ "url": url })),
             90,
         )
         .await
     }
 
-    /// Starts the explicit album build in ytalbum.
-    pub async fn ytalbum_build(&self, build: &YtAlbumBuild) -> ShellResult<YtAlbumJob> {
+    /// Starts the explicit album build in music.
+    pub async fn music_build(&self, build: &MusicBuild) -> ShellResult<MusicJob> {
         self.json(
             Method::POST,
-            "/ytalbum/api/jobs",
+            "/music/api/jobs",
             Some(serde_json::to_value(build).map_err(|_| ShellError::Unreadable)?),
             10,
         )
@@ -5538,8 +5544,8 @@ impl Shell {
     }
 
     /// Reads one build's progress and recent log.
-    pub async fn ytalbum_job(&self, id: &str) -> ShellResult<YtAlbumJob> {
-        self.json(Method::GET, &format!("/ytalbum/api/jobs/{id}"), None, 10)
+    pub async fn music_job(&self, id: &str) -> ShellResult<MusicJob> {
+        self.json(Method::GET, &format!("/music/api/jobs/{id}"), None, 10)
             .await
     }
 

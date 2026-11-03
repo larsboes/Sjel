@@ -56,7 +56,7 @@ mod ui;
 pub mod update;
 mod viz;
 mod workspace;
-mod ytalbum;
+mod music;
 
 use sjel_gpui_core::area::Area;
 use sjel_gpui_core::{route, shell};

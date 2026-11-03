@@ -248,7 +248,7 @@ seen="$(inference_backend_seen)"
 # `[capability.X] env` must reach the process started ON DEMAND, not only the launchd/systemd
 # unit it was rendered into until 2026-10-04. It reached only the unit, and a capability with
 # `autostart = "false"` never gets one, so nothing on the machine could give it a PATH: the
-# Sjel UI's start of ytalbum died on "missing required tool 'yt-dlp'" and of knowledge-graph on
+# Sjel UI's start of music died on "missing required tool 'yt-dlp'" and of knowledge-graph on
 # "nohup: bun: No such file or directory", while the identical command from a login shell
 # worked. Asserted through a marker rather than through PATH so the check does not depend on
 # which host tools happen to be installed.

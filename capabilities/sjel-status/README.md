@@ -6,7 +6,7 @@ Local status and lifecycle gateway for enabled capabilities. It reads the servic
 
 The process derives capability names, ports and health paths from `service.toml` manifests rather than maintaining a second list. Health reports distinguish an unavailable required autostart service from a normally stopped on-demand service.
 
-The gateway binds to loopback. Lifecycle routes can start or stop processes, so reachability is restricted to the local machine; deployment authentication also protects routes when an inbound token is configured.
+The primary listener binds to loopback. An optional LAN listener admits paired devices, and a protected Unix socket serves the tailnet proxy. Lifecycle routes are authenticated at these boundaries; the LAN listener is disabled unless deployment configuration enables it.
 
 ## Run
 

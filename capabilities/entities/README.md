@@ -1,6 +1,6 @@
 # entities
 
-Canonical registry for people, organisations, places and the operator's own context. Obsidian and Google Contacts are optional adapters; Sjel owns the registry facts.
+Canonical registry for people, organisations, places and the operator's own context. Google Contacts is an optional inbound adapter; Sjel owns the registry facts and their provenance.
 
 ## Why this shape: typed facts with provenance
 

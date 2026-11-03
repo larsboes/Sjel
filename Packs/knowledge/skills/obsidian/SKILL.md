@@ -17,7 +17,17 @@ vault contents. The contract path is set per machine with `contract_path` in the
 no-doubling law, naming, and frontmatter typing. When none is configured, follow the vault's
 existing conventions: read neighbouring notes, their folders and frontmatter before writing.
 
-In Pi, use the governed `obsidian_*` tools by default. Call `obsidian_contract` before the first
+**Local vault mode.** When the overlay's `config/knowledge.toml` sets `local_files = true`, the
+user selected direct file access for the vault at `vault_root`, and only for that vault. Read,
+search, create and edit its files with the local file tools (`read`, `grep`, `find`, `edit`,
+`write`), in Pi and in other harnesses. Before the first change in a session, read the contract
+that `scripts/vault contract` names. Use `obsidian_*` tools only for Obsidian-aware operations,
+such as the active note, backlinks, or a heading-targeted patch. Local access does not pass the
+Obsidian access policy: it records no clearance, restricts no egress tools, writes no audit line
+and has no version check against a concurrent edit in Obsidian. Use it only for a vault with no
+confidential notes. The vault contract still governs every write, including read-only folders.
+
+Without local vault mode, in Pi, use the governed `obsidian_*` tools by default. Call `obsidian_contract` before the first
 mutation in a session. It loads the configured contract from the vault through Obsidian and gates
 writes against its current digest, or reports that no contract is configured for this machine. If a
 contract is configured but missing, stop and say so — do not improvise structure or substitute an
@@ -50,8 +60,8 @@ block, and frontmatter targets; `obsidian_outline`, `obsidian_search`, `obsidian
 `obsidian_base_read`; validate drafts with `obsidian_note_validate` or `obsidian_base_validate`
 before writing. Create with `obsidian_create`, extend with `obsidian_append`, and make structural
 edits with `obsidian_patch`. Reserve `obsidian_write` for deliberate whole-note replacement.
-Moves and deletes require confirmation; never work around a mutation refusal by switching to
-shell or direct filesystem access.
+Moves and deletes require confirmation. Outside local vault mode, never work around a
+mutation refusal by switching to shell or direct filesystem access.
 
 ## Read before writing
 

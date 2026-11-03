@@ -12,6 +12,9 @@ Vault-coupled, never vault-hardcoded: the private overlay's `config/knowledge.to
 vault profile and may provide `vault_root` for filesystem-only helpers. It may also name a
 vault-writing contract with `contract_path`, a vault-relative note path that differs per machine.
 The contract is optional; without it, writes follow the vault's existing conventions.
+`local_files = true` selects local vault mode: agents read and edit files under `vault_root` with
+local file tools instead of the governed Pi tools. Local access bypasses the access policy below,
+so set it only for a vault with no confidential notes.
 
 ## Skills
 

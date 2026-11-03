@@ -17,14 +17,14 @@ The service is managed through `tools/service-runner.sh` and its `service.toml` 
 One-shot imports and refreshes use the `places` CLI:
 
 ```sh
-places backfill amex
-places backfill cities
-places backfill stations
-places backfill calendar
-places backfill takeout
-places backfill travelers
-places backfill vault
-places climate fetch
+places-server backfill amex
+places-server backfill cities
+places-server backfill stations
+places-server backfill calendar
+places-server backfill takeout
+places-server backfill travelers
+places-server backfill vault
+places-server climate fetch
 ```
 
 ## Considered and declined

@@ -4,9 +4,9 @@ Checks apartment layouts against measured room geometry, clearance rules and inv
 
 ## Why this shape: proposals before placements
 
-The solver evaluates explicit room rules and item declarations. Search and composition return candidate layouts; they do not silently change the measured placements. A placement is accepted only after the user reviews it and the capability validates it against the layout rules.
+The solver evaluates explicit room rules and item declarations. Search and composition return candidate layouts; they do not silently change measured placements. The reviewed RoomPlan placement path validates a confirmed observation-to-item link, item ownership, layout rules and the expected revision before it records a placement.
 
-RoomPlan captures are stored as observations. Reconciliation can propose candidate matches, but only confirmed observation-to-item links can support a reviewed placement change. Inventory remains the owner of item records.
+RoomPlan captures are stored as observations. Reconciliation can propose candidate matches, but only confirmed observation-to-item links can support a reviewed RoomPlan placement change. Inventory remains the owner of item records.
 
 ## Run
 

@@ -70,6 +70,7 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
    config and docs.
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
    also move to the neutral register (`on-documentation.md`, Register).
+   Done: secondary capability README sweep (`ec859210`, refined in `cc44c287`).
 5. "Axon" goes in the lines each pass touches, the rest in one rename commit. The compatibility
    paths need their own migration: `X-Axon-*` headers are still accepted until the phone app
    ships (the gate rewrites them), and `axon.toml` and `axon.local.toml` are still read after the

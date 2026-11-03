@@ -150,7 +150,6 @@ impl Workspace {
             | Page::Media
             | Page::Research
             | Page::Setup
-            | Page::Apps
             | Page::Docs
             | Page::Record
             | Page::Settings => Vec::new(),

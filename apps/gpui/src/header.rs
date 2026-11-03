@@ -165,7 +165,6 @@ fn subtitle(view: &Workspace) -> SharedString {
         }
         Page::Software => "Apps on this Mac: size, last used, and what to keep".into(),
         Page::Links => "Your recurring web destinations, grouped and ready to open".into(),
-        Page::Apps => "Standalone interfaces exposed by running capabilities".into(),
         Page::Docs => "Architecture, capability contracts, and operating guides".into(),
         Page::Record => "A record and the Sjel data connected to it".into(),
         Page::Import => "Bring a folder into Sjel, each file to its owner".into(),

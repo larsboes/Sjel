@@ -2834,10 +2834,6 @@
       "verdict": "reject"
     },
     {
-      "name": "hmac",
-      "verdict": "adopt"
-    },
-    {
       "name": "home-assistant",
       "verdict": "adopt"
     },
@@ -2852,10 +2848,6 @@
     {
       "name": "iai-personal-memory-engine",
       "verdict": "inspiration"
-    },
-    {
-      "name": "ibm-plex",
-      "verdict": "adopt"
     },
     {
       "name": "indradb",
@@ -2898,15 +2890,7 @@
       "verdict": "adopt"
     },
     {
-      "name": "lucide",
-      "verdict": "quarry"
-    },
-    {
       "name": "macmon",
-      "verdict": "adopt"
-    },
-    {
-      "name": "maplibre-gl-js",
       "verdict": "adopt"
     },
     {
@@ -2920,10 +2904,6 @@
     {
       "name": "mcpserver-audit",
       "verdict": "inspiration"
-    },
-    {
-      "name": "mermaid",
-      "verdict": "adopt"
     },
     {
       "name": "mermaid-rs-renderer",
@@ -3158,31 +3138,11 @@
       "verdict": "reject"
     },
     {
-      "name": "svelte-ai-tools",
-      "verdict": "adopt"
-    },
-    {
-      "name": "svelte-language-server",
-      "verdict": "adopt"
-    },
-    {
-      "name": "sveltejs-mcp",
-      "verdict": "adopt"
-    },
-    {
       "name": "tabler-icons",
       "verdict": "adopt"
     },
     {
       "name": "tailscale",
-      "verdict": "adopt"
-    },
-    {
-      "name": "tauri-plugin-barcode-scanner",
-      "verdict": "adopt"
-    },
-    {
-      "name": "tauri-plugin-notification",
       "verdict": "adopt"
     },
     {
@@ -3222,23 +3182,7 @@
       "verdict": "adopt"
     },
     {
-      "name": "uqr",
-      "verdict": "adopt"
-    },
-    {
       "name": "vaultwarden",
-      "verdict": "adopt"
-    },
-    {
-      "name": "vega",
-      "verdict": "adopt"
-    },
-    {
-      "name": "vega-embed",
-      "verdict": "adopt"
-    },
-    {
-      "name": "vega-lite",
       "verdict": "adopt"
     },
     {
@@ -3247,10 +3191,6 @@
     },
     {
       "name": "vibecoded-design-tells",
-      "verdict": "adopt"
-    },
-    {
-      "name": "wikimedia-api",
       "verdict": "adopt"
     },
     {

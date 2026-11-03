@@ -43,7 +43,7 @@ require() { # require <path> <literal>
 
 require ".github/workflows/ci.yml" "bun install --frozen-lockfile --ignore-scripts"
 require ".github/workflows/ci.yml" "bun pm scan"
-require "capabilities/soundscape/README.md" "bun install --frozen-lockfile --ignore-scripts"
+require "capabilities/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
 
 # Trees that resolve dependencies: a package.json with a committed bun.lock beside it.
 #
@@ -97,4 +97,4 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "bun install policy passed (CI and the soundscape README disable lifecycle hooks; every resolving tree carries the 24h hold and the scanner)."
+echo "bun install policy passed (CI and the clipper README disable lifecycle hooks; every resolving tree carries the 24h hold and the scanner)."

@@ -9,30 +9,11 @@
 # silently reinstates a hold nobody chose. Patch first (CONTRIBUTING.md#patch-first): a hold that needs
 # a human to end it is a hold that ends late.
 #
-# THE VALUE IS NO LONGER THE SAME IN EVERY BLOCK, and that is the change of 2026-09-22 (Q109).
-# `default-days: 0` remains the ruling for cargo and github-actions; it is `1` for the `bun`
-# block. The three-day default is not what this rules out — a LONG hold is — and the npm-only
-# hold for a human running `bun add` is configured in capabilities/soundscape/ui/bunfig.toml. One sentence of it matters here: a malicious npm publish is
-# caught in hours (chalk/debug ~2.5h, Shai-Hulud ~12h, Mini Shai-Hulud / TanStack ~3h), so one
-# day is the whole window, while a malicious Cargo crate or a compromised `actions/*` tag is
-# close to unheard of and a hold there buys nothing.
-#
-# This block is the automated path, and it is the one that needed the hold: every pull request
-# below is armed to merge itself (Q77), so without it a poisoned publish would reach `main` with
-# no human anywhere in the loop. The bunfig hold is not a substitute and does not cover it —
-# `bun install --frozen-lockfile` ignores `minimumReleaseAge` by design (measured 2026-09-22 on
-# Bun 1.4.2), which is exactly what a Dependabot pull request installs.
-#
-# `default-days: 0` IS accepted, verified 2026-09-02 on this repository: the config validates and
-# Dependabot opened pull requests under it. That was the one open question when this file landed
-# — dependabot-core treats 0 as "no cooldown" (Package::ReleaseCooldownOptions defaults every
-# window to 0, and Job::CooldownDefinition passes an explicit 0 straight through), while the
-# community JSON schema at json.schemastore.org/dependabot-2.0.json declares `default-days`
-# minimum 1, and GitHub's own validator is closed. The validator sided with dependabot-core, so
-# the `default-days: 1` fallback is not needed. 2026-09-22: the `1` in the `bun` block
-# is NOT that fallback coming back. It is the Q109 hold, chosen on its own reasoning, and the
-# blocks that needed no hold still read 0.
-#
+# `default-days: 0` is the ruling for cargo and github-actions: a malicious Cargo crate or a
+# compromised `actions/*` tag is close to unheard of, and a hold there buys nothing.
+# No npm tree is watched here. The one left, the web clipper, is updated by hand under the
+# 24-hour hold in its own bunfig.toml.
+
 # The pull requests these open MERGE THEMSELVES once the required checks pass:
 # .github/workflows/dependabot-automerge.yml arms `gh pr merge --auto --squash` on each one
 # (Q77). Opening them daily and leaving them for a human to notice would have re-created the
@@ -45,11 +26,6 @@
 # file setting: `gh api --method PUT repos/larsboes/Sjel/automated-security-fixes`. That was run
 # on 2026-09-02 and `security_and_analysis.dependabot_security_updates` now reads "enabled";
 # this file alone would have left the reactive half switched off.
-#
-# `bun` is a first-class ecosystem, read from dependabot/dependabot-core upstream: a top-level
-# bun/ directory, and bun/lib/dependabot/bun/package_manager.rb declaring ECOSYSTEM = "bun". It
-# reads bun.lock directly, so the npm ecosystem is not needed. The tree is
-# capabilities/soundscape/ui/bun.lock.
 #
 # capabilities/agentbox/Containerfile is deliberately NOT watched. Its only FROM is
 # `FROM ${BASE_IMAGE}` over an ARG default, and whether Dependabot resolves that shape is
@@ -68,36 +44,6 @@ updates:
       cargo:
         patterns: ["*"]
         update-types: ["minor", "patch"]
-
-  - package-ecosystem: "bun"
-    directory: "/capabilities/soundscape/ui"
-    schedule:
-      interval: "daily"
-    cooldown:
-      default-days: 1          # 24h — the npm-only hold, Q109. See the header.
-    open-pull-requests-limit: 3
-    groups:
-      soundscape-ui:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-    # `typescript` is held on 6.x in this tree, and it is the one dependency here whose major
-    # must not arrive. This is not a pin and not a cooldown -- nothing here ever ends in a
-    # human's hands. The tree runs TWO TypeScripts deliberately: `typescript` ~6.0.0 is the
-    # one svelte-check and @sveltejs/kit resolve against, and `@typescript/native`
-    # (npm:typescript@^7.0.2) is the 7.x binary that the check script's `--tsgo` flag drives.
-    #
-    # Both peer ranges exclude 7 from the primary slot, which is the whole measurement:
-    # svelte-check 4.7.6 declares `typescript: ^5.0.0 || ^6.0.0`, @sveltejs/kit 2.70.3 declares
-    # `^5.3.3 || ^6.0.0`, and svelte-check refuses to start with 7 there -- naming the
-    # two-version setup as its own fix. Measured 2026-09-30 on #204, which moved the primary
-    # to ~7.0.2: of the seven open dependabot pull requests that day it was the only one whose
-    # failure was its own doing rather than a stale merge ref, failing `bun run check` with
-    # "TypeScript 7 support currently requires both TypeScript 7 and TypeScript 6".
-    #
-    # Only majors are ignored, so 6.x patches still arrive and the 7.x alias is unaffected.
-    ignore:
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

@@ -51,8 +51,8 @@ rebase_readme_links() {
 
   echo "## Capabilities"
   echo
-  echo "| Capability | What | Service | Port | Panel |"
-  echo "|---|---|---|---|---|"
+  echo "| Capability | What | Service | Port |"
+  echo "|---|---|---|---|"
   for dir in "$SJEL_ROOT"/capabilities/*/; do
     [ -d "$dir" ] || continue
     # No README.md means this is scaffolding, not a capability yet
@@ -64,57 +64,17 @@ rebase_readme_links() {
     desc="$(awk '/^# /{h=1;next} h{ if (!NF) { if (got) exit; else next }; got=1; printf "%s ", $0 }' "$dir/README.md")"
     trimmed="${desc%%. *}"
     if [ "$trimmed" != "$desc" ]; then desc="$trimmed."; else desc="${desc% }"; fi
-    # Port and panel read from the same manifest the Service column already opens
-    # (Sjel#39). Emitting them is what stops a port number living in two homes — the
-    # manifest and a hand-maintained table in dashboard/README.md — since a generated
-    # column cannot drift from its source. The Panel column is a dash for every
-    # capability today because none declares panel_port/panel_path yet; it is emitted
-    # anyway so the first one that does gets carried in by the freshness gate without a
-    # generator change.
     svc="—"
     port="—"
-    panel="—"
     if [ -f "$dir/service.toml" ]; then
       img="$(toml_get image "$dir/service.toml")"
       tag="$(toml_get tag "$dir/service.toml")"
       if [ -n "$img" ]; then svc="$img:$tag"; fi
       p="$(toml_get port "$dir/service.toml")"
       if [ -n "$p" ]; then port="\`$p\`"; fi
-      pp="$(toml_get panel_port "$dir/service.toml")"
-      pa="$(toml_get panel_path "$dir/service.toml")"
-      if [ -n "$pp" ] || [ -n "$pa" ]; then panel="\`${pp:-$p}${pa}\`"; fi
     fi
     desc="$(printf '%s\n' "$desc" | rebase_readme_links "${dir#"$SJEL_ROOT"/}")"
-    echo "| \`$name\` | $desc | $svc | $port | $panel |"
-  done
-  echo
-
-  echo "## Dashboard (spine shell)"
-  echo
-  echo "The spine's one app — discovers installed capabilities via their manifests and mounts"
-  echo "their panels; owns no domain, no data. See [Three architectural nouns](CONTRIBUTING.md#three-architectural-nouns)."
-  echo
-  echo "| App | What | Port |"
-  echo "|---|---|---|"
-  # Spine apps are discovered the same way the runner and the schema gate find them: a
-  # service.toml one level below the repo root (capabilities/ sit two levels down and have
-  # their own section above). Glob, not a hand-list, so a second spine app can never be
-  # silently absent from this table -- same rationale as capability.sh's registry glob.
-  for st in "$SJEL_ROOT"/*/service.toml; do
-    [ -f "$st" ] || continue          # empty glob -> literal path, skip it
-    dir="$(dirname "$st")/"
-    name="$(basename "$dir")"
-    desc=""
-    if [ -f "$dir/README.md" ]; then
-      desc="$(awk '/^# /{h=1;next} h{ if (!NF) { if (got) exit; else next }; got=1; printf "%s ", $0 }' "$dir/README.md")"
-      trimmed="${desc%%. *}"
-      if [ "$trimmed" != "$desc" ]; then desc="$trimmed."; else desc="${desc% }"; fi
-    fi
-    port="—"
-    p="$(toml_get port "$st")"
-    if [ -n "$p" ]; then port="\`$p\`"; fi
-    desc="$(printf '%s\n' "$desc" | rebase_readme_links "${dir#"$SJEL_ROOT"/}")"
-    echo "| \`$name\` | $desc | $port |"
+    echo "| \`$name\` | $desc | $svc | $port |"
   done
   echo
 

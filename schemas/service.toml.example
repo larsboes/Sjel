@@ -51,17 +51,6 @@ tag      = "stable"                       # REQUIRED, and it names a CHANNEL, no
 # no inline comment (toml_array contract).
 # requires = ["postgres"]
 
-# Optional — the capability's dashboard panel (shell model, CONTRIBUTING.md#three-architectural-nouns).
-# The spine's dashboard/ discovers enabled capabilities via <overlay>/config/machine.toml
-# and mounts
-# each panel from the capability's own HTTP surface: http://127.0.0.1:<panel_port><panel_path>.
-# panel_port is the HOST-published port (the host side of `ports` above), NOT the
-# container-internal one — the dashboard dials the host. One panel per capability
-# (scalar fields — deliberate doctrine, see tools/capability.sh/).
-# A capability without these fields simply has no panel. Flat fields, not a [panel]
-# section — single-line toml.sh contract.
-# panel_port = "8080"
-# panel_path = "/ui"
 ports    = ["127.0.0.1:8080:80"]          # [host-ip:]host-port:container-port, repeatable
 volumes  = ["data/example/data:/data"]    # host side is relative to the overlay root — EXCEPT an
                                           # absolute path, which is taken verbatim as a system path
@@ -211,15 +200,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # Naming the local target/ instead rebuilds one file and
 #                                           # executes another, so the job keeps running whatever
 #                                           # stale binary was left behind.
-# panel_build = ["bun", "run", "build"]
-#                                           # optional, and only for a capability that ships its own
-#                                           # UI. Runs in <capability>/ui/ — fixed by
-#                                           # CONTRIBUTING.md#placement-guide, so it is not a manifest
-#                                           # fact — immediately BEFORE `build`, on the same
-#                                           # trigger. Assumes ui/node_modules is installed; that
-#                                           # install is an operator step (the capability's README),
-#                                           # never a start-time one.
-# build_output = "capabilities/example/ui/dist"
+# build_output = "capabilities/example/dist"
 #                                           # optional, repo-relative — what `build` produces, and
 #                                           # therefore how "already built" is decided. REQUIRED
 #                                           # whenever command[0] is a bare interpreter (bun, uv):
@@ -295,21 +276,6 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # port with neither.
 # proxy_api_only = "true"                   # optional. When the dashboard owns /<name> as a page,
 #                                           # proxy only /<name>/api and still strip /<name>.
-# panel_port  = "4242"                      # a capability that serves its OWN UI (CONTRIBUTING.md#three-architectural-nouns); the shell
-# panel_path  = "/"                         # mounts it. Omit when the dashboard renders the widget.
-# idle_timeout = "300"                      # optional, seconds. Stop this panel once nobody has looked
-#                                           # at it for that long; sjel-status polls
-#                                           # http://127.0.0.1:<panel_port>/__sjel/idle and stops it via
-#                                           # `service-runner.sh idle-stop` (no maintenance hold, so
-#                                           # anything may start it again). A panel served by
-#                                           # tools/panel-server.ts answers that endpoint and injects
-#                                           # the visibility heartbeat that feeds it; one served by
-#                                           # anything else never reports idle and is therefore never
-#                                           # stopped — unreadable means in use, never "kill it".
-#                                           # Ignored without panel_port, and on autostart capabilities:
-#                                           # a capability the machine is meant to keep running is not
-#                                           # idle by definition. NB: a window sitting behind another
-#                                           # window reports hidden, so it counts as unread.
 
 # ── Data kind ──────────────────────────────────────────────────────────────
 # Everything below applies ONLY to kind = "data". The manifest declares state and

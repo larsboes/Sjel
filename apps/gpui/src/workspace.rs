@@ -328,7 +328,6 @@ pub struct Workspace {
     pub inventory_page: Entity<InventoryPage>,
     pub software: Entity<crate::software::Software>,
     pub links_page: Entity<crate::links::LinksPage>,
-    pub apps_page: Entity<crate::apps::AppsPage>,
     pub docs_page: Entity<crate::docs::DocsPage>,
     pub record_page: Entity<crate::record::RecordPage>,
     pub import: Entity<crate::import::ImportPage>,
@@ -421,7 +420,6 @@ impl Workspace {
         let inventory_page = cx.new(|cx| InventoryPage::new(repo.clone(), cx));
         let software = cx.new(|_| crate::software::Software::new(repo.clone()));
         let links_page = cx.new(|_| crate::links::LinksPage::new(repo.clone()));
-        let apps_page = cx.new(|_| crate::apps::AppsPage::new(repo.clone()));
         let docs_page = cx.new(|_| crate::docs::DocsPage::new());
         let record_page = cx.new(|_| crate::record::RecordPage::new(repo.clone()));
         let import = cx.new(|_| crate::import::ImportPage::new(repo.clone()));
@@ -532,7 +530,6 @@ impl Workspace {
             inventory_page,
             software,
             links_page,
-            apps_page,
             docs_page,
             record_page,
             import,
@@ -586,6 +583,13 @@ impl Workspace {
         ) {
             workspace.go(Page::Projects, cx);
             crate::frames::drive_type_bench(frames, path, workspace.projects.clone(), window, cx);
+        }
+        if let (Some(frames), Ok(path)) = (
+            workspace.frames.clone(),
+            std::env::var("SJEL_GPUI_BENCH_CLICK"),
+        ) {
+            workspace.go(Page::Projects, cx);
+            crate::frames::drive_click_bench(frames, path, workspace.projects.clone(), window, cx);
         }
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(POLL).await;
@@ -646,8 +650,6 @@ impl Workspace {
                     links.load(cx);
                     links.load_candidates(cx);
                 });
-            } else if page == Page::Apps {
-                self.apps_page.update(cx, |apps, cx| apps.load(cx));
             } else if page == Page::Import {
                 self.import.update(cx, |import, cx| import.load(cx));
             } else if page == Page::Systems {
@@ -2021,7 +2023,6 @@ impl Render for Workspace {
             }
             Page::Software => self.software.clone().into_any_element(),
             Page::Links => self.links_page.clone().into_any_element(),
-            Page::Apps => self.apps_page.clone().into_any_element(),
             Page::Docs => self.docs_page.clone().into_any_element(),
             Page::Record => self.record_page.clone().into_any_element(),
             Page::Import => self.import.clone().into_any_element(),

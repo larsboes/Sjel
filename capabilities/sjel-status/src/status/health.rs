@@ -217,13 +217,6 @@ pub(crate) async fn sjel_status_health_handler(
 
 /// Everything the shell needs to render itself: what exists and what is up.
 ///
-/// `panel_port` and `panel_path` are reported as the manifest facts they are; the
-/// panel's URL is deliberately NOT assembled here. A panel is loaded by a browser, and
-/// that browser has to reach it on the host it is already talking to: composing
-/// `127.0.0.1:<port>` server-side breaks the moment the shell is opened as `localhost`
-/// (Chrome treats the two as different sites and partitions storage, which is enough to
-/// kill a framework's client init) and breaks harder over Tailscale, where 127.0.0.1 is
-/// the phone. The shell builds the URL from its own `location`.
 pub(crate) async fn capabilities_handler(
 ) -> Result<Json<Vec<CapabilityView>>, (StatusCode, Json<Value>)> {
     let services = registry().await.map_err(bad_gateway)?;
@@ -308,12 +301,9 @@ mod tests {
         });
         for field in [
             "ready_path",
-            "panel_port",
-            "panel_path",
             "autostart",
             "schedule",
             "proxy_api_only",
-            "idle_timeout",
             "routes_absent",
             "backup_target",
             "backup_sqlite",

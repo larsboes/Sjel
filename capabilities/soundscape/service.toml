@@ -2,22 +2,11 @@
 #
 # autostart = false: nothing depends on this being up, and a soundscape that starts
 # itself on boot is a machine that makes noise decisions nobody asked for. The
-# dashboard brings it up when its surface is opened, which is what sjel-status is for.
-#
-# The panel is this same port: the binary serves the built UI bundle alongside its
-# own API, so the surface arrives and leaves with the capability (CONTRIBUTING.md#three-architectural-nouns)
-# rather than living in the spine shell.
+# app's Capabilities page starts it through sjel-status when it is wanted.
 kind        = "process"
 name        = "soundscape"
 command     = ["target/release/soundscape"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "soundscape"]
-# The only capability that ships two artifacts, so the only one that declares a second
-# build. `panel_build` runs in ui/ before `build` and produces ui/dist, which the binary
-# serves. It assumes ui/node_modules is installed, exactly as dashboard/service.toml's
-# `bun run dev` does — see capabilities/soundscape/README.md for that one operator step.
-panel_build = ["bun", "run", "build"]
 port        = "8088"
 health_path = "/health"
 autostart   = "false"
-panel_port  = "8088"
-panel_path  = "/"

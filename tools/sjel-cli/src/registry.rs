@@ -42,16 +42,13 @@ can't be stranded. No service is ever started here: after enable, the suggested
 /// manifest facts sjel-status needs and may not parse TOML for (CONTRIBUTING.md#one-manifest-
 /// per-concern). `backup_sqlite_online` keeps `backup_sqlite` honest: that copy holds nothing
 /// down, and a consumer reading only `backup_sqlite` would render "this stops the service".
-const FIELDS: [&str; 17] = [
+const FIELDS: [&str; 14] = [
     "port",
     "health_path",
     "ready_path",
-    "panel_port",
-    "panel_path",
     "autostart",
     "schedule",
     "proxy_api_only",
-    "idle_timeout",
     "routes_absent",
     "backup_target",
     "backup_sqlite",

@@ -8,7 +8,6 @@ use gpui_kit::{
 
 mod accounts;
 mod agent_run;
-mod apps;
 mod ask;
 mod audio;
 mod backup;

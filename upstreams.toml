@@ -82,13 +82,6 @@ license = "Apache-2.0"
 summary = "Transactions database whose task-oriented documentation informs Sjel's technical reading paths"
 why = "Reviewed 2026-10-16: https://docs.tigerbeetle.com/ distinguishes Start, Concepts, Coding, Operating and Reference, and directs implementation readers to internals. Sjel applies the reader-task distinction to the existing docs/README.md architecture, capability-author and operations routes; it does not add five parallel document trees. Commands and contracts stay in their owning reference, open work stays in ISA.md, and generated inventory stays in ARCHITECTURE.md. Documentation structure only; no source or prose copied and no database dependency. CONTRIBUTING.md records the placement rule. The repository declares Apache-2.0."
 
-[ibm-plex]
-url = "https://github.com/IBM/plex"
-verdict = "adopt"
-license = "OFL-1.1"
-summary = "Self-hosted typeface for the dashboard, chosen for tabular figures and German coverage"
-why = "the dashboard's typeface, self-hosted. Audited 2026-09-06. Replaces the -apple-system stack, which rendered as SF on the only two devices that read this surface and carried no identity of its own -- the largest single lever on how the shell looks, and the one Q87's refresh did not pull. Plex over the two faces a generated page reaches for: Inter and Geist are the current default rather than a choice. Chosen for what this content is: a technical face with true tabular figures, which is what the date, time and money columns need -- Home's `15 Sep / 16 Sep / 7 Oct` column could not align under proportional digits -- and complete German coverage in the latin subset alone, so aeoeue and sz cost no second file. VENDORED, NOT LINKED: 8 woff2 files under dashboard/static/fonts, subsetted latin and latin-ext, fetched once from the Google Fonts CSS API and served from this host. No CDN and no third-party request at runtime, which N3 requires and which a fonts.googleapis.com link would have broken on a tailnet-only surface. 228 KB on disk; about 131 KB is fetched for latin-only content and the latin-ext half downloads only when a character in its range appears, because unicode-range gates it. Three sans weights (400/500/600) and one mono (400) -- mono 500 was fetched and deleted, since nothing needs a bold monospace here. Nothing tracks a release: the files are the artifact, and re-fetching means re-running the subset step recorded in this row"
-
 [iai-personal-memory-engine]
 url = "https://github.com/CodeAbra/iai-personal-memory-engine"
 verdict = "inspiration"
@@ -398,22 +391,8 @@ why = "the TS/JS runtime CONTRIBUTING.md#language-tooling mandates (bun, never n
 url = "https://www.npmjs.com/package/@socketsecurity/bun-security-scanner"
 verdict = "adopt"
 license = "MIT"
-summary = "Bun install-time scanner that checks the dashboard's UI dependencies for malicious packages"
+summary = "Bun install-time scanner that checks the web clipper's npm dependencies for malicious packages"
 why = "the Bun Security Scanner API adapter that checks the dashboard and soundscape UI dependency trees for malware, typosquats and other supply-chain advisories before install. Adopted 2026-09-22 (Q109) after measuring that the existing osv-scanner covers known vulnerabilities but not malicious publishes; free mode needs no token, while SOCKET_API_KEY adds Socket organization policy. It is a devDependency in each tree rather than a global config because Bun refuses a configured scanner that is absent from that project's dependencies. The scanner's network availability is an explicit operational cost; CI runs `bun pm scan` and the tracked bunfig files keep the configuration from silently disappearing"
-
-[maplibre-gl-js]
-url = "https://github.com/maplibre/maplibre-gl-js"
-verdict = "adopt"
-license = "BSD-3-Clause"
-summary = "Interactive map renderer that the dashboard uses for its Trips workspace"
-why = "interactive map renderer for the dashboard's cross-capability Trips workspace. Consumed directly from Svelte through one lifecycle wrapper, matching dashboard/README.md; no React binding and no second UI architecture"
-
-[mermaid]
-url = "https://github.com/mermaid-js/mermaid"
-verdict = "adopt"
-license = "MIT"
-summary = "Diagram renderer that the dashboard uses to draw the Mermaid source summaries produce"
-why = "renders the Mermaid source libs/summarize produces for a content item. Adopted rather than built: a diagram renderer is a solved problem and the alternative was emitting SVG by hand. Loaded by dynamic import inside one Svelte lifecycle wrapper, the same shape as maplibre-gl-js above, so the bundle is code-split onto the reader route instead of every page. `startOnLoad` is off and rendering is an explicit call, because the reader owns when a diagram appears; nothing is fetched at runtime, which is what keeps the dashboard's no-CDN rule intact"
 
 [mermaid-rs-renderer]
 url = "https://github.com/1jehuang/mermaid-rs-renderer"
@@ -422,32 +401,11 @@ license = "MIT"
 summary = "Native Rust Mermaid parser and SVG renderer used by GPUI Docs"
 why = "renders Mermaid fences in the native GPUI documentation reader as SVG consumed by GPUI's built-in SVG element. Adopted rather than translating a second diagram language or invoking a browser at runtime; the dashboard keeps its separate Mermaid.js consumer until retirement. Rendering remains local and uses the app palette."
 
-[vega]
-url = "https://github.com/vega/vega"
-verdict = "adopt"
-license = "BSD-3-Clause"
-summary = "Chart renderer under vega-lite, pinned so Sjel decides which version draws the dashboard figures"
-why = "the renderer vega-lite compiles down to. Pinned rather than floated on vega-lite's `^6.0.0` peer range, so the version that actually draws is a decision here instead of whatever the resolver picked that day"
-
-[vega-lite]
-url = "https://github.com/vega/vega-lite"
-verdict = "adopt"
-license = "BSD-3-Clause"
-summary = "Chart grammar the dashboard uses to draw figures from tables extracted out of content items"
-why = "draws the figure for a content item's extracted table. Adopted rather than built because axes, scales and tick selection are where hand-rolled charts go wrong, not the marks. The model never emits a Vega-Lite specification: libs/summarize returns rows and one derived mark, and dashboard/src/lib/feed/ChartFigure.svelte compiles that here, so transforms, data URLs and the palette stay out of a model's reach"
-
-[vega-embed]
-url = "https://github.com/vega/vega-embed"
-verdict = "adopt"
-license = "BSD-3-Clause"
-summary = "Helper that compiles and mounts Vega-Lite charts in the dashboard with one call"
-why = "one call that compiles a Vega-Lite specification and mounts the SVG, instead of wiring the vega-lite compiler to a vega View by hand. Loaded by dynamic import inside the one figure component, the same code-splitting shape as mermaid and maplibre-gl above; `actions: false` because the export/edit menu it ships by default points at a hosted editor"
-
 [openfreemap]
 url = "https://github.com/hyperknot/openfreemap"
 verdict = "adopt"
 license = "MIT (server); OpenMapTiles/OSM attribution applies to rendered data"
-summary = "Keyless hosted vector basemap that the dashboard's Trips map uses, with attribution kept visible"
+summary = "Keyless hosted vector basemap that the GPUI travel map draws, with attribution kept visible"
 why = "keyless vector basemap for the first Trips vertical slice, using the documented hosted style URL behind one constant. The map keeps provider attribution visible and the seam can later point at a self-hosted OpenFreeMap/PMTiles deployment without changing Trip contracts"
 
 [maplibre-native-rs]
@@ -456,13 +414,6 @@ verdict = "evaluate"
 license = "MIT OR Apache-2.0 (Rust bindings); BSD-2-Clause (MapLibre Native core)"
 summary = "Optional Metal vector-map prototype inside the GPUI travel surface, built against 0.10.0"
 why = "Reuse MapLibre's style parser, labels and renderer instead of building a map engine. The first adapter copies a rendered image into GPUI on camera changes, on a bounded, thread-affine worker. It is experimental, macOS-only, and does not establish smooth texture composition, iOS support or downloadable offline regions. The default raster path remains available. OpenFreeMap supplies the style and tiles; no Mapbox account or key is required."
-
-[wikimedia-api]
-url = "https://www.mediawiki.org/wiki/Extension:PageImages"
-verdict = "adopt"
-license = "API output is source-specific; the Trips client requests freely licensed page images and preserves source attribution"
-summary = "Wikimedia image API that supplies destination pictures for the dashboard's Trips view"
-why = "provider-neutral destination orientation images for Trips. The dashboard validates the small PageImages response into an inert PlaceImage record (dashboard/src/lib/travel/place-image.ts); it never evaluates provider HTML or component code"
 
 [nominatim-api]
 url = "https://nominatim.org/release-docs/latest/api/Search/"
@@ -735,34 +686,6 @@ why = "REJECTED 2026-07-26 on capability, not merit — and it wins the licensin
 
 # --- the Svelte frontend toolchain (dashboard/README.md) ------
 
-[svelte-ai-tools]
-url = "https://github.com/sveltejs/ai-tools"
-verdict = "adopt"
-license = "MIT"
-summary = "Svelte's own agent toolchain, adopted as a Claude Code plugin rather than vendored"
-why = "the Svelte org's own agent toolchain, adopted as a Claude Code plugin (`/plugin marketplace add sveltejs/ai-tools`) rather than vendored into a Pack. Three of its four parts are things a Pack structurally cannot carry — an HTTP MCP server (https://mcp.svelte.dev/mcp, which means every doc lookup and autofixer call sends code context to Svelte's server: public-class work only), an LSP wiring for svelteserver, and a subagent. The fourth, the two skills, is a generated artifact synced from svelte.dev and tools/skills — vendoring it would fork a moving target (runes, async Svelte, {@attach}) with no upstream path. INSIDE COOLDOWN AT ADOPTION: installed 2026-07-28 on a 1-day-old ref, accepted because the installed tree is 13 markdown files plus 2 json and contains no executable code (verified against the cache). The residual vector is plugin.json's lspServers.command, which Claude Code spawns — re-verify that field on every `/plugin marketplace update`, and treat an update as a fresh cooldown decision, not a routine bump"
-
-[lucide]
-url = "https://github.com/lucide-icons/lucide"
-verdict = "quarry"
-license = "ISC"
-summary = "Icon set whose glyph paths were copied once into the dashboard's icon component"
-why = "the source of every glyph in `dashboard/src/lib/Icon.svelte`, whose own header has said so since the React shell and which this register did not carry — against this file's first line, \"No entry, no entry.\" Quarry rather than adopt because nothing is installed and nothing tracks the upstream: thirty-eight path strings were copied once and are maintained here, which is exactly the relationship a dependency was refused for (a few thousand glyphs shipped to use a dozen). Audited 2026-09-05 while fixing the `boxes` glyph, whose third subpath walked to y = -0.5 outside the 24x24 viewBox and never closed, and adding `wallet` and `history` — a copied path is a copied path, and correcting one is this pass's work rather than an upstream bump"
-
-[sveltejs-mcp]
-url = "https://www.npmjs.com/package/@sveltejs/mcp"
-verdict = "adopt"
-license = "MIT"
-summary = "Svelte documentation and autofixer CLI, tracked separately because it fetches and runs code"
-why = "the CLI half of svelte-ai-tools (list-sections, get-documentation, svelte-autofixer), published from that repo's packages/mcp-server. Registered separately because it is the only part that fetches and executes code at call time, and its risk profile is therefore nothing like the plugin's markdown. The upstream skill hardcodes an unpinned `npx @sveltejs/mcp`, so every invocation fetches and executes whatever is current. That was a policy breach Sjel could not fix from its own side until Q77 (2026-09-02); tracking the upstream's latest is the policy now. What it still costs is a RECORD, and that part did not change: npx writes no lockfile, Sjel does not drive the call, and nothing on this machine says which version ran. sveltejs/ai-tools#248 (opened 2026-07-28) stamps the released version into the skill and subagent via the existing update-version.ts release hook -- a provenance fix now rather than an enforcement one. The version this row was audited at is in this file's git history at 2026-09-02"
-
-[svelte-language-server]
-url = "https://github.com/sveltejs/language-tools"
-verdict = "adopt"
-license = "MIT"
-summary = "Svelte language server that gives the Svelte plugin its diagnostics and rename support"
-why = "the `svelteserver` binary that svelte-ai-tools declares but does not ship. Without it the plugin has no Svelte diagnostics, definition lookup or rename support. Registered separately because it is a distinct package and repository"
-
 # --- agentbox: the sandboxed coding agent (capabilities/agentbox) -----------
 
 [pi-coding-agent]
@@ -969,13 +892,6 @@ license = "MIT; nothing is vendored, so no notice obligation falls on this repos
 summary = "Tool that reads a web page as clean markdown; installed globally rather than vendored"
 why = "Reads a web page as clean markdown with navigation, ads and clutter removed. INSTALLED GLOBALLY, NOT VENDORED -- and this row has now been through both arrangements, which is the part worth keeping. It was vendored on 2026-09-16 into Packs/knowledge/vendor/defuddle and un-vendored the same day, because vendoring was solving the wrong problem. The defect it was meant to fix was real: the defuddle SKILL told the model to run a CLI that was not installed and offered `npm install -g defuddle` as the fix, so following the skill meant installing a global package to read one page while a native fetch_content tool did the same job. The first fix vendored the published dist so the fallback could not be a dead pointer -- but that put 2.0M of somebody else's build output in the tree, left the install unrecorded on every OTHER machine anyway, and made Sjel the maintainer of a package that publishes its own releases. What actually killed the dead pointer was the install, not the vendoring. So: installed through its own tooling with `npm install -g defuddle`, landing at $(npm prefix -g)/bin/defuddle (Homebrew's /opt/homebrew/bin on this machine, no sudo needed), version 0.19.3 at this audit -- the same version the vendored copy had pinned. The skill now states the install command and where it lands, so the requirement is documented rather than implied, which is what vendoring was standing in for. In pi the CLI is not used at all: the skill prefers fetch_content and keeps this as the fallback for a harness without a fetch tool. OWNERSHIP, set 2026-09-16: in pi, fetch_content owns fetch-to-markdown and the skill defers to it, so the CLI is not the pi path at all. What remains on disk is two INSTALLS IN TWO ROLES rather than two copies: the library pi-web-access imports from its own node_modules (a declared dependency, used as the primary extractor in its extract.ts, and gitignored -- not part of this repository), and this CLI, for a harness with no fetch tool. They are deliberately NOT collapsed into one, because they are not interchangeable: pi-web-access needs a library it can import, the skill needs a command on PATH, and pointing either at the other's location would be fragile in a different way (node_modules is wiped and reinstalled; a global binary is not). Both are pinned to the same version, 0.19.3, and that lockstep is the thing to preserve -- if they drift, one path silently reads a different renderer than the other, which is the failure this paragraph exists to prevent rather than a duplication to remove"
 
-[tauri-plugin-notification]
-url = "https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/notification"
-verdict = "adopt"
-license = "MIT OR Apache-2.0"
-summary = "Official Tauri plugin the phone app uses for local alerts on a new fare low"
-why = "Local notifications in the phone app for a new Sparpreis low (dashboard/src/lib/travel/fare-alerts.ts). The official Tauri plugin, so adopt rather than a hand-written UNUserNotificationCenter bridge. Crate pinned =2.5.0 in dashboard/src-tauri/Cargo.toml and the JS binding @tauri-apps/plugin-notification 2.5.0 in dashboard/package.json; tauri refuses to build when their minor versions differ. Local only: no APNs entitlement and no push key, ruled 2026-09-25 over real push, which needs a paid developer team and a C3 key on the Mac. The cost of that choice is latency: an alert waits until the app is opened or foregrounded"
-
 [rcgen]
 url = "https://github.com/rustls/rcgen"
 verdict = "adopt"
@@ -989,20 +905,6 @@ verdict = "adopt"
 license = "Apache-2.0 OR ISC OR MIT"
 summary = "Rust TLS library for the Mac's local-network listener and the phone's pinned-certificate client"
 why = "Declared directly on 2026-09-25 for the local-network transport (PRD Q119): the Mac's LAN listener (libs/sjel-server/src/lan.rs, with tokio-rustls and hyper-util) and the phone's pinned-certificate client (dashboard/src-tauri/src/mac_bridge.rs). It was already in both trees through reqwest's default TLS. The phone's verifier accepts exactly one certificate, by SHA-256, and still checks the handshake signature with the provider's own functions, so pinning replaces the chain check and nothing else. The provider is named explicitly in both places, because ServerConfig::builder() panics when a tree enables two"
-
-[tauri-plugin-barcode-scanner]
-url = "https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/barcode-scanner"
-verdict = "adopt"
-license = "MIT OR Apache-2.0"
-summary = "Official Tauri plugin the phone app uses to scan the Mac's pairing QR code"
-why = "The phone scans the Mac's pairing QR code (dashboard/src/lib/setup/SetupSjel.svelte), which carries the node's address, certificate fingerprint and a one-time code. The official Tauri plugin, so adopt rather than a hand-written AVCaptureMetadataOutput bridge. Mobile only; the app calls it through invoke('plugin:barcode-scanner|scan') and does not take the npm wrapper. Added 2026-09-27 at 2.4.6 (2026-08-31): 2.5.0 was under a day old. Read: ios/Sources/BarcodeScannerPlugin.swift returns the decoded string only. On iOS 14 and later `scan` does not ask for camera access; it rejects until `request_permissions` has been called, so the app calls that first (found on the phone 2026-09-27)."
-
-[uqr]
-url = "https://github.com/unjs/uqr"
-verdict = "adopt"
-license = "MIT"
-summary = "Dependency-free QR code generator that draws the Mac's pairing code as SVG"
-why = "Draws the pairing QR code on the Mac as SVG (dashboard/src/lib/DeviceRegistry.svelte). No dependencies of its own, ESM, renders from the encoded modules only. Added 2026-09-27 at 0.1.3 (2026-04-03)."
 
 [gpui]
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui"

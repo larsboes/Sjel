@@ -5254,7 +5254,6 @@ dependencies = [
  "sjel-server",
  "tokio",
  "tokio-stream",
- "tower-http 0.7.1",
 ]
 
 [[package]]

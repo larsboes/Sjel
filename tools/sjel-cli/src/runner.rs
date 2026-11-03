@@ -246,7 +246,6 @@ pub struct Svc<'a> {
     // kind = "process"
     pub command: Vec<String>,
     pub build: Vec<String>,
-    panel_build: Vec<String>,
     build_output: String,
     sign: String,
     workdir: String,
@@ -340,7 +339,6 @@ impl<'a> Svc<'a> {
             no_hold,
             command: Vec::new(),
             build: Vec::new(),
-            panel_build: Vec::new(),
             build_output: String::new(),
             sign: String::new(),
             workdir: String::new(),
@@ -482,7 +480,6 @@ impl<'a> Svc<'a> {
         let t = &self.table;
         self.command = get_array(t, "command");
         self.build = get_array(t, "build");
-        self.panel_build = get_array(t, "panel_build");
         self.build_output = get_str(t, "build_output");
         self.sign = get_str(t, "sign");
         self.workdir = get_str(t, "workdir");
@@ -655,22 +652,6 @@ impl<'a> Svc<'a> {
                 return Ok(());
             } else if artifact_is_current(&self.build, Path::new(&self.command[0]), &sources) {
                 return Ok(());
-            }
-        }
-        if !self.panel_build.is_empty() {
-            println!(
-                "building {} panel: {}",
-                self.cap,
-                self.panel_build.join(" ")
-            );
-            let ui = self.manifest.parent().unwrap_or(Path::new(".")).join("ui");
-            let code = status_of(
-                Command::new(&self.panel_build[0])
-                    .args(&self.panel_build[1..])
-                    .current_dir(ui),
-            );
-            if code != 0 {
-                return fail(code, "");
             }
         }
         println!("building {}: {}", self.cap, self.build.join(" "));

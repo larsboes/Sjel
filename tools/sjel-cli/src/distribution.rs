@@ -285,7 +285,7 @@ fn validate_service(package: &Package, bytes: &[u8]) -> Result<(), String> {
     {
         return Err("package must declare its own process capability".into());
     }
-    if table.contains_key("build") || table.contains_key("panel_build") {
+    if table.contains_key("build") {
         return Err("binary packages must not run source builds".into());
     }
     let required: Vec<_> = table

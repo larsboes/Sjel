@@ -17,13 +17,7 @@ pub(crate) struct Service {
     /// and an empty one means this surface keeps polling `health_path`, exactly as before.
     #[serde(default)]
     pub(crate) ready_path: String,
-    pub(crate) panel_port: String,
-    pub(crate) panel_path: String,
     pub(crate) autostart: String,
-    /// Seconds a panel may go unread before it is stopped. Empty means never — a
-    /// capability opts into being reaped, it is not opted in by having a panel.
-    #[serde(default)]
-    pub(crate) idle_timeout: String,
     /// The systems.toml id a backup lands on. Non-empty is this surface's whole
     /// definition of "has a backup contract", because `tools/backup.sh` refuses a run
     /// without one. Never projected outward — an id is one hop from the private
@@ -138,19 +132,6 @@ impl Service {
             .or_else(|| self.health_url())
     }
 
-    /// How long this panel may go unread, when it says so at all.
-    ///
-    /// Three conditions, all required, and each one is a separate way the reaper could
-    /// otherwise stop something it has no business stopping: a panel to look at, an
-    /// explicit timeout, and NOT autostart — a capability the machine is supposed to
-    /// keep running is never idle by definition.
-    pub(crate) fn idle_timeout_secs(&self) -> Option<u64> {
-        if self.panel_port.is_empty() || self.autostart == "true" {
-            return None;
-        }
-        self.idle_timeout.parse::<u64>().ok().filter(|s| *s > 0)
-    }
-
     /// `None` for a capability with nothing to back up, which is most of them.
     ///
     /// Presence is `backup_target`, not the day fields: a capability may decline to say
@@ -231,7 +212,7 @@ pub(crate) fn axon_root() -> Result<PathBuf, String> {
 /// file list cannot notice a manifest that did not exist when the list was built, and
 /// adding a capability is exactly that case. Directory reads and stats, no forks.
 // `std::path::Path` stays qualified: `axum::extract::Path` owns the bare name in this
-// file, same as in `reap_idle_panels` below.
+// file.
 pub(crate) fn manifest_key(root: &std::path::Path) -> Option<Vec<(PathBuf, SystemTime)>> {
     // Same env contract as SJEL_ROOT above: tools/lib/paths.sh exports it, so anything
     // started by service-runner.sh inherits it.

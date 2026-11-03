@@ -2,7 +2,6 @@
 //!
 //! Shared across macOS desktop and iOS mobile clients.
 
-pub mod apps;
 pub mod backup;
 pub mod block_menu;
 pub mod calendar;

@@ -102,7 +102,7 @@ pub async fn read(shell: &Shell, id: &str) -> ShellResult<View> {
         },
     };
 
-    let registry = shell.capability_panels().await?;
+    let registry = shell.capability_registry().await?;
     let reverse = join_all(
         registry
             .into_iter()

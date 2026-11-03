@@ -2104,7 +2104,7 @@ fn port_uniqueness(ctx: &mut Ctx) {
                 continue;
             }
             let Ok(t) = read_toml(&svc) else { continue };
-            for field in ["port", "panel_port"] {
+            for field in ["port"] {
                 let value = t
                     .get(field)
                     .map(js_value)

@@ -43,8 +43,6 @@ pub enum Page {
     Research,
     /// Node setup, machine probes, and device pairing (`sjel://setup`).
     Setup,
-    /// Capability sites exposed by the local service registry (`sjel://apps`).
-    Apps,
     /// The tracked repository documentation (`sjel://docs`).
     Docs,
     /// A typed capability record opened from a related-record link.
@@ -52,7 +50,7 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 26] = [
+    pub const ALL: [Page; 25] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -77,7 +75,6 @@ impl Page {
         Page::Research,
         Page::Setup,
         Page::Settings,
-        Page::Apps,
         Page::Docs,
     ];
 
@@ -107,7 +104,6 @@ impl Page {
             Self::Research => "/research",
             Self::Setup => "/setup",
             Self::Settings => "/settings",
-            Self::Apps => "/apps",
             Self::Docs => "/docs",
             Self::Record => "/record",
         }
@@ -125,7 +121,6 @@ impl Page {
             Self::SelfModel => "Self-model",
             Self::Cv => "CV",
             Self::Media => "Media",
-            Self::Apps => "Apps",
             Self::Docs => "Docs",
             Self::Record => "Record",
             _ => destination(self.href()).map_or("", |d| d.label),
@@ -171,7 +166,6 @@ pub const DESTINATIONS: &[Destination] = &[
     d("/people", "People"),
     d("/interior", "Interior"),
     d("/media", "Media"),
-    d("/apps", "Apps"),
     d("/research", "Research"),
     d("/systems", "Systems"),
     d("/capabilities", "Capabilities"),
@@ -226,8 +220,8 @@ pub enum Target {
 
 /// `sjel://calendar/2026-10-15` → the unknown path `/calendar/2026-10-15`. `sjel://` and
 /// `sjel://home` are Home. `sjel://ask` opens the finder; `sjel://ask?q=…` (or `sjel://?ask=…`)
-/// also asks the prompt. Travel also recognizes its trip subpages. Standalone capability panel
-/// links open the native Apps registry; unsupported subpaths and queries are `Unknown`.
+/// also asks the prompt. Travel also recognizes its trip subpages. Retired capability panel
+/// links (`/panel/<name>`) and `/apps` open Capabilities; unsupported subpaths and queries are `Unknown`.
 pub fn parse_deep_link(url: &str) -> Option<Target> {
     let rest = url.strip_prefix("sjel://")?.trim_end_matches('/');
     let path = match rest {
@@ -239,11 +233,12 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     if path_only.contains("..") || path.chars().any(char::is_whitespace) {
         return None;
     }
-    if path_only
-        .strip_prefix("/panel/")
+    if path_only == "/apps"
+        || path_only
+            .strip_prefix("/panel/")
         .is_some_and(|name| !name.is_empty() && !name.contains('/'))
     {
-        return Some(Target::Native(Page::Apps));
+        return Some(Target::Native(Page::Capabilities));
     }
     if path_only == "/docs" {
         return Some(Target::Native(Page::Docs));

@@ -27,7 +27,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
-use tower_http::services::{ServeDir, ServeFile};
 
 const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];
 const SCENARIOS: [&str; 5] = ["deep-work", "reading", "reset", "wind-down", "timer"];
@@ -719,14 +718,6 @@ fn spawn_persister(app: &App, path: std::path::PathBuf) {
     });
 }
 
-/// Where the built UI lives. Defaults to what `bun run build` writes (service.toml's
-/// `panel_build`), never a checked-in directory; the runner overrides it when the
-/// capability is installed somewhere else.
-fn ui_dir() -> String {
-    sjel_config::env_var("SJEL_SOUNDSCAPE_UI")
-        .unwrap_or_else(|_| "capabilities/soundscape/ui/dist".to_string())
-}
-
 #[tokio::main]
 async fn main() {
     let app = App {
@@ -745,9 +736,6 @@ async fn main() {
         ),
     }
 
-    let dir = ui_dir();
-    let index = format!("{dir}/index.html");
-
     let router = Router::new()
         .route("/routes", get(routes))
         .route("/health", get(health))
@@ -762,10 +750,7 @@ async fn main() {
             "/api/soundscape/host/release",
             axum::routing::post(release_host),
         )
-        .with_state(app)
-        // SPA fallback: the bundle has one entry point and routes client-side, so
-        // an unknown path is a route, not a 404.
-        .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(&index)));
+        .with_state(app);
 
     let port = sjel_config::resolve_port(Some("SJEL_SOUNDSCAPE_PORT"), None, 8088);
     sjel_server::serve_local("soundscape", port, router).await;

@@ -48,32 +48,12 @@ pub struct CapabilityHealth {
     pub autostart: bool,
 }
 
-/// A registry entry that exposes a standalone interface (`GET /api/sjel-status/capabilities`).
+/// One registry entry (`GET /api/sjel-status/capabilities`), as far as related-record links read it.
 #[derive(Clone, Debug, Default, Deserialize)]
-pub struct CapabilityPanel {
+pub struct RegistryEntry {
     pub name: String,
     #[serde(default)]
-    pub kind: String,
-    #[serde(default)]
-    pub scope: String,
-    #[serde(default)]
-    pub panel_port: String,
-    #[serde(default)]
-    pub panel_path: String,
-    #[serde(default)]
-    pub up: Option<bool>,
-    #[serde(default)]
     pub links_to: Vec<String>,
-}
-
-impl CapabilityPanel {
-    pub fn url(&self, endpoint: &str) -> Option<Url> {
-        let mut url = Url::parse(endpoint).ok()?;
-        url.set_port(Some(self.panel_port.parse::<u16>().ok()?))
-            .ok()?;
-        url.set_path(&self.panel_path);
-        Some(url)
-    }
 }
 
 fn kept_running() -> bool {
@@ -705,6 +685,17 @@ pub struct ProjectRecord {
     /// 1 to 3; the capability reads a missing or other value as 2.
     #[serde(default)]
     pub priority: u8,
+}
+
+/// What `POST /projects/api/record/rename` moved, and which records it pointed at the new title.
+#[derive(Clone, Debug, Deserialize)]
+pub struct RenamedRecord {
+    /// The record's path after the move.
+    pub path: String,
+    pub title: String,
+    /// The records whose `[[...]]` links now name the new title.
+    #[serde(default)]
+    pub links: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -2301,7 +2292,7 @@ impl Shell {
             .await
     }
 
-    pub async fn capability_panels(&self) -> ShellResult<Vec<CapabilityPanel>> {
+    pub async fn capability_registry(&self) -> ShellResult<Vec<RegistryEntry>> {
         self.json(Method::GET, "/api/sjel-status/capabilities", None, 10)
             .await
     }
@@ -3541,6 +3532,18 @@ impl Shell {
         self.send(Method::POST, "/projects/api/record", Some(body), 10)
             .await
             .map(drop)
+    }
+
+    /// Renames a record: its file takes the new title, and every record linking `[[old]]` follows.
+    pub async fn rename_record(&self, path: &str, title: &str) -> ShellResult<RenamedRecord> {
+        let body = serde_json::json!({ "path": path, "title": title });
+        self.json(
+            Method::POST,
+            "/projects/api/record/rename",
+            Some(body),
+            30,
+        )
+        .await
     }
 
     /// Marks a task done, or open again, and answers with the record's new frontmatter.

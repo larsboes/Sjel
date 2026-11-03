@@ -59,7 +59,6 @@ impl Area {
             Self::Life => &[Page::People, Page::Finance, Page::Inventory, Page::Cv],
             Self::Sjel => &[
                 Page::Capabilities,
-                Page::Apps,
                 Page::Systems,
                 Page::Packs,
                 Page::SelfModel,

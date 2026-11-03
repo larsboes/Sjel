@@ -14,30 +14,6 @@
 # deadline of its own, and nothing to do until an ecosystem moved. The exposure, the reason
 # it is accepted, and the date it stops being accepted all belong here, next to the entry
 # they describe.
-# SvelteKit, measured 2026-10-24. Both apps that depend on it are `@sveltejs/adapter-static`
-# bundles with `fallback: index.html`, and the dashboard states `export const prerender = false`
-# in `src/routes/+layout.ts`. Neither ships a server runtime: sjel-status serves the files, and
-# soundscape's bundle is served by its capability's own binary. The fix is Kit 3.0.0, a major
-# version, and the migration is SCOPED rather than unknown: probing it in a worktree on
-# 2026-10-24, the three mechanical steps (kit config into the `sveltekit()` vite plugin,
-# `tsconfig.json` extending `$app/tsconfig`, the now-implicit `$lib` alias declared by hand) left
-# 27 type errors in 11 files on the dashboard, before soundscape and before the build. So these
-# are dated, not dismissed, and the date is the revisit.
-[[IgnoredVulns]]
-id = "GHSA-27mw-82g8-phjj"
-ignoreUntil = 2027-01-01
-reason = "SvelteKit before 3.0.0, CVE-2026-114061, CVSS 2.3: a `setHeaders` cache-control value is inserted unescaped into a tag in a PRERENDERED page, so an attacker who can influence that value at prerender time can inject markup. Reach: nothing is prerendered here. `dashboard/src/routes/+layout.ts` sets `prerender = false`, both apps use adapter-static with an SPA fallback, and no route enumerates at build time -- there is no prerender pass for the value to land in. Ends when both apps run @sveltejs/kit >= 3.0.0."
-
-[[IgnoredVulns]]
-id = "GHSA-pfhg-q3qv-9q6r"
-ignoreUntil = 2027-01-01
-reason = "SvelteKit before 3.0.0, CVSS 4.7: URL redirection to an untrusted site through a server-side self-fetch fallback. Reach: needs a Kit server runtime to follow a redirect, and neither app has one -- adapter-static emits files, sjel-status hands them out, and the soundscape bundle is served by its capability. The dev server does run Kit's SSR path, so this is bounded to a development session on loopback. Ends when both apps run @sveltejs/kit >= 3.0.0."
-
-[[IgnoredVulns]]
-id = "GHSA-gcqx-w48m-w2h4"
-ignoreUntil = 2027-01-01
-reason = "deepmerge 4.3.1 prototype poisoning in mergeObject(), no fixed version. Reach: dashboard/bun.lock and capabilities/soundscape/ui/bun.lock, only via @sveltejs/vite-plugin-svelte 7.3.1, which merges its own build options at build time. Neither bundle ships deepmerge, and no runtime input reaches a merge. Ends when deepmerge publishes a fix or vite-plugin-svelte drops it."
-
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0141"
 ignoreUntil = 2027-01-01
@@ -57,25 +33,6 @@ ignoreUntil = 2027-01-01
 # of them is the operator's own file. The other is a request body on a port that, until
 # 2026-09-08, answered any web page the operator had open.
 reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in two trees. Transit: via lopdf 0.42.0 <- pdf-extract 0.12.1 <- sjel-transit <- sjel-scouting (`cargo tree -i ttf-parser`, 2026-11-01). Two callers reach the parser: `transit import <file>`, where the file is the operator's own, and the raw body of `POST /api/tickets/extract`, which is whatever the caller sent. The second is why this is untrusted input, and it is more exposed than a file on disk: that route sat under CorsLayer::permissive() with no origin refusal, and it takes `Bytes` rather than a typed body, so a cross-origin simple POST reached the PDF parser with no preflight to stop it. `refuse_foreign_origins` now bounds its callers to the dashboard, the tailnet and non-browser clients. Scouting links transit for adapters/transit_fare.rs and calls no extractor, so it inherits the crate and not the reach. The app: via fontdb 0.23.0, from mermaid-rs-renderer 0.3.1 in sjel-gpui and from usvg 0.46.0 <- gpui-pre — a font database over the app's own bytes, reached when a Mermaid diagram or an SVG icon is laid out, not by a URL. No known vulnerability, no CVSS, no affected function and no fixed version: fontdb 0.23 requires ttf-parser ^0.25, so the end is fontdb or usvg moving off it, or a maintained pdf-extract alternative for transit. If either appears, take it, and keep transit's PDF fixtures and the app's diagram rendering green across the swap."
-
-# The two below reach dashboard/src-tauri/Cargo.lock only through gtk 0.18 <- muda/tao <- tauri,
-# which Tauri pulls in for Linux alone. The app ships for macOS and iOS: `cargo tree -i glib
-# --target aarch64-apple-darwin` and `--target aarch64-apple-ios` print nothing (2026-09-27), and
-# no CI job builds the app for Linux. A fix needs Tauri to move off GTK3 (gtk-rs 0.18 is its last
-# GTK3 release). This is one of three exceptions here for a KNOWN vulnerability -- the two
-# SvelteKit entries below are the others -- and each one is bound to a reach that was measured on
-# this machine rather than assumed. Accepting a vulnerability is not the same as accepting a
-# finding: where the code cannot be reached, the entry says which build makes it unreachable, and
-# the date is when the acceptance stops rather than when a fix is expected.
-[[IgnoredVulns]]
-id = "GHSA-wrw7-89jp-8q8g"
-ignoreUntil = 2026-12-01
-reason = "glib 0.18.5 VariantStrIter unsoundness (RUSTSEC-2024-0429; osv reports it under this id), fixed in 0.20. Reached only via gtk 0.18 <- muda/tao <- tauri 2.12 on Linux; the Sjel app builds for macOS and iOS only, where glib is not compiled. Upgrade path: Tauri on GTK4."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2024-0370"
-ignoreUntil = 2026-12-01
-reason = "Unmaintained proc-macro-error 1.0.4, build-time only, via glib-macros 0.18 <- glib <- gtk 0.18, the same Linux-only Tauri path as GHSA-wrw7-89jp-8q8g. No affected functions and no fixed version."
 
 # The three below reach both lockfiles the way the glib pair above reaches one: through Tauri's
 # Linux-only dependency tree. zbus is the D-Bus client, and it arrives via atspi-common and
@@ -102,17 +59,6 @@ reason = "Unmaintained zbus_names 4.3.4, the D-Bus name types, reached only thro
 id = "RUSTSEC-2026-0372"
 ignoreUntil = 2027-01-01
 reason = "Unmaintained zvariant_derive 5.15.0, build-time derive macros that zvariant re-exports, reached only through zbus on Linux and resolved for neither macOS nor iOS. No CVSS, no affected function, no fixed version, and zbus 6.0.0 supplies the same macros. Same reach and same end as RUSTSEC-2026-0370."
-
-# KaTeX arrives only through mermaid, whose newest release (12.1.0) still requires `katex
-# ^0.16.47`, so the fixed version (0.18.2) sits outside every range mermaid declares. The
-# advisory is a read-side prototype-pollution gadget: it needs `Object.prototype` already
-# polluted, or an attacker who can set the renderer options' prototype. The dashboard renders
-# mermaid from markdown the operator writes, so neither precondition holds. Revisit when mermaid
-# widens its range.
-[[IgnoredVulns]]
-id = "GHSA-238p-pmpm-9mq7"
-ignoreUntil = 2026-12-01
-reason = "katex 0.16.47 via mermaid 12.x, whose range (^0.16.47) excludes the fix (0.18.2); newest mermaid 12.1.0 still pins ^0.16.47. Read-side prototype-pollution gadget needing an already-polluted Object.prototype or attacker-set renderer options; the dashboard renders operator-authored mermaid, so neither holds. Revisit when mermaid widens the range."
 
 # Both arrive through GPUI at the Zed revision apps/gpui-prototype pins (5f8a7413), so the bump is
 # Zed's to make, not a transitive patch here. Checked 2026-10-11 with `cargo tree -i` in

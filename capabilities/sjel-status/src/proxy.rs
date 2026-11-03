@@ -451,7 +451,7 @@ mod tests {
     fn svc(name: &str, port: &str, api_only: bool, extra: &[&str]) -> crate::status::Service {
         serde_json::from_value(serde_json::json!({
             "name": name, "kind": "process", "scope": "capability", "port": port,
-            "health_path": "/health", "panel_port": "", "panel_path": "", "autostart": "",
+            "health_path": "/health", "autostart": "",
             "proxy_api_only": if api_only { "true" } else { "" },
             "proxy_extra": extra,
         }))

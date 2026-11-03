@@ -302,12 +302,6 @@ async fn main() {
     // SJEL_STATUS_PORT stays as the manual escape hatch for running outside the runner.
     let port = sjel_server::resolve_port(Some("SJEL_STATUS_PORT"), None, 8082);
 
-    // The other half of on-demand. This process is already the only thing allowed to
-    // start a capability, so it is also the only sensible place to stop one — anything
-    // else would be a second lifecycle owner. It runs here rather than as a launchd
-    // job for the same reason: a reaper that outlives sjel-status could stop panels
-    // while nothing is left to bring them back.
-    let _idle_reaper = IdlePanelReaper::start();
     let _runtime_monitor = RuntimeMonitor::start().await;
 
     // The timing policy. A target whose interval an operator set is run when it comes due,
@@ -595,10 +589,7 @@ mod backup_tests {
             port: String::new(),
             health_path: String::new(),
             ready_path: String::new(),
-            panel_port: String::new(),
-            panel_path: String::new(),
             autostart: String::new(),
-            idle_timeout: String::new(),
             backup_target: String::new(),
             backup_sqlite: String::new(),
             backup_sqlite_online: String::new(),

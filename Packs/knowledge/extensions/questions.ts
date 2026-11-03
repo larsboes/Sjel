@@ -27,6 +27,7 @@ import {
 	type EditorTheme,
 	Key,
 	matchesKey,
+	renderLatex,
 	Text,
 	type TUI,
 	visibleWidth,
@@ -36,8 +37,21 @@ import { Type } from "typebox";
 
 /* ────────────────────────────── shared ────────────────────────────── */
 
+// Same inline delimiters as the pi-tui Markdown renderer. `$` math needs no space inside either
+// delimiter and no digit after the closing `$`, so prices such as "$5 and $10" stay text.
+const INLINE_MATH = /\$\$([^$\n]+?)\$\$|\\\((.+?)\\\)|\$(?!\s)([^$\n]+?)(?<!\s)\$(?!\d)/g;
+
+/** Renders inline LaTeX as Unicode. Keeps the source when pi-tui cannot render it on one line. */
+export function renderInlineMath(text: string): string {
+	return text.replace(INLINE_MATH, (raw, dollars?: string, parens?: string, single?: string) => {
+		const rendered = renderLatex(dollars ?? parens ?? single ?? "");
+		return rendered === undefined || rendered.includes("\n") ? raw : rendered;
+	});
+}
+
 /** Wraps `text` and prefixes the first line, indenting the continuation lines to match. */
 function addPrefixed(lines: string[], width: number, prefix: string, text: string) {
+	text = renderInlineMath(text);
 	const pw = visibleWidth(prefix);
 	if (pw >= width) {
 		lines.push(...wrapTextWithAnsi(prefix + text, Math.max(1, width)));

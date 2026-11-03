@@ -6,8 +6,12 @@ Read this at Phase 3, step 3, when a figure carries the idea better than text do
 
 - Draw when the concept has state, flow, a threshold or a mechanism that the student can act on.
   Do not draw a figure that only repeats the text.
-- A figure tests a prediction. Ask the prediction in the terminal first ("what happens to the
-  queue when arrivals double?"). Then the figure shows the answer.
+- A figure tests a prediction. Run this loop:
+  1. Ask the prediction in the terminal ("what happens to the queue when arrivals double?").
+  2. The student moves the control in Obsidian.
+  3. Ask what they saw, in their words.
+  4. Explain the gap between the prediction and what they saw.
+- A figure is a full part of its note. The note's text does not repeat what the figure shows.
 
 ## Pick the form
 
@@ -19,6 +23,23 @@ Read this at Phase 3, step 3, when a figure carries the idea better than text do
 
 Most teaching figures are the second row. Use Anatomy only when the student understands the
 concept by recognizing a machine.
+
+## Anatomy of a teaching figure
+
+A small simulation of one mechanism, usually 2–8 KB of HTML. From top to bottom:
+
+1. A one-line readout row: the control's current value against the fixed input
+   ("processing: 6 / arrivals: 10").
+2. The control: one slider or one toggle between two modes.
+3. A status banner that changes colour and text when the system changes state ("poll blocked:
+   offsets stop committing, lag grows"). The state change is the lesson.
+4. The drawing: bars, queues, lanes or a timeline, driven by the model.
+5. Pause and Reset buttons when the figure animates.
+6. A caption with the model's assumptions ("each queue holds 20 units, each stage passes at most
+   10 per tick").
+
+A visually hidden heading describes the whole behaviour in one sentence, for screen readers and
+for search.
 
 ## Rules for every interactive figure
 
@@ -36,11 +57,24 @@ teaching.
    and when `prefers-reduced-motion` is set.
 6. **Keyboard.** Every control works from the keyboard.
 
+## Defects to remove from imported figures
+
+Figures exported from chat tools often run, but they break in a vault. Fix each one before
+embedding:
+
+| Defect | Fix |
+|---|---|
+| Host CSS variables (`--text-secondary`, `--border`, `--text-danger`) | Map to the Obsidian variables below |
+| `document.getElementById` | Scope lookups to the root: `root.querySelector` |
+| `setInterval` with no cleanup | Clear it in the `interactive-dispose` listener and pause it offscreen |
+| Hard-coded hex colours | Derive colours from theme variables |
+| Icon fonts or scripts from a CDN, full exported pages | Rewrite as a self-contained fragment |
+
 ## Native `interactive` block
 
 ````markdown
 ```interactive
-file: Knowledge/<domain>/Assets/<kebab-name>.html
+file: Knowledge/<note folder>/Assets/<kebab-name>.html
 height: 380
 ```
 ````
@@ -61,7 +95,7 @@ height: 380
 - Build only Anatomy's Figure tier (one mechanism, 40–80 parts) during a session. A Hero or an
   Epic takes hours. Propose it as follow-up work, not as a teaching step.
 - Anatomy's `build.mjs` writes a standalone page. Copy that page to
-  `$VAULT/Knowledge/<domain>/Assets/<kebab-name>.html`, or to the place the vault contract sets.
+  `<note folder>/Assets/<kebab-name>.html`, or to the place the vault contract sets.
 - Embed it with `html-embed`, not `interactive`. The native renderer keeps only the children of
   `<body>`, so it drops the `class="iso"` and `data-theme` that Anatomy puts on `<body>`. The
   iframe renderer keeps the document, sets `data-theme` to the vault theme, and maps the

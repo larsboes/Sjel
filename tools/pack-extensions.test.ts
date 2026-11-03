@@ -713,6 +713,29 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
     });
   });
 
+  describe("quiz math", () => {
+    test("inline LaTeX in prompt, options and explanation renders as Unicode", async () => {
+      const screens: string[][] = [];
+      const Q = {
+        topic: "t",
+        questions: [{
+          id: "q1",
+          prompt: "When does the queue grow if $\\rho = \\frac{\\lambda}{\\mu}$?",
+          options: ["$\\rho > 1$", "It costs $5 and $10"],
+          correctIndex: 0,
+          explanation: "Arrivals \\(\\lambda\\) exceed service \\(\\mu\\).",
+        }],
+      };
+      await run("quiz", Q, ["1", "\r"], drive(["1", "\r"], screens));
+      const before = screens[0].join("\n");
+      expect(before).toContain("ρ = λ/μ");
+      expect(before).toContain("ρ > 1");
+      expect(before).toContain("$5 and $10");
+      expect(before).not.toContain("\\frac");
+      expect(screens[1].join("\n")).toContain("Arrivals λ exceed service μ.");
+    });
+  });
+
   describe("quiz contest and review", () => {
     const Q = {
       topic: "t",

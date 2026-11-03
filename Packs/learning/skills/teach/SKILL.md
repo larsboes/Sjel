@@ -23,7 +23,8 @@ The arc is **Probe → Plan → Teach → Close**. Do not skip or merge phases.
 - **The vault contract, when one is configured, governs every write**, and the `obsidian` skill carries the procedure. In Pi, call `obsidian_contract` before the first mutation; it loads the contract configured for this machine, or reports that none is configured, in which case follow the vault's existing conventions. For a teaching session: concept notes are Title Case singular under the right `Knowledge/<domain>/`, typed at birth according to the contract or those conventions, one concept = one note, connected with `[[wikilinks]]` and never duplicated.
 - **The student's thinking is the primary data.** Ask them to think out loud with every answer — typed or dictated, unfiltered — and to give a confidence (0–100 %). Read all of it. One answer is one bit; the reasoning shows the model behind it. A right answer on a confused model is a warning, a wrong answer on sound reasoning is progress. Keep your own turns short so their thinking arrives often.
 - **Link before you write.** Before explaining any concept, `grep`/`find` `$VAULT` for an existing note. Exists and the probe showed the student knows it → just `[[link]]` it. Exists but thin → extend it in place. Missing → create it.
-- **Obsidian renders LaTeX (`$...$`, `$$...$$`) and mermaid natively.** Use both freely in notes. In the terminal, keep math readable as plain text.
+- **Math renders in both places.** Obsidian renders LaTeX (`$...$`, `$$...$$`) and mermaid natively. Pi's TUI renders a LaTeX subset as Unicode in messages and in `quiz` text. Follow "Math in the terminal" in `references/explanations.md`, and give every formula a plain-words reading.
+- **Explanations follow `references/explanations.md`.** It sets the shape of one step and what moves from the terminal into the note. The vault contract sets the note anatomy.
 - **Figures follow `references/figures.md`.** It picks the form (SVG, `interactive` block or an Anatomy figure in `html-embed`), the rules every figure follows, and the check before embedding.
 
 ## Phase 1 — Probe
@@ -50,12 +51,23 @@ Goal: the teaching path, fully reasoned out — from the measured edge to the go
 
 Walk the path **one reasoning step at a time**. Never rush ahead; each step must be digestible alone. Per step:
 
-0. **Predict** — before explaining, point at the problem the current state cannot handle and ask the student what has to come next. It need not be answerable; the attempt is the point. Skip it on wrap-up or pure repair turns, never by habit.
-1. **Explain** the step in the terminal — one idea, built from what's already established. Open by resolving the prediction: what they guessed, what is true, and why. Slow beats complete.
-2. **Write the durable core into the vault**: create/extend the concept's note (contract above) with the clean explanation, `[[links]]` to prerequisites and the primary topic note, and `categories:` for its domain. The note gets the polished knowledge; the terminal gets the pedagogy. Never paste the conversational explanation verbatim into the note.
-3. **Visualize when a picture or simulation carries the idea.** Read `references/figures.md` first. Write the asset into `$VAULT/Knowledge/<domain>/Assets/`, render it and read the PNG, then embed it in the concept note. Never embed a figure nobody has looked at.
-4. **Check understanding with the question tool from Phase 1** — 1-2 questions applying (not recalling) the step. Wrong or IDK → re-explain from a different angle before moving on; adjust the remaining path if the miss reveals a deeper gap. Contested → reconcile it with `mode: "review"` first: a learner who disputes a verdict is engaging more deeply with the material than one who accepts it, and moving on while it stands teaches them that arguing is pointless.
-5. Questions from the student always take priority over the path.
+0. **Retrieve** — from the second step on, open with one question that makes the student produce an earlier step in their own words or apply it to a new case. Use the question tool. A miss here changes the plan before new material arrives.
+1. **Predict** — before explaining, point at the problem the current state cannot handle and ask the student what has to come next. It need not be answerable; the attempt is the point. Skip it on wrap-up or pure repair turns, never by habit.
+2. **Explain** the step in the terminal — one idea, built from what's already established. Open by resolving the prediction: what they guessed, what is true, and why. Slow beats complete.
+3. **Write the durable core into the vault**: create/extend the concept's note (contract above) with the clean explanation, `[[links]]` to prerequisites and the primary topic note, and `categories:` for its domain. The note gets the polished knowledge; the terminal gets the pedagogy. Never paste the conversational explanation verbatim into the note.
+4. **Visualize when a picture or simulation carries the idea.** Read `references/figures.md` first. Write the asset into the concept note's folder under `Assets/`, as the vault contract places it, render it and read the PNG, then embed it in the concept note. Never embed a figure nobody has looked at.
+5. **Check understanding with the question tool from Phase 1** — 1-2 questions applying (not recalling) the step. Prefer questions that ask which observation separates two explanations.
+6. **Respond to the reasoning.** Give the verdict, quote the part of the student's thinking that was right or wrong, and name the one misconception in a sentence. Then adapt by correctness and confidence:
+
+   | Result | Next move |
+   |---|---|
+   | Right, high confidence | Move on. Consider skipping a planned step. |
+   | Right, low confidence | One more variant on a new surface. |
+   | Wrong or IDK, low confidence | Re-explain from a different angle, then check again. |
+   | Wrong, high confidence | A misconception: show a contrast case or the step's figure, ask the prediction again, and revise the remaining path. |
+
+   Contested → reconcile it with `mode: "review"` first: a learner who disputes a verdict is engaging more deeply with the material than one who accepts it, and moving on while it stands teaches them that arguing is pointless.
+7. Questions from the student always take priority over the path.
 
 ## Phase 4 — Close
 

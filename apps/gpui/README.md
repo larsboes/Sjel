@@ -241,12 +241,12 @@ for a Tauri and WKWebView process pair — and the Swift menu bar keeps system-w
 invocation pays neither a second resident process nor a cold-launch hop. How the numbers were
 measured: `SJEL_GPUI_FRAMES` and `ps -o rss=` in `src/frames.rs`.
 
-One Cargo workspace builds GPUI, gpui-kit and gpui-mobile. Every page is native, and GPUI draws
-the charts. Travel has a shared native map view: raster maps work on both clients, with the
-MapLibre vector prototype on macOS. `/systems` is the one page that is not a capability's: it puts
-macmon's live sample beside storage, updates, the runtime profile, the hourly host watch and the
-agent's reach, each read from whoever already owns that answer (`src/systems.rs`). Open work is in
-[`docs/plans/gpui.md`](../../docs/plans/gpui.md).
+One Cargo workspace builds GPUI, gpui-kit and gpui-mobile. Every page is native, and GPUI draws the
+charts. Travel, Map, Inventory and Wishlist are partly built. Travel has a shared native map view:
+raster maps work on both clients, with the MapLibre vector prototype on macOS. `/systems` is the
+one page that is not a capability's: it puts macmon's live sample beside storage, updates, the
+runtime profile, the hourly host watch and the agent's reach, each read from whoever already owns
+that answer (`src/systems.rs`). Open work is in [`docs/plans/gpui.md`](../../docs/plans/gpui.md).
 
 ## Workspace and the iOS app
 

@@ -60,18 +60,16 @@ Expect AI-polished text throughout, because I trust my drafts more after an AI p
 
 ## Where it stands
 
-Sjel is moving to one native Rust app. Decided 2026-10-22: the
+Sjel is one native Rust app: the
 [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) client in
-[`apps/gpui`](apps/gpui/README.md) is the one app on macOS and iOS. The SvelteKit and Tauri
-dashboard in `dashboard/` retires, and it gets no new features. Linux, Windows and Android come
-later from the same code.
+[`apps/gpui`](apps/gpui/README.md), on macOS and iOS. Linux, Windows and Android come later from
+the same code.
 
 | Part | Today |
 |---|---|
-| Mac app | 21 of the dashboard's 25 main routes are ported. Travel, Map, Inventory and Wishlist are partly ported ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
+| Mac app | 25 main pages. Travel, Map, Inventory and Wishlist are partly built ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
 | iPhone app | The same GPUI code inside a UIKit host, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
-| Dashboard | Still builds and still serves as a fallback. It is deleted after the gates in [`gpui.md` §3](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes) pass. |
-| Web demo | Goes with the dashboard. A new public page with screenshots of the native app replaces it ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
+| Public page | [larsboes.github.io/Sjel](https://larsboes.github.io/Sjel/). Screenshots of the native app are open ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
 | Capabilities | 27 of the 48 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. |
 
 Not everything becomes Rust. The menu bar companion and the CloudKit relay in `apps/mac` are

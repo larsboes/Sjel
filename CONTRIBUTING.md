@@ -203,8 +203,8 @@ contract, install, or review decision.
    may hold far more — optional capabilities, Packs, public reference projects — and none of
    that may become a runtime prerequisite.
 2. **One feed, many views.** Capabilities keep domain ownership, but publish typed events with
-   provenance, time, confidence and state. The dashboard sorts and connects those events; it
-   does not become another data silo.
+   provenance, time, confidence and state. The app sorts and connects those events; it does not
+   become another data silo.
 3. **Data and mechanism never blur.** Sjel owns public code, schemas, renderers and explicitly
    public first-party datasets. The active private overlay owns private content, secrets, machine
    configuration and history. Both sides use the same bounded
@@ -268,7 +268,7 @@ comparison was semantic or lexical. Sorting combines focus fit, upcoming travel,
 operator keep/dismissal history. Ranking inputs re-evaluate from stored matches rather than
 re-prompting models. `/feed/[id]` provides a unified dynamic reader across all item kinds.
 
-The dashboard shows passive intake and active discovery as two views of one `/feed` workspace.
+The app shows passive intake and active discovery as two views of one `/feed` workspace.
 That is a UI integration and never a database merge: each capability keeps its own contract and
 provenance.
 
@@ -329,7 +329,7 @@ overlays. Integration occurs via declared contracts and state mounts.
 Sjel organizes all code into three nouns:
 
 - **Spine**: The core runtime and developer surface: root manifests, `schemas/`, `tools/`, `libs/`,
-  and the `dashboard/` shell.
+  the `sjel-status` shell and the apps in `apps/`.
 - **Capability**: Autonomous domain units under `capabilities/<name>/`, declared via `service.toml`.
 - **Pack**: Modular agent know-how and workflows under `Packs/<name>/`.
 
@@ -344,7 +344,8 @@ Packs -> Spine -> Capabilities -> Libraries (`libs/`).
 Capabilities interact with other capabilities via loopback HTTP contracts and declared schemas, never
 via direct database mutation.
 
-The dashboard is strictly presentation: it mounts capability surfaces but owns zero domain state.
+The apps are presentation: they read and write through capability contracts and own no domain
+state.
 
 ## Dependencies and build
 
@@ -754,15 +755,11 @@ self-test.
 
 ## Control surface
 
-One web app is the visible form of the gluing layer: **installer, maintainer, and dashboard**.
-
-- **Install/maintain**: guided flows to pick plugins, run the audit gate, apply updates, and
-  see doctor results as UI.
-- **Dashboards**: system status plus tabs embedding the UIs of integrated services: home
-  automation, home-server services, printer, transit, finance, the public daemon profile, ...
-  one place, all of it.
-- It is presentation only: every action goes through the same Rust services and manifests
-  (`sjel.toml`, `upstreams.toml`) that the CLI and agents use. No logic lives in the UI.
+The native app in `apps/gpui` is the visible form of the gluing layer, on the Mac and the iPhone.
+It shows capability status and setup, and every capability's own pages. It is presentation only:
+every action goes through the same Rust services and manifests (`sjel.toml`, `upstreams.toml`)
+that the CLI and agents use. A rule the Mac and the phone share lives in a capability or in
+`apps/gpui/core`.
 
 ## Layout
 
@@ -778,8 +775,8 @@ One web app is the visible form of the gluing layer: **installer, maintainer, an
 | `docs/` | technical documentation hierarchy: architecture, capabilities, and operations manuals |
 | `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill. Every harness, Claude Code included, reads it. There is no `CLAUDE.md`. |
 | `ARCHITECTURE.md` | generated snapshot of capabilities/Packs/upstreams/systems — never hand-edited, see `tools/generate-architecture.sh`. State mounts are machine-local and deliberately absent; `tools/doctor` reports those |
-| `capabilities/<name>/` | one dir per capability: curated README + its code as it lands; optional `ui/` panel served over its own HTTP surface |
-| `dashboard/` | the spine's shell — discovers installed capabilities via their manifests and mounts their panels (installer, doctor UI, service dashboards); owns no domain, no data |
+| `capabilities/<name>/` | one dir per capability: curated README + its code as it lands |
+| `apps/` | `gpui`, the native app for Mac and iPhone, and `mac`, the Swift menu bar and CloudKit relay. Both reach capabilities through the `sjel-status` shell; neither owns domain data |
 | `libs/<name>/` | spine-owned shared code with no domain of its own — statically linked into capability binaries at compile time, own crate in the Cargo workspace from day one |
 | `schemas/` | shared contracts; import, never redefine |
 | `tools/` | install (bootstrap + capability selection), capability (enable/disable, requires-resolution), update (interactive maintainer), doctor (health + version), audit (gitleaks + osv-scanner behind one verb), host-patch (the daily host upgrade job), container-refresh (the daily image pull + recreate), storage (disk classes from the overlay policy, plus `target` for PRD §9's R6 and `reclaim --repo` for the checkout — a Cargo member, see `tools/storage/README.md`), generate-architecture, graphify, agent-integrations (each upstream's own harness integration, at its latest release), mini-tools |
@@ -805,21 +802,22 @@ flowchart TB
     subgraph HARNESS["agent harnesses (swappable)"]
         H["Claude Code · Codex · opencode · pi"]
     end
-    subgraph AXON["Sjel (public shell)"]
-        C["control surface (web):<br/>install · maintain · dashboards"]
+    subgraph SJEL["Sjel (public shell)"]
+        A["apps/gpui (Mac and iPhone)"]
         M["sjel.toml + upstreams.toml"]
         S["schemas/"]
         T["tools/ (install, doctor, audit, generate-architecture)"]
-        CAP["capabilities/ (domain owners, optional ui/)"]
-        D["dashboard/ (spine shell)"]
+        CAP["capabilities/ (domain owners)"]
+        SH["sjel-status (shell)"]
         L["libs/ (spine-owned shared code)"]
-        D -.->|discovers + mounts panels via HTTP| CAP
+        A -->|HTTP| SH
+        SH -.->|proxies + starts on demand| CAP
         L --> CAP
     end
     subgraph OVERLAY["selected deployment overlay (private)"]
         P["config values · vault · databases · memory · backups"]
     end
-    H --> AXON
-    AXON -.->|runtime injection only| OVERLAY
-    AXON -->|contracts + state mounts| EXT["separate projects & services"]
+    H --> SJEL
+    SJEL -.->|runtime injection only| OVERLAY
+    SJEL -->|contracts + state mounts| EXT["separate projects & services"]
 ```

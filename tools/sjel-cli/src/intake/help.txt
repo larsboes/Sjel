@@ -7,6 +7,11 @@ tools/intake — read third-party agent tooling before it reaches an agent.
   tools/intake review <dir> [--against <dir>] [--source <name>]
         The model review on the `intake_review` inference role (a c0 cloud role). It adds
         findings; it cannot clear one.
+  tools/intake review <dir> --source <name> --reviewer claude
+        A coding harness reviews the whole tree: a fresh `claude -p` with read-only tools in a
+        directory that holds only the staged files. Records a receipt with the harness, model
+        and digest. The gate then uses that receipt in place of the model review for exactly
+        that digest. A medium or high finding still holds; only `approve` clears it.
   tools/intake gate <dir> --source <name> [--against <dir>]
         Both, fail-closed: a missing or failed model review holds the content. Passes an
         approved digest at once. Holds (exit 2) on a medium or high finding. An unapproved

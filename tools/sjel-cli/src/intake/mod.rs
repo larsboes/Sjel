@@ -8,6 +8,8 @@
 //! ```text
 //! tools/intake scan <dir> [--against <dir>]         the fixed rules only
 //! tools/intake review <dir> [--against <dir>]       the model review only
+//! tools/intake review <dir> --reviewer <harness> --source <name>
+//!                                                   a coding harness reviews; records a receipt
 //! tools/intake gate <dir> --source <name> [--against <dir>]
 //! tools/intake approve <dir> --source <name> [--version <v>]
 //! tools/intake version <source>                     the last approved version
@@ -59,6 +61,34 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
             let findings = scan(&new, old.as_ref());
             print_findings(&findings);
             Ok(verdict(&findings))
+        }
+        "review" if opts.reviewer.is_some() => {
+            let harness = opts.reviewer.as_deref().unwrap_or_default();
+            if opts.against.is_some() {
+                return Err("a harness review reads the whole tree; drop --against".into());
+            }
+            let source = opts
+                .source
+                .as_deref()
+                .ok_or("a harness review needs --source <name>")?;
+            let (new, _) = opts.trees()?;
+            let digest = digest(&new);
+            let done = review::run_harness(harness, source, &new)?;
+            print_findings(&done.findings);
+            let code = verdict(&done.findings);
+            Ledger::load()?.record_review(Receipt {
+                source: source.into(),
+                digest: digest.clone(),
+                harness: harness.into(),
+                model: done.model.clone(),
+                reviewed_at: chrono::Local::now().format("%Y-%m-%d").to_string(),
+                findings: done.findings,
+            })?;
+            println!(
+                "receipt: {source} reviewed by {harness} ({}) at {digest}",
+                done.model
+            );
+            Ok(code)
         }
         "review" => {
             let (new, old) = opts.trees()?;
@@ -127,6 +157,7 @@ struct Options {
     against: Option<PathBuf>,
     source: Option<String>,
     version: Option<String>,
+    reviewer: Option<String>,
     no_review: bool,
 }
 
@@ -144,6 +175,7 @@ impl Options {
                 "--against" => opts.against = Some(PathBuf::from(value("--against")?)),
                 "--source" => opts.source = Some(value("--source")?),
                 "--version" => opts.version = Some(value("--version")?),
+                "--reviewer" => opts.reviewer = Some(value("--reviewer")?),
                 "--no-review" => opts.no_review = true,
                 flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
                 _ => opts.positional.push(arg.clone()),
@@ -173,12 +205,14 @@ impl Options {
     }
 }
 
-/// What a person approved last, keyed by source. Machine state, not a pin in the repository:
-/// it records what this machine read.
+/// What a person approved, keyed by source, and the harness reviews, keyed by digest. Machine
+/// state, not a pin in the repository: it records what this machine read.
 #[derive(Default, Serialize, Deserialize)]
 struct Ledger {
     #[serde(default)]
     approved: Vec<Approval>,
+    #[serde(default)]
+    reviewed: Vec<Receipt>,
     #[serde(skip)]
     path: PathBuf,
 }
@@ -190,6 +224,19 @@ struct Approval {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     version: Option<String>,
     approved_at: String,
+}
+
+/// A harness review of one exact tree. It stands in for the model review of that digest; it is
+/// not an approval, so a holding finding in it still holds.
+#[derive(Clone, Serialize, Deserialize)]
+struct Receipt {
+    source: String,
+    digest: String,
+    harness: String,
+    model: String,
+    reviewed_at: String,
+    #[serde(default)]
+    findings: Vec<Finding>,
 }
 
 pub fn state_dir() -> PathBuf {
@@ -235,6 +282,15 @@ impl Ledger {
             .and_then(|a| a.version.as_deref())
     }
 
+    fn receipt(&self, digest: &str) -> Option<&Receipt> {
+        self.reviewed.iter().rev().find(|r| r.digest == digest)
+    }
+
+    fn record_review(&mut self, receipt: Receipt) -> Result<(), String> {
+        self.reviewed.push(receipt);
+        self.save()
+    }
+
     fn approve(&mut self, source: &str, digest: &str, version: Option<&str>) -> Result<(), String> {
         self.approved.push(Approval {
             source: source.into(),
@@ -242,6 +298,10 @@ impl Ledger {
             version: version.map(Into::into),
             approved_at: chrono::Local::now().format("%Y-%m-%d").to_string(),
         });
+        self.save()
+    }
+
+    fn save(&self) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
         }
@@ -480,7 +540,16 @@ pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree
         }
     );
     let mut findings = scan(new, old);
-    let reviewed = review::run(source, new, old, &findings);
+    let reviewed = match ledger.receipt(&digest) {
+        Some(r) => {
+            println!(
+                "{source}: reviewed by {} ({}) on {}",
+                r.harness, r.model, r.reviewed_at
+            );
+            Ok(r.findings.clone())
+        }
+        None => review::run(source, new, old, &findings),
+    };
     let code = review_verdict(&mut findings, reviewed);
     print_findings(&findings);
     if code == HELD {
@@ -488,7 +557,8 @@ pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree
             .map(|d| format!(" in {}", d.display()))
             .unwrap_or_default();
         println!(
-            "✗ {source} is held. Read the findings{at}, then approve exactly that copy:\n  tools/intake approve <dir> --source {source}"
+            "✗ {source} is held. Read the findings{at}, then approve exactly that copy:\n  tools/intake approve <dir> --source {source}\n  Without a model review, a coding harness can review it first:\n  tools/intake review <dir> --source {source} --reviewer {}",
+            review::HARNESSES[0]
         );
     } else {
         println!("✓ {source}: no finding holds it");

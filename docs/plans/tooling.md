@@ -10,13 +10,6 @@ covers it.
 
 ## Open
 
-- **A coding agent as the intake reviewer.** `tools/intake` reviews on the `intake_review` cloud
-  role, and that role is not configured on this machine, so the gate holds every unapproved
-  install. A registered coding harness could review instead: it reads the staged tree as
-  untrusted data with read-only tools, adds findings, and cannot clear a fixed-rule finding or
-  approve its own output. Smallest change: `tools/intake review --reviewer <harness>` runs on
-  the staged digest and records a receipt naming the harness, model and digest; the exact
-  approval stays a human step. Relates to P6 and P7 in [`packs.md`](packs.md).
 - **One update surface.** `sjel update` reports package classes but no skills,
   `tools/skills` has no update check, and `tools/harnesses` owns Packs. Smallest change: one
   `sjel update` entry point that delegates skills to `tools/skills check|update`, Packs to
@@ -162,6 +155,10 @@ covers it.
 
 ## Done
 
+- `tools/intake review <dir> --source <name> --reviewer claude` runs a fresh `claude -p` with
+  Read, Glob and Grep in a directory that holds only the staged text files, and records a receipt
+  with the harness, model, digest and findings. The gate uses that receipt in place of the model
+  review for exactly that digest. A medium or high finding still holds until `approve`.
 - `projects put <path> <file> [--base <file>]` creates a record from a file, also in a subfolder,
   and replaces one only while the stored content still equals the base file.
 - `inventory price` records a dated price on a wish by hand, and the daily `wish-prices` job

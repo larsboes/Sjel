@@ -185,6 +185,48 @@ expect "the hold names the review" "model review failed; content is held" 1
   echo "FAIL: an unreviewed add still installed"; fails=$((fails + 1))
 }
 
+# --- add: a harness review receipt stands in for the model review of that digest ------------
+# The fake harness refuses to answer unless it runs locked down in a review directory.
+cat > "$SCRATCH/bin/claude" <<'FAKE'
+#!/bin/bash
+case "$PWD" in */intake/review-*) ;; *) echo "not in a review dir: $PWD" >&2; exit 9 ;; esac
+case " $* " in *" --tools Read,Glob,Grep --permission-mode dontAsk "*) ;; *) exit 9 ;; esac
+[ -f staged-skill/SKILL.md ] || [ -f SKILL.md ] || { echo "no staged file" >&2; exit 9; }
+printf '{"type":"result","is_error":false,"structured_output":{"findings":[%s]},"modelUsage":{"fake-model":{}}}' \
+  "${SKILLS_TEST_FINDING:-}"
+FAKE
+chmod +x "$SCRATCH/bin/claude"
+tree=$(project add-harness)
+tpl=$(template v4 "A reviewed body.")
+export SKILLS_TEST_TEMPLATE="$tpl"
+out=$("$INTAKE" review "$tpl/staged-skill" --source skills:remotion-dev/skills/staged-skill \
+  --reviewer claude 2>&1)
+status=$?
+[ "$status" -eq 0 ] || { echo "FAIL: a clean harness review should exit 0, got $status"; printf '%s\n' "$out" | sed 's/^/    /'; fails=$((fails + 1)); }
+expect "the review records a receipt" "reviewed by claude (fake-model)" 1
+run "$tree" add remotion-dev/skills
+[ "$status" -eq 0 ] || { echo "FAIL: a reviewed add should exit 0, got $status"; fails=$((fails + 1)); }
+expect "the gate uses the receipt" "reviewed by claude (fake-model)" 1
+[ -f "$tree/.claude/skills/staged-skill/SKILL.md" ] || {
+  echo "FAIL: a reviewed add did not install"; fails=$((fails + 1))
+}
+
+# --- add: a holding finding in a receipt still holds ----------------------------------------
+tree=$(project add-harness-held)
+tpl=$(template v5 "A suspicious body.")
+export SKILLS_TEST_TEMPLATE="$tpl"
+export SKILLS_TEST_FINDING='{"path":"SKILL.md","line":6,"severity":"high","category":"inject","evidence":"A suspicious body.","reason":"r"}'
+"$INTAKE" review "$tpl/staged-skill" --source skills:remotion-dev/skills/staged-skill \
+  --reviewer claude >/dev/null 2>&1
+status=$?
+unset SKILLS_TEST_FINDING
+[ "$status" -eq 2 ] || { echo "FAIL: a harness review with a high finding should exit 2, got $status"; fails=$((fails + 1)); }
+run "$tree" add remotion-dev/skills
+[ "$status" -eq 2 ] || { echo "FAIL: a receipt with a high finding should hold, got $status"; fails=$((fails + 1)); }
+[ ! -e "$tree/.claude/skills/staged-skill" ] || {
+  echo "FAIL: a held receipt still installed"; fails=$((fails + 1))
+}
+
 # --- add --global: refused, and npx is never reached ----------------------------------------
 tree=$(project add-global)
 : > "$LOG"

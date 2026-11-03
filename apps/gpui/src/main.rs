@@ -235,7 +235,11 @@ fn main_window(cx: &mut App) -> Option<(WindowHandle<Root>, WeakEntity<Workspace
         None => Bounds::centered(None, window_size, cx),
     };
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_bounds: Some(if float {
+            WindowBounds::Windowed(bounds)
+        } else {
+            WindowBounds::Maximized(bounds)
+        }),
         kind: if float {
             WindowKind::PopUp
         } else {

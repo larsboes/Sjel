@@ -102,13 +102,82 @@ pub struct Travel {
     vector_enabled: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceCategory {
+    Stay,
+    Station,
+    Airport,
+    Place,
+}
+
+impl PlaceCategory {
+    pub fn from_name_and_type(name: &str, item_type: Option<&str>) -> Self {
+        if item_type == Some("stay") || item_type == Some("accommodation") {
+            return Self::Stay;
+        }
+        let lower = name.to_lowercase();
+        if lower.contains("airport")
+            || lower.contains("flughafen")
+            || lower.contains("aéroport")
+            || lower.contains("aeropuerto")
+            || lower.contains("airfield")
+        {
+            Self::Airport
+        } else if lower.contains("hbf")
+            || lower.contains("bahnhof")
+            || lower.contains("station")
+            || lower.contains("gare ")
+            || lower.ends_with("gare")
+            || lower.contains("estación")
+            || lower.contains("terminal")
+        {
+            Self::Station
+        } else if lower.contains("hotel") || lower.contains("hostel") || lower.contains("airbnb") {
+            Self::Stay
+        } else {
+            Self::Place
+        }
+    }
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Stay => "🛏",
+            Self::Station => "🚆",
+            Self::Airport => "✈",
+            Self::Place => "📍",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Stay => "Stay",
+            Self::Station => "Station",
+            Self::Airport => "Airport",
+            Self::Place => "Place",
+        }
+    }
+}
+
+pub(crate) fn urlencode(text: &str) -> String {
+    let mut encoded = String::new();
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
+}
+
 #[derive(Clone)]
-struct LocationMarker {
-    plan_id: String,
-    place: Place,
-    from: String,
-    to: String,
-    label: String,
+pub struct LocationMarker {
+    pub plan_id: String,
+    pub place: Place,
+    pub from: String,
+    pub to: String,
+    pub label: String,
+    pub category: PlaceCategory,
 }
 
 impl Travel {
@@ -588,6 +657,7 @@ impl Travel {
                     from: from.clone(),
                     to: to.clone(),
                     label: format!("{} · {}–{}", plan.title, from, to),
+                    category: PlaceCategory::from_name_and_type(&place.name, None),
                 });
             }
             if let Some(details) = self
@@ -647,8 +717,80 @@ impl Travel {
                         from: day.to_owned(),
                         to,
                         label: format!("{} · stay", plan.title),
+                        category: PlaceCategory::Stay,
                     });
                 }
+            }
+        }
+        markers
+    }
+
+    pub fn current_plan_markers(&self) -> Vec<LocationMarker> {
+        let Some(plan) = self.current() else {
+            return Vec::new();
+        };
+        let mut markers = Vec::new();
+        for place in plan.places() {
+            markers.push(LocationMarker {
+                plan_id: plan.id.clone(),
+                place: place.clone(),
+                from: plan.date_start.clone(),
+                to: plan.date_end.clone(),
+                label: plan.title.clone(),
+                category: PlaceCategory::from_name_and_type(&place.name, None),
+            });
+        }
+        if let Some(details) = self
+            .details
+            .get(&plan.id)
+            .and_then(|slot| slot.value.as_ref())
+        {
+            for item in &details.details.items {
+                if item.item_type != "stay" {
+                    continue;
+                }
+                let Some(latitude) = item
+                    .payload
+                    .get("latitude")
+                    .and_then(serde_json::Value::as_f64)
+                else {
+                    continue;
+                };
+                let Some(longitude) = item
+                    .payload
+                    .get("longitude")
+                    .and_then(serde_json::Value::as_f64)
+                else {
+                    continue;
+                };
+                let day = item
+                    .payload
+                    .get("check_in")
+                    .and_then(serde_json::Value::as_str)
+                    .or(item.day.as_deref())
+                    .unwrap_or(&plan.date_start);
+                let to = item
+                    .payload
+                    .get("check_out")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(day);
+                markers.push(LocationMarker {
+                    plan_id: plan.id.clone(),
+                    place: Place {
+                        name: item.title.clone(),
+                        address: item
+                            .payload
+                            .get("address")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned),
+                        latitude: Some(latitude),
+                        longitude: Some(longitude),
+                    },
+                    from: day.to_owned(),
+                    to: to.to_owned(),
+                    label: format!("{} · stay", plan.title),
+                    category: PlaceCategory::Stay,
+                });
             }
         }
         markers

@@ -10,7 +10,7 @@
 //!   vector-frame offset in `map` all read from the camera and nothing else, so a frame can be
 //!   drawn mid-gesture without any extra state to keep in step.
 use super::forms::FormKind;
-use super::{LocationMarker, Travel};
+use super::{urlencode, LocationMarker, PlaceCategory, Travel};
 use futures::future::{AbortHandle, Abortable};
 use futures::{stream, SinkExt, StreamExt};
 use gpui::{
@@ -18,6 +18,7 @@ use gpui::{
     PathBuilder, StyledImage,
 };
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::Sizable;
 use sjel_gpui_core::{
     shell,
     travel::{self, Coordinate, Tile, TravelRoute, TripSection},
@@ -170,22 +171,7 @@ impl Travel {
         let markers: Vec<LocationMarker> = if matches!(self.route, TravelRoute::Map) {
             self.location_markers()
         } else {
-            self.current()
-                .map(|plan| {
-                    plan.places()
-                        .map(|place| LocationMarker {
-                            plan_id: plan.id.clone(),
-                            place: place.clone(),
-                            from: plan.date_start.clone(),
-                            to: plan.date_end.clone(),
-                            label: format!(
-                                "{} · {}–{}",
-                                plan.title, plan.date_start, plan.date_end
-                            ),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
+            self.current_plan_markers()
         };
         let places: Vec<_> = markers.iter().map(|marker| marker.place.clone()).collect();
         let overview = matches!(self.route, TravelRoute::Map);
@@ -287,6 +273,12 @@ impl Travel {
                     )
                 })
                 .when_some(stop.coordinate(), |panel, at| {
+                    let maps_url = format!(
+                        "https://maps.apple.com/?q={}&ll={:.6},{:.6}",
+                        urlencode(&stop.name),
+                        at.latitude,
+                        at.longitude
+                    );
                     panel
                         .child(
                             div()
@@ -295,14 +287,26 @@ impl Travel {
                                 .child(format!("{:.5}, {:.5}", at.latitude, at.longitude)),
                         )
                         .child(
-                            self.button("open-stop-map")
-                                .label("Open in OpenStreetMap")
-                                .on_click(move |_, _, cx| {
-                                    cx.open_url(&format!(
-                                        "https://www.openstreetmap.org/?mlat={}&mlon={}#map=16/{}/{}",
-                                        at.latitude, at.longitude, at.latitude, at.longitude
-                                    ))
-                                }),
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap_1()
+                                .child(
+                                    self.button("open-apple-maps-panel")
+                                        .primary()
+                                        .label("Open in Apple Maps")
+                                        .on_click(move |_, _, cx| cx.open_url(&maps_url)),
+                                )
+                                .child(
+                                    self.button("open-stop-map")
+                                        .label("OpenStreetMap")
+                                        .on_click(move |_, _, cx| {
+                                            cx.open_url(&format!(
+                                                "https://www.openstreetmap.org/?mlat={}&mlon={}#map=16/{}/{}",
+                                                at.latitude, at.longitude, at.latitude, at.longitude
+                                            ))
+                                        }),
+                                ),
                         )
                 });
             let mut linked = std::collections::HashSet::new();
@@ -948,19 +952,7 @@ impl Travel {
             let markers: Vec<_> = if matches!(self.route, TravelRoute::Map) {
                 self.location_markers()
             } else {
-                self.current()
-                    .map(|plan| {
-                        plan.places()
-                            .map(|place| super::LocationMarker {
-                                plan_id: plan.id.clone(),
-                                place: place.clone(),
-                                from: plan.date_start.clone(),
-                                to: plan.date_end.clone(),
-                                label: plan.title.clone(),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default()
+                self.current_plan_markers()
             };
             if !markers.is_empty() {
                 let (cx_world, cy_world) = center.world_at(self.zoom);
@@ -995,34 +987,147 @@ impl Travel {
                     } else {
                         place.name.clone()
                     };
+                    let pin_text = format!("{} {}", marker.category.icon(), place.name);
                     map = map.child(
                         div()
                             .absolute()
-                            .left(px(x - 5.))
-                            .top(px(y - 5.))
+                            .left(px(x - 12.))
+                            .top(px(y - 12.))
                             .flex()
                             .items_center()
-                            .gap_1()
                             .child(
                                 self.button(gpui::SharedString::from(format!("map-stop-{index}")))
-                                    .label((index + 1).to_string())
+                                    .small()
+                                    .label(pin_text)
                                     .tooltip(label.clone())
                                     .when(selected, |button| button.primary())
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         view.selected_stop = Some(marker_place.clone());
                                         cx.notify();
                                     })),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .px_1()
-                                    .bg(rgb(0xffffff))
-                                    .text_color(rgb(0x222222))
-                                    .child(label),
                             ),
                     );
                 }
+            }
+            if let Some(stop) = &self.selected_stop {
+                let stop_coord = stop.coordinate();
+                let stop_name = stop.name.clone();
+                let stop_address = stop.address.clone();
+                let marker_match = markers.iter().find(|m| {
+                    m.place.name == stop.name && m.place.coordinate() == stop.coordinate()
+                });
+                let category = marker_match
+                    .map(|m| m.category)
+                    .unwrap_or_else(|| PlaceCategory::from_name_and_type(&stop.name, None));
+                let dates = marker_match.map(|m| {
+                    if m.from == m.to || m.to.is_empty() {
+                        m.from.clone()
+                    } else {
+                        format!("{} – {}", m.from, m.to)
+                    }
+                });
+
+                let mut card = div()
+                    .absolute()
+                    .top(px(8.))
+                    .right(px(8.))
+                    .w(px(280.))
+                    .p_3()
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .bg(rgb(palette.surface >> 8))
+                    .shadow_lg()
+                    .flex()
+                    .flex_col()
+                    .gap_1();
+
+                let header = div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .px_1()
+                                    .py(px(0.5))
+                                    .rounded(px(4.))
+                                    .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .text_color(rgb(palette.accent))
+                                    .child(format!("{} {}", category.icon(), category.label())),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.text))
+                                    .child(stop_name.clone()),
+                            ),
+                    )
+                    .child(
+                        self.button("close-stop-card")
+                            .ghost()
+                            .small()
+                            .label("✕")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.selected_stop = None;
+                                cx.notify();
+                            })),
+                    );
+                card = card.child(header);
+
+                if let Some(address) = stop_address {
+                    if !address.is_empty() {
+                        card = card.child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(address),
+                        );
+                    }
+                }
+
+                if let Some(date_str) = dates {
+                    if !date_str.is_empty() {
+                        card = card.child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(format!("📅 {date_str}")),
+                        );
+                    }
+                }
+
+                if let Some(at) = stop_coord {
+                    let maps_url = format!(
+                        "https://maps.apple.com/?q={}&ll={:.6},{:.6}",
+                        urlencode(&stop_name),
+                        at.latitude,
+                        at.longitude
+                    );
+                    card = card.child(
+                        div()
+                            .pt_1()
+                            .flex()
+                            .gap_1()
+                            .child(
+                                self.button("map-open-apple-maps")
+                                    .primary()
+                                    .small()
+                                    .label("Open in Apple Maps")
+                                    .on_click(move |_, _, cx| cx.open_url(&maps_url)),
+                            ),
+                    );
+                }
+
+                map = map.child(card);
             }
         }
         let controls = div()

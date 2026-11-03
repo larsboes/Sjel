@@ -39,6 +39,7 @@ mod music;
 mod packs_view;
 mod pdf_kit;
 mod people_view;
+mod permissions;
 mod projects;
 mod record;
 mod research_view;

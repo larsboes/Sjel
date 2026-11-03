@@ -67,6 +67,7 @@ pub enum Section {
     Accounts,
     Clipper,
     Features,
+    Permissions,
     Updates,
     Shortcuts,
 }
@@ -107,12 +108,13 @@ const SHORTCUT_GROUPS: [&str; 12] = [
 ];
 
 impl Section {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::Appearance,
         Self::Connection,
         Self::Accounts,
         Self::Clipper,
         Self::Features,
+        Self::Permissions,
         Self::Updates,
         Self::Shortcuts,
     ];
@@ -124,6 +126,7 @@ impl Section {
             Self::Accounts => "Accounts & keys",
             Self::Clipper => "Clipper",
             Self::Features => "Features",
+            Self::Permissions => "macOS permissions",
             Self::Updates => "Updates",
             Self::Shortcuts => "Shortcuts",
         }
@@ -137,6 +140,9 @@ impl Section {
             Self::Accounts => "Provider keys and credentials, stored in the OS keychain",
             Self::Clipper => "Templates and the Interpreter model for the Sjel Clipper",
             Self::Features => "Discover, install, and remove optional Sjel features",
+            Self::Permissions => {
+                "Grants only you can give in System Settings, and why Sjel needs them"
+            }
             Self::Updates => "Sjel Desktop builds from your checkout of the Sjel repository",
             Self::Shortcuts => "Read from the key bindings this build registers",
         }
@@ -182,6 +188,14 @@ pub(crate) fn search_section(query: &str, catalogue_has_match: bool) -> Option<S
         "browse",
     ]) {
         Some(Section::Features)
+    } else if matches(&[
+        "permission",
+        "privacy",
+        "photos",
+        "music",
+        "system settings",
+    ]) {
+        Some(Section::Permissions)
     } else if matches(&["connection", "sync", "phone", "endpoint"]) {
         Some(Section::Connection)
     } else if matches(&["update", "build", "version"]) {
@@ -334,6 +348,7 @@ pub fn render(
         Section::Connection => connection(view, palette, cx),
         Section::Accounts => vec![view.accounts.clone().into_any_element()],
         Section::Clipper => vec![view.clipper_settings.clone().into_any_element()],
+        Section::Permissions => permissions(view, palette, cx),
         Section::Updates => updates(view, palette, cx),
         Section::Shortcuts => shortcuts(
             palette,
@@ -1427,6 +1442,52 @@ fn explore_features(view: &Workspace, palette: Palette, cx: &mut Context<Workspa
     section("Explore features", body, palette).into_any_element()
 }
 
+fn permissions(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> Vec<AnyElement> {
+    use crate::permissions::{open_pane, Status, GRANTS};
+    GRANTS
+        .iter()
+        .enumerate()
+        .map(|(index, grant)| {
+            let status = view.permissions[index];
+            let (text, color) = match status {
+                Status::Unchecked => ("Not checked", palette.muted),
+                Status::Checking => ("Waiting for macOS…", palette.accent),
+                Status::Granted => ("Allowed", palette.green),
+                Status::Denied => ("Not allowed. Turn it on in System Settings", palette.amber),
+                Status::Absent => ("Not on this Mac", palette.muted),
+            };
+            row(
+                grant.title,
+                Some(grant.why),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(value(text.into(), color))
+                    .child(
+                        Button::new(("open-pane", index))
+                            .ghost()
+                            .small()
+                            .label("Open System Settings")
+                            .on_click(move |_, _, _| open_pane(&GRANTS[index])),
+                    )
+                    .child(
+                        Button::new(("allow", index))
+                            .primary()
+                            .small()
+                            .label("Allow")
+                            .loading(status == Status::Checking)
+                            .disabled(matches!(status, Status::Checking | Status::Granted))
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.request_permission(index, cx)
+                            })),
+                    ),
+                palette,
+            )
+        })
+        .collect()
+}
+
 fn updates(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> Vec<AnyElement> {
     let (repo, repo_color) = match &view.update_info {
         None => ("Checking…".to_owned(), palette.muted),
@@ -1890,6 +1951,17 @@ mod tests {
             view.update(cx, |view, cx| view.open_settings(Some(section), cx));
             cx.run_until_parked();
             view.read_with(cx, |view, _| assert_eq!(view.settings_section, section));
+        }
+    }
+
+    #[test]
+    fn privacy_words_find_the_permissions_section() {
+        for query in ["privacy", "Photos", "music access", "permission"] {
+            assert_eq!(
+                super::search_section(query, false),
+                Some(Section::Permissions),
+                "{query}"
+            );
         }
     }
 

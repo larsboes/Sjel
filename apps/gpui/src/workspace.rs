@@ -383,6 +383,7 @@ pub struct Workspace {
     pub update_info: Option<crate::update::UpdateInfo>,
     /// When the last `git` check started, so the poll can skip the ones it does not need.
     update_checked_at: Option<Instant>,
+    pub(crate) permissions: [crate::permissions::Status; crate::permissions::GRANTS.len()],
     pub rebuild_state: crate::update::RebuildState,
     /// Whether the failed rebuild shows cargo's whole output instead of the first error.
     pub show_rebuild_log: bool,
@@ -582,6 +583,7 @@ impl Workspace {
             settings_search: Some((settings_search, settings_search_events)),
             update_info: None,
             update_checked_at: None,
+            permissions: Default::default(),
             rebuild_state: crate::update::RebuildState::Idle,
             show_rebuild_log: false,
             _appearance: Some(appearance),
@@ -844,6 +846,26 @@ impl Workspace {
         cx.background_executor()
             .spawn(async move { sjel_gpui_core::prompts::take(id) })
             .detach();
+    }
+
+    /// Asks macOS for one grant with the read the storage report makes; the dialog, if any,
+    /// appears while the read waits.
+    pub fn request_permission(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.permissions[index] = crate::permissions::Status::Checking;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let status = cx
+                .background_executor()
+                .spawn(
+                    async move { crate::permissions::request(&crate::permissions::GRANTS[index]) },
+                )
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.permissions[index] = status;
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {

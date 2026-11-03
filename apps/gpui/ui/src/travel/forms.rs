@@ -13,7 +13,10 @@ use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
     shell::{self, Shell, ShellError},
     travel::{
-        edit::{BookingDraft, StageDraft, StageEdit, TripDraft, STAGE_STATUSES, TRANSPORT_MODES},
+        edit::{
+            stay_rank_body, BookingDraft, StageDraft, StageEdit, StayDraft, TripDraft,
+            STAGE_STATUSES, TRANSPORT_MODES,
+        },
         Item, Source, Stage, TravelRoute, TripSection,
     },
 };
@@ -25,6 +28,8 @@ pub(super) enum FormKind {
     Trip(Option<String>),
     /// `None` adds a booking; `Some(item id)` edits that one.
     Booking(Option<String>),
+    /// `None` adds a stay candidate; `Some(item id)` edits that one.
+    Stay(Option<String>),
     /// `None` adds a stage at the end; `Some(stage id)` edits that one.
     Stage(Option<String>),
 }
@@ -123,6 +128,70 @@ impl Travel {
                             draft.amount,
                             draft.currency,
                             draft.free_cancellation_until,
+                        ],
+                        "",
+                        "",
+                    )
+                }
+                FormKind::Stay(item) => {
+                    let draft = item
+                        .as_deref()
+                        .and_then(|id| self.item(id))
+                        .map(StayDraft::from_item)
+                        .unwrap_or_else(|| {
+                            let dest_coord =
+                                plan.as_ref().and_then(|p| p.destinations.first()).and_then(
+                                    |dest| dest.coordinate().or_else(|| self.coords.get(dest)),
+                                );
+                            StayDraft {
+                                check_in: plan
+                                    .as_ref()
+                                    .map(|p| p.date_start.clone())
+                                    .unwrap_or_default(),
+                                check_out: plan
+                                    .as_ref()
+                                    .map(|p| p.date_end.clone())
+                                    .unwrap_or_default(),
+                                latitude: dest_coord
+                                    .map(|c| format!("{:.5}", c.latitude))
+                                    .unwrap_or_default(),
+                                longitude: dest_coord
+                                    .map(|c| format!("{:.5}", c.longitude))
+                                    .unwrap_or_default(),
+                                currency: "EUR".into(),
+                                ..Default::default()
+                            }
+                        });
+                    (
+                        vec![
+                            ("Stay name", "Hotel Hafen Hamburg"),
+                            ("Check-in", "YYYY-MM-DD"),
+                            ("Check-out", "YYYY-MM-DD"),
+                            ("Latitude", "53.5451"),
+                            ("Longitude", "9.9717"),
+                            ("Rank", "Optional · 1, 2, 3…"),
+                            ("Total amount", "Optional · 240,00"),
+                            ("Currency", "EUR"),
+                            ("Provider", "Optional · booking.com"),
+                            ("Booking link", "Optional · https://…"),
+                            ("Address", "Optional · Seewartenstraße 9"),
+                            ("Booking reference", "Optional · sets stay as booked"),
+                            ("Notes", "Optional · Harbour view, quiet wing"),
+                        ],
+                        vec![
+                            draft.title,
+                            draft.check_in,
+                            draft.check_out,
+                            draft.latitude,
+                            draft.longitude,
+                            draft.rank,
+                            draft.amount,
+                            draft.currency,
+                            draft.provider,
+                            draft.url,
+                            draft.address,
+                            draft.order_ref,
+                            draft.notes,
                         ],
                         "",
                         "",
@@ -250,6 +319,29 @@ impl Travel {
                         .map(|(fields, day)| Work::EditBooking(plan, item, fields, day)),
                 }
             }
+            FormKind::Stay(item) => {
+                let draft = StayDraft {
+                    title: v(0),
+                    check_in: v(1),
+                    check_out: v(2),
+                    latitude: v(3),
+                    longitude: v(4),
+                    rank: v(5),
+                    amount: v(6),
+                    currency: v(7),
+                    provider: v(8),
+                    url: v(9),
+                    address: v(10),
+                    order_ref: v(11),
+                    notes: v(12),
+                };
+                match item {
+                    None => draft.create_body().map(|body| Work::AddBooking(plan, body)),
+                    Some(item) => draft
+                        .edit_body()
+                        .map(|(fields, day)| Work::EditBooking(plan, item, fields, day)),
+                }
+            }
             FormKind::Stage(stage) => {
                 let draft = StageDraft {
                     origin: v(0),
@@ -308,6 +400,25 @@ impl Travel {
         self.write(shell, work, window, cx);
     }
 
+    pub(super) fn set_stay_rank(
+        &mut self,
+        item_id: String,
+        rank: Option<i64>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(shell) = self.writer() else {
+            return;
+        };
+        let Some(plan) = self.selected.clone() else {
+            return;
+        };
+        let Ok(body) = stay_rank_body(rank) else {
+            return;
+        };
+        self.write(shell, Work::ItemFields(plan, item_id, body), window, cx);
+    }
+
     fn write(&mut self, shell: Arc<Shell>, work: Work, _: &mut Window, cx: &mut Context<Self>) {
         let task = shell::run(async move {
             match work {
@@ -325,6 +436,10 @@ impl Travel {
                     .map(|()| Saved::Details),
                 Work::EditBooking(plan, item, fields, day) => shell
                     .trip_booking_edit(&plan, &item, fields, day)
+                    .await
+                    .map(|()| Saved::Details),
+                Work::ItemFields(plan, item, body) => shell
+                    .trip_item_fields(&plan, &item, body)
                     .await
                     .map(|()| Saved::Details),
                 Work::RemoveItem(plan, item) => shell
@@ -391,6 +506,8 @@ impl Travel {
             FormKind::Trip(None) => "New trip".to_owned(),
             FormKind::Booking(None) => "Add a booking".to_owned(),
             FormKind::Booking(Some(_)) => "Edit booking".to_owned(),
+            FormKind::Stay(None) => "Add stay candidate".to_owned(),
+            FormKind::Stay(Some(_)) => "Edit stay candidate".to_owned(),
             FormKind::Stage(None) => "Add a stage".to_owned(),
             FormKind::Stage(Some(_)) => "Edit stage".to_owned(),
         };
@@ -584,6 +701,7 @@ enum Work {
     DeletePlan(String),
     AddBooking(String, serde_json::Value),
     EditBooking(String, String, serde_json::Value, Option<String>),
+    ItemFields(String, String, serde_json::Value),
     RemoveItem(String, String),
     Stages(String, StageEdit),
 }

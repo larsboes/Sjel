@@ -57,6 +57,74 @@ impl Item {
             && url.password().is_none())
         .then_some(url)
     }
+
+    pub fn stay_rank(&self) -> Option<i64> {
+        self.payload
+            .get("rank")
+            .and_then(serde_json::Value::as_i64)
+            .filter(|&rank| rank >= 1)
+    }
+
+    pub fn is_stay_booked(&self) -> bool {
+        self.payload
+            .get("booked")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+            || self.booking_code().is_some()
+    }
+
+    pub fn price_label(&self) -> Option<String> {
+        let cents = self
+            .payload
+            .get("amount_cents")
+            .and_then(serde_json::Value::as_i64)?;
+        let currency = self
+            .payload
+            .get("currency")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("EUR");
+        Some(format!(
+            "{currency} {}.{:02}",
+            cents / 100,
+            (cents % 100).abs()
+        ))
+    }
+
+    pub fn rating_label(&self) -> Option<String> {
+        let rating = self
+            .payload
+            .get("rating")
+            .and_then(serde_json::Value::as_f64)?;
+        Some(format!("{rating:.1}"))
+    }
+}
+
+/// Orders `stay` items for the candidate ranking board: ranked candidates ascending by rank,
+/// then unranked candidates ascending by price, then by title.
+pub fn sort_stay_candidates<'a>(stays: &mut [&'a Item]) {
+    stays.sort_by(|a, b| {
+        let ra = a.stay_rank();
+        let rb = b.stay_rank();
+        ra.is_none()
+            .cmp(&rb.is_none())
+            .then_with(|| ra.cmp(&rb))
+            .then_with(|| {
+                let pa = a
+                    .payload
+                    .get("amount_cents")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(i64::MAX);
+                let pb = b
+                    .payload
+                    .get("amount_cents")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(i64::MAX);
+                pa.cmp(&pb)
+            })
+            .then_with(|| a.title.cmp(&b.title))
+    });
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -206,5 +274,45 @@ mod tests {
             super::super::details_path("trip:plan:1234abcd").unwrap(),
             "/trips/api/plans/trip:plan:1234abcd"
         );
+    }
+
+    #[test]
+    fn stay_candidates_sort_by_rank_then_price_then_title() {
+        let a = Item {
+            id: "1".into(),
+            item_type: "stay".into(),
+            day: Some("2026-11-01".into()),
+            external_id: "stay:a".into(),
+            title: "Hotel Zebra".into(),
+            payload: serde_json::json!({ "rank": 2, "amount_cents": 15000, "currency": "EUR" }),
+        };
+        let b = Item {
+            id: "2".into(),
+            item_type: "stay".into(),
+            day: Some("2026-11-01".into()),
+            external_id: "stay:b".into(),
+            title: "Hotel Alpha".into(),
+            payload: serde_json::json!({ "rank": 1, "amount_cents": 18000, "currency": "EUR", "booked": true }),
+        };
+        let c = Item {
+            id: "3".into(),
+            item_type: "stay".into(),
+            day: Some("2026-11-01".into()),
+            external_id: "stay:c".into(),
+            title: "Hotel Budget".into(),
+            payload: serde_json::json!({ "amount_cents": 9500, "currency": "EUR", "rating": 8.4 }),
+        };
+        let mut refs = vec![&a, &c, &b];
+        sort_stay_candidates(&mut refs);
+        assert_eq!(
+            refs.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            vec!["2", "1", "3"]
+        );
+        assert_eq!(b.stay_rank(), Some(1));
+        assert!(b.is_stay_booked());
+        assert_eq!(c.stay_rank(), None);
+        assert!(!c.is_stay_booked());
+        assert_eq!(c.price_label().as_deref(), Some("EUR 95.00"));
+        assert_eq!(c.rating_label().as_deref(), Some("8.4"));
     }
 }

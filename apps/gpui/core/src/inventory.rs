@@ -100,6 +100,40 @@ pub struct InventoryStateChange {
     pub changed: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventoryStateHistoryEntry {
+    pub state: String,
+    pub since: String,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InteriorImpactVerdict {
+    pub pass: bool,
+    #[serde(default)]
+    pub hard: Vec<String>,
+    #[serde(default)]
+    pub soft: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InteriorImpactChange {
+    pub layout: String,
+    pub before: InteriorImpactVerdict,
+    pub after: InteriorImpactVerdict,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InteriorItemImpact {
+    pub item: String,
+    pub layouts: usize,
+    pub passing_before: usize,
+    pub passing_after: usize,
+    #[serde(default)]
+    pub changed: Vec<InteriorImpactChange>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct InventoryItemWrite {
     pub id: String,

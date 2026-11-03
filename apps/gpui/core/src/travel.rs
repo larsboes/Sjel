@@ -12,7 +12,9 @@ mod details;
 pub mod edit;
 mod navigation;
 pub mod places;
-pub use details::{details_cached, save_details, saved_details, Details, Item, SavedDetails};
+pub use details::{
+    details_cached, save_details, saved_details, sort_stay_candidates, Details, Item, SavedDetails,
+};
 pub use navigation::{TravelRoute, TripSection};
 pub use places::PlaceCoords;
 

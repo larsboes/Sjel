@@ -237,6 +237,203 @@ impl BookingDraft {
     }
 }
 
+/// The stay candidate form, as typed. `check_in`, `check_out`, `latitude`, and `longitude`
+/// are required by `DECLARED_PAYLOADS` in `capabilities/trips/src/store.rs`.
+#[derive(Clone, Debug, Default)]
+pub struct StayDraft {
+    pub title: String,
+    pub check_in: String,
+    pub check_out: String,
+    pub latitude: String,
+    pub longitude: String,
+    pub amount: String,
+    pub currency: String,
+    pub provider: String,
+    pub url: String,
+    pub address: String,
+    pub rank: String,
+    pub order_ref: String,
+    pub notes: String,
+}
+
+impl StayDraft {
+    pub fn from_item(item: &super::Item) -> Self {
+        let text = |key: &str| {
+            item.payload
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        let number = |key: &str| {
+            item.payload
+                .get(key)
+                .and_then(Value::as_f64)
+                .map(|n| format!("{n:.5}"))
+                .unwrap_or_default()
+        };
+        let amount = item
+            .payload
+            .get("amount_cents")
+            .and_then(Value::as_i64)
+            .map(|cents| format!("{}.{:02}", cents / 100, (cents % 100).abs()))
+            .unwrap_or_default();
+        let rank = item.stay_rank().map(|r| r.to_string()).unwrap_or_default();
+        Self {
+            title: item.title.clone(),
+            check_in: {
+                let ci = text("check_in");
+                if ci.is_empty() {
+                    item.day.clone().unwrap_or_default()
+                } else {
+                    ci
+                }
+            },
+            check_out: text("check_out"),
+            latitude: number("latitude"),
+            longitude: number("longitude"),
+            amount,
+            currency: {
+                let c = text("currency");
+                if c.is_empty() {
+                    "EUR".into()
+                } else {
+                    c
+                }
+            },
+            provider: text("provider"),
+            url: text("url"),
+            address: text("address"),
+            rank,
+            order_ref: text("order_ref"),
+            notes: text("notes"),
+        }
+    }
+
+    fn payload(&self) -> Result<Booking, String> {
+        let title = required("The stay name", &self.title)?;
+        let check_in = date("Check-in", &self.check_in)?;
+        let check_out = date("Check-out", &self.check_out)?;
+        if check_in > check_out {
+            return Err("Check-out must not be before check-in.".into());
+        }
+        let latitude: f64 = self
+            .latitude
+            .trim()
+            .replace(',', ".")
+            .parse()
+            .ok()
+            .filter(|lat: &f64| lat.is_finite() && (-90.0..=90.0).contains(lat))
+            .ok_or("Latitude must be a number between -90 and 90.")?;
+        let longitude: f64 = self
+            .longitude
+            .trim()
+            .replace(',', ".")
+            .parse()
+            .ok()
+            .filter(|lon: &f64| lon.is_finite() && (-180.0..=180.0).contains(lon))
+            .ok_or("Longitude must be a number between -180 and 180.")?;
+        let amount = match self.amount.trim() {
+            "" => None,
+            text => Some(cents_from(text).ok_or("The amount must be a number like 122,00.")?),
+        };
+        let currency = self.currency.trim().to_uppercase();
+        let currency = match (amount, currency.as_str()) {
+            (_, "") if amount.is_some() => {
+                return Err("Name the currency of the amount, like EUR.".into())
+            }
+            (_, "") => None,
+            (_, code) if code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase()) => {
+                Some(code.to_owned())
+            }
+            _ => return Err("The currency must be a three-letter code, like EUR.".into()),
+        };
+        let rank = match self.rank.trim() {
+            "" => None,
+            text => {
+                let r: i64 = text
+                    .parse()
+                    .ok()
+                    .filter(|&r| r >= 1)
+                    .ok_or("Rank must be a whole number >= 1, or blank.")?;
+                Some(r)
+            }
+        };
+        let optional_str = |s: &str| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Value::Null
+            } else {
+                Value::String(trimmed.to_owned())
+            }
+        };
+        let order_ref = optional_str(&self.order_ref);
+        let booked = if order_ref.is_string() {
+            Value::Bool(true)
+        } else {
+            Value::Null
+        };
+        let mut payload = Map::new();
+        payload.insert("check_in".into(), check_in.clone().into());
+        payload.insert("check_out".into(), check_out.into());
+        payload.insert("latitude".into(), json!(latitude));
+        payload.insert("longitude".into(), json!(longitude));
+        payload.insert(
+            "amount_cents".into(),
+            amount.map_or(Value::Null, Value::from),
+        );
+        payload.insert("currency".into(), currency.map_or(Value::Null, Value::from));
+        payload.insert("provider".into(), optional_str(&self.provider));
+        payload.insert("url".into(), optional_str(&self.url));
+        payload.insert("address".into(), optional_str(&self.address));
+        payload.insert("rank".into(), rank.map_or(Value::Null, Value::from));
+        payload.insert("order_ref".into(), order_ref);
+        payload.insert("booked".into(), booked);
+        payload.insert("notes".into(), optional_str(&self.notes));
+        Ok((title, Some(check_in), payload))
+    }
+
+    pub fn create_body(&self) -> Result<Value, String> {
+        let (title, day, mut payload) = self.payload()?;
+        payload.retain(|_, value| !value.is_null());
+        let slug: String = title
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        let slug = slug.trim_matches('-');
+        let check_in = payload["check_in"].as_str().unwrap_or_default();
+        let external_id = format!("stay:{slug}:{check_in}");
+        Ok(json!({
+            "item_type": "stay",
+            "day": day,
+            "external_id": external_id,
+            "title": title,
+            "payload": payload,
+        }))
+    }
+
+    pub fn edit_body(&self) -> Result<(Value, Option<String>), String> {
+        let (title, day, payload) = self.payload()?;
+        Ok((json!({ "title": title, "payload": payload }), day))
+    }
+}
+
+/// Builds the `PATCH /trips/api/plans/{id}/items/{item}/fields` body for setting or clearing a
+/// stay candidate's rank.
+pub fn stay_rank_body(rank: Option<i64>) -> Result<Value, String> {
+    if let Some(r) = rank {
+        if r < 1 {
+            return Err("Stay rank must be >= 1.".into());
+        }
+    }
+    Ok(json!({
+        "payload": {
+            "rank": rank,
+        }
+    }))
+}
+
 /// The stage form, as typed.
 #[derive(Clone, Debug)]
 pub struct StageDraft {
@@ -525,5 +722,48 @@ mod tests {
         assert!(StageEdit::Remove("stage:9".into())
             .apply(&mut stages)
             .is_err());
+    }
+
+    #[test]
+    fn a_stay_candidate_validates_coordinates_dates_and_rank() {
+        let draft = StayDraft {
+            title: "Hotel Hafen Hamburg".into(),
+            check_in: "2026-11-01".into(),
+            check_out: "2026-11-03".into(),
+            latitude: "53.5451".into(),
+            longitude: "9.9717".into(),
+            amount: "240,00".into(),
+            currency: "eur".into(),
+            provider: "booking.com".into(),
+            url: "https://www.booking.com/hotel/de/hafen-hamburg.html".into(),
+            address: "Seewartenstraße 9, Hamburg".into(),
+            rank: "1".into(),
+            order_ref: String::new(),
+            notes: "Harbour view".into(),
+        };
+        let body = draft.create_body().unwrap();
+        assert_eq!(body["item_type"], "stay");
+        assert_eq!(body["day"], "2026-11-01");
+        assert_eq!(body["payload"]["check_in"], "2026-11-01");
+        assert_eq!(body["payload"]["check_out"], "2026-11-03");
+        assert_eq!(body["payload"]["amount_cents"], 24000);
+        assert_eq!(body["payload"]["currency"], "EUR");
+        assert_eq!(body["payload"]["rank"], 1);
+        assert!(body["payload"].get("booked").is_none());
+
+        let (edit, day) = draft.edit_body().unwrap();
+        assert_eq!(day.as_deref(), Some("2026-11-01"));
+        assert_eq!(edit["payload"]["rank"], 1);
+        assert_eq!(edit["payload"]["order_ref"], Value::Null);
+
+        assert_eq!(
+            stay_rank_body(Some(2)).unwrap(),
+            json!({ "payload": { "rank": 2 } })
+        );
+        assert_eq!(
+            stay_rank_body(None).unwrap(),
+            json!({ "payload": { "rank": null } })
+        );
+        assert!(stay_rank_body(Some(0)).is_err());
     }
 }

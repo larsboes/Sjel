@@ -1205,7 +1205,71 @@ pub struct FeedContentDetail {
     #[serde(default)]
     pub calendar: Option<FeedCalendarContent>,
     #[serde(default)]
+    pub data_class: FeedDataClass,
+    #[serde(default)]
     pub cloud_processing: FeedCloudProcessingState,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct FeedDataClass {
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub rationale: String,
+    #[serde(default)]
+    pub method: String,
+    #[serde(default)]
+    pub version: String,
+}
+
+pub fn data_class_rank(value: &str) -> u8 {
+    match value {
+        "c0" => 0,
+        "c1" => 10,
+        "c2" => 20,
+        "c3" => 30,
+        _ => 30,
+    }
+}
+
+pub fn data_class_lowering_needs_rationale(current: &str, target: &str) -> bool {
+    !current.is_empty() && data_class_rank(target) < data_class_rank(current)
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct CloudProviderOption {
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub provider_label: String,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub data_tier: String,
+    #[serde(default)]
+    pub billing_mode: String,
+    #[serde(default)]
+    pub failover_priority: u16,
+    #[serde(default)]
+    pub max_requests_per_day: u32,
+    #[serde(default)]
+    pub requests_used_today: Option<u32>,
+    #[serde(default)]
+    pub requests_remaining_today: Option<u32>,
+    #[serde(default)]
+    pub max_input_tokens: u32,
+    #[serde(default)]
+    pub credit_expires_on: Option<String>,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -2421,6 +2485,20 @@ impl Shell {
     pub async fn trip_item_delete(&self, plan: &str, item: &str) -> ShellResult<()> {
         let path = crate::travel::plan_path(plan, &["items", item]).map_err(refused)?;
         self.send(Method::DELETE, &path, None, 10).await?;
+        self.trip_calendar_sync(plan).await;
+        Ok(())
+    }
+
+    /// Updates fields on a trip item in place (`PATCH /trips/api/plans/{plan}/items/{item}/fields`),
+    /// such as setting or clearing a `stay` candidate's `rank`.
+    pub async fn trip_item_fields(
+        &self,
+        plan: &str,
+        item: &str,
+        body: serde_json::Value,
+    ) -> ShellResult<()> {
+        let path = crate::travel::plan_path(plan, &["items", item, "fields"]).map_err(refused)?;
+        self.send(Method::PATCH, &path, Some(body), 10).await?;
         self.trip_calendar_sync(plan).await;
         Ok(())
     }
@@ -4073,6 +4151,41 @@ impl Shell {
         self.json(Method::PATCH, url.path(), Some(patch), 10).await
     }
 
+    pub async fn inventory_state_history(
+        &self,
+        id: &str,
+    ) -> ShellResult<Vec<crate::inventory::InventoryStateHistoryEntry>> {
+        if id.trim().is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("An inventory item id is required.".into()),
+            ));
+        }
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["inventory", "api", "items", id, "state"]);
+        self.json(Method::GET, url.path(), None, 10).await
+    }
+
+    pub async fn interior_item_impact(
+        &self,
+        id: &str,
+        patch: serde_json::Value,
+    ) -> ShellResult<crate::inventory::InteriorItemImpact> {
+        if id.trim().is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("An inventory item id is required.".into()),
+            ));
+        }
+        let mut url = Url::parse("http://127.0.0.1").expect("a static origin parses");
+        url.path_segments_mut()
+            .expect("a hierarchical URL")
+            .extend(["interior", "api", "items", id, "impact"]);
+        self.json(Method::POST, url.path(), Some(patch), 15).await
+    }
+
     pub async fn interior_layouts(
         &self,
     ) -> ShellResult<Vec<crate::inventory::InteriorLayoutSummary>> {
@@ -5217,6 +5330,91 @@ impl Shell {
             30,
         )
         .await
+    }
+
+    pub async fn content_cloud_providers(&self) -> ShellResult<Vec<CloudProviderOption>> {
+        self.json(Method::GET, "/comms/content/cloud-providers", None, 10)
+            .await
+    }
+
+    pub async fn content_cloud_queue(
+        &self,
+        source: &str,
+        id: &str,
+        preview_hash: &str,
+        provider_role: &str,
+    ) -> ShellResult<FeedCloudProcessingState> {
+        let role = provider_role.trim();
+        if !valid_cloud_content_id(source, id) || !is_sha256(preview_hash) || role.is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("Invalid cloud queue source, id, preview hash, or provider role.".into()),
+            ));
+        }
+        self.json(
+            Method::POST,
+            &format!("/comms/content/{source}/{id}/cloud-queue"),
+            Some(serde_json::json!({
+                "preview_hash": preview_hash,
+                "provider_role": role,
+            })),
+            30,
+        )
+        .await
+    }
+
+    pub async fn content_cloud_run_job(
+        &self,
+        job_id: &str,
+    ) -> ShellResult<FeedCloudProcessingState> {
+        let job_id = job_id.trim();
+        if job_id.is_empty() {
+            return Err(ShellError::Refused(
+                400,
+                Some("Cloud job id is required.".into()),
+            ));
+        }
+        self.json(
+            Method::POST,
+            &format!("/comms/content/cloud-jobs/{job_id}/run"),
+            Some(serde_json::json!({})),
+            60,
+        )
+        .await
+    }
+
+    pub async fn set_content_data_class(
+        &self,
+        source: &str,
+        id: &str,
+        data_class: &str,
+        rationale: Option<&str>,
+    ) -> ShellResult<()> {
+        if !valid_cloud_content_id(source, id) {
+            return Err(ShellError::Refused(
+                400,
+                Some("Invalid content source or id.".into()),
+            ));
+        }
+        if !matches!(data_class, "c0" | "c1" | "c2" | "c3") {
+            return Err(ShellError::Refused(
+                400,
+                Some("Data class must be c0, c1, c2, or c3.".into()),
+            ));
+        }
+        let path = match source {
+            "feed" => format!("/comms/feed/{id}/data-class"),
+            "mail" => format!("/comms/triage/{id}/data-class"),
+            _ => unreachable!("validated content source"),
+        };
+        let rationale = rationale.map(str::trim).filter(|r| !r.is_empty());
+        let body = serde_json::json!({
+            "data_class": data_class,
+            "rationale": rationale,
+        });
+        self.send(Method::POST, &path, Some(body), 10)
+            .await
+            .map(drop)
     }
 
     /// Keep (`keeper`), dismiss (`dismissed`) or undo (`new`). The only route that writes those

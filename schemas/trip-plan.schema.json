@@ -647,6 +647,20 @@
             "string",
             "null"
           ]
+        },
+        "rank": {
+          "description": "1-based candidate rank among this trip's stay options, or null when unranked.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

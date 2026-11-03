@@ -1697,6 +1697,14 @@ fn validate_payload(
             .into());
         }
     }
+    if item_type == "stay" {
+        if let Some(rank) = object.get("rank") {
+            let valid = rank.as_i64().is_some_and(|r| r >= 1);
+            if !valid {
+                return Err("a stay's 'rank' must be an integer >= 1, or null to clear it".into());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -2112,10 +2120,26 @@ mod tests {
                 "provider": "booking.com",
                 "url": "https://www.booking.com/hotel/de/example.html",
                 "amount_cents": 12200,
-                "currency": "EUR"
+                "currency": "EUR",
+                "rank": 1
             })
         )
         .is_ok());
+
+        for bad_rank in [json!(0), json!(-1), json!("first")] {
+            let err = validate_payload(
+                "stay",
+                &json!({
+                    "check_in": "2026-09-14",
+                    "check_out": "2026-09-16",
+                    "latitude": 48.1371,
+                    "longitude": 11.5754,
+                    "rank": bad_rank
+                }),
+            )
+            .expect_err("invalid stay rank must be rejected");
+            assert!(err.to_string().contains("rank"), "{err}");
+        }
     }
 
     /// An unmodelled type accepts anything, deliberately: the alternative is

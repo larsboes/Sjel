@@ -17,8 +17,8 @@ use gpui_kit::{
 };
 use sjel_gpui_core::shell::{
     self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
-    FeedContentDetail, FeedDetail, FeedEntry, FeedQualityFlag, FeedQualityRefresh, FeedSurface,
-    ShellError,
+    CloudProviderOption, FeedContentDetail, FeedDetail, FeedEntry, FeedQualityFlag,
+    FeedQualityRefresh, FeedSurface, ShellError,
 };
 
 use crate::clipper::Clips;
@@ -100,6 +100,12 @@ struct CalendarEditForm {
     error: Option<String>,
 }
 
+struct DataClassForm {
+    target: &'static str,
+    rationale: Entity<InputState>,
+    error: Option<String>,
+}
+
 impl Filter {
     fn status(self) -> &'static str {
         match self {
@@ -138,6 +144,12 @@ pub struct Feed {
     cloud_approval_busy: bool,
     cloud_preview_error: Option<ShellError>,
     cloud_preview_scroll: ScrollHandle,
+    cloud_providers: Remote<Vec<CloudProviderOption>>,
+    cloud_job_busy: bool,
+    cloud_job_error: Option<ShellError>,
+    data_class_form: Option<DataClassForm>,
+    data_class_busy: bool,
+    data_class_error: Option<ShellError>,
     cloud_generation: u64,
     /// The last write that failed, shown above the list until the next one.
     pub write_error: Option<ShellError>,
@@ -207,6 +219,12 @@ impl Feed {
             cloud_approval_busy: false,
             cloud_preview_error: None,
             cloud_preview_scroll: ScrollHandle::new(),
+            cloud_providers: Remote::default(),
+            cloud_job_busy: false,
+            cloud_job_error: None,
+            data_class_form: None,
+            data_class_busy: false,
+            data_class_error: None,
             cloud_generation: 0,
             write_error: None,
             review: Remote::default(),
@@ -324,6 +342,16 @@ impl Feed {
         self.cloud_preview_busy = false;
         self.cloud_approval_busy = false;
         self.cloud_preview_error = None;
+        self.cloud_providers = if matches!(source, "feed" | "mail") {
+            Remote::new_loading()
+        } else {
+            Remote::default()
+        };
+        self.cloud_job_busy = false;
+        self.cloud_job_error = None;
+        self.data_class_form = None;
+        self.data_class_busy = false;
+        self.data_class_error = None;
         self.cloud_generation = self.cloud_generation.wrapping_add(1);
         self.focus_next = true;
         cx.notify();
@@ -336,12 +364,19 @@ impl Feed {
             } else {
                 Ok(Vec::new())
             };
-            (content, exports)
+            let providers = if matches!(source, "feed" | "mail") {
+                shell.content_cloud_providers().await
+            } else {
+                Ok(Vec::new())
+            };
+            (content, exports, providers)
         });
         cx.spawn(async move |this, cx| {
-            let (content, exports) = work
-                .await
-                .unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
+            let (content, exports, providers) = work.await.unwrap_or((
+                Err(ShellError::Unreachable),
+                Err(ShellError::Unreachable),
+                Err(ShellError::Unreachable),
+            ));
             let _ = this.update(cx, |view, cx| {
                 if view.content_source == Some(source)
                     && view.reading.as_deref() == Some(expected.as_str())
@@ -349,6 +384,9 @@ impl Feed {
                     view.content_detail.settle(content);
                     if source == "calendar" {
                         view.calendar_exports.settle(exports);
+                    }
+                    if matches!(source, "feed" | "mail") {
+                        view.cloud_providers.settle(providers);
                     }
                     cx.notify();
                 }
@@ -921,6 +959,12 @@ impl Feed {
         self.cloud_preview_busy = false;
         self.cloud_approval_busy = false;
         self.cloud_preview_error = None;
+        self.cloud_providers = Remote::new_loading();
+        self.cloud_job_busy = false;
+        self.cloud_job_error = None;
+        self.data_class_form = None;
+        self.data_class_busy = false;
+        self.data_class_error = None;
         self.cloud_generation = self.cloud_generation.wrapping_add(1);
         self.calendar_exports = Remote::default();
         self.calendar_export_report = Remote::default();
@@ -937,20 +981,24 @@ impl Feed {
         let work = shell::run(async move {
             // Telemetry for the ranking model; a failed write never stops the reader.
             let _ = shell.record_feed_open(&id, first).await;
-            let (detail, content) = futures::join!(
+            let (detail, content, providers) = futures::join!(
                 shell.feed_detail(&id),
                 shell.content_item_detail("feed", &id),
+                shell.content_cloud_providers(),
             );
-            (detail, content)
+            (detail, content, providers)
         });
         cx.spawn(async move |this, cx| {
-            let (detail, content) = work
-                .await
-                .unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
+            let (detail, content, providers) = work.await.unwrap_or((
+                Err(ShellError::Unreachable),
+                Err(ShellError::Unreachable),
+                Err(ShellError::Unreachable),
+            ));
             let _ = this.update(cx, |view, cx| {
                 if view.reading.as_deref() == Some(expected.as_str()) {
                     view.detail.settle(detail);
                     view.content_detail.settle(content);
+                    view.cloud_providers.settle(providers);
                     cx.notify();
                 }
             });
@@ -1257,6 +1305,223 @@ impl Feed {
         self.cloud_preview_error = None;
         self.cloud_generation = self.cloud_generation.wrapping_add(1);
         cx.notify();
+    }
+
+    fn queue_cloud_job(&mut self, provider_role: String, cx: &mut Context<Self>) {
+        if self.cloud_job_busy || self.cloud_preview_busy || self.cloud_approval_busy {
+            return;
+        }
+        let source = self.content_source.unwrap_or("feed");
+        if !matches!(source, "feed" | "mail") {
+            return;
+        }
+        let Some(item) = self.content_detail.value.as_ref() else {
+            return;
+        };
+        let Some(hash) = item.cloud_processing.preview_hash.clone() else {
+            return;
+        };
+        let id = item.id.clone();
+        let expected_source = source;
+        let expected_id = id.clone();
+        let Ok(shell) = self.repo.shell() else { return };
+        self.cloud_job_busy = true;
+        self.cloud_job_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        let generation = self.cloud_generation;
+        cx.notify();
+
+        let work = shell::run(async move {
+            shell
+                .content_cloud_queue(source, &id, &hash, &provider_role)
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.cloud_generation != generation
+                    || view.content_source.unwrap_or("feed") != expected_source
+                    || view.reading.as_deref() != Some(expected_id.as_str())
+                {
+                    return;
+                }
+                view.cloud_job_busy = false;
+                match result {
+                    Ok(state) => {
+                        if let Some(item) = view.content_detail.value.as_mut() {
+                            item.cloud_processing = state;
+                        }
+                    }
+                    Err(error) => view.cloud_job_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn run_cloud_job(&mut self, cx: &mut Context<Self>) {
+        if self.cloud_job_busy || self.cloud_preview_busy || self.cloud_approval_busy {
+            return;
+        }
+        let source = self.content_source.unwrap_or("feed");
+        let Some(item) = self.content_detail.value.as_ref() else {
+            return;
+        };
+        let Some(job_id) = item.cloud_processing.job_id.clone() else {
+            return;
+        };
+        let expected_source = source;
+        let expected_id = item.id.clone();
+        let Ok(shell) = self.repo.shell() else { return };
+        self.cloud_job_busy = true;
+        self.cloud_job_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        let generation = self.cloud_generation;
+        cx.notify();
+
+        let id_for_detail = expected_id.clone();
+        let work = shell::run(async move {
+            let state = shell.content_cloud_run_job(&job_id).await?;
+            let refreshed = shell.content_item_detail(source, &id_for_detail).await.ok();
+            let providers = shell.content_cloud_providers().await.ok();
+            Ok((state, refreshed, providers))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.cloud_generation != generation
+                    || view.content_source.unwrap_or("feed") != expected_source
+                    || view.reading.as_deref() != Some(expected_id.as_str())
+                {
+                    return;
+                }
+                view.cloud_job_busy = false;
+                match result {
+                    Ok((state, refreshed, providers)) => {
+                        if let Some(detail) = refreshed {
+                            view.content_detail.settle(Ok(detail));
+                        } else if let Some(item) = view.content_detail.value.as_mut() {
+                            item.cloud_processing = state;
+                        }
+                        if let Some(providers) = providers {
+                            view.cloud_providers.settle(Ok(providers));
+                        }
+                    }
+                    Err(error) => view.cloud_job_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn select_data_class(
+        &mut self,
+        target: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.data_class_busy {
+            return;
+        }
+        let Some(item) = self.content_detail.value.as_ref() else {
+            return;
+        };
+        let current = item.data_class.value.as_str();
+        if current == target {
+            self.data_class_form = None;
+            cx.notify();
+            return;
+        }
+        if shell::data_class_lowering_needs_rationale(current, target) {
+            let rationale = cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder("Rationale required to lower the data class…")
+            });
+            self.data_class_form = Some(DataClassForm {
+                target,
+                rationale,
+                error: None,
+            });
+            self.data_class_error = None;
+            cx.notify();
+        } else {
+            self.data_class_form = None;
+            self.submit_data_class(target, None, cx);
+        }
+    }
+
+    fn confirm_data_class_lowering(&mut self, cx: &mut Context<Self>) {
+        if self.data_class_busy {
+            return;
+        }
+        let Some(form) = self.data_class_form.as_mut() else {
+            return;
+        };
+        let rationale = form.rationale.read(cx).value().trim().to_owned();
+        if rationale.is_empty() {
+            form.error = Some("Lowering a data class requires a rationale.".to_owned());
+            cx.notify();
+            return;
+        }
+        let target = form.target;
+        form.error = None;
+        self.submit_data_class(target, Some(rationale), cx);
+    }
+
+    fn submit_data_class(
+        &mut self,
+        target: &'static str,
+        rationale: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let source = self.content_source.unwrap_or("feed");
+        if !matches!(source, "feed" | "mail") {
+            return;
+        }
+        let Some(id) = self.reading.clone() else {
+            return;
+        };
+        let Ok(shell) = self.repo.shell() else { return };
+        self.data_class_busy = true;
+        self.data_class_error = None;
+        self.cloud_generation = self.cloud_generation.wrapping_add(1);
+        let generation = self.cloud_generation;
+        cx.notify();
+
+        let expected_source = source;
+        let expected_id = id.clone();
+        let work = shell::run(async move {
+            shell
+                .set_content_data_class(source, &id, target, rationale.as_deref())
+                .await?;
+            shell.content_item_detail(source, &id).await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.cloud_generation != generation
+                    || view.content_source.unwrap_or("feed") != expected_source
+                    || view.reading.as_deref() != Some(expected_id.as_str())
+                {
+                    return;
+                }
+                view.data_class_busy = false;
+                match result {
+                    Ok(detail) => {
+                        view.content_detail.settle(Ok(detail));
+                        view.data_class_form = None;
+                        view.cloud_preview = Remote::default();
+                    }
+                    Err(error) => {
+                        view.data_class_error = Some(error);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn open_calendar_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2239,6 +2504,279 @@ impl Feed {
         } else if self.cloud_preview.loading {
             panel = panel.child(muted("Building a local preview…", palette));
         }
+
+        if item.cloud_processing.status == "staged" {
+            let dispatch = match item.cloud_processing.dispatch_status.as_str() {
+                "queued" => "Queued",
+                "running" => "Running",
+                "succeeded" => "Completed",
+                "failed" => "Failed",
+                _ => "Ready to queue",
+            };
+            let mut job_box = div()
+                .mt_2()
+                .p_3()
+                .rounded(px(6.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_xs()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child("CLOUD JOB"),
+                        )
+                        .child(muted(dispatch, palette)),
+                );
+
+            if let Some(role) = item.cloud_processing.provider_role.as_deref() {
+                job_box = job_box.child(muted(
+                    &format!(
+                        "Provider role: {role} · Calls used: {}",
+                        item.cloud_processing.provider_calls
+                    ),
+                    palette,
+                ));
+            }
+
+            if let Some(providers) = self.cloud_providers.value.as_ref() {
+                if providers.is_empty() {
+                    job_box = job_box.child(muted(
+                        "No reviewed HTTPS cloud roles are configured.",
+                        palette,
+                    ));
+                } else {
+                    let mut role_buttons = div().flex().flex_wrap().gap_2();
+                    for provider in providers {
+                        let role = provider.role.clone();
+                        let remaining = provider
+                            .requests_remaining_today
+                            .map(|r| format!(" · {r} left"))
+                            .unwrap_or_default();
+                        let label = if provider.available {
+                            format!(
+                                "Queue {} ({}{})",
+                                provider.provider_label, provider.data_tier, remaining
+                            )
+                        } else {
+                            format!(
+                                "{} unavailable ({})",
+                                provider.provider_label,
+                                provider
+                                    .unavailable_reason
+                                    .as_deref()
+                                    .unwrap_or("unavailable")
+                            )
+                        };
+                        role_buttons = role_buttons.child(
+                            Button::new(SharedString::from(format!("feed-cloud-queue-{role}")))
+                                .small()
+                                .label(label)
+                                .disabled(!provider.available || self.cloud_job_busy)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.queue_cloud_job(role.clone(), cx);
+                                })),
+                        );
+                    }
+                    job_box = job_box.child(role_buttons);
+                }
+            }
+
+            if item.cloud_processing.job_id.is_some()
+                && item.cloud_processing.dispatch_status != "succeeded"
+            {
+                job_box = job_box.child(
+                    div().flex().child(
+                        Button::new("feed-cloud-job-run")
+                            .small()
+                            .primary()
+                            .label(if self.cloud_job_busy {
+                                "Running cloud job…"
+                            } else {
+                                "Run cloud job"
+                            })
+                            .disabled(self.cloud_job_busy)
+                            .on_click(cx.listener(|view, _, _, cx| view.run_cloud_job(cx))),
+                    ),
+                );
+            }
+
+            if let Some(error) = self
+                .cloud_job_error
+                .as_ref()
+                .map(ToString::to_string)
+                .or_else(|| item.cloud_processing.last_error.clone())
+            {
+                job_box = job_box.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.red))
+                        .child(format!("Cloud job error: {error}")),
+                );
+            }
+
+            if let Some(result) = item.cloud_processing.result.as_ref() {
+                let text =
+                    serde_json::to_string_pretty(result).unwrap_or_else(|_| result.to_string());
+                job_box = job_box.child(section("CLOUD RESULT", text, palette));
+            }
+
+            panel = panel.child(job_box);
+        }
+
+        let current_class = if item.data_class.value.is_empty() {
+            "c1"
+        } else {
+            item.data_class.value.as_str()
+        };
+        let current_label = if item.data_class.label.is_empty() {
+            match current_class {
+                "c0" => "Public",
+                "c1" => "Mine",
+                "c2" => "Others",
+                _ => "Secret",
+            }
+        } else {
+            item.data_class.label.as_str()
+        };
+        let source = self.content_source.unwrap_or("feed");
+        let classes: &[(&'static str, &'static str)] = if source == "mail" {
+            &[
+                ("c1", "Mine · C1"),
+                ("c2", "Others · C2"),
+                ("c3", "Secret · C3"),
+            ]
+        } else {
+            &[
+                ("c0", "Public · C0"),
+                ("c1", "Mine · C1"),
+                ("c2", "Others · C2"),
+                ("c3", "Secret · C3"),
+            ]
+        };
+        let class_buttons = div()
+            .flex()
+            .flex_wrap()
+            .gap_1()
+            .children(classes.iter().map(|&(code, label)| {
+                let selected = current_class == code;
+                Button::new(SharedString::from(format!("feed-data-class-{code}")))
+                    .xsmall()
+                    .label(label)
+                    .when(selected, |b| b.primary())
+                    .when(!selected, |b| b.ghost())
+                    .disabled(self.data_class_busy)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.select_data_class(code, window, cx);
+                    }))
+            }));
+        let mut class_box = div()
+            .mt_2()
+            .p_3()
+            .rounded(px(6.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format!(
+                                "DATA CLASS · {} ({})",
+                                current_label,
+                                current_class.to_uppercase()
+                            )),
+                    )
+                    .child(muted(&item.data_class.method, palette)),
+            )
+            .when(!item.data_class.rationale.trim().is_empty(), |el| {
+                el.child(muted(&item.data_class.rationale, palette))
+            })
+            .child(class_buttons);
+
+        if let Some(form) = self.data_class_form.as_ref() {
+            class_box = class_box.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(muted(
+                        &format!(
+                            "Lowering from {} to {} requires a rationale.",
+                            current_class.to_uppercase(),
+                            form.target.to_uppercase()
+                        ),
+                        palette,
+                    ))
+                    .child(Input::new(&form.rationale).small())
+                    .when_some(form.error.as_deref(), |el, err| {
+                        el.child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.red))
+                                .child(err.to_owned()),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .justify_end()
+                            .gap_2()
+                            .child(
+                                Button::new("feed-data-class-cancel")
+                                    .small()
+                                    .ghost()
+                                    .label("Cancel")
+                                    .disabled(self.data_class_busy)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.data_class_form = None;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("feed-data-class-confirm")
+                                    .small()
+                                    .primary()
+                                    .label(if self.data_class_busy {
+                                        "Saving…"
+                                    } else {
+                                        "Confirm lower class"
+                                    })
+                                    .disabled(self.data_class_busy)
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.confirm_data_class_lowering(cx);
+                                    })),
+                            ),
+                    ),
+            );
+        }
+
+        if let Some(error) = self.data_class_error.as_ref() {
+            class_box = class_box.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.red))
+                    .child(format!("Data class update failed: {error}")),
+            );
+        }
+
+        panel = panel.child(class_box);
         panel.into_any_element()
     }
 

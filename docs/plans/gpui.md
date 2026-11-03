@@ -180,13 +180,18 @@ The former gates are now open checks. None of them ran:
 
 Open work:
 
-- `/feed/[id]`: queueing and running a cloud job (`/comms/content/cloud-jobs`), and lowering a
-  data class, which needs a rationale.
-- `/inventory`: state history and layout impact review.
-- The stay ranking board an unfinished session left in the dashboard. It held one trip's hotels
-  as constants and kept its ranking in memory. A port stores the candidates as `stay` items and
-  needs an item update route in `trips` to hold a rank.
 - Screenshots of the app for the public landing page ([`restructure.md`](restructure.md#4-the-public-page)).
+
+Shipped (awaiting manual check in the running app):
+
+- `/feed/[id]`: queueing and running a cloud job (`/comms/content/cloud-jobs`), and lowering a
+  data class with a required rationale (`apps/gpui/ui/src/feed.rs`).
+- `/inventory`: state history (`GET /inventory/api/items/{id}/state`), state transitions, and layout
+  impact preview (`POST /interior/api/items/{id}/impact`) in the item edit form
+  (`apps/gpui/ui/src/inventory.rs`).
+- Stay ranking board: candidates stored as `stay` items on the trip plan and ranked through
+  `PATCH /trips/api/plans/{plan_id}/items/{item_id}/fields` (`apps/gpui/ui/src/travel/pages.rs`,
+  `apps/gpui/core/src/travel/edit.rs`).
 
 ## 4. Work packages
 
@@ -230,7 +235,7 @@ reads People or Finance records. It uses source, planted fixtures and synthetic 
 | 23 | People writes on macOS: create, edit, delete, facts, field declaration. The phone stays read-only because entities have no phone outbox. | A manual test checks new, edit with a cleared value, add and remove fact, two-press delete, field declaration. Writes refresh the list in place. |
 | 24 | Finance CSV import with mapping preview, candidate review, transfer matching, reclassification, spending review, trip and reimbursement links, balance snapshots. File input uses GPUI `prompt_for_paths`. The app sends file contents, never a path. | A manual test reviews a mapping before import and accepts, rejects and recategorizes candidates. Balances show on the page. |
 | 25 | Scouting and Discover in Feed: sources, scans, saved opportunities, status, calendar promotion with provenance | `/scout` and Discover links stay in GPUI. Scan, save, dismiss, restore and promote work. |
-| 26 | Inventory and wishlist create, edit with the read revision, state changes. Inventory stays the only writer. | Both views refresh without restart. A stale edit is refused and the entry reloads. State history and layout impact preview stay separate work. |
+| 26 | Inventory and wishlist create, edit with the read revision, state changes, state history (`GET /inventory/api/items/{id}/state`), and layout impact preview (`POST /interior/api/items/{id}/impact`). Inventory stays the only writer. | Both views refresh without restart. A stale edit is refused and the entry reloads. State history and layout impact preview render in the edit form. |
 | 27 | Low-fare alerts on the iPhone: rule in `core/src/travel.rs`, unseen `sparpreis-low:` notes through the local notification host, ten-minute throttle, works from saved trips offline | A new low notifies once. A repeat check does not. It works offline. |
 | 28 | Wish comparison. Built: a wish group's candidates carry numeric specs (`inventory specs`, `PUT /api/items/{id}/specs`), the group carries needs (`inventory needs`), and each candidate has dated price observations, one per source and day (`inventory price`, `POST /api/items/{id}/prices`). `GET /api/wish-comparison` reads it all. The daily job [`wish-prices`](../../capabilities/wish-prices/README.md) runs `inventory prices refresh`. It reads only geizhals product pages, never a search page, which geizhals' `robots.txt` disallows. It identifies itself as Sjel, never as a browser, and takes the page's `og:price:amount`. The first price at or below `cost_max_cents` is the alert. The wishlist tab shows, for the selected group, price against a chosen spec with the need and limit lines, a price history, and per candidate the latest price, fit to needs, and € per unit of each spec. The rules are in `core/src/inventory_compare.rs`. A wish group marked as alternatives (`inventory alternatives`, the "Pick one" button) counts only its cheapest member in every budget. | Built: a daily run adds one observation per candidate, and a second run on the same day adds none. A search URL is refused as a source. A price at the limit alerts once (`capabilities/inventory/tests/compare.rs`). Not run: the manual check in the app with three priced candidates. |
 

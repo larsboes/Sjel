@@ -56,6 +56,7 @@ pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<V
         // issues a relevance query per item; a second per-item query would
         // double that over the whole table for no reason.
         let mut verdicts = store.model_verdicts().unwrap_or_default();
+        let mut authenticity = store.triage_authenticity_map().unwrap_or_default();
         Some(
             items
                 .into_iter()
@@ -63,7 +64,8 @@ pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<V
                     let relevance = store.triage_relevance(&item.id).unwrap_or_default();
                     let score = scores.get(&item.id).cloned();
                     let model = verdicts.remove(&item.id);
-                    TriageOut::from_store(item, relevance, score, model)
+                    let assessed = authenticity.remove(&item.id).unwrap_or_default();
+                    TriageOut::from_store(item, relevance, score, model, assessed)
                 })
                 .collect(),
         )
@@ -157,6 +159,9 @@ pub(super) fn run_inbox_sweep(
     let page = google::list_inbox_threads_page(&token, limit, cursor)
         .map_err(|error| error.to_string())?;
     let (people_registry, people_registry_names) = people_registry_receipt();
+    // Read once, before the loop: a sender is new against what the store held
+    // when this pass started.
+    let known_orgs = store.known_sender_orgs(None).ok();
     let mut outcome = SweepOutcome {
         fetched: 0,
         new_count: 0,
@@ -180,7 +185,7 @@ pub(super) fn run_inbox_sweep(
                 continue;
             }
         };
-        let intake = intake::from_thread(meta, &cfg.rules);
+        let intake = intake::from_thread(meta, &cfg.rules, &known_orgs);
         if intake.redaction_count() > 0 {
             outcome.redacted += 1;
         }
@@ -193,7 +198,7 @@ pub(super) fn run_inbox_sweep(
             outcome.event_candidate_ids.push(id.clone());
         }
         if store
-            .upsert_triage_with_rules(&intake.item, &intake.verdict())
+            .upsert_triage_swept(&intake.item, &intake.verdict(), &intake.authenticity)
             .map_err(|error| error.to_string())?
         {
             outcome.new_count += 1;
@@ -1153,6 +1158,31 @@ pub(super) async fn triage_body_handler(
                 "data_class": item.data_class,
                 "subject": item.subject,
                 "body": body,
+            })
+        }))
+    })
+    .await;
+    match result {
+        Ok(Ok(Some(value))) => (StatusCode::OK, Json(value)),
+        Ok(Ok(None)) => error_response(StatusCode::NOT_FOUND, "not found"),
+        Ok(Err(error)) => error_response(StatusCode::BAD_GATEWAY, error),
+        Err(_) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "task failed"),
+    }
+}
+
+/// Both authenticity rungs for one stored mail. The answer carries findings,
+/// which name domains only, so it needs no tier beyond the write gate.
+pub(super) async fn triage_authenticity_handler(Path(id): Path<String>) -> HttpResponse {
+    let result = tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+        let cfg = Config::load();
+        let store = Store::open(&cfg.database_path).map_err(|e| e.to_string())?;
+        let token = google::access_token(&cfg.google_env_path).map_err(|e| e.to_string())?;
+        let assessments = comms::mail_authenticity::audit(&store, &token, &id)?;
+        Ok(assessments.map(|assessments| {
+            json!({
+                "id": id,
+                "verdict": assessments.iter().map(|a| a.verdict).max(),
+                "assessments": assessments,
             })
         }))
     })

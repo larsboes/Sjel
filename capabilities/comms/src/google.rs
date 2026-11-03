@@ -123,6 +123,9 @@ pub struct ThreadMeta {
     pub subject: Option<String>,
     pub date: Option<String>,
     pub list_unsubscribe: Option<String>,
+    /// Every `Authentication-Results` header, in message order.
+    pub authentication_results: Vec<String>,
+    pub reply_to: Option<String>,
     pub snippet: Option<String>,
     pub label_ids: Vec<String>,
     /// internalDate of the latest message, epoch milliseconds.
@@ -348,6 +351,8 @@ pub fn thread_meta_lookup(token: &str, id: &str) -> Result<Option<ThreadMeta>> {
             ("metadataHeaders", "Subject"),
             ("metadataHeaders", "Date"),
             ("metadataHeaders", "List-Unsubscribe"),
+            ("metadataHeaders", "Authentication-Results"),
+            ("metadataHeaders", "Reply-To"),
         ])
         .send()?;
     if is_missing_thread_status(resp.status().as_u16()) {
@@ -385,9 +390,56 @@ pub fn thread_meta_lookup(token: &str, id: &str) -> Result<Option<ThreadMeta>> {
             meta.date = find_header(&payload.headers, "Date").map(str::to_string);
             meta.list_unsubscribe =
                 find_header(&payload.headers, "List-Unsubscribe").map(str::to_string);
+            meta.authentication_results = payload
+                .headers
+                .iter()
+                .filter(|h| h.name.eq_ignore_ascii_case("Authentication-Results"))
+                .map(|h| h.value.clone())
+                .collect();
+            meta.reply_to = find_header(&payload.headers, "Reply-To").map(str::to_string);
         }
     }
     Ok(Some(meta))
+}
+
+/// The latest message's payload under `format=full`. `None` for a missing thread.
+fn latest_payload(token: &str, id: &str) -> Result<Option<MessagePayload>> {
+    std::thread::sleep(THREAD_FETCH_PAUSE);
+    let http = client()?;
+    let response = http
+        .get(format!("{}/{id}", threads_url()))
+        .bearer_auth(token)
+        .query(&[("format", "full")])
+        .send()?;
+    if is_missing_thread_status(response.status().as_u16()) {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        return Err(CommsError::Other(format!(
+            "thread body failed with HTTP {}",
+            response.status()
+        )));
+    }
+    let detail: ThreadDetail = response.json()?;
+    Ok(detail.messages.into_iter().last().and_then(|m| m.payload))
+}
+
+/// The latest message's `text/html` and `text/plain` parts, undecorated, for the
+/// authenticity body rung. Nothing here is persisted.
+pub struct MessageParts {
+    pub html: Option<String>,
+    pub text: Option<String>,
+}
+
+pub fn thread_message_parts(token: &str, id: &str) -> Result<Option<MessageParts>> {
+    let Some(payload) = latest_payload(token, id)? else {
+        return Ok(None);
+    };
+    let cap = |part: String| part.chars().take(BODY_TEXT_CAP * 4).collect::<String>();
+    Ok(Some(MessageParts {
+        html: collect_part(&payload, "text/html").map(cap),
+        text: collect_part(&payload, "text/plain").map(cap),
+    }))
 }
 
 /// Max characters of decoded body text returned. The digest engine caps again
@@ -411,26 +463,10 @@ const BODY_TEXT_CAP: usize = 60_000;
 /// extraction implementation the article path uses. A missing thread is `None`,
 /// the same authoritative-absence signal metadata gives.
 pub fn thread_body_text(token: &str, id: &str) -> Result<Option<String>> {
-    std::thread::sleep(THREAD_FETCH_PAUSE);
-    let http = client()?;
-    let response = http
-        .get(format!("{}/{id}", threads_url()))
-        .bearer_auth(token)
-        .query(&[("format", "full")])
-        .send()?;
-    if is_missing_thread_status(response.status().as_u16()) {
-        return Ok(None);
-    }
-    if !response.status().is_success() {
-        return Err(CommsError::Other(format!(
-            "thread body failed with HTTP {}",
-            response.status()
-        )));
-    }
-    let detail: ThreadDetail = response.json()?;
-    let Some(payload) = detail.messages.last().and_then(|m| m.payload.as_ref()) else {
+    let Some(payload) = latest_payload(token, id)? else {
         return Ok(None);
     };
+    let payload = &payload;
 
     let text = collect_part(payload, "text/plain")
         .or_else(|| {

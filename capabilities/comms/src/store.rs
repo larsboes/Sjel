@@ -1596,6 +1596,38 @@ pub(crate) mod db_tests {
         assert_eq!(row.classification_method, "model", "setup did not take");
     }
 
+    #[test]
+    fn authenticity_is_stored_with_the_swept_row_and_read_back_per_rung() {
+        use crate::mail_authenticity::{Assessment, Finding, Source, Verdict};
+        let store = open_test_store("triage_authenticity_roundtrip");
+        let mut item = mk_triage("thread:auth", "aktiv");
+        item.from_addr = Some("CloudFest <team@em.cloudfest.com>".into());
+        let headers = Assessment::from_findings(
+            Source::Headers,
+            vec![Finding {
+                code: "dmarc_pass".into(),
+                verdict: Verdict::Verified,
+                detail: "DMARC passed for cloudfest.com.".into(),
+            }],
+        );
+        store
+            .upsert_triage_swept(
+                &item,
+                &verdict("aktiv", crate::rules::DecidedBy::Fallback),
+                &headers,
+            )
+            .unwrap();
+        let body = Assessment::from_findings(Source::Body, Vec::new());
+        store.replace_triage_authenticity("thread:auth", &body).unwrap();
+        store.replace_triage_authenticity("thread:auth", &body).unwrap();
+
+        let map = store.triage_authenticity_map().unwrap();
+        let stored = &map["thread:auth"];
+        assert_eq!(stored.len(), 2, "one row per rung, replaced on rewrite");
+        assert!(stored.contains(&headers));
+        assert!(store.known_sender_orgs(None).unwrap().contains("cloudfest.com"));
+    }
+
     /// THE defect this stream had to fix before the model rung could store
     /// anything. The category axis preserved only against the literal `'human'`
     /// (`store/triage.rs`), so the next deterministic sweep reverted a

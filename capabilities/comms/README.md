@@ -160,6 +160,38 @@ message's date, sender and text — while the redaction follows the class. Keepi
 the old text instead would leave one message's date beside an older message's
 subject for the life of the thread.
 
+### Mail authenticity
+
+`src/mail_authenticity.rs` answers one question per mail: does it come from the sender it names?
+Each rung writes one row to `comms_triage_authenticity` with a verdict (`verified`, `unverified`,
+`suspicious` or `failed`) and its findings. `GET /triage` returns the worst verdict over all rungs
+as `authenticity`. A finding names domains only, never a local part, a subject or a body line.
+The verdict is a flag. Sjel moves no mail because of it.
+
+**The header rung runs in every sweep.** The sweep also requests `Authentication-Results` and
+`Reply-To`. The rung trusts only the `Authentication-Results` header that Gmail stamps
+(`mx.google.com`), because a sender can write any other instance of that header (RFC 8601,
+section 5). DMARC that passes for the `From` domain verifies the mail. Without DMARC, a DKIM
+signature or SPF result aligned with the `From` domain verifies it. A DMARC failure fails it. The
+rung also marks these cases:
+
+- A forward (`WG:`, `Fwd:`, `FW:`): the headers prove the forwarder, so the verdict stays
+  `unverified`.
+- A punycode `From` domain.
+- A display name that shows another domain, except from a sending platform such as Substack.
+- A `Reply-To` on another domain, `suspicious` when that domain is a freemail provider.
+- A domain one edit away from, or confusable with, a domain already in the store A first mail from a domain
+  is noted as `new_sender` and changes nothing.
+
+**The body rung runs only on request**: `comms mail audit <thread-id>...` or
+`POST /triage/{id}/authenticity`. It reads the latest message from Gmail, assesses it and drops
+it. It checks link labels that show one domain and go to another, script and IP-address links,
+shortened links and forms. Links through a known click-tracking service count as tracked, not as
+deceptive. For a forward, it reads the quoted `Von:` or `From:` line and checks the links against
+that sender. Because nothing authenticates that line, a forward never reaches `verified`. A
+misleading link label from an authenticated sender is `unverified`, not `suspicious`, because a
+real sender may label its own redirect domain loosely.
+
 ### Collecting on a schedule
 
 `inbox_sweep_minutes` lets comms-server pull proposals unattended. It ships as

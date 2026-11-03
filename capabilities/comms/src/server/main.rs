@@ -29,6 +29,7 @@ use comms::digest;
 use comms::evaluation::{self, EvaluationFactor, FeedEvaluation};
 use comms::google::{self, ThreadAction, ThreadLocation};
 use comms::intake;
+use comms::mail_authenticity;
 use comms::mail_evaluation;
 use comms::mail_events;
 use comms::mail_model::{self, Mode};
@@ -196,6 +197,11 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/triage/{id}/body",
         "One mail's body as text, fetched from Gmail and not stored. Agents at tier zdr or trusted only.",
+    ),
+    r(
+        "POST",
+        "/triage/{id}/authenticity",
+        "Check whether one stored mail comes from the sender it names: headers and links, read fresh from Gmail. Stores and returns the findings, never the body.",
     ),
     r(
         "POST",
@@ -484,6 +490,10 @@ fn build_router(dashboard_origin: &str) -> Router {
         )
         .route("/triage/bulk", post(triage_bulk_handler))
         .route("/triage/{id}/status", post(triage_status_handler))
+        .route(
+            "/triage/{id}/authenticity",
+            post(triage_authenticity_handler),
+        )
         .route("/triage/{id}/stream", post(triage_stream_handler))
         .route("/triage/{id}/data-class", post(triage_data_class_handler))
         .route("/triage/{id}/gmail", post(triage_gmail_handler))
@@ -956,7 +966,7 @@ mod tests {
         let item = triage_fixture("thread-bp");
 
         let unscored =
-            serde_json::to_value(TriageOut::from_store(item.clone(), Vec::new(), None, None))
+            serde_json::to_value(TriageOut::from_store(item.clone(), Vec::new(), None, None, Vec::new()))
                 .unwrap();
         assert!(
             unscored["score_bp"].is_null(),
@@ -969,6 +979,7 @@ mod tests {
             Vec::new(),
             Some((0.6234, "2026-09-05 21:00:00+00:00".into())),
             None,
+            Vec::new(),
         ))
         .unwrap();
         assert_eq!(scored["score_bp"], 6234);

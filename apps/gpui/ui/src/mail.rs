@@ -656,6 +656,9 @@ impl Mail {
         if let Some(top) = m.relevance.first() {
             meta.push(format!("{} {:.2}", top.profile_label, top.score));
         }
+        if let Some(badge) = m.authenticity_badge() {
+            meta.push(badge);
+        }
         if m.waiting {
             meta.push("Waiting".into());
         }
@@ -876,6 +879,7 @@ mod tests {
             gmail_sync_action: None,
             waiting: false,
             relevance: Vec::new(),
+            authenticity: None,
         }
     }
 

@@ -304,6 +304,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
     );
 
     let store = if dry_run { None } else { Some(open_store(cfg)) };
+    let known_orgs = store.as_ref().and_then(|st| st.known_sender_orgs(None).ok());
 
     // stream -> Vec<(from, subject, rationale)>
     let mut grouped: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
@@ -322,7 +323,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         };
         let id = meta.id.clone();
         let from = meta.from_addr.clone().unwrap_or_default();
-        let intake = intake::from_thread(meta, &cfg.rules);
+        let intake = intake::from_thread(meta, &cfg.rules, &known_orgs);
         if intake.event_candidate {
             event_candidate_ids.push(id.clone());
         }
@@ -330,7 +331,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         redacted += usize::from(intake.redaction_count() > 0);
 
         if let Some(st) = &store {
-            match st.upsert_triage_with_rules(&intake.item, &intake.verdict()) {
+            match st.upsert_triage_swept(&intake.item, &intake.verdict(), &intake.authenticity) {
                 Ok(true) => persisted_new += 1,
                 Ok(false) => {}
                 Err(e) => eprintln!("  warning: could not persist {id}: {e}"),
@@ -1161,14 +1162,62 @@ fn guessed_language(candidate: &comms::store::ModelCandidate) -> &'static str {
 /// Explicit only. There is no timer: an unattended local-model drain is what
 /// made this machine hot once already, and the category axis writes a decision
 /// rather than a derived field.
+/// Check whether stored mails come from the sender they name. Reads each body
+/// once from Gmail and stores only the findings.
+fn cmd_mail_audit(args: &[String], cfg: &Config) {
+    let ids = &args[3..];
+    if ids.is_empty() || ids.len() > 50 {
+        eprintln!("error: usage: comms mail audit <thread-id>...  (1 to 50 IDs)");
+        std::process::exit(2);
+    }
+    let store = open_store(cfg);
+    let token = match google::access_token(&cfg.google_env_path) {
+        Ok(token) => token,
+        Err(error) => {
+            eprintln!("error: Gmail token: {error}");
+            std::process::exit(1);
+        }
+    };
+    let mut report = serde_json::Map::new();
+    let mut failed = false;
+    for id in ids {
+        // After one Gmail error the rest are not sent: a rate limit answers
+        // every following call the same way.
+        let value = if failed {
+            serde_json::json!({ "error": "not attempted after an earlier Gmail error" })
+        } else {
+            match comms::mail_authenticity::audit(&store, &token, id) {
+                Ok(Some(assessments)) => serde_json::json!({
+                    "verdict": assessments.iter().map(|a| a.verdict).max(),
+                    "assessments": assessments,
+                }),
+                Ok(None) => {
+                    serde_json::json!({ "error": "not in the triage store or not in Gmail" })
+                }
+                Err(error) => {
+                    failed = true;
+                    serde_json::json!({ "error": error })
+                }
+            }
+        };
+        report.insert(id.clone(), value);
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&report).expect("report serializes")
+    );
+}
+
 fn cmd_mail(args: &[String], cfg: &Config) {
     match args.get(2).map(String::as_str) {
         Some("classify") => {}
         Some("corpus") => return cmd_mail_corpus(args, cfg),
         Some("evidence") => return cmd_mail_evidence(args, cfg),
+        Some("audit") => return cmd_mail_audit(args, cfg),
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
-            eprintln!("              comms mail corpus --out <path> [--force]\n");
+            eprintln!("              comms mail corpus --out <path> [--force]");
+            eprintln!("              comms mail audit <thread-id>...\n");
             std::process::exit(2);
         }
     }

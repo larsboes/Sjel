@@ -22,7 +22,7 @@ impl Store {
     /// itself calls [`Store::upsert_triage_with_rules`], which is the same
     /// transaction plus the `{prefix}_triage_rules` row.
     pub fn upsert_triage(&self, item: &TriageItem) -> Result<bool, Box<dyn std::error::Error>> {
-        self.upsert_triage_inner(item, None)
+        self.upsert_triage_inner(item, None, None)
     }
 
     /// [`Store::upsert_triage`] plus the deterministic verdict that produced
@@ -38,7 +38,18 @@ impl Store {
         item: &TriageItem,
         verdict: &crate::rules::Verdict,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        self.upsert_triage_inner(item, Some(verdict))
+        self.upsert_triage_inner(item, Some(verdict), None)
+    }
+
+    /// What both sweep paths call: the row, its rules verdict and its header
+    /// authenticity, in one transaction.
+    pub fn upsert_triage_swept(
+        &self,
+        item: &TriageItem,
+        verdict: &crate::rules::Verdict,
+        authenticity: &crate::mail_authenticity::Assessment,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        self.upsert_triage_inner(item, Some(verdict), Some(authenticity))
     }
 
     /// One transaction, because two of the columns it writes are governed by a
@@ -50,6 +61,7 @@ impl Store {
         &self,
         item: &TriageItem,
         verdict: Option<&crate::rules::Verdict>,
+        authenticity: Option<&crate::mail_authenticity::Assessment>,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         // Gmail internalDate is epoch-ms; convert to fractional epoch-seconds so
         // the bound param is a plain double for the `unixepoch` modifier below.
@@ -253,8 +265,75 @@ impl Store {
                 ],
             )?;
         }
+        if let Some(assessment) = authenticity {
+            write_authenticity(&transaction, &self.prefix, &item.id, assessment)?;
+        }
         transaction.commit()?;
         Ok(is_new)
+    }
+
+    /// Store one rung's authenticity verdict, replacing that rung's earlier one.
+    pub fn replace_triage_authenticity(
+        &self,
+        triage_id: &str,
+        assessment: &crate::mail_authenticity::Assessment,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = self.conn()?;
+        let transaction = sjel_store::write_transaction(&mut conn)?;
+        write_authenticity(&transaction, &self.prefix, triage_id, assessment)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Every stored authenticity verdict, grouped by thread.
+    pub fn triage_authenticity_map(
+        &self,
+    ) -> Result<
+        std::collections::HashMap<String, Vec<crate::mail_authenticity::Assessment>>,
+        Box<dyn std::error::Error>,
+    > {
+        let conn = self.conn()?;
+        let rows = conn.query_all(
+            &format!(
+                "SELECT triage_id, findings FROM {}_triage_authenticity ORDER BY triage_id, source",
+                self.prefix
+            ),
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?;
+        let mut map: std::collections::HashMap<_, Vec<_>> = std::collections::HashMap::new();
+        for (id, json) in rows {
+            // A row this revision cannot parse is skipped, not guessed at.
+            if let Ok(assessment) = serde_json::from_str(&json) {
+                map.entry(id).or_default().push(assessment);
+            }
+        }
+        Ok(map)
+    }
+
+    /// Organisational domains of every stored sender, for the new-sender and
+    /// look-alike checks.
+    /// `except` leaves one thread out, so re-auditing a mail does not count it
+    /// as its own history.
+    pub fn known_sender_orgs(
+        &self,
+        except: Option<&str>,
+    ) -> Result<std::collections::BTreeSet<String>, Box<dyn std::error::Error>> {
+        let conn = self.conn()?;
+        let senders = conn.query_all(
+            &format!(
+                "SELECT DISTINCT from_addr FROM {}_triage_items
+                 WHERE from_addr IS NOT NULL AND id IS NOT ?1",
+                self.prefix
+            ),
+            params![except],
+            |row| row.get::<_, String>(0),
+        )?;
+        Ok(senders
+            .iter()
+            .filter_map(|from| crate::mail_model::sender_domain(from))
+            .map(|domain| crate::mail_authenticity::org_domain(&domain))
+            .collect())
     }
 
     /// The deterministic verdict stored beside one thread, if a sweep that knew
@@ -1837,6 +1916,37 @@ impl Store {
     }
 }
 
+/// The whole assessment is stored as JSON; `verdict` is a column too so SQL can
+/// filter on it.
+fn write_authenticity(
+    transaction: &rusqlite::Transaction<'_>,
+    prefix: &str,
+    triage_id: &str,
+    assessment: &crate::mail_authenticity::Assessment,
+) -> Result<(), Box<dyn std::error::Error>> {
+    transaction.execute(
+        &format!(
+            "INSERT INTO {prefix}_triage_authenticity
+                (triage_id, source, verdict, findings, revision, assessed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, {now})
+             ON CONFLICT (triage_id, source) DO UPDATE SET
+                 verdict = excluded.verdict,
+                 findings = excluded.findings,
+                 revision = excluded.revision,
+                 assessed_at = excluded.assessed_at",
+            now = sjel_store::NOW
+        ),
+        params![
+            triage_id,
+            assessment.source.as_str(),
+            assessment.verdict.as_str(),
+            serde_json::to_string(assessment)?,
+            &assessment.revision,
+        ],
+    )?;
+    Ok(())
+}
+
 /// Which class the row holds once an upsert lands: the stored one, or the
 /// incoming one.
 ///
@@ -2268,3 +2378,4 @@ mod mail_evaluation_db_tests {
         assert!(!evaluated_at.is_empty(), "the row stamps its own time");
     }
 }
+

@@ -25,6 +25,57 @@ pub struct MailProposal {
     pub waiting: bool,
     #[serde(default)]
     pub relevance: Vec<FeedRelevance>,
+    /// `None` for a thread no authenticity rung has assessed yet.
+    #[serde(default)]
+    pub authenticity: Option<MailAuthenticity>,
+}
+
+/// comms' `AuthenticityOut`: the worst verdict over every rung, and each rung's findings.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct MailAuthenticity {
+    /// `verified`, `unverified`, `suspicious` or `failed`.
+    pub verdict: String,
+    #[serde(default)]
+    pub assessments: Vec<AuthenticityAssessment>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct AuthenticityAssessment {
+    pub source: String,
+    pub verdict: String,
+    #[serde(default)]
+    pub findings: Vec<AuthenticityFinding>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct AuthenticityFinding {
+    pub code: String,
+    pub verdict: String,
+    pub detail: String,
+}
+
+impl MailProposal {
+    /// The row badge: the verdict and the reason behind it. `None` for a verified or
+    /// unassessed mail, so a clean inbox shows no badge at all.
+    pub fn authenticity_badge(&self) -> Option<String> {
+        let auth = self.authenticity.as_ref()?;
+        let label = match auth.verdict.as_str() {
+            "failed" => "Failed check",
+            "suspicious" => "Suspicious",
+            "unverified" => "Unverified",
+            _ => return None,
+        };
+        let reason = auth
+            .assessments
+            .iter()
+            .flat_map(|a| &a.findings)
+            .find(|f| f.verdict == auth.verdict)
+            .map(|f| f.detail.as_str());
+        Some(match reason {
+            Some(reason) => format!("{label}: {reason}"),
+            None => label.to_owned(),
+        })
+    }
 }
 
 /// Category keys as comms stores them, in the order a reader works through them, with labels.
@@ -214,6 +265,7 @@ mod tests {
             gmail_sync_status: None,
             gmail_sync_action: None,
             waiting: false,
+            authenticity: None,
             relevance: score
                 .map(|score| FeedRelevance {
                     profile_label: "p".into(),
@@ -275,5 +327,33 @@ mod tests {
         m.gmail_sync_status = Some("synced".into());
         m.status = "archived".into();
         assert!(!m.actionable());
+    }
+
+    #[test]
+    fn the_badge_names_the_worst_verdict_and_its_reason() {
+        let mut m = mail("a", "issue", "proposed", None, "0");
+        assert_eq!(m.authenticity_badge(), None);
+        let finding = |code: &str, verdict: &str, detail: &str| AuthenticityFinding {
+            code: code.into(),
+            verdict: verdict.into(),
+            detail: detail.into(),
+        };
+        m.authenticity = Some(MailAuthenticity {
+            verdict: "suspicious".into(),
+            assessments: vec![AuthenticityAssessment {
+                source: "headers".into(),
+                verdict: "suspicious".into(),
+                findings: vec![
+                    finding("dmarc_pass", "verified", "DMARC passed."),
+                    finding("reply_to_mismatch", "suspicious", "Replies go to gmail.com."),
+                ],
+            }],
+        });
+        assert_eq!(
+            m.authenticity_badge().as_deref(),
+            Some("Suspicious: Replies go to gmail.com.")
+        );
+        m.authenticity.as_mut().unwrap().verdict = "verified".into();
+        assert_eq!(m.authenticity_badge(), None);
     }
 }

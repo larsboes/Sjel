@@ -16,6 +16,7 @@
 use crate::cloud_derivative::{redact_review_field, redaction_digest, RedactionFinding};
 use crate::content_item::{self, DataClass};
 use crate::google::ThreadMeta;
+use crate::mail_authenticity;
 use crate::people_registry;
 use crate::rules;
 use crate::store::TriageItem;
@@ -94,6 +95,8 @@ pub struct Intake {
     /// the classifier reads `List-Unsubscribe`, a header no column holds.
     /// `Store::upsert_triage_with_rules` persists it beside the row.
     pub decided_by: rules::DecidedBy,
+    /// The header rung's verdict. `Store::upsert_triage_swept` persists it.
+    pub authenticity: mail_authenticity::Assessment,
 }
 
 impl Intake {
@@ -125,8 +128,12 @@ impl Intake {
 
 /// Classify a swept thread and build the row to store, redacting first when
 /// the class demands it.
-pub fn from_thread(meta: ThreadMeta, config_rules: &[rules::Rule]) -> Intake {
-    from_thread_against(meta, config_rules, people_registry::is_known_person)
+pub fn from_thread(
+    meta: ThreadMeta,
+    config_rules: &[rules::Rule],
+    known: &mail_authenticity::KnownOrgs,
+) -> Intake {
+    from_thread_against(meta, config_rules, known, people_registry::is_known_person)
 }
 
 /// `from_thread` with the registry as a parameter, for the same reason
@@ -142,10 +149,21 @@ pub fn from_thread(meta: ThreadMeta, config_rules: &[rules::Rule]) -> Intake {
 fn from_thread_against(
     meta: ThreadMeta,
     config_rules: &[rules::Rule],
+    known: &mail_authenticity::KnownOrgs,
     is_known_person: impl Fn(&str) -> bool,
 ) -> Intake {
     let from = meta.from_addr.clone().unwrap_or_default();
     let subject = meta.subject.clone().unwrap_or_default();
+    // Before redaction: the forward check reads the subject as it arrived.
+    let authenticity = mail_authenticity::assess_headers(
+        &mail_authenticity::HeaderFacts {
+            from: &from,
+            subject: &subject,
+            authentication_results: &meta.authentication_results,
+            reply_to: meta.reply_to.as_deref(),
+        },
+        known,
+    );
     let facts = rules::MailFacts {
         from: &from,
         subject: &subject,
@@ -213,6 +231,7 @@ fn from_thread_against(
         },
         redactions,
         decided_by: verdict.decided_by,
+        authenticity,
     }
 }
 
@@ -266,6 +285,7 @@ mod tests {
             snippet: Some(snippet.into()),
             label_ids: Vec::new(),
             internal_date_ms: Some(1_754_000_000_000),
+            ..Default::default()
         }
     }
 
@@ -279,7 +299,7 @@ mod tests {
     }
 
     fn intake_of(subject: &str, snippet: &str) -> Intake {
-        from_thread_against(meta(subject, snippet), &[], knows_nobody)
+        from_thread_against(meta(subject, snippet), &[], &None, knows_nobody)
     }
 
     /// The case that produced Sjel#129: a live sweep stored a one-time code
@@ -328,6 +348,7 @@ mod tests {
                 "Alice registered",
             ),
             &[],
+            &None,
             knows_alice,
         );
         assert_eq!(intake.item.data_class, "c2");
@@ -394,6 +415,7 @@ mod tests {
         let swept = from_thread_against(
             meta("Re: Mustermann, next week", "She asked about the schedule"),
             &[],
+            &None,
             knows_mustermann,
         );
         assert_eq!(swept.item.data_class, "c2");

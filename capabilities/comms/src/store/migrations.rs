@@ -639,6 +639,18 @@ impl Store {
                 data_class TEXT NOT NULL DEFAULT 'c2' CHECK (data_class = 'c2'),
                 created_at TEXT NOT NULL DEFAULT ({now})
             );
+
+            -- One verdict per thread and rung; `mail_authenticity` owns both vocabularies.
+            CREATE TABLE IF NOT EXISTS {prefix}_triage_authenticity (
+                triage_id TEXT NOT NULL REFERENCES {prefix}_triage_items(id) ON DELETE CASCADE,
+                source TEXT NOT NULL CHECK (source IN ('headers','body','model')),
+                verdict TEXT NOT NULL
+                    CHECK (verdict IN ('verified','unverified','suspicious','failed')),
+                findings TEXT NOT NULL,
+                revision TEXT NOT NULL,
+                assessed_at TEXT NOT NULL DEFAULT ({now}),
+                PRIMARY KEY (triage_id, source)
+            );
             ",
             prefix = prefix,
             now = sjel_store::NOW,

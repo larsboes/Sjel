@@ -326,6 +326,25 @@ pub(super) struct TriageOut {
     /// adds its own field after `waiting_since`, so the two additions are
     /// non-adjacent and git merges both.
     pub(super) model: Option<TriageModelOut>,
+    /// The worst verdict over every rung that assessed this thread, and each
+    /// rung's own findings. `None` for a thread swept before the header rung.
+    pub(super) authenticity: Option<AuthenticityOut>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct AuthenticityOut {
+    pub(super) verdict: mail_authenticity::Verdict,
+    pub(super) assessments: Vec<mail_authenticity::Assessment>,
+}
+
+impl AuthenticityOut {
+    pub(super) fn combine(assessments: Vec<mail_authenticity::Assessment>) -> Option<Self> {
+        let verdict = assessments.iter().map(|a| a.verdict).max()?;
+        Some(Self {
+            verdict,
+            assessments,
+        })
+    }
 }
 
 /// One stored verdict, as the review page reads it.
@@ -380,6 +399,7 @@ impl TriageOut {
         relevance: Vec<RelevanceMatch>,
         score: Option<(f64, String)>,
         model: Option<ModelVerdict>,
+        authenticity: Vec<mail_authenticity::Assessment>,
     ) -> Self {
         Self {
             id: item.id,
@@ -414,6 +434,7 @@ impl TriageOut {
             last_seen: item.last_seen,
             relevance: relevance.into_iter().map(RelevanceOut::from).collect(),
             model: model.map(TriageModelOut::from),
+            authenticity: AuthenticityOut::combine(authenticity),
         }
     }
 }

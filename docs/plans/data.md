@@ -382,6 +382,17 @@ Open items that belong to one capability and to no priority yet.
   class. Deferred until measured need: an NER encoder for the pseudonymizer, Apple Foundation
   Models structured extraction on the phone, and graph linking of trips, receipts and
   transactions.
+- **Mail authenticity.** Decided 2026-11-03: a deterministic header rung, a body rung for links
+  and forwards, and a local-model rung. The verdict is a flag only, and a forward is checked
+  against the sender its quoted header names. Header and body rungs: built
+  (`capabilities/comms/README.md`, "Mail authenticity"). A live sweep of 200 inbox threads
+  gave 194 `verified`, 4 `unverified` (all forwards) and 2 `suspicious`, before the
+  sending-platform exemption. A body audit of 45 mails found one false positive (a brand
+  redirect domain), which the authenticated-sender rule now handles. Open: the model rung, an
+  audit button in the GPUI Mail tab, and a body audit for each newly swept mail, which needs a
+  decision on reading every body in the sweep. Known limits: a fixed list of multi-label
+  suffixes instead of the Public Suffix List, look-alike checks on the first domain label only,
+  and a known-sender set that also holds earlier phishing domains.
 - **Finance investments.** `instruments` holds 13 records and `allocations` is empty. Open: the
   target cohort (active allocations sum to 10,000 bp ±50), tickers where known (a wrong ticker
   prices the wrong company silently), and the `finance-prices` launchd unit.

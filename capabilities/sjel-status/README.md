@@ -1,165 +1,23 @@
-
-
 # sjel-status
 
-What this machine has enabled, what is up, and the one thing allowed to start it.
-Not LifeOS Pulse (`~/.claude/LIFEOS/PULSE/pulse.ts`, port `31337`); see
-"Why this shape: the name and the port" below for why this is a
-separate capability with its own name and port.
+Local status and lifecycle gateway for enabled capabilities. It reads the service registry, aggregates declared health surfaces, exposes runtime state and proxies capability API requests.
 
-It knows no capability names. `tools/capability.sh registry` renders the
-`service.toml` manifests as JSON and this process reads that, so
-`tools/lib/toml.sh` stays the only TOML parser (CONTRIBUTING.md#one-manifest-per-concern) and a port
-literal lives in exactly one file.
+## Why this shape: the manifest is the registry
 
-`src/main.rs` is the composition root for configuration, route assembly, bind,
-and shutdown. The `src/status/` modules own registry/cache invalidation, health
-aggregation and HTTP projection, lifecycle commands, backup contracts/run
-state, and idle-panel reaping. The reaper retains its task handle and stops
-with the server instead of becoming detached process work.
+The process derives capability names, ports and health paths from `service.toml` manifests rather than maintaining a second list. Health reports distinguish an unavailable required autostart service from a normally stopped on-demand service.
 
-## Port and binding
+The gateway binds to loopback. Lifecycle routes can start or stop processes, so reachability is restricted to the local machine; deployment authentication also protects routes when an inbound token is configured.
 
-Default: `8082`. Resolution order: `SJEL_PORT` (exported by tools/service-runner.sh from
-the manifest plus any machine override) — `SJEL_STATUS_PORT` (manual escape hatch when
-running outside the runner) — `8082`.
+## Run
 
-Bound to **127.0.0.1**, not `0.0.0.0`: this process starts and stops the machine's
-capabilities, so it answers to this machine only. The dashboard reaches it through
-Vite's proxy, which runs here too.
-
-The bind was the whole boundary until `libs/sjel-server` grew the inbound gate, and for
-`POST /api/sjel-status/capabilities/:name/start|stop` that was never enough on its own —
-it is process control. When the deployment declares `SJEL_INBOUND_TOKEN_FILE`
-(`schemas/deployment.env.example`), every route here except `/health` asks for that
-token. `/api/sjel-status/routes` then presents it when polling siblings, because a gated
-capability that refused this process would otherwise be reported as not running.
-
-## Endpoints
-
-- `GET /health` — basic liveness check for sjel-status itself
-- `GET /api/sjel-status/health` — `{ok, version, uptime_seconds, capabilities:
-  {<name>: {up, url}}}`, one entry per enabled capability that declares a health
-  surface, each backed by a live 2s-timeout `GET`. `ok` means the **autostart set**
-  is up. Once capabilities start on demand, a stopped on-demand capability is the
-  normal state, not a fault.
-- `/<capability>/...` — proxied to that capability. When the connection is refused, the
-  proxy starts the capability (`service-runner.sh start`, which keeps a maintenance hold) and
-  sends the request once more.
-- `GET /api/sjel-status/events` — server-sent events, `snapshot` frames carrying `health` and
-  `agent` in one object. A frame is sent when the current one is read and then only when the
-  answers change, so a client that follows this stream reads neither endpoint above on a timer.
-  The fingerprint leaves `uptime_seconds` out; a reader adds its own elapsed time to it. One
-  watcher serves every connection and probes only while one is open.
-- `GET /api/sjel-status/capabilities` — the registry plus live state: kind, scope,
-  port, `requires`, `up` (`null` when nothing is declared to poll, meaning unknown
-  rather than down) and `panel_url` for a capability that serves its own UI.
-- `GET /api/sjel-status/storage-history` — one sample per hour of the disk, oldest
-  first, so growth has a line to draw, plus every name that is missing now and has been
-  missing in every sample since. Kept 90 days. The sampler behind it is described below.
-There was a `GET /api/sjel-status/upstreams` here until 2026-08-28. It shelled out to
-`tools/upstream-checker --json --offline` and served a per-entry `ok`/`na`/`warn`/`fail`
-status. PRD Q41 retired that script; the status field *was* its verdict, so recomputing it
-in this process would rebuild the plumbing the item deleted. Dependabot
-(`.github/dependabot.yml`) reports drift on GitHub now, and the verdict half of that feed was never the checker's anyway —
-`/self` already carries it, straight from `upstreams.toml` via `tools/self generate`.
-- `POST /api/sjel-status/capabilities/:name/start` — bring one up (via
-  `service-runner.sh resume`, which also lifts a maintenance hold)
-- `POST /api/sjel-status/capabilities/:name/stop` — take one down and hold it
-- `GET /api/sjel-status/runtime` — this device's selected/effective runtime profile, power source and saved exceptions
-- `POST /api/sjel-status/runtime` — save `selection` (Auto, Normal, On the go) or the `allow` category set; optional `expected_revision` rejects stale updates with 409
-- `GET /api/sjel-status/search?q=` — the app finder's server results: calendar events, people, documents, inventory items, subscriptions, trips and mail (subject and sender, never the body), read from the shared database, every word required, five per source. Each hit carries a `sjel://` link the app already opens (`src/status/search.rs`).
-- `GET /api/sjel-status/now` — aggregated "now" snapshot for menu bar and ambient surfaces: system health, pending agent approvals, current/next/upcoming calendar entries, active/next trips, and warnings
-- `GET /api/sjel-status/mirror/manifest` — what the read-only copy for another device holds, when it was built, its digest, and how many foreign keys the selection broke. The cheap half of a fetch, so a device decides before shipping a whole database.
-- `GET /api/sjel-status/mirror` — the copy itself, served with range support so a device can resume. `sjel mirror build` decides what it contains; this surface follows the manifest's `path` rather than re-deriving it.
-- `POST /api/sjel-status/mirror/rebuild` — build a fresh copy now and answer the new manifest, for a device whose copy is older than it wants. No body: the caller asks for a rebuild, never for the table set. A second request while one is running is a 409.
-
-Runtime controls are owner-only, like the other shell controls. The owned power monitor samples
-at startup and every 30 seconds; workers reread the policy without restarting capabilities.
-A new installation stays Normal until a selection is saved. See
-[`sjel-runtime`](../../libs/runtime/README.md) for admission, exception and deferral behavior.
-
-### The disk's history, and why this capability writes it
-
-`tools/storage report` is a point measurement; it cannot answer "is it growing". The
-record lives here because `host-watch` — which already reads that report hourly —
-states its own contract as "most runs print one line and write nothing, and that silence
-is the product", and this is the one always-up surface. `src/storage_history.rs` owns
-`storage_samples`, `storage_absent` and `storage_classes` tables under this capability's
-prefix in the shared database and samples on its own hourly timer; the endpoint above
-reads them back. The hour is the primary key, so a restart inside an hour replaces its row
-rather than adding a second — a trend that rose on every restart would be an artefact of
-restarts, not a measurement. The wait between samples is anchored on the next wall-clock `:00`,
-not on a monotonic hour: a monotonic timer on macOS does not advance while the system is asleep,
-so a laptop that sleeps nightly would silently lose hour keys.
-
-`storage_classes` holds one row per class per hour, capturing each class size trend across
-the 90-day retention window. A second table, `storage_absent`, holds one row per gone name
-per hour, written in the same transaction as the sample it belongs to. `report` answers "is this
-path there"; only the record can answer "since when", and the names are the policy's own three lists —
-a class, a protected path, a service — so a reader never has to guess which one a name came from. The endpoint
-returns the run each name is still in, with `capped` marking a run that reaches the oldest
-sample kept: there the date is a floor rather than the hour the name went, and the panel says
-"or earlier" instead of printing a day that would read as a death. A run breaks on a sample in
-which the name was present and on nothing else, because a power cut is not evidence that a path
-came back.
-
-See `tools/storage/README.md` for the measurement itself.
-
-### Why a process-control endpoint is safe here, and when it stops being safe
-
-The only reachable names are the ones the registry already lists, so a request names
-a **capability**, never a command. `service-runner.sh` receives a name and looks up
-what to run itself. That plus the 127.0.0.1 bind is the whole security model, and it
-is sufficient only while the port stays local. Exposing this over Tailscale means
-adding real authentication first: "reachable from the phone" and "unauthenticated
-process control" cannot both be true.
-
-## Running
-
-Needs `SJEL_ROOT` set, because it shells out to the repo's own tools and its own path is
-`target/release/`, which locates a build output rather than the checkout. `tools/lib/paths.sh`
-exports it, so the normal path needs nothing:
-
-```bash
+```sh
 tools/service-runner.sh start sjel-status
 ```
 
-## Why this shape: the name and the port
-
-Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
-thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
-
-**Decision:** the health-aggregation capability is `capabilities/sjel-status`,
-binary `sjel-status`, default port `8082`. Not `pulse`, not `31337`.
-
-**Why:** the shelved bulk-port attempt preserved in Git history named its capability `pulse` and
-defaulted to port `31337` — both already belong to the real LifeOS
-Life Dashboard (`~/.claude/LIFEOS/PULSE/pulse.ts`, documented everywhere in LifeOS's own
-`CLAUDE.md`/system prompt as canonical). Two unrelated systems claiming the same name and port
-is a collision waiting to happen the moment both run at once, and it was never a deliberate
-migration — the shelved capability was three stub routes returning hardcoded static data
-(`uptime_seconds: 0`, a fake `{"pulse": "up"}` capabilities map), not a real port of LifeOS
-Pulse's actual functionality. `capabilities/sjel-status` replaces it with real aggregation:
-live `GET /health` calls out to every enabled capability with a health surface — read from
-the registry, not a hand-list — reporting actual reachability, not a canned response. `8082`
-was the next free, unclaimed port (`8080` belongs to vaultwarden, and scouting's default is
-`8084`).
-
-**Forecloses:** no Sjel capability may claim port `31337` or the name "Pulse"/"pulse" — that
-identity belongs to LifeOS, whether or not any machine still runs it. A reader who wants
-LifeOS Pulse data adds it as an upstream, not as a route on this capability.
+The live HTTP contract is available at `GET /api/sjel-status/routes`.
 
 ## Considered and declined
 
-- **A `/*path` catch-all 404 handler** — the shelved first attempt had one
-  returning a hint JSON payload. Axum's default 404 already covers this;
-  the handler added nothing a real client needs. Dropped.
-- **Parsing `service.toml` in Rust** — would have meant a second TOML parser
-  against CONTRIBUTING.md#one-manifest-per-concern, and a `toml` crate as a new upstream for facts the shell
-  already reads. The registry subcommand emits JSON instead; `serde_json` was
-  already a dependency.
-- ~~**A generic capability list read from config**~~ — declined on 2026-07-18 while
-  only two fixed targets needed aggregating. Additional capability consumers and the
-  dashboard proxy met the decision's own flip condition, so the hardcoded
-  transit/scouting literals are gone.
+- **No duplicate capability registry.** The generated registry output is the source for names and service metadata.
+- **No remote unauthenticated process control.** A broader network bind requires an authentication boundary appropriate to that reach.
+- **No upstream dependency status endpoint.** Dependency verdicts have their own registry and maintenance surface.

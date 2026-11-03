@@ -1,90 +1,27 @@
 # inventory
 
-What the household owns, wants and gave away: furniture, gear and clothes in one table.
-`interior` reads the rows to check layouts, and `trips` reads them over HTTP for packing lists.
-It starts at boot (`autostart`), because packing lists need it while `interior` is on-demand.
+Household inventory for owned, wanted and retired items. Interior reads item attributes for layout checks, and Trips reads gear for packing lists.
 
+## Why this shape: state is history
+
+An item is separate from its state changes. State transitions are appended, so a purchase or retirement does not erase what the item used to be. A bought wish becomes an owned record rather than rewriting the original wish.
+
+Wish groups keep alternatives and shared needs together. Their comparison uses explicit numeric specifications and dated price observations rather than product descriptions alone.
+
+Mail-derived evidence is staged as a proposal. It cannot change inventory until reviewed, and C2 proposals cannot create item records.
+
+## Run
+
+```sh
+inventory inventory
+inventory categories
+inventory add <url> [--label <label>]
+inventory import [--force]
 ```
-inventory inventory                 owned, wanted and gone, with prices and the open total
-inventory categories                the categories in use, and spellings that collide
-inventory add <url> [--label X]     a shared link becomes a wanted row
-                                    [--price 79,90] [--category kleidung] [--kind piece]
-                                    [--size M] [--color white] [--seasons winter,spring] [--id x]
-inventory import [--force]          inventory/*.toml into the tables
-inventory serve                     HTTP API on port 8101
-```
 
-The dashboard pages are `/inventory` and `/wishlist`.
+The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. Its live HTTP contract is available at `GET /routes`.
 
-## Tables
+## Considered and declined
 
-| Table | What |
-|---|---|
-| `inventory_item` | one row per thing: sizes in cm, money in cents, clothing and gear fields |
-| `inventory_item_state` | `owned`, `wanted` or `gone`, appended over time; a bought wish is a second row |
-| `inventory_sync_operation` | operation ids already applied from a phone, so a retry is not applied twice |
-| `inventory_mail_proposal` | source-linked mail evidence and reviewed decisions |
-| `inventory_wish_spec` | a wish's numeric specs, compared within its wish group |
-| `inventory_wish_group_need` | a wish group's needs, in the same keys |
-| `inventory_price_observation` | dated prices per wish, one per source and day, the first at or below the limit marked as the alert |
-
-`kind` is `piece` (a thing), `slot` (a need with target sizes and no product yet) or `gear`.
-
-## The English schema
-
-Column and JSON names are English (`width`, `price_cents`, `size`, `seasons`, `notes`, …). A store
-written with the earlier German names is renamed in place the first time the new code opens it,
-inside one transaction, and German vocabulary in stored values is translated (`nord` becomes
-`north`, `pflicht` becomes `required`). `store::LEGACY_FIELDS` lists every rename. German names
-are still accepted on input: in `PUT`, `PATCH`, a phone's queued sync, and the overlay TOML files.
-
-Run only binaries built from the same commit as the store. An older binary would add empty
-German columns next to the renamed ones.
-
-## HTTP
-
-| Route | What |
-|---|---|
-| `GET /api/inventory` | every entry with its state |
-| `GET /api/wishlist` | the open wishlist, its low and high totals, and the months it costs |
-| `GET /api/wish-groups` | wish groups sharing a constraint, with members and cost totals |
-| `POST /api/wish-groups` | create or update a wish group with its title and constraint; `alternatives: true` makes budgets count only its cheapest member |
-| `PUT /api/wish-groups/{id}/items` | set the item members of a wish group |
-| `DELETE /api/wish-groups/{id}` | delete a wish group |
-| `PUT /api/wish-groups/{id}/needs` | replace a group's needs: numeric keys its candidates are compared to |
-| `PUT /api/items/{id}/specs` | replace a wish's numeric specs (`memory_gb`, `bandwidth_gb_s`) |
-| `POST /api/items/{id}/prices` | record a dated price; one per source and day, the first at or below `cost_max_cents` alerts |
-| `GET /api/wish-comparison` | every group with its needs, and its candidates' specs and price histories |
-| `POST /api/items` | create an entry; `state` is required |
-| `PUT /api/items/{id}` | replace an entry |
-| `PATCH /api/items/{id}` | change the named fields; `null` clears one, an unknown field is refused |
-| `GET`, `POST /api/items/{id}/state` | the state history, or append a change |
-| `POST /api/sync` | signed mutations from a paired phone |
-| `GET`, `POST /api/mail-proposals` | list or stage mail evidence without changing an item |
-| `POST /api/mail-proposals/withdraw` | delete undecided and rejected proposals of one mail thread, `{"source_prefix":"mail:v1:<thread>:"}` |
-| `POST /api/mail-proposals/{id}/decision` | reject, create a delivered item, or match an existing owned item after review |
-| `GET /api/items/{id}/mail-match-snapshot` | read the item and state revisions needed for a reviewed match |
-| `GET /api/item-refs/{reference}` | resolve a typed item reference and current state |
-
-Item field writes raise the row's `revision` and return it as `ETag`. A client that sends the revision
-it read as `If-Match` gets `409` with the current row when another device wrote in between, and
-nothing is overwritten.
-
-Mail proposals retain a source reference and a short excerpt. A reviewed delivery can create an
-owned item; a match checks both item and state revisions. Inventory items do not retain a data
-class, so a `c2` proposal cannot create an item. It can be rejected or matched without changing
-the item. Proposal routes are closed to agent tokens.
-
-## Imports and the vault
-
-`inventory/*.toml` in the overlay (`data/inventory/inventory`, else `data/interior/inventory`) was
-the source of the first import. Since then the tables are the truth: `import` refuses to run over
-existing rows without `--force`.
-
-A slot's prose is in its row: `target`, `reason`, `notes` and `open_question`. Until 2026-10-20
-`vault-writeback` also gave every slot a note under the vault's `Atlas/Interior/`, seeded once
-from those columns and then maintained only in a marked region. On 2026-10-20 all 18 notes still
-matched their rows, so the notes went to the vault's `Archive/` and the writeback was removed
-([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Nothing in
-this capability writes the vault.
-
+- **No direct mail-to-inventory mutation.** Mail evidence requires review before it creates or matches an item.
+- **No vault write-back.** Inventory rows are the source of truth; the capability does not maintain a second editable copy in the vault.

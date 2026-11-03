@@ -16,6 +16,32 @@ pub use details::{save_details, saved_details, Details, Item, SavedDetails};
 pub use navigation::{TravelRoute, TripSection};
 pub use places::PlaceCoords;
 
+/// What `POST /trips/api/plans/{id}/resolve-places` returns.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ResolvePlacesResult {
+    pub plan_id: String,
+    pub updated_at: String,
+    pub resolved: Vec<ResolvedPlace>,
+    pub unresolved: Vec<UnresolvedPlace>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ResolvedPlace {
+    pub place_id: String,
+    pub name: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct UnresolvedPlace {
+    pub place_id: String,
+    pub name: String,
+    pub reason: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Place {
     pub name: String,
@@ -274,6 +300,27 @@ impl Source {
                 .await
                 .map_err(|error| error.to_string()),
             Self::Device(_) => Err("Trip suggestions can only be adopted on the Mac.".into()),
+        }
+    }
+
+    /// Asks the trips capability to resolve coordinates for any place on the plan that carries none.
+    /// If `refresh` is true, every place is looked up again, replacing any stored coordinate.
+    pub async fn resolve_places(
+        &self,
+        id: &str,
+        refresh: bool,
+    ) -> Result<ResolvePlacesResult, String> {
+        let path = plan_path(id, &["resolve-places"])?;
+        match self {
+            Self::Shell(shell) => shell
+                .trip_resolve_places(id, refresh)
+                .await
+                .map_err(|error| error.to_string()),
+            Self::Device(client) => {
+                let body = serde_json::to_vec(&serde_json::json!({ "refresh": refresh }))
+                    .map_err(|e| e.to_string())?;
+                client.post(&path, &body).await
+            }
         }
     }
 }
@@ -915,5 +962,43 @@ mod tests {
         // A second pass has nothing left to do.
         assert_eq!(plan.fill_coordinates(&coords), 0);
         assert_eq!(plan.connections().len(), 1);
+    }
+
+    #[test]
+    fn resolve_places_result_parses_wire_shape() {
+        let payload = serde_json::json!({
+            "plan_id": "trip:plan:123",
+            "updated_at": "1730650000",
+            "resolved": [
+                {
+                    "place_id": "place:bonn",
+                    "name": "Bonn",
+                    "latitude": 50.735,
+                    "longitude": 7.102,
+                    "source": "registry"
+                }
+            ],
+            "unresolved": [
+                {
+                    "place_id": "",
+                    "name": "Atlantis",
+                    "reason": "geocoder returned no match"
+                }
+            ]
+        });
+        let result: ResolvePlacesResult = serde_json::from_value(payload).unwrap();
+        assert_eq!(result.plan_id, "trip:plan:123");
+        assert_eq!(result.updated_at, "1730650000");
+        assert_eq!(result.resolved.len(), 1);
+        assert_eq!(result.resolved[0].name, "Bonn");
+        assert_eq!(result.resolved[0].latitude, 50.735);
+        assert_eq!(result.resolved[0].source.as_deref(), Some("registry"));
+        assert_eq!(result.unresolved.len(), 1);
+        assert_eq!(result.unresolved[0].name, "Atlantis");
+
+        assert_eq!(
+            plan_path("trip:plan:123", &["resolve-places"]).unwrap(),
+            "/trips/api/plans/trip:plan:123/resolve-places"
+        );
     }
 }

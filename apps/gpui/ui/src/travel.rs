@@ -654,12 +654,34 @@ impl Travel {
         markers
     }
 
+    /// Explicit request (from map or trip page) to resolve missing coordinates or refresh all.
+    pub fn resolve_current_plan(&mut self, refresh: bool, cx: &mut Context<Self>) {
+        if self.resolving {
+            return;
+        }
+        if let Some(plan) = self.current() {
+            let keys: Vec<_> = plan
+                .places()
+                .filter(|p| refresh || p.coordinate().is_none())
+                .map(travel::places::key)
+                .collect();
+            for key in keys {
+                self.asked.remove(&key);
+            }
+        }
+        self.resolve_coordinates_internal(refresh, cx);
+    }
+
     /// Resolves the selected trip's typed places through `places` and keeps the answer.
     ///
     /// Only names nothing has answered yet are asked for, so opening the same trip twice
     /// costs one file read and no network. One geocoder refusal is not an error state: the
     /// stop keeps reading "Coordinates not available", which is the truth about it.
     fn resolve_coordinates(&mut self, cx: &mut Context<Self>) {
+        self.resolve_coordinates_internal(false, cx);
+    }
+
+    fn resolve_coordinates_internal(&mut self, refresh: bool, cx: &mut Context<Self>) {
         if self.resolving {
             self.resolve_again = true;
             return;
@@ -673,8 +695,7 @@ impl Travel {
         let mut seen = std::collections::HashSet::new();
         let pending: Vec<(String, String)> = plan
             .places()
-            .filter(|place| place.coordinate().is_none())
-            .filter(|place| self.coords.get(place).is_none())
+            .filter(|place| refresh || (place.coordinate().is_none() && self.coords.get(place).is_none()))
             .filter_map(|place| {
                 let key = travel::places::key(place);
                 (!self.asked.contains(&key) && seen.insert(key.clone()))
@@ -685,8 +706,46 @@ impl Travel {
             return;
         }
         self.resolving = true;
+        let plan_id = plan.id.clone();
         cx.spawn(async move |this, cx| {
-            let answers = travel::places::resolve(source, pending).await;
+            // First ask the trips capability (POST /api/plans/{id}/resolve-places).
+            // It searches the registry first, geocoder second, and stamps SQLite trips.db.
+            let trips_source = source.clone();
+            let trips_id = plan_id.clone();
+            let capability_result = shell::run(async move {
+                trips_source.resolve_places(&trips_id, refresh).await
+            })
+            .await;
+
+            let (answers, stamped) = match capability_result {
+                Some(Ok(report)) => {
+                    let mut ans = Vec::new();
+                    for r in report.resolved {
+                        let key = travel::places::key(&Place {
+                            name: r.name,
+                            address: None,
+                            latitude: None,
+                            longitude: None,
+                        });
+                        ans.push((key, Ok(Coordinate::new(r.latitude, r.longitude))));
+                    }
+                    for u in report.unresolved {
+                        let key = travel::places::key(&Place {
+                            name: u.name,
+                            address: None,
+                            latitude: None,
+                            longitude: None,
+                        });
+                        ans.push((key, Ok(None)));
+                    }
+                    (ans, true)
+                }
+                _ => {
+                    let ans = travel::places::resolve(source, pending).await;
+                    (ans, false)
+                }
+            };
+
             let saved = this.update(cx, |view, cx| {
                 view.resolving = false;
                 let mut filled = false;
@@ -721,6 +780,9 @@ impl Travel {
                 // one that was already on screen keeps the view the operator chose.
                 let first_frame = view.has_no_known_stop();
                 view.fill_known_coordinates();
+                if stamped {
+                    view.read_details(plan_id, true, cx);
+                }
                 if matches!(view.route, TravelRoute::Map) {
                     view.presence_loaded = false;
                     view.load_people_presence(cx, false);

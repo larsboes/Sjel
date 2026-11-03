@@ -1057,23 +1057,34 @@ impl Travel {
             );
         map = map.child(controls);
         if no_locations && self.map_error.is_none() {
-            map = map.child(
-                div()
-                    .absolute()
-                    .top(px(56.))
-                    .left(px(8.))
-                    .px_2()
-                    .py_1()
-                    .rounded(px(6.))
-                    .bg(rgb(palette.surface >> 8))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(if self.resolving {
-                        "Locating stops…"
-                    } else {
-                        "World view · no trip stops located"
-                    }),
-            );
+            let mut overlay = div()
+                .absolute()
+                .top(px(56.))
+                .left(px(8.))
+                .flex()
+                .items_center()
+                .gap_2()
+                .px_2()
+                .py_1()
+                .rounded(px(6.))
+                .bg(rgb(palette.surface >> 8))
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(if self.resolving {
+                    "Locating stops…"
+                } else {
+                    "World view · no trip stops located"
+                });
+            if !self.resolving && self.current().is_some() {
+                overlay = overlay.child(
+                    self.button("map-locate-stops")
+                        .label("Locate stops")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.resolve_current_plan(false, cx)
+                        })),
+                );
+            }
+            map = map.child(overlay);
         }
         if (self.map_loading && !self.has_imagery()) || (!self.uses_vector_map() && !self.online) {
             let status = if self.map_loading && !self.has_imagery() {

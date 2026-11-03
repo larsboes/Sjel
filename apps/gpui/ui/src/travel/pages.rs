@@ -645,6 +645,7 @@ impl Travel {
             .unwrap_or_default();
 
         page = page.child(self.readiness_strip(plan, &items));
+        let has_unlocated = plan.places().any(|p| p.coordinate().is_none());
         page = page
             .child(div().text_sm().child(format!("From {}", plan.origin.name)))
             .child(div().text_sm().child(format!(
@@ -666,7 +667,35 @@ impl Travel {
                     )
                     .child(self.button("open-map").label("View map").on_click(
                         cx.listener(|view, _, _, cx| view.open_section(TripSection::Map, cx)),
-                    )),
+                    ))
+                    .when(has_unlocated, |bar| {
+                        bar.child(
+                            self.button("resolve-plan-places")
+                                .label(if self.resolving {
+                                    "Locating stops…"
+                                } else {
+                                    "Locate stops"
+                                })
+                                .disabled(self.resolving)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.resolve_current_plan(false, cx)
+                                })),
+                        )
+                    })
+                    .when(!has_unlocated, |bar| {
+                        bar.child(
+                            self.button("refresh-plan-places")
+                                .label(if self.resolving {
+                                    "Locating stops…"
+                                } else {
+                                    "Refresh coordinates"
+                                })
+                                .disabled(self.resolving)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.resolve_current_plan(true, cx)
+                                })),
+                        )
+                    }),
             );
         page = page.child(self.trip_calendar_timeline());
         page = page.child(self.who_is_around(plan, &items));
@@ -1047,9 +1076,23 @@ impl Travel {
         } else {
             row = row.child(
                 div()
-                    .text_xs()
-                    .text_color(rgb(self.palette.muted))
-                    .child("Coordinates not available"),
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(self.palette.muted))
+                            .child("Coordinates not available"),
+                    )
+                    .child(
+                        self.button(gpui::SharedString::from(format!("place-locate-{index}")))
+                            .label(if self.resolving { "Locating…" } else { "Locate" })
+                            .disabled(self.resolving)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.resolve_current_plan(false, cx)
+                            })),
+                    ),
             );
         }
         row.into_any_element()

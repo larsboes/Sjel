@@ -120,13 +120,13 @@ the Mac's last sync time.
    origin, destinations and stages, so the map, climate, distance joins and the accommodation
    anchor all have one. Rule 2 below draws nothing for an upcoming trip without it: before this
    the live travel layer held eight trip-destination points, all `phase: past`, and no upcoming
-   trip at all. Still open: **the map and the trip page do not ask for one.** A destination that
-   stayed unlocated — places down during the save, or a name the geocoder does not know — needs
-   `POST /api/plans/:id/resolve-places` called for it, and no client calls it yet. Also open:
-   **the past plans still carry no coordinates** (several do, from an older import). Backfilling
-   them means resolving names like `Valencia, Spain → Nice, France` and `Hamburg, Frankfurt`,
-   which are two places in one string: a single geocoded point for those is worse than a null,
-   so the backfill needs a decision about compound names before it runs.
+   trip at all. Shipped (client wiring): GPUI calls `POST /trips/api/plans/:id/resolve-places`
+   when a trip opens with unlocated stops, stamps the stored plan, and exposes "Locate stops" on
+   the map overlay and trip page, plus "Refresh coordinates" for repairs. Still open: **the past
+   plans still carry no coordinates** (several do, from an older import). Backfilling them means
+   resolving names like `Valencia, Spain → Nice, France` and `Hamburg, Frankfurt`, which are two
+   places in one string: a single geocoded point for those is worse than a null, so the backfill
+   needs a decision about compound names before it runs.
 1. **Itinerary timeline.** One card per day. Each stage shows its mode, times and the connection
    time to the next stage. Trip details include linked events and nearby calendar events, each
    with its full start–end time range and any extracted programme details; nearby matches stay

@@ -2448,6 +2448,22 @@ impl Shell {
         Ok(())
     }
 
+    /// Asks trips to resolve coordinates for missing places on a plan, or refresh all coordinates.
+    pub async fn trip_resolve_places(
+        &self,
+        id: &str,
+        refresh: bool,
+    ) -> ShellResult<crate::travel::ResolvePlacesResult> {
+        let path = crate::travel::plan_path(id, &["resolve-places"]).map_err(refused)?;
+        self.json(
+            Method::POST,
+            &path,
+            Some(serde_json::json!({ "refresh": refresh })),
+            30,
+        )
+        .await
+    }
+
     /// Calendar mirrors stages and booking deadlines only when asked. Best effort: the trip write
     /// already succeeded.
     async fn trip_calendar_sync(&self, plan: &str) {

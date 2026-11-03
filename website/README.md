@@ -13,8 +13,8 @@ Nothing on it runs a capability, and nothing is fetched while a page renders.
 ## Build and preview
 
 ```sh
-website/build                      # writes site/, then checks links and the payload
-cd site && python3 -m http.server  # preview at http://127.0.0.1:8000
+website/build                      # writes site/, checks links and the payload
+website/build --serve              # builds and serves at http://127.0.0.1:8000
 ```
 
 `website/build` fails when an internal link or `#anchor` has no target (`scripts/links.ts`) or

@@ -18,10 +18,12 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SJEL_ROOT="$(cd "$_here/.." && pwd)"
 
 OUT="$SJEL_ROOT/site"
+SERVE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
-    -h|--help) echo "usage: website/build [--out <dir>]"; exit 0 ;;
+    --serve) SERVE=1; shift ;;
+    -h|--help) echo "usage: website/build [--out <dir>] [--serve]"; exit 0 ;;
     *) echo "website/build: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
@@ -43,3 +45,7 @@ bun "$_here/scripts/links.ts" "$OUT"
 "$SJEL_ROOT/tools/check-site-payload.sh" "$OUT"
 
 echo "website/build: $(du -sh "$OUT" | cut -f1) in $OUT"
+
+if [ "$SERVE" -eq 1 ]; then
+  exec bun "$_here/scripts/serve.ts" "$OUT" 8000
+fi

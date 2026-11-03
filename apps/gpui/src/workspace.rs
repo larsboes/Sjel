@@ -1783,10 +1783,28 @@ impl Workspace {
     }
 
     fn on_ui_zoom_in(&mut self, _: &UiZoomIn, _: &mut Window, cx: &mut Context<Self>) {
+        if self.page == Page::Travel {
+            self.travel
+                .update(cx, |travel, cx| travel.zoom_by(1., None, cx));
+            return;
+        }
+        if self.page == Page::Documents {
+            self.documents.update(cx, |docs, cx| docs.zoom_in(cx));
+            return;
+        }
         self.step_ui_zoom(1, cx);
     }
 
     fn on_ui_zoom_out(&mut self, _: &UiZoomOut, _: &mut Window, cx: &mut Context<Self>) {
+        if self.page == Page::Travel {
+            self.travel
+                .update(cx, |travel, cx| travel.zoom_by(-1., None, cx));
+            return;
+        }
+        if self.page == Page::Documents {
+            self.documents.update(cx, |docs, cx| docs.zoom_out(cx));
+            return;
+        }
         self.step_ui_zoom(-1, cx);
     }
 
@@ -2229,7 +2247,9 @@ impl Render for Workspace {
                             view.documents
                                 .update(cx, |docs, cx| docs.on_wheel_zoom(event, cx));
                         }
-                        _ => {
+                        _ if view.right_panel.is_open()
+                            && view.right_panel.seat() == Seat::Terminal =>
+                        {
                             let dy = match event.delta {
                                 gpui::ScrollDelta::Pixels(d) => f32::from(d.y),
                                 gpui::ScrollDelta::Lines(d) => d.y,
@@ -2238,6 +2258,18 @@ impl Render for Workspace {
                             if step != 0 {
                                 cx.stop_propagation();
                                 view.step_terminal_zoom(step, cx);
+                            }
+                        }
+                        _ => {
+                            let lines = match event.delta {
+                                gpui::ScrollDelta::Lines(delta) => delta.y,
+                                gpui::ScrollDelta::Pixels(delta) => delta.y / px(UI_SCROLL_PIXELS_PER_STEP),
+                            };
+                            view.ui_zoom_gesture += lines;
+                            let steps = view.ui_zoom_gesture.trunc();
+                            if steps != 0. {
+                                view.ui_zoom_gesture -= steps;
+                                view.step_ui_zoom(steps as i32, cx);
                             }
                         }
                     }
@@ -2274,21 +2306,6 @@ impl Render for Workspace {
                 }
                 if event.phase == gpui::TouchPhase::Ended {
                     view.ui_zoom_gesture = 0.;
-                }
-            }))
-            .on_scroll_wheel(cx.listener(|view, event: &gpui::ScrollWheelEvent, _, cx| {
-                if !event.modifiers.platform {
-                    return;
-                }
-                let lines = match event.delta {
-                    gpui::ScrollDelta::Lines(delta) => delta.y,
-                    gpui::ScrollDelta::Pixels(delta) => delta.y / px(UI_SCROLL_PIXELS_PER_STEP),
-                };
-                view.ui_zoom_gesture += lines;
-                let steps = view.ui_zoom_gesture.trunc();
-                if steps != 0. {
-                    view.ui_zoom_gesture -= steps;
-                    view.step_ui_zoom(steps as i32, cx);
                 }
             }))
             .on_action(cx.listener(Self::on_toggle_soundscape))

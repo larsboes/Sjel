@@ -35,7 +35,7 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 
 [[profile]]
 name = "home"
-description = "Retired 2026-10-24 — the home stack lives with the household's deployment now"
+description = "Retired — the home stack lives with the household's deployment now"
 packs = []
 
 [[profile]]

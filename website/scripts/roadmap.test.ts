@@ -10,10 +10,9 @@ describe("roadmap", () => {
     expect(html).toContain("Active");
     expect(html).toContain("Planned");
     expect(html).toContain("Launched");
-    expect(html).toContain("Agent Containment by Provider");
-    expect(html).toContain("iPhone Native App");
-    expect(html).toContain("November 2026");
-    expect(html).toContain("October 2026");
+    expect(html).toContain("GPUI Desktop &amp; Mobile Port");
+    expect(html).toContain("Agent Containment");
+    expect(html).toContain("Initial Milestones");
   });
 
   test("builds roadmap HTML without external scripts or leaking secrets", async () => {

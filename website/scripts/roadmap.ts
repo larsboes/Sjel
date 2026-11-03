@@ -22,126 +22,79 @@ interface MonthGroup {
 
 const ACTIVE_ITEMS: Item[] = [
   {
-    title: "Agent Containment by Provider",
-    badge: "Priority 0",
-    desc: "Coding agents on untrusted providers run in an isolated sandbox with a network allow-list. Data is capped at data class c2 and pseudonymized before reaching cloud models.",
+    title: "GPUI Desktop & Mobile Port (Ongoing)",
+    badge: "Core UI",
+    desc: "Unifying all macOS and iOS surfaces in Zed's native GPUI Rust framework. Delivering sub-10ms rendering, offline trip itineraries, calendar rescheduling, and session approvals.",
+    href: `${REPO}/blob/main/docs/plans/gpui.md`,
+  },
+  {
+    title: "Agent Containment & Privacy Gates",
+    badge: "Security",
+    desc: "Isolating coding agents by provider trust. Sandboxing untrusted providers, capping data access, and automatically pseudonymizing sensitive facts up to data class c2.",
     href: "../docs/architecture/security.html",
   },
   {
-    title: "iPhone Native App (Daily Driver)",
-    badge: "Priority 1",
-    desc: "GPUI mobile interface for daily essentials: session approvals, travel timelines, mail triage, offline document reading, and fast calendar rescheduling.",
-    href: `${REPO}/blob/main/docs/plans/gpui.md#2-phone-priority-areas`,
-  },
-  {
-    title: "One Workspace & Flat Crate Consolidation",
-    badge: "Priority 2",
-    desc: "Consolidating Sjel into a single root Cargo workspace with flat crates/, sweeping comments and retiring legacy web fragments.",
+    title: "Flat Workspace Consolidation",
+    badge: "Architecture",
+    desc: "Restructuring Sjel into a lean, single Cargo workspace with flat crates/, eliminating lingering dashboard dependencies and trimming codebase footprint.",
     href: `${REPO}/blob/main/docs/plans/restructure.md`,
-  },
-  {
-    title: "Always-On Home Server Node",
-    badge: "Hardware",
-    desc: "Offloading 24/7 background feeds, price collection, travel alerts, and local c2/c3 models to a dedicated Mac mini home server.",
-    href: `${REPO}/blob/main/PLAN.md#decisions`,
   },
 ];
 
 const PLANNED_ITEMS: Item[] = [
   {
-    title: "Standalone SQLite & Turso Replica Sync",
+    title: "Offline-First Replica Sync (Turso)",
     badge: "Storage",
-    desc: "Decoupled database per capability with offline-first local replicas on macOS and iPhone synced via Turso/libsql.",
+    desc: "Decoupled SQLite database per capability with offline-first local replicas on macOS and iPhone synced via Turso/libsql.",
     href: "../docs/architecture/storage.html",
   },
   {
+    title: "Always-On Home Server Node",
+    badge: "Hardware",
+    desc: "Offloading continuous background ingestion, travel alerts, and c2/c3 local model inference to a dedicated Mac mini home server.",
+    href: `${REPO}/blob/main/PLAN.md#decisions`,
+  },
+  {
+    title: "Turnkey Mac DMG & TestFlight Distribution",
+    badge: "Distribution",
+    desc: "Notarized macOS installer and TestFlight distribution enabling household members and friends to run Sjel without dev toolchains (#235).",
+    href: `${REPO}/issues/235`,
+  },
+  {
     title: "Transit Corridor Reliability Ingest",
-    badge: "Transit",
+    badge: "Travel",
     desc: "Automated punctuality collection and delay monitoring for regional rail corridors while the Mac is closed.",
     href: `${REPO}/blob/main/docs/plans/transit.md`,
-  },
-  {
-    title: "RoomPlan 3D LiDAR Capture",
-    badge: "Scanning",
-    desc: "Native iPhone LiDAR room scanning to capture room geometries and feed real-world floor plans into interior layouts.",
-    href: `${REPO}/blob/main/docs/plans/scanning.md`,
-  },
-  {
-    title: "Vault-Grounded Spaced Recall",
-    badge: "Learning",
-    desc: "Extracting atomic claim notes from Obsidian vaults with interactive teach and practice recall sessions on desktop and mobile.",
-    href: `${REPO}/blob/main/docs/plans/learning.md`,
-  },
-  {
-    title: "Fresh-User Notarized DMG & TestFlight Installer",
-    badge: "Distribution",
-    desc: "Turnkey friend trial without requiring Xcode, Rust, Bun or terminal commands.",
-    href: `${REPO}/issues/235`,
   },
 ];
 
 const LAUNCHED_GROUPS: MonthGroup[] = [
   {
-    month: "November 2026",
+    month: "Initial Milestones",
     items: [
       {
-        title: "Vector Technical Documentation Overhaul",
-        badge: "Docs",
-        desc: "Wide auto-scaling layout, task-based goal cards, sequential pagers, breadcrumbs, and zero-script static performance.",
-        href: "../docs/index.html",
-      },
-      {
-        title: "Native Bun Static Preview Server",
-        badge: "v0.1.0-pre",
-        desc: "Native Bun.serve static preview server with website/build --serve support and Python server retirement.",
-        href: `${REPO}/commit/8f65e71c`,
-      },
-      {
-        title: "Feed Cloud Jobs & Data-Class Lowering",
-        badge: "GPUI",
-        desc: "Interactive rationale prompt for lowering sensitive feed items before handing them to cloud agent workflows.",
-        href: `${REPO}/commit/13521098`,
-      },
-      {
-        title: "Inventory History & Layout Impact Preview",
-        badge: "Interior",
-        desc: "State transition inspection and spatial impact calculations directly inside the GPUI edit form.",
-        href: `${REPO}/commit/13521098`,
-      },
-      {
-        title: "Stay Ranking Board for Trip Plans",
-        badge: "Travel",
-        desc: "Hotel stay candidates stored as first-class items on trip plans with preference ranking.",
-        href: `${REPO}/commit/13521098`,
-      },
-    ],
-  },
-  {
-    month: "October 2026",
-    items: [
-      {
-        title: "GPUI Native Desktop & iOS Shell",
-        badge: "Core",
-        desc: "Retired the Tauri app and web dashboard to standardize on a high-performance, single native Rust UI stack.",
+        title: "Single Native GPUI Foundation",
+        badge: "Core UI",
+        desc: "Consolidated desktop and mobile clients onto Zed's GPUI framework, fully retiring the legacy Tauri app and web dashboard.",
         href: `${REPO}/commit/41d6e6a2`,
       },
       {
-        title: "Low-Fare Rail Price Monitoring",
+        title: "Autonomous Rail Fare Tracker",
         badge: "Travel",
-        desc: "Offline-first sparpreis alerts notifying once per new low fare on iPhone.",
+        desc: "Background sparpreis rail price monitoring with local notifications on iPhone whenever a new lowest fare is observed.",
         href: `${REPO}/blob/main/capabilities/sparpreis-watch/README.md`,
       },
       {
-        title: "Robots-Compliant Wishlist Price Tracking",
+        title: "Targeted Wishlist Price Comparisons",
         badge: "Inventory",
-        desc: "Automated product price observations with budget alerts and unit price comparisons.",
+        desc: "Robots-compliant daily product price tracking, need-based candidate comparisons, and automated alert thresholds.",
         href: `${REPO}/blob/main/capabilities/wish-prices/README.md`,
       },
       {
-        title: "Map Scroll & Zoom Controls",
-        badge: "GPUI",
-        desc: "System scroll direction alignment and Cmd+wheel zooming in native map views.",
-        href: `${REPO}/commit/134d6bc9`,
+        title: "Deterministic Relational Storage",
+        badge: "Storage",
+        desc: "Unified SQLite storage layer with WAL mode, immediate write locking, and isolated backup/restore verification.",
+        href: "../docs/architecture/storage.html",
       },
     ],
   },

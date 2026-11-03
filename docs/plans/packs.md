@@ -102,7 +102,7 @@ precedes installer hardening. Anatomy remains unchanged until the external-skill
 | P3 | Report account-synced skills that share a name with a Pack skill, with their drift (defect 1). | In a cloud session, `tools/harnesses status` lists the six names above with "differs". |
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
-| P6 | Done: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
+| P6 | Done in `cf6563d9`, with failure rollback in `f0538875`: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
 | P7 | Manage approved external skills per harness (defect 3), after decision 4.4. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
 
 Verification: all 408 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy and `rustfmt

@@ -62,7 +62,7 @@ nav.bar .links a[aria-current] { box-shadow: inset 0 -2px 0 #6cc3d8; }
 `;
 
 /** The top bar. `current` marks the section the page belongs to. */
-export function topBar(root: string, current: "home" | "docs" | "reference"): string {
+export function topBar(root: string, current: "home" | "docs" | "reference" | "roadmap"): string {
   const link = (href: string, label: string, key: string, opt = false) =>
     `<a${opt ? ' class="opt"' : ""} href="${root}${href}"${current === key ? ' aria-current="page"' : ""}>${label}</a>`;
   return `<div class="top"><div class="wrap"><nav class="bar" aria-label="Site">
@@ -70,6 +70,7 @@ export function topBar(root: string, current: "home" | "docs" | "reference"): st
   <div class="links">
     ${link("docs/index.html", "Docs", "docs")}
     ${link("reference/index.html", "Reference", "reference")}
+    ${link("roadmap/index.html", "Roadmap", "roadmap")}
     <a href="${REPO}" class="icon-link" aria-label="GitHub repository" title="GitHub">${GITHUB_ICON}</a>
   </div>
 </nav></div></div>`;
@@ -234,6 +235,61 @@ td.route { white-space: nowrap; }
 .pager-title { font-weight: 600; font-size: .95rem; color: var(--fg); }
 .pager-card:hover .pager-title { color: var(--teal); }
 
+.roadmap-wrap { max-width: 78rem; margin: 0 auto; }
+.roadmap-hero { margin-bottom: 3rem; }
+.roadmap-hero h1 { font-size: clamp(2.4rem, 4.2vw, 3.4rem); font-weight: 700; letter-spacing: -.03em; margin: 0 0 .75rem; }
+.roadmap-hero p { font-size: 1.2rem; color: var(--dim); max-width: 52rem; line-height: 1.6; margin: 0 0 1rem; }
+.roadmap-hero .subtext { font-size: .92rem; color: var(--dim); }
+.roadmap-hero .subtext a { color: var(--teal); text-decoration: none; font-weight: 550; }
+.roadmap-hero .subtext a:hover { text-decoration: underline; }
+
+.roadmap-section {
+  display: grid; grid-template-columns: 14rem 1fr; gap: 2.5rem;
+  padding: 3rem 0; border-top: 1px solid var(--line);
+}
+@media (max-width: 800px) { .roadmap-section { grid-template-columns: 1fr; gap: 1.25rem; } }
+
+.roadmap-status { position: sticky; top: 2rem; align-self: start; }
+.roadmap-status h2 {
+  font-size: 1.35rem; font-weight: 700; display: flex; align-items: center;
+  gap: .6rem; margin: 0; letter-spacing: -.01em;
+}
+.roadmap-status.active h2 { color: #2a8a5b; }
+.roadmap-status.planned h2 { color: #d68710; }
+.roadmap-status.launched h2 { color: #8e62d6; }
+@media (prefers-color-scheme: dark) {
+  .roadmap-status.active h2 { color: #48bb78; }
+  .roadmap-status.planned h2 { color: #ecc94b; }
+  .roadmap-status.launched h2 { color: #b794f4; }
+}
+
+.timeline-group {
+  display: grid; grid-template-columns: 14rem 1fr; gap: 2.5rem; margin-bottom: 2.5rem;
+}
+.timeline-group:last-child { margin-bottom: 0; }
+@media (max-width: 800px) { .timeline-group { grid-template-columns: 1fr; gap: .75rem; } }
+.timeline-date { font-size: 1.15rem; font-weight: 700; color: var(--fg); padding-top: .4rem; }
+
+.roadmap-cards { display: flex; flex-direction: column; gap: .85rem; }
+.roadmap-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  padding: 1.15rem 1.35rem; text-decoration: none; color: inherit;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+  display: flex; flex-direction: column; gap: .4rem;
+}
+.roadmap-card:hover {
+  border-color: var(--teal); transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+}
+.roadmap-card-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.roadmap-card-title { font-weight: 650; font-size: 1.05rem; color: var(--fg); display: inline-flex; align-items: center; gap: .45rem; }
+.roadmap-card-title .ext { font-size: .8rem; opacity: .5; }
+.roadmap-badge {
+  font: 500 .72rem var(--mono); padding: .15rem .5rem; border-radius: 4px;
+  background: var(--code); color: var(--dim); border: 1px solid var(--line); white-space: nowrap;
+}
+.roadmap-card-desc { font-size: .92rem; color: var(--dim); line-height: 1.55; margin: 0; }
+
 footer.site { border-top: 1px solid var(--line); padding: 1.5rem 0 3rem; font-size: .84rem; color: var(--dim); }
 footer.site .wrap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
 footer.site code { font: .8rem var(--mono); }
@@ -244,7 +300,7 @@ export interface PageOptions {
   description: string;
   /** Prefix back to the site root: "" at the root, "../" one level down. */
   root: string;
-  current: "home" | "docs" | "reference";
+  current: "home" | "docs" | "reference" | "roadmap";
   body: string;
   /** Left column. With `toc`, the page gets three columns. */
   sidebar?: string;

@@ -323,6 +323,7 @@ export function renderLanding(model: SelfModel): string {
         <a class="opt" href="#capabilities">Capabilities</a>
         <a href="docs/index.html">Docs</a>
         <a href="reference/index.html">Reference</a>
+        <a href="roadmap/index.html">Roadmap</a>
         <a href="${REPO}" class="icon-link" aria-label="GitHub repository" title="GitHub">${GITHUB_ICON}</a>
       </div>
     </nav>
@@ -500,6 +501,7 @@ export function renderLanding(model: SelfModel): string {
         <a href="docs/operations/index.html"><b>Operations</b><span>Doctor, service lifecycle and patch policy.</span></a>
         <a href="reference/index.html"><b>Reference</b><span>One page per unit: contract, routes, coupling and README.</span></a>
         <a href="reference/self-model.html"><b>Self-model</b><span>Every unit, its coupling and every upstream verdict.</span></a>
+        <a href="roadmap/index.html"><b>Roadmap</b><span>Timeline and milestones: Active, Planned, Launched.</span></a>
         <a href="${REPO}/blob/main/PLAN.md"><b>Plan</b><span>What is built, what is next and why.</span></a>
       </div>
     </div>

@@ -178,7 +178,7 @@ The former gates are now open checks. None of them ran:
 
 Open work:
 
-- Screenshots of the app for the public landing page ([`restructure.md`](restructure.md#4-the-public-page)).
+- [ ] (TODO: deferred, not in today's scope) Screenshots of the app for the public landing page ([`restructure.md`](restructure.md#4-the-public-page)).
 
 Shipped (awaiting manual check in the running app):
 

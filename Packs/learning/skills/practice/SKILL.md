@@ -9,9 +9,10 @@ Teaching puts a claim into the student's head. Practice makes the claim come to 
 the features of a new situation can trigger it. Change nothing in the material. Change only
 when and how reliably it comes to mind.
 
-Read the vault through the `obsidian` skill. Resolve the vault with `scripts/vault root`. The
-contract row for claims defines the format: `summary:` holds the statement, and each
-`## Because` bullet is one argument whose premises together imply the claim.
+Read the vault through the `obsidian` skill. Resolve the vault with `scripts/vault root`. Claim notes
+have `type: claim` and the format that `teach` writes: `summary:` holds the statement, and each
+`## Because` bullet is one argument whose premises together imply the claim. A claim sits beside
+its concept note or in the domain's `Claims/` folder, so find claims by `type`, not by folder.
 
 ## Rules
 

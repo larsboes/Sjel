@@ -142,9 +142,8 @@ view measures note review age, not learner retention, and must not become a prac
 
 Pilot placement follows that existing folder rule: keep the first one or two claims beside
 their concept in its existing domain folder. Create a Claims subfolder only for a genuine
-cluster of at least three, with link verification if notes move. Before using the pilot in Pi,
-align `teach`'s unconditional Claims-folder instruction with this convention. This is an open
-skill change; the plan alone does not change deployed behavior.
+cluster of at least three, with link verification if notes move. `teach` (Phase 4, step 1) and `practice` follow this
+convention since 2026-11-03.
 
 The minimal claim shape is `type: claim`, an honest `maturity`, a self-contained proposition in
 `summary`, existing domain `categories`, a `concept: "[[canonical concept]]"` link, source
@@ -161,8 +160,8 @@ valid learned claim must come from the pilot rather than a fabricated session re
 
 1. Apply the reconciled conventions to the teaching skill, then demonstrate them in the pilot.
    Done when one existing concept and one valid claim demonstrate placement, metadata, argument
-   links and provenance without introducing a second owner. Convention inspection is complete;
-   the skill alignment and real-claim demonstration remain open.
+   links and provenance without introducing a second owner. Convention inspection and the
+   skill alignment are complete; the real-claim demonstration remains open.
 2. Run the five teach/practice pairs already required by stage 1, including an existing-note
    topic and a source-led topic. Include a later-session transfer check and an interrupted
    session resumed from notes. Done when the log records all ten sessions and identifies

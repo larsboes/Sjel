@@ -532,7 +532,8 @@ impl Clips {
                     Ok(count) => {
                         view.open = None;
                         view.parsed_doc = None;
-                        view.delete_status = Some((true, format!("Removed {count} clip version(s).")));
+                        view.delete_status =
+                            Some((true, format!("Removed {count} clip version(s).")));
                         view.load(cx);
                     }
                     Err(error) => view.delete_status = Some((false, error)),
@@ -563,7 +564,8 @@ impl Clips {
                         view.open = None;
                         view.parsed_doc = None;
                         view.documents = Some(Ok(Vec::new()));
-                        view.delete_status = Some((true, format!("Removed {count} clip version(s).")));
+                        view.delete_status =
+                            Some((true, format!("Removed {count} clip version(s).")));
                     }
                     Err(error) => view.delete_status = Some((false, error)),
                 }
@@ -591,12 +593,14 @@ impl Clips {
         cx: &mut Context<Self>,
     ) {
         let title_input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx).placeholder("Clip Title (e.g. LLM Privacy and Routing Strategy)");
+            let mut s = InputState::new(window, cx)
+                .placeholder("Clip Title (e.g. LLM Privacy and Routing Strategy)");
             s.set_value(title, window, cx);
             s
         });
         let url_input = cx.new(|cx| {
-            let mut s = InputState::new(window, cx).placeholder("Source URL (e.g. https://aistudio.google.com/...)");
+            let mut s = InputState::new(window, cx)
+                .placeholder("Source URL (e.g. https://aistudio.google.com/...)");
             s.set_value(url, window, cx);
             s
         });
@@ -684,7 +688,8 @@ impl Clips {
         if let Some((content, _)) = crate::clipboard::read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {
-                    turn.prompt.update(cx, |t, cx| t.set_value(content, window, cx));
+                    turn.prompt
+                        .update(cx, |t, cx| t.set_value(content, window, cx));
                     composer.status = Some((true, format!("Pasted prompt into Turn {}.", idx + 1)));
                     cx.notify();
                 }
@@ -700,8 +705,10 @@ impl Clips {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get_mut(idx) {
                     turn.show_thoughts = true;
-                    turn.thoughts.update(cx, |t, cx| t.set_value(content, window, cx));
-                    composer.status = Some((true, format!("Pasted thoughts into Turn {}.", idx + 1)));
+                    turn.thoughts
+                        .update(cx, |t, cx| t.set_value(content, window, cx));
+                    composer.status =
+                        Some((true, format!("Pasted thoughts into Turn {}.", idx + 1)));
                     cx.notify();
                 }
             }
@@ -724,11 +731,15 @@ impl Clips {
         if let Some((content, is_html)) = crate::clipboard::read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {
-                    turn.response.update(cx, |t, cx| t.set_value(content, window, cx));
+                    turn.response
+                        .update(cx, |t, cx| t.set_value(content, window, cx));
                     composer.status = Some((
                         true,
                         if is_html {
-                            format!("Pasted rich response into Turn {} (links converted).", idx + 1)
+                            format!(
+                                "Pasted rich response into Turn {} (links converted).",
+                                idx + 1
+                            )
                         } else {
                             format!("Pasted response into Turn {}.", idx + 1)
                         },
@@ -760,14 +771,18 @@ impl Clips {
                 if let Some(composer) = &mut self.composer {
                     composer.status = Some((
                         true,
-                        format!("Auto-split clipboard into {} dialogue turn(s).", composer.turns.len()),
+                        format!(
+                            "Auto-split clipboard into {} dialogue turn(s).",
+                            composer.turns.len()
+                        ),
                     ));
                     cx.notify();
                 }
             } else if let Some(composer) = &mut self.composer {
                 composer.status = Some((
                     false,
-                    "Could not detect dialogue turns in clipboard. Use individual paste buttons.".into(),
+                    "Could not detect dialogue turns in clipboard. Use individual paste buttons."
+                        .into(),
                 ));
                 cx.notify();
             }
@@ -775,7 +790,9 @@ impl Clips {
     }
 
     fn save_composer(&mut self, individual: bool, cx: &mut Context<Self>) {
-        let Some(composer) = &mut self.composer else { return };
+        let Some(composer) = &mut self.composer else {
+            return;
+        };
         let title = composer.title.read(cx).value().trim().to_string();
         let url = composer.url.read(cx).value().trim().to_string();
         let title = if title.is_empty() {
@@ -897,7 +914,14 @@ impl Clips {
             );
         }
         navigation = navigation.child(note(
-            format!("Page {} of {} · blocks {}–{} of {}", page + 1, page_count, start + 1, end, doc.blocks.len()),
+            format!(
+                "Page {} of {} · blocks {}–{} of {}",
+                page + 1,
+                page_count,
+                start + 1,
+                end,
+                doc.blocks.len()
+            ),
             palette.muted,
         ));
         if page + 1 < page_count {
@@ -963,7 +987,11 @@ impl Clips {
                         Button::new("clips-delete-document")
                             .small()
                             .ghost()
-                            .label(if confirm_delete { "Confirm delete" } else { "Delete clip" })
+                            .label(if confirm_delete {
+                                "Confirm delete"
+                            } else {
+                                "Delete clip"
+                            })
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.confirm_delete.as_deref() == Some(key_for_delete.as_str()) {
                                     view.delete_document(key_for_delete.clone(), cx);
@@ -974,7 +1002,12 @@ impl Clips {
                             })),
                     ),
             )
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(title))
+            .child(
+                div()
+                    .text_xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(title),
+            )
             .child(note(
                 format!(
                     "{} · {} version{} · {}",
@@ -1069,11 +1102,7 @@ impl Clips {
             .into_any_element()
     }
 
-    fn render_composer(
-        &self,
-        cx: &mut Context<Self>,
-        palette: Palette,
-    ) -> AnyElement {
+    fn render_composer(&self, cx: &mut Context<Self>, palette: Palette) -> AnyElement {
         let Some(composer) = &self.composer else {
             return div().into_any_element();
         };
@@ -1303,7 +1332,11 @@ impl Clips {
                         Button::new("composer-save-thread")
                             .small()
                             .primary()
-                            .label(if saving { "Saving…" } else { "Save 1 Thread Note" })
+                            .label(if saving {
+                                "Saving…"
+                            } else {
+                                "Save 1 Thread Note"
+                            })
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.save_composer(false, cx);
                             })),
@@ -1319,7 +1352,12 @@ impl Clips {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_xs().text_color(rgb(palette.muted)).child("Title"))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Title"),
+                    )
                     .child(Input::new(&title_input)),
             )
             .child(
@@ -1367,19 +1405,21 @@ impl Clips {
                         Button::new("composer-save-thread-bottom")
                             .small()
                             .primary()
-                            .label(if saving { "Saving…" } else { "Save 1 Thread Note" })
+                            .label(if saving {
+                                "Saving…"
+                            } else {
+                                "Save 1 Thread Note"
+                            })
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.save_composer(false, cx);
                             })),
                     ),
             );
 
-        let status_view = composer.status.as_ref().map(|(ok, msg)| {
-            note(
-                msg.clone(),
-                if *ok { palette.muted } else { palette.red },
-            )
-        });
+        let status_view = composer
+            .status
+            .as_ref()
+            .map(|(ok, msg)| note(msg.clone(), if *ok { palette.muted } else { palette.red }));
 
         div()
             .flex()
@@ -1452,20 +1492,20 @@ fn render_citation_audit(text: &str, palette: Palette) -> AnyElement {
                 .text_xs();
 
             if let Some(url) = target_url {
-                chip = chip
-                    .cursor_pointer()
-                    .on_click(move |_, _, cx| {
-                        let clean = sjel_gpui_core::clipper::unwrap_google_redirect(&url);
-                        if clean.contains("vertexaisearch.cloud.google.com/grounding-api-redirect/") {
-                            let clean_clone = clean.clone();
-                            cx.spawn(async move |cx| {
-                                let resolved = sjel_gpui_core::clipper::resolve_redirect_http(&clean_clone).await;
-                                let _ = cx.update(|cx| cx.open_url(&resolved));
-                            }).detach();
-                        } else {
-                            cx.open_url(&clean);
-                        }
-                    });
+                chip = chip.cursor_pointer().on_click(move |_, _, cx| {
+                    let clean = sjel_gpui_core::clipper::unwrap_google_redirect(&url);
+                    if clean.contains("vertexaisearch.cloud.google.com/grounding-api-redirect/") {
+                        let clean_clone = clean.clone();
+                        cx.spawn(async move |cx| {
+                            let resolved =
+                                sjel_gpui_core::clipper::resolve_redirect_http(&clean_clone).await;
+                            let _ = cx.update(|cx| cx.open_url(&resolved));
+                        })
+                        .detach();
+                    } else {
+                        cx.open_url(&clean);
+                    }
+                });
             }
 
             chip.child(
@@ -1541,9 +1581,7 @@ impl Render for Clips {
 
         if self.composer.is_some() {
             let body = self.render_composer(cx, palette);
-            return div()
-                .w_full()
-                .child(body);
+            return div().w_full().child(body);
         }
 
         let body = match (&self.open, &self.documents) {

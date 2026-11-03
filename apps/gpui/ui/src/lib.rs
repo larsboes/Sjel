@@ -27,7 +27,6 @@ pub mod self_view;
 pub mod setup;
 pub mod sidebar;
 pub mod software;
-pub mod web_links;
 pub mod soundscape;
 pub mod systems;
 pub mod tasks;
@@ -35,6 +34,7 @@ pub mod terminal;
 pub mod theme;
 pub mod today;
 pub mod travel;
+pub mod web_links;
 
 pub use doc_view::{render_block, render_doc, render_markdown};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};

@@ -1151,10 +1151,9 @@ impl Documents {
         }
         let current = self.selected.as_deref().and_then(|selected| {
             let rows = self.rows.value.as_ref()?;
-            self.order.iter().position(|entry| {
-                rows.get(entry.index)
-                    .is_some_and(|row| row.id == selected)
-            })
+            self.order
+                .iter()
+                .position(|entry| rows.get(entry.index).is_some_and(|row| row.id == selected))
         });
         let next = match current {
             Some(at) => (at as isize + by).clamp(0, self.order.len() as isize - 1) as usize,
@@ -1959,9 +1958,10 @@ impl Documents {
                         .cmp(&grouping_key(&rows[*right], grouping))
                         .then_with(|| {
                             if by_name {
-                                rows[*left].filename.to_lowercase().cmp(
-                                    &rows[*right].filename.to_lowercase(),
-                                )
+                                rows[*left]
+                                    .filename
+                                    .to_lowercase()
+                                    .cmp(&rows[*right].filename.to_lowercase())
                             } else {
                                 rows[*right].imported_at.cmp(&rows[*left].imported_at)
                             }
@@ -1970,7 +1970,12 @@ impl Documents {
             }
         }
         let mut counts: Vec<(String, usize)> = Vec::new();
-        if let Some(rows) = self.rows.value.as_ref().filter(|_| self.grouping != Grouping::None) {
+        if let Some(rows) = self
+            .rows
+            .value
+            .as_ref()
+            .filter(|_| self.grouping != Grouping::None)
+        {
             for index in &picked {
                 let label = grouping_key(&rows[*index], self.grouping);
                 match counts.iter_mut().find(|(seen, _)| *seen == label) {

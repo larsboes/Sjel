@@ -6,8 +6,8 @@
 //! (`capabilities/comms/clipper/src/types/types.ts`); the app edits the fields people change and
 //! carries every other field through unchanged.
 
-use serde_json::{json, Value};
 use crate::inline::Inline;
+use serde_json::{json, Value};
 
 /// Upstream's save behaviors, with the label the app shows.
 pub const BEHAVIORS: [(&str, &str); 6] = [
@@ -332,7 +332,10 @@ pub fn html_to_markdown(html: &str) -> String {
                         if is_closing {
                             if let Some((href, label)) = in_a.take() {
                                 let decoded_label = decode_html_entities(label.trim());
-                                let clean_label = decoded_label.trim_start_matches('[').trim_end_matches(']').trim();
+                                let clean_label = decoded_label
+                                    .trim_start_matches('[')
+                                    .trim_end_matches(']')
+                                    .trim();
                                 if !clean_label.is_empty() {
                                     let link_md = format!("[{clean_label}]({href})");
                                     out.push_str(&link_md);
@@ -581,7 +584,9 @@ pub struct ClipCitation {
 pub fn unwrap_google_redirect(raw_url: &str) -> String {
     let mut current = raw_url.to_string();
     for _ in 0..3 {
-        let Ok(parsed) = reqwest::Url::parse(&current) else { break; };
+        let Ok(parsed) = reqwest::Url::parse(&current) else {
+            break;
+        };
         let host = parsed.host_str().unwrap_or("");
         if (host.contains("google.") || host == "google") && parsed.path().starts_with("/url") {
             let mut found = None;
@@ -613,7 +618,9 @@ pub async fn resolve_redirect_http(raw_url: &str) -> String {
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(5))
         .build();
-    let Ok(client) = client else { return clean; };
+    let Ok(client) = client else {
+        return clean;
+    };
 
     if let Ok(resp) = client.head(&clean).send().await {
         let final_url = resp.url().as_str();
@@ -746,7 +753,11 @@ pub fn markdown_to_turns(markdown: &str) -> Vec<ClipTurn> {
         let p = prompt.trim().to_string();
         let r = resp.trim().to_string();
         let t = thoughts.trim();
-        let th = if t.is_empty() { None } else { Some(t.to_string()) };
+        let th = if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        };
         if !p.is_empty() || !r.is_empty() || th.is_some() {
             turns.push(ClipTurn {
                 index: *idx,
@@ -764,13 +775,25 @@ pub fn markdown_to_turns(markdown: &str) -> Vec<ClipTurn> {
     for line in markdown.lines() {
         let trimmed = line.trim();
         if trimmed == "---" {
-            flush(&mut turns, &mut turn_index, &mut current_prompt, &mut current_thoughts, &mut current_response);
+            flush(
+                &mut turns,
+                &mut turn_index,
+                &mut current_prompt,
+                &mut current_thoughts,
+                &mut current_response,
+            );
             section = Section::None;
             continue;
         }
         if trimmed.starts_with("## Prompt") {
             if matches!(section, Section::Response) {
-                flush(&mut turns, &mut turn_index, &mut current_prompt, &mut current_thoughts, &mut current_response);
+                flush(
+                    &mut turns,
+                    &mut turn_index,
+                    &mut current_prompt,
+                    &mut current_thoughts,
+                    &mut current_response,
+                );
             }
             section = Section::Prompt;
             continue;
@@ -802,7 +825,8 @@ pub fn markdown_to_turns(markdown: &str) -> Vec<ClipTurn> {
             Section::Thoughts => {
                 if let Some(stripped) = trimmed.strip_prefix('>') {
                     let s = stripped.trim();
-                    if !s.is_empty() && !s.starts_with("[!NOTE]") && !s.starts_with("**Thoughts**") {
+                    if !s.is_empty() && !s.starts_with("[!NOTE]") && !s.starts_with("**Thoughts**")
+                    {
                         current_thoughts.push_str(s);
                         current_thoughts.push('\n');
                     }
@@ -821,7 +845,13 @@ pub fn markdown_to_turns(markdown: &str) -> Vec<ClipTurn> {
         }
     }
 
-    flush(&mut turns, &mut turn_index, &mut current_prompt, &mut current_thoughts, &mut current_response);
+    flush(
+        &mut turns,
+        &mut turn_index,
+        &mut current_prompt,
+        &mut current_thoughts,
+        &mut current_response,
+    );
 
     if turns.is_empty() {
         turns.push(ClipTurn {
@@ -999,7 +1029,10 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].prompt, "Compare LLMs");
         assert_eq!(parsed[0].thoughts.as_deref(), Some("Comparing models..."));
-        assert_eq!(parsed[0].response, "OpenAI vs Anthropic [1](https://anthropic.com)");
+        assert_eq!(
+            parsed[0].response,
+            "OpenAI vs Anthropic [1](https://anthropic.com)"
+        );
         assert_eq!(parsed[1].prompt, "Tell me more");
         assert_eq!(parsed[1].thoughts, None);
         assert_eq!(parsed[1].response, "Details here");
@@ -1072,7 +1105,10 @@ mod tests {
         let citations = audit_citations(&md);
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[0].label, "1");
-        assert_eq!(citations[0].url.as_deref(), Some("https://openai.com/terra"));
+        assert_eq!(
+            citations[0].url.as_deref(),
+            Some("https://openai.com/terra")
+        );
         assert_eq!(citations[1].label, "2");
         assert_eq!(citations[1].url.as_deref(), Some("https://anthropic.com"));
     }

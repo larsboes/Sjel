@@ -138,11 +138,7 @@ fn read_source(
 /// One history row: URL, title, visit count, last visit as the browser stores it.
 type HistoryRow = (String, String, u64, Option<String>);
 
-fn read_chrome(
-    conn: &Connection,
-    days: u16,
-    min_visits: u16,
-) -> Result<Vec<HistoryRow>, String> {
+fn read_chrome(conn: &Connection, days: u16, min_visits: u16) -> Result<Vec<HistoryRow>, String> {
     let chrome_epoch_delta = 11_644_473_600_i64;
     let cutoff = unix_now()
         .saturating_sub(i64::from(days) * 86_400)
@@ -171,11 +167,7 @@ fn read_chrome(
         .map_err(|e| e.to_string())
 }
 
-fn read_safari(
-    conn: &Connection,
-    days: u16,
-    min_visits: u16,
-) -> Result<Vec<HistoryRow>, String> {
+fn read_safari(conn: &Connection, days: u16, min_visits: u16) -> Result<Vec<HistoryRow>, String> {
     let cutoff = unix_now()
         .saturating_sub(i64::from(days) * 86_400)
         .saturating_sub(978_307_200) as f64;

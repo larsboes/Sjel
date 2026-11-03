@@ -66,7 +66,9 @@ fn prompt_outbox(
                         .small()
                         .label("Copy")
                         .tooltip("Copy the prompt and remove it from this list")
-                        .on_click(cx.listener(move |view, _, _, cx| view.copy_prompt_draft(id, cx))),
+                        .on_click(
+                            cx.listener(move |view, _, _, cx| view.copy_prompt_draft(id, cx)),
+                        ),
                 )
                 .into_any_element()
         })

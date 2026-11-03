@@ -144,8 +144,9 @@ fn update(args: &[String]) -> Result<u8, String> {
     }
 
     let mut jobs: Vec<Job> = Vec::new();
-    // Which source a skill came from, for the gate's approval key.
-    let mut job_sources: BTreeMap<String, String> = BTreeMap::new();
+    // Which source each staged layout came from: the gate's approval key is per skill, so a
+    // name that two sources both ship would otherwise take the other source's key.
+    let mut job_sources: BTreeMap<PathBuf, String> = BTreeMap::new();
     let mut locks: Vec<(PathBuf, Vec<String>)> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
     for (source, names) in &groups {
@@ -165,7 +166,7 @@ fn update(args: &[String]) -> Result<u8, String> {
             match by_name.remove(name) {
                 Some(mut found) => {
                     for job in &found {
-                        job_sources.insert(job.skill.clone(), source.clone());
+                        job_sources.insert(job.dest.clone(), source.clone());
                     }
                     jobs.append(&mut found);
                 }
@@ -185,7 +186,7 @@ fn update(args: &[String]) -> Result<u8, String> {
     let mut held = false;
     let mut error = false;
     for job in &jobs {
-        let source = job_sources.get(&job.skill).cloned().unwrap_or_default();
+        let source = job_sources.get(&job.dest).cloned().unwrap_or_default();
         let key = format!("skills:{source}/{}", job.skill);
         match gate_tree(&key, Some(&job.staged), &job.tree, baseline(&job.before)) {
             0 => {}
@@ -200,8 +201,23 @@ fn update(args: &[String]) -> Result<u8, String> {
         println!("\nnothing updated: a skill is held");
         return Ok(HELD);
     }
-    publish(&jobs)?;
-    for (stage_lock, names) in &locks {
+    let published = publish(&jobs)?;
+    if let Err(e) = write_locks(&project, &locks, &jobs) {
+        published.rollback();
+        return Err(format!("{e}; published layouts were rolled back"));
+    }
+    published.commit();
+    println!("✓ updated {} skill layout(s)", jobs.len());
+    Ok(0)
+}
+
+/// Merge every staged lock entry for a skill that was actually published.
+fn write_locks(
+    project: &Path,
+    locks: &[(PathBuf, Vec<String>)],
+    jobs: &[Job],
+) -> Result<(), String> {
+    for (stage_lock, names) in locks {
         let updated: Vec<String> = names
             .iter()
             .filter(|n| jobs.iter().any(|job| job.skill == **n))
@@ -211,8 +227,7 @@ fn update(args: &[String]) -> Result<u8, String> {
             merge_lock(&project.join("skills-lock.json"), stage_lock, &updated)?;
         }
     }
-    println!("✓ updated {} skill layout(s)", jobs.len());
-    Ok(0)
+    Ok(())
 }
 
 fn baseline(before: &DestState) -> Option<&Tree> {
@@ -242,12 +257,16 @@ fn install(project: &Path, stage: &Path, jobs: &[Job], package: &str) -> Result<
         return Ok(HELD);
     }
     let names: Vec<String> = jobs.iter().map(|job| job.skill.clone()).collect();
-    publish(jobs)?;
-    merge_lock(
+    let published = publish(jobs)?;
+    if let Err(e) = merge_lock(
         &project.join("skills-lock.json"),
         &stage.join("skills-lock.json"),
         &names,
-    )?;
+    ) {
+        published.rollback();
+        return Err(format!("{e}; published layouts were rolled back"));
+    }
+    published.commit();
     println!("✓ installed {} skill layout(s)", jobs.len());
     Ok(0)
 }
@@ -299,36 +318,58 @@ fn dest_state(dest: &Path) -> Result<DestState, String> {
     }
 }
 
-/// Write every screened tree, replacing what was there. Backups are kept beside the stage and
-/// restored on failure; a crash between renames is not covered, and the lock is written last.
-fn publish(jobs: &[Job]) -> Result<(), String> {
-    let backup_dir = fresh_stage("backup")?;
-    let mut done: Vec<(&Path, Option<PathBuf>)> = Vec::new();
-    let result = publish_all(&backup_dir, jobs, &mut done);
-    if let Err(message) = result {
-        for (dest, backup) in done.iter().rev() {
+/// Write every screened tree, replacing what was there. Backups are kept until the caller
+/// commits; a crash between renames is not covered, and the lock is written last.
+#[derive(Debug)]
+struct Published {
+    backup_dir: PathBuf,
+    done: Vec<(PathBuf, Option<PathBuf>)>,
+}
+
+impl Published {
+    fn rollback(&self) {
+        for (dest, backup) in self.done.iter().rev() {
             let _ = fs::remove_dir_all(dest);
             if let Some(backup) = backup {
                 let _ = fs::rename(backup, dest);
             }
         }
-        return Err(format!("{message}; published layouts were rolled back"));
     }
-    let _ = fs::remove_dir_all(&backup_dir);
-    Ok(())
+
+    fn commit(self) {
+        let _ = fs::remove_dir_all(&self.backup_dir);
+    }
 }
 
-fn publish_all<'a>(
+fn publish(jobs: &[Job]) -> Result<Published, String> {
+    let backup_dir = fresh_stage("backup")?;
+    let mut published = Published {
+        backup_dir,
+        done: Vec::new(),
+    };
+    if let Err(message) = publish_all(&published.backup_dir.clone(), jobs, &mut published.done) {
+        published.rollback();
+        return Err(format!("{message}; published layouts were rolled back"));
+    }
+    Ok(published)
+}
+
+fn publish_all(
     backup_dir: &Path,
-    jobs: &'a [Job],
-    done: &mut Vec<(&'a Path, Option<PathBuf>)>,
+    jobs: &[Job],
+    done: &mut Vec<(PathBuf, Option<PathBuf>)>,
 ) -> Result<(), String> {
     for job in jobs {
         // The destination must still hold what was screened against.
         match (&job.before, dest_state(&job.dest)?) {
             (DestState::Tree(before), DestState::Tree(now)) if digest(before) == digest(&now) => {}
             (DestState::Absent, DestState::Absent) => {}
-            (DestState::Other, DestState::Other) => {}
+            (DestState::Other, DestState::Other) => {
+                return Err(format!(
+                    "{} is a symlink; another installer owns it",
+                    job.dest.display()
+                ))
+            }
             _ => return Err(format!("{} changed during the run", job.dest.display())),
         }
         let agent = job
@@ -346,7 +387,7 @@ fn publish_all<'a>(
             None
         };
         // Recorded before the write, so a failure part-way through still restores the backup.
-        done.push((&job.dest, backup));
+        done.push((job.dest.clone(), backup));
         write_tree(&job.dest, &job.tree)?;
     }
     Ok(())
@@ -490,9 +531,24 @@ fn fresh_stage(kind: &str) -> Result<PathBuf, String> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or_default();
-    let dir = super::state_dir()
-        .join("staged")
-        .join(format!("skills-{kind}-{}-{nanos}", std::process::id()));
+    let staged = super::state_dir().join("staged");
+    // A stage is only useful while the run that made it is alive; keep the tree small.
+    if let Ok(entries) = fs::read_dir(&staged) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with("skills-") {
+                let age = entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|m| m.elapsed().ok());
+                if age.is_some_and(|age| age.as_secs() > 86_400) {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+    let dir = staged.join(format!("skills-{kind}-{}-{nanos}", std::process::id()));
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
 }
@@ -557,6 +613,85 @@ mod tests {
         let err = write_tree(&dir, &tree).unwrap_err();
         assert!(err.contains("outside the skill directory"), "{err}");
         assert!(!dir.parent().unwrap().join("outside").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_symlinked_destination_is_refused_rather_than_replaced() {
+        let dir = scratch("symlink");
+        let project = dir.join("project");
+        let pack = dir.join("pack/demo");
+        fs::create_dir_all(&pack).unwrap();
+        fs::write(pack.join("SKILL.md"), "pack text").unwrap();
+        let dest = project.join(".claude/skills/demo");
+        fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&pack, &dest).unwrap();
+        let mut tree = Tree::new();
+        tree.insert(
+            "SKILL.md".into(),
+            TreeFile {
+                bytes: b"new".to_vec(),
+                executable: false,
+            },
+        );
+        let job = Job {
+            skill: "demo".into(),
+            dest: dest.clone(),
+            staged: dir.join("staged"),
+            before: dest_state(&dest).unwrap(),
+            tree,
+        };
+        let err = publish(&[job]).unwrap_err();
+        assert!(err.contains("another installer owns it"), "{err}");
+        assert_eq!(
+            fs::read_to_string(pack.join("SKILL.md")).unwrap(),
+            "pack text"
+        );
+        assert!(fs::symlink_metadata(&dest)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_failed_second_layout_restores_the_first() {
+        let dir = scratch("rollback");
+        let project = dir.join("project");
+        let mut jobs = Vec::new();
+        for agent in [".claude", ".agents"] {
+            let dest = project.join(agent).join("skills/demo");
+            fs::create_dir_all(&dest).unwrap();
+            fs::write(dest.join("SKILL.md"), "old").unwrap();
+            let mut tree = Tree::new();
+            tree.insert(
+                "SKILL.md".into(),
+                TreeFile {
+                    bytes: b"new".to_vec(),
+                    executable: false,
+                },
+            );
+            jobs.push(Job {
+                skill: "demo".into(),
+                before: dest_state(&dest).unwrap(),
+                dest,
+                staged: dir.join("staged"),
+                tree,
+            });
+        }
+        // The second destination changes after screening, so it fails after the first was
+        // written; both must end up as they were.
+        fs::write(jobs[1].dest.join("SKILL.md"), "changed after screening").unwrap();
+        let err = publish(&jobs).unwrap_err();
+        assert!(err.contains("changed during the run"), "{err}");
+        assert_eq!(
+            fs::read_to_string(jobs[0].dest.join("SKILL.md")).unwrap(),
+            "old"
+        );
+        assert_eq!(
+            fs::read_to_string(jobs[1].dest.join("SKILL.md")).unwrap(),
+            "changed after screening"
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -626,7 +761,8 @@ mod tests {
             before: DestState::Tree(read_tree(&dest).unwrap()),
             tree,
         };
-        publish(&[job]).unwrap();
+        let published = publish(&[job]).unwrap();
+        published.commit();
         assert_eq!(fs::read_to_string(dest.join("SKILL.md")).unwrap(), "new");
 
         // A destination that changed since screening aborts and leaves it alone.

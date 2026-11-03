@@ -236,6 +236,26 @@ expect "a held update says so" "nothing updated" 1
 expect_file "a held update leaves the installed copy alone" \
   "$tree/.claude/skills/staged-skill/SKILL.md" "old body"
 
+# --- add: a symlinked destination belongs to another installer and is refused -------------
+tree=$(project add-symlink)
+pack="$SCRATCH/pack-skill"
+mkdir -p "$pack"
+printf 'pack text\n' > "$pack/SKILL.md"
+mkdir -p "$tree/.claude/skills"
+ln -s "$pack" "$tree/.claude/skills/staged-skill"
+tpl=$(template v6 "First body.")
+export SKILLS_TEST_TEMPLATE="$tpl"
+approve "$tpl"
+: > "$LOG"
+run "$tree" add remotion-dev/skills
+[ "$status" -eq 1 ] || { echo "FAIL: a symlinked destination should exit 1, got $status"; fails=$((fails + 1)); }
+[ -L "$tree/.claude/skills/staged-skill" ] || {
+  echo "FAIL: the symlink was replaced"; fails=$((fails + 1))
+}
+[ "$(cat "$pack/SKILL.md")" = "pack text" ] || {
+  echo "FAIL: the symlink target was written through"; fails=$((fails + 1))
+}
+
 # --- update with no lock is an error ----------------------------------------------------------
 tree=$(project update-nolock)
 run "$tree" update

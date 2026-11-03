@@ -69,8 +69,10 @@ copies whose unit set is unchanged still need `sync` to receive source updates. 
 
 These checks cover Sjel-managed Packs, not every discovery root a harness reads. External skills
 such as Anatomy and application-owned skill links load independently. `tools/skills add` and
-`update` stage third-party content through `tools/intake`; direct upstream installers bypass that
-screening. The install-integrity limits and external-skill management work are tracked in
+`update` stage third-party content once, screen that snapshot through `tools/intake`, and install
+those same bytes; a missing model review holds the install unless the exact digest was approved.
+Direct upstream installers (`npx skills add -g`) bypass all of it. The remaining limits and the
+management work for global skills are tracked in
 [`docs/plans/packs.md`](../../docs/plans/packs.md).
 
 GitHub Copilot CLI settings are managed separately from Pack contents:

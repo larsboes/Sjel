@@ -1281,6 +1281,14 @@ impl Render for TerminalView {
                             ScrollDelta::Lines(delta) => delta.y,
                             ScrollDelta::Pixels(delta) => delta.y / px(12.),
                         };
+                        if event.modifiers.platform || event.modifiers.control {
+                            let step = steps.signum() as i32;
+                            if step != 0 {
+                                cx.stop_propagation();
+                                cx.emit(TerminalEvent::Zoom(step));
+                            }
+                            return;
+                        }
                         let lines = (steps.signum() * WHEEL_LINES as f32).round() as i32;
                         if lines != 0 {
                             view.scroll_by(lines, cx);

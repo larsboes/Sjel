@@ -517,12 +517,7 @@ impl Travel {
     }
 
     /// Zooms about the pointer, which is what a wheel or a pinch does.
-    pub(super) fn zoom_by(
-        &mut self,
-        delta: f64,
-        cursor: Option<(f32, f32)>,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn zoom_by(&mut self, delta: f64, cursor: Option<(f32, f32)>, cx: &mut Context<Self>) {
         let Some(center) = self.center else {
             return;
         };
@@ -549,14 +544,13 @@ impl Travel {
 
     /// A scroll wheel over the map zooms it; the page scrolls when the pointer is outside.
     ///
-    /// The wheel deltas are per-event and unbounded: a trackpad flick sends a long tail of
-    /// small ones and a notched mouse sends one large line delta, so both are turned into a
-    /// zoom delta and capped per event.
-    pub(super) fn on_wheel(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut Context<Self>) {
+    /// GPUI's scroll delta comes straight from the platform event (`NSEvent.scrollingDeltaY`
+    /// on macOS), which already applies the system's per-device scroll direction setting.
+    pub fn on_wheel(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut Context<Self>) {
         use gpui::ScrollDelta;
         let delta = match event.delta {
-            ScrollDelta::Pixels(d) => -f64::from(d.y) * 0.0035,
-            ScrollDelta::Lines(d) => -f64::from(d.y) * 0.4,
+            ScrollDelta::Pixels(d) => f64::from(d.y) * 0.0035,
+            ScrollDelta::Lines(d) => f64::from(d.y) * 0.4,
         };
         if delta == 0. {
             return;
@@ -817,13 +811,32 @@ impl Travel {
             }))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|view, event: &gpui::MouseDownEvent, _, _| {
+                cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
+                    if event.click_count == 2 {
+                        let cursor = view.cursor_in_map(event.position);
+                        let delta = if event.modifiers.shift { -1. } else { 1. };
+                        view.zoom_by(delta, cursor, cx);
+                        return;
+                    }
+                    view.drag = Some(event.position);
+                    view.map_dragged = false;
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
+                    if event.modifiers.platform || event.modifiers.control {
+                        let cursor = view.cursor_in_map(event.position);
+                        let delta = if event.modifiers.shift { -1. } else { 1. };
+                        view.zoom_by(delta, cursor, cx);
+                        return;
+                    }
                     view.drag = Some(event.position);
                     view.map_dragged = false;
                 }),
             )
             .on_mouse_move(cx.listener(|view, event: &gpui::MouseMoveEvent, _, cx| {
-                if !event.dragging() {
+                if !event.dragging() && event.pressed_button != Some(MouseButton::Middle) {
                     view.drag = None;
                     return;
                 }
@@ -853,8 +866,26 @@ impl Travel {
                     }
                 }),
             )
+            .on_mouse_up(
+                MouseButton::Middle,
+                cx.listener(|view, _, _, cx| {
+                    if view.drag.take().is_some() && view.map_dragged {
+                        view.settle_map(cx);
+                        cx.notify();
+                    }
+                }),
+            )
             .on_mouse_up_out(
                 MouseButton::Left,
+                cx.listener(|view, _, _, cx| {
+                    if view.drag.take().is_some() && view.map_dragged {
+                        view.settle_map(cx);
+                        cx.notify();
+                    }
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Middle,
                 cx.listener(|view, _, _, cx| {
                     if view.drag.take().is_some() && view.map_dragged {
                         view.settle_map(cx);
@@ -1401,10 +1432,10 @@ mod tests {
         let (start, start_center) = view.read_with(cx, |view, _| (view.zoom, view.center.unwrap()));
         let under_pointer = ground_at(start_center, start, viewport, at);
 
-        // A wheel notch away from the map zooms out; the point under the pointer stays put.
+        // A wheel notch down zooms out; the point under the pointer stays put.
         cx.simulate_event(ScrollWheelEvent {
             position: cursor,
-            delta: ScrollDelta::Lines(point(0., 1.)),
+            delta: ScrollDelta::Lines(point(0., -1.)),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
         });
@@ -1420,7 +1451,7 @@ mod tests {
         // And back the other way, from the same pointer.
         cx.simulate_event(ScrollWheelEvent {
             position: cursor,
-            delta: ScrollDelta::Lines(point(0., -1.)),
+            delta: ScrollDelta::Lines(point(0., 1.)),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
         });

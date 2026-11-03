@@ -73,6 +73,10 @@ actions!(
         DocNextPage,
         /// Toggle 1x / 2x zoom on the open document reader.
         DocToggleZoom,
+        /// Zoom in on the active map, document, or terminal.
+        ZoomIn,
+        /// Zoom out on the active map, document, or terminal.
+        ZoomOut,
         /// Open Settings at the section it showed last.
         OpenSettings,
         /// Open the terminal in the right edge.
@@ -230,8 +234,14 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("right", DocNextPage, Some(PAGE_KEYS)),
         KeyBinding::new("pagedown", DocNextPage, Some(PAGE_KEYS)),
         KeyBinding::new("z", DocToggleZoom, Some(PAGE_KEYS)),
-        KeyBinding::new("cmd-=", DocToggleZoom, Some(PAGE_KEYS)),
-        KeyBinding::new("cmd-+", DocToggleZoom, Some(PAGE_KEYS)),
+        KeyBinding::new("+", ZoomIn, Some(PAGE_KEYS)),
+        KeyBinding::new("=", ZoomIn, Some(PAGE_KEYS)),
+        KeyBinding::new("-", ZoomOut, Some(PAGE_KEYS)),
+        KeyBinding::new("cmd-=", ZoomIn, None),
+        KeyBinding::new("cmd-+", ZoomIn, None),
+        KeyBinding::new("shift-cmd-=", ZoomIn, None),
+        KeyBinding::new("cmd--", ZoomOut, None),
+        KeyBinding::new("shift-cmd--", ZoomOut, None),
         // Vim chords for fast page jumps
         KeyBinding::new("g h", GoTo(Page::Home), Some(PAGE_KEYS)),
         KeyBinding::new("g o", GoTo(Page::Context), Some(PAGE_KEYS)),
@@ -1726,6 +1736,44 @@ impl Workspace {
         }
     }
 
+    fn on_zoom_in(&mut self, _: &ZoomIn, _: &mut Window, cx: &mut Context<Self>) {
+        match self.page {
+            Page::Travel => {
+                self.travel
+                    .update(cx, |travel, cx| travel.zoom_by(1., None, cx));
+            }
+            Page::Documents => {
+                self.documents.update(cx, |docs, cx| docs.zoom_in(cx));
+            }
+            _ => self.step_terminal_zoom(1, cx),
+        }
+    }
+
+    fn on_zoom_out(&mut self, _: &ZoomOut, _: &mut Window, cx: &mut Context<Self>) {
+        match self.page {
+            Page::Travel => {
+                self.travel
+                    .update(cx, |travel, cx| travel.zoom_by(-1., None, cx));
+            }
+            Page::Documents => {
+                self.documents.update(cx, |docs, cx| docs.zoom_out(cx));
+            }
+            _ => self.step_terminal_zoom(-1, cx),
+        }
+    }
+
+    fn step_terminal_zoom(&mut self, steps: i32, cx: &mut Context<Self>) {
+        let settings = self.appearance_settings;
+        let terminal_font_size = step_terminal_font_size(settings.terminal_font_size, steps);
+        self.set_appearance(
+            AppearanceSettings {
+                terminal_font_size,
+                ..settings
+            },
+            cx,
+        );
+    }
+
     fn on_next_page(&mut self, _: &NextPage, _: &mut Window, cx: &mut Context<Self>) {
         self.step_tab(1, cx);
     }
@@ -2113,9 +2161,36 @@ impl Render for Workspace {
         // fire while a palette query has focus.
         div()
             .id("workspace")
-            .when_some(self.frames.clone(), |root, frames| {
-                root.on_scroll_wheel(move |_, _, _| frames.input())
-            })
+            .on_scroll_wheel(cx.listener(|view, event: &gpui::ScrollWheelEvent, _, cx| {
+                if let Some(frames) = &view.frames {
+                    frames.input();
+                }
+                if event.modifiers.platform || event.modifiers.control {
+                    match view.page {
+                        Page::Travel => {
+                            cx.stop_propagation();
+                            view.travel
+                                .update(cx, |travel, cx| travel.on_wheel(event, cx));
+                        }
+                        Page::Documents => {
+                            cx.stop_propagation();
+                            view.documents
+                                .update(cx, |docs, cx| docs.on_wheel_zoom(event, cx));
+                        }
+                        _ => {
+                            let dy = match event.delta {
+                                gpui::ScrollDelta::Pixels(d) => f32::from(d.y),
+                                gpui::ScrollDelta::Lines(d) => d.y,
+                            };
+                            let step = dy.signum() as i32;
+                            if step != 0 {
+                                cx.stop_propagation();
+                                view.step_terminal_zoom(step, cx);
+                            }
+                        }
+                    }
+                }
+            }))
             .on_action(cx.listener(Self::open_palette))
             .on_action(cx.listener(Self::on_focus_search))
             .on_action(cx.listener(Self::on_next_page))
@@ -2131,6 +2206,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_doc_prev_page))
             .on_action(cx.listener(Self::on_doc_next_page))
             .on_action(cx.listener(Self::on_doc_toggle_zoom))
+            .on_action(cx.listener(Self::on_zoom_in))
+            .on_action(cx.listener(Self::on_zoom_out))
             .on_action(cx.listener(Self::on_toggle_soundscape))
             .on_action(cx.listener(Self::on_cycle_soundscape_preset))
             .on_action(cx.listener(Self::on_run_primary))

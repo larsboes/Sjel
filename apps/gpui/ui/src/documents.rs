@@ -1445,6 +1445,26 @@ impl Documents {
         self.set_zoom(next, cx);
     }
 
+    pub fn zoom_in(&mut self, cx: &mut Context<Self>) {
+        self.set_zoom(Zoom::Close, cx);
+    }
+
+    pub fn zoom_out(&mut self, cx: &mut Context<Self>) {
+        self.set_zoom(Zoom::Page, cx);
+    }
+
+    pub fn on_wheel_zoom(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut Context<Self>) {
+        let dy = match event.delta {
+            gpui::ScrollDelta::Pixels(d) => f32::from(d.y),
+            gpui::ScrollDelta::Lines(d) => d.y,
+        };
+        if dy > 0. {
+            self.zoom_in(cx);
+        } else if dy < 0. {
+            self.zoom_out(cx);
+        }
+    }
+
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let field = self.search_field(window, cx);
         field.update(cx, |input, cx| input.focus(window, cx));
@@ -2691,6 +2711,17 @@ fn parse_page_ranges(value: &str) -> Result<Vec<DuplicatePageRange>, String> {
 
 fn reader_page_element(reader: &Reader, palette: Palette) -> AnyElement {
     if let Some(image) = reader.image() {
+        if reader.zoom == Zoom::Close {
+            return div()
+                .id("document-page-zoom-scroll")
+                .flex_1()
+                .min_h_0()
+                .w_full()
+                .overflow_scroll()
+                .p_2()
+                .child(img(image).w(px(1200.)))
+                .into_any_element();
+        }
         return div()
             .flex_1()
             .min_h_0()

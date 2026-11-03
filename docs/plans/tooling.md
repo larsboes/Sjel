@@ -10,12 +10,19 @@ covers it.
 
 ## Open
 
+- **Harness intake review, live.** `tools/intake review --reviewer claude` passed only against a
+  fake `claude` in `tools/skills.test.sh`. A real `claude -p` run has not happened. Unverified:
+  the CLI accepts `--setting-sources project` together with `--json-schema`, and the field that
+  holds the answer (the parser reads `structured_output`, then JSON in `result`). Smallest
+  change: run it once on a held stage and fix the flags it rejects. Also open: Codex as a second
+  reviewer in `review::HARNESSES`, and a timeout on the harness run.
 - **One update surface.** `sjel update` reports package classes but no skills,
   `tools/skills` has no update check, and `tools/harnesses` owns Packs. Smallest change: one
   `sjel update` entry point that delegates skills to `tools/skills check|update`, Packs to
-  `tools/harnesses`, and the rest to its existing surfaces, with one report. The per-owner
-  verbs stay the implementation; the skill `sjel` carries the route in a reference rather than a
-  second skill.
+  `tools/harnesses`, and the rest to its existing surfaces, with one report. Blocked by the
+  read-only check below: `tools/skills check` installs today, so the delegate must not call it.
+  The per-owner verbs stay the implementation; the skill `sjel` carries the route in a reference
+  rather than a second skill.
 - **Read-only global skill update checks.** `tools/skills list --global --json` inventories
   installations but has no update-check verb. The upstream CLI exposes `update` without a
   documented dry-run mode, and `sjel update` reports Interceptor integration state without

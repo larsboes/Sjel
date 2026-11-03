@@ -49,6 +49,7 @@ drifting copies.
    digest was approved, `--no-review` is gone, and an unapproved `--against` baseline is
    ignored. Without the `intake_review` role, `tools/intake review --reviewer claude` records a
    harness review receipt for one digest, and the gate reads it in place of the model review.
+   Not run live yet: see "Harness intake review, live" in [`tooling.md`](tooling.md).
    Snapshots now refuse symlinks, special files, files over 2 MiB and unreadable
    directories rather than substituting a placeholder. Limits: publication is not
    crash-atomic across layouts (backups are restored on ordinary failure, the lock is written

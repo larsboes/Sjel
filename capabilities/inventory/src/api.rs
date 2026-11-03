@@ -27,6 +27,10 @@ pub struct SaveWishGroupRequest {
     pub constraint_text: String,
     #[serde(default)]
     pub item_ids: Option<Vec<String>>,
+    /// Mark the group as alternatives: a budget counts only its cheapest member. Absent leaves
+    /// the mark as it is.
+    #[serde(default)]
+    pub alternatives: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
@@ -277,15 +281,19 @@ async fn api_wishlist(State(s): State<Arc<AppState>>) -> Result<impl IntoRespons
         .map(|(i, _)| i)
         .collect();
 
-    let total_low: i64 = open
+    // A group of alternatives is one purchase: only its cheapest member is in the totals. The
+    // list itself still carries every wish.
+    let alternatives = st.alternative_groups().map_err(boom)?;
+    let counted = crate::store::compare::counted(open.clone(), &alternatives);
+    let total_low: i64 = counted
         .iter()
         .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
         .sum();
-    let total_high: i64 = open
+    let total_high: i64 = counted
         .iter()
         .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
         .sum();
-    let unpriced = open
+    let unpriced = counted
         .iter()
         .filter(|i| i.price_cents.is_none() && i.cost_min_cents.is_none())
         .count();
@@ -327,6 +335,11 @@ async fn api_post_wish_group(
         .map_err(boom)?;
     if let Some(items) = body.item_ids {
         st.set_wish_group_items(&body.id, &items).map_err(boom)?;
+    }
+    let mut group = group;
+    if let Some(alternatives) = body.alternatives {
+        st.set_alternatives(&body.id, alternatives).map_err(boom)?;
+        group.alternatives = alternatives;
     }
     Ok(Json(group))
 }

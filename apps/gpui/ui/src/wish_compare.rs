@@ -12,7 +12,8 @@ use gpui_kit::{
 use sjel_gpui_core::inventory::compare::{
     day_number, format_per_unit, history_domains, scatter_domains, Fit, GroupComparison,
 };
-use sjel_gpui_core::inventory::format_cents;
+use sjel_gpui_core::inventory::{format_cents, WishGroup};
+use sjel_gpui_core::shell::{self, ShellError};
 
 use super::InventoryPage;
 use crate::theme::{tint, Palette};
@@ -35,6 +36,41 @@ fn series_colour(palette: &Palette, index: usize) -> u32 {
 }
 
 impl InventoryPage {
+    /// Flip a group between "every member counts" and "pick one".
+    pub(super) fn set_alternatives(&mut self, group: WishGroup, cx: &mut Context<Self>) {
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.wish_error = Some(error.to_string());
+                cx.notify();
+                return;
+            }
+        };
+        self.group_busy = Some(group.id.clone());
+        let work = shell::run(async move {
+            shell
+                .inventory_set_alternatives(
+                    &group.id,
+                    &group.title,
+                    &group.constraint_text,
+                    !group.alternatives,
+                )
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.group_busy = None;
+                match result {
+                    Ok(()) => page.load(cx),
+                    Err(error) => page.wish_error = Some(error.to_string()),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// The comparison for the selected group, or None when the group has nothing to compare.
     pub(super) fn render_comparison(
         &self,

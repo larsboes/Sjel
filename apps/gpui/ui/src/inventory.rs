@@ -16,7 +16,7 @@ use crate::interior::RoomPlanHistory;
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
-    budget_of, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
+    budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
     wishlist_view, InteriorLayoutSummary, InventoryItem, InventoryRow, InventoryState,
     InventoryWishlist, MailMatchSnapshot, MailProposal, NewInventoryItem, WishGroup,
 };
@@ -1937,14 +1937,21 @@ impl InventoryPage {
 
         // The banner describes what the list shows. When a group or a search narrows it, the range
         // of the whole wishlist stays visible underneath instead of disappearing.
-        let budget = budget_of(shown.iter().copied());
-        let whole = budget_of(wishlist.items.iter());
+        // A group of alternatives is one purchase: only its cheapest member is in a total.
+        let budget = budget_of(counted(&shown, &groups));
+        let every: Vec<&InventoryItem> = wishlist.items.iter().collect();
+        let whole = budget_of(counted(&every, &groups));
         let range = format!(
             "{} – {}",
             format_cents(Some(budget.low_cents)),
             format_cents(Some(budget.high_cents))
         );
         let label = match &group {
+            Some(group) if group.alternatives => format!(
+                "{} · {} open · pick one, the cheapest counts",
+                group.title,
+                shown.len()
+            ),
             Some(group) => format!("{} · {} open", group.title, shown.len()),
             None if filtered => format!(
                 "Matching wishes · {} of {}",
@@ -2075,6 +2082,21 @@ impl InventoryPage {
                     } else {
                         group.constraint_text.clone()
                     }),
+            );
+            let toggle = group.clone();
+            row = row.child(
+                Button::new(format!("group-alternatives-{}", group.id))
+                    .small()
+                    .ghost()
+                    .label(if group.alternatives {
+                        "Pick one: on"
+                    } else {
+                        "Pick one: off"
+                    })
+                    .disabled(group_busy)
+                    .on_click(cx.listener(move |page, _, _, cx| {
+                        page.set_alternatives(toggle.clone(), cx);
+                    })),
             );
             let id = group.id.clone();
             let confirming = self.confirm_remove_group.as_deref() == Some(id.as_str());

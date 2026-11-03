@@ -517,6 +517,9 @@ pub struct WishGroup {
     pub title: String,
     #[serde(default)]
     pub constraint_text: String,
+    /// One of the members gets bought: a budget counts only the cheapest.
+    #[serde(default)]
+    pub alternatives: bool,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -529,6 +532,8 @@ pub struct WishGroupView {
     pub id: String,
     pub title: String,
     pub constraint_text: String,
+    #[serde(default)]
+    pub alternatives: bool,
     pub created_at: String,
     pub updated_at: String,
     pub items: Vec<Item>,
@@ -1273,6 +1278,7 @@ impl Store {
             id: id.to_string(),
             title: title.to_string(),
             constraint_text: constraint_text.to_string(),
+            alternatives: false,
             created_at: String::new(),
             updated_at: String::new(),
         })
@@ -1316,7 +1322,7 @@ impl Store {
     pub fn wish_groups(&self) -> Result<Vec<WishGroupView>, Error> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&format!(
-            "SELECT id, title, constraint_text, created_at, updated_at FROM {}_wish_group ORDER BY title",
+            "SELECT id, title, constraint_text, created_at, updated_at, alternatives FROM {}_wish_group ORDER BY title",
             self.prefix
         ))?;
         let groups: Vec<WishGroup> = stmt
@@ -1327,6 +1333,7 @@ impl Store {
                     constraint_text: row.get(2)?,
                     created_at: row.get(3)?,
                     updated_at: row.get(4)?,
+                    alternatives: row.get::<_, i64>(5)? == 1,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -1347,11 +1354,17 @@ impl Store {
                     items.push(it);
                 }
             }
-            let total_low: i64 = items
+            let alternatives = if g.alternatives {
+                vec![ids.clone()]
+            } else {
+                Vec::new()
+            };
+            let counted = compare::counted(items.iter().collect(), &alternatives);
+            let total_low: i64 = counted
                 .iter()
                 .map(|i| i.price_cents.or(i.cost_min_cents).unwrap_or(0))
                 .sum();
-            let total_high: i64 = items
+            let total_high: i64 = counted
                 .iter()
                 .map(|i| i.price_cents.or(i.cost_max_cents).unwrap_or(0))
                 .sum();
@@ -1360,6 +1373,7 @@ impl Store {
                 id: g.id,
                 title: g.title,
                 constraint_text: g.constraint_text,
+                alternatives: g.alternatives,
                 created_at: g.created_at,
                 updated_at: g.updated_at,
                 items,

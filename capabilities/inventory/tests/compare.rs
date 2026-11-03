@@ -143,3 +143,33 @@ fn a_price_is_recorded_once_a_day_and_alerts_once() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn a_group_of_alternatives_costs_its_cheapest_member() {
+    let path = temp_file("alternatives");
+    let store = Store::open(&path).unwrap();
+    for (id, cents) in [("m6", 140_102), ("m5", 247_000)] {
+        let mut item = wish(id, None);
+        item.price_cents = Some(cents);
+        store.upsert_item(&item).unwrap();
+    }
+    store
+        .create_or_update_wish_group("server", "Home server", "")
+        .unwrap();
+    store
+        .set_wish_group_items("server", &["m6".into(), "m5".into()])
+        .unwrap();
+    let total = |store: &Store| store.wish_groups().unwrap()[0].total_low_cents;
+    assert_eq!(total(&store), 387_102, "unmarked, the members add up");
+
+    store.set_alternatives("server", true).unwrap();
+    assert!(store.wish_groups().unwrap()[0].alternatives);
+    assert_eq!(total(&store), 140_102);
+    assert_eq!(
+        store.alternative_groups().unwrap(),
+        vec![vec!["m5".to_string(), "m6".to_string()]]
+    );
+    assert!(store.set_alternatives("missing", true).is_err());
+
+    let _ = std::fs::remove_file(&path);
+}

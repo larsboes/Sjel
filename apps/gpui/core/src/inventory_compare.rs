@@ -76,6 +76,30 @@ impl Shell {
             .await?;
         Ok(envelope.groups)
     }
+
+    /// Mark a wish group as alternatives or not. The title and constraint go along because the
+    /// route saves the whole group.
+    pub async fn inventory_set_alternatives(
+        &self,
+        id: &str,
+        title: &str,
+        constraint_text: &str,
+        alternatives: bool,
+    ) -> ShellResult<()> {
+        self.send(
+            reqwest::Method::POST,
+            "/inventory/api/wish-groups",
+            Some(serde_json::json!({
+                "id": id,
+                "title": title,
+                "constraint_text": constraint_text,
+                "alternatives": alternatives,
+            })),
+            10,
+        )
+        .await
+        .map(|_| ())
+    }
 }
 
 /// Cents per one unit of a spec, for one candidate at its latest price.

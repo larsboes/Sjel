@@ -180,6 +180,9 @@ pub struct WishGroup {
     pub title: String,
     #[serde(default)]
     pub constraint_text: String,
+    /// One member gets bought: a budget counts only the cheapest.
+    #[serde(default)]
+    pub alternatives: bool,
     #[serde(default)]
     pub items: Vec<InventoryItem>,
     #[serde(default)]
@@ -340,6 +343,37 @@ pub fn budget_of<'a>(items: impl IntoIterator<Item = &'a InventoryItem>) -> Budg
     budget
 }
 
+/// The wishes a budget counts, in the rule `compare::counted` applies on the capability side: of
+/// a group marked as alternatives only the cheapest priced member counts, and with no priced
+/// member the first one does. Other groups add up.
+pub fn counted<'a>(items: &[&'a InventoryItem], groups: &[WishGroup]) -> Vec<&'a InventoryItem> {
+    let low = |item: &InventoryItem| item.price_cents.or(item.cost_min_cents);
+    let mut dropped = std::collections::BTreeSet::new();
+    for group in groups.iter().filter(|group| group.alternatives) {
+        let present: Vec<&InventoryItem> = items
+            .iter()
+            .copied()
+            .filter(|item| group.contains(&item.id))
+            .collect();
+        let keep = present
+            .iter()
+            .filter(|item| low(item).is_some())
+            .min_by_key(|item| low(item))
+            .or(present.first())
+            .map(|item| item.id.clone());
+        for item in present {
+            if Some(&item.id) != keep.as_ref() {
+                dropped.insert(item.id.clone());
+            }
+        }
+    }
+    items
+        .iter()
+        .copied()
+        .filter(|item| !dropped.contains(&item.id))
+        .collect()
+}
+
 /// How many monthly surpluses these wishes take, in the rule `budget::months_to_pay` applies on the
 /// capability side: a surplus that is not positive funds nothing.
 pub fn months_to_pay(open_cents: i64, balance: &MonthlyBalance) -> Option<f64> {
@@ -447,6 +481,30 @@ mod tests {
             cost_max_cents: cost.map(|c| c.1),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_group_of_alternatives_counts_its_cheapest_member() {
+        let items = [
+            wish("m6", Some(140_102), None),
+            wish("m5", Some(247_000), None),
+            wish("lamp", Some(3_000), None),
+        ];
+        let refs: Vec<&InventoryItem> = items.iter().collect();
+        let mut group = WishGroup {
+            id: "server".into(),
+            title: "Home server".into(),
+            items: vec![wish("m6", None, None), wish("m5", None, None)],
+            ..Default::default()
+        };
+        assert_eq!(counted(&refs, std::slice::from_ref(&group)).len(), 3);
+        group.alternatives = true;
+        let kept = counted(&refs, &[group]);
+        assert_eq!(
+            kept.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            vec!["m6", "lamp"]
+        );
+        assert_eq!(budget_of(kept).low_cents, 143_102);
     }
 
     #[test]

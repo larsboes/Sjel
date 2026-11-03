@@ -13,7 +13,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use super::{Error, Store};
+use super::{Error, Item, Store};
 
 /// One numeric property: a candidate's spec, or a group's need.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -97,7 +97,52 @@ pub(super) fn migrate(conn: &Connection, prefix: &str) -> Result<(), Error> {
         );
         "
     ))?;
+    let present: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = 'alternatives'",
+        params![format!("{prefix}_wish_group")],
+        |row| row.get(0),
+    )?;
+    if present == 0 {
+        conn.execute_batch(&format!(
+            "ALTER TABLE {prefix}_wish_group ADD COLUMN alternatives INTEGER NOT NULL DEFAULT 0;"
+        ))?;
+    }
     Ok(())
+}
+
+/// What a wish costs at the low end: its price, else its lowest estimate.
+fn low_cents(item: &Item) -> Option<i64> {
+    item.price_cents.or(item.cost_min_cents)
+}
+
+/// The wishes a budget counts. A group marked as alternatives is one purchase, so of its members
+/// only the cheapest priced one counts. With no priced member, the first one counts, unpriced.
+/// Groups without the mark add up as before. `apps/gpui/core` applies the same rule
+/// (`inventory::counted`) to the lists it narrows on the client.
+pub fn counted<'a>(items: Vec<&'a Item>, alternatives: &[Vec<String>]) -> Vec<&'a Item> {
+    let mut dropped = std::collections::BTreeSet::new();
+    for members in alternatives {
+        let present: Vec<&Item> = items
+            .iter()
+            .copied()
+            .filter(|i| members.contains(&i.id))
+            .collect();
+        let keep = present
+            .iter()
+            .filter(|i| low_cents(i).is_some())
+            .min_by_key(|i| low_cents(i))
+            .or(present.first())
+            .map(|i| i.id.clone());
+        for item in present {
+            if Some(&item.id) != keep.as_ref() {
+                dropped.insert(item.id.clone());
+            }
+        }
+    }
+    items
+        .into_iter()
+        .filter(|i| !dropped.contains(&i.id))
+        .collect()
 }
 
 /// A key is lower-case ASCII, digits and `_`, so it can name a chart axis and a CLI argument.
@@ -152,6 +197,46 @@ impl Store {
             return Err(format!("no entry `{item_id}`").into());
         }
         self.replace_numbers("wish_spec", "item_id", item_id, specs)
+    }
+
+    /// Mark a wish group as alternatives (one of its members gets bought) or not.
+    pub fn set_alternatives(&self, group_id: &str, alternatives: bool) -> Result<(), Error> {
+        let conn = self.conn()?;
+        let changed = conn.execute(
+            &format!(
+                "UPDATE {}_wish_group SET alternatives = ?2 WHERE id = ?1",
+                self.prefix
+            ),
+            params![group_id, alternatives],
+        )?;
+        if changed == 0 {
+            return Err(format!("no wish group `{group_id}`").into());
+        }
+        Ok(())
+    }
+
+    /// The member ids of every group marked as alternatives.
+    pub fn alternative_groups(&self) -> Result<Vec<Vec<String>>, Error> {
+        let p = &self.prefix;
+        let conn = self.conn()?;
+        let mut groups = conn.prepare(&format!(
+            "SELECT id FROM {p}_wish_group WHERE alternatives = 1 ORDER BY id"
+        ))?;
+        let ids: Vec<String> = groups
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        let mut members = conn.prepare(&format!(
+            "SELECT item_id FROM {p}_wish_group_item WHERE group_id = ?1 ORDER BY item_id"
+        ))?;
+        let mut out = Vec::new();
+        for id in ids {
+            out.push(
+                members
+                    .query_map(params![id], |row| row.get(0))?
+                    .collect::<Result<_, _>>()?,
+            );
+        }
+        Ok(out)
     }
 
     /// Replace a wish group's needs. An empty list clears them.
@@ -371,6 +456,43 @@ mod tests {
         assert!(parse_spec("Memory=32").is_err());
         assert!(parse_spec("memory_gb=lots").is_err());
         assert!(parse_spec("memory_gb").is_err());
+    }
+
+    fn priced(id: &str, price: Option<i64>, min: Option<i64>) -> Item {
+        Item {
+            id: id.into(),
+            price_cents: price,
+            cost_min_cents: min,
+            ..Item::default()
+        }
+    }
+
+    #[test]
+    fn alternatives_count_once_at_their_cheapest() {
+        let items = [
+            priced("m6", Some(140_102), None),
+            priced("m5", Some(247_000), None),
+            priced("estimate", None, Some(100_000)),
+            priced("lamp", Some(3_000), None),
+        ];
+        let all: Vec<&Item> = items.iter().collect();
+        let ids = |v: Vec<&Item>| v.iter().map(|i| i.id.clone()).collect::<Vec<_>>();
+        let group = vec!["m6".to_string(), "m5".to_string(), "estimate".to_string()];
+        assert_eq!(
+            ids(counted(all.clone(), &[group])),
+            vec!["estimate", "lamp"]
+        );
+        assert_eq!(
+            ids(counted(all.clone(), &[])),
+            vec!["m6", "m5", "estimate", "lamp"]
+        );
+        // No priced member: the first counts, so the unpriced count stays honest.
+        let unpriced = [priced("a", None, None), priced("b", None, None)];
+        let refs: Vec<&Item> = unpriced.iter().collect();
+        assert_eq!(
+            ids(counted(refs, &[vec!["a".into(), "b".into()]])),
+            vec!["a"]
+        );
     }
 
     #[test]

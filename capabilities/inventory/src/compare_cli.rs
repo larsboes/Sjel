@@ -37,6 +37,7 @@ pub async fn run(cmd: &str, argv: &[String]) -> i32 {
         "price" => price(&store, argv),
         "specs" => numbers(&store, argv, false),
         "needs" => numbers(&store, argv, true),
+        "alternatives" => alternatives(&store, argv),
         _ => compare(&store, argv),
     }
 }
@@ -167,6 +168,40 @@ pub fn numbers(store: &Store, argv: &[String], needs: bool) -> i32 {
     match result {
         Ok(()) => {
             println!("{owner}: {} value(s)", parsed.len());
+            0
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            2
+        }
+    }
+}
+
+/// `alternatives <group> yes|no`: one member of the group gets bought, so a budget counts only
+/// the cheapest.
+fn alternatives(store: &Store, argv: &[String]) -> i32 {
+    let (Some(group), Some(mark)) = (argv.get(1), argv.get(2)) else {
+        eprintln!("usage: inventory alternatives <group> yes|no");
+        return 2;
+    };
+    let on = match mark.as_str() {
+        "yes" => true,
+        "no" => false,
+        _ => {
+            eprintln!("usage: inventory alternatives <group> yes|no");
+            return 2;
+        }
+    };
+    match store.set_alternatives(group, on) {
+        Ok(()) => {
+            println!(
+                "{group}: {}",
+                if on {
+                    "alternatives, the cheapest counts"
+                } else {
+                    "every member counts"
+                }
+            );
             0
         }
         Err(e) => {

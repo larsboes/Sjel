@@ -48,7 +48,7 @@ German columns next to the renamed ones.
 | `GET /api/inventory` | every entry with its state |
 | `GET /api/wishlist` | the open wishlist, its low and high totals, and the months it costs |
 | `GET /api/wish-groups` | wish groups sharing a constraint, with members and cost totals |
-| `POST /api/wish-groups` | create or update a wish group with its title and constraint |
+| `POST /api/wish-groups` | create or update a wish group with its title and constraint; `alternatives: true` makes budgets count only its cheapest member |
 | `PUT /api/wish-groups/{id}/items` | set the item members of a wish group |
 | `DELETE /api/wish-groups/{id}` | delete a wish group |
 | `PUT /api/wish-groups/{id}/needs` | replace a group's needs: numeric keys its candidates are compared to |

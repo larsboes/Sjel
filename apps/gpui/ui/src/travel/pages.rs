@@ -316,12 +316,15 @@ impl Travel {
                         .child(format!("Offline: {}%", offline_status.percent())),
                 )
                 .child(
-                    self.button(gpui::SharedString::from(format!("download-offline-{}", plan.id)))
-                        .ghost()
-                        .label("Download offline pack")
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.prepare_offline_pack(plan_id.clone(), cx);
-                        })),
+                    self.button(gpui::SharedString::from(format!(
+                        "download-offline-{}",
+                        plan.id
+                    )))
+                    .ghost()
+                    .label("Download offline pack")
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.prepare_offline_pack(plan_id.clone(), cx);
+                    })),
                 )
                 .into_any_element()
         };
@@ -437,9 +440,9 @@ impl Travel {
                             self.button(gpui::SharedString::from(format!("trip-{}", plan.id)))
                                 .ghost()
                                 .label(plan.title.clone())
-                                .on_click(
-                                    cx.listener(move |view, _, _, cx| view.select(open_id.clone(), cx)),
-                                ),
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.select(open_id.clone(), cx)
+                                })),
                         )
                         .child(if is_offline {
                             div()
@@ -1180,11 +1183,15 @@ impl Travel {
                     )
                     .child(
                         self.button(gpui::SharedString::from(format!("place-locate-{index}")))
-                            .label(if self.resolving { "Locating…" } else { "Locate" })
+                            .label(if self.resolving {
+                                "Locating…"
+                            } else {
+                                "Locate"
+                            })
                             .disabled(self.resolving)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.resolve_current_plan(false, cx)
-                            })),
+                            .on_click(
+                                cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
+                            ),
                     ),
             );
         }
@@ -1218,10 +1225,7 @@ impl Travel {
         let mut stages: Vec<_> = plan.stages.iter().collect();
         stages.sort_by_key(|stage| stage.sequence);
 
-        let slot = self
-            .selected
-            .as_ref()
-            .and_then(|id| self.details.get(id));
+        let slot = self.selected.as_ref().and_then(|id| self.details.get(id));
 
         let items: Vec<Item> = slot
             .and_then(|s| s.value.as_ref())
@@ -1358,26 +1362,34 @@ impl Travel {
                 let linked_ids: std::collections::HashSet<_> =
                     linked.iter().map(|l| l.id.as_str()).collect();
 
-                let linked_events: Vec<(&sjel_gpui_core::record::Link, Option<&CalendarEntry>)> = linked
-                    .into_iter()
-                    .filter_map(|link| {
-                        let entry = slot.calendar_events.iter().find(|e| e.id == link.id);
-                        let matches = entry
-                            .map(|e| e.starts_at.starts_with(day_str.as_str()))
-                            .or_else(|| link.at.as_deref().map(|at| at.starts_with(day_str.as_str())))
-                            .unwrap_or(false);
-                        if matches {
-                            Some((link, entry))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+                let linked_events: Vec<(&sjel_gpui_core::record::Link, Option<&CalendarEntry>)> =
+                    linked
+                        .into_iter()
+                        .filter_map(|link| {
+                            let entry = slot.calendar_events.iter().find(|e| e.id == link.id);
+                            let matches = entry
+                                .map(|e| e.starts_at.starts_with(day_str.as_str()))
+                                .or_else(|| {
+                                    link.at
+                                        .as_deref()
+                                        .map(|at| at.starts_with(day_str.as_str()))
+                                })
+                                .unwrap_or(false);
+                            if matches {
+                                Some((link, entry))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
 
                 let nearby_events: Vec<&CalendarEntry> = slot
                     .calendar_events
                     .iter()
-                    .filter(|e| e.starts_at.starts_with(day_str.as_str()) && !linked_ids.contains(e.id.as_str()))
+                    .filter(|e| {
+                        e.starts_at.starts_with(day_str.as_str())
+                            && !linked_ids.contains(e.id.as_str())
+                    })
                     .collect();
 
                 (linked_events, nearby_events)
@@ -1551,21 +1563,14 @@ impl Travel {
                                         "⚠️ Transfer buffer required:"
                                     }),
                             )
-                            .child(
-                                div()
-                                    .text_color(rgb(palette.text))
-                                    .child(if same_stop {
-                                        format!(
-                                            "At {} (seamless station transfer)",
-                                            stage.destination.name
-                                        )
-                                    } else {
-                                        format!(
-                                            "{} → {} (station transfer required)",
-                                            stage.destination.name, next_stage.origin.name
-                                        )
-                                    }),
-                            ),
+                            .child(div().text_color(rgb(palette.text)).child(if same_stop {
+                                format!("At {} (seamless station transfer)", stage.destination.name)
+                            } else {
+                                format!(
+                                    "{} → {} (station transfer required)",
+                                    stage.destination.name, next_stage.origin.name
+                                )
+                            })),
                     );
                 } else if *orig_i + 1 < stages.len() {
                     let next_stage = stages[*orig_i + 1];
@@ -1589,21 +1594,19 @@ impl Travel {
                                         .text_color(rgb(palette.muted))
                                         .child("🌙 Overnight / Layover:"),
                                 )
-                                .child(
-                                    div()
-                                        .text_color(rgb(palette.text))
-                                        .child(if same_hub {
-                                            format!(
-                                                "Stay at {} until departure on {}",
-                                                stage.destination.name, next_date_str
-                                            )
-                                        } else {
-                                            format!(
-                                                "At {} · transfer to {} before departure on {}",
-                                                stage.destination.name, next_stage.origin.name, next_date_str
-                                            )
-                                        }),
-                                ),
+                                .child(div().text_color(rgb(palette.text)).child(if same_hub {
+                                    format!(
+                                        "Stay at {} until departure on {}",
+                                        stage.destination.name, next_date_str
+                                    )
+                                } else {
+                                    format!(
+                                        "At {} · transfer to {} before departure on {}",
+                                        stage.destination.name,
+                                        next_stage.origin.name,
+                                        next_date_str
+                                    )
+                                })),
                         );
                     }
                 }
@@ -1655,7 +1658,9 @@ impl Travel {
                         .or_else(|| {
                             link.at.as_deref().map(|at| {
                                 at.split_once('T')
-                                    .map(|(d, time)| format!("{d} · {}", time.get(..5).unwrap_or(time)))
+                                    .map(|(d, time)| {
+                                        format!("{d} · {}", time.get(..5).unwrap_or(time))
+                                    })
                                     .unwrap_or_else(|| at.to_owned())
                             })
                         })
@@ -1680,7 +1685,10 @@ impl Travel {
                                             .rounded(px(4.))
                                             .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
                                             .border_1()
-                                            .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
+                                            .border_color(rgba(crate::theme::tint(
+                                                palette.accent,
+                                                0x35,
+                                            )))
                                             .text_xs()
                                             .font_weight(gpui::FontWeight::MEDIUM)
                                             .text_color(rgb(palette.accent))
@@ -1945,7 +1953,11 @@ impl Travel {
                     })),
             );
         }
-        if let Some(address) = item.payload.get("address").and_then(serde_json::Value::as_str) {
+        if let Some(address) = item
+            .payload
+            .get("address")
+            .and_then(serde_json::Value::as_str)
+        {
             let addr = address.to_owned();
             actions = actions.child(
                 self.button(gpui::SharedString::from(format!("map-addr-{}", item.id)))

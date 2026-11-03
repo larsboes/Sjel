@@ -18,7 +18,7 @@
 #   tools/release vX.Y.Z                     # explicit version
 #   tools/release ... --push                 # also push the tag to origin
 #   tools/release ... --gh                   # also publish a gh release (implies --push)
-#   tools/release ... --force                # skip the clean/on-main/not-behind/doctor gate
+#   tools/release ... --force                # skip the clean/on-main/not-behind/CI gate
 #   tools/release --notes-only               # print the notes that WOULD be generated, cut nothing
 #   tools/release -h
 #
@@ -110,8 +110,14 @@ gate() {
   if [ "${behind:-0}" -gt 0 ]; then
     echo "release: $behind commit(s) behind origin/main — tools/update.sh first." >&2; fail=1
   fi
-  if ! "$TOOLS_DIR/doctor" >/dev/null 2>&1; then
-    echo "release: tools/doctor reports problems — fix them, or re-run with --force (knowingly)." >&2; fail=1
+  # The commit's CI result, not this machine's doctor: host state such as a stale backup says
+  # nothing about the tree being tagged.
+  local sha ci
+  sha="$(git -C "$SJEL_ROOT" rev-parse HEAD)"
+  ci="$(cd "$SJEL_ROOT" && gh run list --workflow CI --commit "$sha" --json conclusion \
+    --jq '[.[] | .conclusion] | if index("success") then "success" else (.[0] // "none" | if . == "" then "pending" else . end) end' 2>/dev/null || echo unknown)"
+  if [ "$ci" != success ]; then
+    echo "release: CI on ${sha:0:8} is '$ci', not 'success' — wait for it, or re-run with --force (knowingly)." >&2; fail=1
   fi
   return "$fail"
 }
@@ -119,7 +125,7 @@ gate() {
 if [ "$FORCE" -eq 0 ]; then
   if ! gate; then echo "release: gate failed — not cutting $VERSION." >&2; exit 1; fi
 else
-  echo "release: --force — skipping the clean/on-main/not-behind/doctor gate." >&2
+  echo "release: --force — skipping the clean/on-main/not-behind/CI gate." >&2
 fi
 
 NOTES_FILE="$(mktemp)"

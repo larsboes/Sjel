@@ -566,7 +566,7 @@ line, and its commit identity stays independent of the Sjel version it runs agai
 ### Cutting and consuming a release
 
 Tags are created through `tools/release`, never by hand. It gates on a clean tree, on `main`, not
-behind `origin/main`, and a passing `tools/doctor`, then generates notes from the manifest-aware
+behind `origin/main`, and a successful CI run on the exact commit, then generates notes from the manifest-aware
 delta in `tools/lib/delta.sh` — the same view `tools/update.sh` shows a consumer, so release notes
 and the incoming preview cannot drift apart.
 

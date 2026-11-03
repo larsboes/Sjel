@@ -7,6 +7,11 @@
 //! gate screens, and publication materializes the same tree — the stage is not read again after
 //! screening. The project `skills-lock.json` takes the staged entry verbatim, so remote
 //! provenance survives.
+//!
+//! `store` publishes the same screened bytes into the skill store instead of a project: one
+//! Pack per upstream source, whose `pack.toml` pins each skill's digest. Every harness reads
+//! the store as a Pack root, so profiles select upstream skills like Pack skills. `verify`
+//! re-reads the store against those pins.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -41,6 +46,8 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
     match verb.as_str() {
         "add" => add(rest),
         "update" => update(rest),
+        "store" => store(rest),
+        "verify" => verify(),
         "help" | "-h" | "--help" => {
             println!("{}", usage());
             Ok(0)
@@ -50,7 +57,8 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
 }
 
 fn usage() -> &'static str {
-    "usage: skills add <package> [--skill <name>]... [--agent <id>]... | skills update"
+    "usage: skills add <package> [--skill <name>]... [--agent <id>]... | skills update | \
+     skills store <package> [--skill <name>]... | skills verify"
 }
 
 /// One screened skill, bound for one agent's project directory.
@@ -110,12 +118,16 @@ fn add(args: &[String]) -> Result<u8, String> {
     println!("staging {package} for {}", agents.join(", "));
     stage_add(&stage, &package, &skills, &agents)?;
 
-    let mut jobs = collect_jobs(&stage, &project)?;
+    let jobs = select(collect_jobs(&stage, &project)?, &skills, &package)?;
+    install(&project, &stage, &jobs, &package)
+}
+
+/// Keep the named skills, or every staged one when none is named.
+fn select(mut jobs: Vec<Job>, skills: &[String], package: &str) -> Result<Vec<Job>, String> {
     if !skills.is_empty() {
-        let wanted: Vec<&str> = skills.iter().map(String::as_str).collect();
-        jobs.retain(|job| wanted.contains(&job.skill.as_str()));
-        for name in wanted {
-            if !jobs.iter().any(|job| job.skill == name) {
+        jobs.retain(|job| skills.contains(&job.skill));
+        for name in skills {
+            if !jobs.iter().any(|job| &job.skill == name) {
                 return Err(format!("{package} staged no skill '{name}'"));
             }
         }
@@ -123,7 +135,261 @@ fn add(args: &[String]) -> Result<u8, String> {
     if jobs.is_empty() {
         return Err(format!("{package} staged no skill"));
     }
-    install(&project, &stage, &jobs, &package)
+    Ok(jobs)
+}
+
+/// Gate every job under its package key: 0 passes, HELD holds, 1 is an error.
+fn gate_jobs(jobs: &[Job], package: &str) -> u8 {
+    let mut code = 0;
+    for job in jobs {
+        let key = format!("skills:{package}/{}", job.skill);
+        match gate_tree(&key, Some(&job.staged), &job.tree, baseline(&job.before)) {
+            0 => {}
+            HELD if code == 0 => code = HELD,
+            HELD => {}
+            _ => code = 1,
+        }
+    }
+    code
+}
+
+/// Where approved upstream skills live, one Pack per source. Every harness reads it as a Pack
+/// root (`harnesses/registry.rs`).
+pub fn store_root() -> PathBuf {
+    super::state_dir()
+        .parent()
+        .map(|sjel| sjel.join("skill-store"))
+        .unwrap_or_default()
+}
+
+/// The store Pack for a source: the repository name, as `owner/repo` or a URL names it.
+fn store_pack(package: &str) -> Result<String, String> {
+    let name = package
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(".git")
+        .to_ascii_lowercase();
+    crate::harnesses::engine::assert_simple_name(&name, "store pack")?;
+    Ok(name)
+}
+
+fn store(args: &[String]) -> Result<u8, String> {
+    let mut package = String::new();
+    let mut skills: Vec<String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "-s" | "--skill" => skills.push(it.next().cloned().ok_or("--skill needs a value")?),
+            other if other.starts_with('-') => return Err(format!("unknown option {other}")),
+            other if package.is_empty() => package = other.to_owned(),
+            other => {
+                return Err(format!(
+                    "store takes one package; got '{package}' and '{other}'"
+                ))
+            }
+        }
+    }
+    if package.is_empty() {
+        return Err("store needs a package".into());
+    }
+    let pack = store_pack(&package)?;
+    let pack_dir = store_root().join(&pack);
+    let stage = fresh_stage("store")?;
+    println!("staging {package} for the skill store");
+    stage_add(&stage, &package, &skills, &["claude-code".to_owned()])?;
+    let mut jobs = select(collect_jobs(&stage, &stage)?, &skills, &package)?;
+    for job in &mut jobs {
+        job.dest = pack_dir.join("skills").join(&job.skill);
+        job.before = dest_state(&job.dest)?;
+    }
+    let names: Vec<String> = jobs.iter().map(|job| job.skill.clone()).collect();
+    let root = std::env::var("SJEL_ROOT")
+        .map_err(|_| "SJEL_ROOT is unset; run it through tools/skills")?;
+    collisions(Path::new(&root), &pack, &names)?;
+    match gate_jobs(&jobs, &package) {
+        0 => {}
+        HELD => {
+            println!("\nnothing stored: {package} is held");
+            return Ok(HELD);
+        }
+        code => return Ok(code),
+    }
+    let published = publish(&jobs)?;
+    if let Err(e) = write_store_manifest(&pack_dir, &pack, &package, &stage, &jobs) {
+        published.rollback();
+        return Err(format!("{e}; stored skills were rolled back"));
+    }
+    published.commit();
+    println!(
+        "✓ stored {} in Pack '{pack}' at {}\n  Select it in profiles.toml, then: tools/harnesses apply",
+        names.join(", "),
+        pack_dir.display()
+    );
+    Ok(0)
+}
+
+/// Refuse a store Pack or skill name that another Pack root already declares: two roots with
+/// one Pack name stop every harness, and two Packs with one skill name fight over its folder.
+fn collisions(root: &Path, pack: &str, names: &[String]) -> Result<(), String> {
+    use crate::harnesses::{engine, registry::Registry};
+    let config = crate::packs::config(&Registry::new(root), "opencode")?;
+    let store = store_root();
+    for other in engine::available_packs(&config, true)? {
+        let dir = engine::pack_dir(&config, &other)?;
+        if dir.starts_with(&store) {
+            continue;
+        }
+        if other == pack {
+            return Err(format!("a Pack named '{pack}' exists at {}", dir.display()));
+        }
+        let theirs = engine::read_pack_skills(&config, &other)?;
+        if let Some(name) = names.iter().find(|n| theirs.contains(n)) {
+            return Err(format!("skill '{name}' is already in Pack '{other}'"));
+        }
+    }
+    Ok(())
+}
+
+/// Write the store Pack's manifest: the Pack fields the deploy engine reads, the upstream
+/// source, and one pin per skill. Pins of skills this run did not touch are kept.
+fn write_store_manifest(
+    pack_dir: &Path,
+    pack: &str,
+    package: &str,
+    stage: &Path,
+    jobs: &[Job],
+) -> Result<(), String> {
+    let path = pack_dir.join("pack.toml");
+    let mut pins = match fs::read_to_string(&path) {
+        Ok(text) => text
+            .parse::<toml::Table>()
+            .map_err(|e| format!("{}: {e}", path.display()))?
+            .remove("pin")
+            .and_then(|v| v.as_table().cloned())
+            .unwrap_or_default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let lock: Value = fs::read_to_string(stage.join("skills-lock.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let mut url = String::new();
+    for job in jobs {
+        let entry = &lock["skills"][&job.skill];
+        if let Some(u) = entry["sourceUrl"].as_str() {
+            url = u.to_owned();
+        }
+        let digest = digest(&job.tree);
+        let mut pin = toml::Table::new();
+        pin.insert("digest".into(), digest.clone().into());
+        if let Some(rev) = entry["skillFolderHash"].as_str() {
+            pin.insert("revision".into(), rev.into());
+        }
+        pin.insert(
+            "approval".into(),
+            super::evidence(&digest)
+                .unwrap_or_else(|| format!("passed the intake_review gate {today}"))
+                .into(),
+        );
+        pin.insert("stored".into(), today.clone().into());
+        pins.insert(job.skill.clone(), pin.into());
+    }
+    let mut manifest = toml::Table::new();
+    manifest.insert("name".into(), pack.into());
+    manifest.insert(
+        "description".into(),
+        format!("Approved upstream skills from {package}").into(),
+    );
+    manifest.insert(
+        "skills".into(),
+        pins.keys().cloned().collect::<Vec<_>>().into(),
+    );
+    let mut upstream = toml::Table::new();
+    upstream.insert("source".into(), package.into());
+    if !url.is_empty() {
+        upstream.insert("url".into(), url.into());
+    }
+    manifest.insert("upstream".into(), upstream.into());
+    manifest.insert("pin".into(), pins.into());
+    let text = toml::to_string(&manifest).map_err(|e| e.to_string())?;
+    let tmp = path.with_extension("toml.tmp");
+    fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Re-read every stored skill against its pin. Exit 1 on drift, a missing pin, or a skill
+/// folder the manifest does not name.
+fn verify() -> Result<u8, String> {
+    let root = store_root();
+    let Ok(entries) = fs::read_dir(&root) else {
+        println!("no skill store at {}", root.display());
+        return Ok(0);
+    };
+    let problems = verify_store(entries.flatten().map(|e| e.path()).collect());
+    for p in &problems {
+        println!("  ✗ {p}");
+    }
+    if problems.is_empty() {
+        println!("✓ every stored skill matches its pin");
+        Ok(0)
+    } else {
+        Ok(1)
+    }
+}
+
+fn verify_store(mut packs: Vec<PathBuf>) -> Vec<String> {
+    packs.sort();
+    let mut problems = Vec::new();
+    for dir in packs.into_iter().filter(|d| d.is_dir()) {
+        let pack = dir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let manifest = match fs::read_to_string(dir.join("pack.toml"))
+            .map_err(|e| e.to_string())
+            .and_then(|t| t.parse::<toml::Table>().map_err(|e| e.to_string()))
+        {
+            Ok(m) => m,
+            Err(e) => {
+                problems.push(format!("{pack}: pack.toml: {e}"));
+                continue;
+            }
+        };
+        let pins = manifest.get("pin").and_then(toml::Value::as_table);
+        let named: Vec<&str> = manifest
+            .get("skills")
+            .and_then(toml::Value::as_array)
+            .map(|a| a.iter().filter_map(toml::Value::as_str).collect())
+            .unwrap_or_default();
+        for name in &named {
+            let pinned = pins
+                .and_then(|p| p.get(*name))
+                .and_then(|p| p.get("digest"))
+                .and_then(toml::Value::as_str);
+            match (pinned, read_tree(&dir.join("skills").join(name))) {
+                (None, _) => problems.push(format!("{pack}/{name}: no pinned digest")),
+                (_, Err(e)) => problems.push(format!("{pack}/{name}: {e}")),
+                (Some(want), Ok(tree)) if digest(&tree) != want => {
+                    problems.push(format!("{pack}/{name}: content differs from its pin"))
+                }
+                _ => {}
+            }
+        }
+        if let Ok(found) = fs::read_dir(dir.join("skills")) {
+            for entry in found.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if !named.contains(&name.as_str()) {
+                    problems.push(format!("{pack}/{name}: in the store but not in pack.toml"));
+                }
+            }
+        }
+    }
+    problems
 }
 
 fn update(args: &[String]) -> Result<u8, String> {
@@ -239,22 +505,13 @@ fn baseline(before: &DestState) -> Option<&Tree> {
 
 /// Gate every staged layout, then publish only what passed.
 fn install(project: &Path, stage: &Path, jobs: &[Job], package: &str) -> Result<u8, String> {
-    let mut held = false;
-    let mut error = false;
-    for job in jobs {
-        let key = format!("skills:{package}/{}", job.skill);
-        match gate_tree(&key, Some(&job.staged), &job.tree, baseline(&job.before)) {
-            0 => {}
-            HELD => held = true,
-            _ => error = true,
+    match gate_jobs(jobs, package) {
+        0 => {}
+        HELD => {
+            println!("\nnothing installed: {package} is held");
+            return Ok(HELD);
         }
-    }
-    if error {
-        return Ok(1);
-    }
-    if held {
-        println!("\nnothing installed: {package} is held");
-        return Ok(HELD);
+        code => return Ok(code),
     }
     let names: Vec<String> = jobs.iter().map(|job| job.skill.clone()).collect();
     let published = publish(jobs)?;
@@ -565,6 +822,49 @@ fn lock_error_text(path: &Path, e: serde_json::Error) -> String {
 mod tests {
     use super::*;
     use crate::intake::TreeFile;
+
+    #[test]
+    fn a_store_pack_is_named_after_the_repository() {
+        assert_eq!(store_pack("wheresryan22/anatomy").unwrap(), "anatomy");
+        assert_eq!(
+            store_pack("https://github.com/o/Skill-Set.git/").unwrap(),
+            "skill-set"
+        );
+        assert!(store_pack("o/under_score").is_err());
+    }
+
+    #[test]
+    fn verify_reports_drift_missing_pins_and_unnamed_folders() {
+        let dir = scratch("verify");
+        let pack = dir.join("p");
+        let mut tree = Tree::new();
+        tree.insert(
+            "SKILL.md".into(),
+            TreeFile {
+                bytes: b"body".to_vec(),
+                executable: false,
+            },
+        );
+        write_tree(&pack.join("skills/ok"), &tree).unwrap();
+        write_tree(&pack.join("skills/drifted"), &tree).unwrap();
+        write_tree(&pack.join("skills/stray"), &tree).unwrap();
+        let pin = digest(&tree);
+        fs::write(
+            pack.join("pack.toml"),
+            format!(
+                "name = \"p\"\nskills = [\"ok\", \"drifted\", \"unpinned\"]\n\
+                 [pin.ok]\ndigest = \"{pin}\"\n[pin.drifted]\ndigest = \"{pin}\"\n"
+            ),
+        )
+        .unwrap();
+        fs::write(pack.join("skills/drifted/SKILL.md"), "changed").unwrap();
+        let problems = verify_store(vec![pack]);
+        assert_eq!(problems.len(), 3, "{problems:?}");
+        assert!(problems[0].contains("drifted") && problems[0].contains("differs"));
+        assert!(problems[1].contains("unpinned") && problems[1].contains("no pinned digest"));
+        assert!(problems[2].contains("stray"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("sjel-skills-{name}-{}", std::process::id()));

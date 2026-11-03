@@ -27,6 +27,7 @@ refusing --global: a system-wide skill must be a Sjel Pack.
 
   deploy a Pack:   tools/packs-pi deploy <pack>      (pi's registry)
                    tools/packs-claude deploy <pack>  (materialized copies + ledger)
+  upstream skill:  tools/skills store <package>      (a store Pack, selected by profile)
 
   If you mean it anyway: npx skills add <package> -g   (tools/skills audit will report it)
 EOF
@@ -41,9 +42,15 @@ tools/skills — install non-Pack agent skills at the right scope, by driving `n
                             exactly those bytes, exits 2 when held.
   tools/skills update      re-stages every source in skills-lock.json, gates it, and
                             updates only destinations that already hold the skill
+  tools/skills store <package> [--skill <name>]...
+                            stages once, gates, and publishes the screened bytes into the
+                            skill store as a Pack named after the repository, with each
+                            skill's digest, revision and approval pinned in its pack.toml.
+                            Select the Pack in profiles.toml, then tools/harnesses apply.
+  tools/skills verify      every stored skill against its pin; exit 1 on drift
   tools/skills list [--global] [--json]
                             what is installed, in this project or globally
-  tools/skills audit       global skills no Sjel Pack owns; exit 1 if any
+  tools/skills audit       global skills no Sjel Pack owns, and store drift; exit 1 if any
   tools/skills remove|find [...]
                             pass-through to the CLI (global removal allowed)
 
@@ -51,7 +58,8 @@ the scope rule:
 
   system-wide   Sjel Packs, and only Packs: tools/packs-pi deploy <pack>,
                 tools/packs-claude deploy <pack>. These load in every session of
-                every project.
+                every project. An upstream skill becomes a Pack through
+                tools/skills store.
   project-wide  everything else, gated through tools/intake before it installs.
 
   `--global` is refused. See Packs/harness/README.md for the full reasoning.
@@ -81,9 +89,11 @@ for entry in entries:
         print("%s\t%s\t%s" % (entry["name"], entry["source"], agents))
 ')"
 
+  local store=0
+  ( sjel_cli_exec skills verify ) || store=1
   if [ -z "$findings" ]; then
     printf '✓ no skill is installed globally outside a Sjel Pack\n'
-    return 0
+    return "$store"
   fi
   printf 'global skills that no Sjel Pack owns:\n'
   printf '%s\n' "$findings" | while IFS="$(printf '\t')" read -r name source agents; do
@@ -120,6 +130,7 @@ case "$verb" in
     sjel_cli_exec skills add "$@"
     ;;
   update|upgrade) sjel_cli_exec skills update "$@" ;;
+  store|verify) sjel_cli_exec skills "$verb" "$@" ;;
   list|ls) cmd_list "$@" ;;
   audit) cmd_audit "$@" ;;
   remove|rm|find|init) cli "$verb" "$@" ;;

@@ -54,7 +54,15 @@ drifting copies.
    directories rather than substituting a placeholder. Limits: publication is not
    crash-atomic across layouts (backups are restored on ordinary failure, the lock is written
    last), and approval records still do not prove who read the findings.
-3. **External skills bypass Pack profile selection.** Anatomy is globally discovered outside the
+3. **External skills bypass Pack profile selection.** Partly fixed by P7: a skill stored with
+   `tools/skills store` is a Pack in the store root (`~/.local/state/sjel/skill-store/`) and a
+   profile selects it. Destinations stay in each harness's deployment ledger, not in the store
+   Pack. Not run live: Anatomy is still the global install. The move is `tools/skills store
+   wheresryan22/anatomy` (held until reviewed or approved), `anatomy` in the `coding-harness`
+   profile (pi's `full` takes every Pack), `tools/harnesses apply`, then `tools/skills remove -g
+   -s anatomy -y`, and `upstreams.toml [anatomy]` updated. Unchecked: Anatomy in a pi session
+   started in the vault. The text below is the state before P7.
+   Anatomy is globally discovered outside the
    Pack ledger, and application-owned skill symlinks have their own installer. The current scope
    rule in `tools/skills` rejects global non-Pack installs, while `upstreams.toml [anatomy]`
    records a direct global install. Removing a Pack from a coding profile does not remove these
@@ -117,7 +125,7 @@ precedes installer hardening. Anatomy remains unchanged until the external-skill
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
 | P6 | Done in `cf6563d9`, with failure rollback in `f0538875`: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
-| P7 | Manage approved external skills per harness (defect 3) from a content-pinned store (decision 4.4). | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
+| P7 | Manage approved external skills per harness (defect 3) from a content-pinned store (decision 4.4). Built: `tools/skills store` and `verify`, the store as a Pack root in `harnesses/registry.rs`, drift in `tools/skills audit`. Open: the live Anatomy move below, re-storing as the only update path, and application-owned skill links. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
 
 Verification: all 408 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy and `rustfmt
 --check` pass. A parallel rerun hit a managed-settings lock failure in

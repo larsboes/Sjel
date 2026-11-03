@@ -65,13 +65,17 @@ impl Registry {
         let state_dir = state_home.join("axon").join("pack-deployments");
 
         // Pack roots: the public source of truth first, then the overlay's Packs when this
-        // machine has an overlay that carries one.
+        // machine has an overlay that carries one, then the store of approved upstream skills.
+        let store = crate::intake::skills::store_root();
         let with_overlay = |roots: &mut Vec<PathBuf>| {
             if let Some(overlay) = &overlay {
                 let packs = overlay.join("Packs");
                 if packs.is_dir() {
                     roots.push(packs);
                 }
+            }
+            if store.is_dir() {
+                roots.push(store.clone());
             }
         };
         let mut claude_roots = vec![root.join("Packs")];

@@ -112,7 +112,7 @@ pub fn run(tool: &str, args: &[String]) -> ExitCode {
     }
 }
 
-fn config(registry: &Registry, id: &str) -> Result<DeployConfig, String> {
+pub(crate) fn config(registry: &Registry, id: &str) -> Result<DeployConfig, String> {
     registry
         .by_id(id)
         .map(|harness: &Harness| harness.config.clone())

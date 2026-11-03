@@ -511,6 +511,18 @@ fn print_findings(findings: &[Finding]) {
     }
 }
 
+/// What let this exact digest through the gate, for the record that publishes it. `None` when
+/// only a model review on the `intake_review` role passed it, which leaves no record.
+pub fn evidence(digest: &str) -> Option<String> {
+    let ledger = Ledger::load().ok()?;
+    if let Some(a) = ledger.approved.iter().rev().find(|a| a.digest == digest) {
+        return Some(format!("approved {}", a.approved_at));
+    }
+    ledger
+        .receipt(digest)
+        .map(|r| format!("reviewed by {} ({}) {}", r.harness, r.model, r.reviewed_at))
+}
+
 /// Require fixed rules and model review unless this exact digest was approved. `dir` names
 /// where the bytes came from, in the hold message only.
 ///

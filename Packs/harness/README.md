@@ -71,8 +71,12 @@ These checks cover Sjel-managed Packs, not every discovery root a harness reads.
 such as Anatomy and application-owned skill links load independently. `tools/skills add` and
 `update` stage third-party content once, screen that snapshot through `tools/intake`, and install
 those same bytes; a missing model review holds the install unless the exact digest was approved.
-Direct upstream installers (`npx skills add -g`) bypass all of it. The remaining limits and the
-management work for global skills are tracked in
+`tools/skills store <package>` publishes the same screened bytes into the skill store instead,
+as a Pack named after the repository whose `pack.toml` pins each skill's digest, revision and
+approval. Every harness reads the store as a Pack root, so a profile selects an upstream skill
+like any Pack skill, and `tools/skills audit` reports a stored skill that no longer matches its
+pin. Direct upstream installers (`npx skills add -g`) bypass all of it. The remaining limits and
+the management work for global skills are tracked in
 [`docs/plans/packs.md`](../../docs/plans/packs.md).
 
 GitHub Copilot CLI settings are managed separately from Pack contents:

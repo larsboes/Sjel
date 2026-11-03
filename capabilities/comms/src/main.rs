@@ -113,6 +113,8 @@ fn print_help() {
     println!("                                  database.");
     println!("  clips [--limit N=20]            list Sjel Clipper documents, newest first");
     println!("  clips show <document-key>       print a clip document's current Markdown");
+    println!("  clips delete <document-key>     delete all versions of one clip document");
+    println!("  clips delete-all --yes          delete every saved clip version");
     println!("                                  Both read through comms-server's clip socket.");
     println!("  prompts                         list prompt drafts waiting in the outbox");
     println!("  prompts add --title T           queue a prompt draft; the body is read from stdin");
@@ -172,6 +174,20 @@ fn cmd_clips(args: &[String]) {
                 std::process::exit(1);
             }
         },
+        Some("delete") => match args.get(3) {
+            Some(key) => serde_json::json!({ "type": "delete_document", "key": key }),
+            None => {
+                eprintln!("error: usage: comms clips delete <document-key>");
+                std::process::exit(1);
+            }
+        },
+        Some("delete-all") if args.iter().any(|arg| arg == "--yes") => {
+            serde_json::json!({ "type": "delete_all" })
+        }
+        Some("delete-all") => {
+            eprintln!("error: deleting every clip requires --yes");
+            std::process::exit(1);
+        }
         _ => serde_json::json!({
             "type": "documents",
             "limit": arg_after(args, "--limit").and_then(|v| v.parse::<u64>().ok()).unwrap_or(20),
@@ -181,6 +197,10 @@ fn cmd_clips(args: &[String]) {
     if answer["ok"] != true {
         eprintln!("error: {}", answer["error"].as_str().unwrap_or("unknown"));
         std::process::exit(1);
+    }
+    if let Some(deleted_rows) = answer.get("deleted_rows").and_then(serde_json::Value::as_u64) {
+        println!("deleted {deleted_rows} clip version(s)");
+        return;
     }
     if let Some(document) = answer.get("document") {
         println!("{}", document["markdown"].as_str().unwrap_or_default());

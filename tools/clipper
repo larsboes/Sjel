@@ -27,7 +27,7 @@ die() { echo "clipper: $*" >&2; exit 1; }
 
 cmd_build() {
   command -v bun >/dev/null || die "bun is required"
-  (cd "$CLIPPER" && bun install --frozen-lockfile --ignore-scripts && bun run build)
+  (cd "$CLIPPER" && { [ -d "node_modules" ] || bun install --frozen-lockfile --ignore-scripts; } && bun run build)
   echo "clipper: extension built at $CLIPPER/dist"
 }
 

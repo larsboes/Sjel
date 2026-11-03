@@ -1,6 +1,7 @@
 use super::*;
 
 const MAX_PAYLOAD_BYTES: usize = 2 * 1024 * 1024;
+const MAX_DOCUMENT_KEY_BYTES: usize = 5 + 1024 + 1 + 512;
 
 /// A locally retained browser capture. The payload is not sent for enrichment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -313,6 +314,34 @@ impl Store {
             .filter_map(|key| self.web_clip_document(key).transpose())
             .collect()
     }
+
+    /// Delete every stored version belonging to one clip document.
+    ///
+    /// # Errors
+    /// Returns an error when the key is invalid or storage is unavailable.
+    pub fn delete_web_clip_document(&self, document_key: &str) -> Result<usize, ClipError> {
+        if document_key.trim().is_empty() || document_key.len() > MAX_DOCUMENT_KEY_BYTES {
+            return Err(ClipError::Invalid);
+        }
+        self.conn()
+            .map_err(|_| ClipError::Storage)?
+            .execute(
+                &format!("DELETE FROM {}_web_clips WHERE document_key = ?1", self.prefix),
+                params![document_key],
+            )
+            .map_err(|_| ClipError::Storage)
+    }
+
+    /// Delete every stored clip version.
+    ///
+    /// # Errors
+    /// Returns an error when storage is unavailable.
+    pub fn delete_all_web_clips(&self) -> Result<usize, ClipError> {
+        self.conn()
+            .map_err(|_| ClipError::Storage)?
+            .execute(&format!("DELETE FROM {}_web_clips", self.prefix), [])
+            .map_err(|_| ClipError::Storage)
+    }
 }
 
 #[cfg(test)]
@@ -395,6 +424,60 @@ mod tests {
             store.put_web_clip(input),
             Err(ClipError::TooLarge)
         ));
+    }
+
+    #[test]
+    fn deleting_a_document_removes_all_versions_and_leaves_other_documents() {
+        let store = open_test_store("web_clips_delete_document");
+        store.put_web_clip(clip("a", "overwrite", "one")).unwrap();
+        store
+            .put_web_clip(clip("b", "append-specific", "two"))
+            .unwrap();
+        store.put_web_clip(clip("other", "create", "keep")).unwrap();
+
+        assert_eq!(
+            store
+                .delete_web_clip_document("note:Clippings/Example")
+                .unwrap(),
+            2
+        );
+        assert!(store
+            .web_clip_document("note:Clippings/Example")
+            .unwrap()
+            .is_none());
+        assert!(store.web_clip("a").unwrap().is_none());
+        assert_eq!(store.web_clip_documents(10).unwrap().len(), 1);
+        assert!(matches!(
+            store.delete_web_clip_document(" "),
+            Err(ClipError::Invalid)
+        ));
+    }
+
+    #[test]
+    fn deleting_a_document_accepts_the_longest_valid_key() {
+        let store = open_test_store("web_clips_delete_long_key");
+        let mut input = clip("long-key", "overwrite", "body");
+        input.payload["destination"]["path"] = serde_json::json!("p".repeat(1024));
+        input.payload["destination"]["name"] = serde_json::json!("n".repeat(512));
+        let clip = store.put_web_clip(input).unwrap();
+        let document_key = match clip {
+            WebClipWrite::Created(clip) | WebClipWrite::Replayed(clip) => clip.document_key,
+        };
+
+        assert_eq!(document_key.len(), MAX_DOCUMENT_KEY_BYTES);
+        assert_eq!(store.delete_web_clip_document(&document_key).unwrap(), 1);
+        assert!(store.web_clip_document(&document_key).unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_all_removes_every_clip_version() {
+        let store = open_test_store("web_clips_delete_all");
+        store.put_web_clip(clip("a", "create", "one")).unwrap();
+        store.put_web_clip(clip("b", "create", "two")).unwrap();
+
+        assert_eq!(store.delete_all_web_clips().unwrap(), 2);
+        assert!(store.web_clip_documents(10).unwrap().is_empty());
+        assert_eq!(store.delete_all_web_clips().unwrap(), 0);
     }
 
     #[test]

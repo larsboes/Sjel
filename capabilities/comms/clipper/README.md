@@ -43,7 +43,17 @@ document, and the document shows the versions folded together:
 | Append / prepend to daily note | `daily:<YYYY-MM-DD>`, the browser's local date | Adds after / before it |
 
 Read them back without a browser: `comms clips` lists documents, and `comms clips show <key>`
-prints one.
+prints one. `comms clips delete <key>` removes every version of one document; `comms clips delete-all
+--yes` removes all stored clips. In **Feed › Clips**, open a document to delete it, or confirm
+**Remove all** from the list.
+
+Google AI Studio chat captures collapse exact repeated Markdown blocks of at least 200 characters
+within each prompt and response. Fenced code and tables are preserved; an intentional repeated
+paragraph is kept only once in the saved clip.
+
+Large documents in **Feed › Clips** are parsed once and shown in pages of at most 80 Markdown
+blocks. Citation auditing applies to the visible page, keeping scrolling and navigation bounded
+without truncating the stored clip.
 
 ## Settings Sjel owns
 

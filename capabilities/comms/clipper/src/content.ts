@@ -12,6 +12,7 @@ import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './utils/iframe-resize';
 import { parseForClip } from './utils/clip-utils';
+import { cleanAiStudioTurns, extractAiStudio, extractAiStudioAsync, extractAiStudioTurns, getAiStudioConversationKey, scanFullAiStudioChat, turnsToMarkdown, mergeTurnsForConversation, turnsToHtml } from './utils/ai-studio-extractor';
 
 declare global {
 	interface Window {
@@ -29,6 +30,51 @@ declare global {
 	const myGeneration = window.obsidianClipperGeneration;
 
 	debugLog('Clipper', 'Initializing content script, generation', myGeneration);
+
+	let liveAiStudioTurns: any[] = [];
+	let liveAiStudioConversationKey = '';
+	const currentAiStudioConversationKey = () => getAiStudioConversationKey(window.location.href);
+	const isCurrentAiStudioConversation = (sourceUrl: string) =>
+		getAiStudioConversationKey(sourceUrl) === currentAiStudioConversationKey();
+	const mergeLiveAiStudioTurns = (turns: any[], sourceUrl = window.location.href) => {
+		const conversationKey = getAiStudioConversationKey(sourceUrl);
+		liveAiStudioTurns = mergeTurnsForConversation(
+			liveAiStudioTurns,
+			turns,
+			liveAiStudioConversationKey,
+			conversationKey,
+		);
+		liveAiStudioConversationKey = conversationKey;
+		return liveAiStudioTurns;
+	};
+	if (typeof window !== 'undefined' && (window.location.href.includes('aistudio.google.com') || window.location.host.includes('aistudio.google.com'))) {
+		const harvestTurns = () => {
+			try {
+				const visible = extractAiStudioTurns(document);
+				if (visible.length > 0) {
+					mergeLiveAiStudioTurns(visible);
+				}
+			} catch {
+				// ignore
+			}
+		};
+
+		let harvestTimer: any = null;
+		const debouncedHarvest = () => {
+			clearTimeout(harvestTimer);
+			harvestTimer = setTimeout(harvestTurns, 200);
+		};
+
+		window.addEventListener('scroll', debouncedHarvest, { passive: true });
+		document.addEventListener('scroll', debouncedHarvest, { passive: true, capture: true });
+		try {
+			const obs = new MutationObserver(debouncedHarvest);
+			obs.observe(document.body, { childList: true, subtree: true });
+		} catch {
+			// ignore
+		}
+		setTimeout(harvestTurns, 500);
+	}
 
 	let isHighlighterMode = false;
 	const iframeId = 'obsidian-clipper-iframe';
@@ -153,12 +199,18 @@ declare global {
 		}
 
 		if (request.action === "copyMarkdownToClipboard") {
-			flattenShadowDom(document).then(() => {
+			const requestConversationKey = currentAiStudioConversationKey();
+			flattenShadowDom(document).then(async () => {
 				try {
-					const defuddled = parseForClip(document);
-
-					// Convert HTML content to markdown
-					const markdown = createMarkdownContent(defuddled.content, document.URL);
+					const aiStudio = await extractAiStudioAsync(document);
+					if (currentAiStudioConversationKey() !== requestConversationKey) {
+						sendResponse({ success: false, error: 'Conversation changed during export' });
+						return;
+					}
+					const turns = aiStudio ? mergeLiveAiStudioTurns(aiStudio.turns, aiStudio.url) : [];
+					const markdown = (aiStudio && turns.length > 0)
+						? turnsToMarkdown(turns)
+						: createMarkdownContent(parseForClip(document).content, document.URL);
 
 					// Copy to clipboard
 					const textArea = document.createElement("textarea");
@@ -178,11 +230,25 @@ declare global {
 		}
 
 		if (request.action === "saveMarkdownToFile") {
+			const requestConversationKey = currentAiStudioConversationKey();
 			flattenShadowDom(document).then(async () => {
 				try {
-					const defuddled = parseForClip(document);
-					const markdown = createMarkdownContent(defuddled.content, document.URL);
-					const title = defuddled.title || document.title || 'Untitled';
+					const aiStudio = await extractAiStudioAsync(document);
+					if (currentAiStudioConversationKey() !== requestConversationKey) {
+						sendResponse({ success: false, error: 'Conversation changed during export' });
+						return;
+					}
+					const turns = aiStudio ? mergeLiveAiStudioTurns(aiStudio.turns, aiStudio.url) : [];
+					let markdown: string;
+					let title: string;
+					if (aiStudio && turns.length > 0) {
+						markdown = turnsToMarkdown(turns);
+						title = aiStudio.title || 'Untitled';
+					} else {
+						const defuddled = parseForClip(document);
+						markdown = createMarkdownContent(defuddled.content, document.URL);
+						title = defuddled.title || document.title || 'Untitled';
+					}
 					const fileName = title.replace(/[/\\?%*:|"<>]/g, '-');
 					await saveFile({
 						content: markdown,
@@ -199,6 +265,7 @@ declare global {
 		}
 
 		if (request.action === "getPageContent") {
+			const requestConversationKey = currentAiStudioConversationKey();
 			// Flatten shadow DOM before extraction (async, needs main world)
 			const flattenTimeout = new Promise<void>(resolve => setTimeout(resolve, 3000));
 			Promise.race([flattenShadowDom(document), flattenTimeout]).then(async () => {
@@ -221,9 +288,36 @@ declare global {
 				);
 				const defuddled = await Promise.race([defuddle.parseAsync(), parseTimeout])
 					.catch(() => defuddle.parse());
+				if (currentAiStudioConversationKey() !== requestConversationKey) {
+					sendResponse({ success: false, error: 'Conversation changed during extraction' });
+					return;
+				}
 				const extractedContent: { [key: string]: string } = {
 					...defuddled.variables,
 				};
+
+				const aiStudio = await extractAiStudioAsync(document);
+				if (currentAiStudioConversationKey() !== requestConversationKey) {
+					sendResponse({ success: false, error: 'Conversation changed during extraction' });
+					return;
+				}
+				if (aiStudio) {
+					aiStudio.turns = mergeLiveAiStudioTurns(aiStudio.turns, aiStudio.url);
+					if (aiStudio.turns.length > 0) {
+						const cleanedTurns = cleanAiStudioTurns(aiStudio.turns);
+						aiStudio.markdown = turnsToMarkdown(cleanedTurns);
+						aiStudio.html = turnsToHtml(cleanedTurns);
+						aiStudio.variables.turnsCount = String(cleanedTurns.length);
+						aiStudio.variables.firstPrompt = cleanedTurns[0]?.prompt || '';
+						aiStudio.variables.lastResponse = cleanedTurns[cleanedTurns.length - 1]?.response || '';
+
+						defuddled.title = aiStudio.title || defuddled.title;
+						defuddled.content = aiStudio.html;
+						Object.assign(extractedContent, aiStudio.variables);
+						extractedContent.markdown = aiStudio.markdown;
+						extractedContent.turns = JSON.stringify(cleanedTurns);
+					}
+				}
 
 				// Create a new DOMParser
 				const parser = new DOMParser();
@@ -300,6 +394,32 @@ declare global {
 		} else if (request.action === "extractContent") {
 			const content = extractContentBySelector(request.selector, request.attribute, request.extractHtml);
 			sendResponse({ content: content });
+		} else if (request.action === "scanFullAiStudioChat") {
+			const scanConversationKey = currentAiStudioConversationKey();
+			scanFullAiStudioChat(document).then((turns) => {
+				if (currentAiStudioConversationKey() !== scanConversationKey) {
+					sendResponse({ success: false, error: 'Conversation changed during scan' });
+					return;
+				}
+				mergeLiveAiStudioTurns(turns, scanConversationKey);
+				const markdown = turnsToMarkdown(liveAiStudioTurns);
+				sendResponse({ success: true, turns: cleanAiStudioTurns(liveAiStudioTurns), markdown });
+			}).catch((error: unknown) => {
+				console.error('[Obsidian Clipper] scanFullAiStudioChat error:', error);
+				sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+			});
+			return true;
+		} else if (request.action === "captureVisibleTurns") {
+			try {
+				const turns = extractAiStudioTurns(document);
+				mergeLiveAiStudioTurns(turns);
+				const markdown = turnsToMarkdown(liveAiStudioTurns);
+				sendResponse({ success: true, turns: cleanAiStudioTurns(liveAiStudioTurns), markdown });
+			} catch (error: unknown) {
+				console.error('[Obsidian Clipper] captureVisibleTurns error:', error);
+				sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+			}
+			return true;
 		} else if (request.action === "paintHighlights") {
 			ensureHighlighterCSS().then(() => highlighter.loadHighlights()).then(() => {
 				if (generalSettings.alwaysShowHighlights) {

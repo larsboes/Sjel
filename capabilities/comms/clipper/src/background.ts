@@ -366,6 +366,102 @@ async function nativeFetch(url: string, options?: any): Promise<{ ok: boolean; s
 	}
 }
 
+// Unwrap Google interstitial redirect URLs (e.g. google.com/url?sa=E&q=...)
+export function unwrapGoogleRedirect(rawUrl: string): string {
+	try {
+		if (rawUrl.includes('google.com/url?') || rawUrl.includes('google.de/url?') || rawUrl.includes('/url?q=')) {
+			const parsed = new URL(rawUrl);
+			const target = parsed.searchParams.get('q') || parsed.searchParams.get('url');
+			if (target) {
+				return decodeURIComponent(target);
+			}
+		}
+	} catch {
+		// keep rawUrl
+	}
+	return rawUrl;
+}
+
+// Auto-resolve Google Vertex AI Search grounding redirects into clean, direct URLs
+export async function resolveOneRedirectUrl(rawUrl: string): Promise<string> {
+	const unwrapped = unwrapGoogleRedirect(rawUrl);
+	if (!unwrapped.includes('vertexaisearch.cloud.google.com/grounding-api-redirect/')) {
+		return unwrapped;
+	}
+	try {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), 4000);
+		const resp = await fetch(unwrapped, {
+			method: 'HEAD',
+			redirect: 'follow',
+			signal: controller.signal,
+		});
+		clearTimeout(timeout);
+		if (resp.url && !resp.url.includes('vertexaisearch.cloud.google.com')) {
+			return resp.url;
+		}
+	} catch {
+		// Fallback to GET if HEAD failed
+		try {
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 4000);
+			const resp = await fetch(unwrapped, {
+				method: 'GET',
+				redirect: 'follow',
+				signal: controller.signal,
+			});
+			clearTimeout(timeout);
+			if (resp.url && !resp.url.includes('vertexaisearch.cloud.google.com')) {
+				return resp.url;
+			}
+		} catch {
+			// keep unwrapped
+		}
+	}
+	return unwrapped;
+}
+
+// Redirect resolution proxy for citations & grounding links
+browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime.MessageSender) => {
+	if (typeof request !== 'object' || request === null) return;
+	const req = request as any;
+	if (req.action === 'resolveRedirectUrl' && typeof req.url === 'string') {
+		return resolveOneRedirectUrl(req.url).then(resolvedUrl => ({ resolvedUrl }));
+	}
+	if (req.action === 'resolveRedirectUrls' && Array.isArray(req.urls)) {
+		return Promise.all(req.urls.map((u: string) => resolveOneRedirectUrl(u))).then(resolvedUrls => ({ resolvedUrls }));
+	}
+	if (req.action === 'flattenShadowDom' && sender?.tab?.id) {
+		const tabId = sender.tab.id;
+		if (browser.scripting) {
+			return browser.scripting.executeScript({
+				target: { tabId },
+				world: 'MAIN',
+				func: () => {
+					function walk(root: any) {
+						try {
+							const elements = root.querySelectorAll('*');
+							for (let i = 0; i < elements.length; i++) {
+								const el = elements[i];
+								if (el.shadowRoot) {
+									try {
+										walk(el.shadowRoot);
+										if (el.shadowRoot.innerHTML) {
+											el.setAttribute('data-defuddle-shadow', el.shadowRoot.innerHTML);
+										}
+									} catch {}
+								}
+							}
+						} catch {}
+					}
+					walk(document);
+				}
+			}).then(() => ({ success: true })).catch((err: any) => ({ success: false, error: err?.message }));
+		}
+		return Promise.resolve({ success: false });
+	}
+});
+
 // Fetch proxy for extension pages (reader, highlights).
 // Returns a Promise for the webextension-polyfill.
 // On Firefox MV3, host_permissions require explicit user grant —

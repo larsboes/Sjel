@@ -19,7 +19,17 @@ export interface RenderContext {
 
 export type AsyncResolver = (name: string, context: RenderContext) => Promise<any>;
 
-const engine = createEngine<ClipperTemplateContext>({ filters: clipperFilters });
+const engineLimits = {
+	maxValueLength: 100_000_000,
+	maxOutputLength: 50_000_000,
+	maxOperations: 1_000_000,
+	maxTemplateLength: 10_000_000,
+};
+
+const engine = createEngine<ClipperTemplateContext>({
+	filters: clipperFilters,
+	limits: engineLimits,
+});
 
 interface DeferredTemplates {
 	template: string;
@@ -239,14 +249,20 @@ export async function compileTemplate(
 		return undefined;
 	};
 
-	const result = await engine.render(deferred.template, {
-		variables: {
-			...variables,
-			...deferred.variables,
+	const result = await engine.render(
+		deferred.template,
+		{
+			variables: {
+				...variables,
+				...deferred.variables,
+			},
+			context: { tabId, currentUrl },
+			resolveVariable,
 		},
-		context: { tabId, currentUrl },
-		resolveVariable,
-	});
+		{
+			limits: engineLimits,
+		}
+	);
 
 	// Log any errors (but don't fail - return partial output)
 	if (result.errors.length > 0) {

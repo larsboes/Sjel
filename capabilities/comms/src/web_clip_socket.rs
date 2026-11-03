@@ -103,8 +103,8 @@ fn clip_error(error: &ClipError) -> Value {
 /// Answer one request against the store at `database`.
 ///
 /// Requests: `ping`; `save` with `clip`; `documents` with `limit`; `document` with `key`;
-/// `settings_get`; `settings_seed` with `templates`; `settings_put` with `templates` and
-/// `base_revision`; `interpret` with `prompt`.
+/// `delete_document` with `key`; `delete_all`; `settings_get`; `settings_seed` with
+/// `templates`; `settings_put` with `templates` and `base_revision`; `interpret` with `prompt`.
 pub fn handle(database: &Path, interpreter: &dyn Interpreter, request: &Value) -> Value {
     let kind = request.get("type").and_then(Value::as_str).unwrap_or("");
     match kind {
@@ -167,6 +167,19 @@ pub fn handle(database: &Path, interpreter: &dyn Interpreter, request: &Value) -
                 Err(error) => clip_error(&error),
             }
         }
+        "delete_document" => {
+            let Some(key) = request.get("key").and_then(Value::as_str) else {
+                return failure("invalid");
+            };
+            match store.delete_web_clip_document(key) {
+                Ok(deleted_rows) => json!({ "ok": true, "deleted_rows": deleted_rows }),
+                Err(error) => clip_error(&error),
+            }
+        }
+        "delete_all" => match store.delete_all_web_clips() {
+            Ok(deleted_rows) => json!({ "ok": true, "deleted_rows": deleted_rows }),
+            Err(error) => clip_error(&error),
+        },
         "settings_get" => match store.clipper_settings() {
             Ok(settings) => json!({
                 "ok": true,
@@ -341,6 +354,16 @@ mod tests {
         );
         assert_eq!(
             handle(&db, &Stub, &json!({"type": "document", "key": "x"}))["error"],
+            "not_found"
+        );
+        assert_eq!(
+            handle(&db, &Stub, &json!({"type": "delete_document", "key": "clip:r1"}))[
+                "deleted_rows"
+            ],
+            1
+        );
+        assert_eq!(
+            handle(&db, &Stub, &json!({"type": "document", "key": "clip:r1"}))["error"],
             "not_found"
         );
         std::fs::remove_dir_all(dir).unwrap();

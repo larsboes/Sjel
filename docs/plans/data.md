@@ -234,12 +234,48 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
    Clipper) and the Interpreter, which answers on the light local role; Feed › Clips lists and
    reads clips. Not yet checked in the browser: the first seed, a locked editor, and an
    Interpreter run.
-5. **Review and routing.** Clip documents to owning capabilities with provenance, and into the
+5. **Multi-turn chat threads and citation audit (Clipper + GPUI).** Built 2026-11-01: capture
+   and compose multi-turn LLM sessions (`Prompt 1` / `Text 1`, `Prompt 2` / `Text 2`, …) with
+   verified link and footnote preservation across both the Chrome Clipper and `Feed › Clips` in
+   GPUI.
+   - **Browser extension (`capabilities/comms/clipper`).** Added recursive shadow DOM traversal
+     in `flatten-shadow-dom.js` and custom extractor in `src/utils/ai-studio-extractor.ts` to capture
+     turns, thoughts, and grounding citations (`[N](url)`) on Google AI Studio (`aistudio.google.com`).
+     Integrated into `parseForClip`, `getPageContent`, `copyMarkdownToClipboard`, and `saveMarkdownToFile`.
+   - **Rich clipboard & citation audit (`apps/gpui/core/src/clipper.rs`, `apps/gpui/src/clipboard.rs`).**
+     Added `objc2-app-kit` `NSPasteboard` reader for `public.html` and `public.utf8-plain-text` in safe
+     Rust. Converts `<a href="url">` and footnote badges into Markdown links (`[label](url)`), and audits
+     citations into `Resolved`, `UnlinkedRef` (`[N]` without URL target), and `MalformedUrl`.
+   - **GPUI composer and reader (`apps/gpui/src/clipper.rs`, `apps/gpui/ui/src/doc_view.rs`).**
+     Added **+ New Thread Clip** and **Edit in Composer** in `Feed › Clips`: turn-by-turn composer
+     (`Prompt N` + `Response N`, **📋 Paste Rich (HTML + Links)**, **+ Add Turn**, reorder/delete)
+     saving over `libs/clip-socket`. Added **Citation & Link Audit** chip strip in both composer turn cards
+     and document reader view. Enabled clickable links in `doc_view.rs`.
+   - **Verified with:** (a) 337 passing unit tests in `apps/gpui/core` (`cargo test`); (b) 227 passing
+     unit tests in `capabilities/comms/clipper` (`bun run check`); (c) clean compilation of GPUI desktop
+     app (`cargo check --manifest-path apps/gpui/Cargo.toml`); and (d) successful production build of
+     the Chrome extension (`bun run build`).
+   - **Large clip reading and lifecycle (working tree).** Comms supports deleting one clip document
+     or every saved version over its owner-only socket; GPUI confirms deletion, parses a clip once,
+     paginates at 80 Markdown blocks and audits citations only on the visible page. AI Studio
+     extraction excludes nested `ms-cmark-node` elements and collapses exact repeated Markdown
+     blocks of at least 200 characters within each prompt or response, while preserving code blocks
+     and tables. Incremental merges retain source turn indices and scope cached turns to the
+     conversation URL; clipboard and file exports use the same cache. Table cells that AI Studio
+     wraps in `ms-cmark-node` are read, so tables render as Markdown instead of being dropped.
+     Checked 2026-11-03: the full-chat scan of the current source on a live four-turn AI Studio
+     conversation gave 4 prompt/response pairs, 38 table rows and no repeated prose line, at
+     141 KB. The clip saved on 2026-11-02 by the then-loaded extension was 480 KB with every
+     nested node repeated. 248 extension tests pass and `dist/` is rebuilt. The reloaded
+     extension saved `clip:9da3fba4` the same day: 142 KB, 4 pairs, 38 table rows, 61 links, no
+     repeated prose line. Open: the clip's `description` is AI Studio's site tagline, not the
+     conversation. The GPUI compile was not run in this check.
+6. **Review and routing.** Clip documents to owning capabilities with provenance, and into the
    vault when the result is knowledge. Clips stay `c2` and unenriched until then.
-6. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts
+7. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts
    and a dry run; keep the originals.
-7. **Retire `axon-clip`** after the new extension carries daily use.
-8. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
+8. **Retire `axon-clip`** after the new extension carries daily use.
+9. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
    example AI Studio with Search grounding (the `research` skill). Built 2026-11-03: the
    `comms_prompt_drafts` table, the clip-socket requests `drafts`, `draft_add` and `draft_take`,
    `comms prompts [add --title T | take <id>]`, and a "Prompts for you" section on `Today` in

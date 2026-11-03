@@ -157,7 +157,10 @@ export async function initializePageContent(
 			content = processHighlights(content, highlights);
 		}
 
-		const markdownBody = createMarkdownContent(content, currentUrl);
+		// Use pre-formatted markdown (e.g. from chat extractor) if available, avoiding Turndown re-escaping
+		const markdownBody = (extractedContent && extractedContent.markdown)
+			? extractedContent.markdown
+			: createMarkdownContent(content, currentUrl);
 
 		const highlightsData = collapseGroupsForExport(highlights, c => createMarkdownContent(c, currentUrl));
 

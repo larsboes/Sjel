@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html id="popup" class="is-side-panel">
 	<head>
+		<meta charset="UTF-8">
 		<title>Sjel Clipper</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 		<link rel="stylesheet" href="style.css">
@@ -49,7 +50,20 @@
 			</div>
 			<div class="metadata-properties"></div>
 			<div id="note-content-container">
-				<textarea id="note-content-field" rows="4" data-i18n="notesAboutPage"></textarea>
+				<div id="turn-review-bar" class="turn-review-bar" style="display: none;">
+					<div class="turn-review-tabs">
+						<button id="view-turns-btn" class="review-tab active" type="button">Turns Review</button>
+						<button id="view-raw-btn" class="review-tab" type="button">Markdown Editor</button>
+					</div>
+					<div class="turn-review-actions">
+						<button id="scan-chat-btn" class="turn-action-btn" type="button" title="Auto-scroll tab to detect all turns">⚡ Scan Chat</button>
+						<button id="capture-visible-btn" class="turn-action-btn" type="button" title="Capture current visible turn on screen">+ Capture View</button>
+						<button id="add-manual-turn-btn" class="turn-action-btn" type="button" title="Add empty turn card">+ Add Box</button>
+					</div>
+					<span id="turn-citation-summary" class="turn-citation-summary"></span>
+				</div>
+				<div id="turn-review-container" class="turn-review-container" style="display: none;"></div>
+				<textarea id="note-content-field" rows="6" data-i18n="notesAboutPage"></textarea>
 			</div>
 			<div class="clipper-footer">
 				<div class="vault-path-container">

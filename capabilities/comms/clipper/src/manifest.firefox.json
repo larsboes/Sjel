@@ -7,6 +7,7 @@
 	"description": "Save and highlight web pages in a private and durable format that you can access offline. The official extension for Obsidian.",
 	"permissions": [
 		"activeTab",
+		"clipboardRead",
 		"clipboardWrite",
 		"contextMenus",
 		"storage",

@@ -24,6 +24,7 @@ import { sanitizeFileName } from '../utils/string-utils';
 import { saveFile } from '../utils/file-utils';
 import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i18n';
 import { formatPropertyValue } from '../utils/shared';
+import { turnsToMarkdown, mergeTurns } from '../utils/ai-studio-extractor';
 
 interface ReaderModeResponse {
 	success: boolean;
@@ -939,6 +940,7 @@ async function fillTemplateFieldValues(currentTabId: number, template: Template 
 	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
 	if (noteContentField) {
 		noteContentField.value = template.noteContentFormat ? formattedContent : '';
+		renderTurnReview(variables, noteContentField.value);
 	}
 
 	if (generalSettings.interpreterEnabled) {
@@ -1444,3 +1446,488 @@ async function copyContent() {
 
 // Update the resize event listener to use the debounced version
 window.addEventListener('resize', debouncedSetPopupDimensions);
+
+interface ParsedTurn {
+	index: number;
+	prompt: string;
+	thoughts?: string;
+	response: string;
+}
+
+function parseTurnsFromContent(content: string, variables?: any): ParsedTurn[] {
+	const rawTurns = variables?.['{{turns}}'] || variables?.turns || variables?.extractedContent?.turns;
+	if (rawTurns) {
+		try {
+			const parsed = typeof rawTurns === 'string' ? JSON.parse(rawTurns) : rawTurns;
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				return parsed;
+			}
+		} catch {
+			// ignore json parse error
+		}
+	}
+
+	if (!content.includes('## Prompt')) return [];
+
+	const lines = content.split('\n');
+	const turns: ParsedTurn[] = [];
+	let currentPrompt = '';
+	let currentResponse = '';
+	let currentThoughts = '';
+	let inSection: 'prompt' | 'thoughts' | 'response' | 'none' = 'none';
+	let turnIdx = 1;
+
+	const flush = () => {
+		if (inSection !== 'none' || currentPrompt.trim() || currentResponse.trim() || currentThoughts.trim()) {
+			// Strip any trailing horizontal rule left from \n---\n between turns
+			let cleanedResp = currentResponse.trim();
+			if (cleanedResp.endsWith('---')) {
+				cleanedResp = cleanedResp.slice(0, -3).trim();
+			}
+			turns.push({
+				index: turnIdx++,
+				prompt: currentPrompt.trim(),
+				thoughts: currentThoughts.trim() || undefined,
+				response: cleanedResp,
+			});
+		}
+		currentPrompt = '';
+		currentResponse = '';
+		currentThoughts = '';
+		inSection = 'none';
+	};
+
+	for (const line of lines) {
+		const trimmed = line.trim();
+		if (trimmed.startsWith('## Prompt')) {
+			flush();
+			inSection = 'prompt';
+			continue;
+		}
+		if (trimmed.startsWith('> [!NOTE] Thoughts') || trimmed.startsWith('> **Thoughts**:') || trimmed.startsWith('> Thoughts')) {
+			inSection = 'thoughts';
+			continue;
+		}
+		if (trimmed.startsWith('## Response')) {
+			inSection = 'response';
+			continue;
+		}
+
+		if (inSection === 'prompt') {
+			currentPrompt += line + '\n';
+		} else if (inSection === 'thoughts') {
+			if (trimmed.startsWith('>')) {
+				const stripped = trimmed.replace(/^>\s*/, '');
+				if (!stripped.startsWith('[!NOTE]') && !stripped.startsWith('**Thoughts**')) {
+					currentThoughts += stripped + '\n';
+				}
+			} else if (trimmed === '') {
+				currentThoughts += '\n';
+			} else {
+				inSection = 'response';
+				currentResponse += line + '\n';
+			}
+		} else if (inSection === 'response') {
+			currentResponse += line + '\n';
+		}
+	}
+	flush();
+	return turns;
+}
+
+export function renderTurnReview(variables: any, contentMarkdown: string) {
+	const bar = document.getElementById('turn-review-bar');
+	const container = document.getElementById('turn-review-container');
+	const textarea = document.getElementById('note-content-field') as HTMLTextAreaElement;
+	const viewTurnsBtn = document.getElementById('view-turns-btn');
+	const viewRawBtn = document.getElementById('view-raw-btn');
+	const citationSummary = document.getElementById('turn-citation-summary');
+	const scanBtn = document.getElementById('scan-chat-btn') as HTMLButtonElement | null;
+	const captureBtn = document.getElementById('capture-visible-btn') as HTMLButtonElement | null;
+	const addBtn = document.getElementById('add-manual-turn-btn') as HTMLButtonElement | null;
+
+	if (!bar || !container || !textarea) return;
+
+	const currentUrl = variables?.url || (typeof window !== 'undefined' ? window.location.href : '');
+	const isAiStudio = currentUrl.includes('aistudio.google.com') ||
+		!!variables?.['{{turns}}'] ||
+		!!variables?.turns ||
+		contentMarkdown.includes('## Prompt');
+
+	const turns = parseTurnsFromContent(contentMarkdown, variables);
+	if (turns.length === 0 && !isAiStudio) {
+		bar.style.display = 'none';
+		container.style.display = 'none';
+		textarea.style.display = 'block';
+		return;
+	}
+
+	bar.style.display = 'flex';
+	container.style.display = 'flex';
+	textarea.style.display = 'none'; // Default to review mode
+
+	// Auto-collapse metadata properties in review mode to give turns review full vertical space
+	const metadataProperties = document.querySelector('.metadata-properties') as HTMLElement;
+	const metadataHeader = document.querySelector('.metadata-properties-header') as HTMLElement;
+	if (metadataProperties && metadataHeader) {
+		metadataProperties.classList.add('collapsed');
+		metadataHeader.classList.add('collapsed');
+	}
+
+	// Action buttons in review bar
+	if (scanBtn) {
+		scanBtn.onclick = async (e) => {
+			e.preventDefault();
+			if (!currentTabId) return;
+			const origText = scanBtn.textContent;
+			scanBtn.textContent = '⚡ Scanning...';
+			scanBtn.disabled = true;
+			try {
+				const resp = await browser.tabs.sendMessage(currentTabId, { action: 'scanFullAiStudioChat' }) as any;
+				if (resp && resp.success && Array.isArray(resp.turns) && resp.turns.length > 0) {
+					const existingTurns = parseTurnsFromContent(textarea.value, variables);
+					const merged = mergeTurns(existingTurns, resp.turns);
+					const newMd = turnsToMarkdown(merged);
+					textarea.value = newMd;
+					variables.turns = JSON.stringify(merged);
+					variables['{{turns}}'] = JSON.stringify(merged);
+					renderTurnReview(variables, newMd);
+				}
+			} catch (err) {
+				console.error('[Clipper] scanFullAiStudioChat error:', err);
+			} finally {
+				scanBtn.textContent = origText;
+				scanBtn.disabled = false;
+			}
+		};
+	}
+
+	if (captureBtn) {
+		captureBtn.onclick = async (e) => {
+			e.preventDefault();
+			if (!currentTabId) return;
+			const origText = captureBtn.textContent;
+			captureBtn.textContent = 'Capturing...';
+			captureBtn.disabled = true;
+			try {
+				const resp = await browser.tabs.sendMessage(currentTabId, { action: 'captureVisibleTurns' }) as any;
+				if (resp && resp.success && Array.isArray(resp.turns) && resp.turns.length > 0) {
+					const existingTurns = parseTurnsFromContent(textarea.value, variables);
+					const merged = mergeTurns(existingTurns, resp.turns);
+					const newMd = turnsToMarkdown(merged);
+					textarea.value = newMd;
+					variables.turns = JSON.stringify(merged);
+					variables['{{turns}}'] = JSON.stringify(merged);
+					renderTurnReview(variables, newMd);
+				}
+			} catch (err) {
+				console.error('[Clipper] captureVisibleTurns error:', err);
+			} finally {
+				captureBtn.textContent = origText;
+				captureBtn.disabled = false;
+			}
+		};
+	}
+
+	if (addBtn) {
+		addBtn.onclick = (e) => {
+			e.preventDefault();
+			const existingTurns = parseTurnsFromContent(textarea.value, variables);
+			const newTurn: ParsedTurn = {
+				index: existingTurns.length + 1,
+				prompt: '',
+				response: '',
+			};
+			const updated = [...existingTurns, newTurn];
+			const newMd = turnsToMarkdown(updated);
+			textarea.value = newMd;
+			variables.turns = JSON.stringify(updated);
+			variables['{{turns}}'] = JSON.stringify(updated);
+			renderTurnReview(variables, newMd);
+		};
+	}
+
+	if (viewTurnsBtn && viewRawBtn) {
+		viewTurnsBtn.classList.add('active');
+		viewRawBtn.classList.remove('active');
+
+		viewTurnsBtn.onclick = (e) => {
+			e.preventDefault();
+			viewTurnsBtn.classList.add('active');
+			viewRawBtn.classList.remove('active');
+			renderTurnReview({ ...variables, '{{turns}}': undefined, turns: undefined }, textarea.value);
+			container.style.display = 'flex';
+			textarea.style.display = 'none';
+		};
+
+		viewRawBtn.onclick = (e) => {
+			e.preventDefault();
+			viewRawBtn.classList.add('active');
+			viewTurnsBtn.classList.remove('active');
+			container.style.display = 'none';
+			textarea.style.display = 'block';
+		};
+	}
+
+	let citationCount = 0;
+	container.innerHTML = '';
+
+	if (turns.length === 0) {
+		const emptyDiv = document.createElement('div');
+		emptyDiv.className = 'turn-empty-state';
+		emptyDiv.style.padding = '16px';
+		emptyDiv.style.textAlign = 'center';
+		emptyDiv.style.color = 'var(--text-muted)';
+		emptyDiv.style.fontSize = 'var(--font-ui-smaller)';
+		emptyDiv.innerHTML = 'No conversation turns loaded yet.<br>Click <strong>⚡ Scan Chat</strong> to auto-scroll and capture all turns, or <strong>+ Add Box</strong> to paste manually.';
+		container.appendChild(emptyDiv);
+		if (citationSummary) {
+			citationSummary.textContent = '0 turns · 0 citations';
+		}
+		return;
+	}
+
+	const escapeHtml = (s: string) =>
+		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+	const renderMarkdownWithCitations = (text: string) => {
+		const lines = text.split('\n');
+		const outputParts: string[] = [];
+		let inTable = false;
+		let tableRows: string[][] = [];
+
+		const formatInline = (content: string) => {
+			let h = escapeHtml(content);
+			// Clean duplicate brackets on citation links: [[1]](url) or [1](url)
+			h = h.replace(/\[+([^\]]+)\]+\((https?:\/\/[^\s\)]+)\)/g, (_match, label, url) => {
+				citationCount++;
+				return `<a class="citation-chip" href="${url}" target="_blank" rel="noopener noreferrer" title="${url}">[${label}]</a>`;
+			});
+			// Bold
+			h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+			// Inline code
+			h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+			return h;
+		};
+
+		const flushTable = () => {
+			if (tableRows.length > 0) {
+				let tableHtml = '<div class="table-wrapper"><table class="turn-table">';
+				let isHeader = true;
+				for (const row of tableRows) {
+					const isSeparator = row.every(cell => /^[-: ]+$/.test(cell.trim()));
+					if (isSeparator) {
+						isHeader = false;
+						continue;
+					}
+					const cellTag = isHeader ? 'th' : 'td';
+					tableHtml += '<tr>';
+					for (const cell of row) {
+						tableHtml += `<${cellTag}>${formatInline(cell)}</${cellTag}>`;
+					}
+					tableHtml += '</tr>';
+				}
+				tableHtml += '</table></div>';
+				outputParts.push(tableHtml);
+				tableRows = [];
+			}
+			inTable = false;
+		};
+
+		let regularTextBuffer: string[] = [];
+		const flushRegularText = () => {
+			if (regularTextBuffer.length > 0) {
+				const block = regularTextBuffer.join('\n');
+				outputParts.push(formatInline(block));
+				regularTextBuffer = [];
+			}
+		};
+
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length > 2) {
+				flushRegularText();
+				inTable = true;
+				const cells = trimmed
+					.slice(1, -1)
+					.split('|')
+					.map(c => c.trim());
+				tableRows.push(cells);
+			} else {
+				if (inTable) {
+					flushTable();
+				}
+				regularTextBuffer.push(line);
+			}
+		}
+
+		if (inTable) {
+			flushTable();
+		}
+		flushRegularText();
+
+		return outputParts.join('\n');
+	};
+
+	turns.forEach(turn => {
+		const card = document.createElement('div');
+		card.className = 'turn-card';
+
+		// Header with title and delete button
+		const header = document.createElement('div');
+		header.className = 'turn-card-header';
+		header.innerHTML = `
+			<span class="turn-card-title">Turn ${turn.index}</span>
+			<div class="turn-header-actions">
+				<button class="turn-delete-btn" type="button" title="Delete Turn ${turn.index}">🗑️</button>
+			</div>
+		`;
+		header.querySelector('.turn-delete-btn')?.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			const remaining = turns.filter(t => t.index !== turn.index);
+			remaining.forEach((t, i) => { t.index = i + 1; });
+			const newMd = turnsToMarkdown(remaining);
+			textarea.value = newMd;
+			variables.turns = JSON.stringify(remaining);
+			variables['{{turns}}'] = JSON.stringify(remaining);
+			renderTurnReview(variables, newMd);
+		});
+		card.appendChild(header);
+
+		// Helper to create a section (prompt or response)
+		const createTurnSection = (
+			field: 'prompt' | 'response',
+			label: string,
+			badge: string,
+			content: string
+		) => {
+			const section = document.createElement('details');
+			section.className = `turn-section ${field}-section`;
+			section.open = true;
+
+			const summary = document.createElement('summary');
+			summary.innerHTML = `
+				<span class="section-title">${label}</span>
+				<div class="section-actions">
+					<span class="section-badge">${badge}</span>
+					<button class="turn-paste-btn" type="button" title="Paste clipboard text into ${label}">📋 Paste</button>
+					<button class="turn-toggle-edit-btn" type="button" title="Edit text">✏️ Edit</button>
+				</div>
+			`;
+
+			const body = document.createElement('div');
+			body.className = 'section-body';
+
+			const renderedDiv = document.createElement('div');
+			renderedDiv.className = 'section-body-rendered';
+			renderedDiv.innerHTML = renderMarkdownWithCitations(content || '');
+
+			const editArea = document.createElement('textarea');
+			editArea.className = 'turn-textarea';
+			editArea.placeholder = `Enter ${label.toLowerCase()} or click Paste...`;
+			editArea.value = content || '';
+
+			if (!content.trim()) {
+				renderedDiv.style.display = 'none';
+				editArea.style.display = 'block';
+			} else {
+				renderedDiv.style.display = 'block';
+				editArea.style.display = 'none';
+			}
+
+			// Paste button handler
+			summary.querySelector('.turn-paste-btn')?.addEventListener('click', async (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				try {
+					const text = await navigator.clipboard.readText();
+					if (text !== undefined) {
+						turn[field] = text;
+						const newMd = turnsToMarkdown(turns);
+						textarea.value = newMd;
+						variables.turns = JSON.stringify(turns);
+						variables['{{turns}}'] = JSON.stringify(turns);
+						renderTurnReview(variables, newMd);
+					}
+				} catch (clipErr) {
+					console.warn('Clipboard read failed:', clipErr);
+					const manual = window.prompt(`Paste text for ${label}:`);
+					if (manual !== null) {
+						turn[field] = manual;
+						const newMd = turnsToMarkdown(turns);
+						textarea.value = newMd;
+						variables.turns = JSON.stringify(turns);
+						variables['{{turns}}'] = JSON.stringify(turns);
+						renderTurnReview(variables, newMd);
+					}
+				}
+			});
+
+			// Toggle Edit button handler
+			const toggleBtn = summary.querySelector('.turn-toggle-edit-btn') as HTMLButtonElement | null;
+			toggleBtn?.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const isCurrentlyEditing = editArea.style.display !== 'none';
+				if (isCurrentlyEditing) {
+					turn[field] = editArea.value;
+					const newMd = turnsToMarkdown(turns);
+					textarea.value = newMd;
+					variables.turns = JSON.stringify(turns);
+					variables['{{turns}}'] = JSON.stringify(turns);
+					renderedDiv.innerHTML = renderMarkdownWithCitations(editArea.value);
+					editArea.style.display = 'none';
+					renderedDiv.style.display = 'block';
+					toggleBtn.textContent = '✏️ Edit';
+					if (citationSummary) {
+						citationSummary.textContent = `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${citationCount} citation${citationCount === 1 ? '' : 's'}`;
+					}
+				} else {
+					editArea.style.display = 'block';
+					renderedDiv.style.display = 'none';
+					toggleBtn.textContent = '👁️ Done';
+					editArea.focus();
+				}
+			});
+
+			// Realtime update on textarea change
+			editArea.addEventListener('input', () => {
+				turn[field] = editArea.value;
+				const newMd = turnsToMarkdown(turns);
+				textarea.value = newMd;
+				variables.turns = JSON.stringify(turns);
+				variables['{{turns}}'] = JSON.stringify(turns);
+			});
+
+			body.appendChild(renderedDiv);
+			body.appendChild(editArea);
+			section.appendChild(summary);
+			section.appendChild(body);
+			return section;
+		};
+
+		// 1. Prompt section
+		card.appendChild(createTurnSection('prompt', `Prompt ${turn.index}`, 'user', turn.prompt));
+
+		// 2. Thoughts block (if present)
+		if (turn.thoughts && turn.thoughts.trim().length > 0) {
+			const thoughtSection = document.createElement('details');
+			thoughtSection.className = 'turn-section thoughts-section';
+			thoughtSection.innerHTML = `
+				<summary><span class="section-title">✦ Thoughts</span> <span class="section-badge">click to expand</span></summary>
+				<div class="section-body thoughts-body">${renderMarkdownWithCitations(turn.thoughts)}</div>
+			`;
+			card.appendChild(thoughtSection);
+		}
+
+		// 3. Response section
+		card.appendChild(createTurnSection('response', `Response ${turn.index}`, 'model', turn.response));
+
+		container.appendChild(card);
+	});
+
+	if (citationSummary) {
+		citationSummary.textContent = `${turns.length} turn${turns.length === 1 ? '' : 's'} · ${citationCount} citation${citationCount === 1 ? '' : 's'}`;
+	}
+}

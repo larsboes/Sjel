@@ -671,6 +671,8 @@ comms keep <id> | dismiss <id>           # update local status; optional keeper 
 comms summarize --pending                # retry summaries for items that lack one
 comms clips [--limit N=20]               # Sjel Clipper documents, via comms-server's socket
 comms clips show <document-key>          # one clip document's current Markdown
+comms clips delete <document-key>        # delete all versions of one clip document
+comms clips delete-all --yes             # delete every saved clip version
 comms --help
 ```
 

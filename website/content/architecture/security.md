@@ -1,8 +1,8 @@
 # Security & access control
 
 Use the shared server gate when exposing a capability. Authentication and listener policy are
-implemented in [`sjel-server`](../../libs/sjel-server/README.md); the
-[devices capability](../../capabilities/devices/README.md) owns pairing.
+implemented in [`sjel-server`](../../../libs/sjel-server/README.md); the
+[devices capability](../../../capabilities/devices/README.md) owns pairing.
 
 ## Security invariants
 
@@ -11,19 +11,19 @@ implemented in [`sjel-server`](../../libs/sjel-server/README.md); the
 ### 1. Listener policy
 
 Loopback is the default capability listener. Broader reach requires the explicit authenticated
-listener policies in [`sjel-server`](../../libs/sjel-server/src/lib.rs); the separate
-[LAN listener](../../libs/sjel-server/src/lan.rs) requires paired-device credentials.
+listener policies in [`sjel-server`](../../../libs/sjel-server/src/lib.rs); the separate
+[LAN listener](../../../libs/sjel-server/src/lan.rs) requires paired-device credentials.
 Doctor's server-bind check enforces use of the shared server boundary in capability source.
 Container network declarations have their own rules in the
-[service schema](../../schemas/service.toml.example), including host networking where required.
+[service schema](../../../schemas/service.toml.example), including host networking where required.
 
 ### 2. Tailnet identity ingress gate
 
 A configured `SJEL_TAILNET_OPERATOR` identifies the operator, but an identity header alone does
 not prove that Tailscale supplied it. The trusted Tailnet proxy policy is reserved for a Unix
 socket accessible to Tailscale Serve. Direct loopback callers must satisfy the selected credential
-policy. See [`tailnet.rs`](../../libs/sjel-server/src/tailnet.rs) and
-[`auth.rs`](../../libs/sjel-server/src/auth.rs).
+policy. See [`tailnet.rs`](../../../libs/sjel-server/src/tailnet.rs) and
+[`auth.rs`](../../../libs/sjel-server/src/auth.rs).
 
 **The socket half is blocked by Tailscale itself, measured 2026-10-24.** Since v1.98.9, Serve
 restricts Unix-socket proxy targets to a socket owned by `root` (the fix for TS-2026-004). The
@@ -47,19 +47,19 @@ before changing an exemption or assuming all routes require the same credential.
 
 The LAN listener validates paired-device signatures. Pairing claim and join-request routes have
 explicit unsigned exceptions so a new device can enroll. The signature headers and pairing
-payloads are defined in [device authentication](../../schemas/device-auth.schema.json) and
-[pairing](../../schemas/device-pairing.schema.json).
+payloads are defined in [device authentication](../../../schemas/device-auth.schema.json) and
+[pairing](../../../schemas/device-pairing.schema.json).
 
 ### 4. Zero secrets in repository
 
 Keep credentials, private keys, personal data, and deployment values out of the public tree.
 Configuration may refer to a credential file or OS keychain entry; the credential value stays
-private. Follow the [security and data doctrine](../../CONTRIBUTING.md#security-and-data).
+private. Follow the [security and data doctrine](../../../CONTRIBUTING.md#security-and-data).
 
 ## Agent access policy
 
-[`agent.rs`](../../libs/sjel-server/src/agent.rs) and
-[`agent_policy.rs`](../../libs/sjel-server/src/agent_policy.rs) enforce four per-capability modes:
+[`agent.rs`](../../../libs/sjel-server/src/agent.rs) and
+[`agent_policy.rs`](../../../libs/sjel-server/src/agent_policy.rs) enforce four per-capability modes:
 `off` refuses access, `read-only` admits reads, `ask` requires owner approval for writes, and
 `auto` admits writes except routes declared `confirm`. The current default for an absent policy
 entry is `auto`. A declared mutating GET counts as a write.

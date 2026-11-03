@@ -2,14 +2,14 @@
 
 Capabilities that use the shared relational store open the same SQLite file and own distinct
 table prefixes. Other state, such as mounted media or a vault, retains its own storage contract.
-The [store capability](../../capabilities/store/README.md) owns the shared file's backup contract;
-[`sjel-store`](../../libs/sjel-store/README.md) owns connection and migration behavior.
+The [store capability](../../../capabilities/store/README.md) owns the shared file's backup contract;
+[`sjel-store`](../../../libs/sjel-store/README.md) owns connection and migration behavior.
 
 ## Database specifications
 
-[`sjel-config`](../../libs/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
+[`sjel-config`](../../../libs/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
 `<overlay>/data/axon/axon.db`, with a temporary scratch file as its fallback when no overlay
-resolves. [`sjel-store`](../../libs/sjel-store/src/lib.rs) applies these settings to each pooled
+resolves. [`sjel-store`](../../../libs/sjel-store/src/lib.rs) applies these settings to each pooled
 connection:
 
 ```sql
@@ -36,7 +36,7 @@ Migrations run once per database file and table prefix in each process, through
 
 A device can read from a local copy of a remote Turso primary instead of the shared file. The copy
 holds the primary's write-ahead log, so reads are local and writes are forwarded to the primary.
-[`sjel-turso`](../../libs/sjel-turso/README.md) owns the open call, the first pull before the DDL,
+[`sjel-turso`](../../../libs/sjel-turso/README.md) owns the open call, the first pull before the DDL,
 and the background interval. The replica engine is a default feature rather than an opt-in one,
 because following a primary has to be configuration: an opt-in feature meant editing a Cargo.toml per
 capability, which is the one thing a machine's setup cannot do for itself.
@@ -58,12 +58,12 @@ settings into everything it starts. A deployment-wide setting has one home, and 
 
 Resolve deployment paths through the owning configuration API. Machine state mounts are declared
 in the active overlay's `config/machine.toml`; see the
-[machine schema](../../schemas/machine.toml.example).
+[machine schema](../../../schemas/machine.toml.example).
 
 The shared store uses `backup_sqlite_online`: `tools/backup.sh` takes a live SQLite `.backup`
 snapshot. Do not copy an open database file without its SQLite snapshot protocol. Container-owned
 SQLite files use the separate cold-backup contract described in the
-[service schema](../../schemas/service.toml.example).
+[service schema](../../../schemas/service.toml.example).
 
 ## Backups before migrations
 

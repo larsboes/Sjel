@@ -1,8 +1,8 @@
 # Sjel technical documentation
 
 Choose a guide by the task you want to complete. Repository doctrine lives in
-[CONTRIBUTING.md](../CONTRIBUTING.md#engineering-doctrine); the current declared structure
-is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
+[CONTRIBUTING.md](../../CONTRIBUTING.md#engineering-doctrine); the current declared structure
+is generated in [ARCHITECTURE.md](../../ARCHITECTURE.md).
 
 ## Reading paths
 
@@ -14,7 +14,7 @@ is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
 | Design the optional feature manager | [Feature manager](architecture/feature-manager.md) | [Release preparation](operations/index.md#release-preparation-and-later-testing) |
 | Add or change a capability | [Capability manifests](capabilities/manifest.md) | [Health and freshness contracts](capabilities/contracts.md), the capability's manual |
 | Diagnose or manage a host | [Operations guide](operations/index.md) | [Doctor](operations/doctor.md), [patch policy](operations/index.md#patch-first), [service persistence](operations/persistence.md) |
-| Projects & Generative UI | [Projects UI](architecture/projects-ui.md) | [Engineering doctrine](../CONTRIBUTING.md#product-rules) |
+| Projects & Generative UI | [Projects UI](architecture/projects-ui.md) | [Engineering doctrine](../../CONTRIBUTING.md#product-rules) |
 | Rehearse recovery before a migration | [Storage and recovery](architecture/storage.md#backups-before-migrations) | The owning capability's backup contract |
 
 ## Documentation sections
@@ -24,5 +24,5 @@ is generated in [ARCHITECTURE.md](../ARCHITECTURE.md).
 - [Operations](operations/index.md): diagnosis and service lifecycle procedures.
 
 Read the owning capability or Pack README for its purpose and design choices. Order, open work and
-decisions not yet built live in [PLAN.md](../PLAN.md) and [docs/plans/](plans/). Use Sjel tools for current ports, enabled services, and
+decisions not yet built live in [PLAN.md](../../PLAN.md) and [docs/plans/](../../docs/plans/). Use Sjel tools for current ports, enabled services, and
 health; a documentation page cannot establish that a service is running.

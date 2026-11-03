@@ -10,6 +10,12 @@ covers it.
 
 ## Open
 
+- **Clipper browser smoke checks.** `tools/clipper build` compiles the extension and `check`
+  pings its native host; neither verifies a live page capture. YouTube verification required
+  reloading the extension and inspecting its popup through native Chrome controls because
+  `interceptor contexts` and `tab list` exited without output. Smallest change: a smoke-check
+  command that reports the loaded extension revision and verifies transcript availability,
+  description and optional comment variables on a controlled browser fixture.
 - **Cited web answers for agents.** Decided 2026-11-03: no Sjel command for Gemini Search
   grounding. Google refused grounding on the free tier (HTTP 429 on `gemini-3.8-flash` and
   `gemini-3.6-flash`; `gemini-2.5-flash` is closed to new users), and the Gemini API terms

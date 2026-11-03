@@ -2,7 +2,7 @@
 
 Use separate signals for a listening process, usable dependencies, and arriving data. Their
 contracts are declared in [service manifests](manifest.md), with the complete field reference in
-[`schemas/service.toml.example`](../../schemas/service.toml.example).
+[`schemas/service.toml.example`](../../../schemas/service.toml.example).
 
 ## Freshness contracts
 
@@ -18,7 +18,7 @@ A declaring service answers `GET /__sjel/freshness` with
 The pre-rename `GET /__axon/freshness` answers the same body for one release, because sjel-status
 polls every capability and a capability built before the 2026-10-20 rename cannot answer a path
 it has never heard of; `libs/sjel-server/src/auth.rs` owns both names.
-[`doctor`](../../tools/sjel-cli/src/doctor/checks.rs) reads this endpoint and evaluates the
+[`doctor`](../../../tools/sjel-cli/src/doctor/checks.rs) reads this endpoint and evaluates the
 declared thresholds. The timestamp measures producer arrival, including a successful sweep that
 finds nothing new. It is not the newest item's publication timestamp: a quiet source is different
 from a stopped collector. There is no `[freshness]` table or arbitrary SQL query in this contract.
@@ -28,7 +28,7 @@ from a stopped collector. There is no `[freshness]` table or arbitrary SQL query
 ### 1. Distinct run vs. success
 
 Comms stores per-source telemetry in
-[`source_state.rs`](../../capabilities/comms/src/store/source_state.rs).
+[`source_state.rs`](../../../capabilities/comms/src/store/source_state.rs).
 `record_sweep_success` updates run and success timestamps, records the pass's counts, and clears
 the failure streak. `record_sweep_failure` updates run and failure timestamps and increments the
 streak without replacing the last success. These are Comms methods, not a mandatory API that

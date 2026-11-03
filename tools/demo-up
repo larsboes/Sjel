@@ -2,7 +2,7 @@
 # tools/demo-up — run the published demonstration's stack, against the demo overlay (#168).
 #
 # Points a single shell at demo/overlay, gives every capability a throwaway database, starts
-# them through the ordinary service runner, then seeds and records. The operator's own overlay
+# them through the ordinary service runner, then seeds them. The operator's own overlay
 # and sjel.local.toml are never touched — see the SJEL_OVERLAY_ROOT override in tools/lib/paths.sh.
 #
 # THE COLLISION, and why this script refuses rather than coping. The demo capabilities listen on
@@ -19,7 +19,7 @@
 #   2. tools/demo-seed — refuse unless the resolved overlay IS demo/overlay
 #   3. tools/demo-seed — refuse any capability whose store already holds rows
 #
-#   tools/demo-up            start, seed, record
+#   tools/demo-up            start, seed
 #   tools/demo-up start      start only
 #   tools/demo-up down       stop the demo stack
 #   tools/demo-up reset      delete the demo database
@@ -55,7 +55,7 @@ CAPABILITIES="$(toml_array capabilities "$SJEL_MACHINE_TOML")"
 # its own connection string; they share one file now, and cross-capability joins in the
 # recorded corpus depend on that being true here too.
 export SJEL_DB_PATH="$DEMO_DB_PATH"
-# One date for the whole run: the seeder, the origin and the recorder each load the manifest.
+# One date for the whole run: the seeder and the origin each load the manifest.
 export SJEL_DEMO_ANCHOR="${SJEL_DEMO_ANCHOR:-$(date +%F)}"
 # Finance keeps four things outside its database, each behind its own env var, and every one
 # of them has to land inside the demo tree rather than in an overlay. Discovered the expensive
@@ -96,12 +96,12 @@ export SJEL_COMMS_GMAIL_URL="$DEMO_ORIGIN/gmail"
 # Scouting's source declaration is generated rather than tracked: it contains the origin's
 # address, and that address has an owner already (demo.toml). A tracked copy would be the
 # second place the port lives, and the one that silently disagrees. Same status as
-# demo/fixtures and demo/state — a build product of the manifest, gitignored.
+# demo/state — a build product of the manifest, gitignored.
 # Comms disables every mutating route when no api_secret_file is configured, /ingest included,
 # so the demo needs one to be seedable at all. Generated per run rather than tracked: a literal
 # token in this repository would be a credential in git even though nothing real accepts it, and
 # the demo's determinism rule is about the corpus, not about a throwaway header. The value never
-# reaches a fixture — it is a request header, and nothing records it.
+# reaches the store — it is a request header.
 write_comms_config() {
   local secret_file="$DEMO_STATE/comms-api-secret"
   openssl rand -hex 32 > "$secret_file"
@@ -119,7 +119,7 @@ write_comms_config() {
   # nine capability ports it does not name.
   # Every other capability fails closed without an inbound token since ISC-45, so the demo
   # declares the same throwaway file as the deployment's token. One token for all of them is
-  # what tools/demo-seed and tools/demo-record already send.
+  # what tools/demo-seed already sends.
   printf 'SJEL_INBOUND_TOKEN_FILE=%s\n' "$secret_file" > "$SJEL_ROOT/demo/overlay/config/deployment.env"
   cat > "$SJEL_ROOT/demo/overlay/config/comms.json" <<JSON
 {
@@ -344,7 +344,6 @@ case "${1:-all}" in
     # next run's port check would refuse to start against its own leftover.
     trap stop_origin EXIT
     "$_here/demo-seed"
-    "$_here/demo-record"
     stop_origin
     ;;
   *)

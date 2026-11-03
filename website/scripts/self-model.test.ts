@@ -1,4 +1,4 @@
-// Tests for tools/generate-site.ts (#14).
+// Tests for website/scripts/self-model.ts (#14).
 //
 // The acceptance criteria this file exists to hold are properties of the OUTPUT, not of the code:
 // nothing overlay-scoped may appear, nothing may request another host, and no rendered fact may
@@ -8,9 +8,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { renderSite } from "./generate-site.ts";
+import { renderSite } from "./self-model.ts";
 
-const SJEL_ROOT = join(import.meta.dir, "..");
+const SJEL_ROOT = join(import.meta.dir, "../..");
 
 const MODEL = {
   schema: 2,

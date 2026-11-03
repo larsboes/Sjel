@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderLanding } from "./generate-landing.ts";
+import { renderLanding } from "./landing.ts";
 
 describe("landing page", () => {
   test("every capability is listed and links to its reference page, an unmapped one under Platform", () => {
@@ -11,8 +11,8 @@ describe("landing page", () => {
       ],
       upstreams: [],
     });
-    expect(html).toContain('href="docs/trips.html"');
-    expect(html).toContain('href="docs/brand-new.html"');
+    expect(html).toContain('href="reference/trips.html"');
+    expect(html).toContain('href="reference/brand-new.html"');
     const platform = html.slice(html.indexOf("<h3>Platform"));
     expect(platform).toContain("brand-new");
     expect(html).toContain("<b>2</b><span>capabilities</span>");

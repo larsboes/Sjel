@@ -2,7 +2,7 @@
 
 A capability owns a domain contract and declares its runtime in `service.toml`. Public units live
 under `capabilities/`; private units can live in the active overlay. The
-[generated architecture](../../ARCHITECTURE.md#capabilities) lists public declarations. Use the
+[generated architecture](../../../ARCHITECTURE.md#capabilities) lists public declarations. Use the
 host registry for the enabled set and live status.
 
 ## Capability types
@@ -29,4 +29,4 @@ prerequisites; it does not permit one capability to mutate another's tables.
 | Follow journey planning and trip intent | [Travel and routing](travel.md) |
 
 The owning README explains purpose and design choices. These manuals describe interface and data
-contracts; [PLAN.md](../../PLAN.md) and [docs/plans/](../plans/) hold open work and decisions.
+contracts; [PLAN.md](../../../PLAN.md) and [docs/plans/](../../../docs/plans/) hold open work and decisions.

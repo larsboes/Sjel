@@ -1,7 +1,7 @@
 name: Pages
 
-# Publish the public site from tracked files (tools/build-site): the landing page, one reference
-# page per unit and the self-model page. No capability runs here, and the payload gate at the end
+# Publish the public site from tracked files (website/build): the landing page, the docs from
+# website/content, one reference page per unit and the self-model page. No capability runs here, and the payload gate at the end
 # refuses a build that carries anything it should not.
 
 on:
@@ -60,9 +60,9 @@ jobs:
         run: tools/self check
 
       - name: Assemble the site
-        run: tools/build-site
+        run: website/build
 
-      # build-site runs the gate itself; this makes the refusal a named, visible step.
+      # website/build runs the gate itself; this makes the refusal a named, visible step.
       - name: Payload hygiene
         run: tools/check-site-payload.sh site
 

@@ -2,7 +2,7 @@
 
 An exact-byte ingest gate and integrity ledger for a library on mounted volumes, with a read-only preview of reviewed organization mappings, a mirror it both builds and verifies, and a read-only HTTP surface the dashboard's `/media` page reads. It answers whether a SHA-256 digest is known, where indexed bytes live, whether indexed mirrors still match, which collections have reviewed destinations, and what each ingest run did with every path it considered. It does not provide a backup contract, delete library content, or browse photographs. The organization preview has no apply action.
 
-The verbs that act on the library (`organize`, `supersede`, `relabel`, `reclaim`, `mirror`) are operator-invoked commands with their own approval lists; the HTTP surface exposes none of them. Ledger shape, architecture and the HTTP contract: [`docs/capabilities/media.md`](../../docs/capabilities/media.md).
+The verbs that act on the library (`organize`, `supersede`, `relabel`, `reclaim`, `mirror`) are operator-invoked commands with their own approval lists; the HTTP surface exposes none of them. Ledger shape, architecture and the HTTP contract: [`website/content/capabilities/media.md`](../../website/content/capabilities/media.md).
 
 ## Run it
 

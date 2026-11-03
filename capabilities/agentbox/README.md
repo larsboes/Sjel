@@ -368,8 +368,8 @@ Two things in it no longer hold, which is worth knowing before following it dire
 was renamed — `badlogic/pi-mono` is now `earendil-works/pi`, and its npm package moved from
 `@mariozechner/pi-coding-agent` (last release 0.73.1) to `@earendil-works/`, so the article's
 `npm install -g` pulls a version months behind a project that ships a self-contained binary and
-needs no Node at all. And its `192.168.64.1` is a default, not an address: address the host by
-name, which is what the launcher does (`host.docker.internal`).
+needs no Node at all. And the host address it hard-codes is the VM network's default, not a
+stable address: address the host by name, which is what the launcher does (`host.docker.internal`).
 
 Everything else that differs is deliberate and argued above: binary over npm, a closed network
 over policy-only egress, host uid over uid 1000, and the API key resolved from the overlay rather

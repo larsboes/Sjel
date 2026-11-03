@@ -3,7 +3,7 @@
 //!
 //! Two tables, one question — "who is this, and where have we been together" — so this module owns
 //! both the place row and the link, and the rules that join them. The link stores a person's *name*,
-//! not an id (docs/capabilities/links.md D7–D11): `places_people` holds the operator's decision for
+//! not an id (website/content/capabilities/links.md D7–D11): `places_people` holds the operator's decision for
 //! a name that means somebody, and `sjel_links::name_key` is how the two are compared. A dismissed
 //! row is not a link and is never shown.
 //!

@@ -2,7 +2,7 @@
 
 Technical reference manual for `capabilities/media`: the exact-byte ingest gate, the volume
 integrity ledger, and the read-only HTTP surface the dashboard's `/media` page reads. The operator
-workflow — every verb, its guards and its flags — is in [`capabilities/media/README.md`](../../capabilities/media/README.md).
+workflow — every verb, its guards and its flags — is in [`capabilities/media/README.md`](../../../capabilities/media/README.md).
 
 ```mermaid
 flowchart TD
@@ -116,7 +116,7 @@ external filesystem edits and storage failure.
 
 ## 3. The HTTP surface
 
-`media serve` starts a process capability on port **8102** ([`service.toml`](../../capabilities/media/service.toml)).
+`media serve` starts a process capability on port **8102** ([`service.toml`](../../../capabilities/media/service.toml)).
 It is read-only by construction: every handler calls a `Ledger` reader, so nothing reachable over
 the port can move a file, drop a row, or change a library byte. The verbs that act on the library
 stay operator-invoked commands with their own approval lists and are not exposed.

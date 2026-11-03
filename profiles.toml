@@ -320,7 +320,7 @@ packs = ["*"]
 # to the household deployment's own repository, ytalbum left the private overlay, and cv
 # followed them out of the Packs. What those Packs carried that is still Sjel's is now
 # documentation beside the tooling that replaced it: `capabilities/cv/RUNBOOK.md`,
-# `docs/capabilities/travel.md` and `docs/capabilities/travel-traps.md`. `full` therefore
+# `website/content/capabilities/travel.md` and `website/content/capabilities/travel-traps.md`. `full` therefore
 # needs no `except` at all: every Pack in the repository is deployed by it.
 except = []
 # The 2026-10-13 trim was a DEPLOYMENT decision, and the 2026-10-24 retirement is a different

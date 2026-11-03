@@ -1,7 +1,7 @@
 // tools/lib/demo-endpoints.ts — read demo.toml, and turn a browser path into a real URL (#168).
 //
-// Shared by tools/demo-seed and tools/demo-record so the two cannot disagree about which
-// capability a path belongs to.
+// Shared by tools/demo-seed and tools/demo-origin so they agree on which capability a path
+// belongs to.
 //
 // The resolution rule is not invented here. dashboard/vite.config.ts already proxies
 // `/<capability>` to that capability's port with the prefix stripped, reading ports from
@@ -53,7 +53,6 @@ export interface DemoManifest {
   /** Where tools/demo-origin listens, and the only place that address is written down.
    *  Comms and Scouting are pointed at it by URL, Transit by its endpoint overrides. */
   origin: string;
-  fixturesDir: string;
   capabilities: DemoCapability[];
   /** Capability name → why the demo does not include it. Rendered, not just recorded. */
   absent: Record<string, string>;
@@ -120,7 +119,6 @@ export function loadManifest(path = join(SJEL_ROOT, "demo/demo.toml")): DemoMani
     anchor,
     label: demo.label,
     origin: demo.origin,
-    fixturesDir: raw.fixtures?.dir ?? "demo/fixtures",
     capabilities,
     absent,
   };

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Release orchestration uses the same Bun build runtime as tools/generate-site.ts.
+// Release orchestration uses the same Bun build runtime as the website build.
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -161,7 +161,7 @@ function runtime(options: Options, stage: string) {
   for (const name of ["lib", "templates"]) copyPublicTree(`tools/${name}`, join(stage, "tools", name));
   for (const name of ["storage/storage", "capability-auth/capability-auth"]) copy(join(root, "tools", name), join(stage, "tools", name));
   copy(join(root, "toolchain.toml"), join(stage, "toolchain.toml"));
-  for (const name of ["schemas", "docs"]) copyPublicTree(name, join(stage, name));
+  for (const name of ["schemas", "docs", "website/content"]) copyPublicTree(name, join(stage, name));
   writeFileSync(join(stage, "distribution.json"), JSON.stringify({ schema: 1, version: options.version, platform, core, source_builds: false }, null, 2) + "\n");
   files(stage); // Refuse developer symlinks in the portable payload.
 }
@@ -247,7 +247,7 @@ function main() {
     dirty: changes.stdout.length !== 0, rebuilt: options.build };
   build(options);
   mkdirSync(options.out, { recursive: true });
-  writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse docs/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
+  writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse website/content/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
   const stage = mkdtempSync(join(tmpdir(), "sjel-release-"));
   try {
     if (options.kind === "macos") macos(options, stage);

@@ -28,7 +28,7 @@ Git or the code already holds.
 | Order, priority, open work, decisions not yet built | `PLAN.md`, `docs/plans/<area>.md` | READMEs, manifests, code |
 | A built decision and the reasoning needed to change it | The owner README, `## Why this shape: <topic>` | Code comments, TOML |
 | A rejected alternative | The owner README, `## Considered and declined` | Plans |
-| Interface contracts, data flows | `docs/capabilities/<name>.md` | READMEs |
+| Interface contracts, data flows | `website/content/capabilities/<name>.md` | READMEs |
 | History, measurements, who decided | The commit message | Anywhere tracked |
 | An invariant the code cannot express | A one- or two-line code comment | READMEs |
 | What a config value means, or its unit | One comment line on the key | Rationale paragraphs |
@@ -94,7 +94,7 @@ Found 2026-10-25 by heading and by dated lines:
   `upstreams.toml` and waiver dates in `osv-scanner*.toml` are data, not history, and stay.
 
 **README shape after the sweep.** What it is, `## Why this shape: <topic>`, how to run it, a link
-to the technical manual in `docs/capabilities/`, `## Considered and declined`. No history, no
+to the technical manual in `website/content/capabilities/`, `## Considered and declined`. No history, no
 open-work list, no measurements without the command that reproduces them.
 
 ## 3. Layout
@@ -169,10 +169,12 @@ only on binaries a user types (`sjel`, `sjel-agent`, `sjel-mcp`).
 
 ## 4. The public page
 
-The live demo is gone (decided 2026-11-03). `larsboes.github.io/Sjel/` is a landing page
-(`tools/generate-landing.ts`): what Sjel is, an architecture figure, the data classes, the
-capability index from `self.json`, the measured numbers, and links into the reference docs.
-`tools/build-site` builds it from tracked files; no capability runs in the Pages job.
+The live demo is gone (decided 2026-11-03). The public site is `website/`, laid out after
+Vector's repository (decided 2026-11-03): `website/content/` holds the user docs (architecture,
+capabilities, operations) and `docs/` keeps the contributor plans. `website/build` renders the
+landing page, the docs with a sidebar, and one reference page per unit (contract, routes read
+from each `const ROUTES` block, coupling, README), then fails on a broken internal link or a
+private marker. No capability runs in the Pages job.
 
 Open: screenshots and short animations of the GPUI app in the hero and the Two surfaces section.
 

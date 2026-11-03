@@ -23,7 +23,7 @@ keychain, and never sent through the Ask service or conversation.
 **Settings** groups appearance, connection and sync, Accounts & keys, Clipper, Features, updates,
 and shortcuts. Clipper edits the Sjel Clipper's templates and names the local model its
 Interpreter runs on; comms holds both and the browser extension pulls them. Its searchable contents rail can be hidden. The Feature Manager's package, lifecycle,
-and local recommendation contract lives in [the architecture guide](../../docs/architecture/feature-manager.md).
+and local recommendation contract lives in [the architecture guide](../../website/content/architecture/feature-manager.md).
 Settings can browse the official feature catalogue, inspect package requirements and data access,
 and install a confirmed package when the placed runtime and release are compatible. Local Ask
 signals can recommend a feature, with a visible reason and a dismiss option. Installed features
@@ -442,7 +442,7 @@ The record is `Sjel Life` (the store name `Sjel` is taken), the bundle `dev.sjel
 `host/PrivacyInfo.xcprivacy` declares the two required-reason APIs a Rust binary actually touches.
 `ITSAppUsesNonExemptEncryption` is false, because the app encrypts nothing beyond TLS. What the
 App Store Connect key can and cannot do, and the one-time steps in the web UI, are in
-[the operations guide](../../docs/operations/index.md).
+[the operations guide](../../website/content/operations/index.md).
 
 ## Soundscape: a slideover with its own synth
 

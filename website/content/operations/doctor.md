@@ -11,7 +11,7 @@ tools/doctor --version  # version identity only
 
 The full report exits `0` when all checks pass and `1` when one or more checks fail.
 `--version` exits `0` and is not a health assertion. The current report sections are defined in
-[`doctor/checks.rs`](../../tools/sjel-cli/src/doctor/checks.rs).
+[`doctor/checks.rs`](../../../tools/sjel-cli/src/doctor/checks.rs).
 
 ## Check categories
 

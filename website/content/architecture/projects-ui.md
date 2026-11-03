@@ -1,6 +1,6 @@
 # Projects and Tasks UI/UX Architecture
 
-Projects, tasks, and project notes are owned by Sjel ([`capabilities/projects`](../../capabilities/projects/README.md)).
+Projects, tasks, and project notes are owned by Sjel ([`capabilities/projects`](../../../capabilities/projects/README.md)).
 This document records the UI/UX architecture for viewing and interacting with them, the live embed
 mechanisms, the generative/intelligent UI evolution, and the upstream references.
 
@@ -31,7 +31,7 @@ mechanisms, the generative/intelligent UI evolution, and the upstream references
 2. **Second copy**: Every write to a record renders its markdown to `<overlay>/data/projects/`.
 3. **Security boundary**: Attachments (`GET /api/file`) serve images and PDFs inline, while all other
    mime types (including HTML and SVGs with scripts) are served with `Content-Disposition: attachment`
-   and `sandbox` restrictions ([`capabilities/projects/src/server.rs:271`](../../capabilities/projects/src/server.rs#L271)).
+   and `sandbox` restrictions ([`capabilities/projects/src/server.rs:271`](../../../capabilities/projects/src/server.rs#L271)).
 
 ---
 
@@ -62,7 +62,7 @@ live measurement checks (M1–M5) directly within the note body.
 ## 3. Generative and Intelligent UI Evolution
 
 The step following figure embeds is **Generative UI from the typed core**
-([Product Rule 6](../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*).
+([Product Rule 6](../../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*).
 
 Rather than streaming unstructured markdown or generating insecure arbitrary HTML, intelligent agents in
 Sjel compose structured interfaces out of an audited, declarative component catalog.
@@ -70,9 +70,9 @@ Sjel compose structured interfaces out of an audited, declarative component cata
 ### Architectural Principles
 
 1. **Declarative Component Schema**: The model emits a structured AST or declarative UI language (such as OpenUI Lang 1.0) specifying layout, data binding, and state variables (`$variables`).
-2. **Local Model Execution ([Product Rule 1](../../CONTRIBUTING.md#product-rules))**: UI generation runs locally on Apple Silicon (AFM / Ollama models like `qwen3.8:27b` or `gpt-oss:20b`), requiring low latency to the first token.
-3. **Data Boundary & Privacy ([Product Rule 4](../../CONTRIBUTING.md#product-rules))**: Components bind to local capability endpoints (SQL, TOML, links); raw personal context does not leave the device.
-4. **Action Confirmation ([Product Rule 5](../../CONTRIBUTING.md#product-rules))**: Reversible actions execute seamlessly; mutating or irreversible actions require explicit approval.
+2. **Local Model Execution ([Product Rule 1](../../../CONTRIBUTING.md#product-rules))**: UI generation runs locally on Apple Silicon (AFM / Ollama models like `qwen3.8:27b` or `gpt-oss:20b`), requiring low latency to the first token.
+3. **Data Boundary & Privacy ([Product Rule 4](../../../CONTRIBUTING.md#product-rules))**: Components bind to local capability endpoints (SQL, TOML, links); raw personal context does not leave the device.
+4. **Action Confirmation ([Product Rule 5](../../../CONTRIBUTING.md#product-rules))**: Reversible actions execute seamlessly; mutating or irreversible actions require explicit approval.
 
 ---
 
@@ -161,7 +161,7 @@ Consistent with Sjel's Knowledge Base doctrine ("Type at birth", `Packs/knowledg
 
 ## 9. Generative UI Component Engine (`gen-ui`)
 
-Sjel implements a native declarative Generative UI rendering system ([Product Rule 6](../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*), inspired by [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) and OpenAI's Intelligent UI paradigms.
+Sjel implements a native declarative Generative UI rendering system ([Product Rule 6](../../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*), inspired by [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) and OpenAI's Intelligent UI paradigms.
 
 Instead of unvetted arbitrary HTML or raw prose, models and markdown notes specify structured, declarative JSON payloads inside fenced code blocks:
 

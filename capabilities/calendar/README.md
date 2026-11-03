@@ -757,7 +757,7 @@ calendar, 404 → wrong `calendar_id`, 429 → rate limit).
 
 ## Architecture & Verification
 
-Detailed data models, forward-only rhythm invariants, soft conflict resolution, and Google Calendar two-way synchronization contracts are documented in [Calendar Architecture](../../docs/capabilities/calendar.md).
+Detailed data models, forward-only rhythm invariants, soft conflict resolution, and Google Calendar two-way synchronization contracts are documented in [Calendar Architecture](../../website/content/capabilities/calendar.md).
 
 ### Connecting an account
 

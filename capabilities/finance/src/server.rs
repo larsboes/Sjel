@@ -43,7 +43,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/links",
-        "Transactions that reference a typed id. Required: to=<id>, such as to=trip:plan:… (docs/capabilities/links.md).",
+        "Transactions that reference a typed id. Required: to=<id>, such as to=trip:plan:… (website/content/capabilities/links.md).",
     ),
     r(
         "GET",
@@ -186,7 +186,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "Per-instrument price freshness, the newest 50 fetch attempts and the last status per provider. No parameters.",
     ),
     // A literal for the reason comms gives: the table is parsed as text by
-    // tools/demo-check-paths.test.ts, while the server routes `sjel_server::FRESHNESS_PATH`.
+    // website/scripts/routes.ts, while the server routes `sjel_server::FRESHNESS_PATH`.
     r(
         "GET",
         "/__sjel/freshness",

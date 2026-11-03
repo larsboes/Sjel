@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# tools/build-site — assemble the public site.
+# website/build — assemble the public site from tracked files.
 #
 #   site/
-#     index.html          tools/generate-landing — what Sjel is, how it fits, the way into the docs
-#     docs/               tools/generate-docs and tools/generate-site — reference pages, self-model
+#     index.html        scripts/landing.ts    what Sjel is and how it fits together
+#     docs/**           scripts/docs.ts       website/content/**/*.md, with a sidebar
+#     reference/**      scripts/reference.ts  one page per unit; scripts/self-model.ts
 #     favicon.svg, hedgehog.png
 #
-# Reads only tracked files, so it needs no running capability. The payload gate at the end is
-# not optional: nothing here uploads, so refusing to leave the bytes behind is the last check.
+# Needs no running capability. Two gates run at the end: every internal link resolves
+# (scripts/links.ts), and the payload carries nothing private (tools/check-site-payload.sh).
 #
-#   tools/build-site                 build into site/
-#   tools/build-site --out <dir>
+#   website/build                build into site/
+#   website/build --out <dir>
 set -euo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,30 +21,25 @@ OUT="$SJEL_ROOT/site"
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
-    -h|--help) echo "usage: build-site [--out <dir>]"; exit 0 ;;
-    *) echo "build-site: unknown argument '$1'" >&2; exit 1 ;;
+    -h|--help) echo "usage: website/build [--out <dir>]"; exit 0 ;;
+    *) echo "website/build: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-echo "build-site: landing page"
-bun "$_here/generate-landing.ts" --out "$OUT"
-cp "$_here/lib/site-favicon.svg" "$OUT/favicon.svg"
+bun "$_here/scripts/landing.ts" --out "$OUT"
+bun "$_here/scripts/docs.ts" --out "$OUT"
+bun "$_here/scripts/reference.ts" --out "$OUT"
+bun "$_here/scripts/self-model.ts" --out "$OUT"
+cp "$_here/assets/favicon.svg" "$OUT/favicon.svg"
 cp "$SJEL_ROOT/.github/assets/sjel-hedgehog.png" "$OUT/hedgehog.png"
-
-echo "build-site: reference pages"
-# No recording: the reference pages describe each unit's declared contract.
-"$_here/generate-docs" --out "$OUT/docs" --fixtures "$OUT/.no-recording"
-
-echo "build-site: self-model page"
-"$_here/generate-site" --out "$OUT/docs" --name self-model.html
 
 # GitHub Pages runs Jekyll unless told not to, and Jekyll drops directories that begin with `_`.
 touch "$OUT/.nojekyll"
 
-echo "build-site: hygiene gate"
-"$_here/check-site-payload.sh" "$OUT"
+bun "$_here/scripts/links.ts" "$OUT"
+"$SJEL_ROOT/tools/check-site-payload.sh" "$OUT"
 
-echo "build-site: $(du -sh "$OUT" | cut -f1) in $OUT"
+echo "website/build: $(du -sh "$OUT" | cut -f1) in $OUT"

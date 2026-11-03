@@ -189,7 +189,7 @@ Every change keeps to these. Rules 1, 4 and 5 describe the target behaviour; the
 Sjel supports macOS and Linux. The guided installer detects the platform, creates or connects a
 private deployment overlay, writes the local machine manifest, and leaves existing state alone.
 
-Follow [the shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
+Follow [the shell-only installation workflow](website/content/operations/index.md#install-a-shell-only-node)
 for prerequisites, source setup, capability selection, authentication, build, startup and reboot
 verification. The installer reports missing tools rather than installing them silently.
 Contributors who only need source and tests can skip operating setup and start at
@@ -289,7 +289,7 @@ patterns (see `upstreams.toml` [lifeos]).
 ### Public core and private overlays
 
 Sjel contains public code, schemas, renderers, and engine logic. Private data, vault contents,
-backups, and deployment configuration live in the active overlay. See [docs/architecture/security.md](docs/architecture/security.md).
+backups, and deployment configuration live in the active overlay. See [website/content/architecture/security.md](website/content/architecture/security.md).
 
 Mechanism stays in Sjel; instance inventory and values stay in the overlay.
 `tools/check-publication-hygiene.sh` gates against committed workstation paths and deployment
@@ -334,7 +334,7 @@ Sjel organizes all code into three nouns:
 - **Capability**: Autonomous domain units under `capabilities/<name>/`, declared via `service.toml`.
 - **Pack**: Modular agent know-how and workflows under `Packs/<name>/`.
 
-See [docs/architecture/index.md](docs/architecture/index.md) for full topology and boundary rules.
+See [website/content/architecture/index.md](website/content/architecture/index.md) for full topology and boundary rules.
 Shared utilities belong in `libs/`; contracts belong in `schemas/`; operator tools belong in `tools/`.
 Do not introduce unstructured `utils/` catch-alls.
 
@@ -384,7 +384,7 @@ not a substitute for a deterministic baseline it has not beaten.
 
 ### One manifest per concern
 
-Configuration has one owner per concern (see [docs/capabilities/manifest.md](docs/capabilities/manifest.md)):
+Configuration has one owner per concern (see [website/content/capabilities/manifest.md](website/content/capabilities/manifest.md)):
 
 | Manifest | Owns |
 | --- | --- |
@@ -477,7 +477,7 @@ substitute for that hold — see [Patch first](#patch-first) for the trade.
 
 ### Patch first
 
-Take upstream patches under the [patch policy](docs/operations/index.md#patch-first), including
+Take upstream patches under the [patch policy](website/content/operations/index.md#patch-first), including
 the Bun/npm age window, update ownership, receipts, and accepted risks.
 
 ### Secrets
@@ -491,13 +491,13 @@ none exists today.
 
 ### Data classes
 
-Follow the [data-class and model-admission policy](docs/architecture/security.md#data-classes).
+Follow the [data-class and model-admission policy](website/content/architecture/security.md#data-classes).
 The shared admission functions own the gate; labels and callers must agree with it.
 
 ### Backups before migrations
 
 No data migration starts without a tested 3-2-1 backup. Follow the
-[recovery rehearsal](docs/architecture/storage.md#backups-before-migrations) before changing live
+[recovery rehearsal](website/content/architecture/storage.md#backups-before-migrations) before changing live
 state. Delivery receipts alone do not prove recovery.
 
 ## Tooling conventions
@@ -596,13 +596,13 @@ the clone shape; it does not provide prebuilt services or complete authenticatio
 **A release tarball instead of a clone was rejected.** `tools/update.sh` updates by fetch and
 fast-forward. A tarball would require a second update mechanism, including removal of files
 deleted upstream. Historical clone measurements do not establish the current installation size;
-use the [footprint method](docs/operations/index.md#installation-footprint).
+use the [footprint method](website/content/operations/index.md#installation-footprint).
 
 Source checkouts retain Git for release identity, updates and repository metadata. The consumer
 distribution target is now prebuilt apps and a minimal node, with optional capability packages;
 it must not require Git or build tooling on the user's machine. `distribution.json` and the
 release catalogue carry the packaged runtime's identity. The remaining acceptance probes live
-in [#235](https://github.com/larsboes/Sjel/issues/235), and [release preparation](docs/operations/index.md#release-preparation-and-later-testing)
+in [#235](https://github.com/larsboes/Sjel/issues/235), and [release preparation](website/content/operations/index.md#release-preparation-and-later-testing)
 does not establish that the source-free installation is ready.
 
 The agent-readable install page is the primary route and the one-liner is the terminal alternative.
@@ -668,12 +668,15 @@ Capability and Pack READMEs explain what the thing solves, its verdict, tradeoff
 honest experience. A README may precede implementation when defining the capability is itself the
 current work.
 
-The [technical docs](docs/README.md) route readers by task: understand the architecture, build a
+The [technical docs](website/content/index.md) route readers by task: understand the architecture, build a
 capability, or operate an installation. Keep commands and interface contracts in their references;
 explain entry points and invariants beside the owning code. This organization draws on
 [TigerBeetle's documentation](https://docs.tigerbeetle.com/) and
 [rust-analyzer's architecture guide](https://rust-analyzer.github.io/book/contributing/architecture.html),
 recorded as documentation influences in `upstreams.toml`.
+
+User docs live in `website/content/` and are published by `website/build` (see
+[website/README.md](website/README.md)). `docs/` holds contributor material: `docs/plans/`.
 
 Report vulnerabilities through the private route in [SECURITY.md](SECURITY.md), never through
 a public issue.
@@ -688,7 +691,7 @@ CI limit. Generated files and vendored upstream documentation are outside this l
 
 Split by subject and ownership, with a short entry point linking to the details. Move a rule
 to one canonical location and update its references; do not copy it into several documents.
-Use existing READMEs and `docs/` sections before adding another guide. Keep `AGENTS.md` a short
+Use existing READMEs and `website/content/` sections before adding another guide. Keep `AGENTS.md` a short
 bootstrap that routes to the shared rules and relevant skills. A separate repository-rules
 file earns its place only when it replaces an existing body of rules and simplifies navigation.
 
@@ -708,7 +711,7 @@ Repository-wide doctrine lives here. Do not create a detached decision-log direc
 ### Scratch is not documentation
 
 `to-integrate/` is ignored pre-git scratch and may never be cited by permanent files. Unjudged
-external leads belong in the owning README or relevant `docs/` section. When a lead becomes a
+external leads belong in the owning README or relevant `website/content/` section. When a lead becomes a
 concrete experiment someone can run, track it in a `type:idea` issue. Adopted dependencies and
 influences pass through `upstreams.toml` and the consuming owner.
 

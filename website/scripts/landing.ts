@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
-// tools/generate-landing.ts — the public landing page: what Sjel is, how it fits together, and
+// website/scripts/landing.ts — the public landing page: what Sjel is, how it fits together, and
 // the way into the reference docs.
 //
-//   bun tools/generate-landing.ts                write site/index.html
-//   bun tools/generate-landing.ts --out <dir>    write <dir>/index.html
+//   bun website/scripts/landing.ts                write site/index.html
+//   bun website/scripts/landing.ts --out <dir>    write <dir>/index.html
 //
 // The copy follows README.md. Counts and the capability index come from self.json, so a new
 // capability appears here without an edit. Self-contained: one HTML file, no script, no font.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { esc } from "./lib/site-style.ts";
+import { esc } from "./style.ts";
 
-const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 const REPO = "https://github.com/larsboes/Sjel";
 
 interface Unit { name: string; kind: string; service?: { kind: string; port?: string } }
@@ -44,7 +44,7 @@ function capabilityIndex(units: Unit[]): string {
       <div class="area${title === "Platform" ? " wide" : ""}">
         <h3>${esc(title)} <span class="n">${names.length}</span></h3>
         <p>${esc(blurb)}</p>
-        <ul>${names.sort().map((n) => `<li><a href="docs/${esc(n)}.html">${esc(n)}</a></li>`).join("")}</ul>
+        <ul>${names.sort().map((n) => `<li><a href="reference/${esc(n)}.html">${esc(n)}</a></li>`).join("")}</ul>
       </div>`).join("");
 }
 
@@ -283,6 +283,7 @@ export function renderLanding(model: SelfModel): string {
         <a class="opt" href="#privacy">Privacy</a>
         <a class="opt" href="#capabilities">Capabilities</a>
         <a href="docs/index.html">Docs</a>
+        <a href="reference/index.html">Reference</a>
         <a href="${REPO}">GitHub</a>
       </div>
     </nav>
@@ -411,12 +412,14 @@ export function renderLanding(model: SelfModel): string {
       <p class="kicker">Documentation</p>
       <h2>Go deeper.</h2>
       <div class="docs">
-        <a href="docs/index.html"><b>Reference</b><span>One page per unit: contract, coupling and routes.</span></a>
-        <a href="docs/self-model.html"><b>Self-model</b><span>Every unit, its coupling and every upstream verdict.</span></a>
-        <a href="${REPO}/blob/main/ARCHITECTURE.md"><b>Architecture</b><span>Generated from the manifests.</span></a>
-        <a href="${REPO}/blob/main/docs/architecture/security.md"><b>Security</b><span>Data classes, the agent gate and the threat model.</span></a>
+        <a href="docs/index.html"><b>Start here</b><span>Reading paths by task: install, place a component, diagnose a host.</span></a>
+        <a href="docs/architecture/index.html"><b>Architecture</b><span>Component ownership, storage and access boundaries.</span></a>
+        <a href="docs/architecture/security.html"><b>Security</b><span>Data classes, the agent gate and the threat model.</span></a>
+        <a href="docs/capabilities/manifest.html"><b>Capability manifests</b><span>How a capability declares how it runs.</span></a>
+        <a href="docs/operations/index.html"><b>Operations</b><span>Doctor, service lifecycle and patch policy.</span></a>
+        <a href="reference/index.html"><b>Reference</b><span>One page per unit: contract, routes, coupling and README.</span></a>
+        <a href="reference/self-model.html"><b>Self-model</b><span>Every unit, its coupling and every upstream verdict.</span></a>
         <a href="${REPO}/blob/main/PLAN.md"><b>Plan</b><span>What is built, what is next and why.</span></a>
-        <a href="${REPO}/blob/main/CONTRIBUTING.md"><b>Contributing</b><span>Placement, verification and doctrine.</span></a>
       </div>
     </div>
   </section>
@@ -426,8 +429,9 @@ export function renderLanding(model: SelfModel): string {
   <footer>
     <span>Sjel · AGPL-3.0</span>
     <a href="${REPO}">GitHub</a>
-    <a href="docs/index.html">Reference</a>
-    <a href="${REPO}/blob/main/README.md">README</a>
+    <a href="docs/index.html">Docs</a>
+    <a href="reference/index.html">Reference</a>
+    <a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a>
   </footer>
 </div>
 </body>
@@ -442,5 +446,5 @@ if (import.meta.main) {
   const model = JSON.parse(readFileSync(join(SJEL_ROOT, "self.json"), "utf8")) as SelfModel;
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "index.html"), renderLanding(model));
-  console.log(`generate-landing: wrote ${join(outDir, "index.html")}`);
+  console.log(`landing: wrote ${join(outDir, "index.html")}`);
 }

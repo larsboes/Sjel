@@ -32,7 +32,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/links",
-        "Plans whose travellers are a person. Required: to=ent:<id> (docs/capabilities/links.md D11).",
+        "Plans whose travellers are a person. Required: to=ent:<id> (website/content/capabilities/links.md D11).",
     ),
     r(
         "GET",

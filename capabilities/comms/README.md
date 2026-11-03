@@ -679,7 +679,7 @@ evaluator and lexical fallback remain the control in every run.
 
 ### Model Evaluation Baseline
 
-The repeatable public baseline lives in [`eval/`](eval/README.md): manually judged DE/EN rankings with explicit rationales and acceptance thresholds evaluated against the loopback model endpoint. The full inference architecture and privacy redaction ladder are documented in [Feed & Communications Architecture](../../docs/capabilities/feed-and-comms.md).
+The repeatable public baseline lives in [`eval/`](eval/README.md): manually judged DE/EN rankings with explicit rationales and acceptance thresholds evaluated against the loopback model endpoint. The full inference architecture and privacy redaction ladder are documented in [Feed & Communications Architecture](../../website/content/capabilities/feed-and-comms.md).
 
 ## Gmail mutation boundary
 

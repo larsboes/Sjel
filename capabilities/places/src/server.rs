@@ -38,7 +38,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "GET",
         "/api/links",
         "Places linked to a typed id. Required: to=<id>: fin:tx:<source_id> for a transaction, \
-         ent:<id> for a person (docs/capabilities/links.md).",
+         ent:<id> for a person (website/content/capabilities/links.md).",
     ),
     r(
         "GET",

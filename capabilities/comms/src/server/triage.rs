@@ -1130,7 +1130,7 @@ pub(super) async fn triage_data_class_handler(
     }
 }
 
-/// One mail's body for an agent the owner trusts with names (`docs/architecture/data-processing-policy.md`).
+/// One mail's body for an agent the owner trusts with names (`website/content/architecture/data-processing-policy.md`).
 /// Fetched from Gmail per call and never stored. `data_class` is in the answer so the gate
 /// withholds a c3 mail. The deployment token gets 403: the tier comes only from the gate.
 pub(super) async fn triage_body_handler(

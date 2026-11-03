@@ -69,7 +69,7 @@ impl Mode {
 /// retention was verified for the account and endpoint. `Trusted` is a route the owner trusts
 /// without that proof. Both read the same view, [`sjel_pseudonymize::view::trusted_view`]; the
 /// tier is logged so a call shows which promise it relied on
-/// (`docs/architecture/data-processing-policy.md`).
+/// (`website/content/architecture/data-processing-policy.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tier {
     Pseudonymized,

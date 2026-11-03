@@ -12,7 +12,7 @@ Keep each fact with its owner:
 
 - `PLAN.md` and `docs/plans/<area>.md`: priority, open work with a done-when check, decisions not
   yet built.
-- `docs/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
+- `website/content/capabilities/<name>.md`: a capability's technical manual (interface contracts, data
   flows, Mermaid diagrams, guarantees). The capability README stays a lean entry point with the
   why and a link to the manual.
 

@@ -73,14 +73,14 @@ url = "https://github.com/rust-lang/rust-analyzer"
 verdict = "inspiration"
 license = "MIT OR Apache-2.0"
 summary = "Language server whose architecture guide informs Sjel's entry-point and invariant documentation"
-why = "Reviewed 2026-10-16: https://rust-analyzer.github.io/book/contributing/architecture.html starts with a high-level model, then entry points, a code map and explicit architecture invariants. Sjel uses that distinction within docs/architecture/ and owner references: explain where to enter the implementation and what must remain true, while generated ARCHITECTURE.md owns the manifest inventory. Documentation structure only; no source or prose copied and no runtime dependency. CONTRIBUTING.md records the placement rule. The repository declares MIT and Apache-2.0 licenses."
+why = "Reviewed 2026-10-16: https://rust-analyzer.github.io/book/contributing/architecture.html starts with a high-level model, then entry points, a code map and explicit architecture invariants. Sjel uses that distinction within website/content/architecture/ and owner references: explain where to enter the implementation and what must remain true, while generated ARCHITECTURE.md owns the manifest inventory. Documentation structure only; no source or prose copied and no runtime dependency. CONTRIBUTING.md records the placement rule. The repository declares MIT and Apache-2.0 licenses."
 
 [tigerbeetle]
 url = "https://github.com/tigerbeetle/tigerbeetle"
 verdict = "inspiration"
 license = "Apache-2.0"
 summary = "Transactions database whose task-oriented documentation informs Sjel's technical reading paths"
-why = "Reviewed 2026-10-16: https://docs.tigerbeetle.com/ distinguishes Start, Concepts, Coding, Operating and Reference, and directs implementation readers to internals. Sjel applies the reader-task distinction to the existing docs/README.md architecture, capability-author and operations routes; it does not add five parallel document trees. Commands and contracts stay in their owning reference, open work stays in ISA.md, and generated inventory stays in ARCHITECTURE.md. Documentation structure only; no source or prose copied and no database dependency. CONTRIBUTING.md records the placement rule. The repository declares Apache-2.0."
+why = "Reviewed 2026-10-16: https://docs.tigerbeetle.com/ distinguishes Start, Concepts, Coding, Operating and Reference, and directs implementation readers to internals. Sjel applies the reader-task distinction to the existing website/content/index.md architecture, capability-author and operations routes; it does not add five parallel document trees. Commands and contracts stay in their owning reference, open work stays in ISA.md, and generated inventory stays in ARCHITECTURE.md. Documentation structure only; no source or prose copied and no database dependency. CONTRIBUTING.md records the placement rule. The repository declares Apache-2.0."
 
 [iai-personal-memory-engine]
 url = "https://github.com/CodeAbra/iai-personal-memory-engine"

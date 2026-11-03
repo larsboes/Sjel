@@ -1,4 +1,4 @@
-//! What calendar answers on `GET /api/links` (docs/capabilities/links.md, LNK-8).
+//! What calendar answers on `GET /api/links` (website/content/capabilities/links.md, LNK-8).
 //!
 //! Calendar links a trip's own entries by `payload.plan_id` and adopted draft entries by its
 //! materialization ledger. Every entry has a typed id, so `unlinkable` is always 0.

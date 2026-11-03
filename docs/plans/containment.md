@@ -103,7 +103,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
      qualifies.
 7. **`c2` to the `trusted` ring (C1).** `providers.toml` accepts `c2` as `highest_data_class`;
    `content_item::cloud_admission` admits `c2` as a `trusted_view` derivative to a `c2` provider
-   only. The doctrine changes in the same commit: `docs/architecture/security.md` (Data classes)
+   only. The doctrine changes in the same commit: `website/content/architecture/security.md` (Data classes)
    and `shared-data-boundaries.md`. The overlay `data/` is denied in the Claude Code and Codex
    sandbox settings, and a seeded synthetic store replaces it for debugging. Done when: a
    `trusted` agent token reads a `c2` mail with names readable and its sender's address replaced,

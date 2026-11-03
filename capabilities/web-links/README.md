@@ -36,4 +36,4 @@ links history candidates
 links history keep|dismiss <candidate-id>
 ```
 
-The API and data flow are documented in [`docs/capabilities/web-links.md`](../../docs/capabilities/web-links.md).
+The API and data flow are documented in [`website/content/capabilities/web-links.md`](../../website/content/capabilities/web-links.md).

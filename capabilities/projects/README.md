@@ -85,7 +85,7 @@ written back into a journal entry.
 
 Projects owns reviewed references to Inventory items. `GET /api/inventory-links?path=` lists
 references held by one project record. `GET /api/links?to=inv:<hex>` returns the backreferences
-in the [typed links contract](../../docs/capabilities/links.md). A project record's link ID is
+in the [typed links contract](../../website/content/capabilities/links.md). A project record's link ID is
 `project:<lowercase hex of its UTF-8 path>`.
 
 `POST /api/inventory-links` and `POST /api/inventory-links/remove` take `project`, `path`,

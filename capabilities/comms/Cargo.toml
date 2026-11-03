@@ -66,7 +66,7 @@ sjel-summarize = { path = "../../libs/summarize" }
 sjel-pseudonymize = { path = "../../libs/pseudonymize" }
 content-item = { path = "../../libs/content-item" }
 route-manifest = { path = "../../libs/route-manifest" }
-# The `/api/links` body every capability answers alike (docs/capabilities/links.md).
+# The `/api/links` body every capability answers alike (website/content/capabilities/links.md).
 sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

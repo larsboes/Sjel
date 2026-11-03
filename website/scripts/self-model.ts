@@ -1,37 +1,17 @@
 #!/usr/bin/env bun
-// tools/generate-site.ts — render self.json as a self-contained page (#14).
+// website/scripts/self-model.ts — self.json rendered as one page: every unit, the coupling scan
+// and every upstream verdict. Generated, never hand-maintained: a fact that is not in a manifest
+// cannot appear here.
 //
-// The repository has no landing surface: the only entry points are a 32 KB README and a generated
-// ARCHITECTURE.md. This renders what Sjel already knows about itself into one HTML file someone
-// can read without cloning.
-//
-// Generated, never hand-maintained, for the same reason ARCHITECTURE.md is: a fact that is not in
-// a manifest cannot appear here, so the page cannot drift from the tree.
-//
-// Everything here traces to a tracked manifest: service.toml for kind/port/requires,
-// upstreams.toml for the verdict, and tools/self's own coupling scan over Cargo.toml and
-// source imports.
-//
-// Self-contained by requirement (#14) and by house rule: inline CSS, no script, no font, no image,
-// no request to any other host. The one interactive element (filtering by kind) is CSS-only.
-//
-// This is the self-model page under docs/. The reference pages (tools/generate-docs) and the
-// landing page (tools/generate-landing.ts) sit beside it, and the shell, the
-// stylesheet and the nav that ties the three together moved to tools/lib/site-style.ts. What
-// stayed here is unchanged — the self-model tables, and the argument above about which of
-// them may honestly be published.
-//
-//   tools/generate-site                 write site/index.html
-//   tools/generate-site --out <dir>     write <dir>/index.html
-//   tools/generate-site --check         render to memory, report size, write nothing
+//   bun website/scripts/self-model.ts --out <site>     write <site>/reference/self-model.html
+//   bun website/scripts/self-model.ts --check          render to memory, write nothing
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { loadManifest } from "./lib/demo-endpoints.ts";
-import { esc, page } from "./lib/site-style.ts";
+import { esc, page } from "./style.ts";
 
-const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 
 interface Unit {
   name: string;
@@ -127,7 +107,7 @@ ${body}
 </section>`;
 }
 
-export function renderSite(model: SelfModel, demoed: string[] = [], root = "../"): string {
+export function renderSite(model: SelfModel, root = "../"): string {
   const counts = KIND_ORDER
     .map((k) => [k, model.units.filter((u) => u.kind === k).length] as const)
     .filter(([, n]) => n > 0);
@@ -136,7 +116,7 @@ export function renderSite(model: SelfModel, demoed: string[] = [], root = "../"
     description:
       "What Sjel is: its capabilities, their contracts, and how they connect — generated from the repository's own manifests.",
     root,
-    current: "overview",
+    current: "reference",
     body: `
 <header>
   <h1>Sjel</h1>
@@ -148,60 +128,35 @@ ${counts.map(([k, n]) => `    <li><strong>${n}</strong> ${esc(KIND_LABEL[k].toLo
   </ul>
 </header>
 
-<section>
-  <h2>Where else to look</h2>
-  <p class="blurb">Nothing on this site is written by hand. The tables below are generated from the manifests, and the reference pages from those plus a recording of capabilities seeded with generated data.</p>
-  <ul class="cards">
-    <li><a href="index.html"><strong>Reference →</strong><span>One page per unit: declared contract, what it is coupled to, and response shapes read out of the recording.</span></a></li>
-    <li><a href="https://github.com/larsboes/Sjel"><strong>Source →</strong><span>The repository, its README, and the manifests every page here is generated from.</span></a></li>
-  </ul>
-</section>
 ${renderUnits(model.units)}
 ${renderCoupling(model.coupling)}
 ${renderUpstreams(model.upstreams)}`,
-    footer: `  <p>Generated from <code>self.json</code> (schema ${esc(model.schema)}, written by <code>${esc(model.generator)}</code>) and rendered by <code>tools/generate-site.ts</code>. Nothing here is hand-maintained.</p>`,
+    footer: `  <p>Generated from <code>self.json</code> (schema ${esc(model.schema)}, written by <code>${esc(model.generator)}</code>) and rendered by <code>website/scripts/self-model.ts</code>. Nothing here is hand-maintained.</p>`,
   });
 }
 
 function main(): void {
   const args = process.argv.slice(2);
-  if (args.includes("-h") || args.includes("--help")) {
-    console.log("tools/generate-site [--out <dir>] [--name <file>] [--check]");
-    process.exit(0);
-  }
   const outIdx = args.indexOf("--out");
-  const outDir = outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, "site");
-  // Since #170 the site root is the dashboard, so this page is no longer an index. It keeps
-  // its own generator because it renders self.json rather than a per-unit view, and it is
-  // written into /docs beside the reference pages under its own name.
-  const nameIdx = args.indexOf("--name");
-  const outName = nameIdx >= 0 ? args[nameIdx + 1] : "index.html";
+  const outDir = join(outIdx >= 0 ? args[outIdx + 1] : join(SJEL_ROOT, "site"), "reference");
   const selfPath = join(SJEL_ROOT, "self.json");
   if (!existsSync(selfPath)) {
-    console.error(`generate-site: no self.json at ${selfPath} — run: tools/self generate`);
+    console.error(`self-model: no self.json at ${selfPath}; run tools/self generate`);
     process.exit(1);
   }
   const model = JSON.parse(readFileSync(selfPath, "utf8")) as SelfModel;
-  // A schema bump means the shape this renderer reads may have moved under it. Fail rather than
-  // publish a page built from assumptions about fields that no longer mean what they did.
   if (model.schema !== 2) {
-    console.error(`generate-site: self.json is schema ${model.schema}, this renderer knows schema 2`);
+    console.error(`self-model: self.json is schema ${model.schema}, this renderer knows schema 2`);
     process.exit(1);
   }
-  // Which capabilities the demo actually runs, read from demo.toml rather than inferred from
-  // what is NOT in its absent list — the demo covers a handful of the tree's capabilities, and
-  // "everything except the three we wrote a reason for" would overstate it by twenty.
-  const isSubdir = outDir.endsWith("docs") || outDir.endsWith("research");
-  const root = isSubdir ? "../" : "";
-  const html = renderSite(model, loadManifest().capabilities.map((c) => c.name), root);
+  const html = renderSite(model);
   if (args.includes("--check")) {
-    console.log(`generate-site: renders ${html.length} bytes from schema ${model.schema} (nothing written)`);
+    console.log(`self-model: renders ${html.length} bytes (nothing written)`);
     return;
   }
   mkdirSync(outDir, { recursive: true });
-  const dest = join(outDir, outName);
-  writeFileSync(dest, html);
-  console.log(`wrote ${dest} (${html.length} bytes)`);
+  writeFileSync(join(outDir, "self-model.html"), html);
+  console.log(`self-model: wrote ${join(outDir, "self-model.html")}`);
 }
 
 if (import.meta.main) main();

@@ -84,7 +84,7 @@ done, check each state below. Write "not applicable" for a state only when you k
 
 Sjel's value is the joins between its areas: the trip that explains the spend, the event that
 explains the trip. Every view of one record lists what it touches in other capabilities, and
-opens it in place (the inspector, `docs/capabilities/links.md`). In review, a record view that lists
+opens it in place (the inspector, `website/content/capabilities/links.md`). In review, a record view that lists
 nothing outside its own capability gets a question.
 
 ## Rule 5: one product, native surfaces

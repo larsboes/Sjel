@@ -25,7 +25,7 @@ markdown-root = { path = "../../libs/markdown-root" }
 sjel-server = { path = "../../libs/sjel-server" }
 sjel-store = { path = "../../libs/sjel-store" }
 route-manifest = { path = "../../libs/route-manifest" }
-# The name key and the resolve body, shared with trips and places (docs/capabilities/links.md D8).
+# The name key and the resolve body, shared with trips and places (website/content/capabilities/links.md D8).
 sjel-links = { path = "../../libs/links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

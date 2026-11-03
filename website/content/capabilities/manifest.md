@@ -1,6 +1,6 @@
 # Capability manifest specification (`service.toml`)
 
-Copy the relevant fields from [`schemas/service.toml.example`](../../schemas/service.toml.example).
+Copy the relevant fields from [`schemas/service.toml.example`](../../../schemas/service.toml.example).
 That file is the complete field reference. Manifests use flat, single-line TOML fields, including
 argv arrays for commands. Do not wrap them in a `[service]` or `[backup]` table.
 
@@ -42,9 +42,9 @@ health_path = "/health"
 autostart = "true"
 ```
 
-For working examples, read [punctuality](../../capabilities/punctuality/service.toml), the scheduled
-[entities sync](../../capabilities/entities-sync/service.toml), and the data-only
-[store](../../capabilities/store/service.toml).
+For working examples, read [punctuality](../../../capabilities/punctuality/service.toml), the scheduled
+[entities sync](../../../capabilities/entities-sync/service.toml), and the data-only
+[store](../../../capabilities/store/service.toml).
 
 ### Manifest rules
 

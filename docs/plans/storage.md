@@ -65,7 +65,7 @@ power-loss test at each durable write, and any check of a started primary.
   3. `sjel mirror build`, which copies tables out of the shared file.
 
 **Docs to correct when the split starts.** `capabilities/store/README.md` and
-`docs/architecture/storage.md` justify one file with cross-schema joins. Only one statement in all
+`website/content/architecture/storage.md` justify one file with cross-schema joins. Only one statement in all
 capabilities spans two table prefixes, and it is a migration helper.
 
 ## 2. Decisions

@@ -88,7 +88,7 @@ workspace with flat `crates/` ([`restructure.md`](docs/plans/restructure.md)).
 1. **On the glass.** The native app is for daily life. A phone joins the Mac from a card that
    appears when both are on the same network, and nobody in the household needs a terminal. Node
    setup still needs an operator. The
-   [installation workflow](docs/operations/index.md#install-a-shell-only-node) lists the steps.
+   [installation workflow](website/content/operations/index.md#install-a-shell-only-node) lists the steps.
 2. **Under the hood.** Every capability serves a live route manifest (`GET /routes`), speaks typed
    JSON over loopback HTTP, and keeps its state in SQLite. Every workflow runs from the terminal
    too (`sjel`, `sjel capability call`), and local models plug in the same way.
@@ -139,7 +139,7 @@ smart. Using and maintaining it may not require that smartness.
 | Sjel agent on the phone: sessions, approvals, three access tiers, a command policy | Built, not yet tested on a device ([`agent.md`](docs/plans/agent.md)). |
 | Terminal on the Mac from the phone, behind Face ID | Built, not yet tested on a device. |
 | Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented. Listener, credentials and deployment setup are required. |
-| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](docs/architecture/security.md#agent-access-policy) controls admission. |
+| Pseudonymizer in front of cloud model calls and admitted agent reads | Implemented for `comms` cloud calls and capabilities that admit the agent gate. The [access policy](website/content/architecture/security.md#agent-access-policy) controls admission. |
 | Data about other people sent to a cloud model pseudonymized, or synced end-to-end encrypted | Target |
 | Model selection: device model or local decision engine, with heuristic fallback | Selection and fallback paths implemented. Available models depend on the device and configured services. |
 | Small install with optional downloadable capabilities | Release preparation exists for Mac DMGs, node archives and native iOS archives. First-run setup and a clean-user install remain open ([#235](https://github.com/larsboes/Sjel/issues/235)). |
@@ -156,7 +156,7 @@ tools/install.sh
 ~~~
 
 Setup creates or connects private configuration outside this repository and offers capability
-selection. Follow the [shell-only installation workflow](docs/operations/index.md#install-a-shell-only-node)
+selection. Follow the [shell-only installation workflow](website/content/operations/index.md#install-a-shell-only-node)
 for prerequisites, authentication, startup and reboot checks. Enabling an optional capability does
 not start it or remove unused code from the checkout.
 
@@ -187,7 +187,7 @@ from a public clone. The relevance corpus is public
 have no recorded date. Offline use and pairing time are not measured yet.
 
 Run `sjel test` and `cargo test --workspace --locked` for current test results. This page does
-not establish that the current checkout passes. See [installation footprint](docs/operations/index.md#installation-footprint)
+not establish that the current checkout passes. See [installation footprint](website/content/operations/index.md#installation-footprint)
 for the measured shell artifacts and what that inventory excludes.
 
 ## Structure

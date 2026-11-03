@@ -3,7 +3,7 @@
 //!
 //! A trip stores a place as it was typed. The dashboard's place field slugifies typed text
 //! into `place:<slug>` with a null coordinate whenever nobody picks a suggested station, and
-//! `trips draft-intent` does the same on purpose (`docs/capabilities/travel.md` §1). Every
+//! `trips draft-intent` does the same on purpose (`website/content/capabilities/travel.md` §1). Every
 //! coordinate-dependent view downstream then degrades without saying so: the map falls back
 //! to a world overview and each stop reads "Coordinates not available"
 //! (`capabilities/trips/src/store.rs`, `list_places`).

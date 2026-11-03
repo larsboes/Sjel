@@ -1,20 +1,12 @@
-# The demo manifest (#168). One file decides what the published demonstration contains.
-#
-# Sjel's public page used to be tables generated from self.json: true, checkable, and
-# no help at all to somebody asking what the thing looks like. This manifest drives the
-# other half — a real dashboard bundle running on data that was never real.
+# The demo manifest: which capabilities the screenshot stack seeds, and which it leaves out.
 #
 # THE ONE INVARIANT: every value the demo shows was produced by tools/demo-seed writing
 # through a capability's own public HTTP API, into a store that started empty. Nothing
 # reads an overlay, a vault, a keychain or a live database. A capability that cannot be
-# filled that way does not appear here — see `[absent]` at the bottom, which says which
-# ones those are and why, because a demo that quietly omits half the system is a worse
-# lie than one that shows nothing.
+# filled that way does not appear here — see `[absent]` at the bottom, which says why.
 #
-# Paths below are written as the BROWSER requests them, not as a capability serves them.
-# tools/demo-record resolves each one through `tools/capability.sh registry`, applying the
-# same `/<name>` prefix rule dashboard/vite.config.ts proxies by — so a port stays declared
-# in exactly one service.toml and this file never learns a number.
+# Paths are written as the shell's proxy serves them (`/<name>/…`), and resolved through
+# `tools/capability.sh registry`, so a port stays declared in exactly one service.toml.
 
 [demo]
 # Fixed, because a demo that differs between two builds cannot be reviewed by diffing it.
@@ -46,17 +38,10 @@ label = "Demo data — generated, not real"
 # and generates Scouting's source declaration from it.
 origin = "http://127.0.0.1:8099"
 
-[fixtures]
-# Where tools/demo-record writes, and where the demo bundle's fetch shim reads. Untracked:
-# fixtures are a build product of the seeder plus the capability servers, and committing
-# them would let a stale copy get published behind a changed API without anything noticing.
-dir = "demo/fixtures"
-
 # ─── Seeded capabilities ──────────────────────────────────────────────────────
 #
 # `writes` names the generator in tools/lib/demo-data.ts that fills this capability.
-# `paths` are recorded AFTER every seeder has run, so cross-capability references
-# (a finance expense pointing at a trip) resolve.
+# `paths[0]` is the read the seeder waits on before it writes.
 
 # No task capability here since PRD Q48 (2026-08-27): the Action kind moved into the
 # operator's Obsidian vault, and `vault` reads a directory rather than a store a seeder
@@ -146,10 +131,6 @@ paths = [
   "/finance/api/import/candidates",
   "/finance/api/import/csv/mappings",
   "/finance/api/import/investments/mappings",
-  # With the query the client always sends: the shim keys on pathname PLUS search
-  # (dashboard/src/lib/demo.ts:54) and the recorder keys on the literal string here
-  # (tools/demo-record.ts:135), so the bare path answers 501 for every real request.
-  # The calendar block above carries the same shape for the same reason.
   "/finance/api/portfolio?currency=EUR",
   "/finance/api/decisions?status=open",
   "/finance/api/prices/status",
@@ -216,15 +197,6 @@ paths = [
 # runner — capabilities up because the job started them, one repo on main, no overlay.
 # Nothing to invent, and inventing it would be the only way to get it wrong.
 #
-# `/api/sjel-status/upstreams` stood in this list until 2026-09-08 and had not been a route
-# since 2026-08-28: PRD Q41 retired `tools/upstream-checker`, whose verdict was the endpoint's
-# only content, and the handler went with it (`capabilities/sjel-status/src/status/health.rs`
-# keeps the reasoning where the code was). The dashboard's types went at the same time
-# (`dashboard/src/lib/api.ts`, `UpstreamEntry` / `UpstreamAudit`), so nothing has asked for it
-# in eleven days — the manifest was the last thing that still named it, and the recorder would
-# have taken sjel-status' proxy fallback and failed the Pages build on a 404 from transit.
-# The verdict half is not lost: `self.json` carries `{name, verdict}` per upstreams.toml row
-# and `/self` above serves it. `tools/demo-check-paths` is what refuses the next one.
 paths = [
   "/sjel-status/api/sjel-status/health",
   "/sjel-status/api/sjel-status/capabilities",

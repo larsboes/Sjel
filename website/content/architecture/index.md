@@ -1,15 +1,15 @@
 # Architecture overview
 
 Sjel separates the runtime, domain services, and agent workflows. The
-[generated architecture](../../ARCHITECTURE.md) lists their declared wiring; the
-[engineering doctrine](../../CONTRIBUTING.md#architecture-and-ownership) defines placement.
+[generated architecture](../../../ARCHITECTURE.md) lists their declared wiring; the
+[engineering doctrine](../../../CONTRIBUTING.md#architecture-and-ownership) defines placement.
 
 ## Architectural nouns
 
 ### 1. The Spine
 
 The spine contains root manifests, `schemas/`, operator tools in `tools/` and shared libraries in
-`libs/`. The client is the native app in [`apps/gpui`](../../apps/gpui/README.md). It presents
+`libs/`. The client is the native app in [`apps/gpui`](../../../apps/gpui/README.md). It presents
 capability surfaces and owns no domain state.
 
 ### 2. Capabilities
@@ -24,7 +24,7 @@ See the [manifest guide](../capabilities/manifest.md).
 
 Packs contain portable agent skills and workflows under `Packs/<name>/`. Their `pack.toml`
 manifests declare the capabilities and external systems they use. See the
-[Pack schema](../../schemas/pack.toml.example) and [Pack directory](../../Packs/).
+[Pack schema](../../../schemas/pack.toml.example) and [Pack directory](../../../Packs/).
 
 ## Boundary invariants
 

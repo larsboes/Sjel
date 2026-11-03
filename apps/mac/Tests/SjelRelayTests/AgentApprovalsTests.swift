@@ -39,8 +39,8 @@ import Testing
 @Suite struct CachedTokenTests {
     final class Reads: @unchecked Sendable {
         var count = 0
-        var answer: DashboardLogin.KeychainRead
-        init(_ answer: DashboardLogin.KeychainRead) { self.answer = answer }
+        var answer: InboundToken.KeychainRead
+        init(_ answer: InboundToken.KeychainRead) { self.answer = answer }
     }
 
     @Test func aTokenIsReadOnceAndKept() {

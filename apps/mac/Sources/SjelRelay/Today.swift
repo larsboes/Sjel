@@ -1,7 +1,7 @@
 import Foundation
 
 /// One calendar entry as `GET /calendar/api/entries` serves it (`CalendarEntry` in
-/// `dashboard/src/lib/api.ts`). Only the fields the menu bar shows.
+/// `capabilities/calendar`). Only the fields the menu bar shows.
 public struct CalendarEntry: Sendable, Equatable, Decodable, Identifiable {
     public let id: String
     public let title: String

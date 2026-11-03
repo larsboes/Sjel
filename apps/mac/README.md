@@ -14,7 +14,7 @@ Per Sjel / Sjel doctrine and **Product Rule 4**:
 
 - `SjelRelay`: Swift library managing `C2Record` modeling, `EncryptionEnvelope` AEAD packaging, `RelayKeyManager` Keychain storage, and `CloudKitRelay` translation to/from `CKRecord`.
 - `SjelMacApp`: Native SwiftUI `MenuBarExtra` companion app: the shell's health, **Open
-  Dashboard**, **Open App** (the GPUI desktop app, `dev.sjel.desktop`, installed by
+  App** (the GPUI desktop app, `dev.sjel.desktop`, installed by
   `apps/gpui/install`), and **Open at login**. When the installed desktop app is behind the
   checkout, a **Sjel Desktop update** row offers **Update**. It compares the `SjelBuildCommit`
   that `apps/gpui/install` writes into the bundle's Info.plist with `~/Developer/Sjel`.
@@ -32,13 +32,11 @@ apps/mac/install
 Builds a signed `~/Applications/Sjel.app` and starts it. It lives in the menu bar only. Its menu
 has **Open at login**, so the app is there after a restart.
 
-## Opening the dashboard
+## The inbound token
 
-The shell at `127.0.0.1:8082` refuses a browser that carries no credential (ISA ISC-45).
-**Open Dashboard** reads the inbound token from the login Keychain (item `sjel-inbound-token`,
-written by `tools/setup-inbound-auth.sh`). It trades the token for a single-use ticket and opens
-the browser with it. The shell turns the ticket into a 30-day session cookie
-(`capabilities/sjel-status/src/session.rs`). The token never reaches the browser.
+The menu bar reads the deployment's inbound token from the login Keychain (item
+`sjel-inbound-token`, written by `tools/setup-inbound-auth.sh`) to call the shell for health and
+agent approvals (`InboundToken`, `CachedToken`). The token never leaves this app.
 
 ## Agent writes that ask
 

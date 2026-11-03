@@ -39,16 +39,13 @@ final class QuickAsk {
     let session = QuickAskSession()
     private let askInSession: (String, [AskTurn]) async -> AskOutcome
     private let openDesktop: (String?) -> Void
-    private let openDashboard: (String?) -> Void
 
     init(
         askInSession: @escaping (String, [AskTurn]) async -> AskOutcome,
-        openDesktop: @escaping (String?) -> Void,
-        openDashboard: @escaping (String?) -> Void
+        openDesktop: @escaping (String?) -> Void
     ) {
         self.askInSession = askInSession
         self.openDesktop = openDesktop
-        self.openDashboard = openDashboard
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let me = Unmanaged.passUnretained(self).toOpaque()
         InstallEventHandler(GetApplicationEventTarget(), { _, _, context in
@@ -155,12 +152,6 @@ final class QuickAsk {
                 self.close()
                 self.openDesktop(q)
             },
-            onOpenDashboard: { [weak self] draft in
-                guard let self else { return }
-                let q = draft.isEmpty ? self.session.lastQuestion : draft
-                self.close()
-                self.openDashboard(q)
-            },
             onClear: { [weak self] in
                 self?.session.clear()
                 self?.resizePanel(expanded: false)
@@ -188,7 +179,6 @@ private struct QuickAskField: View {
     @ObservedObject var session: QuickAskSession
     let onSubmit: (String) -> Void
     let onContinueDesktop: (String) -> Void
-    let onOpenDashboard: (String) -> Void
     let onClear: () -> Void
     let onCancel: () -> Void
     @State private var text = ""
@@ -266,12 +256,6 @@ private struct QuickAskField: View {
                     }
                     .keyboardShortcut("o", modifiers: .command)
                     .controlSize(.small)
-
-                    Button("Dashboard") {
-                        onOpenDashboard(text.trimmingCharacters(in: .whitespacesAndNewlines))
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.borderless)
 
                     Spacer()
 

@@ -58,7 +58,7 @@ public struct AgentView: Sendable, Equatable {
 
 /// Reads the waiting writes from the shell and sends the owner's decision
 /// (`GET /api/sjel-status/agent`, `POST /api/sjel-status/agent/approvals/{id}`).
-/// Authenticated with the deployment token from the login Keychain, like `DashboardLogin`.
+/// Authenticated with the deployment token from the login Keychain, through `InboundToken`.
 public struct AgentApprovals: Sendable {
     public let baseURL: URL
     private let readToken: @Sendable () -> String?

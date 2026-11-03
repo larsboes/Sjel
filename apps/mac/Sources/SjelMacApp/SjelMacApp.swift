@@ -26,7 +26,7 @@ final class SjelMacViewModel: ObservableObject {
     @Published var status: NodeStatus = .offline
     /// When `status` was last read, so a panel that stopped updating says so.
     @Published var checkedAt: Date? = nil
-    /// What the last "Open Dashboard" could not do, in words for the person who clicked it.
+    /// What the last "Open App" could not do, in words for the person who clicked it.
     @Published var openProblem: String? = nil
     @Published var launchesAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
@@ -43,7 +43,6 @@ final class SjelMacViewModel: ObservableObject {
     private let token = CachedToken()
     private lazy var bridge = NodeBridge(token: token)
     private lazy var approvals = AgentApprovals(token: token)
-    private let login = DashboardLogin()
     private let notifications = ApprovalNotifications()
     private var announced: Set<String> = []
     /// Findings already notified, kept across launches so a restart does not repeat them.
@@ -70,13 +69,6 @@ final class SjelMacViewModel: ObservableObject {
             },
             openDesktop: { [weak self] question in
                 self?.openDesktopAsk(question)
-            },
-            openDashboard: { [weak self] question in
-                if let question, !question.isEmpty {
-                    self?.askInDashboard(question)
-                } else {
-                    self?.openDashboard()
-                }
             }
         )
         notifications.onDecision = { [weak self] id, allow in
@@ -182,14 +174,6 @@ final class SjelMacViewModel: ObservableObject {
         quickAsk?.show(initialQuestion: question)
     }
 
-    /// Sends a question to the web dashboard's Ask drawer (`/?ask=…`) when explicitly requested.
-    func askInDashboard(_ question: String) {
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        let encoded = question.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        openDashboard(next: "/?ask=\(encoded)")
-    }
-
     /// Continues the session in the native GPUI desktop app (`sjel://ask?q=…`).
     func openDesktopAsk(_ question: String?) {
         var allowed = CharacterSet.alphanumerics
@@ -201,27 +185,16 @@ final class SjelMacViewModel: ObservableObject {
         } else {
             link = "sjel://ask"
         }
+        openDesktop(link: link)
+    }
+
+    /// Opens a `sjel://` link in the desktop app, or the app itself when the link cannot open.
+    func openDesktop(link: String) {
         if let url = URL(string: link),
            NSWorkspace.shared.urlForApplication(withBundleIdentifier: "dev.sjel.desktop") != nil {
             NSWorkspace.shared.open(url)
         } else {
             openDesktopApp()
-        }
-    }
-
-    func openDashboard(next: String? = nil) {
-        Task {
-            do throws(DashboardLogin.Failure) {
-                let url = try await login.loginURL(next: next)
-                openProblem = nil
-                NSWorkspace.shared.open(url)
-            } catch {
-                openProblem = switch error {
-                case .notSetUp: "Sjel is not set up on this Mac yet."
-                case .unreachable: "Sjel is not running on this Mac."
-                case .refused(let status): "Sjel refused the login (\(status))."
-                }
-            }
         }
     }
 
@@ -465,17 +438,13 @@ struct SjelMenuBarView: View {
     private var actions: some View {
         HStack {
             Button {
-                model.openDashboard()
+                model.openDesktopApp()
             } label: {
-                Text("Open Dashboard").frame(maxWidth: .infinity)
+                Text("Open App").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .keyboardShortcut("d", modifiers: .command)
-            .help("Open the dashboard in the browser, logged in (⌘D)")
-
-            Button("Open App") { model.openDesktopApp() }
-                .keyboardShortcut("o", modifiers: .command)
-                .help("Open the native desktop app (⌘O)")
+            .keyboardShortcut("o", modifiers: .command)
+            .help("Open the native desktop app (⌘O)")
 
             Button("Ask") { model.showAsk() }
                 .keyboardShortcut("k", modifiers: .command)
@@ -646,7 +615,7 @@ struct SjelMenuBarView: View {
             }
             ForEach(entries.prefix(4)) { entry in
                 Button {
-                    model.openDashboard(next: "/calendar")
+                    model.openDesktop(link: "sjel://calendar")
                 } label: {
                     HStack(spacing: 6) {
                         Circle()

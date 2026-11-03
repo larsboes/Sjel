@@ -2,15 +2,18 @@
 //!
 //! Shared across macOS desktop and iOS mobile clients.
 
+pub mod accounts;
 pub mod ask;
 pub mod backup;
 pub mod block_menu;
 pub mod calendar;
+pub mod capabilities;
 pub mod clipper;
 pub mod context;
 pub mod cv;
 pub mod data;
 pub mod doc_view;
+pub mod docs;
 pub mod documents;
 pub mod editor;
 pub mod feed;
@@ -31,6 +34,7 @@ pub mod projects;
 pub mod record;
 pub mod research;
 pub mod scout;
+pub mod selection;
 pub mod self_view;
 pub mod setup;
 pub mod sidebar;
@@ -42,6 +46,7 @@ pub mod terminal;
 pub mod theme;
 pub mod today;
 pub mod travel;
+pub mod viz;
 pub mod web_links;
 
 pub use doc_view::{render_block, render_doc, render_markdown};

@@ -236,7 +236,7 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
     if path_only == "/apps"
         || path_only
             .strip_prefix("/panel/")
-        .is_some_and(|name| !name.is_empty() && !name.contains('/'))
+            .is_some_and(|name| !name.is_empty() && !name.contains('/'))
     {
         return Some(Target::Native(Page::Capabilities));
     }

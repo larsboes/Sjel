@@ -21,6 +21,8 @@ tokio = { version = "1", features = ["sync"] }
 # The VT parser and grid model behind ui/src/terminal.rs. See its upstreams.toml row.
 alacritty_terminal = "0.26"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
+mermaid-rs-renderer = { version = "=0.3.1", default-features = false }
+zeroize = "=1.9.1"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"] }

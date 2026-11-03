@@ -2018,7 +2018,19 @@ impl Render for Workspace {
         }
         let page = match self.page {
             Page::Home => home::render(self, palette, window, cx).into_any_element(),
-            Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
+            Page::Capabilities => capabilities::render(
+                capabilities::State {
+                    health: &self.health,
+                    agent: &self.agent,
+                    busy: &self.busy,
+                    selected: self.selected(),
+                    selection: &self.selection,
+                },
+                palette,
+                cx,
+                |view, name, start, window, cx| view.set_running(name, start, window, cx),
+            )
+            .into_any_element(),
             Page::Backup => {
                 self.backup_page
                     .update(cx, |backup, cx| backup.set_palette(palette, cx));

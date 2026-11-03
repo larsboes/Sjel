@@ -35,6 +35,7 @@ mod links;
 mod macos_glass;
 mod mail;
 mod media_view;
+mod music;
 mod packs_view;
 mod pdf_kit;
 mod people_view;
@@ -56,7 +57,6 @@ mod ui;
 pub mod update;
 mod viz;
 mod workspace;
-mod music;
 
 use sjel_gpui_core::area::Area;
 use sjel_gpui_core::{route, shell};

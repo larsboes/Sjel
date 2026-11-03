@@ -7035,13 +7035,9 @@ dependencies = [
  "futures",
  "gpui-kit",
  "gpui-pre",
- "image",
  "libsql",
- "mermaid-rs-renderer",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "raw-window-handle",
  "reqwest 0.13.5",
@@ -7050,7 +7046,6 @@ dependencies = [
  "sjel-gpui-core",
  "sjel-gpui-ui",
  "tokio",
- "zeroize",
 ]
 
 [[package]]
@@ -7103,6 +7098,7 @@ dependencies = [
  "gpui-pre",
  "image",
  "maplibre_native",
+ "mermaid-rs-renderer",
  "metal",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -7110,6 +7106,7 @@ dependencies = [
  "serde_json",
  "sjel-gpui-core",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

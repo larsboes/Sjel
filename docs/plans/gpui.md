@@ -373,11 +373,12 @@ build was performed for this handoff.
    manifests, and `gpui-mobile` at git rev `c24a1308e1`. Move all four pins in one commit of its
    own, with `cargo test` on core and ui and `ios/run-sim` before and after.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
-   twelve more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
-   `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`) moved on 2026-11-03.
-   Still in `src/`: `capabilities`, `docs` (Mermaid renderer), `accounts` and `settings`. A platform
-   call goes behind one small trait in the shell (keychain, open URL, audio, notifications,
-   scanner), never as a `cfg` in a page. Run `simplify` on each page as it moves.
+   seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
+   `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
+   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. Still in `src/`: `settings`
+   (desktop shell window & shortcut settings). A platform call goes behind one small trait in the
+   shell (keychain, open URL, audio, notifications, scanner), never as a `cfg` in a page. Run
+   `simplify` on each page as it moves.
 3. **Phone tabs for moved pages.** The phone bar is full at five (`Today | Inbox | Calendar |
    People | Travel`, `ui/src/nav.rs`). A sixth page needs a different bar, not a sixth item.
    Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).

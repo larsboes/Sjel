@@ -4,14 +4,13 @@ import { removeExistingHighlights } from './utils/highlighter-overlays';
 import { loadSettings, generalSettings } from './utils/storage-utils';
 import { getDomain } from './utils/string-utils';
 import { extractContentBySelector as extractContentBySelectorShared } from './utils/shared';
-import Defuddle from 'defuddle';
 import { createMarkdownContent } from 'defuddle/full';
 import { flattenShadowDom } from './utils/flatten-shadow-dom';
 import { serializeChildren } from './utils/dom-utils';
 import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './utils/iframe-resize';
-import { parseForClip } from './utils/clip-utils';
+import { parseForClipAsync } from './utils/clip-utils';
 import { cleanAiStudioTurns, extractAiStudio, extractAiStudioAsync, extractAiStudioTurns, getAiStudioConversationKey, scanFullAiStudioChat, turnsToMarkdown, mergeTurnsForConversation, turnsToHtml } from './utils/ai-studio-extractor';
 
 declare global {
@@ -210,7 +209,7 @@ declare global {
 					const turns = aiStudio ? mergeLiveAiStudioTurns(aiStudio.turns, aiStudio.url) : [];
 					const markdown = (aiStudio && turns.length > 0)
 						? turnsToMarkdown(turns)
-						: createMarkdownContent(parseForClip(document).content, document.URL);
+						: createMarkdownContent((await parseForClipAsync(document)).content, document.URL);
 
 					// Copy to clipboard
 					const textArea = document.createElement("textarea");
@@ -245,7 +244,7 @@ declare global {
 						markdown = turnsToMarkdown(turns);
 						title = aiStudio.title || 'Untitled';
 					} else {
-						const defuddled = parseForClip(document);
+						const defuddled = await parseForClipAsync(document);
 						markdown = createMarkdownContent(defuddled.content, document.URL);
 						title = defuddled.title || document.title || 'Untitled';
 					}
@@ -280,14 +279,7 @@ declare global {
 					selectedHtml = serializeChildren(div);
 				}
 
-				// Use parseAsync to ensure async variables like {{transcript}} are available.
-				// If it hangs (e.g. another extension has corrupted fetch), fall back to sync parse.
-				const defuddle = new Defuddle(document, { url: document.URL });
-				const parseTimeout = new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error('parseAsync timeout')), 8000)
-				);
-				const defuddled = await Promise.race([defuddle.parseAsync(), parseTimeout])
-					.catch(() => defuddle.parse());
+				const defuddled = await parseForClipAsync(document);
 				if (currentAiStudioConversationKey() !== requestConversationKey) {
 					sendResponse({ success: false, error: 'Conversation changed during extraction' });
 					return;

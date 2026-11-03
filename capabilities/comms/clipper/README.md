@@ -55,6 +55,29 @@ Large documents in **Feed › Clips** are parsed once and shown in pages of at m
 blocks. Citation auditing applies to the visible page, keeping scrolling and navigation bounded
 without truncating the stored clip.
 
+## YouTube clips
+
+The popup and direct Markdown exports use asynchronous extraction for YouTube, allowing up to
+30 seconds for captions and the transcript panel. The default content includes the video,
+full description and timestamped transcript when extraction succeeds. An unavailable transcript
+is marked in the captured content; opening YouTube's transcript panel and clipping again retries
+the capture. This status describes the capture, not whether the video has captions.
+
+Templates can select individual sections:
+
+| Variable | Content |
+|---|---|
+| `{{transcript}}` | Timestamped transcript, or empty when unavailable |
+| `{{transcriptStatus}}` | `available` or `unavailable` |
+| `{{videoDescription}}` | Full extracted description in Markdown |
+| `{{comments}}` | Up to 50 loaded top-level comments, with author attribution |
+| `{{commentsCount}}` | Number of captured comments |
+| `{{videoId}}` | YouTube video identifier |
+
+Comments are optional: a template includes them with `{{comments}}`. Capture uses the threads
+already loaded on the page, without scrolling, fetching more comments or expanding replies.
+The limit applies to the first 50 loaded threads; exact duplicate comments are omitted.
+
 ## Settings Sjel owns
 
 The templates and the Interpreter model belong to Sjel. Edit them in the Sjel app under

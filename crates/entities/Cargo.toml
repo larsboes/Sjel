@@ -1,0 +1,41 @@
+[package]
+name = "sjel-entities"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sjel's system of record for people, organisations, places and the operator: typed fields per kind, declared extension fields, dated location facts, and where every value came from (PRD Q117)."
+publish = false
+
+[lib]
+name = "entities"
+path = "src/lib.rs"
+
+[[bin]]
+name = "entities-server"
+path = "src/server.rs"
+
+[dependencies]
+civil-date = { path = "../civil-date" }
+sjel-config = { path = "../sjel-config" }
+sjel-credentials = { path = "../sjel-credentials" }
+sjel-http = { path = "../sjel-http" }
+# The wikilink parser the vault link checker uses, for counting Journal links (journal.rs).
+markdown-root = { path = "../markdown-root" }
+sjel-server = { path = "../sjel-server" }
+sjel-store = { path = "../sjel-store" }
+route-manifest = { path = "../route-manifest" }
+# The name key and the resolve body, shared with trips and places (website/content/capabilities/links.md D8).
+sjel-links = { path = "../links" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+rusqlite.workspace = true
+# Blocking, inside spawn_blocking, like capabilities/trips: the geocode call to places
+# runs beside the store write it feeds.
+reqwest = { workspace = true, features = ["blocking", "json", "form", "query"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+axum.workspace = true
+schemars = "1.2.2"
+
+[lints]
+workspace = true

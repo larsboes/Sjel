@@ -1,0 +1,69 @@
+[package]
+name = "sjel-interior"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Raumplanung: misst Layouts gegen die Raeumungsregeln einer Wohnung und sucht Positionen, die sie erfuellen."
+publish = false
+
+[[bin]]
+name = "interior"
+path = "src/main.rs"
+
+[lib]
+name = "interior"
+path = "src/lib.rs"
+
+[dependencies]
+# Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
+# einen eigenen Listener baut.
+sjel-server = { path = "../sjel-server" }
+# Loest SJEL_PERSONAL_ROOT auf. Jede Zahl, die diese Capability rechnet, liegt unter
+# <overlay>/data/interior — hier liegt keine.
+sjel-config = { path = "../sjel-config" }
+# `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
+route-manifest = { path = "../route-manifest" }
+schemars = "1.2.2"
+# Die Zeilen sind eine Tabelle, die `capabilities/inventory` besitzt, und diese
+# Capability liest sie aus derselben Datei — ohne sie ist kein Layout zu rechnen. Der eigene
+# Praefix traegt nur noch `interior_placement`. libs/sjel-store/README.md hat das Warum.
+sjel-store = { path = "../sjel-store" }
+# The monthly balance the purchase order is measured against is inventory's (`budget::monatssaldo`).
+sjel-inventory = { path = "../inventory" }
+# Der Tag, an dem ein Entwurf entsteht. Vier Capabilities hatten diese zwoelf Zeilen
+# abgeschrieben, statt eine zu teilen — libs/civil-date/README begruendet, warum das
+# Teilen keinen Datumsabhaengigkeit kostet, und genau darum geht es hier.
+civil-date = { path = "../civil-date" }
+rusqlite.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# Der Vertrag, den der native RoomPlan-Layer erzeugt (`libs/roomplan-contract`). Bis heute hatte er
+# auf dieser Seite keinen Leser: der Endpunkt prueft damit, statt einem Dokument zu glauben.
+roomplan-contract = { path = "../roomplan-contract" }
+# The capture the phone posts is JSON — the shell proxies JSON and a paired device posts JSON — so the
+# parametric export travels base64 inside it rather than as a second content type.
+base64.workspace = true
+sha2.workspace = true
+toml.workspace = true
+# Not `full`: these are the drivers this crate reaches for, verified with a lone
+# `cargo check -p <crate> --all-targets`, which is the only build where a missing
+# tokio feature is visible (a workspace build unifies them away).
+# `fs` for api_media's `canonicalize`/`metadata`/`read`, which must not block the runtime.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+axum.workspace = true
+# Not `thiserror.workspace = true`: the workspace entry is "1.0", which six members share,
+# and this crate is the only one on 2.0. Inheriting would downgrade it; raising the table
+# would bump the other six. Both are version changes, which belong on a Dependabot commit.
+thiserror = "2.0"
+# Der eigentliche Hebel der Suche: die Kandidaten sind voneinander unabhaengig.
+# Seit 2026-10-02 aus der Workspace-Tabelle: die Version gehoert dorthin, die Begruendung hier.
+rayon.workspace = true
+
+[dev-dependencies]
+# `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und
+# ohne Port fahren kann. Dasselbe Muster nutzt capabilities/sjel-status bereits.
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

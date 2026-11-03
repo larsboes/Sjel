@@ -1,0 +1,64 @@
+[package]
+name = "sjel-trips"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Persistent cross-capability trip plans and itinerary item references."
+publish = false
+
+[lib]
+name = "trips"
+path = "src/lib.rs"
+
+[[bin]]
+name = "trips-server"
+path = "src/server.rs"
+
+[dependencies]
+# Howard Hinnant's civil-from-days pair, shared rather than copied. No
+# dependencies of its own, which is why the four copies existed.
+civil-date = { path = "../civil-date" }
+sjel-pseudonymize = { path = "../pseudonymize" }
+# Outbound HTTP goes through one factory: the user-agent, the timeout and the
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../sjel-http" }
+sjel-config = { path = "../sjel-config" }
+# The people-by-name contract and `/api/links` body, shared with entities (website/content/capabilities/links.md).
+sjel-links = { path = "../links" }
+sjel-server = { path = "../sjel-server" }
+sjel-store = { path = "../sjel-store" }
+# The vault projection: `markdown_root::projection` owns placement, containment and
+# the header; src/projection.rs owns only what a plan looks like (PRD Q49).
+markdown-root = { path = "../markdown-root" }
+route-manifest = { path = "../route-manifest" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# The database, after PRD Q45 retired Postgres. Bundled so the deployment does
+# not depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has
+# the measurement that settled it.
+rusqlite.workspace = true
+# Not `full`: these are the drivers this crate reaches for, verified with a lone
+# `cargo check -p <crate> --all-targets`, which is the only build where a missing
+# tokio feature is visible (a workspace build unifies them away).
+# `sync` for the export lock's `tokio::sync::Mutex`, `time` for the retry `sleep`, `net`
+# for the `TcpListener` the server tests bind.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "net"] }
+axum.workspace = true
+tower-http = { workspace = true, features = ["cors"] }
+schemars = "1.2.2"
+# Was loopback-only with no TLS backend; the Kiwi flight adapter (kiwi.rs)
+# speaks HTTPS to mcp.kiwi.com, so the default TLS stack is back in. Version
+# matched to capabilities/calendar and transit so the workspace resolves one reqwest.
+reqwest = { workspace = true, features = ["blocking", "json"] }
+# Flight-segment times arrive naive airport-local; station-time resolves them
+# to UTC via country + island-airport lookups (PRD X1/F2).
+station-time = { path = "../station-time" }
+thiserror.workspace = true
+
+[[bin]]
+name = "trips"
+path = "src/bin/trips-cli.rs"
+
+[lints]
+workspace = true

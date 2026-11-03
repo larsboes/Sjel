@@ -43,7 +43,7 @@ set -e
 PRUNE='-name .claude -o -name node_modules -o -name target -o -name .git'
 
 # The owner of the primitive. Everything else is a caller.
-OWNER="libs/sjel-store/"
+OWNER="sjel-store/"
 
 fail=0
 scanned=0
@@ -52,7 +52,7 @@ hits=0
 while IFS= read -r f; do
   rel="${f#./}"
   case "$rel" in
-    "$OWNER"*|*/"$OWNER"*) continue ;;  # the library that defines the safe form
+    *"crates/sjel-store/"*|*"libs/sjel-store/"*|"$OWNER"*|*/"$OWNER"*) continue ;;  # the library that defines the safe form
     */target/*|target/*) continue ;;
   esac
 

@@ -20,10 +20,11 @@ BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-claude-config"
 
 # Rebuild when the binary is missing, or when any crate source is newer than it. `find -newer`
 # with -quit stops at the first hit, so this costs one stat walk over a small tree.
+_crate="$SJEL_ROOT/crates/claude-code-config"
 _stale=""
 if [ ! -x "$BIN" ]; then
   _stale="yes"
-elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+elif [ -n "$(find "$_crate/src" "$_crate/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
   _stale="yes"
 fi
 if [ -n "$_stale" ]; then

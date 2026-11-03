@@ -1,0 +1,30 @@
+[package]
+name = "sjel-soundscape"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The conductor: what should be playing, and the state that survives a reload. The synth itself runs in the browser -- see capabilities/soundscape/README.md."
+publish = false
+
+[[bin]]
+name = "soundscape"
+path = "src/main.rs"
+
+[dependencies]
+sjel-config = { path = "../sjel-config" }
+sjel-server = { path = "../sjel-server" }
+route-manifest = { path = "../route-manifest" }
+axum.workspace = true
+# Not `full`: these are the drivers this crate reaches for, verified with a lone
+# `cargo check -p <crate> --all-targets`, which is the only build where a missing
+# tokio feature is visible (a workspace build unifies them away).
+# `time` for the tick `interval` and `timeout_at`, `sync` for the broadcast channel the
+# SSE stream fans out on.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

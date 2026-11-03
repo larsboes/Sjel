@@ -25,10 +25,11 @@ fi
 # -newer` with -quit stops at the first hit, so this costs one stat walk over a small tree.
 # tools/service-runner.sh builds a capability's binary from its service.toml; a tool has no
 # manifest, so the same idea is spelled out here.
+_crate="$SJEL_ROOT/crates/storage"
 _stale=""
 if [ ! -x "$BIN" ]; then
   _stale="yes"
-elif [ -n "$(find "$_here/src" "$_here/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+elif [ -n "$(find "$_crate/src" "$_crate/Cargo.toml" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
   _stale="yes"
 fi
 if [ -n "$_stale" ]; then

@@ -298,13 +298,14 @@ overlays. Integration occurs via declared contracts and state mounts.
 
 Sjel organizes all code into three nouns:
 
-- **Spine**: The core runtime and developer surface: root manifests, `schemas/`, `tools/`, `libs/`,
-  the `sjel-status` shell and the apps in `apps/`.
-- **Capability**: Autonomous domain units under `capabilities/<name>/`, declared via `service.toml`.
+- **Spine**: The core runtime and developer surface: root manifests, `schemas/`, `tools/` (scripts),
+  `crates/` (shared crates, apps and tools), the `sjel-status` gateway and the apps in `apps/`.
+- **Capability**: Autonomous domain units declared via `service.toml` (Rust crates under `crates/<name>/`,
+  supervised third-party software and scripts under `services/<name>/`).
 - **Pack**: Modular agent know-how and workflows under `Packs/<name>/`.
 
 See [website/content/architecture/index.md](website/content/architecture/index.md) for full topology and boundary rules.
-Shared utilities belong in `libs/`; contracts belong in `schemas/`; operator tools belong in `tools/`.
+Shared Rust code belongs in `crates/`; third-party services in `services/`; contracts belong in `schemas/`; operator tools belong in `tools/`.
 Do not introduce unstructured `utils/` catch-alls.
 
 ### Schemas and dependency direction

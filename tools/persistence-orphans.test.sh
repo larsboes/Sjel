@@ -80,8 +80,10 @@ if printf '%s\n' "$PERSIST" | grep -q "remove-persistence nothing-declares-this"
 fi
 
 # --- the doctor never names a capability to exempt it ------------------------------------
-if grep -rqE '"macmon"' "$_root/tools/sjel-cli/src/doctor/"; then
-  fail "the doctor (tools/sjel-cli/src/doctor/) names macmon directly — the exemption must come from the manifest"
+_doctor_dir="$_root/crates/sjel-cli/src/doctor/"
+[ -d "$_doctor_dir" ] || _doctor_dir="$_root/tools/sjel-cli/src/doctor/"
+if grep -rqE '"macmon"' "$_doctor_dir"; then
+  fail "the doctor ($_doctor_dir) names macmon directly — the exemption must come from the manifest"
 fi
 
 if [ "$fails" -gt 0 ]; then

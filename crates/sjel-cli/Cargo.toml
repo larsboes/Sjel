@@ -1,0 +1,95 @@
+[package]
+name = "sjel-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sjel's operator tooling as one binary. Each subcommand replaces one interpreted tools/ script, one at a time; the script becomes a launcher that execs this."
+publish = false
+default-run = "sjel-cli"
+
+# sjel-cli, not sjel: ~/.local/bin/sjel is the bash launcher tools/install.sh links, and two
+# things called `sjel` on PATH is the collision the suffix avoids. The bash launcher retires
+# into this binary once enough subcommands live here (decided 2026-10-02: one crate, not one
+# crate per tool, so paths, overlay and manifest resolution are written once).
+[[bin]]
+name = "sjel-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "sjel-desktop-launcher"
+path = "src/desktop_launcher.rs"
+
+[dependencies]
+# Already resolved in the workspace lock (tools/storage uses the same three), so this crate
+# adds no external crate.
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+# tools/doctor's path, env and listener sweeps are two dozen patterns ported from doctor.ts.
+# Already in the workspace lock (1.13 through other members), so this resolves no new crate.
+regex.workspace = true
+# The Pack ledger's digests are sha256 over a file set with modes (engine.rs's `digest_files`),
+# and the timestamp in `tools/harnesses status --json` is a civil date. Both
+# are already in the workspace lock (sha2 through libs/pseudonymize, civil-date is a member),
+# so neither adds a crate to resolve.
+sha2.workspace = true
+civil-date = { path = "../civil-date" }
+zeroize.workspace = true
+signal-hook = "=0.4.6"
+# host-watch writes its findings into the one shared SQLite file, so it opens it the way every
+# capability does — `sjel-config` owns where that file is and `sjel-store` owns the pragmas,
+# the once-per-database migration and the write transaction. Both are already in the workspace
+# lock (the capabilities resolve them), so neither adds a crate to resolve; `pool_for`'s
+# `min_idle(0)` is there for exactly this shape, a job that opens one connection, writes and
+# exits. First tool in this crate to link SQLite: measured 4.9 MB -> 6.9 MB on this Mac, and a
+# single `cargo build -p sjel-cli` no longer links only pure-Rust code — bundled SQLite needs a C
+# compiler, which is already the linker cargo picks on both macOS and Linux.
+backup = { package = "sjel-backup", path = "../backup" }
+sjel-config = { path = "../sjel-config" }
+sjel-runtime = { path = "../runtime" }
+sjel-store = { path = "../sjel-store" }
+# The workspace's SQLite, for `sjel mirror`: it copies tables between two files in one read
+# transaction. Already linked through sjel-store, so this adds no build.
+rusqlite = { workspace = true }
+# The build timestamp in the manifest, in the RFC 3339 form every other artefact here uses.
+chrono = { workspace = true }
+sjel-skill-metadata = { path = "../skill-metadata" }
+# `tools/model-check` asks the registry the same questions every capability asks it: is this
+# backend on loopback, and is this backend's credential present. Both rules live in
+# `libs/inference` (`is_loopback_url`, `resolve_key_file` + `api_key_from_file`) and are reused
+# rather than re-derived, which is also why the doctor can run the sweep in-process.
+sjel-inference = { path = "../inference" }
+# `tools/intake review` runs the shared agent loop on a c0 cloud role with read-only tools.
+sjel-agent = { path = "../sjel-agent" }
+# The two scheduled jobs that call another capability over HTTP — feed-sweep to comms,
+# sparpreis-watch to trips and transit. `sjel-http` owns the blocking client, its user-agent, the
+# timeout no caller can forget and the redirect policy; `sjel-server` owns `InboundAuth`, which is
+# the one implementation of "put the deployment credential on a loopback request and nowhere else"
+# (used by capabilities/calendar, transit, comms, places and scouting the same way). Reimplementing
+# either here would be the second copy of a security rule this workspace keeps in one place.
+#
+# The cost, measured on this Mac: sjel-cli goes from 7.3 MB to 14.1 MB, because `sjel-server`
+# brings in axum, rustls, rcgen and hyper-util. All of them are already in the lock, already built
+# for the capabilities, and most of that tree (rustls, hyper, tokio, h2) is shared with the reqwest
+# `sjel-http` needs anyway, so this is mostly a link cost rather than a compile one. `reqwest` is
+# named only for the request, response and URL types those two hand back.
+sjel-http = { path = "../sjel-http" }
+# Minting the primary's JWT, and the Keychain entry its signing key lives in. `libsql-auth`
+# deliberately carries no libsql: this binary already links `sjel-store`, and two SQLite copies
+# in one executable clash at link time.
+libsql-auth = { path = "../libsql-auth" }
+sjel-credentials = { path = "../sjel-credentials" }
+sjel-server = { path = "../sjel-server" }
+reqwest = { workspace = true, features = ["blocking", "json", "form"] }
+# ES256 for the App Store Connect token in `sjel testflight`. Already in the lock through
+# libs/libsql-auth (same 0.17), so it adds no crate.
+ring = "0.17"
+
+# No clap, for the reason tools/storage/Cargo.toml states. Revisit when the subcommand count
+# makes the match statement harder to read than the dependency is to audit.
+
+[lints]
+workspace = true

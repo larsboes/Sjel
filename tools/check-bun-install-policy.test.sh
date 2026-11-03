@@ -16,10 +16,10 @@ fails=0
 # between the cases the missing file rather than the missing directory.
 plant() { # plant <name> <ci-install> [<mode>]
   local root="$SCRATCH/$1" mode="${3:-full}"
-  mkdir -p "$root/.github/workflows" "$root/ui" "$root/capabilities/comms/clipper"
+  mkdir -p "$root/.github/workflows" "$root/ui" "$root/crates/comms/clipper"
   printf '%s\n' "$2" > "$root/.github/workflows/ci.yml"
   printf 'bun pm scan\n' >> "$root/.github/workflows/ci.yml"
-  printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/capabilities/comms/clipper/README.md"
+  printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/crates/comms/clipper/README.md"
 
   printf '{"name":"planted-ui"}\n' > "$root/ui/package.json"
   printf '{}\n' > "$root/ui/bun.lock"

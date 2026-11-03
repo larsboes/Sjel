@@ -16,8 +16,8 @@ describe("this repository's GPUI inputs", () => {
   const runs = (file: string) => firstHit([file], inputs) !== null;
 
   test("a path dependency added through Cargo.toml is an input", () => {
-    expect(runs("libs/clip-socket/src/lib.rs")).toBe(true);
-    expect(runs("libs/sjel-config/src/lib.rs")).toBe(true);
+    expect(runs("crates/clip-socket/src/lib.rs")).toBe(true);
+    expect(runs("crates/sjel-config/src/lib.rs")).toBe(true);
   });
 
   test("files compiled in from outside the crates are inputs", () => {
@@ -27,7 +27,7 @@ describe("this repository's GPUI inputs", () => {
   });
 
   test("a capability, a pack or the plan is not", () => {
-    expect(runs("capabilities/comms/src/main.rs")).toBe(false);
+    expect(runs("crates/comms/src/main.rs")).toBe(false);
     expect(runs("Packs/knowledge/README.md")).toBe(false);
     expect(runs("PLAN.md")).toBe(false);
     expect(runs("apps/gpuix/file")).toBe(false);

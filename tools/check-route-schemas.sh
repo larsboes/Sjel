@@ -34,7 +34,11 @@ baseline_count() {
 fail=0
 checked=0
 while IFS= read -r f; do
-  cap="$(printf '%s' "$f" | sed -E 's|.*/capabilities/([^/]+)/.*|\1|')"
+  cap="$(printf '%s' "$f" | sed -E 's#.*/(capabilities|crates)/([^/]+)/.*#\2#')"
+  # Only check capability crates (those declaring service.toml) in a real checkout.
+  if [ -f "$ROOT/Cargo.toml" ] && [ ! -f "$ROOT/crates/$cap/service.toml" ] && [ ! -f "$ROOT/capabilities/$cap/service.toml" ]; then
+    continue
+  fi
   block="$(block_of "$f")"
   writes="$(printf '%s\n' "$block" | grep -oE '"(POST|PUT|PATCH)"' | wc -l | tr -d ' ')"
   schemas="$(printf '%s\n' "$block" | grep -c 'request_schema: Some')"
@@ -55,7 +59,7 @@ while IFS= read -r f; do
   elif [ "$undeclared" -lt "$base" ]; then
     echo "improved:   $cap $base → $undeclared — lower the baseline"
   fi
-done < <(grep -rl 'const ROUTES' "$ROOT"/capabilities/*/src/*.rs 2>/dev/null | sort)
+done < <(grep -rl 'const ROUTES' "$ROOT"/crates/*/src/*.rs "$ROOT"/capabilities/*/src/*.rs 2>/dev/null | sort)
 
 [ "$checked" -gt 0 ] || { echo "check-route-schemas: found no capability ROUTES manifests under $ROOT" >&2; exit 2; }
 

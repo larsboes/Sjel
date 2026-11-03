@@ -156,11 +156,12 @@ Packs/ schemas/ docs/ research/ tools/ (scripts only)
 Other agent sessions edit this checkout at the same time, and a move of every crate breaks
 their open edits.
 
-1. After the dashboard is deleted (fewer paths to move).
-2. Announce a freeze. Commit or finish open work first.
+1. After the dashboard is deleted (fewer paths to move) — done (`143003fd`).
+2. Announce a freeze. Commit or finish open work first — done (`ec859210` through `42237f97`).
 3. One generated commit: `git mv` per crate, then path rewrites in manifests, `service.toml`
-   commands, tools, CI and docs. A script does the rewrite, and it stays in `tools/` for review.
-4. `cargo check --workspace`, `tools/doctor`, the CI legs, and a service restart prove it.
+   commands, tools, CI and docs. A script does the rewrite, and it stays in `tools/` for review
+   (`tools/migrate-layout.ts`). Done in this change.
+4. `cargo check --workspace`, `tools/doctor`, the CI legs, and a service restart prove it — done.
 5. Then the API crates and crate-shape changes, one capability per commit.
 
 Naming (decided 2026-10-25): the directory name equals the package name. The `sjel-` prefix stays

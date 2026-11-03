@@ -127,7 +127,11 @@ export SJEL_CAPS_DIR SJEL_OVERLAY_CAPS_DIR
 # stopping, because the two manifests are different services wearing one name.
 sjel_manifest_for() {
   local name="$1" root_mf="" overlay_mf=""
-  if [ -f "$SJEL_CAPS_DIR/$name/service.toml" ]; then
+  if [ -f "$SJEL_ROOT/crates/$name/service.toml" ]; then
+    root_mf="$SJEL_ROOT/crates/$name/service.toml"
+  elif [ -f "$SJEL_ROOT/services/$name/service.toml" ]; then
+    root_mf="$SJEL_ROOT/services/$name/service.toml"
+  elif [ -f "$SJEL_CAPS_DIR/$name/service.toml" ]; then
     root_mf="$SJEL_CAPS_DIR/$name/service.toml"
   fi
   if [ -f "$SJEL_OVERLAY_CAPS_DIR/$name/service.toml" ]; then

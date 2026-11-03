@@ -32,7 +32,7 @@ const LABEL: Record<string, string> = { capability: "Capability", lib: "Library"
 /** The repository's directory convention for a unit's source. */
 function sourceDir(unit: Unit): string {
   switch (unit.kind) {
-    case "capability": return `capabilities/${unit.name}`;
+    case "capability": return existsSync(join(root, "crates", unit.name)) ? `crates/${unit.name}` : (existsSync(join(root, "services", unit.name)) ? `services/${unit.name}` : `capabilities/${unit.name}`);
     case "lib": return `libs/${unit.name}`;
     case "pack": return `Packs/${unit.name}`;
     default: return unit.name;

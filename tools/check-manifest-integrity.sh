@@ -25,12 +25,12 @@ fail=0
 # Every service.toml `requires = [...]` entry → each must be a real capabilities/<name>/ dir.
 # Word-splitting on toml_array's newline-per-element output is safe: capability names carry
 # no whitespace (bash 3.2-safe, no mapfile).
-for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
+for svc in "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/service.toml "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
   [ -f "$svc" ] || continue          # empty glob → literal path, skip it
   owner="$(basename "$(dirname "$svc")")"
   for dep in $(toml_array requires "$svc"); do
-    if [ ! -d "$SJEL_ROOT/capabilities/$dep" ]; then
-      echo "FAIL [$owner]: requires '$dep' but capabilities/$dep/ does not exist" >&2
+    if [ ! -d "$SJEL_ROOT/crates/$dep" ] && [ ! -d "$SJEL_ROOT/services/$dep" ] && [ ! -d "$SJEL_ROOT/capabilities/$dep" ]; then
+      echo "FAIL [$owner]: requires '$dep' but neither crates/$dep/, services/$dep/, nor capabilities/$dep/ exists" >&2
       fail=1
     fi
   done

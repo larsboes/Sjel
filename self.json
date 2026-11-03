@@ -4,7 +4,7 @@
   "units": [
     {
       "name": "agent",
-      "kind": "lib",
+      "kind": "capability",
       "service": {
         "kind": "process",
         "requires": [],
@@ -34,7 +34,7 @@
     },
     {
       "name": "backup",
-      "kind": "capability"
+      "kind": "lib"
     },
     {
       "name": "calendar",
@@ -50,7 +50,15 @@
       "kind": "lib"
     },
     {
+      "name": "capability-auth",
+      "kind": "lib"
+    },
+    {
       "name": "civil-date",
+      "kind": "lib"
+    },
+    {
+      "name": "claude-code-config",
       "kind": "lib"
     },
     {
@@ -88,7 +96,7 @@
     },
     {
       "name": "cv",
-      "kind": "capability"
+      "kind": "lib"
     },
     {
       "name": "deliberation",
@@ -155,6 +163,10 @@
       "kind": "lib"
     },
     {
+      "name": "fda-launcher",
+      "kind": "lib"
+    },
+    {
       "name": "feed-sweep",
       "kind": "capability",
       "service": {
@@ -206,7 +218,7 @@
     },
     {
       "name": "host-net",
-      "kind": "capability"
+      "kind": "lib"
     },
     {
       "name": "host-patch",
@@ -409,6 +421,14 @@
       "kind": "capability"
     },
     {
+      "name": "sjel-agent",
+      "kind": "lib"
+    },
+    {
+      "name": "sjel-cli",
+      "kind": "lib"
+    },
+    {
       "name": "sjel-config",
       "kind": "lib"
     },
@@ -418,6 +438,10 @@
     },
     {
       "name": "sjel-http",
+      "kind": "lib"
+    },
+    {
+      "name": "sjel-mcp",
       "kind": "lib"
     },
     {
@@ -485,6 +509,10 @@
     },
     {
       "name": "station-time",
+      "kind": "lib"
+    },
+    {
+      "name": "storage",
       "kind": "lib"
     },
     {
@@ -585,23 +613,12 @@
   "coupling": [
     {
       "from": "agent",
-      "to": "extraction",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/agent/Cargo.toml"
-      ]
-    },
-    {
-      "from": "agent",
       "to": "inference",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/agent/Cargo.toml",
-        "libs/agent/Cargo.toml"
+        "crates/agent/Cargo.toml"
       ]
     },
     {
@@ -611,7 +628,17 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/agent/Cargo.toml"
+        "crates/agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "agent",
+      "to": "sjel-agent",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/agent/Cargo.toml"
       ]
     },
     {
@@ -621,18 +648,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/agent/Cargo.toml",
-        "libs/agent/Cargo.toml"
-      ]
-    },
-    {
-      "from": "agent",
-      "to": "sjel-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/agent/Cargo.toml"
+        "crates/agent/Cargo.toml"
       ]
     },
     {
@@ -642,27 +658,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/agent/Cargo.toml"
-      ]
-    },
-    {
-      "from": "agent",
-      "to": "skill-metadata",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/agent/Cargo.toml"
-      ]
-    },
-    {
-      "from": "assistant",
-      "to": "agent",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/agent/Cargo.toml"
       ]
     },
     {
@@ -672,7 +668,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -682,7 +678,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -692,7 +688,17 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
+      ]
+    },
+    {
+      "from": "assistant",
+      "to": "sjel-agent",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -702,7 +708,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -712,7 +718,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -722,7 +728,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -732,7 +738,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/assistant/Cargo.toml"
+        "crates/assistant/Cargo.toml"
       ]
     },
     {
@@ -742,7 +748,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/backup/Cargo.toml"
+        "crates/backup/Cargo.toml"
       ]
     },
     {
@@ -752,7 +758,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/backup/Cargo.toml"
+        "crates/backup/Cargo.toml"
       ]
     },
     {
@@ -762,7 +768,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -772,7 +778,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -782,7 +788,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -792,7 +798,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -802,7 +808,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -812,7 +818,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -822,7 +828,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -832,7 +838,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -842,7 +848,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -852,7 +858,27 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/calendar/Cargo.toml"
+        "crates/calendar/Cargo.toml"
+      ]
+    },
+    {
+      "from": "capability-auth",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/capability-auth/Cargo.toml"
+      ]
+    },
+    {
+      "from": "capability-auth",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/capability-auth/Cargo.toml"
       ]
     },
     {
@@ -862,7 +888,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/clip-socket/Cargo.toml"
+        "crates/clip-socket/Cargo.toml"
       ]
     },
     {
@@ -872,7 +898,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -882,7 +908,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -892,7 +918,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -902,7 +928,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -912,7 +938,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -922,7 +948,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -932,7 +958,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -942,7 +968,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -952,7 +978,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -962,7 +988,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -972,7 +998,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -982,7 +1008,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -992,7 +1018,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -1002,7 +1028,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/comms/Cargo.toml"
+        "crates/comms/Cargo.toml"
       ]
     },
     {
@@ -1012,7 +1038,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/cv/Cargo.toml"
+        "crates/cv/Cargo.toml"
       ]
     },
     {
@@ -1022,7 +1048,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/devices/Cargo.toml"
+        "crates/devices/Cargo.toml"
       ]
     },
     {
@@ -1032,7 +1058,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/devices/Cargo.toml"
+        "crates/devices/Cargo.toml"
       ]
     },
     {
@@ -1042,7 +1068,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/devices/Cargo.toml"
+        "crates/devices/Cargo.toml"
       ]
     },
     {
@@ -1052,7 +1078,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/devices/Cargo.toml"
+        "crates/devices/Cargo.toml"
       ]
     },
     {
@@ -1062,7 +1088,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/devices/Cargo.toml"
+        "crates/devices/Cargo.toml"
       ]
     },
     {
@@ -1072,7 +1098,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1082,7 +1108,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1092,7 +1118,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1102,7 +1128,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1112,7 +1138,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1122,7 +1148,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1132,7 +1158,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/documents/Cargo.toml"
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -1142,7 +1168,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1152,7 +1178,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1162,7 +1188,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1172,7 +1198,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1182,7 +1208,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1192,7 +1218,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1202,7 +1228,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1212,7 +1238,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1222,7 +1248,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/entities/Cargo.toml"
+        "crates/entities/Cargo.toml"
       ]
     },
     {
@@ -1232,7 +1258,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/extraction/Cargo.toml"
+        "crates/extraction/Cargo.toml"
       ]
     },
     {
@@ -1242,7 +1268,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1252,7 +1278,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1262,7 +1288,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1272,7 +1298,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1282,7 +1308,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1292,7 +1318,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1302,7 +1328,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1312,7 +1338,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1322,7 +1348,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1332,7 +1358,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/finance/Cargo.toml"
+        "crates/finance/Cargo.toml"
       ]
     },
     {
@@ -1342,7 +1368,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/host-net/Cargo.toml"
+        "crates/host-net/Cargo.toml"
       ]
     },
     {
@@ -1352,7 +1378,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/import/Cargo.toml"
+        "crates/import/Cargo.toml"
       ]
     },
     {
@@ -1362,7 +1388,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/import/Cargo.toml"
+        "crates/import/Cargo.toml"
       ]
     },
     {
@@ -1372,7 +1398,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/import/Cargo.toml"
+        "crates/import/Cargo.toml"
       ]
     },
     {
@@ -1382,7 +1408,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/import/Cargo.toml"
+        "crates/import/Cargo.toml"
       ]
     },
     {
@@ -1392,7 +1418,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/import/Cargo.toml"
+        "crates/import/Cargo.toml"
       ]
     },
     {
@@ -1402,7 +1428,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/inference/Cargo.toml"
+        "crates/inference/Cargo.toml"
       ]
     },
     {
@@ -1412,7 +1438,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/inference/Cargo.toml"
+        "crates/inference/Cargo.toml"
       ]
     },
     {
@@ -1422,7 +1448,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/inference/Cargo.toml"
+        "crates/inference/Cargo.toml"
       ]
     },
     {
@@ -1432,7 +1458,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/inference/Cargo.toml"
+        "crates/inference/Cargo.toml"
       ]
     },
     {
@@ -1442,7 +1468,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1452,7 +1478,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1462,7 +1488,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1472,7 +1498,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1482,7 +1508,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1492,7 +1518,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1502,7 +1528,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/interior/Cargo.toml"
+        "crates/interior/Cargo.toml"
       ]
     },
     {
@@ -1512,7 +1538,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1522,7 +1548,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1532,7 +1558,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1542,7 +1568,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1552,7 +1578,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1562,7 +1588,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/inventory/Cargo.toml"
+        "crates/inventory/Cargo.toml"
       ]
     },
     {
@@ -1572,7 +1598,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/media/Cargo.toml"
+        "crates/media/Cargo.toml"
       ]
     },
     {
@@ -1582,7 +1608,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/media/Cargo.toml"
+        "crates/media/Cargo.toml"
       ]
     },
     {
@@ -1592,7 +1618,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/media/Cargo.toml"
+        "crates/media/Cargo.toml"
       ]
     },
     {
@@ -1602,7 +1628,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/media/Cargo.toml"
+        "crates/media/Cargo.toml"
       ]
     },
     {
@@ -1612,7 +1638,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/media/Cargo.toml"
+        "crates/media/Cargo.toml"
       ]
     },
     {
@@ -1622,7 +1648,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/operator-profile/Cargo.toml"
+        "crates/operator-profile/Cargo.toml"
       ]
     },
     {
@@ -1632,7 +1658,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/operator-profile/Cargo.toml"
+        "crates/operator-profile/Cargo.toml"
       ]
     },
     {
@@ -1642,7 +1668,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/operator-profile/Cargo.toml"
+        "crates/operator-profile/Cargo.toml"
       ]
     },
     {
@@ -1652,7 +1678,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/operator-profile/Cargo.toml"
+        "crates/operator-profile/Cargo.toml"
       ]
     },
     {
@@ -1662,7 +1688,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1672,7 +1698,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1682,7 +1708,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1692,7 +1718,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1702,7 +1728,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1712,7 +1738,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1722,7 +1748,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1732,7 +1758,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/places/Cargo.toml"
+        "crates/places/Cargo.toml"
       ]
     },
     {
@@ -1742,7 +1768,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1752,7 +1778,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1762,7 +1788,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1772,7 +1798,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1782,7 +1808,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1792,7 +1818,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1802,7 +1828,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1812,7 +1838,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/projects/Cargo.toml"
+        "crates/projects/Cargo.toml"
       ]
     },
     {
@@ -1822,7 +1848,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/pseudonymize/Cargo.toml"
+        "crates/pseudonymize/Cargo.toml"
       ]
     },
     {
@@ -1832,7 +1858,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/punctuality/Cargo.toml"
+        "crates/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1842,7 +1868,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/punctuality/Cargo.toml"
+        "crates/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1852,7 +1878,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/punctuality/Cargo.toml"
+        "crates/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1862,7 +1888,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/punctuality/Cargo.toml"
+        "crates/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1872,7 +1898,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/punctuality/Cargo.toml"
+        "crates/punctuality/Cargo.toml"
       ]
     },
     {
@@ -1882,7 +1908,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/runtime/Cargo.toml"
+        "crates/runtime/Cargo.toml"
       ]
     },
     {
@@ -1892,7 +1918,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1902,7 +1928,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1912,7 +1938,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1922,7 +1948,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1932,7 +1958,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1942,7 +1968,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1952,7 +1978,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1962,7 +1988,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1972,7 +1998,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
       ]
     },
     {
@@ -1982,7 +2008,177 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/scouting/Cargo.toml"
+        "crates/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
+      "to": "extraction",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
+      "to": "skill-metadata",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "backup",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "libsql-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-agent",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-credentials",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
+      "to": "skill-metadata",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
       ]
     },
     {
@@ -1992,7 +2188,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/sjel-credentials/Cargo.toml"
+        "crates/sjel-credentials/Cargo.toml"
       ]
     },
     {
@@ -2002,7 +2198,17 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/sjel-credentials/Cargo.toml"
+        "crates/sjel-credentials/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-mcp",
+      "to": "sjel-http",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-mcp/Cargo.toml"
       ]
     },
     {
@@ -2012,7 +2218,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/sjel-server/Cargo.toml"
+        "crates/sjel-server/Cargo.toml"
       ]
     },
     {
@@ -2022,7 +2228,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/sjel-server/Cargo.toml"
+        "crates/sjel-server/Cargo.toml"
       ]
     },
     {
@@ -2032,7 +2238,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "libs/sjel-server/Cargo.toml"
+        "crates/sjel-server/Cargo.toml"
       ]
     },
     {
@@ -2042,7 +2248,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2052,7 +2258,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2062,7 +2268,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2072,7 +2278,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2082,7 +2288,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2092,7 +2298,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2102,7 +2308,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2112,7 +2318,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/sjel-status/Cargo.toml"
+        "crates/sjel-status/Cargo.toml"
       ]
     },
     {
@@ -2122,7 +2328,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/software/Cargo.toml"
+        "crates/software/Cargo.toml"
       ]
     },
     {
@@ -2132,7 +2338,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/software/Cargo.toml"
+        "crates/software/Cargo.toml"
       ]
     },
     {
@@ -2142,7 +2348,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/software/Cargo.toml"
+        "crates/software/Cargo.toml"
       ]
     },
     {
@@ -2152,7 +2358,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/software/Cargo.toml"
+        "crates/software/Cargo.toml"
       ]
     },
     {
@@ -2162,7 +2368,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/soundscape/Cargo.toml"
+        "crates/soundscape/Cargo.toml"
       ]
     },
     {
@@ -2172,7 +2378,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/soundscape/Cargo.toml"
+        "crates/soundscape/Cargo.toml"
       ]
     },
     {
@@ -2182,161 +2388,47 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/soundscape/Cargo.toml"
+        "crates/soundscape/Cargo.toml"
       ]
     },
     {
-      "from": "summarize",
-      "to": "inference",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/summarize/Cargo.toml"
-      ]
-    },
-    {
-      "from": "summarize",
-      "to": "runtime",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/summarize/Cargo.toml"
-      ]
-    },
-    {
-      "from": "summarize",
-      "to": "sjel-http",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "libs/summarize/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "agent",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "backup",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "civil-date",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "inference",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "libsql-auth",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "runtime",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
+      "from": "storage",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "tools/capability-auth/Cargo.toml",
-        "tools/sjel-cli/Cargo.toml",
-        "tools/storage/Cargo.toml"
+        "crates/storage/Cargo.toml"
       ]
     },
     {
-      "from": "tools",
-      "to": "sjel-credentials",
+      "from": "summarize",
+      "to": "inference",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "tools/sjel-cli/Cargo.toml"
+        "crates/summarize/Cargo.toml"
       ]
     },
     {
-      "from": "tools",
+      "from": "summarize",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/summarize/Cargo.toml"
+      ]
+    },
+    {
+      "from": "summarize",
       "to": "sjel-http",
       "kinds": [
         "cargo-dep"
       ],
       "evidence": [
-        "tools/sjel-cli/Cargo.toml",
-        "tools/sjel-mcp/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "sjel-server",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/capability-auth/Cargo.toml",
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "sjel-store",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
-      ]
-    },
-    {
-      "from": "tools",
-      "to": "skill-metadata",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "tools/sjel-cli/Cargo.toml"
+        "crates/summarize/Cargo.toml"
       ]
     },
     {
@@ -2346,7 +2438,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2356,7 +2448,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2366,7 +2458,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2376,7 +2468,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2386,7 +2478,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2396,7 +2488,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2406,7 +2498,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/transit/Cargo.toml"
+        "crates/transit/Cargo.toml"
       ]
     },
     {
@@ -2416,7 +2508,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "crates/traveler/Cargo.toml"
       ]
     },
     {
@@ -2426,7 +2518,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "crates/traveler/Cargo.toml"
       ]
     },
     {
@@ -2436,7 +2528,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "crates/traveler/Cargo.toml"
       ]
     },
     {
@@ -2446,7 +2538,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "crates/traveler/Cargo.toml"
       ]
     },
     {
@@ -2456,7 +2548,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/traveler/Cargo.toml"
+        "crates/traveler/Cargo.toml"
       ]
     },
     {
@@ -2466,7 +2558,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2476,7 +2568,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2486,7 +2578,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2496,7 +2588,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2506,7 +2598,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2516,7 +2608,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2526,7 +2618,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2536,7 +2628,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2546,7 +2638,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2556,7 +2648,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/trips/Cargo.toml"
+        "crates/trips/Cargo.toml"
       ]
     },
     {
@@ -2566,7 +2658,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "crates/vault/Cargo.toml"
       ]
     },
     {
@@ -2576,7 +2668,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "crates/vault/Cargo.toml"
       ]
     },
     {
@@ -2586,7 +2678,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "crates/vault/Cargo.toml"
       ]
     },
     {
@@ -2596,7 +2688,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "crates/vault/Cargo.toml"
       ]
     },
     {
@@ -2606,7 +2698,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/vault/Cargo.toml"
+        "crates/vault/Cargo.toml"
       ]
     },
     {
@@ -2616,7 +2708,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/web-links/Cargo.toml"
+        "crates/web-links/Cargo.toml"
       ]
     },
     {
@@ -2626,7 +2718,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/web-links/Cargo.toml"
+        "crates/web-links/Cargo.toml"
       ]
     },
     {
@@ -2636,7 +2728,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/web-links/Cargo.toml"
+        "crates/web-links/Cargo.toml"
       ]
     },
     {
@@ -2646,7 +2738,7 @@
         "cargo-dep"
       ],
       "evidence": [
-        "capabilities/web-links/Cargo.toml"
+        "crates/web-links/Cargo.toml"
       ]
     }
   ],

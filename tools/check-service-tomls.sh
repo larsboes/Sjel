@@ -37,7 +37,7 @@ overlay_glob=""
 if [ "${SJEL_CHECK_OVERLAY:-}" = 1 ] && [ -d "${SJEL_OVERLAY_CAPS_DIR:-}" ]; then
   overlay_glob="$SJEL_OVERLAY_CAPS_DIR"
 fi
-for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml ${overlay_glob:+"$overlay_glob"/*/service.toml}; do
+for svc in "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/service.toml "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml ${overlay_glob:+"$overlay_glob"/*/service.toml}; do
   [ -f "$svc" ] || continue          # empty glob → literal path, skip it
   found=1
   cap="$(basename "$(dirname "$svc")")"
@@ -165,7 +165,7 @@ fi
 # two manifests shipping the same default is the scouting-vs-vaultwarden 8080 collision,
 # which was found by starting the full enabled set instead of by a gate. Now it's a gate.
 port_lines=""
-for svc in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
+for svc in "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/service.toml "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
   [ -f "$svc" ] || continue
   cap="$(basename "$(dirname "$svc")")"
   hostports="$(toml_get port "$svc")"

@@ -1,0 +1,52 @@
+[package]
+name = "sjel-traveler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The traveller profile: stated constraints, personal ranking weights, interests, and the provenance of every value."
+publish = false
+
+[lib]
+name = "traveler"
+path = "src/lib.rs"
+
+[[bin]]
+name = "traveler-server"
+path = "src/server.rs"
+
+[dependencies]
+# Howard Hinnant's civil-from-days pair, shared rather than copied. The derived
+# baseline measures trip length and booking lead time in whole days, and both
+# endpoints are ISO dates — the one thing this lib exists to do without pulling
+# a date crate in for it.
+civil-date = { path = "../civil-date" }
+sjel-config = { path = "../sjel-config" }
+# The bind, the inbound gate and the browser-origin refusal. This capability
+# serves personal state, so the origin guard is load-bearing rather than
+# decorative (libs/sjel-server/src/origin.rs).
+sjel-server = { path = "../sjel-server" }
+sjel-store = { path = "../sjel-store" }
+route-manifest = { path = "../route-manifest" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# The database, after PRD Q45 retired Postgres. Bundled, same as every other
+# store-owning capability (upstreams.toml [rusqlite] has the measurement).
+rusqlite.workspace = true
+# Not `full`: `rt-multi-thread` for the explicit `Runtime::new()` in the binary,
+# `net` for the `TcpListener` the server tests bind, `macros` for `#[tokio::test]`.
+# Verified with a lone `cargo check -p sjel-traveler --all-targets`, which is the only
+# build where a missing feature is visible (a workspace build unifies them away).
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+axum.workspace = true
+# Derived, never hand-written: the route manifest publishes the write body's
+# schema from the struct serde already deserializes (PRD §4.4 item 11).
+schemars = "1.2.2"
+
+[dev-dependencies]
+# The HTTP tests drive the wired router over a real socket, because the origin
+# guard is a layer and a handler called directly would skip it.
+reqwest = { workspace = true, features = ["json"] }
+
+[lints]
+workspace = true

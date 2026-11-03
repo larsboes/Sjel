@@ -53,7 +53,7 @@ rebase_readme_links() {
   echo
   echo "| Capability | What | Service | Port |"
   echo "|---|---|---|---|"
-  for dir in "$SJEL_ROOT"/capabilities/*/; do
+  for dir in "$SJEL_ROOT"/crates/*/ "$SJEL_ROOT"/services/*/ "$SJEL_ROOT"/capabilities/*/; do
     [ -d "$dir" ] || continue
     # No README.md means this is scaffolding, not a capability yet
     # (CONTRIBUTING.md#documentation-stays-owned-and-current). The row it produced was empty in the
@@ -185,7 +185,7 @@ rebase_readme_links() {
       echo "  $pid -.-> $lid((\"$link\"))"
     done
   done
-  for dir in "$SJEL_ROOT"/capabilities/*/; do
+  for dir in "$SJEL_ROOT"/crates/*/ "$SJEL_ROOT"/services/*/ "$SJEL_ROOT"/capabilities/*/; do
     [ -d "$dir" ] || continue
     name="$(basename "$dir")"
     if [ -f "$dir/service.toml" ]; then
@@ -209,7 +209,7 @@ rebase_readme_links() {
   # dashboard requires sjel-status over HTTP and shares no code with it at all.
   #
   # Both globs: capabilities sit two levels down, the spine's own manifests one level down.
-  for st in "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
+  for st in "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/service.toml "$SJEL_ROOT"/capabilities/*/service.toml "$SJEL_ROOT"/*/service.toml; do
     [ -f "$st" ] || continue
     name="$(basename "$(dirname "$st")")"
     cid="cap_${name//[^A-Za-z0-9]/_}"

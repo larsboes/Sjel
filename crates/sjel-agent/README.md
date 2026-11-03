@@ -1,0 +1,238 @@
+# crates/sjel-agent
+
+One agent loop. It sends the conversation to a model, runs the tool calls the model asks for,
+appends the results, and repeats until the model answers without a tool call.
+
+A shared library with two consumers. The coding CLI in `src/main.rs` is a minimal
+pi alternative (`tools::coding`). [`crates/assistant`](../../crates/assistant) is the
+second consumer (`POST /api/ask`), passing read-only Sjel capability tools (`sjel_health`,
+`calendar_entries`, `projects_list`, `project_records`, `trips_plans`) and never `bash`. The loop
+does not change between them.
+
+## Model and wire format
+
+The model comes from a `sjel-inference` role (`crates/inference`). The CLI uses the role
+`coding` unless `--role` names another. Requests use streamed OpenAI chat completions with
+`tools` by default. OpenAI ChatGPT OAuth roles use the streamed Responses API, with function-call
+and tool-result messages translated by the agent. Both protocols share the same data-class
+admission and request limits.
+
+HTTP is blocking, through `sjel-http`. An async caller runs `Agent::run` inside
+`spawn_blocking`, which is the pattern `libs/sjel-http/Cargo.toml` states for the workspace.
+
+## Cloud calls
+
+`Agent::run` refuses a remote HTTPS role because its inputs and tool results have no provenance
+labels. `Agent::run_public` is the narrow opt-in: the caller attests the complete conversation
+as c0, and the agent then requires a current reviewed provider, active billing policy, configured
+credential, input ceiling, and a durable per-role daily request reservation in the private
+overlay. It also refuses tools and extensions, whose data egress is not classed at the value
+level. The reservation is written before dispatch; malformed ledgers and lock timeouts refuse
+the request. c1 requires a reviewed pseudonymized derivative and is not admitted by this method.
+
+The response streams. `src/stream.rs` folds the server-sent events into one message and
+passes each text fragment to the front end as it arrives. Fragment strings are borrowed from
+the line buffer, so most of them reach the terminal without an allocation.
+
+## Steering and follow-ups
+
+`Agent::input_queue()` returns a cloneable handle that an embedding can keep while
+`Agent::run` is active. `steer` adds a user message after the current tool batch and before the
+next model request. `follow_up` adds one after the current prompt receives its final answer.
+The queue is bounded to 32 messages; a full queue returns `InputQueueError::Full` so the caller
+can apply backpressure or tell the user the message was not accepted.
+
+## Coding tools
+
+`tools::coding(root)` returns `read`, `write`, `edit`, `bash`, `grep`, `find` and `ls`, the
+same core tools pi gives a model. Two choices differ from pi:
+
+- `grep` and `find` run in-process on ripgrep's own crates (`ignore`, `grep-searcher`,
+  `grep-regex`). There is no process per call. The walk uses every core, respects
+  `.gitignore`, and stops when the 30 KB output budget is spent.
+- `ls` uses `std::fs` directly, omits hidden entries, sorts names, and caps the listing at 500
+  entries.
+- `read`, `grep`, `find` and `ls` declare themselves read-only. When every call in one model turn
+  is read-only, the loop runs them on scoped threads. A turn that reads five files waits for
+  the slowest read, not the sum.
+
+The file tools are not confined to `root`. `bash` can reach any path the process can, so a
+path check on the other tools would not stop anything. The assistant must never get these
+tools.
+
+## Extensions
+
+The core is one tool set. Everything beyond it is an official extension: a first-party Rust
+crate compiled into this binary, doing nothing until it is named. The contract is five hooks in
+[`src/extension.rs`](src/extension.rs) — the tools it adds, the system prompt, the request
+context, the gate in front of every tool call, and the rewrite applied to what a tool returned
+before the model reads it. That last one touches the model's copy only: the trace on your own
+terminal keeps the raw text.
+
+`<overlay>/config/agent.toml` names the set a run starts with, and `--ext` changes it for one
+run, in the order the flags are given:
+
+```toml
+[agent]
+extensions = ["guard", "skills"]
+```
+
+```bash
+sjel-agent --ext none "..."       # the core only
+sjel-agent --ext +skills "..."    # add one
+sjel-agent --ext -guard "..."     # remove one
+```
+
+A name without a sign is an error rather than a guess, and a name this binary does not carry
+stops the run at startup: a session quietly missing the extension the operator asked for is worse
+than one that does not start.
+
+The guard is compiled in and on by default — the one exception to "off until named", because its
+absence is what puts a credential in a request. `--ext -guard`, `--ext none`, or an `agent.toml`
+that names a set without it, removes it, and the startup line says so when it is gone. It refuses
+secret paths on `read`, `edit`, `grep` and `find`, and any `bash` command that names one unless
+it is an allowlisted shape (`source .env && …`, `export VAR=…`, `bw unlock`, writing a reference).
+It also scrubs what `bash`, `read` and `grep` returned before the model reads it.
+
+It carries the two tools that make a refusal actionable, because a guard that only says no leaves
+a run with no way to do legitimate work: `vault_exec` runs a command with an env file loaded and
+replaces every value it loaded with `****` in the result — by value, by shape and by length — and
+`vault_keys` lists the names in such a file without the values. Pass `keys` to `vault_exec` to put
+only the variables the command needs into its environment; without it the whole environment and
+every variable in the file are inherited, which is the risky default and what the tool's own
+description says.
+
+## Skills
+
+The `skills` extension is not on by default: it offers what `[skills] paths` names.
+
+```toml
+[agent]
+extensions = ["guard", "skills"]
+
+[skills]
+paths = [
+  "~/Developer/Sjel/Packs/coding/skills/effective-rust",
+  "~/Developer/Sjel/Packs/writing/skills/human-writing",
+]
+```
+
+Each named skill contributes its `name` and its `description` to the system prompt — one line
+each — and nothing else of its `SKILL.md`. The document arrives when the model calls the `skill`
+tool with that name, which is the point: twenty skills cost twenty lines, not twenty documents. A
+path that will not read, or whose frontmatter the Pack engine would refuse, is named at startup
+and skipped, and the run goes on.
+
+## Rust diagnostics
+
+The `rust` extension carries a `cargo` tool, not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "skills", "rust"]
+```
+
+It runs `cargo check`, `clippy` or `test` with `--message-format=json` and returns one line per
+diagnostic — `path:line:col level[code] message — span label`, with the compiler's notes under
+it — instead of the rendered output. Same information, about a third of the bytes on a small
+build, and it carries the span label, which is the part that says what to change. Pass
+`manifest_path` to build another crate, `package` to limit it to one, `all_targets` to include
+tests and examples. `cargo deny` is not offered: it does not speak the compiler's JSON, and
+this repository has no `deny.toml`.
+
+## MCP (Model Context Protocol)
+
+The `mcp` extension discovers and registers tools from external MCP servers, not on by default.
+It speaks JSON-RPC 2.0 over both stdio child processes and HTTP endpoints via `sjel-http`:
+
+```toml
+[agent]
+extensions = ["guard", "mcp"]
+
+[mcp.servers.sjel]
+command = "sjel"
+args = ["mcp"]
+timeout = 120
+
+[mcp.servers.remote]
+url = "http://localhost:8080/mcp"
+timeout = 30
+```
+
+Discovered tools are exposed as `<server>__<tool>`. Calls support configurable timeouts and cleanly handle Ctrl-C by returning a stopped result in under 1 second without terminating the server.
+
+## Compaction
+
+The `compaction` extension summarizes older complete turns when estimated tokens exceed the role's
+`max_input_tokens` (or `[compaction] max_tokens` in `agent.toml`), not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "compaction"]
+
+[compaction]
+max_tokens = 16384 # optional override; defaults to role's limit
+```
+
+It replaces the oldest complete turns with a single summary message before each completion. A turn
+is never split between tool calls and their results, and the session file is updated so
+`--continue` resumes from the compacted summary.
+
+## Web Access
+
+The `web` extension provides read-only outbound web access (`web_fetch` and `web_search`), not on by default.
+
+```toml
+[agent]
+extensions = ["guard", "web"]
+
+[web]
+timeout = 30 # optional timeout in seconds (default 30, max 120)
+```
+
+- **`web_fetch`**: Fetches an HTTP(S) URL and parses its content into structured text using `sjel-extraction`, capped at 20,000 characters.
+- **`web_search`**: Searches DuckDuckGo HTML without external browser daemons or API keys, returning title, URL, and snippet links.
+- **Security**: Guarded by `sjel-http::guard` to reject non-http(s) schemes (`file://`) and block requests resolving to loopback or private networks (SSRF prevention). Respects turn stop signals.
+
+## Run it
+
+```bash
+cargo build -p sjel-agent
+cd <project> && sjel-agent "fix the failing test in foo.rs"   # one prompt, then exit
+cd <project> && sjel-agent                                     # one prompt per line, /exit stops
+cd <project> && sjel-agent --continue                          # resume the newest session here
+```
+
+Use `/login` inside the interactive agent to choose a provider, `/login openai` for ChatGPT
+browser sign-in, or `/login deepseek` to go directly to its hidden API-key prompt. OAuth tokens
+and API keys are saved in the OS keychain; slash commands are handled locally and never enter
+model history.
+The equivalent operator commands are `sjel provider list`, `sjel provider login <provider>`,
+and `sjel provider logout <provider>`. Add `api_key_credential_id` or `oauth_credential_id` to
+a backend in the private `config/inference.json` to select its keychain entry. ChatGPT OAuth
+uses `api: "openai_responses"` with `oauth_credential_id: "inference-openai-chatgpt"`.
+
+The answer streams to stdout. Thinking, tool calls and their results go to stderr.
+
+Ctrl-C stops the current turn and keeps the conversation. Text that streamed before the stop
+stays, a running `bash` command is killed with its process group, and a tool call that never
+ran gets a result that says so. A second Ctrl-C exits with 130. Any other failed turn is
+removed from the conversation, so the prompt can be sent again.
+
+## Sessions
+
+Every turn is appended to
+`<overlay>/data/agent/sessions/<working directory>/<millis>.jsonl`, one message per line,
+mode 0600. A session can hold any file the model read, which is why it lives in the private
+overlay and not in the repository. The system prompt is not stored. A resumed session gets
+the current one, so an edited `AGENTS.md` takes effect. `--continue` takes the newest session
+for the working directory. `--session <file>` resumes or starts a named file.
+
+Add a `coding` role to the overlay's `config/inference.json` first:
+
+```json
+"coding": { "backend": "omlx", "model": "gemma-4-26b-a4b-it-4bit" }
+```
+
+A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
+chunk. Press it twice to exit instead.

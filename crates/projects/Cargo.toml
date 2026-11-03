@@ -1,0 +1,49 @@
+[package]
+name = "sjel-projects"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Projects, tasks and project notes in the shared store, rendered to markdown on every write."
+publish = false
+
+[lib]
+name = "projects"
+path = "src/lib.rs"
+
+[[bin]]
+name = "projects-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "projects"
+path = "src/cli.rs"
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+content-item = { path = "../content-item" }
+markdown-root = { path = "../markdown-root" }
+route-manifest = { path = "../route-manifest" }
+reqwest.workspace = true
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sjel-config = { path = "../sjel-config" }
+sjel-http = { path = "../sjel-http" }
+sjel-links = { path = "../links" }
+sjel-server = { path = "../sjel-server" }
+# LibSQL, not `sjel-store`: the second capability cut over (PLAN.md Phase 4). The rows stay in the
+# shared file, and the app that already reads them directly (`apps/gpui` over raw `libsql`) now
+# shares the engine with the capability that writes them. `rusqlite` leaves this crate's graph with
+# it -- one binary cannot link both bundled SQLite libraries.
+sjel-turso = { path = "../sjel-turso" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+
+[dev-dependencies]
+# `ServiceExt::oneshot`, so the router test drives the wired handlers with no listener and no
+# port. The same pattern capabilities/transit, sjel-status and operator-profile use.
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

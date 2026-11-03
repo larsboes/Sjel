@@ -52,7 +52,9 @@ contains "$out" "--print-env"
 for job in repo-gates bun-tests; do
   grep -q "^  $job:" "$ROOT/.github/workflows/ci.yml" ||
     fail "sjel dispatches to CI job '$job', which .github/workflows/ci.yml does not declare"
-  grep -q "\"run\", \"$job\"" "$ROOT/tools/sjel-cli/src/main.rs" ||
+  _sjel_main="$ROOT/crates/sjel-cli/src/main.rs"
+  [ -f "$_sjel_main" ] || _sjel_main="$ROOT/tools/sjel-cli/src/main.rs"
+  grep -q "\"run\", \"$job\"" "$_sjel_main" ||
     fail "sjel no longer dispatches to CI job '$job'"
 done
 

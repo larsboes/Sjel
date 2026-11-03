@@ -109,7 +109,7 @@ jobs:
             echo "| Image | Critical | High | Result |"
             echo "|---|---:|---:|---|"
           } >> "$GITHUB_STEP_SUMMARY"
-          for m in capabilities/*/service.toml; do
+          for m in crates/*/service.toml services/*/service.toml capabilities/*/service.toml; do
             image=$(sed -n 's/^image *= *"\([^"]*\)".*/\1/p' "$m" | head -1)
             [ -n "$image" ] || continue
             tag=$(sed -n 's/^tag *= *"\([^"]*\)".*/\1/p' "$m" | head -1)

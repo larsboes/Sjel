@@ -1,0 +1,32 @@
+[package]
+name = "sjel-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Register Sjel's MCP server with the agent harnesses on this machine, and verify each registration by speaking MCP to it."
+publish = false
+
+# sjel-mcp, not mcp: tools/sjel-mcp/sjel-mcp is the launcher that execs this. Both halves of
+# Sjel's MCP tooling are here: the stdio server (`src/server.rs`, tools/sjel-mcp.ts until
+# 2026-10-04) and the registration and verification of it (src/main.rs).
+[[bin]]
+name = "sjel-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# pi's config and every JSON-RPC message are JSON, and serde_json was already in the workspace
+# lock. `serde` is here for the `/routes` and gate shapes the server reads.
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# The outbound half. libs/sjel-http owns the blocking client, its user-agent and the timeout no
+# caller can forget, so the server does not build a second one. reqwest is named only for the
+# response type that client hands back.
+sjel-http = { path = "../sjel-http" }
+reqwest = { workspace = true, features = ["blocking"] }
+# encodeURIComponent and URLSearchParams, the two encodings the TypeScript got from the platform.
+# Already in the workspace lock through `url`, so this resolves no new crate.
+percent-encoding = "2"
+
+[lints]
+workspace = true

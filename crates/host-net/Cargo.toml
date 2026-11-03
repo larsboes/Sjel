@@ -1,0 +1,35 @@
+[package]
+name = "sjel-host-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "What this host exposes to the network, read without sudo: listening sockets with their scope, the application firewall's state, and the tailnet's posture."
+publish = false
+
+# host-net-cli, not host-net: capabilities/host-net/host-net is the shell entry point this
+# capability puts on PATH (capabilities/shell/init.zsh), and it is that script which execs this
+# binary. Two things named `host-net` on PATH is the collision the suffix avoids. Same reason
+# capabilities/punctuality names its binary punctuality-cli.
+[[bin]]
+name = "host-net-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Overlay resolution only — <overlay>/config/host-net-policy.toml. Zero external
+# dependencies of its own (libs/sjel-config/Cargo.toml), so this stays a three-crate build.
+sjel-config = { path = "../sjel-config" }
+
+# --json, `tailscale status --json`, and the policy file. All three were already resolved in
+# the workspace lock before this crate existed (serde 1.0.229, serde_json 1.0.151, toml 0.8.23
+# via capabilities/interior), so adding this capability resolves no new external crate.
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+toml.workspace = true
+
+# No clap. Four verbs and one flag is a match statement; the workspace has no clap today and
+# a CLI parser is not worth being the crate that introduces one
+# (CONTRIBUTING.md#cargo-and-bun-are-the-build-path, "name what it buys").
+
+[lints]
+workspace = true

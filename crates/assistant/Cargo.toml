@@ -1,0 +1,35 @@
+[package]
+name = "sjel-assistant"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local-first assistant inference endpoint for the Sjel dashboard."
+publish = false
+
+[[bin]]
+name = "assistant-server"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+base64.workspace = true
+chrono.workspace = true
+futures = "0.3"
+reqwest.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+sjel-agent = { path = "../sjel-agent" }
+sjel-config = { path = "../sjel-config" }
+sjel-http = { path = "../sjel-http" }
+sjel-inference = { path = "../inference" }
+sjel-runtime = { path = "../runtime" }
+sjel-store = { path = "../sjel-store" }
+sjel-server = { path = "../sjel-server" }
+route-manifest = { path = "../route-manifest" }
+schemars = "1.2.2"
+
+[lints]
+workspace = true

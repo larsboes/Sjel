@@ -1,0 +1,70 @@
+[package]
+name = "sjel-finance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Reviewed finance imports, journal projections, cash flow, and append-only subscriptions."
+publish = false
+
+[lib]
+name = "finance"
+path = "src/lib.rs"
+
+[[bin]]
+name = "finance-server"
+path = "src/server.rs"
+
+# The commands that are not the server: a price fetch a timer can run, and the
+# human-readable rebuild of the decision ledger for when the server is down.
+[[bin]]
+name = "finance-cli"
+path = "src/bin/finance-cli.rs"
+
+[dependencies]
+# Howard Hinnant's civil-from-days pair, shared rather than copied. No
+# dependencies of its own, which is why the four copies existed.
+civil-date = { path = "../civil-date" }
+# Outbound HTTP goes through one factory: the user-agent, the timeout and the
+# connection pool are decided there, not at each call site (libs/sjel-http).
+sjel-http = { path = "../sjel-http" }
+sjel-config = { path = "../sjel-config" }
+sjel-server = { path = "../sjel-server" }
+sjel-store = { path = "../sjel-store" }
+# The candidate identity, shared with capabilities/places, which re-derives it.
+# One implementation because 263 live venue links resolve only while the two
+# agree byte for byte.
+candidate-fingerprint = { path = "../candidate-fingerprint" }
+markdown-root = { path = "../markdown-root" }
+route-manifest = { path = "../route-manifest" }
+# Typed ids and the `/api/links` body every capability answers alike (website/content/capabilities/links.md).
+sjel-links = { path = "../links" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# The database, after PRD Q45 retired Postgres. Bundled so the deployment does not
+# depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
+# measurement that settled it.
+rusqlite.workspace = true
+# Not `full`: these are the drivers this crate reaches for, verified with a lone
+# `cargo check -p <crate> --all-targets`, which is the only build where a missing
+# tokio feature is visible (a workspace build unifies them away).
+# `#[tokio::main]`, `#[tokio::test]` and 27 `spawn_blocking` store reads, nothing else.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+axum.workspace = true
+tower-http = { workspace = true, features = ["cors"] }
+csv = "1.4"
+sha2.workspace = true
+# The data-class vocabulary, owned by one crate rather than restated per capability.
+# Its own dependencies are serde and serde_json only; calendar and comms already take it.
+content-item = { path = "../content-item" }
+# The loopback feed lookup and the two networked price providers. The literal is
+# matched to capabilities/trips so the workspace resolves one reqwest.
+reqwest = { workspace = true, features = ["blocking", "json", "cookies"] }
+
+[dev-dependencies]
+# `ServiceExt::oneshot`, so the origin test drives the wired Router with no listener
+# and no port. The same pattern capabilities/sjel-status already uses.
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

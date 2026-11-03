@@ -15,7 +15,8 @@ set -euo pipefail
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$_here/lib/paths.sh"
 
-CLIPPER="$SJEL_ROOT/capabilities/comms/clipper"
+CLIPPER="$SJEL_ROOT/crates/comms/clipper"
+[ -d "$CLIPPER" ] || CLIPPER="$SJEL_ROOT/capabilities/comms/clipper"
 HOST_NAME="dev.sjel.clip"
 EXTENSION_ID="$(tr -d '[:space:]' < "$CLIPPER/extension-id")"
 WRAPPER="$SJEL_OVERLAY_ROOT/data/comms/clip-host"

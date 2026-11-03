@@ -28,9 +28,12 @@ sjel_cli_exec() {
   fi
   if [ -z "$bin" ]; then
     local crate
-    crate="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../sjel-cli" 2>/dev/null && pwd)" || crate=""
+    crate="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../crates/sjel-cli" 2>/dev/null && pwd)" || crate=""
     if [ -z "$crate" ] || [ ! -f "$crate/Cargo.toml" ]; then
-      echo "$sub: no tools/sjel-cli crate beside this launcher and SJEL_CLI_BIN is unset" >&2
+      crate="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../sjel-cli" 2>/dev/null && pwd)" || crate=""
+    fi
+    if [ -z "$crate" ] || [ ! -f "$crate/Cargo.toml" ]; then
+      echo "$sub: no sjel-cli crate found and SJEL_CLI_BIN is unset" >&2
       exit 2
     fi
     bin="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-cli"

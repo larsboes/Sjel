@@ -27,7 +27,7 @@ fi
 
 fail=0
 checked=0
-for f in "$SJEL_ROOT"/capabilities/*/README.md "$SJEL_ROOT"/capabilities/*/service.toml \
+for f in "$SJEL_ROOT"/crates/*/README.md "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/README.md "$SJEL_ROOT"/services/*/service.toml "$SJEL_ROOT"/capabilities/*/README.md "$SJEL_ROOT"/capabilities/*/service.toml \
          "$SJEL_ROOT"/Packs/*/pack.toml "$SJEL_ROOT"/libs/*/README.md; do
   [ -f "$f" ] || continue
   checked=$((checked + 1))

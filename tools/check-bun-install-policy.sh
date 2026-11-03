@@ -43,7 +43,11 @@ require() { # require <path> <literal>
 
 require ".github/workflows/ci.yml" "bun install --frozen-lockfile --ignore-scripts"
 require ".github/workflows/ci.yml" "bun pm scan"
-require "capabilities/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
+if [ -f "$ROOT/crates/comms/clipper/README.md" ]; then
+  require "crates/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
+else
+  require "capabilities/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
+fi
 
 # Trees that resolve dependencies: a package.json with a committed bun.lock beside it.
 #

@@ -76,7 +76,9 @@ export function routesBlock(src: string): string | null {
 
 /** Every route a capability declares, from the first `const ROUTES` block under its `src/`. */
 export function capabilityRoutes(root: string, name: string): DeclaredRoute[] {
-  const src = join(root, "capabilities", name, "src");
+  const src = existsSync(join(root, "crates", name, "src"))
+    ? join(root, "crates", name, "src")
+    : join(root, "capabilities", name, "src");
   if (!existsSync(src)) return [];
   const files = readdirSync(src, { recursive: true })
     .map(String)

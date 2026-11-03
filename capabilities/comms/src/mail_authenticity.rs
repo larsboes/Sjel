@@ -156,17 +156,29 @@ pub fn assess_headers(facts: &HeaderFacts<'_>, known: &KnownOrgs) -> Assessment 
                 let platform = TRACKERS.contains(&org);
                 findings.push(Finding::new(
                     "display_name_domain",
-                    if platform { Verdict::Verified } else { Verdict::Suspicious },
+                    if platform {
+                        Verdict::Verified
+                    } else {
+                        Verdict::Suspicious
+                    },
                     format!("The display name shows {named}, but the mail is from {domain}."),
                 ));
             }
         }
-        if let Some(reply_org) = facts.reply_to.and_then(sender_domain).map(|d| org_domain(&d)) {
+        if let Some(reply_org) = facts
+            .reply_to
+            .and_then(sender_domain)
+            .map(|d| org_domain(&d))
+        {
             if reply_org != org {
                 let freemail = FREEMAIL.contains(&reply_org.as_str());
                 findings.push(Finding::new(
                     "reply_to_mismatch",
-                    if freemail { Verdict::Suspicious } else { Verdict::Verified },
+                    if freemail {
+                        Verdict::Suspicious
+                    } else {
+                        Verdict::Verified
+                    },
                     format!("Replies go to {reply_org}, not {org}."),
                 ));
             }
@@ -195,7 +207,11 @@ pub fn assess_headers(facts: &HeaderFacts<'_>, known: &KnownOrgs) -> Assessment 
 
 fn authentication_finding(results: &[String], from_org: Option<&str>) -> Finding {
     let Some(from_org) = from_org else {
-        return Finding::new("no_sender", Verdict::Unverified, "The From header names no domain.");
+        return Finding::new(
+            "no_sender",
+            Verdict::Unverified,
+            "The From header names no domain.",
+        );
     };
     let Some(trusted) = results.iter().find_map(|header| trusted_results(header)) else {
         return Finding::new(
@@ -352,10 +368,17 @@ fn display_name_domain(from: &str) -> Option<String> {
     let name = &from[..from.rfind('<')?];
     name.split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '(' | ')' | ',' | '<'))
         .filter_map(|token| {
-            let token = token.rsplit('@').next()?.trim_matches('.').to_ascii_lowercase();
+            let token = token
+                .rsplit('@')
+                .next()?
+                .trim_matches('.')
+                .to_ascii_lowercase();
             let (_, tld) = token.rsplit_once('.')?;
-            (tld.len() >= 2 && tld.chars().all(|c| c.is_ascii_alphabetic())
-                && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+            (tld.len() >= 2
+                && tld.chars().all(|c| c.is_ascii_alphabetic())
+                && token
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
             .then_some(token)
         })
         .next()
@@ -365,8 +388,8 @@ fn display_name_domain(from: &str) -> Option<String> {
 // ponytail: fixed list instead of the Public Suffix List; replace with the PSL
 // when a sender under another multi-label suffix is misgrouped.
 const MULTI_LABEL_SUFFIXES: &[&str] = &[
-    "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.jp", "co.nz",
-    "com.br", "com.cn", "co.at", "or.at", "co.za", "com.tr", "co.in", "com.mx",
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "co.jp", "co.nz", "com.br",
+    "com.cn", "co.at", "or.at", "co.za", "com.tr", "co.in", "com.mx",
 ];
 
 /// The registrable domain: `em.cloudfest.com` becomes `cloudfest.com`.
@@ -384,9 +407,23 @@ pub fn org_domain(domain: &str) -> String {
 }
 
 const FREEMAIL: &[&str] = &[
-    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com",
-    "icloud.com", "me.com", "gmx.de", "gmx.net", "web.de", "proton.me", "protonmail.com",
-    "aol.com", "mail.ru", "yandex.ru", "t-online.de",
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "yahoo.com",
+    "icloud.com",
+    "me.com",
+    "gmx.de",
+    "gmx.net",
+    "web.de",
+    "proton.me",
+    "protonmail.com",
+    "aol.com",
+    "mail.ru",
+    "yandex.ru",
+    "t-online.de",
 ];
 
 /// A known organisational domain that `org` imitates: one edit apart, or equal
@@ -454,18 +491,52 @@ pub struct BodyFacts<'a> {
 
 /// Hosts that rewrite links for click tracking on a sender's behalf.
 const TRACKERS: &[&str] = &[
-    "hubspotlinks.com", "hubspotemail.net", "hubspotlinks-eu1.com", "hubspotemail-eu1.net",
-    "hs-sites.com", "hs-sites-eu1.com", "list-manage.com", "mailchi.mp",
-    "sendgrid.net", "mailgun.org", "sparkpostmail.com", "mandrillapp.com", "rs6.net",
-    "exacttarget.com", "mktomail.com", "mkt.com", "klaviyo.com", "brevo.com", "sendibt3.com",
-    "sendinblue.com", "awstrack.me", "beehiiv.com", "substack.com", "cmail19.com",
-    "cmail20.com", "createsend.com", "postmarkapp.com", "e.customeriomail.com",
-    "customeriomail.com", "safelinks.protection.outlook.com", "urldefense.com",
+    "hubspotlinks.com",
+    "hubspotemail.net",
+    "hubspotlinks-eu1.com",
+    "hubspotemail-eu1.net",
+    "hs-sites.com",
+    "hs-sites-eu1.com",
+    "list-manage.com",
+    "mailchi.mp",
+    "sendgrid.net",
+    "mailgun.org",
+    "sparkpostmail.com",
+    "mandrillapp.com",
+    "rs6.net",
+    "exacttarget.com",
+    "mktomail.com",
+    "mkt.com",
+    "klaviyo.com",
+    "brevo.com",
+    "sendibt3.com",
+    "sendinblue.com",
+    "awstrack.me",
+    "beehiiv.com",
+    "substack.com",
+    "cmail19.com",
+    "cmail20.com",
+    "createsend.com",
+    "postmarkapp.com",
+    "e.customeriomail.com",
+    "customeriomail.com",
+    "safelinks.protection.outlook.com",
+    "urldefense.com",
 ];
 
 const SHORTENERS: &[&str] = &[
-    "bit.ly", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly",
-    "t.ly", "shorturl.at", "rb.gy", "tiny.cc",
+    "bit.ly",
+    "tinyurl.com",
+    "goo.gl",
+    "ow.ly",
+    "is.gd",
+    "buff.ly",
+    "rebrand.ly",
+    "cutt.ly",
+    "t.ly",
+    "shorturl.at",
+    "rb.gy",
+    "tiny.cc",
 ];
 
 /// Links, forms and, for a forward, the original sender.
@@ -590,7 +661,9 @@ fn link_findings(
             );
         }
         let is_own = sender_org == Some(org.as_str());
-        let is_tracker = TRACKERS.iter().any(|t| host == *t || host.ends_with(&format!(".{t}")));
+        let is_tracker = TRACKERS
+            .iter()
+            .any(|t| host == *t || host.ends_with(&format!(".{t}")));
         if let Some(shown) = label_domain(&link.label) {
             let shown_org = org_domain(&shown);
             // An authenticated sender that shows its own brand is not
@@ -600,7 +673,11 @@ fn link_findings(
                 // An authenticated sender can still be a compromised account.
                 flag(
                     "deceptive_link_text",
-                    if sender_authenticated { Verdict::Unverified } else { Verdict::Suspicious },
+                    if sender_authenticated {
+                        Verdict::Unverified
+                    } else {
+                        Verdict::Suspicious
+                    },
                     format!("A link shows {shown} but goes to {host}."),
                 );
             }
@@ -648,7 +725,9 @@ fn label_domain(label: &str) -> Option<String> {
     let (_, tld) = candidate.rsplit_once('.')?;
     (tld.len() >= 2
         && tld.chars().all(|c| c.is_ascii_alphabetic())
-        && candidate.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+        && candidate
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-'))
     .then_some(candidate)
 }
 
@@ -732,7 +811,9 @@ fn text_links(text: &str) -> Vec<Link> {
         let href = rest[..end].to_string();
         let label = if text[..index].ends_with('<') {
             let before = &text[..index - 1];
-            let start = before.rfind(|c: char| c.is_whitespace() || c == ']').map_or(0, |i| i + 1);
+            let start = before
+                .rfind(|c: char| c.is_whitespace() || c == ']')
+                .map_or(0, |i| i + 1);
             before[start..].to_string()
         } else {
             String::new()
@@ -768,13 +849,34 @@ const MODEL_RATIONALE_CHARS: usize = 200;
 
 /// The signals the model may name. Anything else in its answer is dropped.
 pub const MODEL_SIGNALS: [(&str, &str); 7] = [
-    ("credential_request", "asks for a password, a code or a login"),
-    ("payment_request", "asks for a payment, bank details or a gift card"),
-    ("pressure", "sets a short deadline or threatens a loss to force a fast reaction"),
-    ("threat", "threatens a block, a fee, legal action or exposure"),
-    ("prize_lure", "promises a prize, a refund or an offer that is too good"),
-    ("impersonation", "claims to be a brand, a bank, an authority or a colleague it may not be"),
-    ("attachment_lure", "pushes the reader to open an attachment or enable content"),
+    (
+        "credential_request",
+        "asks for a password, a code or a login",
+    ),
+    (
+        "payment_request",
+        "asks for a payment, bank details or a gift card",
+    ),
+    (
+        "pressure",
+        "sets a short deadline or threatens a loss to force a fast reaction",
+    ),
+    (
+        "threat",
+        "threatens a block, a fee, legal action or exposure",
+    ),
+    (
+        "prize_lure",
+        "promises a prize, a refund or an offer that is too good",
+    ),
+    (
+        "impersonation",
+        "claims to be a brand, a bank, an authority or a colleague it may not be",
+    ),
+    (
+        "attachment_lure",
+        "pushes the reader to open an attachment or enable content",
+    ),
 ];
 
 pub fn model_prompt(sender_domain: Option<&str>, subject: &str, body: &str) -> String {
@@ -841,7 +943,12 @@ pub fn parse_model_answer(answer: &str) -> Option<ModelAnswer> {
     Some(ModelAnswer {
         verdict,
         signals,
-        rationale: raw.rationale.trim().chars().take(MODEL_RATIONALE_CHARS).collect(),
+        rationale: raw
+            .rationale
+            .trim()
+            .chars()
+            .take(MODEL_RATIONALE_CHARS)
+            .collect(),
     })
 }
 
@@ -871,28 +978,41 @@ pub fn assess_with_model(
     let role = match crate::quiet::rung(&cfg.inference, chars, MODEL_REPLY_TOKENS) {
         crate::quiet::Rung::Light(role) => *role,
         crate::quiet::Rung::OverWindow => {
-            return note("model_skipped", "The prompt does not fit the local model's window.")
+            return note(
+                "model_skipped",
+                "The prompt does not fit the local model's window.",
+            )
         }
         crate::quiet::Rung::Unconfigured => {
             return note("model_unavailable", "No local model is configured.")
         }
     };
     if crate::quiet::runtime_admission(runtime, &role, chars, MODEL_REPLY_TOKENS).is_err() {
-        return note("model_deferred", "The runtime profile defers local model work.");
+        return note(
+            "model_deferred",
+            "The runtime profile defers local model work.",
+        );
     }
     let target = crate::digest::to_target(cfg, &role, runtime);
-    let answer =
-        match summarize::ask(Some(&target), &prompt, MODEL_REPLY_TOKENS, Reach::LoopbackOnly) {
-            Outcome::Ok(answer) => answer,
-            other => {
-                return note(
-                    "model_error",
-                    &format!("The local model gave no answer ({}).", other.state()),
-                )
-            }
-        };
+    let answer = match summarize::ask(
+        Some(&target),
+        &prompt,
+        MODEL_REPLY_TOKENS,
+        Reach::LoopbackOnly,
+    ) {
+        Outcome::Ok(answer) => answer,
+        other => {
+            return note(
+                "model_error",
+                &format!("The local model gave no answer ({}).", other.state()),
+            )
+        }
+    };
     let Some(parsed) = parse_model_answer(&answer) else {
-        return note("model_unparseable", "The local model's answer was not readable.");
+        return note(
+            "model_unparseable",
+            "The local model's answer was not readable.",
+        );
     };
     // The model's sentence is free text about the mail, so it is always redacted.
     let mut redactions = Vec::new();
@@ -951,10 +1071,12 @@ pub fn audit(
         },
         &known,
     );
-    let authenticated = headers
-        .findings
-        .iter()
-        .any(|f| matches!(f.code.as_str(), "dmarc_pass" | "dkim_aligned" | "spf_aligned"));
+    let authenticated = headers.findings.iter().any(|f| {
+        matches!(
+            f.code.as_str(),
+            "dmarc_pass" | "dkim_aligned" | "spf_aligned"
+        )
+    });
     let mut assessments = vec![headers];
     if let Some(parts) =
         crate::google::thread_message_parts(token, id).map_err(|e| e.to_string())?
@@ -1001,7 +1123,10 @@ mod tests {
 
     fn assess(from: &str, subject: &str, results: &[&str], reply_to: Option<&str>) -> Assessment {
         let results: Vec<String> = results.iter().map(|r| r.to_string()).collect();
-        let known = Some(BTreeSet::from(["paypal.com".to_string(), "cloudfest.com".to_string()]));
+        let known = Some(BTreeSet::from([
+            "paypal.com".to_string(),
+            "cloudfest.com".to_string(),
+        ]));
         assess_headers(
             &HeaderFacts {
                 from,
@@ -1014,12 +1139,21 @@ mod tests {
     }
 
     fn codes(assessment: &Assessment) -> Vec<&str> {
-        assessment.findings.iter().map(|f| f.code.as_str()).collect()
+        assessment
+            .findings
+            .iter()
+            .map(|f| f.code.as_str())
+            .collect()
     }
 
     #[test]
     fn gmail_dmarc_pass_is_verified() {
-        let a = assess("CloudFest Team <team@cloudfest.com>", "Last call", &[CLOUDFEST], None);
+        let a = assess(
+            "CloudFest Team <team@cloudfest.com>",
+            "Last call",
+            &[CLOUDFEST],
+            None,
+        );
         assert_eq!(a.verdict, Verdict::Verified);
         assert_eq!(codes(&a), ["dmarc_pass"]);
     }
@@ -1070,15 +1204,34 @@ mod tests {
         assert_eq!(a.verdict, Verdict::Suspicious);
         assert!(codes(&a).contains(&"display_name_domain"));
         let header = "mx.google.com; dmarc=pass header.from=substack.com";
-        let b = assess("Zach from DataExpert.io <x@substack.com>", "Post", &[header], None);
-        assert_eq!(b.verdict, Verdict::Verified, "a newsletter platform sends for others");
+        let b = assess(
+            "Zach from DataExpert.io <x@substack.com>",
+            "Post",
+            &[header],
+            None,
+        );
+        assert_eq!(
+            b.verdict,
+            Verdict::Verified,
+            "a newsletter platform sends for others"
+        );
     }
 
     #[test]
     fn freemail_reply_to_is_suspicious_and_other_reply_to_is_noted() {
-        let a = assess("C <team@cloudfest.com>", "x", &[CLOUDFEST], Some("x@gmail.com"));
+        let a = assess(
+            "C <team@cloudfest.com>",
+            "x",
+            &[CLOUDFEST],
+            Some("x@gmail.com"),
+        );
         assert_eq!(a.verdict, Verdict::Suspicious);
-        let b = assess("C <team@cloudfest.com>", "x", &[CLOUDFEST], Some("x@whd.events"));
+        let b = assess(
+            "C <team@cloudfest.com>",
+            "x",
+            &[CLOUDFEST],
+            Some("x@whd.events"),
+        );
         assert_eq!(b.verdict, Verdict::Verified);
         assert!(codes(&b).contains(&"reply_to_mismatch"));
     }
@@ -1129,11 +1282,19 @@ mod tests {
 
     #[test]
     fn a_forward_is_checked_against_its_original_sender() {
-        let a = body("Me <me@work.example>", "WG: Last call", None, Some(FORWARD_TEXT));
+        let a = body(
+            "Me <me@work.example>",
+            "WG: Last call",
+            None,
+            Some(FORWARD_TEXT),
+        );
         assert_eq!(a.verdict, Verdict::Unverified);
         assert_eq!(codes(&a), ["forwarded_sender", "link_summary"]);
         let summary = &a.findings[1].detail;
-        assert!(summary.starts_with("2 link(s) to the sender's domain, 1 through a tracking"), "{summary}");
+        assert!(
+            summary.starts_with("2 link(s) to the sender's domain, 1 through a tracking"),
+            "{summary}"
+        );
         assert!(summary.contains("employer.example"));
     }
 

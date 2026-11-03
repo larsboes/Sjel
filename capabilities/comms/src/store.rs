@@ -1618,14 +1618,21 @@ pub(crate) mod db_tests {
             )
             .unwrap();
         let body = Assessment::from_findings(Source::Body, Vec::new());
-        store.replace_triage_authenticity("thread:auth", &body).unwrap();
-        store.replace_triage_authenticity("thread:auth", &body).unwrap();
+        store
+            .replace_triage_authenticity("thread:auth", &body)
+            .unwrap();
+        store
+            .replace_triage_authenticity("thread:auth", &body)
+            .unwrap();
 
         let map = store.triage_authenticity_map().unwrap();
         let stored = &map["thread:auth"];
         assert_eq!(stored.len(), 2, "one row per rung, replaced on rewrite");
         assert!(stored.contains(&headers));
-        assert!(store.known_sender_orgs(None).unwrap().contains("cloudfest.com"));
+        assert!(store
+            .known_sender_orgs(None)
+            .unwrap()
+            .contains("cloudfest.com"));
     }
 
     /// THE defect this stream had to fix before the model rung could store

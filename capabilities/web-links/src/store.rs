@@ -450,7 +450,7 @@ mod tests {
             visits: 4,
             last_visit: None,
         };
-        store.stage(&[candidate.clone()]).unwrap();
+        store.stage(std::slice::from_ref(&candidate)).unwrap();
         let kept = store
             .decide_candidate(&candidate.id, HistoryDecision::Keep)
             .unwrap()

@@ -118,7 +118,9 @@ fn print_help() {
     println!("                                  Both read through comms-server's clip socket.");
     println!("  prompts                         list prompt drafts waiting in the outbox");
     println!("  prompts add --title T           queue a prompt draft; the body is read from stdin");
-    println!("  prompts take <id>               print a draft's body and remove it from the outbox");
+    println!(
+        "  prompts take <id>               print a draft's body and remove it from the outbox"
+    );
     println!("  egress-log [--limit N=25]       show outbound cloud model calls with token counts");
     println!("       [--audit]                  and costs, or audit egress payloads for C2 leaks");
     println!("  --help, -h                      show this help");
@@ -198,7 +200,10 @@ fn cmd_clips(args: &[String]) {
         eprintln!("error: {}", answer["error"].as_str().unwrap_or("unknown"));
         std::process::exit(1);
     }
-    if let Some(deleted_rows) = answer.get("deleted_rows").and_then(serde_json::Value::as_u64) {
+    if let Some(deleted_rows) = answer
+        .get("deleted_rows")
+        .and_then(serde_json::Value::as_u64)
+    {
         println!("deleted {deleted_rows} clip version(s)");
         return;
     }
@@ -304,7 +309,9 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
     );
 
     let store = if dry_run { None } else { Some(open_store(cfg)) };
-    let known_orgs = store.as_ref().and_then(|st| st.known_sender_orgs(None).ok());
+    let known_orgs = store
+        .as_ref()
+        .and_then(|st| st.known_sender_orgs(None).ok());
 
     // stream -> Vec<(from, subject, rationale)>
     let mut grouped: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();

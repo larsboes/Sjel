@@ -326,7 +326,10 @@ impl Store {
         self.conn()
             .map_err(|_| ClipError::Storage)?
             .execute(
-                &format!("DELETE FROM {}_web_clips WHERE document_key = ?1", self.prefix),
+                &format!(
+                    "DELETE FROM {}_web_clips WHERE document_key = ?1",
+                    self.prefix
+                ),
                 params![document_key],
             )
             .map_err(|_| ClipError::Storage)

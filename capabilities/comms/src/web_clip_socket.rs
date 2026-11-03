@@ -357,9 +357,11 @@ mod tests {
             "not_found"
         );
         assert_eq!(
-            handle(&db, &Stub, &json!({"type": "delete_document", "key": "clip:r1"}))[
-                "deleted_rows"
-            ],
+            handle(
+                &db,
+                &Stub,
+                &json!({"type": "delete_document", "key": "clip:r1"})
+            )["deleted_rows"],
             1
         );
         assert_eq!(
@@ -377,10 +379,22 @@ mod tests {
         let ask = |request: Value| handle(&db, &Stub, &request);
         let added = ask(json!({"type": "draft_add", "title": "Watch", "body": "Compare"}));
         let id = added["draft"]["id"].as_i64().unwrap();
-        assert_eq!(ask(json!({"type": "drafts"}))["drafts"][0]["title"], "Watch");
-        assert_eq!(ask(json!({"type": "draft_take", "id": id}))["draft"]["body"], "Compare");
-        assert_eq!(ask(json!({"type": "draft_take", "id": id}))["error"], "not_found");
-        assert_eq!(ask(json!({"type": "draft_add", "title": "x"}))["error"], "invalid");
+        assert_eq!(
+            ask(json!({"type": "drafts"}))["drafts"][0]["title"],
+            "Watch"
+        );
+        assert_eq!(
+            ask(json!({"type": "draft_take", "id": id}))["draft"]["body"],
+            "Compare"
+        );
+        assert_eq!(
+            ask(json!({"type": "draft_take", "id": id}))["error"],
+            "not_found"
+        );
+        assert_eq!(
+            ask(json!({"type": "draft_add", "title": "x"}))["error"],
+            "invalid"
+        );
         assert_eq!(ask(json!({"type": "drafts"}))["drafts"], json!([]));
         std::fs::remove_dir_all(dir).unwrap();
     }

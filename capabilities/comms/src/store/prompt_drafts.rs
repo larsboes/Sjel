@@ -143,7 +143,9 @@ mod tests {
     #[test]
     fn a_taken_draft_leaves_the_outbox_once() {
         let (store, dir) = store();
-        let first = store.add_prompt_draft(" Watch ", "Compare\n  watches").unwrap();
+        let first = store
+            .add_prompt_draft(" Watch ", "Compare\n  watches")
+            .unwrap();
         store.add_prompt_draft("Mac", "Compare minis").unwrap();
         assert_eq!(first.title, "Watch");
         assert_eq!(store.prompt_drafts().unwrap().len(), 2);
@@ -151,7 +153,10 @@ mod tests {
         assert_eq!(taken.body, "Compare\n  watches", "the body is kept exactly");
         assert_eq!(store.take_prompt_draft(first.id).unwrap(), None);
         let left = store.prompt_drafts().unwrap();
-        assert_eq!(left.iter().map(|d| d.title.as_str()).collect::<Vec<_>>(), ["Mac"]);
+        assert_eq!(
+            left.iter().map(|d| d.title.as_str()).collect::<Vec<_>>(),
+            ["Mac"]
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -165,7 +170,10 @@ mod tests {
         for n in 0..MAX_QUEUED {
             store.add_prompt_draft(&format!("t{n}"), "b").unwrap();
         }
-        assert_eq!(store.add_prompt_draft("one more", "b"), Err(DraftError::Full));
+        assert_eq!(
+            store.add_prompt_draft("one more", "b"),
+            Err(DraftError::Full)
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

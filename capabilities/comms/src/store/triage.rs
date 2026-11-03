@@ -2378,4 +2378,3 @@ mod mail_evaluation_db_tests {
         assert!(!evaluated_at.is_empty(), "the row stamps its own time");
     }
 }
-

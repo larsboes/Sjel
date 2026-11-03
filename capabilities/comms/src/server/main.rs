@@ -965,9 +965,14 @@ mod tests {
     fn score_bp_is_basis_points_and_absent_is_null() {
         let item = triage_fixture("thread-bp");
 
-        let unscored =
-            serde_json::to_value(TriageOut::from_store(item.clone(), Vec::new(), None, None, Vec::new()))
-                .unwrap();
+        let unscored = serde_json::to_value(TriageOut::from_store(
+            item.clone(),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+        ))
+        .unwrap();
         assert!(
             unscored["score_bp"].is_null(),
             "a mail with no evaluation is null, not zero -- 0 is a real score"

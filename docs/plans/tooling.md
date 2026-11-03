@@ -23,11 +23,6 @@ covers it.
   `PATH`. Workaround: `cargo build --bin comms -p sjel-comms`, then
   `target/debug/comms clips --limit 5` and `clips show <key>`. Smallest change: install `comms`
   with the other user-facing binaries, and add a `sjel` command alias for `clips`.
-- **Writing a project note from a prepared file.** `projects new-note` writes only
-  `<project>/<title>.md`, so it cannot place a note in a subfolder. `projects edit` runs
-  `$EDITOR` without a shell. Workaround: a two-line script as `$EDITOR` that copies a prepared
-  file over the scratch file. Smallest change: `projects put <path> <file>`, which creates or
-  replaces a record with a base check, the same path `POST /api/record` takes.
 
 - **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
@@ -140,6 +135,8 @@ covers it.
 
 ## Done
 
+- `projects put <path> <file> [--base <file>]` creates a record from a file, also in a subfolder,
+  and replaces one only while the stored content still equals the base file.
 - `inventory price` records a dated price on a wish by hand, and the daily `wish-prices` job
   (`inventory prices refresh`) records each wish-group candidate's geizhals product page. See
   GPUI WP 28 in [`gpui.md`](gpui.md#4-work-packages).

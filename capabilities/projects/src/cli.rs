@@ -9,6 +9,8 @@ const USAGE: &str = "usage: projects <command>
   new-project <name> [--summary TEXT]
   new-note <project> <title> [--summary TEXT]
   edit <path>                                  open a record in $EDITOR and save it
+  put <path> <file> [--base <file>]            create a record from a file; with --base, replace it
+                                               only while the stored content still equals that file
   done <task-id>  |  reopen <task-id>
   set <path> <key> [value]                     set one property; no value clears it
   attach <path> <file>                         store a binary attachment in a live project
@@ -144,6 +146,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             } else {
                 ops::save(&projects, path, &edited, Some(&base)).await?;
                 println!("saved {path}");
+            }
+        }
+        "put" => {
+            let path = positional(1)?;
+            let content = std::fs::read_to_string(positional(2)?)?;
+            let base = match flag("--base") {
+                Some(file) => Some(std::fs::read_to_string(file)?),
+                None => None,
+            };
+            if base.as_deref() == Some(content.as_str()) {
+                println!("unchanged {path}");
+            } else {
+                let saved = ops::save(&projects, path, &content, base.as_deref()).await?;
+                println!(
+                    "{} {}",
+                    if base.is_some() { "saved" } else { "added" },
+                    saved.path
+                );
             }
         }
         "done" | "reopen" => {

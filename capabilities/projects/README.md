@@ -76,7 +76,8 @@ written back into a journal entry.
 - `GET /api/files`, `GET /api/file?path=`, `POST /api/file {path, base64}`: list, serve (sandboxed
   with `Content-Security-Policy: sandbox` and `nosniff`), and store project attachments under live
   projects; refuses a second add of different bytes with `409 Conflict`.
-- CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`),
+- CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`), `put` (creates a record from a file, or with `--base` replaces it
+  while the stored content still equals the base file),
   `done`, `reopen`, `set`, `attach`, `remove`, `normalize`, `import`, `freeze-vault`, `verify`,
   `render`.
 

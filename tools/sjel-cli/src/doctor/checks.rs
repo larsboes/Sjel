@@ -2870,35 +2870,7 @@ fn session_orientation(ctx: &mut Ctx) {
             "{dirty} uncommitted change(s) — git status for detail"
         ));
     }
-    let isas: Vec<String> = git(
-        &ctx.root,
-        &[
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "ISA.md",
-            "*/ISA.md",
-            "*/*/ISA.md",
-            "*/*/*/ISA.md",
-        ],
-    )
-    .split('\n')
-    .filter(|l| !l.is_empty())
-    .map(str::to_owned)
-    .collect();
-    let open: usize = isas
-        .iter()
-        .map(|f| {
-            std::fs::read_to_string(ctx.root.join(f)).map_or(0, |t| {
-                t.split('\n').filter(|l| l.starts_with("- [ ] ")).count()
-            })
-        })
-        .sum();
-    ctx.ok(format!(
-        "open backlog: {open} claim(s) across {} ISA(s) · doctrine: CONTRIBUTING.md",
-        isas.len()
-    ));
+    ctx.ok("plan: PLAN.md · doctrine: CONTRIBUTING.md");
 }
 
 /// `tools/doctor --version`: installed against origin/main, read-only.

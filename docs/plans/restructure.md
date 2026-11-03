@@ -63,9 +63,10 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 ### Order
 
 1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise.
-2. TOML first, one comment line per key at most. Then `upstreams.toml` in its target shape.
-3. Remove the ISA leftovers: the doctor count, `tools/isa-hygiene.sh` and its test, and the 17
-   citations (state the rule they point to, or delete them).
+2. TOML first, one comment line per key at most (`Cargo.toml` and `apps/gpui/Cargo.toml` done).
+   Then `upstreams.toml` in its target shape.
+3. Done (`tools/isa-hygiene.sh`, its test, and the doctor ISA count removed). Open: the remaining
+   ISA citations in code and config (state the rule they point to, or delete them).
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
    also move to the neutral register (`on-documentation.md`, Register).
 5. "Axon" goes in the lines each pass touches, the rest in one rename commit. The compatibility

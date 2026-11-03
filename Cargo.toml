@@ -52,8 +52,6 @@ members = [
     "libs/station-time",
     "libs/skill-metadata",
     "libs/summarize",
-    # A tool, not a capability: operator machinery lives in tools/ (on-placement.md), and its
-    # backend logic is Rust (on-dependencies-and-build.md), so tools/ holds a Cargo member.
     "tools/capability-auth",
     "tools/claude-code-config",
     "tools/fda-launcher",
@@ -66,71 +64,14 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-# A floor, not a pin: the oldest release this workspace compiles on. rust-toolchain.toml
-# rolls on `stable` (Q77), so what actually builds is newer than this on every machine.
+# Minimum supported Rust version; rust-toolchain.toml tracks stable.
 rust-version = "1.96"
 license = "AGPL-3.0-only"
 
-# Zero unsafe, enforced rather than asserted. This is a WORKSPACE lint, so on its own it does
-# nothing: cargo applies it only in a crate that writes `[lints] workspace = true`, which is
-# every member (`cargo metadata` verified 2026-10-01 — `capabilities/`, `libs/` and `tools/`,
-# not the two directory names it looks like). Denied rather than warned
-# because the invariant is the point — the first real `unsafe` block should have to argue for
-# itself in review instead of being a diagnostic a busy session scrolls past.
-#
-# Measured before it landed, 2026-09-29: `rg '\bunsafe\b' capabilities libs --glob '*.rs'`
-# returns three hits, every one of them prose or an error string — no `unsafe` block, fn, impl
-# or trait anywhere in the workspace.
 [workspace.lints.rust]
 unsafe_code = "deny"
 
-# One version per crate, for the crates more than one member declares.
-#
-# Before this table, 24 members each wrote their own version requirement for axum, tokio,
-# reqwest, rusqlite, serde, serde_json, thiserror, tower-http, sha2 and toml. A Dependabot
-# bump was a 24-file edit, and the requirements had already drifted apart in two places
-# (serde and serde_json were written as both "1" and "1.0"; thiserror as "1.0" and "2.0").
-#
-# The split between this table and the members: **the version lives here, the features live
-# with the member that needs them.** Where every member asked for the same features, they
-# moved here too, and the member reads `dep.workspace = true`:
-#
-#   rusqlite  ["bundled"]                    — all ten members, no exception
-#   chrono    default-features = false,      — one member (libs/station-time), whole spec
-#             ["std", "clock"]
-#
-# Where the feature sets differ the entry carries the version only, and the member writes
-# `dep = { workspace = true, features = [...] }` with the list it had before. That is
-# reqwest (five distinct sets across twelve declarations), tokio (three), tower-http (two:
-# "cors" for the API servers, "fs" for the two that serve a bundle) and serde ("derive" in
-# eighteen members, bare in libs/sjel-store, whose narrow dependency surface is deliberate).
-#
-# Not a bump: no requirement here resolves to a different version than it did before, and
-# Cargo.lock is unchanged. Q77 says roll on the latest, hold nothing — so raising a floor is
-# Dependabot's job on its own commit, not a side effect of this one. Measured with
-# `cargo tree -d --workspace`: 99 duplicated version entries across 44 packages before this
-# change and 99 after, because every second version in that list arrives transitively
-# (tower-http 0.6 and tower 0.5 through reqwest 0.13 and axum 0.7, toml 1.1 and thiserror 2.0
-# through xberg). Unification of declarations cannot remove a duplicate a dependency requires.
-#
-# Re-measured 2026-09-30, on the five-major commit: 100 entries, and of the examples above
-# tower 0.5 and toml 1.1 are no longer duplicates at all -- that commit removed tower 0.4.13
-# and the whole toml 0.8 family (toml, toml_datetime, serde_spanned, winnow). What it added in
-# their place is tower-http 0.7 beside reqwest 0.13's 0.6, and parquet 60's brotli 9 and
-# alloc-stdlib 0.3 beside the brotli 8 and alloc-stdlib 0.2 that xberg already brought. A wash
-# in the count and not optional on either side: reqwest's compression stack and parquet's
-# reader are not this workspace's declarations to unify.
-#
-# capabilities/interior stays out of the `thiserror` entry: it is on 2.0 while six members are
-# on 1.0, and moving either way would be a version change. It says so at its own declaration.
-#
-# capabilities/sjel-status was the exception to the `tower` entry until 2026-09-30: it declared
-# 0.4 as a normal dependency, and moving it to 0.5 was a version change, which Q77 puts on a
-# Dependabot commit rather than on a security one. That commit arrived (the tower 0.4 -> 0.5.3
-# bump), sjel-status now reads the entry like the other six, and 0.4.13 leaves Cargo.lock
-# because nothing declares it any more. The move added no package: 0.5.3 was already there
-# through axum and reqwest, so what changed is an edge in this file and one fewer version in
-# the lock.
+# Shared dependency versions; member crates declare their own feature sets.
 [workspace.dependencies]
 aho-corasick = "1.1"
 base64 = "0.23"
@@ -153,38 +94,7 @@ zeroize = "1.9"
 tower = "0.5"
 tower-http = "0.7"
 
-# Dependencies carry no debug info; workspace crates keep line tables only.
-#
-# Measured 2026-08-29, before this stanza existed: `target/debug` was 44 GB, of which `deps/`
-# alone was 27 GB and held **166,635 loose `.o` files totalling 14.9 GB**. The same 580 crates
-# under the release profile occupy 2.7 GB with zero `.o` files. Ten to one on an identical
-# dependency graph, and the whole difference is DWARF.
-#
-# Two cargo defaults produce that, and neither was ever chosen here — this file had no
-# `[profile.*]` section at all, so the workspace ran on stock settings:
-#
-#   debug = true            — "full debug info, default for `dev`" (cargo book, Profiles). Every
-#                             type and every variable, for all ~559 dependencies.
-#   split-debuginfo         — "the default value for this option is `unpacked` on macOS for
-#                             profiles that have debug information otherwise enabled". That is
-#                             why the object files sit loose on disk instead of in a bundle.
-#
-# The `"*"` glob is the precise tool for this: cargo documents it as overriding "the settings for
-# all dependencies (but not any workspace member)". The dependencies, which nobody steps into,
-# stop paying for it.
-#
-# The workspace crates themselves get `line-tables-only` since 2026-10-11: backtraces, profilers
-# and lldb breakpoints keep file and line, but lldb cannot show variables or types. Nobody here
-# inspects variables in a debugger (no `lldb` in shell history), and smaller objects link faster.
-# To step with variables again, set `[profile.dev] debug = true` and rebuild.
-#
-# The trade, stated so it is not discovered: a backtrace through a dependency keeps its frames
-# but loses file, line and variable detail inside them. If that ever costs more than the disk,
-# delete the `package."*"` lines; nothing else depends on them.
-#
-# Why this belongs in the tracked file rather than an overlay: it is a fact about Sjel's build,
-# identical on every machine and in CI, so it is not a per-machine value (sjel.toml's header
-# states that boundary). §9's R6 in the PRD is what made the number worth acting on.
+# Workspace crates keep line tables only; dependencies carry no debug info.
 [profile.dev]
 debug = "line-tables-only"
 

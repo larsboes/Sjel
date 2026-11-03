@@ -44,7 +44,6 @@ are:
 cargo test --workspace --locked
 bun test
 tools/check-publication-hygiene.sh
-tools/isa-hygiene.sh
 ~~~
 
 Rust packages are members of the root `Cargo.toml` workspace and share the
@@ -293,7 +292,7 @@ backups, and deployment configuration live in the active overlay. See [website/c
 
 Mechanism stays in Sjel; instance inventory and values stay in the overlay.
 `tools/check-publication-hygiene.sh` gates against committed workstation paths and deployment
-markers. `tools/isa-hygiene.sh` sweeps tracked documentation for machine-private references.
+markers.
 
 ### What the installer owns in an agent harness
 

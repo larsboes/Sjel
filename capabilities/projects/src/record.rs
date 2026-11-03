@@ -258,7 +258,7 @@ pub fn rewrite_links(content: &str, from: &str, to: &str) -> (String, usize) {
     let mut out = String::with_capacity(content.len());
     let mut rest = content;
     let mut moved = 0;
-    let mut code = code_spans(content);
+    let code = code_spans(content);
     let mut code_at = 0;
     let mut at = 0;
     while let Some(found) = rest.find("[[") {

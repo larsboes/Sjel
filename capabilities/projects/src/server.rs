@@ -832,6 +832,7 @@ async fn rename_record(
         "path": renamed.path,
         "title": renamed.title,
         "links": renamed.links,
+        "failed": renamed.failed,
     })))
 }
 

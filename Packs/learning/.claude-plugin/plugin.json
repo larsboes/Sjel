@@ -1,0 +1,9 @@
+{
+  "name": "learning",
+  "description": "Teaching and practice that grow the Obsidian vault — probe the edge of understanding, teach one step at a time with interactive figures, and practice on claims already taught.",
+  "author": {
+    "name": "Lars Boes",
+    "url": "https://github.com/larsboes/Sjel"
+  },
+  "license": "MIT"
+}

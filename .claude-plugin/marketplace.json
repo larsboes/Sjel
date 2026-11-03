@@ -38,6 +38,10 @@
       "source": "knowledge"
     },
     {
+      "name": "learning",
+      "source": "learning"
+    },
+    {
       "name": "presentations",
       "source": "presentations"
     },

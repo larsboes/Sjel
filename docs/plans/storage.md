@@ -206,6 +206,11 @@ migrations").
    archived, not deleted.
 6. **Sync last.** Before any replica or sync service: per-database identity, authorization,
    conflicts, revocation, freshness and data-class admission.
+   Sync is not inference: rows are encrypted on the device before they leave it, with the key in
+   the Secure Enclave or keychain, so a relay that cannot read them (for example a Cloudflare
+   Worker) may carry every class, `c3` included. Data-class admission then applies only to
+   plaintext. Open: whether the sync engine read in step 1 supports client-side encryption, or
+   whether Sjel encrypts the change log itself.
 
 ## 5. Backups
 

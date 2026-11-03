@@ -10,6 +10,20 @@ covers it.
 
 ## Open
 
+- **Cited web answers for agents.** Decided 2026-11-03: no Sjel command for Gemini Search
+  grounding. Google refused grounding on the free tier (HTTP 429 on `gemini-3.8-flash` and
+  `gemini-3.6-flash`; `gemini-2.5-flash` is closed to new users), and the Gemini API terms
+  forbid caching, analyzing or learning from grounded results even on the paid tier
+  (https://aistudio.google.com/docs/terms, "Grounding with Google Search"). Driving the AI Studio
+  chat with an agent is excluded too: its `robots.txt` disallows `/prompts/` and `/app`. The
+  `research` skill (Packs/knowledge) routes instead: built-in web search for quick facts,
+  `interceptor-research` for wide investigations, and a drafted prompt that the user runs in
+  AI Studio and clips. Open: the prompt outbox (`data.md`, "Prompt outbox").
+- **Reading the newest clip.** `sjel search clip` found nothing, and no `comms` binary was on
+  `PATH`. Workaround: `cargo build --bin comms -p sjel-comms`, then
+  `target/debug/comms clips --limit 5` and `clips show <key>`. Smallest change: install `comms`
+  with the other user-facing binaries, and add a `sjel` command alias for `clips`.
+
 - **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
   profile's 7 skills to 14. Workaround: re-run `tools/harnesses use lean --harness pi`, which also

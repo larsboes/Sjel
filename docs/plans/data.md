@@ -239,6 +239,13 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
 6. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts
    and a dry run; keep the originals.
 7. **Retire `axon-clip`** after the new extension carries daily use.
+8. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
+   example AI Studio with Search grounding (the `research` skill). The draft goes into a short
+   queue in `comms`, written through a CLI verb and the MCP server, and appears as a card on the
+   `Today` page in GPUI with one Copy action. Copy puts the text on the clipboard and removes the
+   card. The answer comes back as a clip. Done when an agent's draft shows on `Today` on the Mac,
+   Copy pastes it unchanged, and the card is gone after Copy. Open: whether an uncopied draft
+   expires, and whether the phone shows the queue too.
 
 Later: platform integrations such as Instagram saves, only where the platform's terms allow
 automated access; a capture of a page the operator is viewing stays the default.
@@ -330,8 +337,24 @@ Open items that belong to one capability and to no priority yet.
   (`<overlay>/config/comms-mail-stream-shadow.json`). Labels are hand judgements, written before
   any model output is read. The stream switch needs model agreement of at least control plus 10
   points and a false-eviction rate of at most 2%. Urgency has its own gate.
+- **Mail classifier ladder.** Order decided 2026-11-03: label the 121 fixtures first, then add an
+  incremental classical classifier (TF-IDF features, linear model) between rung 1 rules and the
+  local model. It trains on the operator's corrections only. Done when it beats the rules-only
+  control on the labelled set by the same gate as the stream switch, and it never lowers a data
+  class. Deferred until measured need: an NER encoder for the pseudonymizer, Apple Foundation
+  Models structured extraction on the phone, and graph linking of trips, receipts and
+  transactions.
 - **Finance investments.** `instruments` holds 13 records and `allocations` is empty. Open: the
   target cohort (active allocations sum to 10,000 bp ±50), tickers where known (a wrong ticker
   prices the wrong company silently), and the `finance-prices` launchd unit.
+- **Wishlist hardening.** A wish names a target (model and configuration), the highest price
+  worth paying and a deadline, so a discount can be judged against it. Done by hand 2026-11-03 for
+  the three electronics wishes of the Black Friday week (2026-11-23 to 2026-11-30): `target` and
+  `cost_max_cents` (the price limit) on `mac-mini-m4-pro`, `wunsch-iphone` and
+  `wunsch-apple-watch`, with a dated price snapshot in `notes`; the duplicates `newer-iphone` and
+  `newer-apple-watch` are `gone` with a note naming the row they merged into. Open: a merge
+  action for duplicate wishes (today a duplicate can only become `gone`, which reads as given
+  away), and a price watch that alerts when a listed offer falls below `cost_max_cents`. Done
+  when a wish with a target and a price limit raises an alert for a real offer below it.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.

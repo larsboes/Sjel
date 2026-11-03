@@ -420,11 +420,14 @@ impl Projects {
         Ok(removed)
     }
 
-    /// Move one record to a new path: the row takes the new path and title, the file moves with
-    /// it, and its inventory links follow. Returns whether a row was there.
+    /// Move one record to a new path: the row takes the new path and every column the new path
+    /// derives, the file is written from the row's content, and its inventory links follow.
+    /// Returns whether a row was there.
     ///
     /// # Errors
-    /// The new path is not a record path, or a row or file already sits there.
+    /// The new path is not a record path, or a row or file already sits there. A render that
+    /// fails after the row moved leaves the row written, as [`Self::put`] does: `render_all`
+    /// repairs the file, and `verify` reports it until then.
     pub async fn move_record(&self, from: &str, to: &str) -> Fallible<bool> {
         if self.get(to).await?.is_some() {
             return Err(format!("{to}: a record is already there").into());
@@ -437,8 +440,6 @@ impl Projects {
         if self.root.join(to).exists() {
             return Err(format!("{to}: a file is already there").into());
         }
-        // The file first: a rename that cannot render its new path leaves the store as it was.
-        self.render(&moved)?;
         let tx = self.db.begin().await?;
         tx.execute(
             "UPDATE projects_inventory_links SET record_path = ?1 WHERE record_path = ?2",
@@ -466,6 +467,13 @@ impl Projects {
         )
         .await?;
         tx.commit().await?;
+        // Rendered from the row, not from the bytes read above: a write that landed in the
+        // meantime is then the one that reaches the new file.
+        let moved = self
+            .get(to)
+            .await?
+            .ok_or_else(|| format!("{to}: the row moved away"))?;
+        self.render(&moved)?;
         match fs::remove_file(self.root.join(from)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
             _ => {}

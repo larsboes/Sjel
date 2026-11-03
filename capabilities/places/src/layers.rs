@@ -622,7 +622,7 @@ pub struct AssignUnplaced {
 /// `Ok(None)` means no place resolved (the caller's 404). A city-kind place is
 /// linked at city precision whatever the request said (README D1); the
 /// response reports the precision actually written. The write stays inside the
-/// places schema (ISA A2); the description match is a read-only SELECT over
+/// places schema; the description match is a read-only SELECT over
 /// finance.
 pub fn assign_unplaced(
     store: &PlacesStore,

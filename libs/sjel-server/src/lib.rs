@@ -23,7 +23,7 @@
 
 use std::net::SocketAddr;
 
-/// The agent identity: read-only, every response pseudonymized (ISA F9).
+/// The agent identity: reads pseudonymized, writes under the owner's mode.
 pub mod agent;
 pub mod agent_policy;
 mod auth;
@@ -106,7 +106,7 @@ pub async fn serve_local(name: &str, port: u16, router: axum::Router) {
 }
 
 /// [`serve_local`], for a capability with routes an agent must treat specially: a write that
-/// leaves Sjel or cannot be undone, or a `GET` that changes state (ISA F10).
+/// leaves Sjel or cannot be undone, or a `GET` that changes state.
 ///
 /// Every capability served here admits the agent token under the mode the owner set for it on
 /// the Systems page (`agent_policy`). The default is auto.
@@ -306,7 +306,7 @@ mod http_tests {
         format!("http://{addr}")
     }
 
-    // --- the agent identity (ISA F9) ---------------------------------------------
+    // --- the agent identity ------------------------------------------------------
 
     fn agent_access() -> agent::AgentAccess {
         use sha2::Digest;
@@ -631,7 +631,7 @@ mod http_tests {
         assert_eq!(secret.status(), 403);
     }
 
-    // --- writes under the owner's mode (ISA F10) -----------------------------------------
+    // --- writes under the owner's mode ---------------------------------------------------
 
     async fn agent_post(
         base: &str,

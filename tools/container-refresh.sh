@@ -11,7 +11,7 @@
 #      leave the images after it on last week's build
 #   3. the DIGEST decides, never the tag. `pull` on `:stable` is a no-op the registry answers
 #      cheaply; the container is recreated only when the local digest for that reference
-#      actually changed (ISA.md C4 — the declared tag is a channel, the digest is the fact)
+#      actually changed (the declared tag is a channel, the digest is the fact)
 #   4. a receipt is written whatever happened, because tools/doctor reads it — a scheduled job
 #      that silently stopped firing is the failure mode a scheduled job actually has
 #

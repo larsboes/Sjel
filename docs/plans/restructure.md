@@ -55,9 +55,8 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
   456, `osv-scanner-installed.toml` 155 of 386, `Cargo.toml` 93 of 190, `systems.toml` 64 of 180,
   and 922 comment lines across all `service.toml` files.
 - "Axon" appears 804 times in 299 files.
-- 17 lines in code and config cite IDs of the retired `ISA.md` (for example "ISA F10", "ISA.md
-  C4"). `tools/sjel-cli/src/doctor/checks.rs` still counts ISA claims, and `tools/isa-hygiene.sh`
-  scans ISA files.
+- 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
+  "ISA F10", "ISA.md C4"); 0 remain there. 7 remain outside those directories (Order, step 3).
 - Over 800 lines: `capabilities/comms/README.md`, `capabilities/calendar/README.md`.
 
 ### Order
@@ -65,8 +64,12 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise.
 2. TOML first, one comment line per key at most (`Cargo.toml` and `apps/gpui/Cargo.toml` done).
    Then `upstreams.toml` in its target shape.
-3. Done (`tools/isa-hygiene.sh`, its test, and the doctor ISA count removed). Open: the remaining
-   ISA citations in code and config (state the rule they point to, or delete them).
+3. Done for `ISA.md` hygiene tooling and for `libs/`, `capabilities/`, `tools/` (see the commit
+   "state the rule each ISA citation pointed to"). Open: 7 citations, each to state its rule or
+   be deleted: `apps/gpui/ui/src/systems.rs:8`, `apps/mac/README.md:44`,
+   `apps/mac/Sources/SjelMacApp/SjelMacApp.swift:33`,
+   `apps/mac/Sources/SjelRelay/AgentApprovals.swift:3`, `osv-scanner.toml:74`,
+   `schemas/service.toml.example:43`, `website/content/operations/index.md:151`.
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
    also move to the neutral register (`on-documentation.md`, Register).
 5. "Axon" goes in the lines each pass touches, the rest in one rename commit. The compatibility

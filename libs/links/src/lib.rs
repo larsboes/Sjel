@@ -5,7 +5,7 @@
 //! `GET /api/links?to=<id>` with a [`Links`] body. The shell asks only the capabilities that
 //! declare the id's kind, so it holds no code per pair of capabilities.
 //!
-//! No axum here on purpose (ISA D4): each capability writes its own handler around [`target`].
+//! No axum here on purpose: each capability writes its own handler around [`target`].
 
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +37,7 @@ impl<'a> TypedId<'a> {
 }
 
 /// Checks the `to` query parameter. An absent or untyped `to` is a 400 with this reason, never
-/// an empty list: an empty list would read as "nothing references it" (ISA LNK-3).
+/// an empty list: an empty list would read as "nothing references it".
 pub fn target(to: Option<&str>) -> Result<TypedId<'_>, String> {
     match to {
         None | Some("") => Err("`to` is required: the typed id to find references to".into()),
@@ -45,7 +45,7 @@ pub fn target(to: Option<&str>) -> Result<TypedId<'_>, String> {
     }
 }
 
-/// One row that references the target. Rendered the same for every kind (ISA D5).
+/// One row that references the target. Rendered the same for every kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Link {
     /// The row's own typed id, so the shell can follow it.
@@ -69,13 +69,13 @@ pub struct Links {
     pub to: String,
     pub links: Vec<Link>,
     /// Rows that reference the target but have no linkable id, so a short list is never a silent
-    /// one (ISA D3).
+    /// one.
     pub unlinkable: usize,
 }
 
 /// `<kind>:<16 hex>` from the first 8 bytes of SHA-256 over `identity`. Deterministic, so the
-/// same identity always gives the same id. Places used this with a `_` separator until
-/// 2026-10-06; the hex is unchanged, which is what makes its migration a rename (ISA LNK-11).
+/// same identity always gives the same id. The hex is a function of `identity` alone, never of
+/// the separator, so changing a separator is a rename and not a re-key.
 pub fn stable_id(kind: &str, identity: &str) -> String {
     use sha2::{Digest, Sha256};
     use std::fmt::Write;

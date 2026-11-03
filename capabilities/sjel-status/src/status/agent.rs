@@ -2,7 +2,7 @@ use super::*;
 
 use sjel_server::agent_policy::{Mode, PolicyFiles};
 
-/// The agent's reach on this machine, for the Systems page (ISA F10).
+/// The agent's reach on this machine, for the Systems page.
 ///
 /// This process owns the page, so it owns the writes to the policy and the decisions on
 /// approvals. Each capability's gate reads the same files on its next request

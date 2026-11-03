@@ -3,7 +3,7 @@
 //! Obsidian vault's `Atlas/Events/` convention, generalized to "any directory
 //! of markdown event notes").
 //!
-//! Annotate-only by design (per the original ISA decision): this module never
+//! Annotate-only by design: this module never
 //! writes or mutates notes, only returns the best-matching existing note path
 //! so the caller can surface it as a cross-reference.
 

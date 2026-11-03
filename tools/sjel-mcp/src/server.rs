@@ -10,7 +10,7 @@
 //!
 //! Every call carries the agent token, read from the login Keychain through
 //! `tools/capability-auth` and held in this process only. Answers come back pseudonymized by the
-//! gate (ISA F9). A write that waits for the owner answers 202; this server repeats it with
+//! gate. A write that waits for the owner answers 202; this server repeats it with
 //! `X-Sjel-Approval` until the owner decides in the menu-bar app or on the Systems page.
 //!
 //! MCP's stdio transport is newline-delimited JSON-RPC. The three methods an agent needs

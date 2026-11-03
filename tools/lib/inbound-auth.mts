@@ -1,7 +1,7 @@
 // tools/lib/inbound-auth.ts — the deployment's inbound token, read for a loopback caller.
 //
-// Every serve_local capability refuses a protected route without a credential (ISA ISC-45,
-// libs/sjel-server/src/lib.rs). A TypeScript caller on this machine reads the token here, and
+// Every serve_local capability refuses a protected route without a credential
+// (libs/sjel-server/src/lib.rs). A TypeScript caller on this machine reads the token here, and
 // after 2026-10-04 those callers are the two Vite dev proxies that carry a browser request to a
 // capability — the dashboard's and soundscape's. The Rust callers do not come through this file:
 // they use `sjel_server::InboundAuth::with_loopback_auth`, which reads the same declaration and

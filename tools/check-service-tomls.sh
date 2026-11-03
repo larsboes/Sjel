@@ -5,7 +5,7 @@
 # were refused until 2026-09-02 and are now the preferred form (Q77,
 # CONTRIBUTING.md#patch-first). The gate that refused them was defending reproducibility a tag never
 # provided — publishers rebuild under the same literal — so what it actually bought was delay.
-# The digest of the running container is the version fact (ISA.md C4). Pure file-based: it
+# The digest of the running container is the version fact. Pure file-based: it
 # reads the tracked manifests and nothing else — no git, no network, no live service.
 #
 # Three kinds, three field sets (schemas/service.toml.example):

@@ -1,4 +1,4 @@
-//! Benchmark evaluation for the specialist agent claim (ISA.md: libs/agent Wave 2).
+//! Benchmark evaluation for the specialist agent claim.
 //!
 //! Evaluates whether the specialist configuration (with `skills` and `cargo` diagnostic tool)
 //! produces code with fewer clippy warnings across a fixed set of Rust tasks compared to baseline.

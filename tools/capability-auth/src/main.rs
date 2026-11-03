@@ -9,7 +9,7 @@
 //! comms does (`api_secret_file`); every other name gets the deployment-wide token.
 //!
 //! `--agent` prints the agent token's header instead, read from the login Keychain. That
-//! token is read-only and every response to it is pseudonymized (ISA F9). `enroll` creates
+//! token is read-only and every response to it is pseudonymized. `enroll` creates
 //! it: see [`enroll`].
 //!
 //! Exit status carries the answer for callers that must not see the value:

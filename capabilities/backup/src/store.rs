@@ -1,6 +1,6 @@
 //! The `backup_` tables in the shared store: targets, runs, verifications, timing policy.
 //!
-//! Writes stay inside this prefix (ISA anti-claim A1). Reading another prefix is a plain
+//! Writes stay inside this prefix. Reading another prefix is a plain
 //! SELECT, the same usage `capabilities/store/README.md` chose one database for.
 //!
 //! Every timestamp is TEXT in `sjel_store::NOW`'s one canonical format, because two widths

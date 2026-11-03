@@ -227,7 +227,7 @@ pub fn command(root: &Path, args: &[String]) -> ExitCode {
         }
         "mail" => {
             // Mail triage without Secret rows. From an agent session the gate also
-            // pseudonymizes every row (ISA F9); from the operator's shell the rows are raw.
+            // pseudonymizes every row; from the operator's shell the rows are raw.
             let status = rest.first().map_or("", String::as_str);
             if !status.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
                 usage_error("sjel: status must be a word like proposed")
@@ -354,7 +354,7 @@ fn url(root: &Path, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("sjel: capability '{name}' has no registered HTTP surface"))
 }
 
-/// An agent session is read-only and every response is pseudonymized (ISA F9). `SJEL_AGENT=1`
+/// An agent session is pseudonymized by the gate on every response. `SJEL_AGENT=1`
 /// marks one by hand, `CLAUDECODE=1` is Claude Code's own marker, and `SJEL_AGENT=0` turns it
 /// off for the operator.
 pub fn in_agent_session() -> bool {

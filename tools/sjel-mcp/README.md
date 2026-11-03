@@ -63,4 +63,4 @@ back as the same token within a conversation and as a different one across proce
 Registering is cheap; the value is the handshake. After registering, the tool starts the server
 and speaks real MCP to it — `initialize`, then `tools/list` — and prints the tool count it
 answered with. That is what would have caught the original failure, where the server was built,
-documented in ISA, and registered in no harness at all for a day.
+documented, and registered in no harness at all for a day.

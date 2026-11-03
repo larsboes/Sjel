@@ -9,8 +9,6 @@
 //! crate drives it with argv arrays and records what happened. The one thing this owns
 //! that the tools cannot is memory: a failed run leaves no receipt behind, and a run that
 //! leaves no trace is the failure a backup tool must not have.
-//!
-//! Claims and their falsifiers: the backup unit of the root `ISA.md`.
 
 pub mod policy;
 pub mod runner;

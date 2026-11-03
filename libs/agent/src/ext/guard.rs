@@ -2,9 +2,8 @@
 //! "off until named" (D2, D3).
 //!
 //! A port of `Packs/security/extensions/secrets-guard.ts`, its `tool_call` half only. That file
-//! also registers `vault_exec` and `vault_keys` and rewrites `tool_result` content; both need
-//! things this core does not have yet — a tool-result hook and those two tools — and `ISA.md`
-//! records them as not yet specified rather than quietly porting half of them. What it does here
+//! also registers `vault_exec` and `vault_keys`; both need tools this core does not have, so it
+//! ports neither rather than quietly porting half of them. What it does here
 //! is stop the read at the tool-call boundary, which is the half that decides whether a
 //! credential can reach a model at all.
 //!

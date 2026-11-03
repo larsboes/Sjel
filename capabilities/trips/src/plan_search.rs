@@ -524,7 +524,8 @@ pub fn compose(
         Ok(windows) => (windows, "calendar", true),
         Err(_) if request.kind == WindowKind::Month => {
             // NOT all-free. `flight_when` degrades that way by a stated
-            // contract; this route follows the ISA instead.
+            // contract; a month of all-free windows is not an answer, so this
+            // route refuses.
             return Err(NO_CALENDAR_FOR_A_MONTH.into());
         }
         Err(_) => {

@@ -221,8 +221,8 @@ const FREEMAIL_BRANDS: &[&str] = &[
     "protonmail",
 ];
 
-/// Whether `domain` belongs to a mail provider for private people (ISA F9: such a domain is not
-/// kept beside a sender token, because it tells nothing and the address belongs to a person).
+/// Whether `domain` belongs to a mail provider for private people. Such a domain is not kept
+/// beside a sender token, because it tells nothing and the address belongs to a person.
 pub fn is_freemail_domain(domain: &str) -> bool {
     let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
     if FREEMAIL_DOMAINS

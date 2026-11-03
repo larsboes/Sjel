@@ -1,4 +1,4 @@
-//! The agent view of a JSON response: what a caller outside this machine may read (ISA F9).
+//! The agent view of a JSON response: what a caller outside this machine may read.
 //!
 //! Three rules, by field name, because a response carries no other signal:
 //!

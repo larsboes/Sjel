@@ -52,7 +52,7 @@ source spelling.
 
 ## Keyed sessions and the agent view
 
-Two additions serve agents that read Sjel through its APIs (ISA F9).
+Two additions serve agents that read Sjel through its APIs.
 
 - **Keyed tokens (`keyed.rs`).** `PseudonymizerSession::keyed(key)` issues
   `<TRAVELER_k3x9qa>` instead of `<TRAVELER_01>`. The suffix is HMAC-SHA256 over the entity

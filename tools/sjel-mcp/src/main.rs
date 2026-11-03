@@ -2,10 +2,10 @@
 // machine, and verify each registration against the server itself.
 //
 // Why this exists: the server shipped 2026-10-01 and was registered in no harness at all. The
-// ISA named the command that would have done it, nobody ran it, and nothing in this repository
-// could have noticed. Wiring that lives only in a document rots without a claim failing. This
-// is the claim: it writes the registration, then speaks MCP to the server it wrote and reports
-// the tool count it got back.
+// command that would have done it lived only in a document, nobody ran it, and nothing in this
+// repository could have noticed. Wiring that lives only in a document rots without a claim
+// failing. This is the claim: it writes the registration, then speaks MCP to the server it wrote
+// and reports the tool count it got back.
 //
 // ## Two harnesses, and why the list is short
 //

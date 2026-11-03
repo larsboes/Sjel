@@ -668,7 +668,7 @@ async fn geocode(
     }
 }
 
-// ─── Climate normals (README D5, ISA F4) ─────────────────────────────────────
+// ─── Climate normals (README D5) ─────────────────────────────────────
 
 /// Optional plan window. Only the month numbers it covers are used, so a
 /// request cannot narrow the normals themselves — a normal is the whole month

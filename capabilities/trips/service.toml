@@ -28,7 +28,7 @@ exports  = ["json", "ics-projection"]
 # pointed at `interior` (8092), which is on demand — so after a restart, until somebody opened
 # `/interior`, every list lost its weights and equipment fields, and the dependency was not
 # declared anywhere. That is what this line fixes, and it is a real fix now: `inventory` is
-# `autostart = true`, so `up` starts it before this process (ISA F13).
+# `autostart = true`, so `up` starts it before this process.
 requires = ["inventory"]
 # `places` is called and is deliberately NOT required: `src/place_resolve.rs` asks it for a
 # destination's coordinate on every save, and with it down the plan is stored with that

@@ -1,4 +1,4 @@
-//! What an agent may do on each capability, and the record of what it did (ISA F10).
+//! What an agent may do on each capability, and the record of what it did.
 //!
 //! Files under the overlay, shared by every capability's gate and by sjel-status, which owns
 //! the Systems page that writes them. Files rather than a table, because this crate is under

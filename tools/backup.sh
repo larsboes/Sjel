@@ -231,7 +231,7 @@ runtime_exec() {
 
 # Where a capability's backups land is a fact about the machine, not about the
 # capability: the Mac ships vaultwarden's tarballs to the Pi, and the Pi cannot ship
-# them to itself (ISA anti-claim A3). Same override home as service-runner.sh's `ports`.
+# them to itself. Same override home as service-runner.sh's `ports`.
 if [ -f "$SJEL_MACHINE_TOML" ]; then
   TARGET_OVERRIDE="$(toml_get_in "capability.$CAP" backup_target "$SJEL_MACHINE_TOML")"
   if [ -n "$TARGET_OVERRIDE" ]; then TARGET_ID="$TARGET_OVERRIDE"; fi
@@ -627,7 +627,7 @@ TAG="$(toml_get tag "$MANIFEST")"
 #
 # `tag` above stopped identifying a build on 2026-09-02 (Q77): every declared tag is now a
 # rolling channel ("stable", "latest", "alpine"), so `image:tag` names a stream that moves under
-# the same string. The digest is the only version fact left (ISA.md C4), and an archive that
+# the same string. The digest is the only version fact left, and an archive that
 # does not carry it can never say which build wrote the bytes inside it.
 #
 # Recorded, never enforced — tools/restore.sh prints it and compares nothing. Images roll daily

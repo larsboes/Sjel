@@ -49,9 +49,7 @@ unavailable inside the Linux runtime), and `upstreams.toml` carries the verdicts
 (`multilingual-e5-base-mlx`, `bge-reranker-v2-m3-mlx`) rather than for the server. A machine
 either has it running or configures roles that do not name it.
 
-Recorded here on 2026-08-25 because `capabilities/learning` was deleted (PRD D6). That
-capability was a README and an ISA with no code, and the one claim in it nothing else owned
-was that oMLX is the local-AI rung Sjel builds on.
+Recorded here because nothing else owns the claim that oMLX is the local-AI rung Sjel builds on.
 
 ## Wiring it up
 

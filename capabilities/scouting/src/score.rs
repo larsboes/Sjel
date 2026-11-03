@@ -297,7 +297,7 @@ fn load_hash_fallback_profiles(interest_profile_dir: &str) -> Vec<TelosProfile> 
         }
         // "Focus" is a hub/lens file in the original TELOS convention, not an
         // interest profile itself -- skip it if present so it doesn't dilute
-        // scoring (see LifeOS-mono scouting ISA.md, ISC-45).
+        // scoring.
         if name == "Focus" {
             continue;
         }

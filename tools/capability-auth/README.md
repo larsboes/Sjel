@@ -34,7 +34,7 @@ sjel-status's proxy uses. Any other capability name gets the deployment-wide tok
 
 Tests: `tools/capability-auth.test.sh`, against a throwaway overlay and a synthetic token.
 
-## The agent token (ISA F9)
+## The agent token
 
 `enroll` puts a random token in the login Keychain through `security -i` on stdin, so it is in
 no argument list. The server side gets only its SHA-256, in

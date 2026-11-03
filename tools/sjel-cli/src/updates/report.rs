@@ -103,7 +103,7 @@ pub static SURFACES: &[Surface] = &[
         owner: Owner::Scheduled,
         owner_detail: "capabilities/container-refresh · 24h",
         actionable: false,
-        why: "the declared tag is a channel and the digest is the fact (ISA.md C4); reported from its receipt and never pulled here",
+        why: "the declared tag is a channel and the digest is the fact; reported from its receipt and never pulled here",
     },
     Surface {
         id: "cargo",

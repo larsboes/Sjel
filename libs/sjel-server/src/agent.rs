@@ -1,5 +1,5 @@
-//! The agent identity at the gate: every response pseudonymized (ISA F9), and writes under
-//! the owner's per-capability mode (ISA F10, `crate::agent_policy`).
+//! The agent identity at the gate: every response pseudonymized, and writes under the
+//! owner's per-capability mode (`crate::agent_policy`).
 //!
 //! An agent holds its own token. The deployment stores only its SHA-256, in
 //! `<overlay>/config/agent-token.sha256`, so nothing on the server side can hand the token

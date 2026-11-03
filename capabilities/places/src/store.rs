@@ -1,7 +1,7 @@
 //! Persistence for the place registry, the permanent geocode cache, the
 //! transaction links and the companion register (`README.md` schema section).
 //!
-//! Writes happen only under this store's own table prefix (ISA anti-claim A2).
+//! Writes happen only under this store's own table prefix.
 //! Cross-capability reads live in `layers.rs` and `backfill.rs` as plain
 //! SELECTs. PRD Q45 (2026-08-27) made those same-file joins across table
 //! prefixes rather than across schemas; they are joins either way, which is the
@@ -264,7 +264,7 @@ impl PlacesStore {
             CREATE INDEX IF NOT EXISTS idx_{prefix}_person_places_state
                 ON {prefix}_person_places(state, person);
 
-            -- Climate normals, twelve rows per place (README D5, ISA F4).
+            -- Climate normals, twelve rows per place (README D5).
             -- The table IS the cache: permanent by design like the geocode cache
             -- above, so there is no TTL column and no second cache table. A
             -- re-fetch is DELETE-then-twelve-INSERTs in one transaction, so a

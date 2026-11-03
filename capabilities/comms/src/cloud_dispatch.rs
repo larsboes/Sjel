@@ -14,13 +14,12 @@ pub const TASK_VERSION: &str = "content-analysis-v1";
 /// The second question a reviewed derivative can be asked: produce the digest
 /// the local ladder could not.
 ///
-/// A `task` value rather than a second table, per the ISA decision of
-/// 2026-08-12. `content_cloud_jobs` already owns the daily budget counter, the
-/// attempts ledger, the five-call cap, provider failover and the `preview_hash`
-/// pin that closes the time-of-check/time-of-use gap between approving a
-/// document and sending it. A parallel table would have re-earned all five, and
-/// the first one it got subtly wrong would be a document leaving the machine
-/// under a hash nobody approved.
+/// A `task` value rather than a second table. `content_cloud_jobs` already
+/// owns the daily budget counter, the attempts ledger, the five-call cap,
+/// provider failover and the `preview_hash` pin that closes the
+/// time-of-check/time-of-use gap between approving a document and sending it. A
+/// parallel table would have re-earned all five, and the first one it got subtly
+/// wrong would be a document leaving the machine under a hash nobody approved.
 pub const DIGEST_TASK_VERSION: &str = "content-digest-v1";
 pub const DIGEST_RESULT_SCHEMA_VERSION: &str = "cloud-content-digest-v1";
 

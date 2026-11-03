@@ -17,8 +17,8 @@ use serde::Serialize;
 ///
 /// Bis 2026-10-05 zeigte das auf `interior` (8092), und das war der Defekt: `interior`
 /// ist on-demand, weil es einen Grundriss und private Fotos ausliefert, also verlor
-/// nach jedem Neustart jede Packliste ihre Gewichte, bis jemand den Grundriss oeffnete
-/// (ISA F13). `inventory` ist `autostart = true`.
+/// nach jedem Neustart jede Packliste ihre Gewichte, bis jemand den Grundriss oeffnete.
+/// `inventory` ist `autostart = true`.
 ///
 /// Der alte Name der Umgebungsvariable bleibt gueltig: eine Maschine, die ihn gesetzt
 /// hat, zeigt damit weiter auf denselben Dienst, statt still auf den Standard

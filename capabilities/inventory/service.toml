@@ -6,7 +6,7 @@
 # keine gute Idee. Nur hing an ihm auch das Inventar — `capabilities/trips` liest
 # `GET /api/inventory` ueber HTTP (3 s Timeout) und meldet `interior_reachable: false`, wenn
 # nichts lauscht. Nach einem Neustart verlor damit jede Packliste ihre Gewichte, bis jemand den
-# Grundriss oeffnete. Zwei Domaenen, ein Lebenszyklus, und der falsche hat gewonnen (ISA F13).
+# Grundriss oeffnete. Zwei Domaenen, ein Lebenszyklus, und der falsche hat gewonnen.
 #
 # Was hier liegt, braucht keinen Grundriss: die Zeilen, ihr Zustand ueber die Zeit, die
 # Wunschliste, der Link-Intake. Was einen braucht, bleibt in `interior`.

@@ -230,7 +230,7 @@ pub struct InboundAuth {
     /// Set on the LAN listener (`crate::lan`): a device signature is required, and a tailnet
     /// identity header is removed rather than believed, because anyone on the Wi-Fi can write it.
     lan_devices_only: bool,
-    /// Set by [`InboundAuth::admit_agents`] when the deployment enrolled an agent (ISA F9).
+    /// Set by [`InboundAuth::admit_agents`] when the deployment enrolled an agent.
     agent: Option<Arc<crate::agent::AgentAccess>>,
 }
 
@@ -328,8 +328,7 @@ impl InboundAuth {
     }
 
     /// Admit the deployment's agent token on this capability, under the mode the owner set
-    /// for it (ISA F10), with every response pseudonymized (ISA F9). A no-op when no agent is
-    /// enrolled.
+    /// for it, with every response pseudonymized. A no-op when no agent is enrolled.
     ///
     /// A mode that forbids writes forbids every method but GET and HEAD, so a GET that changes
     /// state must be named in `routes.get_writes`.

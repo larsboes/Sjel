@@ -1,5 +1,5 @@
 // tools/claude-code-config/src/main.rs — apply and check Sjel's user-level Claude Code
-// settings (ISA ISC-45; the managed layer this replaced retired 2026-10-02).
+// settings (the managed layer this replaced retired 2026-10-02).
 //
 // What changed and why: the security floor used to be deployed as a root-owned managed policy
 // at /Library/Application Support/ClaudeCode/managed-settings.json, together with two locks

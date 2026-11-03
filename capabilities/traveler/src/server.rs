@@ -289,7 +289,7 @@ mod route_manifest_tests {
 
     /// The manifest is data a caller reads to learn the surface; a served route
     /// that is not in it is a caller guessing. Adding a mount without a manifest
-    /// entry fails here (ISA TRV-3).
+    /// entry fails here.
     #[test]
     fn the_manifest_covers_every_served_route() {
         let missing = route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES);

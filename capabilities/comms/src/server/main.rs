@@ -538,9 +538,8 @@ fn build_router(dashboard_origin: &str) -> Router {
 /// Without this, an unconfigured secret would leave those routes open instead
 /// of closed, which is the one direction this must never move.
 ///
-/// `admit_agents` because mail is what an agent most needs to read, pseudonymized (ISA F9),
-/// under the mode the owner set (ISA F10). [`AGENT_ROUTES`] names the writes that ask in
-/// every mode.
+/// `admit_agents` because mail is what an agent most needs to read, pseudonymized, under
+/// the mode the owner set. [`AGENT_ROUTES`] names the writes that ask in every mode.
 fn inbound_auth(cfg: &Config) -> sjel_server::InboundAuth {
     sjel_server::InboundAuth::resolve(cfg.api_secret.clone())
         .refuse_without_token()

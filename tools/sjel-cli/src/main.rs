@@ -111,6 +111,7 @@ fn main() -> ExitCode {
     match command {
         "audit" => return audit::run(rest),
         "intake" => return intake::run(rest),
+        "skills" => return intake::skills::run(rest),
         "host-watch" => return host_watch::run(rest),
         "feed-sweep" => return feed_sweep::run(rest),
         "sparpreis-watch" => return sparpreis_watch::run(rest),
@@ -168,7 +169,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // stdio MCP server, and its registration with each harness. Both halves are
         // the sjel-mcp crate: tools/sjel-mcp.ts was the server until 2026-10-04.
         "mcp" => exec(Command::new(tool("tools/sjel-mcp/sjel-mcp")).args(rest)),
-        // This device's user-level Claude Code settings (ISA ISC-45).
+        // This device's user-level Claude Code settings.
         "claude" => {
             exec(Command::new(tool("tools/claude-code-config/claude-code-config")).args(rest))
         }

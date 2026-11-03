@@ -23,9 +23,8 @@
 //! one is a personal fact and this repository is public.
 //!
 //! **Names.** Company is counted as a shape — solo, pair, group — never listed.
-//! `travelers` holds real names and is already served by `GET /api/plans`, which
-//! the root `ISA.md` records as an open leak; this projection must not be a
-//! second place they leave by.
+//! `travelers` holds real names and is already served by `GET /api/plans`; this
+//! projection must not be a second place they leave by.
 
 use serde::{Deserialize, Serialize};
 

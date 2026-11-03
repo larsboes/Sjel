@@ -4,9 +4,8 @@
 # `request_schema`. tools/check-route-schemas.sh fails when one rises.
 #
 # The count is 78 (92 when the gate was built on 2026-10-15), re-measured on
-# 2026-10-21 when sjel-status's twelve body routes gained `schema_of::<T>()`. The
-# travel ISA's "fourteen" (2026-08-12) was never measured and was wrong by a
-# factor of six. Raise nothing here without a reason; the point of the file is
+# 2026-10-21 when sjel-status's twelve body routes gained `schema_of::<T>()`.
+# Raise nothing here without a reason; the point of the file is
 # that the number can only fall.
 #
 #   capability  undeclared_write_bodies

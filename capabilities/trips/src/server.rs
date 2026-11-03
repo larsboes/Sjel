@@ -1612,7 +1612,7 @@ struct PackQuery {
 /// Where the inventory serves its rows. Same hardcoded-sibling-port shape, and the
 /// same caveat, as `calendar_base_url` above — but this one moved on 2026-10-05: it
 /// pointed at `interior` (8092), which is on-demand, so a pack list lost every weight
-/// after a restart until somebody opened the floor plan (ISA F13).
+/// after a restart until somebody opened the floor plan.
 fn interior_base_url() -> String {
     for name in ["SJEL_INVENTORY_URL", "SJEL_INTERIOR_URL"] {
         if let Ok(url) = sjel_config::env_var(name) {

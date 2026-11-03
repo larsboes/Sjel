@@ -1,5 +1,5 @@
 #!/bin/bash
-# Human-run provisioning for the shared inbound API token (ISA ISC-45).
+# Human-run provisioning for the shared inbound API token.
 #
 # The durable copy is in the operator's login Keychain, item `sjel-inbound-token`, the store
 # the principal chose on 2026-10-01 for secrets set up per user. The capability servers read a

@@ -34,7 +34,7 @@ The floor used to be deployed as a root-owned policy at
 The principal ruled on 2026-10-02 that it should not be: it needed sudo for every change, it
 had to be deployed per device, it carried an MCP allowlist that silently blocked this
 machine's own MCP server until it was measured, and `tools/`,
-`Packs/` and ISA all had to describe it.
+`Packs/` both had to describe it.
 
 The floor now lives in `tools/templates/claude-code/settings.base.json` and lands in the same
 user-level file as everything else. **What that gives up is stated rather than hidden:** a

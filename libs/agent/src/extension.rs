@@ -6,8 +6,8 @@
 //! (skills), request context (compaction) and the tool-call gate (guard). pi's event bus,
 //! renderers and commands are not copied.
 //!
-//! A hook that does not exist here is a core change, and a core change is a decision in
-//! `ISA.md` first.
+//! A hook that does not exist here is a core change, and a core change lands with a decision
+//! in this crate's `README.md` first.
 
 use crate::{Message, Tool, ToolCall};
 
@@ -50,7 +50,7 @@ pub trait Extension: Send + Sync {
     /// raw text, because that trace goes to the operator's terminal and hiding their own
     /// command's output from them helps nobody.
     ///
-    /// The fifth hook, added 2026-10-08 (ISA.md, D9). It exists because a gate that reads a
+    /// The fifth hook. It exists because a gate that reads a
     /// call cannot see what a command prints: `curl -H "Authorization: Bearer $TOKEN"` names no
     /// secret path, and the response may echo the token.
     fn tool_result(&self, _call: &ToolCall, _content: &mut String) {}

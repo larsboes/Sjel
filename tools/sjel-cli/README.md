@@ -232,7 +232,7 @@ and `-h` were identical in stdout, stderr and exit code. Three differences are d
 - The artifact's `generator` field reads `tools/self` where the TypeScript wrote `tools/self.ts`.
   `self.json` was regenerated in the same change, which is the whole of the artifact diff.
 - The help line and the status header say `Sjel's self-model` where the TypeScript still said
-  `Sjel's self-model`. That rename is repository-wide and older than this port (ISA F3); those two
+  `Sjel's self-model`. That rename is repository-wide and older than this port; those two
   strings were the ones it had missed.
 - `rollUp` no longer builds its `node id -> unit` map. The TypeScript returned it "for edge
   attribution" and nothing read it — the coupling layer comes from `#[path]` attributes and Cargo

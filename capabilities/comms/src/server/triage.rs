@@ -8,8 +8,7 @@ pub(super) struct TriageParams {
     /// dashboard, so this is a policy an agent client applies, not a gate.
     max_data_class: Option<String>,
     /// Keep only mail whose sender, subject or snippet contains this text,
-    /// ignoring case. An agent finds one mail without reading the whole table
-    /// (ISA, comms · one gap).
+    /// ignoring case. An agent finds one mail without reading the whole table.
     q: Option<String>,
 }
 

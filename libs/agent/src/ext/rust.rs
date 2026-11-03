@@ -374,7 +374,7 @@ mod tests {
                 .expect("cargo ran")
                 .reported();
             let out = check(&manifest);
-            // Printed for the record: the numbers in ISA.md are these, not an assumption.
+            // Printed for the record: these are the measured sizes, not an assumption.
             println!(
                 "{name}: tool {} bytes, rendered {} bytes",
                 out.len(),

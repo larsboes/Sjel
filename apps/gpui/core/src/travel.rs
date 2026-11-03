@@ -12,7 +12,7 @@ mod details;
 pub mod edit;
 mod navigation;
 pub mod places;
-pub use details::{save_details, saved_details, Details, Item, SavedDetails};
+pub use details::{details_cached, save_details, saved_details, Details, Item, SavedDetails};
 pub use navigation::{TravelRoute, TripSection};
 pub use places::PlaceCoords;
 
@@ -134,6 +134,76 @@ impl Plan {
             fill(&mut stage.destination);
         }
         filled
+    }
+
+    /// The map tiles that cover every stop of this plan from coarse overview through city detail.
+    pub fn offline_tiles(&self) -> Vec<Tile> {
+        let mut tiles = std::collections::BTreeSet::new();
+        let coords: Vec<_> = self.places().filter_map(|p| p.coordinate()).collect();
+        if coords.is_empty() {
+            return Vec::new();
+        }
+        if let Some((center, zoom)) = fit(&coords, 800., 600.) {
+            for (tile, _, _) in visible_tiles(center, zoom, 800., 600.) {
+                tiles.insert(tile);
+            }
+        }
+        for coord in coords {
+            for zoom in 10..=14 {
+                let (cx, cy) = coord.world(zoom);
+                let count = 1_i64 << zoom;
+                let tx = (cx / 256.0).floor() as i64;
+                let ty = (cy / 256.0).floor() as i64;
+                if (0..count).contains(&ty) {
+                    tiles.insert(Tile {
+                        zoom,
+                        x: tx.rem_euclid(count) as u32,
+                        y: ty as u32,
+                    });
+                }
+            }
+        }
+        tiles.into_iter().collect()
+    }
+
+    /// Checks local disk storage for this trip's offline assets.
+    pub fn check_offline_readiness(&self) -> OfflineStatus {
+        let details_cached = details_cached(&self.id);
+        let needed_tiles = self.offline_tiles();
+        let total_tiles = needed_tiles.len();
+        let cached_tiles = needed_tiles.iter().filter(|&&t| tile_cached(t)).count();
+        OfflineStatus {
+            details_cached,
+            total_tiles,
+            cached_tiles,
+            booking_docs_total: 0,
+            booking_docs_cached: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OfflineStatus {
+    pub details_cached: bool,
+    pub total_tiles: usize,
+    pub cached_tiles: usize,
+    pub booking_docs_total: usize,
+    pub booking_docs_cached: usize,
+}
+
+impl OfflineStatus {
+    pub fn is_ready(&self) -> bool {
+        self.details_cached
+            && (self.total_tiles == 0 || self.cached_tiles >= self.total_tiles)
+            && (self.booking_docs_total == 0 || self.booking_docs_cached >= self.booking_docs_total)
+    }
+
+    pub fn percent(&self) -> u8 {
+        let total = 1 + self.total_tiles + self.booking_docs_total;
+        let cached = (if self.details_cached { 1 } else { 0 })
+            + self.cached_tiles
+            + self.booking_docs_cached;
+        ((cached as f64 / total as f64) * 100.0).round().min(100.0) as u8
     }
 }
 
@@ -552,7 +622,7 @@ impl Tile {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tile {
     pub zoom: u8,
     pub x: u32,
@@ -744,6 +814,17 @@ pub async fn load_tile(tile: Tile, online: bool) -> Result<PathBuf, String> {
     .map_err(|e| e.to_string())?
     .map_err(|e| format!("Cache map: {e}"))?;
     Ok(path)
+}
+
+pub fn tile_cached(tile: Tile) -> bool {
+    let Some(dir) = cache_dir() else {
+        return false;
+    };
+    dir.join("osm")
+        .join(tile.zoom.to_string())
+        .join(tile.x.to_string())
+        .join(format!("{}.png", tile.y))
+        .is_file()
 }
 
 #[cfg(test)]
@@ -1000,5 +1081,61 @@ mod tests {
             plan_path("trip:plan:123", &["resolve-places"]).unwrap(),
             "/trips/api/plans/trip:plan:123/resolve-places"
         );
+    }
+
+    #[test]
+    fn offline_tiles_and_readiness_status() {
+        let plan = Plan {
+            id: "trip:test:offline".into(),
+            title: "Berlin and Paris".into(),
+            origin: Place {
+                name: "Berlin".into(),
+                address: None,
+                latitude: Some(52.52),
+                longitude: Some(13.405),
+            },
+            destinations: vec![Place {
+                name: "Paris".into(),
+                address: None,
+                latitude: Some(48.856),
+                longitude: Some(2.352),
+            }],
+            date_start: "2026-12-01".into(),
+            date_end: "2026-12-05".into(),
+            status: "saved".into(),
+            stages: Vec::new(),
+        };
+
+        let tiles = plan.offline_tiles();
+        assert!(!tiles.is_empty());
+        // Must contain zoom levels 10 to 14
+        for zoom in 10..=14 {
+            assert!(tiles.iter().any(|t| t.zoom == zoom));
+        }
+
+        let status = plan.check_offline_readiness();
+        assert_eq!(status.total_tiles, tiles.len());
+        assert_eq!(status.booking_docs_total, 0);
+
+        // When not cached on disk, ready is false
+        assert!(!status.is_ready());
+
+        // Empty plan has 0 tiles
+        let empty_plan = Plan {
+            id: "empty".into(),
+            title: "Empty".into(),
+            origin: Place {
+                name: "Nowhere".into(),
+                address: None,
+                latitude: None,
+                longitude: None,
+            },
+            destinations: Vec::new(),
+            date_start: "".into(),
+            date_end: "".into(),
+            status: "draft".into(),
+            stages: Vec::new(),
+        };
+        assert!(empty_plan.offline_tiles().is_empty());
     }
 }

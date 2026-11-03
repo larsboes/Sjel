@@ -256,6 +256,76 @@ impl Travel {
                 )
                 .into_any_element();
         };
+        let offline_status = plan.check_offline_readiness();
+        let is_downloading = self.offline_downloading.contains(&plan.id);
+        let progress = self.offline_progress.get(&plan.id).copied();
+        let plan_id = plan.id.clone();
+
+        let offline_pill = if offline_status.is_ready() {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(4.))
+                .bg(rgba(crate::theme::tint(palette.green, 0x18)))
+                .border_1()
+                .border_color(rgba(crate::theme::tint(palette.green, 0x35)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.green))
+                .child("✓ Offline ready")
+                .into_any_element()
+        } else if is_downloading {
+            let label = if let Some((cur, total)) = progress {
+                format!("Downloading offline pack… ({cur}/{total} tiles)")
+            } else {
+                "Downloading offline pack…".to_string()
+            };
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .px_2()
+                .py(px(2.))
+                .rounded(px(4.))
+                .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                .border_1()
+                .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
+                .text_xs()
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(rgb(palette.accent))
+                .child(label)
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .px_2()
+                        .py(px(2.))
+                        .rounded(px(4.))
+                        .bg(rgba(palette.raised))
+                        .border_1()
+                        .border_color(rgba(palette.border))
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!("Offline: {}%", offline_status.percent())),
+                )
+                .child(
+                    self.button(gpui::SharedString::from(format!("download-offline-{}", plan.id)))
+                        .ghost()
+                        .label("Download offline pack")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.prepare_offline_pack(plan_id.clone(), cx);
+                        })),
+                )
+                .into_any_element()
+        };
+
         page = page
             .child(
                 div()
@@ -263,22 +333,7 @@ impl Travel {
                     .items_center()
                     .justify_between()
                     .child(div().text_xl().child(plan.title.clone()))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .px_2()
-                            .py(px(2.))
-                            .rounded(px(4.))
-                            .bg(rgba(crate::theme::tint(palette.green, 0x18)))
-                            .border_1()
-                            .border_color(rgba(crate::theme::tint(palette.green, 0x35)))
-                            .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(palette.green))
-                            .child("✓ Offline ready"),
-                    ),
+                    .child(offline_pill),
             )
             .child(
                 div()
@@ -364,6 +419,8 @@ impl Travel {
             }
             let id = plan.id.clone();
             let open_id = id.clone();
+            let is_offline = plan.check_offline_readiness().is_ready();
+            let is_caching = self.offline_downloading.contains(&plan.id);
             let trip = div()
                 .flex_col()
                 .gap_1()
@@ -371,12 +428,48 @@ impl Travel {
                 .border_b_1()
                 .border_color(rgba(palette.border))
                 .child(
-                    self.button(gpui::SharedString::from(format!("trip-{}", plan.id)))
-                        .ghost()
-                        .label(plan.title.clone())
-                        .on_click(
-                            cx.listener(move |view, _, _, cx| view.select(open_id.clone(), cx)),
-                        ),
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(
+                            self.button(gpui::SharedString::from(format!("trip-{}", plan.id)))
+                                .ghost()
+                                .label(plan.title.clone())
+                                .on_click(
+                                    cx.listener(move |view, _, _, cx| view.select(open_id.clone(), cx)),
+                                ),
+                        )
+                        .child(if is_offline {
+                            div()
+                                .px_1p5()
+                                .py(px(1.))
+                                .rounded(px(4.))
+                                .bg(rgba(crate::theme::tint(palette.green, 0x18)))
+                                .border_1()
+                                .border_color(rgba(crate::theme::tint(palette.green, 0x35)))
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(rgb(palette.green))
+                                .child("✓ Offline")
+                                .into_any_element()
+                        } else if is_caching {
+                            div()
+                                .px_1p5()
+                                .py(px(1.))
+                                .rounded(px(4.))
+                                .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                .border_1()
+                                .border_color(rgba(crate::theme::tint(palette.accent, 0x35)))
+                                .text_xs()
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(rgb(palette.accent))
+                                .child("⬇ Caching…")
+                                .into_any_element()
+                        } else {
+                            div().into_any_element()
+                        }),
                 )
                 .child(
                     div()

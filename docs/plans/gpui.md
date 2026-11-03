@@ -135,8 +135,11 @@ the Mac's last sync time.
 2. **Map.** Shipped: category pins for stays (🛏), stations (🚆), airports (✈) and places (📍).
    Interactive stop card on map overlay with stop name, category badge, address, dates, and "Open in
    Apple Maps" deep link. "Fit trip" control re-centers and fits all trip stops.
-3. **Offline-ready mark.** Shown per trip when its details, its booking PDFs (kept under rule 2)
-   and the map tiles for its bounds at zoom 10–15 are on the phone.
+3. **Offline-ready mark.** Shipped: computed per trip via `check_offline_readiness()` based on
+   cached details and tile coverage for bounds across zoom 10–14. Trip header shows `✓ Offline ready`
+   when verified, or an offline readiness percentage with a "Download offline pack" action that
+   asynchronously prefetches missing tiles and details. Trip library displays `✓ Offline` status
+   for cached trips.
 4. **Fare alerts.** Work Package 27, verified on a device.
 5. **Edits on the phone.** Trip fields and bookings, through the Trips routes the Mac uses.
 
@@ -243,7 +246,29 @@ one costs 1.5 µs a block, 80 µs a typical note and 3.0 ms for the largest of 1
 --ignored`). A keystroke touches one block, so the work live preview adds is ~2 µs: the cost sits
 in shaping and editor integration, not in the mapping.
 
-Two routes, neither taken:
+Decided 2026-11-03: prototype route 2 on one paragraph behind `SJEL_GPUI_LIVE_PREVIEW=1`, then
+review before choosing a full implementation. The flag is off by default. The first paragraph's
+existing textarea keeps the source markdown, keys, composition and undo history; a separate
+view draws its projected text, marks, selection, preedit underline and a steady caret. The drawn
+text owns the block height; the transparent input is absolutely positioned and clipped. Other
+blocks keep the existing editor. Converting that paragraph into another kind ends its preview.
+
+Prototype checks: parser tests cover nested spans, links, Unicode and source/projection offsets;
+headless window tests cover unchanged wrapping on focus outside a span, click-to-source mapping,
+editing inside bold with undo, typing with undo/redo, and composition commit with undo. These
+checks do not establish real-device IME behavior or visual acceptance. The full core and UI test
+suites, `cargo test -p sjel-projects`, host `cargo check --all-targets`, Rust 2021 formatting and
+`bash -n apps/gpui/bench-scroll` pass. The bench launcher now forwards the click mode and preview
+flag. Installation, click/typing measurements, manual rename checks and an iOS build have not
+run; concurrent GPUI edits prevent installing this checkout in isolation.
+
+Open before a full build: projected vertical navigation and IME candidate-window geometry
+(the textarea still uses source layout), bidirectional drag selection, double/triple-click
+selection, caret blinking and touch/accessibility behavior. The two layouts are not equivalent;
+the prototype only prevents the hidden input's larger box from setting the displayed height.
+The flag does not enable preview on every block. No full route has been selected.
+
+The candidate routes remain:
 
 1. **Projected text.** The textarea holds the shown text; a change is mapped back onto the markdown
    and the caret re-set. Caret, selection and hit-testing stay native. Risks: resetting the value

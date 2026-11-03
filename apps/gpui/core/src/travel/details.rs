@@ -82,6 +82,13 @@ fn path(id: &str) -> Result<std::path::PathBuf, String> {
         .join(format!("{name}.json")))
 }
 
+pub fn details_cached(id: &str) -> bool {
+    let Ok(path) = path(id) else {
+        return false;
+    };
+    path.is_file()
+}
+
 pub async fn saved_details(id: &str) -> Result<Option<SavedDetails>, String> {
     let path = path(id)?;
     let expected = id.to_owned();

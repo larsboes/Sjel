@@ -96,6 +96,8 @@ pub struct Travel {
     presence_again: bool,
     compact_map: bool,
     selected_day_filter: Option<String>,
+    pub(super) offline_downloading: std::collections::HashSet<String>,
+    pub(super) offline_progress: HashMap<String, (usize, usize)>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
     vector: Option<vector::VectorMap>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -237,6 +239,8 @@ impl Travel {
             presence_again: false,
             compact_map: false,
             selected_day_filter: None,
+            offline_downloading: std::collections::HashSet::new(),
+            offline_progress: HashMap::new(),
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
             vector: None,
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -1100,6 +1104,53 @@ impl Travel {
             },
             cx,
         );
+    }
+
+    pub(super) fn prepare_offline_pack(&mut self, plan_id: String, cx: &mut Context<Self>) {
+        if self.offline_downloading.contains(&plan_id) {
+            return;
+        }
+        self.offline_downloading.insert(plan_id.clone());
+        self.read_details(plan_id.clone(), true, cx);
+        let Some(plan) = self.plans.iter().find(|p| p.id == plan_id).cloned() else {
+            self.offline_downloading.remove(&plan_id);
+            return;
+        };
+        let tiles = plan.offline_tiles();
+        let total = tiles.len();
+        let cached = tiles.iter().filter(|&&t| travel::tile_cached(t)).count();
+        self.offline_progress.insert(plan_id.clone(), (cached, total));
+        let missing_tiles: Vec<_> = tiles
+            .into_iter()
+            .filter(|&t| !travel::tile_cached(t))
+            .collect();
+        if missing_tiles.is_empty() {
+            self.offline_downloading.remove(&plan_id);
+            self.offline_progress.remove(&plan_id);
+            cx.notify();
+            return;
+        }
+
+        let target_id = plan_id.clone();
+        cx.spawn(async move |this, cx| {
+            let mut downloaded = cached;
+            for tile in missing_tiles {
+                let _ = travel::load_tile(tile, true).await;
+                downloaded += 1;
+                let id = target_id.clone();
+                let _ = this.update(cx, |view, cx| {
+                    view.offline_progress.insert(id, (downloaded, total));
+                    cx.notify();
+                });
+            }
+            let _ = this.update(cx, |view, cx| {
+                view.offline_downloading.remove(&target_id);
+                view.offline_progress.remove(&target_id);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
     }
 }
 

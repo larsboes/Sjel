@@ -34,21 +34,13 @@ ignoreUntil = 2027-01-01
 # 2026-09-08, answered any web page the operator had open.
 reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in two trees. Transit: via lopdf 0.42.0 <- pdf-extract 0.12.1 <- sjel-transit <- sjel-scouting (`cargo tree -i ttf-parser`, 2026-11-01). Two callers reach the parser: `transit import <file>`, where the file is the operator's own, and the raw body of `POST /api/tickets/extract`, which is whatever the caller sent. The second is why this is untrusted input, and it is more exposed than a file on disk: that route sat under CorsLayer::permissive() with no origin refusal, and it takes `Bytes` rather than a typed body, so a cross-origin simple POST reached the PDF parser with no preflight to stop it. `refuse_foreign_origins` now bounds its callers to the dashboard, the tailnet and non-browser clients. Scouting links transit for adapters/transit_fare.rs and calls no extractor, so it inherits the crate and not the reach. The app: via fontdb 0.23.0, from mermaid-rs-renderer 0.3.1 in sjel-gpui and from usvg 0.46.0 <- gpui-pre — a font database over the app's own bytes, reached when a Mermaid diagram or an SVG icon is laid out, not by a URL. No known vulnerability, no CVSS, no affected function and no fixed version: fontdb 0.23 requires ttf-parser ^0.25, so the end is fontdb or usvg moving off it, or a maintained pdf-extract alternative for transit. If either appears, take it, and keep transit's PDF fixtures and the app's diagram rendering green across the swap."
 
-# The three below reach both lockfiles the way the glib pair above reaches one: through Tauri's
-# Linux-only dependency tree. zbus is the D-Bus client, and it arrives via atspi-common and
-# accesskit_atspi_common (Linux AT-SPI accessibility), zbus_xml and oo7 (the secret-service
-# keyring). Nothing in that chain resolves for a target Sjel ships: for each of zvariant,
-# zvariant_derive and zbus_names, `cargo tree --manifest-path {apps/gpui-prototype,
-# dashboard/src-tauri}/Cargo.toml -i <crate> --target aarch64-apple-darwin` prints "nothing to
-# print", and so does the same probe with `--target aarch64-apple-ios` (all twelve measured
-# 2026-10-18). The lockfiles still list all three, which is what osv-scanner reads. They are
-# informational — no CVSS, no affected function — and no fixed version exists, because RUSTSEC
-# retired each crate as a standalone and folded it into zbus 6.0.0. The end of these is a zbus 6
-# major bump on the Linux side, which is upstream's and not a patch here.
+# The three below reach `apps/gpui/Cargo.lock` only through the Linux D-Bus tree (zbus, via
+# AT-SPI accessibility and the secret-service keyring). None resolves for macOS or iOS. They end
+# with a zbus 6 major bump upstream.
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0370"
 ignoreUntil = 2027-01-01
-reason = "Unmaintained zvariant 5.15.0, the D-Bus wire format, reached only through zbus on Linux and resolved for neither macOS nor iOS. No known vulnerability, no CVSS, no affected function and no fixed version: the crate is zbus 6.0.0's `wire` module now, so ending this needs a zbus major bump rather than a patch here. Revisit when Tauri's Linux tree moves to zbus 6, or when these two lockfiles stop carrying a Linux build."
+reason = "Unmaintained zvariant 5.15.0, the D-Bus wire format, reached only through zbus on Linux and resolved for neither macOS nor iOS. No known vulnerability, no CVSS, no affected function and no fixed version: the crate is zbus 6.0.0's `wire` module now, so ending this needs a zbus major bump rather than a patch here. Revisit when GPUI's Linux tree moves to zbus 6."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0371"

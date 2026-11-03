@@ -1,10 +1,8 @@
 # GPUI: one native app
 
 The native GPUI client ([`apps/gpui`](../../apps/gpui/README.md)) is the one Sjel app on macOS and
-iOS, with Linux, Windows and Android later. The SvelteKit and Tauri dashboard (`dashboard/`) is
-the second consumer, and it retires (decided 2026-10-22). Port each page, then improve it in GPUI.
-A rule that both clients share goes into a capability or `apps/gpui/core`, never only into
-`dashboard/`. No new feature work goes into the dashboard.
+iOS, with Linux, Windows and Android later. A rule the Mac and the phone share goes into a
+capability or `apps/gpui/core`.
 
 Lane A in [`PLAN.md`](../../PLAN.md). Lane B, the agent, has priority when the two compete. The agent seat (Work Package 22) is in
 [`agent.md`](agent.md), RoomPlan and the other scanners are in [`scanning.md`](scanning.md), and

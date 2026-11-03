@@ -21,4 +21,4 @@ Sjel separates backend code across three rungs:
   1. A reproducible benchmark proving that safe Rust is an unacceptable bottleneck, recorded in the owning README.
   2. Explicit authorization from the repo maintainer.
   3. A formal `// SAFETY:` block documenting why the invariants hold and how undefined behavior is impossible.
-- FFI anchors (such as iOS dead-strip prevention in `dashboard/src-tauri`) remain strictly confined to platform-specific boundary files with minimal footprint.
+- FFI anchors (such as iOS dead-strip prevention) remain strictly confined to platform-specific boundary files with minimal footprint.

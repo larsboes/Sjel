@@ -59,7 +59,7 @@ the code's address in place of the old one. A revoked key stays refused
 
 On the LAN listener an unregistered device may send exactly three unsigned requests: a claim, a
 join request, and one join request's state (`libs/sjel-server/src/auth.rs`,
-`unsigned_pairing_route`). The phone leaves those three unsigned (`dashboard/src-tauri/src/mac_bridge.rs`,
+`unsigned_pairing_route`). The phone leaves those three unsigned (`libs/device-auth`,
 `unsigned_pairing_request`); every other request is signed.
 
 The service is reached through the Sjel status shell at `/devices/api/...`. It remains behind the

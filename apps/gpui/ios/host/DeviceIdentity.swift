@@ -2,8 +2,7 @@ import CryptoKit
 import Foundation
 import Security
 
-// The device key for `axon-device-auth/v1`. A port of plugins/device-identity (the Tauri app's
-// identity) under its own Keychain service: a Curve25519 signing key, created once, kept
+// The device key for `axon-device-auth/v1`. Its own Keychain service holds a Curve25519 signing key, created once, kept
 // `ThisDeviceOnly`. Rust gets the public key and signatures over C; the private key never
 // leaves this file.
 

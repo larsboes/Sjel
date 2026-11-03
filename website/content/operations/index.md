@@ -83,7 +83,7 @@ published. The command never publishes a public release. It uses the maintainer'
 `gh` authentication; preparation does not require it. Do not replace an existing release's
 assets with unreviewed preparation files.
 
-Native iOS archive and TestFlight upload are separate from the Tauri phone installer:
+Native iOS archive and TestFlight upload:
 
 ```bash
 sjel testflight                       # archive, upload, wait for processing, set What to Test
@@ -114,8 +114,7 @@ Every build goes to the internal group `Team`, which sees all builds and needs n
 Review. Its testers are added once in App Store Connect (TestFlight → Team → Testers). External
 testing needs Beta App Review per build, and builds expire after 90 days; see
 [Apple's TestFlight documentation](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
-`tools/phone-install` remains the Tauri development-phone path; the native Simulator path is
-`apps/gpui/ios/run-sim`. Neither installs from TestFlight.
+The Simulator path is `apps/gpui/ios/run-sim`. It does not install from TestFlight.
 
 ### Optional capabilities and the later friend trial
 

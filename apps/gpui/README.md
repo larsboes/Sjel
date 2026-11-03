@@ -241,22 +241,12 @@ for a Tauri and WKWebView process pair — and the Swift menu bar keeps system-w
 invocation pays neither a second resident process nor a cold-launch hop. How the numbers were
 measured: `SJEL_GPUI_FRAMES` and `ps -o rss=` in `src/frames.rs`.
 
-The move has four steps:
-
-0. **Done.** One Cargo workspace builds GPUI, gpui-kit and gpui-mobile, and shows one list fed over
-   loopback HTTP on the Mac and in the iOS Simulator. Had this failed, the iPhone decision would
-   open again.
-1. **Done.** A command palette, measured for start time and resident memory against Tauri.
-2. **In progress.** The dashboard's routes, ported into this app: `context`, `calendar` and `inbox`
-   first, with the native `capabilities` page as the reference. GPUI draws the charts. Travel now
-   has a shared native map view: raster maps work on both clients, with the MapLibre vector
-   prototype available on macOS. The dashboard keeps its vector map. Home, Today, Capabilities,
-   Systems, Projects, Ask, Travel, Feed, Inbox, Calendar, Documents, Backup, Finance, People,
-   Inventory, Software and Import are native. `/systems` is the one that is not a capability's
-   page: it puts macmon's live sample beside storage, updates, the runtime profile, the hourly
-   host watch and the agent's reach, each read from whoever already owns that answer (`src/systems.rs`).
-3. Test and review, then decide: switch, keep both, or stop. Svelte and Tauri stay live until that
-   review.
+One Cargo workspace builds GPUI, gpui-kit and gpui-mobile. Every page is native, and GPUI draws
+the charts. Travel has a shared native map view: raster maps work on both clients, with the
+MapLibre vector prototype on macOS. `/systems` is the one page that is not a capability's: it puts
+macmon's live sample beside storage, updates, the runtime profile, the hourly host watch and the
+agent's reach, each read from whoever already owns that answer (`src/systems.rs`). Open work is in
+[`docs/plans/gpui.md`](../../docs/plans/gpui.md).
 
 ## Workspace and the iOS app
 
@@ -647,14 +637,7 @@ strip meets GPUI's tint, because GPUI's translucent colours blend lighter over a
 over its own. `SJEL_GPUI_NO_GLASS=1` draws the normal sidebar on any macOS. This is an experiment,
 not a supported GPUI hosting API.
 
-## Evaluation scope
+## Data boundary
 
-- Does a GPU-native Rust shell feel like a better desktop home for Sjel?
-- Is the build and macOS packaging burden acceptable beside Tauri, iOS, and the Swift menu-bar
-  companion?
-- Can richer views use the existing HTTP contracts without adding direct database access or
-  exposing credentials to the client?
-
-The app is an evaluation surface, not a dashboard port. A destination gets a native page when the
-native form does something the browser cannot do as well. Until then, the finder opens it in the
-dashboard.
+Every page reads and writes through the capabilities' HTTP contracts. The app has no direct
+database access and holds no capability credentials.

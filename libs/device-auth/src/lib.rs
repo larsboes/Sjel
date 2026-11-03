@@ -2,9 +2,8 @@
 //!
 //! A paired device signs every request with its Ed25519 key. The signature covers the bytes from
 //! [`signing_message`]. The devices capability rebuilds the same bytes to verify
-//! (`capabilities/devices/src/auth.rs`); the phone apps build them to sign
-//! (`dashboard/src-tauri/src/mac_bridge.rs`, `apps/gpui-prototype/core`). The key itself never
-//! enters this crate: a caller passes a signing function.
+//! (`capabilities/devices/src/auth.rs`); the GPUI app builds them to sign
+//! (`apps/gpui/core/src/device.rs`). The key itself never enters this crate: a caller passes a signing function.
 
 use sha2::{Digest, Sha256};
 

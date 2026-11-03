@@ -193,8 +193,8 @@ pub fn unsigned_pairing_route(method: &Method, path: &str) -> bool {
 }
 
 /// The target a device signs: the path the capability sees after the shell removes its mount.
-/// `/api/...` is not mounted and stays as it is. Mirrors `signed_path` in
-/// `dashboard/src-tauri/src/mac_bridge.rs`, which is the signing side.
+/// `/api/...` is not mounted and stays as it is. Mirrors
+/// `device_auth::signed_path`, which is the signing side.
 pub fn device_signed_path(path_and_query: &str) -> &str {
     if path_and_query == "/api" || path_and_query.starts_with("/api/") {
         return path_and_query;

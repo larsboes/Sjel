@@ -44,7 +44,7 @@ pub const R6_MAX_RATIO: f64 = 3.0;
 /// Xcode's build phase launches `cargo` without the shell environment, so `CARGO_TARGET_DIR`
 /// is unset and cargo falls back to the workspace-local `target/`. `reclaim --repo --target` runs
 /// `cargo clean`, which honours that same variable, so it could only ever clean the one
-/// directory — and `dashboard/src-tauri/target` reached 15 GB unremarked.
+/// directory.
 #[derive(Debug, Clone, Serialize)]
 pub struct SecondaryTarget {
     pub path: String,
@@ -131,7 +131,7 @@ pub fn target_dir(repo_root: &Path) -> (PathBuf, &'static str) {
 /// (`capabilities/calendar/service.toml` names `target/release/calendar-server`), which is why
 /// `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` at anything inside the checkout.
 /// Reporting it as reclaimable would invite exactly the mistake that guard exists to prevent.
-/// What this is for is a *nested* workspace: `dashboard/src-tauri/target` is a second target dir
+/// What this is for is a *nested* workspace: `apps/gpui/target` is a second target dir
 /// under the repo root whose builds the checkout's own `target/` knows nothing about.
 ///
 /// The walk is bounded and skips the two subtrees that cannot hold a workspace and are
@@ -465,7 +465,7 @@ mod tests {
 
         // The nested workspace whose target dir Xcode's build phase produces when
         // CARGO_TARGET_DIR is not in the environment.
-        let nested = repo.join("dashboard").join("src-tauri");
+        let nested = repo.join("apps").join("gpui");
         std::fs::create_dir_all(nested.join("target")).unwrap();
         std::fs::write(nested.join("Cargo.toml"), b"[workspace]\n").unwrap();
         std::fs::write(nested.join("target").join("CACHEDIR.TAG"), b"").unwrap();
@@ -479,14 +479,12 @@ mod tests {
         let found = secondary_targets(&repo, &primary);
         assert_eq!(found.len(), 1, "found: {found:?}");
         assert!(
-            found[0].path.ends_with("dashboard/src-tauri/target"),
+            found[0].path.ends_with("apps/gpui/target"),
             "{}",
             found[0].path
         );
         assert!(
-            found[0]
-                .manifest
-                .ends_with("dashboard/src-tauri/Cargo.toml"),
+            found[0].manifest.ends_with("apps/gpui/Cargo.toml"),
             "{}",
             found[0].manifest
         );
@@ -520,7 +518,7 @@ mod tests {
         .unwrap();
 
         // The nested workspace, which is the case this actually looks for.
-        let nested = repo.join("dashboard").join("src-tauri");
+        let nested = repo.join("apps").join("gpui");
         std::fs::create_dir_all(nested.join("target")).unwrap();
         std::fs::write(nested.join("target").join("CACHEDIR.TAG"), b"").unwrap();
 
@@ -531,7 +529,7 @@ mod tests {
         let found = secondary_targets(&repo, &elsewhere);
         assert_eq!(found.len(), 1, "found: {found:?}");
         assert!(
-            found[0].path.ends_with("dashboard/src-tauri/target"),
+            found[0].path.ends_with("apps/gpui/target"),
             "{}",
             found[0].path
         );

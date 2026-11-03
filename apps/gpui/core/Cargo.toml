@@ -17,7 +17,7 @@ test-support = []
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The axon-device-auth/v1 protocol and the pinned TLS client for the LAN listener, shared with
-# the devices capability and the Tauri phone app.
+# the devices capability.
 device-auth = { path = "../../../libs/device-auth", features = ["pinned-tls"] }
 futures = "0.3"
 # rustls: the pinned client for the LAN listener (device.rs) needs a TLS backend. http2: that

@@ -198,7 +198,7 @@ shows the ones on this machine.
 | Part | Contents |
 |---|---|
 | Core | `capabilities/entities`, `capabilities/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server` |
-| Apps | `apps/gpui` (Mac and iPhone, Rust and GPUI), `apps/mac` (Swift menu bar and CloudKit relay), `dashboard` (SvelteKit and Tauri, retiring) |
+| Apps | `apps/gpui` (Mac and iPhone, Rust and GPUI), `apps/mac` (Swift menu bar and CloudKit relay) |
 | Agent | `agent`, `assistant`, `agentbox`, `packs` |
 | Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |

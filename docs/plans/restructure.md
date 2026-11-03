@@ -88,8 +88,8 @@ Found 2026-10-25 by heading and by dated lines (resolved in 2026-11-03 sweep):
 - Done: `capabilities/trips/decisions/travel-seams-not-built.md` moved to `capabilities/trips/README.md`
   (`## Considered and declined`) and the decisions directory removed.
 - Done: `places` ("Deliberately not built") moved to `## Considered and declined`.
-- Done: `capabilities/trips/README.md` and `capabilities/transit/README.md` swept to standard shape (`## Why this shape:`, `## Considered and declined`, no dated narratives or migration logs).
-- Most dated lines in READMEs remaining: `tools/sjel-cli` (32), `comms`, `documents`, `agentbox` (16 each), `finance` (14), `scouting` (13).
+- Done: `capabilities/trips/README.md`, `capabilities/transit/README.md`, and `tools/sjel-cli/README.md` swept to standard shape (`## Why this shape:`, `## Considered and declined`, no dated narratives or migration logs).
+- Most dated lines in READMEs remaining: `comms`, `documents`, `agentbox` (16 each), `finance` (14), `scouting` (13).
 - Most dated lines in TOML: `profiles.toml` (35), `toolchain.toml` (13). Review dates in
   `upstreams.toml` and waiver dates in `osv-scanner*.toml` are data, not history, and stay.
 

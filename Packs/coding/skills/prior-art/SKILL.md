@@ -61,7 +61,7 @@ Packs/coding/skills/prior-art/scripts/search-prior-art "<query>"
 # 2. Find the owning command, tool or capability:
 sjel search "<query>"
 
-# 3. Check for related decisions in ISA or PRD:
+# 3. Check for related decisions in the plans:
 grep -in -C 2 "<query>" PLAN.md docs/plans/*.md ARCHITECTURE.md
 ```
 

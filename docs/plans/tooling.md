@@ -23,6 +23,16 @@ covers it.
   `PATH`. Workaround: `cargo build --bin comms -p sjel-comms`, then
   `target/debug/comms clips --limit 5` and `clips show <key>`. Smallest change: install `comms`
   with the other user-facing binaries, and add a `sjel` command alias for `clips`.
+- **Writing a project note from a prepared file.** `projects new-note` writes only
+  `<project>/<title>.md`, so it cannot place a note in a subfolder. `projects edit` runs
+  `$EDITOR` without a shell. Workaround: a two-line script as `$EDITOR` that copies a prepared
+  file over the scratch file. Smallest change: `projects put <path> <file>`, which creates or
+  replaces a record with a base check, the same path `POST /api/record` takes.
+- **Price snapshots for a wish.** Pricing a wishlist item across new, refurbished and used
+  offers took raw `interceptor` reads of comparison, refurbisher and classifieds pages, and
+  each refurbisher shows variant prices differently. Smallest change: an `inventory` command
+  that records a dated price observation (source URL, price, configuration) on a wish row, so
+  the snapshot lives with the wish instead of in notes.
 
 - **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`

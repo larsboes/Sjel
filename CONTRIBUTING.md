@@ -9,8 +9,9 @@ operator-specific policy.
 Name the consumer and the outcome. An interesting technology without a concrete Sjel consumer
 remains an idea, not an implementation commitment.
 
-Use GitHub Issues for concrete work that a maintainer or contributor can test or complete.
-Name the consumer, outcome, and acceptance check. Use `type:idea` for experiments that may conclude not to build. Keep temporary plans with the active task; remove them when the work ends.
+Use GitHub Issues for concrete work that a maintainer or contributor can test or complete. Name
+the consumer, outcome, and acceptance check. Use `type:idea` for experiments that may conclude
+not to build.
 
 Open work that is not yet an issue lives in [`PLAN.md`](PLAN.md) and the area plans in
 [`docs/plans/`](docs/plans/). Move enduring behavior into code, tests, or the owning docs. Comments
@@ -18,17 +19,18 @@ explain local invariants, not dated decisions. Git keeps the history.
 
 Before external code or adopted design influence enters the tree, record its canonical source in
 `upstreams.toml`. Record the license and verdict there too, then state precisely what Sjel
-adopts. No version: the register holds none since 2026-09-02, because every dependency tracks its
-upstream's latest release (#patch-first).
+adopts. Record no version: every dependency tracks its upstream's latest release
+([Patch first](#patch-first)).
 
 ## Work on one change
 
 Until `PLAN.md` is done, every change goes straight to `main`. Branches, worktrees and pull
-requests start at `v0.1.0`. Rules: `Packs/harness/skills/sjel/references/on-changes.md`. Keep
-the diff inside one coherent boundary. Put reusable code and doctrine in Sjel; use synthetic fixtures for
-data-shaped tests. Never copy an active overlay or secret value into public work. Workstation paths
-and private logs must also stay out of commits and GitHub text, including screenshots and test
-failures.
+requests start at `v0.1.0`. Rules: `Packs/harness/skills/sjel/references/on-changes.md`.
+
+Keep the diff inside one coherent boundary. Put reusable code and doctrine in Sjel, and use
+synthetic fixtures for data-shaped tests. Never copy an active overlay or a secret value into
+public work. Keep workstation paths and private logs out of commits and GitHub text, including
+screenshots and test failures.
 
 Run `tools/doctor` before editing and record unrelated or machine-only failures separately. A
 fresh source checkout does not need a real private overlay for CI; repository tests use synthetic
@@ -36,96 +38,65 @@ configuration where a machine contract is required.
 
 ## Validate the changed boundary
 
-Run the nearest tests and checks declared by the package you changed. Then inspect the focused
-diff, `git diff --check`, and `git status --short` before committing. Common repository checks
-are:
+Run `sjel check` (`tools/ci-local fast`) before you push; the pre-push hook runs it too. It runs
+the quick subset of CI for the current change in parallel: `cargo fmt`, the repo gates, clippy and
+`cargo test` on the affected crates, and the tests beside changed files.
+`SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs the full suite. Then inspect the
+diff, `git diff --check` and `git status --short`, and commit. Do not describe a skipped or
+unavailable check as passing.
+
+### Rust
+
+Rust packages are members of the root `Cargo.toml` workspace and share the root `Cargo.lock`.
+Keep each package's direct dependencies in its own manifest, and add no nested lockfile. The
+full set, from the repository root:
 
 ~~~sh
-cargo test --workspace --locked
-bun test
-tools/check-publication-hygiene.sh
-~~~
-
-Rust packages are members of the root `Cargo.toml` workspace and share the
-root `Cargo.lock`. Keep each package's direct dependencies in that package's
-manifest; do not add a nested lockfile. For a Rust change, verify the workspace
-view and the build:
-
-~~~sh
-cargo metadata --locked --no-deps --format-version 1
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo check --workspace --locked
 cargo test --workspace --locked
 ~~~
 
-Run the format and Clippy commands from the repository root. They use the channel and
-components `rust-toolchain.toml` names -- `stable`, so the release rustup last fetched;
-CI resolves the same file, not a literal held somewhere else. Do not replace a finding
-with a workspace-wide allowance. A narrow allowance belongs beside the affected
-item and must explain the invariant that makes the lint inapplicable.
+These use the channel and components `rust-toolchain.toml` names, as CI does. Do not answer a
+lint with a workspace-wide allowance. A narrow allowance goes beside the affected item and
+names the invariant that makes the lint inapplicable.
 
-That command needs no database service and no environment variable. The
-database-backed suites are `db_tests::` — one module name across the workspace,
-which is what makes them selectable — and each test opens a temp SQLite file of
-its own. Run them alone with:
+`cargo test` needs no database service and no environment variable. The database-backed suites
+share the module name `db_tests::`, and each test opens its own temporary SQLite file:
 
 ~~~sh
 cargo test --workspace --locked -- db_tests::
 ~~~
 
-`sjel check` (`tools/ci-local fast`) runs the quick subset of CI for the current change, in
-parallel: `cargo fmt`, the repo gates, clippy and `cargo test` on the affected crates, and the
-tests beside changed files. The pre-push hook runs it; `SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs
-the full suite.
-
-`tools/ci-local list` identifies CI jobs that can be replayed locally. `tools/ci-local run
-repo-gates` and `tools/ci-local run bun-tests` read their scripts from the CI workflow; action
-setup is not replayed, and the Bun job installs locked dependencies in the checkout. The runner
-refuses jobs with conditions, environment, shell settings or expressions it cannot reproduce. Rust tests use `tools/cargo-hermetic`
-to isolate the local overlay and build output. CI uses disposable Linux runners; GPUI also checks
-other native platforms and the UI job creates a disposable overlay.
-
-For a lower-concurrency local Rust test run, Cargo and the test harness accept independent limits:
+`tools/cargo-hermetic` isolates the local overlay, writable data and build output, and refuses
+release builds. For a run with less memory and contention:
 
 ~~~sh
 CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 tools/cargo-hermetic test --workspace --locked
 ~~~
 
-The limits reduce parallel work, which can reduce peak memory and contention at the cost of elapsed
-time. `tools/cargo-hermetic` isolates writable data and refuses release builds; its target directory
-is reused across runs. `bun run tools/ci-impact.ts --local` reports an experimental Rust package
-selection for staged, unstaged and untracked changes. It is a shadow report, not a substitute for
-the required checks: runtime file reads are not modeled.
+### Other checks
 
-A performance claim is proved by a probe this repository can re-run, not by a scratch program
-outside the checkout: an ignored test beside the code it measures, or a script under `tools/`. The
-comment or README that states the number names that probe, so the next person can repeat it on
-their own machine and see whether it still holds.
+- `sjel gates` and `sjel test` replay CI's repo gates and Bun job from the workflow file.
+  `tools/ci-local list` shows which jobs can be replayed.
+- A package that `tools/discover-ui-packages` reports: run `bun run check`, and `bun run build`
+  where it declares one. CI runs both.
+- A manifest change: run `tools/generate-architecture.sh`, then
+  `tools/check-architecture-fresh.sh`.
+- A test that needs a platform resource (`/dev/full`, a container runtime) uses `skippable` from
+  `tools/lib/test-support.sh`. It reports omitted coverage locally and fails in CI.
 
-Run `bun run check` and `bun run build` in a package that `tools/discover-ui-packages` reports
-when its code changes. The check does not compile a template; the build does. CI runs both. Manifest or
-generated-architecture changes also require:
+A performance claim names a probe this repository can re-run: an ignored test beside the code it
+measures, or a script under `tools/`.
 
-~~~sh
-tools/generate-architecture.sh
-tools/check-architecture-fresh.sh
-~~~
+### Pitfalls
 
-Do not describe a skipped or unavailable check as passing.
-
-**`SJEL_DB_PATH` isolates the database only.** Vault projections (`comms`, `finance`, `trips`)
-resolve their roots from overlay configurations. When testing against a copy, export isolated
-projection roots as well: `SJEL_TRIPS_EXPORT_ROOT`, `SJEL_FINANCE_DECISIONS_ROOT`, and a
-scratch `SJEL_COMMS_CONFIG`.
-
-**Do not `cargo build --release` in a worktree sharing the root `target/`.** That build overwrites
-`target/release/<bin>`, which is the binary supervised by `tools/service-runner.sh`. When testing
-from a worktree, build debug binaries or set an isolated `CARGO_TARGET_DIR`.
-
-Assertions requiring platform-specific resources (`/dev/full`, container runtimes) must use
-`skippable` from `tools/lib/test-support.sh`: skippable tests print omitted coverage locally and fail
-in CI.
+- **`SJEL_DB_PATH` isolates the database only.** Vault projections (`comms`, `finance`, `trips`)
+  resolve their roots from overlay configuration. When you test against a copy, also export
+  `SJEL_TRIPS_EXPORT_ROOT`, `SJEL_FINANCE_DECISIONS_ROOT` and a scratch `SJEL_COMMS_CONFIG`.
+- **Do not `cargo build --release` in a worktree that shares the root `target/`.** That build
+  overwrites `target/release/<bin>`, the binary `tools/service-runner.sh` supervises. Build debug
+  binaries there, or set an isolated `CARGO_TARGET_DIR`.
 
 ## Open the pull request
 
@@ -144,12 +115,11 @@ The project is licensed under the GNU Affero General Public License, version 3 o
 offer those people its source. Code that `Packs/` vendors from other projects keeps its own
 license; each such Pack reproduces the upstream notice in its `LICENSE` file.
 
-Every commit carries a Developer Certificate of Origin sign-off
+A contributed commit carries a Developer Certificate of Origin sign-off
 ([developercertificate.org](https://developercertificate.org/)): a `Signed-off-by:` line that
-states you have the right to submit the change under this license. `git commit -s` adds it.
-A sign-off does not transfer copyright: a contributor keeps it in their change. A later license
-change (README, open question O2) therefore needs the consent of every contributor whose code
-remains, or a contributor license agreement introduced before outside contributions arrive.
+states you have the right to submit the change under this license. `git commit -s` adds it. A
+sign-off does not transfer copyright: a contributor keeps it in their change. A later license
+change therefore needs the consent of every contributor whose code remains.
 
 Releases before 2026-09-26 were published under the MIT license and stay available under it.
 
@@ -430,23 +400,17 @@ argues for it — four fields and nothing else. The consuming README also record
 adopted: runtime, idea, architecture, algorithm, code or asset. A local clone or archive path is
 never durable provenance.
 
-**The register records no version.** `pin` stood on 86 rows until 2026-09-02, when Q77
-deleted it. Every dependency here tracks its upstream's latest release, and the field had stopped
-describing anything a machine was running: `capabilities/host-patch` moves brew, uv and rustup
-nightly, `capabilities/container-refresh` moves the images daily, Dependabot moves the Cargo and
-Bun manifests, and both workflows install `latest`. What it actually recorded was the date an
-audit was written, which is a fact that belongs in the `why` where it cannot be mistaken for a
-claim about a host. Deleted lines stay in the manifest's git history.
-
-What changed on 2026-09-02 (Q74, then Q77) is who checks what, and how fast a fix lands. What
-is required — a verdict, a licence and an argument, before consumption — is unchanged.
+**The register records no version.** Every dependency tracks its upstream's latest release:
+`capabilities/host-patch` moves brew, uv and rustup nightly, `capabilities/container-refresh`
+moves the images daily, Dependabot moves the Cargo and Bun manifests, and the workflows install
+`latest`. An audit date belongs in the `why`.
 
 | Question | Answered by |
 |---|---|
 | Is there a verdict, a licence and a reason? | `upstreams.toml` itself, read by a human at review time |
-| Is a newer release out? | Dependabot version updates — `.github/dependabot.yml`, one grouped pull request per ecosystem per day; Cargo/actions use 0 days, Bun uses the Q109 one-day window |
+| Is a newer release out? | Dependabot version updates — `.github/dependabot.yml`, one grouped pull request per ecosystem per day; Cargo and actions use 0 days, Bun a one-day window |
 | Is a locked dependency known-vulnerable? | Dependabot alerts and security updates, and `osv-scanner` in `.github/workflows/security.yml` and in `tools/audit` |
-| Is software installed outside this checkout known-vulnerable? | `tools/audit`'s second `osv-scanner` pass: the full global npm tree as a CycloneDX SBOM, plus each installed crate's own published `Cargo.lock` (the resolution `cargo install --locked` uses). Nothing else covers it — Dependabot reads lockfiles in this repository, and `osv-scanner`'s `directory` plugin extracts nothing from installed software on this host (measured 2026-10-03 on 2.6.0) |
+| Is software installed outside this checkout known-vulnerable? | `tools/audit`'s second `osv-scanner` pass: the full global npm tree as a CycloneDX SBOM, plus each installed crate's own published `Cargo.lock` (the resolution `cargo install --locked` uses). Nothing else covers it — Dependabot reads lockfiles in this repository, and `osv-scanner`'s `directory` plugin extracts nothing from installed software |
 | Is there a CVE in a declared capability image? | `grype registry:<image>:<tag>` in `security.yml`, weekly. Findings are report-only and land in the run summary; the job goes red only if it discovered no image to scan. No container runtime and no local pull |
 | Is there a secret in this repository? | GitHub secret scanning, with push protection — and `gitleaks` in `tools/audit`, which reads history the push protection never saw |
 | Is there a secret in the private overlay? | `tools/audit` alone. GitHub charges for secret scanning on a private repository, and this repository's CI cannot reach the overlay, so this is the one scan that has to be local |
@@ -454,26 +418,15 @@ is required — a verdict, a licence and an argument, before consumption — is 
 | Is a host package behind? | `sjel update` — every class of software installed outside this checkout, with the owner of each named and the stale ones listed. `capabilities/host-patch` moves `brew`, `uv` and `rustup` daily; `sjel update apply` moves the two classes nothing else owns (`cargo install`ed crates, global npm packages) |
 | Is a running container behind its channel? | Nothing asks. `capabilities/container-refresh` pulls every declared image every day and recreates what moved |
 
-`upstreams.toml` is documentation, and only documentation. Nothing enforces its fields, and since
-Q77 no script reads one: `tools/agent-integrations.sh` drove an upstream's own installer at a
-recorded version and now takes its latest, `tools/sysmon` printed a recorded version in its
-install advice and now names none, and `tools/self` publishes name and verdict into
-`self.json`. A human reads a verdict before adopting a dependency, which was always the actual
-rule.
+`upstreams.toml` is documentation. No script enforces or reads its fields, except `tools/self`,
+which publishes each name and verdict into `self.json`. A human reads a verdict before adopting a
+dependency.
 
-`pin_kind`, `tracked_by` and `installed_probe` were deleted on 2026-09-02 under Q74. Each existed
-to describe an opt-out from `renovate.json5`'s release watch, and that file went with the
-cooldown. `installed_probe` named how to ask *this* machine what it really has, and under
-patch-first the answer is "whatever brew installed last night" — the question stops being askable
-rather than stopping being asked.
-
-**Two gaps, named rather than left to be inferred from a green check.** Shell is scanned by
-nothing: CodeQL has no shell extractor, `semgrep` was retired with the rest of the set, and
-0.44 MB of `tools/` is the largest hand-written surface here. A malicious release is not
-covered uniformly: Q109 adds Socket's scanner to the two Bun UI trees, while every other
-install path relies on its own ecosystem controls, lifecycle-hook blocking where Bun applies,
-and the observation that happens outside this repository. The scanner is network-backed and its free mode is not a
-substitute for that hold — see [Patch first](#patch-first) for the trade.
+**Two gaps.** No scanner covers shell: CodeQL has no shell extractor, and `tools/` is the largest
+hand-written surface. A malicious release is covered unevenly: CI runs Socket's scanner over each
+Bun package that `tools/discover-ui-packages` finds, and every other install path relies on its
+ecosystem's own controls and on Bun's lifecycle-hook blocking. The scanner's free mode does not
+replace the age window; see [Patch first](#patch-first).
 
 ### Patch first
 
@@ -771,15 +724,17 @@ that the CLI and agents use. A rule the Mac and the phone share lives in a capab
 | `<overlay>/config/deployment.env` | this deployment's shared facts, resolved by `libs/sjel-config` and `libs/sjel-server` for every capability that needs one. A capability may still override, but may not silently disagree |
 | `profiles.toml` | named Pack sets (`tools/packs-codex use <profile>`). Tracked and shared: a profile says which Packs belong together, while which machine deploys them stays in the overlay |
 | `upstreams.toml` | every external project: url, verdict, license, why |
-| `README.md` | human-facing architecture and durable repository doctrine |
-| `docs/` | technical documentation hierarchy: architecture, capabilities, and operations manuals |
+| `README.md` | what Sjel is, where it stands, and how to start |
+| `CONTRIBUTING.md` | how to change Sjel, and the engineering doctrine |
+| `PLAN.md`, `docs/plans/` | priority order, and one plan per area with its open work |
+| `website/content/` | architecture, capability contracts and operations manuals, published as the public site |
 | `AGENTS.md` | minimal cross-harness bootstrap that routes assistants into the `sjel` skill. Every harness, Claude Code included, reads it. There is no `CLAUDE.md`. |
 | `ARCHITECTURE.md` | generated snapshot of capabilities/Packs/upstreams/systems — never hand-edited, see `tools/generate-architecture.sh`. State mounts are machine-local and deliberately absent; `tools/doctor` reports those |
 | `capabilities/<name>/` | one dir per capability: curated README + its code as it lands |
 | `apps/` | `gpui`, the native app for Mac and iPhone, and `mac`, the Swift menu bar and CloudKit relay. Both reach capabilities through the `sjel-status` shell; neither owns domain data |
 | `libs/<name>/` | spine-owned shared code with no domain of its own — statically linked into capability binaries at compile time, own crate in the Cargo workspace from day one |
 | `schemas/` | shared contracts; import, never redefine |
-| `tools/` | install (bootstrap + capability selection), capability (enable/disable, requires-resolution), update (interactive maintainer), doctor (health + version), audit (gitleaks + osv-scanner behind one verb), host-patch (the daily host upgrade job), container-refresh (the daily image pull + recreate), storage (disk classes from the overlay policy, plus `target` for PRD §9's R6 and `reclaim --repo` for the checkout — a Cargo member, see `tools/storage/README.md`), generate-architecture, graphify, agent-integrations (each upstream's own harness integration, at its latest release), mini-tools |
+| `tools/` | operator tools: `install.sh`, `capability.sh` (enable, disable, resolve `requires`), `update.sh`, `doctor`, `audit` (gitleaks and osv-scanner), `storage` (disk classes from the overlay policy, `target` and `reclaim --repo`), `generate-architecture.sh`, `agent-integrations.sh`, and the `sjel-cli` behind `sjel` |
 
 `ARCHITECTURE.md`'s tables and its Mermaid dependency graph (Packs → capabilities they drive →
 the upstream image each declares) are derived straight from

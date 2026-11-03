@@ -81,15 +81,13 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 READMEs and manifests still hold open work. Rule: a README describes what is built and why, and
 open work goes to the owning area plan or an issue (`on-documentation.md`, Plans).
 
-Found 2026-10-25 by heading and by dated lines:
+Found 2026-10-25 by heading and by dated lines (resolved in 2026-11-03 sweep):
 
-- "Not built" sections: `capabilities/inventory`, `entities`, `software`, `people-registry`,
-  `knowledge-graph` ("Not measured, not built"), `scouting` ("Candidate sources (queued, not
-  built)"), `agent` ("What is not built"), `libs/agent` ("Not here yet").
-- `capabilities/trips/decisions/travel-seams-not-built.md`: a decisions directory, which
-  CONTRIBUTING.md ("Decisions live with their owner") does not allow.
-- `places` ("Deliberately not built") is a declined-alternatives list. It moves to
-  `## Considered and declined`, not to a plan.
+- Done: "Not built" sections in `capabilities/inventory`, `entities`, `software`, `people-registry`,
+  `scouting`, `agent`, and `libs/agent` were removed or migrated to `## Considered and declined`.
+- Done: `capabilities/trips/decisions/travel-seams-not-built.md` moved to `capabilities/trips/README.md`
+  (`## Considered and declined`) and the decisions directory removed.
+- Done: `places` ("Deliberately not built") moved to `## Considered and declined`.
 - Most dated lines in READMEs: `tools/sjel-cli` (32), `capabilities/trips` (23), `transit` (20),
   `comms`, `documents`, `agentbox` (16 each), `finance` (14), `scouting` (13).
 - Most dated lines in TOML: `profiles.toml` (35), `toolchain.toml` (13). Review dates in

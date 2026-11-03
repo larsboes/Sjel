@@ -24,7 +24,4 @@ catalog.
   sjel-status lists them at `GET /api/sjel-status/credentials`; the desktop app's
   Settings › Accounts page connects a grant in-process (`apps/gpui/core/src/accounts.rs`).
 
-## Not built yet
-
-`ProviderKind::Bitwarden` exists in the types, but no adapter implements it. Callers must not
-return a `SecretValue` to a webview or put one in a diagnostic.
+Callers must not return a `SecretValue` to a webview or put one in a diagnostic.

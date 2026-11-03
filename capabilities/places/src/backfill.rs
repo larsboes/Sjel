@@ -1302,8 +1302,7 @@ pub fn frontmatter_home(scalars: &BTreeMap<String, String>) -> Option<String> {
 }
 
 /// Great-circle distance in kilometres — haversine in code, the no-PostGIS
-/// decision (README "Deliberately not built", following
-/// `dashboard/src/lib/travel/travel-candidates.ts`).
+/// decision (README "Considered and declined").
 pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
     let radius_km = 6371.0;
     let (lat1, lon1) = (a.0.to_radians(), a.1.to_radians());

@@ -22,7 +22,6 @@ shell's exports. True — and unnecessary once the job runs through `tools/servi
 sources `tools/lib/paths.sh`, which exports it. One fewer machine-local value copied by hand into
 a generated file.
 
-## Not built
+## Considered and declined
 
-Google Contacts beyond inbound, an import from TELOS, trips listed from a person, and meetup
-capture. All four were named in the PRD, and none is planned.
+- **Google Contacts outbound sync, TELOS import, trips from person, and meetup capture.** Sjel maintains minimal read-only sync and delegates relational joins to `entities` and `trips`.

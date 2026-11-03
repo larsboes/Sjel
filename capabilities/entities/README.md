@@ -80,13 +80,7 @@ Sjel, and "Use this" writes the source's value back with that source as its owne
 next sync keeps it current. On 2026-09-25 this found 9 values across 8 people that the first
 18 merges had dropped.
 
-## Not built yet
+## Considered and declined
 
-- **Writing back to Google.** The sync is read-only today. The groundwork is there: every
-  value records its source, the contact's `etag` is stored, and `sources` shows the diff. A
-  write-back would push operator-owned values for the fields Google has (emails, phones,
-  birthday, company, role), needs the `contacts` scope instead of `contacts.readonly`, and
-  sends C2 to Google, so it needs a ruling on which fields may go (PRD §6.1).
-- Undoing a merge from the app; the snapshot in `entities_merges` makes it possible.
-- Folding the places companion register (`places_person_places`) into dated facts.
-- Changing a field's type after values exist.
+- **Writing back to Google Contacts.** Synchronization is read-only: outbound write-back requires broad `contacts` scope instead of `contacts.readonly` and sends C2 data to Google.
+- **Mutating field types with existing values.** Types are immutable once values exist to prevent silent data corruption.

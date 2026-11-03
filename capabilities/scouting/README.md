@@ -184,22 +184,6 @@ adapter-agnostic. Budget ~150–300 lines per source (mostly the HTTP client + r
 
 See § Verdict above for the architecture call.
 
-## Candidate sources (queued, not built)
-
-Two source ideas carried over from `inspirations.md` (now drained and removed), neither turned
-into an adapter yet:
-
-- **Job scouting** — [lifeelo.com](https://www.lifeelo.com), not evaluated. Same shape as any
-  other source if it turns out to have a scrapeable listing feed: a new `SourceAdapter` impl
-  plus one match-arm (see Extending it above). No council held yet on whether it's actually
-  good — don't assume it is just because it's listed here.
-- **Travel deals** — [travel-dealz.de](https://travel-dealz.de) as a deal-aggregator source,
-  plus the TER Grand Est ["Pass Jeune"](https://www.ter.sncf.com/grand-est/tarifs-cartes/bons-plans/pass-jeune)
-  regional youth rail pass as a concrete opportunity type worth scoring (cheap short trips from
-  Bonn into RLP/Grand Est). This one sits closer to `transit` than to the generic adapters
-  above — likely the second cross-capability source after `transit_fare`
-  (`capabilities/store/README.md`'s correlation section, Phase 2), not a standalone adapter.
-
 ## Alternatives considered (adopt-before-build check)
 
 Sjel doctrine (CONTRIBUTING.md#dependency-verdicts-and-provenance, `upstreams.toml`) requires checking for an existing tool

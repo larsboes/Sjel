@@ -322,12 +322,11 @@ and it takes flags the `backfill <name>` dispatch has no room for.
   refresh path; without it a place with rows is served from the table and makes
   no provider request at all.
 
-## Deliberately not built
+## Considered and declined
 
 - **No PostGIS.** The pinned official alpine image ships without it, and a
   personal transaction history does not need a spatial index. Distance math is
-  haversine in code,
-  as in `dashboard/src/lib/travel/travel-candidates.ts`.
+  haversine in code (`sjel_gpui_core::travel`).
 - **No GPS trace.** Travel history is reconstructed from plans, legs and spend
   evidence. Nothing tracks the phone.
 - **No photo storage.** PRD non-goal N4 is permanent: Sjel indexes and links,

@@ -88,8 +88,3 @@ matched their rows, so the notes went to the vault's `Archive/` and the writebac
 ([ruling](../projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)). Nothing in
 this capability writes the vault.
 
-## Not built
-
-Intake from a link works (`inventory add <url>`). Intake from the object does not. Scanning an
-object needs the extraction ladder to end at something better than text, and the only barcode
-path is `tauri-plugin-barcode-scanner`, which reads the Mac's pairing QR code.

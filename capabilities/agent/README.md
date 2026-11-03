@@ -166,17 +166,6 @@ The join between the agent UI and the capability is not tested: each part has it
 run has never been driven end to end through the capability. `docs/plans/agent.md` (Live
 validation) lists what to do in which order, and what a session picking it up needs to know first.
 
-## What is not built
-
-- **The phone's terminal.** Its client is written against `Shell` and the phone speaks
-  `DeviceClient`, so the seat reports that instead of opening one. The Face ID gate before a
-  reattach has no `LocalAuthentication` binding in `ios/host` yet.
-- **Live integration validation.** Work Package 22 still needs a real desktop run and paired-phone
-  checks for start, follow, reconnect, transcript recovery, approval from both clients, deny, stop,
-  and re-pair. A host-target compile is not evidence that the phone flow works on-device.
-- **The container runtime.** `capabilities/agentbox` behind the same session API, once the
-  model-endpoint question its README records is answered.
-
 ## Ownership boundary
 
 Runs coding tools on the paths it is given, so it is the one capability whose tools are not limited

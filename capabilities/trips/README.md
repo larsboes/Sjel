@@ -498,6 +498,14 @@ data loss.
 The copy is one-way and for reconstruction only. A trip's notes are written on the trip page,
 into the plan, not into these files.
 
+## Considered and declined
+
+- **No leave-home scheduler in Sjel.** A departure scheduler belongs to the home automation runtime (Home Assistant in the private overlay), not to a travel capability. Sjel produces the calendar `away` entries that an external automation reads.
+- **Sjel never executes a booking.** The carrier's own checks and refund terms apply in a browser. The operator pastes confirmation evidence into a `booking` plan item (`provider`, `order_ref`), and Sjel never buys tickets directly.
+- **No flight search.** Flight search is external. Sjel holds flights in a plan (`PlaceKind::Airport`, `TransportMode::Flight`, `transport` items), but does not own a flight provider search engine.
+- **No cloud AI for itinerary ranking.** Trust tier boundaries and pseudonymization rules keep itineraries local. The redaction rules for cloud derivatives are designed for generic text, not itinerary data.
+- **No model-read scouting adapter for foreign-language sources.** Extracted events from untrusted HTML require verifiable ground truth; arbitrary model scraping without server-rendered ground truth is declined.
+
 ## Build
 
 ```bash

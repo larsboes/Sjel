@@ -521,7 +521,7 @@ impl PlacesStore {
     }
 
     /// Every place that carries a coordinate, for haversine matching in code —
-    /// the no-PostGIS decision in `README.md` ("Deliberately not built").
+    /// the no-PostGIS decision in `README.md` ("Considered and declined").
     pub fn places_with_coordinates(&self) -> Fallible<Vec<Place>> {
         let prefix = &self.prefix;
         let conn = self.conn()?;

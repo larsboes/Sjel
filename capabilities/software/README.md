@@ -94,8 +94,6 @@ Both live in the shared database through `sjel-turso`, as `operator-profile` doe
 A key with `/` or `@` is percent-encoded in the path (`npm:%40playwright%2Fcli`). `GET /routes` is
 the manifest the gate checks against the router.
 
-## Not built
+## Considered and declined
 
-- Review in the doctor or the status page. It shows on the Software page and in `software list`.
-- Vendor CLIs (Claude Code, Codex, opencode): they install and uninstall through their own
-  installers, so a row here could record a decision but never act on it.
+- **Vendor CLI package lifecycle.** Vendor CLIs install and update through their own harnesses, so software inventory does not attempt uninstalls or lifecycle management for them.

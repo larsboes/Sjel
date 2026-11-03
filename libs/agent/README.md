@@ -234,14 +234,5 @@ Add a `coding` role to the overlay's `config/inference.json` first:
 "coding": { "backend": "omlx", "model": "gemma-4-26b-a4b-it-4bit" }
 ```
 
-## Not here yet
-
-The extension contract, the guard, skills, Rust diagnostics, MCP, compaction, line
-editing with command history, and subagents (`ext::subagents`) all run. A full-screen TUI is not decided.
-
-Pi stays until this agent beats it on one household task and one coding task, each measured
-against the existing path. The product reasoning is the `projects` record
-`Sjel/Agent/PRD sjel-agent.md`.
-
 A Ctrl-C while the model reads a long prompt and streams nothing takes effect at the first
 chunk. Press it twice to exit instead.

@@ -1,4 +1,5 @@
-//! Every HTTP call the plan search makes, and nothing else.
+//! Every HTTP call the plan search makes, and the client the place resolution
+//! (`crate::place_resolve`) is built on. Nothing else.
 //!
 //! One function per upstream, each with an explicit timeout, each returning a
 //! `Result`. No `.ok()`, no `unwrap_or_default()` on a response path: a
@@ -62,6 +63,12 @@ fn base_url(variable: &str, port: u16) -> String {
     sjel_config::env_var(variable).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
 }
 
+/// The registry and geocoder own every coordinate this capability stores
+/// (`crate::place_resolve`).
+pub(crate) fn places_base_url() -> String {
+    base_url("SJEL_PLACES_URL", 8093)
+}
+
 fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
     sjel_http::client(sjel_http::Purpose::new("trips-upstream"), timeout)
         .map_err(|error| format!("client build: {error}"))
@@ -69,7 +76,50 @@ fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
 
 /// One GET, with the status checked before the body is parsed.
 fn get_json(url: &str, timeout: Duration) -> Result<Value, String> {
-    let request = sjel_server::InboundAuth::with_loopback_auth(client(timeout)?.get(url), url);
+    send_json(client(timeout)?.get(url), url)
+}
+
+/// The same GET, cut short when the caller's own budget runs out first.
+///
+/// The per-request timeout is a ceiling and the caller's budget is the wall:
+/// without the second, a four-destination save could sit on an unresponsive
+/// geocoder for four times its own timeout rather than the one budget it
+/// promised (`crate::place_resolve`).
+pub(crate) fn get_json_within(
+    url: &str,
+    timeout: Duration,
+    deadline: Instant,
+) -> Result<Value, String> {
+    let timeout = capped(timeout, deadline)?;
+    send_json(client(timeout)?.get(url), url)
+}
+
+/// One POST of a JSON body, with the same status check, under the caller's budget.
+pub(crate) fn post_json_within(
+    url: &str,
+    body: &Value,
+    timeout: Duration,
+    deadline: Instant,
+) -> Result<Value, String> {
+    let timeout = capped(timeout, deadline)?;
+    send_json(client(timeout)?.post(url).json(body), url)
+}
+
+fn capped(timeout: Duration, deadline: Instant) -> Result<Duration, String> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err("the resolution budget is spent".into());
+    }
+    // Whole seconds, because `sjel_http::client` pools a client per
+    // `(purpose, timeout)` forever: a budget that yields 5.734 s on one call and
+    // 4.981 s on the next would build a client and its runtime thread for each
+    // and never reuse one. Eight distinct seconds is a ceiling, not a leak.
+    let seconds = remaining.as_secs().clamp(1, 60);
+    Ok(timeout.min(Duration::from_secs(seconds)))
+}
+
+fn send_json(request: reqwest::blocking::RequestBuilder, url: &str) -> Result<Value, String> {
+    let request = sjel_server::InboundAuth::with_loopback_auth(request, url);
     let response = request.send().map_err(|error| short(&error.to_string()))?;
     let status = response.status();
     if !status.is_success() {
@@ -450,7 +500,7 @@ pub fn parse_climate(body: &Value, month: u32) -> Result<HashMap<String, SeasonS
 }
 
 /// Percent-encode a query value. Place names carry spaces, commas and umlauts.
-fn urlencode(value: &str) -> String {
+pub(crate) fn urlencode(value: &str) -> String {
     let mut encoded = String::with_capacity(value.len());
     for byte in value.as_bytes() {
         match byte {

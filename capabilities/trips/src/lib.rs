@@ -10,6 +10,7 @@ pub mod kiwi;
 pub mod outfit;
 pub mod pack;
 pub mod people;
+pub mod place_resolve;
 pub mod plan_search;
 pub mod projection;
 pub mod retrospective;

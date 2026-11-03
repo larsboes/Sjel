@@ -46,11 +46,52 @@ three different shapes (a scouting opportunity, a whole search result, a calenda
 declaring one shape for it would reject two of them. A variant is declared where there is
 exactly one shape to promise, and nowhere else.
 
+### A destination's coordinate is derived, and trips derives it
+
+A typed destination used to be a name and nothing else: `place:<slug>` with null latitude and
+longitude. `capabilities/places` draws only a destination that carries a coordinate, so an
+upcoming trip put nothing on the map, had no anchor for an accommodation search, no distance to
+a scouting candidate and no climate for its stage. Every point the live map layer held for a
+past trip was there; an upcoming one drew nothing at all.
+
+`src/place_resolve.rs` fills it in, and the plan stores it (`POST`/`PATCH /api/plans`). The
+ladder is the registry first and the geocoder second, in that order: `GET /api/places?q=<name>`
+is instant, offline and free of an upstream call, while `POST /api/geocode` reaches Nominatim at
+one request a second and writes a registry row. The registry rung requires an **exact** name —
+`search_places` is a `LIKE '%name%'` over name and city, so one city name also answers venues and
+neighbourhoods that merely contain it. Taking the first row would put a trip's pin somewhere in
+the middle of one of those, so anything short of an exact name falls through to the geocoder,
+which is asked the whole name.
+
+Four rules follow from it being derived state:
+
+1. **A save never fails over a coordinate.** `places` is not a declared requirement
+   (`service.toml`), so with places down the plan is stored, the destination keeps the name the
+   operator typed and the coordinate stays null — which the response body shows as a null in a
+   field that is otherwise filled. The reason is not in that body: it belongs to
+   `resolve-places`, which is the retry. One `Pass` covers the whole save with a 6 s budget, so
+   an unresponsive geocoder costs the save its budget and not four timeouts.
+2. **A client cannot erase one.** The Mac's form types a destination from text and sends null
+   coordinates on every save, so `carry_derived` keeps the stored coordinate for a place whose
+   id and name are unchanged. A renamed destination carries nothing: it is a different place.
+3. **A coordinate is not a route change.** `same_route` compares id, name and kind, so fixing a
+   coordinate does not regenerate the stages and lose each booking's `selected_option_id`.
+4. **A coordinate can be replaced.** `POST /api/plans/:id/resolve-places` with
+   `{"refresh": true}` looks every place up again; `{}` fills in only the places that have none.
+   The route is also the retry after a save that ran while places was down.
+
+**A place is keyed by its name, not its id.** An imported plan carries `"id": ""` on its origin
+and on every destination, so a stamp keyed by id gave the second place the first one's
+coordinate — a real plan was reachable whose origin had its destination's position. The name is
+what the lookup was made with and what identifies a place within one plan. The pass keeps the
+answer per name and applies it again when the same place is mentioned twice, because a round trip
+names its origin as its last destination.
+
 The accommodation flow, for the agent surface: anchor the search on the stage's
 **destination coordinate**, not the city name — the provider takes coordinates directly, and a
 coordinate is what lets the result match places later. When the stage carries no coordinate
-(imported and drafted plans often don't), resolve one from `GET /api/places` before falling
-back to geocoding: a place already visited usually has it. Write the offers as one
+(imported and drafted plans often don't), read it from the plan first, then `GET /api/places`
+before falling back to geocoding: a place already visited usually has it. Write the offers as one
 `option_set` (query, anchor provenance, every offer with its coordinate and URL), then the
 chosen candidate as a `stay`. First run 2026-08-12 against a real plan: the October Berlin
 stage had no coordinate, the December Berlin place did, and the search rode that one.
@@ -87,6 +128,8 @@ twenty-four:
 - `GET|POST /api/plans`
 - `GET|PATCH|DELETE /api/plans/:id`
 - `POST /api/plans/:id/items`
+- `POST /api/plans/:id/resolve-places` — a coordinate for every place the plan names and
+  carries none; `{"refresh": true}` replaces the ones it has
 - `PATCH|DELETE /api/plans/:plan_id/items/:item_id`
 - `POST /api/plans/:id/outcome` — how one booked stage went against the option it
   was chosen under

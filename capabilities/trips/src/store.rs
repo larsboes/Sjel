@@ -332,6 +332,108 @@ fn now_text() -> String {
     seconds.to_string()
 }
 
+/// Keeps the coordinate and address the plan already holds for a place the caller
+/// re-sent by name.
+///
+/// The Mac's trip form types a destination from text (`typed_place` in
+/// `apps/gpui/core/src/travel/edit.rs`), so it sends null coordinates on every save.
+/// Without this, one edit to a title would strip a resolved destination back to a
+/// name and take it off the map. The match needs both the id and the name: a
+/// renamed destination is a different place and has to be resolved again.
+/// The whole list at once, for a destination list a client re-sent.
+fn carry_derived_all(incoming: Vec<PlaceRef>, stored: &[PlaceRef]) -> Vec<PlaceRef> {
+    incoming
+        .into_iter()
+        .map(|place| carry_derived(place, stored))
+        .collect()
+}
+
+fn carry_derived(mut incoming: PlaceRef, stored: &[PlaceRef]) -> PlaceRef {
+    let Some(known) = stored
+        .iter()
+        .find(|place| place.id == incoming.id && place.name.trim() == incoming.name.trim())
+    else {
+        return incoming;
+    };
+    if incoming.latitude.is_none() {
+        incoming.latitude = known.latitude;
+    }
+    if incoming.longitude.is_none() {
+        incoming.longitude = known.longitude;
+    }
+    if incoming.address.is_none() {
+        incoming.address = known.address.clone();
+    }
+    incoming
+}
+
+/// Applies a resolved coordinate to one place, leaving every other field alone.
+///
+/// Keyed on the name, which is what the lookup was made with: an imported plan
+/// carries an empty `id` on every place, so an id-keyed stamp put London's
+/// coordinate on Bonn.
+fn stamp_place(
+    place: &mut PlaceRef,
+    coordinates: &std::collections::HashMap<String, (f64, f64)>,
+    refresh: bool,
+) {
+    if !refresh && place.latitude.is_some() && place.longitude.is_some() {
+        return;
+    }
+    if let Some((latitude, longitude)) =
+        coordinates.get(&crate::place_resolve::place_key(&place.name))
+    {
+        place.latitude = Some(*latitude);
+        place.longitude = Some(*longitude);
+    }
+}
+
+/// Gives every stage place the coordinate the plan's own place for that name
+/// carries.
+///
+/// A stage names a place the plan also names — that is what `generated_stages`
+/// builds — so the two must not disagree. They did: a PATCH that only carried a new
+/// destination coordinate left the stage that ends there unlocated.
+fn with_plan_coordinates(
+    mut stages: Vec<TripStage>,
+    origin: &PlaceRef,
+    destinations: &[PlaceRef],
+) -> Vec<TripStage> {
+    let places: Vec<&PlaceRef> = std::iter::once(origin).chain(destinations.iter()).collect();
+    for stage in stages.iter_mut() {
+        for place in [&mut stage.origin, &mut stage.destination] {
+            let key = crate::place_resolve::place_key(&place.name);
+            let Some(known) = places
+                .iter()
+                .find(|known| crate::place_resolve::place_key(&known.name) == key)
+            else {
+                continue;
+            };
+            place.latitude = known.latitude;
+            place.longitude = known.longitude;
+            if place.address.is_none() {
+                place.address = known.address.clone();
+            }
+        }
+    }
+    stages
+}
+
+/// Whether two places are the same stop on the route.///
+/// A coordinate is derived from the name, so it is compared out: fixing one is
+/// not a different trip, and treating it as one regenerated every stage and lost
+/// each booking's `selected_option_id`.
+fn same_route_place(a: &PlaceRef, b: &PlaceRef) -> bool {
+    a.id == b.id && a.name.trim() == b.name.trim() && a.kind == b.kind
+}
+
+fn same_route(a: &[PlaceRef], b: &[PlaceRef]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(one, other)| same_route_place(one, other))
+}
+
 fn generated_stages(input: &CreatePlan) -> Vec<TripStage> {
     let mut previous = input.origin.clone();
     input
@@ -911,8 +1013,20 @@ impl TripsStore {
         let date_start_before = current.date_start.clone();
         let previous_stages = current.stages.clone();
         let title = input.title.clone().unwrap_or(current.title);
-        let origin = input.origin.clone().unwrap_or(current.origin);
-        let destinations = input.destinations.clone().unwrap_or(current.destinations);
+        // A coordinate is derived state, not typed state (`crate::place_resolve`). A
+        // client that re-sends a destination by its name must not erase the one the
+        // plan holds, and re-sending the same route must not read as a route change.
+        let origin = match input.origin.clone() {
+            Some(incoming) => carry_derived(incoming, std::slice::from_ref(&origin_before)),
+            None => current.origin,
+        };
+        let destinations = match input.destinations.clone() {
+            Some(incoming) => carry_derived_all(incoming, &destinations_before),
+            None => current.destinations,
+        };
+        let origin_changed = input.origin.is_some() && !same_route_place(&origin, &origin_before);
+        let destinations_changed =
+            input.destinations.is_some() && !same_route(&destinations, &destinations_before);
         let date_start = input.date_start.clone().unwrap_or(current.date_start);
         let date_end = input.date_end.clone().unwrap_or(current.date_end);
         let interests = input.interests.clone().unwrap_or(current.interests);
@@ -928,14 +1042,8 @@ impl TripsStore {
         // regenerate every stage from scratch -- discarding `selected_option_id`
         // and the `booked` status of each one. That is the most plausible reason
         // no outcome has ever been recorded against a stage.
-        let route_changed = input
-            .origin
-            .as_ref()
-            .is_some_and(|value| *value != origin_before)
-            || input
-                .destinations
-                .as_ref()
-                .is_some_and(|value| *value != destinations_before)
+        let route_changed = origin_changed
+            || destinations_changed
             || input
                 .date_start
                 .as_ref()
@@ -981,6 +1089,10 @@ impl TripsStore {
         if !["draft", "saved", "archived"].contains(&status.as_str()) {
             return Err("status must be draft, saved, or archived".into());
         }
+        // A stage's places are copies of the plan's places, and a PATCH can carry a
+        // new coordinate for a destination without touching the stages at all. The
+        // plan's own place is the truth, so the stage copies follow it.
+        let stages = with_plan_coordinates(stages, &origin, &destinations);
 
         let now = now_text();
         let origin_json = serde_json::to_string(&origin)?;
@@ -1015,6 +1127,71 @@ impl TripsStore {
                 &plan_id,
                 &budget_cents,
                 &currency,
+            ],
+            row_to_plan,
+        )?;
+        Ok(Some(plan))
+    }
+
+    /// Writes a coordinate onto every place the plan already names.
+    ///
+    /// Keyed by the place's name, because that is what the lookup was made with and
+    /// what identifies a place within one plan: an imported plan carries `"id": ""`
+    /// on every place. The write touches no stage's status, date or
+    /// `selected_option_id`, and it bumps `updated_at` like any other write.
+    ///
+    /// The caller read the plan and then spent seconds on the network, so the write
+    /// is conditional on the revision it read (`where_updated_at`): a plan edited in
+    /// between is a `stale_plan` conflict rather than a silent overwrite of the
+    /// booking, note or date that landed during the lookup.
+    pub fn stamp_place_coordinates(
+        &self,
+        plan_id: &str,
+        coordinates: &std::collections::HashMap<String, (f64, f64)>,
+        refresh: bool,
+        where_updated_at: &str,
+    ) -> Result<Option<TripPlan>, Box<dyn std::error::Error>> {
+        let Some(details) = self.get_plan(plan_id)? else {
+            return Ok(None);
+        };
+        if coordinates.is_empty() {
+            return Ok(Some(details.plan));
+        }
+        let current = details.plan;
+        if current.updated_at != where_updated_at {
+            return Err(format!(
+                "stale_plan: the lookups started at {where_updated_at} but the plan is at {}; \
+                 re-read it and resolve again",
+                current.updated_at
+            )
+            .into());
+        }
+        let mut origin = current.origin.clone();
+        stamp_place(&mut origin, coordinates, refresh);
+        let mut destinations = current.destinations.clone();
+        for destination in destinations.iter_mut() {
+            stamp_place(destination, coordinates, refresh);
+        }
+        let mut stages = current.stages.clone();
+        for stage in stages.iter_mut() {
+            stamp_place(&mut stage.origin, coordinates, refresh);
+            stamp_place(&mut stage.destination, coordinates, refresh);
+        }
+        let now = now_text();
+        let conn = self.conn()?;
+        let plan = conn.query_row(
+            &format!(
+                "UPDATE {prefix}_plans SET origin=?1,destinations=?2,stages=?3,updated_at=?4
+                 WHERE id=?5
+                 RETURNING {PLAN_COLUMNS}",
+                prefix = self.prefix
+            ),
+            params![
+                &serde_json::to_string(&origin)?,
+                &serde_json::to_string(&destinations)?,
+                &serde_json::to_string(&stages)?,
+                &now,
+                &plan_id,
             ],
             row_to_plan,
         )?;
@@ -2038,6 +2215,30 @@ mod db_tests {
         }
     }
 
+    /// An imported plan's place: a name and no id at all.
+    fn nameless_id(name: &str) -> PlaceRef {
+        PlaceRef {
+            id: String::new(),
+            name: name.into(),
+            kind: PlaceKind::Station,
+            address: None,
+            latitude: None,
+            longitude: None,
+        }
+    }
+
+    /// A located place, as `place_resolve` leaves one.
+    fn placed(id: &str, name: &str, latitude: f64, longitude: f64) -> PlaceRef {
+        PlaceRef {
+            id: id.into(),
+            name: name.into(),
+            kind: PlaceKind::City,
+            address: None,
+            latitude: Some(latitude),
+            longitude: Some(longitude),
+        }
+    }
+
     fn a_plan() -> CreatePlan {
         CreatePlan {
             title: "Autumn in Valencia".into(),
@@ -2400,6 +2601,259 @@ mod db_tests {
             StageStatus::Planning,
             "the unbooked stage stays unbooked"
         );
+    }
+
+    /// A trip's coordinate is derived state (`crate::place_resolve`), and the Mac's
+    /// form types a destination from text: it sends null coordinates on every save.
+    /// Without the carry, one title edit takes a located trip off the map.
+    #[test]
+    fn a_typed_destination_does_not_erase_the_coordinate_the_plan_holds() {
+        let store = open_test_store("carry_coordinate");
+        let mut input = a_plan();
+        input.destinations = vec![placed("valencia", "valencia", 39.4699, -0.3763)];
+        let plan = store.create_plan(&input).unwrap();
+        assert_eq!(plan.destinations[0].latitude, Some(39.4699));
+
+        // Exactly what the editor sends: the same names, typed back, with no
+        // coordinates — which is what `typed_place` in the GPUI crate builds.
+        let renamed = store
+            .update_plan(
+                &plan.id,
+                &UpdatePlan {
+                    title: Some("Still Valencia".into()),
+                    destinations: Some(vec![place("valencia")]),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(
+            (
+                renamed.destinations[0].latitude,
+                renamed.destinations[0].longitude
+            ),
+            (Some(39.4699), Some(-0.3763)),
+            "a re-typed destination kept its coordinate"
+        );
+        assert_eq!(
+            renamed.stages, plan.stages,
+            "re-sending the same route is not a route change"
+        );
+    }
+
+    /// A renamed destination is a different place, so the coordinate the old name
+    /// carried must not follow it: the carry is keyed on the id AND the name.
+    #[test]
+    fn a_renamed_destination_does_not_inherit_the_old_coordinate() {
+        let store = open_test_store("renamed_destination");
+        let mut input = a_plan();
+        input.destinations = vec![placed("valencia", "valencia", 39.4699, -0.3763)];
+        let plan = store.create_plan(&input).unwrap();
+
+        let moved = store
+            .update_plan(
+                &plan.id,
+                &UpdatePlan {
+                    destinations: Some(vec![place("madrid")]),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(moved.destinations[0].name, "madrid");
+        assert_eq!(
+            moved.destinations[0].latitude, None,
+            "Madrid must not be pinned where Valencia is"
+        );
+    }
+
+    /// The coordinate is stamped onto the plan's places and nothing else: no stage
+    /// status, no chosen option, no item.
+    #[test]
+    fn stamping_a_coordinate_leaves_every_stage_state_alone() {
+        let store = open_test_store("stamp_coordinate");
+        let plan = store.create_plan(&a_plan()).unwrap();
+        let booked = book_the_first_stage(&store, &plan);
+        assert_eq!(plan.destinations[0].latitude, None);
+
+        let mut coordinates = std::collections::HashMap::new();
+        coordinates.insert("valencia".to_string(), (39.4699, -0.3763));
+        let stamped = store
+            .stamp_place_coordinates(&booked.id, &coordinates, false, &booked.updated_at)
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(stamped.destinations[0].latitude, Some(39.4699));
+        assert_eq!(
+            stamped.destinations[0].longitude,
+            Some(-0.3763),
+            "both coordinates land, not just the latitude"
+        );
+        assert_eq!(stamped.stages[0].destination.latitude, Some(39.4699));
+        assert_eq!(
+            stamped.stages[0].status,
+            StageStatus::Booked,
+            "a stamp is not a route change"
+        );
+        assert_eq!(
+            stamped.stages[0].selected_option_id.as_deref(),
+            Some("option:chosen")
+        );
+        assert_eq!(
+            stamped.destinations[0].name, "valencia",
+            "the operator's spelling is not replaced by the registry's"
+        );
+    }
+
+    /// The defect, measured on the live database: an imported plan carries
+    /// `"id": ""` on its origin and on every destination, so a stamp keyed by id
+    /// put London's coordinate on Bonn — both places answered key `""`.
+    #[test]
+    fn two_places_with_no_id_keep_their_own_coordinates() {
+        let store = open_test_store("stamp_empty_ids");
+        let mut input = a_plan();
+        input.origin = nameless_id("Bonn");
+        input.destinations = vec![nameless_id("London")];
+        let plan = store.create_plan(&input).unwrap();
+
+        let mut report = crate::place_resolve::Report::default();
+        for (name, latitude, longitude) in [
+            ("Bonn", 50.7352621, 7.1024635),
+            ("London", 51.5074456, -0.1277653),
+        ] {
+            report.resolved.push(crate::place_resolve::Resolved {
+                place_id: String::new(),
+                name: name.into(),
+                latitude,
+                longitude,
+                source: crate::place_resolve::Source::Geocode,
+            });
+        }
+        let stamped = store
+            .stamp_place_coordinates(&plan.id, &report.coordinates(), false, &plan.updated_at)
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(
+            (stamped.origin.latitude, stamped.origin.longitude),
+            (Some(50.7352621), Some(7.1024635)),
+            "the origin took the destination's coordinate"
+        );
+        assert_eq!(
+            (
+                stamped.destinations[0].latitude,
+                stamped.destinations[0].longitude
+            ),
+            (Some(51.5074456), Some(-0.1277653))
+        );
+        assert_eq!(stamped.stages[0].origin.latitude, Some(50.7352621));
+    }
+
+    /// A corrected coordinate is not a different route: the stops and the dates are
+    /// what a route is, and regenerating stages over a derived field would throw
+    /// away every chosen option.
+    #[test]
+    fn fixing_a_coordinate_keeps_a_booked_stage() {
+        let store = open_test_store("coordinate_is_derived");
+        let plan = store.create_plan(&a_plan()).unwrap();
+        let booked = book_the_first_stage(&store, &plan);
+
+        let mut located = booked.destinations.clone();
+        located[0].latitude = Some(39.4699);
+        located[0].longitude = Some(-0.3763);
+        let edited = store
+            .update_plan(
+                &plan.id,
+                &UpdatePlan {
+                    destinations: Some(located),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(edited.destinations[0].latitude, Some(39.4699));
+        assert_eq!(
+            edited.stages[0].status,
+            StageStatus::Booked,
+            "a coordinate is derived, so it is not a route change"
+        );
+        assert_eq!(
+            edited.stages[0].selected_option_id.as_deref(),
+            Some("option:chosen")
+        );
+    }
+
+    /// A PATCH can carry a new destination coordinate and no stages at all. The stage
+    /// that ends there is a copy of the plan's place, and it followed the other way:
+    /// it kept the old, empty coordinate (found in review of the first version).
+    #[test]
+    fn a_new_destination_coordinate_reaches_the_stage_that_ends_there() {
+        let store = open_test_store("stage_follows_destination");
+        let plan = store.create_plan(&a_plan()).unwrap();
+        assert_eq!(plan.stages[0].destination.latitude, None);
+
+        let mut located = plan.destinations.clone();
+        located[0].latitude = Some(39.4699);
+        located[0].longitude = Some(-0.3763);
+        let edited = store
+            .update_plan(
+                &plan.id,
+                &UpdatePlan {
+                    destinations: Some(located),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expect("the plan exists");
+
+        assert_eq!(
+            (
+                edited.stages[0].destination.latitude,
+                edited.stages[0].destination.longitude
+            ),
+            (Some(39.4699), Some(-0.3763)),
+            "the stage kept a coordinate the plan no longer holds"
+        );
+    }
+
+    /// The lookup happens over the network between the read and the write, so the
+    /// write is conditional on the revision that was read: a plan edited in the
+    /// meantime is a conflict, not a silent overwrite of what was edited.
+    #[test]
+    fn a_stamp_refuses_a_plan_edited_while_it_was_looking() {
+        let store = open_test_store("stamp_conflict");
+        let plan = store.create_plan(&a_plan()).unwrap();
+        // A revision the plan cannot be at. `updated_at` is seconds, so an edit that
+        // lands inside the same second is indistinguishable from no edit at all —
+        // the same limit `expected_updated_at` on PATCH has, and not one this test
+        // should pretend to close by sleeping.
+        let read_at = "1793727524".to_string();
+        // Another writer lands in between — the case the guard exists for.
+        store
+            .update_plan(
+                &plan.id,
+                &UpdatePlan {
+                    title: Some("Renamed while the geocoder answered".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .expect("the plan exists");
+
+        let mut coordinates = std::collections::HashMap::new();
+        coordinates.insert("valencia".to_string(), (39.4699, -0.3763));
+        let refused = store
+            .stamp_place_coordinates(&plan.id, &coordinates, false, &read_at)
+            .expect_err("a stale stamp must be refused");
+        assert!(refused.to_string().contains("stale_plan"), "{refused}");
+
+        // The other writer's edit is still there.
+        let reread = store.get_plan(&plan.id).unwrap().expect("the plan exists");
+        assert_eq!(reread.plan.title, "Renamed while the geocoder answered");
+        assert_eq!(reread.plan.destinations[0].latitude, None);
     }
 
     /// The defect: `add_item` ended with an unconditional `status = 'saved'`, so

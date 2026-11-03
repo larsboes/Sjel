@@ -74,6 +74,18 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     route_manifest::Route {
         method: "POST",
+        path: "/api/plans/{id}/resolve-places",
+        summary: "Look up and store a coordinate for every place the plan names and carries none: \
+                  the registry by exact name first, the geocoder second. Answers {plan_id, \
+                  resolved, unresolved, updated_at}, where each unresolved entry carries its \
+                  reason. Body is optional: {refresh: true} looks every place up again, which is \
+                  the repair for a wrong coordinate. The retry after a save that ran while places \
+                  was down, and the backfill for plans written before a destination had a \
+                  coordinate.",
+        request_schema: Some(route_manifest::schema_of::<ResolvePlacesRequest>),
+    },
+    route_manifest::Route {
+        method: "POST",
         path: "/api/plans/{id}/items",
         summary: "Add an item to a plan. Four item_types (transport, option_set, booking, \
                   stay) promise a payload shape and are validated on write: see \
@@ -454,6 +466,14 @@ async fn list_plans(State(state): State<AppState>) -> ApiResponse {
 async fn create_plan(State(state): State<AppState>, Json(input): Json<CreatePlan>) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
+        // A typed destination is a name and nothing else, so the coordinate every
+        // later reader needs is resolved here, before the one write that stores it
+        // (`crate::place_resolve`). A failure is not fatal: the plan keeps the name
+        // the operator typed and the destination carries no coordinate, which the
+        // response shows. What went wrong is not in this body — `POST
+        // /api/plans/{id}/resolve-places` names it, and is the retry.
+        let mut input = input;
+        trips::place_resolve::stamp_plan(&mut input.origin, &mut input.destinations);
         let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
         let plan = store
             .create_plan(&input)
@@ -479,6 +499,17 @@ async fn update_plan(
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
     match blocking(move || {
+        let mut input = input;
+        // Only a place the caller actually sent is looked up: a PATCH that renames a
+        // plan must not spend the save's budget on coordinates it did not touch.
+        let mut pass = trips::place_resolve::Pass::new();
+        let mut report = trips::place_resolve::Report::default();
+        if let Some(origin) = input.origin.as_mut() {
+            pass.stamp_one(origin, &mut report);
+        }
+        if let Some(destinations) = input.destinations.as_mut() {
+            pass.stamp_all(destinations, &mut report);
+        }
         let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
         let decisions = trips::people::decisions(&store).map_err(|error| error.to_string())?;
         store
@@ -950,6 +981,73 @@ async fn delete_plan(
             StatusCode::INTERNAL_SERVER_ERROR,
             json!({ "error": error.to_string() }),
         ),
+    }
+}
+
+/// What `POST /api/plans/{id}/resolve-places` accepts: nothing, or one flag.
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
+struct ResolvePlacesRequest {
+    /// Look every place up again, replacing the coordinate the plan already holds.
+    /// The repair for a wrong one; absent means only the places that have none.
+    #[serde(default)]
+    refresh: bool,
+}
+
+async fn resolve_plan_places(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: Option<Json<ResolvePlacesRequest>>,
+) -> ApiResponse {
+    let refresh = body.map(|Json(input)| input.refresh).unwrap_or_default();
+    let database_path = state.database_path.clone();
+    match blocking(move || {
+        let store = TripsStore::open(&database_path).map_err(|error| error.to_string())?;
+        let Some(details) = store.get_plan(&id).map_err(|error| error.to_string())? else {
+            return Ok::<Option<(TripPlan, trips::place_resolve::Report)>, String>(None);
+        };
+        let plan = details.plan;
+        // Origin and destinations first, then any place only a stage names — an
+        // imported or drafted plan can hold a stage its destination list does not.
+        // One pass shares the budget and skips a place already looked up.
+        let mut pass = if refresh {
+            trips::place_resolve::Pass::refreshing()
+        } else {
+            trips::place_resolve::Pass::new()
+        };
+        let mut report = trips::place_resolve::Report::default();
+        let mut origin = plan.origin.clone();
+        pass.stamp_one(&mut origin, &mut report);
+        let mut destinations = plan.destinations.clone();
+        pass.stamp_all(&mut destinations, &mut report);
+        for stage in plan.stages.iter() {
+            let mut from = stage.origin.clone();
+            pass.stamp_one(&mut from, &mut report);
+            let mut to = stage.destination.clone();
+            pass.stamp_one(&mut to, &mut report);
+        }
+        let stamp = report.coordinates();
+        let stored = store
+            .stamp_place_coordinates(&id, &stamp, refresh, &plan.updated_at)
+            .map_err(|error| error.to_string())?
+            .ok_or("the plan vanished between read and write")?;
+        Ok(Some((stored, report)))
+    })
+    .await
+    {
+        Ok(Some((plan, report))) => response(
+            StatusCode::OK,
+            json!({
+                "plan_id": plan.id,
+                "updated_at": plan.updated_at,
+                "resolved": report.resolved,
+                "unresolved": report.unresolved,
+            }),
+        ),
+        Ok(None) => response(
+            StatusCode::NOT_FOUND,
+            json!({ "error": "trip plan not found" }),
+        ),
+        Err(error) => response(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": error })),
     }
 }
 
@@ -1782,6 +1880,7 @@ fn build_router(state: AppState) -> Router {
             get(get_plan).patch(update_plan).delete(delete_plan),
         )
         .route("/api/plans/{id}/items", post(add_item))
+        .route("/api/plans/{id}/resolve-places", post(resolve_plan_places))
         .route(
             "/api/plans/{plan_id}/items/{item_id}",
             delete(delete_item).patch(set_item_day),

@@ -115,12 +115,26 @@ the Mac's last sync time.
 
 ### Travel
 
+0. **A destination has a coordinate.** Shipped: `capabilities/trips/src/place_resolve.rs`
+   resolves one on save (registry by exact name, then the geocoder) and stores it on the plan's
+   origin, destinations and stages, so the map, climate, distance joins and the accommodation
+   anchor all have one. Rule 2 below draws nothing for an upcoming trip without it: before this
+   the live travel layer held eight trip-destination points, all `phase: past`, and no upcoming
+   trip at all. Still open: **the map and the trip page do not ask for one.** A destination that
+   stayed unlocated — places down during the save, or a name the geocoder does not know — needs
+   `POST /api/plans/:id/resolve-places` called for it, and no client calls it yet. Also open:
+   **the past plans still carry no coordinates** (several do, from an older import). Backfilling
+   them means resolving names like `Valencia, Spain → Nice, France` and `Hamburg, Frankfurt`,
+   which are two places in one string: a single geocoded point for those is worse than a null,
+   so the backfill needs a decision about compound names before it runs.
 1. **Itinerary timeline.** One card per day. Each stage shows its mode, times and the connection
    time to the next stage. Trip details include linked events and nearby calendar events, each
    with its full start–end time range and any extracted programme details; nearby matches stay
    marked as unlinked until explicitly added to the itinerary. A tap copies the booking code.
 2. **Map.** Category pins for stays, stations, airports and places. A tap opens a card with the
-   stop's name, address, date, and "Open in Apple Maps". A "fit trip" control.
+   stop's name, address, date, and "Open in Apple Maps". A "fit trip" control. The tile model,
+   zoom, dateline wrap and `fit()` already exist in `apps/gpui/core/src/travel.rs`; the pins and
+   the card do not.
 3. **Offline-ready mark.** Shown per trip when its details, its booking PDFs (kept under rule 2)
    and the map tiles for its bounds at zoom 10–15 are on the phone.
 4. **Fare alerts.** Work Package 27, verified on a device.

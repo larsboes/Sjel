@@ -7,7 +7,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString, Window};
 
 use crate::route::Page;
 use crate::selection::Item;
@@ -16,17 +16,63 @@ use crate::theme::{tint, Palette};
 use crate::ui::{dot, due_badge, list, note, placeholder, priority_pill, row, section};
 use crate::workspace::Workspace;
 
-pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
+pub fn render(
+    view: &Workspace,
+    palette: Palette,
+    window: &Window,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
+    let window_width = f32::from(window.viewport_size().width);
+    let is_wide = window_width >= 1080.;
+
+    let content = if is_wide {
+        div()
+            .flex()
+            .flex_row()
+            .items_start()
+            .gap_6()
+            .w_full()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap_6()
+                    .child(today(view, palette, cx))
+                    .child(focus_tasks(view, palette, cx)),
+            )
+            .child(
+                div()
+                    .w(px(400.))
+                    .flex_none()
+                    .flex()
+                    .flex_col()
+                    .gap_6()
+                    .children(prompt_outbox(view, palette, cx))
+                    .child(travel_card(view, palette, cx)),
+            )
+            .into_any_element()
+    } else {
+        div()
+            .flex()
+            .flex_col()
+            .gap_6()
+            .w_full()
+            .child(today(view, palette, cx))
+            .child(focus_tasks(view, palette, cx))
+            .children(prompt_outbox(view, palette, cx))
+            .child(travel_card(view, palette, cx))
+            .into_any_element()
+    };
+
     div()
         .flex()
         .flex_col()
-        .gap_8()
+        .gap_6()
+        .w_full()
         .children(needs_you(view, palette, cx))
-        .children(prompt_outbox(view, palette, cx))
-        .children(next_trip(view, palette, cx))
-        .child(location(view, palette, cx))
-        .child(focus_tasks(view, palette, cx))
-        .child(today(view, palette, cx))
+        .child(content)
 }
 
 /// Prompts an agent drafted for you to paste elsewhere. Copy empties the card; none draws nothing.
@@ -76,61 +122,86 @@ fn prompt_outbox(
     Some(section("Prompts for you", list(rows, palette), palette).into_any_element())
 }
 
-/// The trip that matters now, above the map: the nearest saved plan or Calendar draft.
-fn next_trip(
-    view: &Workspace,
-    palette: Palette,
-    cx: &mut Context<Workspace>,
-) -> Option<AnyElement> {
-    let (trip, plan_id) = view
+/// The trip that matters now, together with the location map: contextual travel card.
+fn travel_card(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
+    let trip_info = view
         .travel
-        .update(cx, |travel, cx| travel.home_next_trip(palette, cx))?;
-    let mut body = div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_2()
-        .child(trip);
-    if let Some(id) = plan_id {
-        body = body.child(
-            Button::new("home-open-trip")
-                .ghost()
-                .label("Open trip")
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    let route = sjel_gpui_core::travel::TravelRoute::Trip {
-                        id: id.clone(),
-                        section: sjel_gpui_core::travel::TripSection::Overview,
-                    };
-                    view.travel
-                        .update(cx, |travel, cx| travel.open_route(route, cx));
-                    view.go(Page::Travel, cx);
-                })),
-        );
-    }
-    Some(section("Next trip", body.into_any_element(), palette).into_any_element())
-}
-
-fn location(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
+        .update(cx, |travel, cx| travel.home_next_trip(palette, cx));
     let map = view
         .travel
         .update(cx, |travel, cx| travel.home_map(palette, cx));
-    section(
-        "Location",
-        div()
+
+    if let Some((trip, plan_id)) = trip_info {
+        let mut trip_header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_2()
+            .px_1()
+            .child(trip);
+        if let Some(id) = plan_id {
+            trip_header = trip_header.child(
+                Button::new("home-open-trip")
+                    .ghost()
+                    .small()
+                    .label("Open trip")
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        let route = sjel_gpui_core::travel::TravelRoute::Trip {
+                            id: id.clone(),
+                            section: sjel_gpui_core::travel::TripSection::Overview,
+                        };
+                        view.travel
+                            .update(cx, |travel, cx| travel.open_route(route, cx));
+                        view.go(Page::Travel, cx);
+                    })),
+            );
+        }
+
+        let body = div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_3()
+            .rounded(px(16.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .p_3()
+            .child(trip_header)
             .child(map)
             .child(
-                Button::new("open-location")
-                    .ghost()
-                    .label("Open Location")
-                    .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
-            )
-            .into_any_element(),
-        palette,
-    )
-    .into_any_element()
+                div().flex().justify_end().child(
+                    Button::new("open-location")
+                        .ghost()
+                        .small()
+                        .label("Open Location")
+                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
+                ),
+            );
+
+        section("Next trip & Location", body.into_any_element(), palette).into_any_element()
+    } else {
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .rounded(px(16.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .p_3()
+            .child(map)
+            .child(
+                div().flex().justify_end().child(
+                    Button::new("open-location")
+                        .ghost()
+                        .small()
+                        .label("Open Location")
+                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
+                ),
+            );
+
+        section("Location", body.into_any_element(), palette).into_any_element()
+    }
 }
 
 /// The day on screen: the date, its three counts, and the timeline, from the Today view.
@@ -339,7 +410,7 @@ fn focus_tasks(
                                     .id(("home-proj-tag", index))
                                     .px_2()
                                     .py(px(2.))
-                                    .rounded(px(4.))
+                                    .rounded(px(6.))
                                     .bg(rgba(palette.raised))
                                     .text_color(rgb(palette.accent))
                                     .text_xs()
@@ -382,7 +453,7 @@ fn focus_tasks(
                                         .flex_none()
                                         .px(px(6.))
                                         .py(px(1.5))
-                                        .rounded(px(3.))
+                                        .rounded(px(6.))
                                         .bg(rgba(tint(palette.accent, 0x24)))
                                         .text_color(rgb(palette.accent))
                                         .text_xs()

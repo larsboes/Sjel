@@ -7,6 +7,7 @@ pub mod backup;
 pub mod block_menu;
 pub mod calendar;
 pub mod clipper;
+pub mod context;
 pub mod cv;
 pub mod data;
 pub mod doc_view;

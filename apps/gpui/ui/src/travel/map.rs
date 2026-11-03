@@ -772,7 +772,7 @@ impl Travel {
             }))
             .flex_none()
             .overflow_hidden()
-            .rounded(px(8.))
+            .rounded(px(16.))
             .border_1()
             .border_color(rgba(palette.border))
             .bg(rgb(palette.surface >> 8))
@@ -1113,17 +1113,13 @@ impl Travel {
                         at.longitude
                     );
                     card = card.child(
-                        div()
-                            .pt_1()
-                            .flex()
-                            .gap_1()
-                            .child(
-                                self.button("map-open-apple-maps")
-                                    .primary()
-                                    .small()
-                                    .label("Open in Apple Maps")
-                                    .on_click(move |_, _, cx| cx.open_url(&maps_url)),
-                            ),
+                        div().pt_1().flex().gap_1().child(
+                            self.button("map-open-apple-maps")
+                                .primary()
+                                .small()
+                                .label("Open in Apple Maps")
+                                .on_click(move |_, _, cx| cx.open_url(&maps_url)),
+                        ),
                     );
                 }
 
@@ -1137,10 +1133,10 @@ impl Travel {
             .flex()
             .gap_1()
             .p_1()
-            .rounded(px(6.))
+            .rounded(px(10.))
             .border_1()
             .border_color(rgba(palette.border))
-            .bg(rgb(palette.surface >> 8))
+            .bg(rgba(palette.surface))
             .child(
                 self.button("fit-trip")
                     .label("Fit trip")
@@ -1171,8 +1167,8 @@ impl Travel {
                 .gap_2()
                 .px_2()
                 .py_1()
-                .rounded(px(6.))
-                .bg(rgb(palette.surface >> 8))
+                .rounded(px(8.))
+                .bg(rgba(palette.surface))
                 .text_xs()
                 .text_color(rgb(palette.muted))
                 .child(if self.resolving {
@@ -1184,9 +1180,9 @@ impl Travel {
                 overlay = overlay.child(
                     self.button("map-locate-stops")
                         .label("Locate stops")
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.resolve_current_plan(false, cx)
-                        })),
+                        .on_click(
+                            cx.listener(|view, _, _, cx| view.resolve_current_plan(false, cx)),
+                        ),
                 );
             }
             map = map.child(overlay);

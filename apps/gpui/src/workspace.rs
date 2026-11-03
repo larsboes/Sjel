@@ -2014,7 +2014,7 @@ impl Render for Workspace {
             window.focus(&self.focus, cx);
         }
         let page = match self.page {
-            Page::Home => home::render(self, palette, cx).into_any_element(),
+            Page::Home => home::render(self, palette, window, cx).into_any_element(),
             Page::Capabilities => capabilities::render(self, palette, cx).into_any_element(),
             Page::Backup => {
                 self.backup_page
@@ -2236,7 +2236,19 @@ impl Render for Workspace {
                                         .overflow_y_scroll()
                                         .track_scroll(&scroll)
                                         .vertical_scrollbar(&scroll)
-                                        .child(div().px_8().pb_8().max_w(px(880.)).child(page))
+                                        .child(
+                                            div()
+                                                .px_8()
+                                                .pb_8()
+                                                .w_full()
+                                                .when(self.page == Page::Home, |el| {
+                                                    el.max_w(px(1440.))
+                                                })
+                                                .when(self.page != Page::Home, |el| {
+                                                    el.max_w(px(880.))
+                                                })
+                                                .child(page),
+                                        )
                                 },
                             )
                             // The soundscape panel slides over the page and not the navigation: a

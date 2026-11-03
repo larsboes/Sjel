@@ -9,7 +9,7 @@
 // capability appears here without an edit. Self-contained: one HTML file, no script, no font.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { esc } from "./style.ts";
+import { esc, GITHUB_ICON } from "./style.ts";
 
 const SJEL_ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 const REPO = "https://github.com/larsboes/Sjel";
@@ -155,7 +155,7 @@ const CSS = `
 body { margin: 0; background: var(--bg); color: var(--fg);
   font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
 a { color: inherit; }
-.wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+.wrap { max-width: 96rem; margin: 0 auto; padding: 0 clamp(1.25rem, 3vw, 3rem); }
 /* Grid children default to min-width: auto, so one long line would widen the page. */
 .hero > *, .split > *, .areas > *, .classes > *, .steps > *, .docs > * { min-width: 0; }
 :focus-visible { outline: 2px solid var(--teal-2); outline-offset: 3px; border-radius: 3px; }
@@ -163,18 +163,21 @@ a { color: inherit; }
 .top { background: var(--ink); color: var(--cream); }
 nav.bar { display: flex; align-items: center; gap: 1.5rem; height: 64px; }
 nav.bar .brand { display: flex; align-items: center; gap: .6rem; font-weight: 650; text-decoration: none; letter-spacing: -.01em; }
-nav.bar .links { display: flex; gap: 1.25rem; margin-left: auto; font-size: .9rem; }
+nav.bar .links { display: flex; align-items: center; gap: 1.25rem; margin-left: auto; font-size: .9rem; }
 nav.bar .links a { text-decoration: none; opacity: .78; }
 nav.bar .links a:hover { opacity: 1; }
+.icon-link { display: inline-flex; align-items: center; justify-content: center; opacity: .82; text-decoration: none; transition: opacity .15s, transform .15s; }
+.icon-link:hover { opacity: 1; transform: translateY(-1px); }
+.btn svg, .btn .icon { flex-shrink: 0; }
 @media (max-width: 720px) { nav.bar .links a.opt { display: none; } }
 
-.hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 3rem; align-items: center; padding: 4.5rem 0 5rem; }
+.hero { display: grid; grid-template-columns: 1.25fr 1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; padding: 5rem 0 5.5rem; }
 @media (max-width: 900px) { .hero { grid-template-columns: 1fr; padding: 3rem 0 3.5rem; } }
 .eyebrow { font: 500 .78rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #8fd0df; margin: 0 0 1rem; }
-.hero h1 { font-size: clamp(2.2rem, 4.6vw, 3.4rem); line-height: 1.07; letter-spacing: -.03em; margin: 0 0 1.25rem; font-weight: 700; }
-.hero p.lede { font-size: 1.15rem; color: #c6d4d3; max-width: 34rem; margin: 0 0 2rem; }
+.hero h1 { font-size: clamp(2.2rem, 4.4vw, 3.5rem); line-height: 1.07; letter-spacing: -.03em; margin: 0 0 1.25rem; font-weight: 700; }
+.hero p.lede { font-size: 1.2rem; color: #c6d4d3; max-width: 48rem; margin: 0 0 2rem; line-height: 1.65; }
 .cta { display: flex; flex-wrap: wrap; gap: .75rem; }
-.btn { display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1.1rem; border-radius: 6px;
+.btn { display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1.15rem; border-radius: 6px;
   font-weight: 600; font-size: .95rem; text-decoration: none; transition: background-color .15s, transform .15s; }
 .btn.primary { background: var(--teal); color: #fff; }
 .btn.primary:hover { background: var(--teal-2); }
@@ -182,12 +185,12 @@ nav.bar .links a:hover { opacity: 1; }
 .btn.ghost:hover { background: var(--ink-2); }
 .btn:active { transform: translateY(1px); }
 
-.quickstart { margin-top: 1.75rem; background: var(--ink-2); border: 1px solid #1d3a40; border-radius: 8px; overflow: hidden; max-width: 34rem; }
+.quickstart { margin-top: 1.75rem; background: var(--ink-2); border: 1px solid #1d3a40; border-radius: 8px; overflow: hidden; max-width: 48rem; }
 .quickstart-head { display: flex; align-items: center; justify-content: space-between; padding: .5rem .85rem; background: rgba(0,0,0,0.25); border-bottom: 1px solid #1d3a40; font: 500 .74rem var(--mono); color: #8fd0df; text-transform: uppercase; letter-spacing: .06em; }
 .quickstart-head span.sub { font-size: .72rem; color: #9fb3b1; text-transform: none; letter-spacing: normal; }
 .quickstart pre { margin: 0; padding: .85rem 1rem; background: transparent; font: .8rem/1.65 var(--mono); color: #d5e2e0; border: none; }
 .com { color: #6f8a88; }
-.mark { justify-self: center; width: min(100%, 26rem); }
+.mark { justify-self: center; width: min(100%, 28rem); }
 .mark img { width: 100%; height: auto; border-radius: 22px; display: block; }
 
 .stats { border-top: 1px solid #1d3a40; display: grid; grid-template-columns: repeat(5, 1fr); }
@@ -200,7 +203,7 @@ section.band { padding: 5rem 0; border-bottom: 1px solid var(--line); }
 .kicker { font: 500 .75rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--teal); margin: 0 0 .6rem; }
 @media (prefers-color-scheme: dark) { .kicker { color: #6cc3d8; } }
 h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -.025em; line-height: 1.15; margin: 0 0 1rem; }
-.intro { color: var(--dim); max-width: 44rem; font-size: 1.05rem; margin: 0 0 2.5rem; }
+.intro { color: var(--dim); max-width: 58rem; font-size: 1.05rem; margin: 0 0 2.5rem; }
 
 .figure { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; overflow-x: auto; }
 .arch { display: block; width: 100%; min-width: 680px; height: auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
@@ -320,7 +323,7 @@ export function renderLanding(model: SelfModel): string {
         <a class="opt" href="#capabilities">Capabilities</a>
         <a href="docs/index.html">Docs</a>
         <a href="reference/index.html">Reference</a>
-        <a href="${REPO}">GitHub</a>
+        <a href="${REPO}" class="icon-link" aria-label="GitHub repository" title="GitHub">${GITHUB_ICON}</a>
       </div>
     </nav>
     <div class="hero">
@@ -329,8 +332,14 @@ export function renderLanding(model: SelfModel): string {
         <h1>A local-first data kernel and native GPUI client.</h1>
         <p class="lede">Sjel stores personal life facts as deterministic, typed SQLite data on hardware you own. Cryptographically signed peering over Tailscale, sub-10ms native rendering across macOS and iOS, and mathematical data-class sandboxing for local and cloud models.</p>
         <div class="cta">
-          <a class="btn primary" href="docs/index.html">Read the docs</a>
-          <a class="btn ghost" href="${REPO}">View the source</a>
+          <a class="btn primary" href="docs/index.html">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+            Read the docs
+          </a>
+          <a class="btn ghost" href="${REPO}">
+            ${GITHUB_ICON}
+            <span>GitHub</span>
+          </a>
         </div>
         <div class="quickstart">
           <div class="quickstart-head">
@@ -499,11 +508,15 @@ export function renderLanding(model: SelfModel): string {
 
 <div class="wrap">
   <footer>
-    <span>Sjel · AGPL-3.0</span>
-    <a href="${REPO}">GitHub</a>
-    <a href="docs/index.html">Docs</a>
-    <a href="reference/index.html">Reference</a>
-    <a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a>
+    <div class="foot-wrap">
+      <span>Sjel · AGPL-3.0</span>
+      <div class="foot-links">
+        <a href="docs/index.html">Docs</a>
+        <a href="reference/index.html">Reference</a>
+        <a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a>
+        <a href="${REPO}" class="icon-link" aria-label="GitHub repository" title="GitHub">${GITHUB_ICON}</a>
+      </div>
+    </div>
   </footer>
 </div>
 </body>

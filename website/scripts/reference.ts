@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderMarkdown } from "./markdown.ts";
 import { capabilityRoutes, type DeclaredRoute } from "./routes.ts";
-import { esc, page, REPO } from "./style.ts";
+import { esc, GITHUB_ICON, page, REPO } from "./style.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 
@@ -105,7 +105,7 @@ function unitPage(unit: Unit, model: SelfModel, units: Unit[], root: string): st
     current: "reference",
     sidebar: sidebar(units, unit.name),
     body: `<h1>${esc(unit.name)}</h1>
-<p class="tagline">${esc(LABEL[unit.kind] ?? unit.kind)} · <a href="${REPO}/tree/main/${esc(dir)}">source</a></p>
+<p class="tagline">${esc(LABEL[unit.kind] ?? unit.kind)} · <a href="${REPO}/tree/main/${esc(dir)}" class="icon-link source-link" title="Source">${GITHUB_ICON} <span>Source</span></a></p>
 <h2 id="contract">Contract</h2>
 ${contract(unit)}
 ${unit.kind === "capability" ? routesSection(capabilityRoutes(root, unit.name), dir) : ""}

@@ -1059,7 +1059,7 @@ fn boot_persistence(ctx: &mut Ctx) {
     }
 
     // A unit installed for a capability this machine does not enable: its watchdog starts it
-    // anyway. Spine components (a root-level service.toml) and their sidecars are exempt.
+    // anyway.
     let enabled = ctx.enabled();
     let os = ctx.machine_str("os").unwrap_or_default();
     let unit_dir = match os.as_str() {
@@ -1071,26 +1071,6 @@ fn boot_persistence(ctx: &mut Ctx) {
         ),
         _ => None,
     };
-    let mut exempt = BTreeSet::new();
-    for name in sorted_dir_names(&ctx.root) {
-        let svc = ctx.root.join(&name).join("service.toml");
-        if !svc.exists() {
-            continue;
-        }
-        exempt.insert(name);
-        if let Ok(t) = read_toml(&svc) {
-            for s in t
-                .get("sidecars")
-                .and_then(toml::Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(s) = s.as_str().filter(|s| !s.is_empty()) {
-                    exempt.insert(s.to_owned());
-                }
-            }
-        }
-    }
     let mut orphans = Vec::new();
     if let Some(dir) = unit_dir.filter(|d| d.exists()) {
         for f in std::fs::read_dir(&dir)
@@ -1106,7 +1086,7 @@ fn boot_persistence(ctx: &mut Ctx) {
                     .and_then(|r| r.strip_suffix(".service"))
                     .map(str::to_owned)
             };
-            if let Some(c) = cap.filter(|c| !exempt.contains(c) && !enabled.contains(c)) {
+            if let Some(c) = cap.filter(|c| !enabled.contains(c)) {
                 orphans.push((c, dir.join(&f)));
             }
         }

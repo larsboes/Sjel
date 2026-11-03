@@ -9,11 +9,9 @@ allowed-tools: Read, Write, Edit, Bash
 Sjel is a workstation that one person reads many times a day. A good view answers the reader's
 question at a glance, keeps every other action one step away, and never makes the reader wait.
 
-The rules below are written in terms of intent, not a framework, so they hold if the dashboard
-moves from Svelte to GPUI (decision of 2026-10-08). The Svelte implementation of each rule —
-kit primitives, tokens and the tests that enforce them — is in
-[`references/sjel-dashboard.md`](references/sjel-dashboard.md). Read it before you edit
-`dashboard/`.
+The rules below are written in terms of intent, not a framework. They apply to the GPUI app on
+the Mac and the iPhone and to the public site in `website/`. For GPUI implementation details, use
+the `gpui` skill.
 
 Source for rules 1–3: Kole Jain, "The 3 dashboard UI flaws that give away you've never built
 one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel. Rule 4 and the tip rule
@@ -122,15 +120,13 @@ Speed is a feature of the design, not a later optimisation.
 5. **Check the tells and the budget.** Read
    [`references/anti-slop-tells.md`](references/anti-slop-tells.md) and
    [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md).
-6. **Run surface-specific checks.** For dashboard changes, use the tests listed in
-   [`references/sjel-dashboard.md`](references/sjel-dashboard.md). For toolkit details, route
-   to the relevant implementation skill.
+6. **Run surface-specific checks.** For GPUI, the app's tests and `bench-scroll`; for the site,
+   `website/build`. For toolkit details, route to the relevant implementation skill.
 
 ## Reference routing
 
 | Topic | Reference |
 |---|---|
-| Svelte kit primitives, tokens, enforcing tests, how each rule is built today | [`references/sjel-dashboard.md`](references/sjel-dashboard.md) |
 | The AI design tells, their code signatures and fixes | [`references/anti-slop-tells.md`](references/anti-slop-tells.md) |
 | Typography, number alignment, spacing, density, semantic colour | [`references/visual-hierarchy-and-typography.md`](references/visual-hierarchy-and-typography.md) |
 | Zero layout shift, compositor-only motion, contrast, reduced motion | [`references/mechanical-sympathy-in-ui.md`](references/mechanical-sympathy-in-ui.md) |

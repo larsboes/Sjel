@@ -91,15 +91,7 @@ impl Paths {
             (true, Some(o)) => Manifest::Duplicate(core, o),
             (true, None) => Manifest::Found(core),
             (false, Some(o)) => Manifest::Found(o),
-            // A spine component (today: dashboard/) carries its manifest at the repo root.
-            (false, None) => {
-                let spine = self.root.join(name).join("service.toml");
-                if spine.is_file() {
-                    Manifest::Found(spine)
-                } else {
-                    Manifest::None
-                }
-            }
+            (false, None) => Manifest::None,
         }
     }
 

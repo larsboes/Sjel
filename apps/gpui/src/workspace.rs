@@ -37,7 +37,15 @@ use crate::shell::{
     self, AgentView, AvailableFeature, Backups, GlobalTask, InstalledFeature, NodeHealth,
     ShellError, Snapshot, SoundscapeState,
 };
-use crate::theme::{step_terminal_font_size, AppearanceSettings, GlassStyle, Palette};
+use crate::theme::{
+    step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, Palette,
+    DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES,
+};
+
+/// Pinch travel per app zoom step (0.1 is a 10% pinch).
+const UI_PINCH_STEP: f32 = 0.15;
+/// Trackpad scroll travel per app zoom step.
+const UI_SCROLL_PIXELS_PER_STEP: f32 = 40.;
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
 use sjel_gpui_core::terminal::Host;
@@ -77,6 +85,12 @@ actions!(
         ZoomIn,
         /// Zoom out on the active map, document, or terminal.
         ZoomOut,
+        /// Make the whole app larger.
+        UiZoomIn,
+        /// Make the whole app smaller.
+        UiZoomOut,
+        /// Return the app to its default size.
+        UiZoomReset,
         /// Open Settings at the section it showed last.
         OpenSettings,
         /// Open the terminal in the right edge.
@@ -237,11 +251,12 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("+", ZoomIn, Some(PAGE_KEYS)),
         KeyBinding::new("=", ZoomIn, Some(PAGE_KEYS)),
         KeyBinding::new("-", ZoomOut, Some(PAGE_KEYS)),
-        KeyBinding::new("cmd-=", ZoomIn, None),
-        KeyBinding::new("cmd-+", ZoomIn, None),
-        KeyBinding::new("shift-cmd-=", ZoomIn, None),
-        KeyBinding::new("cmd--", ZoomOut, None),
-        KeyBinding::new("shift-cmd--", ZoomOut, None),
+        KeyBinding::new("cmd-=", UiZoomIn, None),
+        KeyBinding::new("cmd-+", UiZoomIn, None),
+        KeyBinding::new("shift-cmd-=", UiZoomIn, None),
+        KeyBinding::new("cmd--", UiZoomOut, None),
+        KeyBinding::new("shift-cmd--", UiZoomOut, None),
+        KeyBinding::new("alt-cmd-0", UiZoomReset, None),
         // Vim chords for fast page jumps
         KeyBinding::new("g h", GoTo(Page::Home), Some(PAGE_KEYS)),
         KeyBinding::new("g o", GoTo(Page::Context), Some(PAGE_KEYS)),
@@ -354,6 +369,8 @@ pub struct Workspace {
     /// True once the shell pushes its answers, so the timer stops reading them.
     streaming: bool,
     pub appearance_settings: AppearanceSettings,
+    /// Pinch or Cmd-scroll travel not yet turned into a zoom step.
+    ui_zoom_gesture: f32,
     /// The section Settings shows.
     pub settings_section: crate::settings::Section,
     pub settings_feature_view: crate::settings::FeatureView,
@@ -556,6 +573,7 @@ impl Workspace {
             focus,
             refocus: false,
             appearance_settings,
+            ui_zoom_gesture: 0.,
             settings_section: crate::settings::Section::default(),
             settings_feature_view: crate::settings::FeatureView::default(),
             settings_query: String::new(),
@@ -1667,6 +1685,8 @@ impl Workspace {
             theme.colors.button_primary_hover = accent.opacity(0.9);
             theme.colors.button_primary_active = accent.opacity(0.8);
             theme.colors.button_primary_foreground = gpui_kit::white();
+            // `Root` sets the window's rem size from this on every frame, so it is the app's zoom.
+            theme.font_size = px(f32::from(self.appearance_settings.ui_font_size));
         });
     }
 
@@ -1759,6 +1779,38 @@ impl Workspace {
                 self.documents.update(cx, |docs, cx| docs.zoom_out(cx));
             }
             _ => self.step_terminal_zoom(-1, cx),
+        }
+    }
+
+    fn on_ui_zoom_in(&mut self, _: &UiZoomIn, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_ui_zoom(1, cx);
+    }
+
+    fn on_ui_zoom_out(&mut self, _: &UiZoomOut, _: &mut Window, cx: &mut Context<Self>) {
+        self.step_ui_zoom(-1, cx);
+    }
+
+    fn on_ui_zoom_reset(&mut self, _: &UiZoomReset, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_appearance(
+            AppearanceSettings {
+                ui_font_size: DEFAULT_UI_FONT_SIZE,
+                ..self.appearance_settings
+            },
+            cx,
+        );
+    }
+
+    fn step_ui_zoom(&mut self, steps: i32, cx: &mut Context<Self>) {
+        let settings = self.appearance_settings;
+        let ui_font_size = step_font_size(&UI_FONT_SIZES, settings.ui_font_size, steps);
+        if ui_font_size != settings.ui_font_size {
+            self.set_appearance(
+                AppearanceSettings {
+                    ui_font_size,
+                    ..settings
+                },
+                cx,
+            );
         }
     }
 
@@ -2208,6 +2260,37 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_doc_toggle_zoom))
             .on_action(cx.listener(Self::on_zoom_in))
             .on_action(cx.listener(Self::on_zoom_out))
+            .on_action(cx.listener(Self::on_ui_zoom_in))
+            .on_action(cx.listener(Self::on_ui_zoom_out))
+            .on_action(cx.listener(Self::on_ui_zoom_reset))
+            // A pinch or a Cmd-scroll over the map or the terminal zooms that view; they stop
+            // the event, so what reaches here zooms the app.
+            .on_pinch(cx.listener(|view, event: &gpui::PinchEvent, _, cx| {
+                view.ui_zoom_gesture += event.delta;
+                let steps = (view.ui_zoom_gesture / UI_PINCH_STEP).trunc();
+                if steps != 0. {
+                    view.ui_zoom_gesture -= steps * UI_PINCH_STEP;
+                    view.step_ui_zoom(steps as i32, cx);
+                }
+                if event.phase == gpui::TouchPhase::Ended {
+                    view.ui_zoom_gesture = 0.;
+                }
+            }))
+            .on_scroll_wheel(cx.listener(|view, event: &gpui::ScrollWheelEvent, _, cx| {
+                if !event.modifiers.platform {
+                    return;
+                }
+                let lines = match event.delta {
+                    gpui::ScrollDelta::Lines(delta) => delta.y,
+                    gpui::ScrollDelta::Pixels(delta) => delta.y / px(UI_SCROLL_PIXELS_PER_STEP),
+                };
+                view.ui_zoom_gesture += lines;
+                let steps = view.ui_zoom_gesture.trunc();
+                if steps != 0. {
+                    view.ui_zoom_gesture -= steps;
+                    view.step_ui_zoom(steps as i32, cx);
+                }
+            }))
             .on_action(cx.listener(Self::on_toggle_soundscape))
             .on_action(cx.listener(Self::on_cycle_soundscape_preset))
             .on_action(cx.listener(Self::on_run_primary))

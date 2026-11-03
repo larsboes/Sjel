@@ -363,19 +363,33 @@ impl TerminalFont {
 /// The terminal's font sizes on offer, in points.
 pub const TERMINAL_FONT_SIZES: [u8; 5] = [11, 12, 13, 14, 16];
 
-/// The size `steps` places away from `current` among [`TERMINAL_FONT_SIZES`], held at both ends.
+/// The app's base font sizes on offer, in points. Every `rem` in the UI is this size.
+pub const UI_FONT_SIZES: [u8; 9] = [11, 12, 13, 14, 16, 18, 20, 22, 24];
+
+/// The default base font size, gpui-component's own.
+pub const DEFAULT_UI_FONT_SIZE: u8 = 16;
+
+/// The size `steps` places away from `current` among `sizes`, held at both ends.
 /// A size that is not on offer (an edited file) steps from the nearest one that is.
-pub fn step_terminal_font_size(current: u8, steps: i32) -> u8 {
-    let at = TERMINAL_FONT_SIZES
+pub fn step_font_size(sizes: &[u8], current: u8, steps: i32) -> u8 {
+    let at = sizes
         .iter()
         .position(|size| *size >= current)
-        .unwrap_or(TERMINAL_FONT_SIZES.len() - 1) as i32;
-    let to = (at + steps).clamp(0, TERMINAL_FONT_SIZES.len() as i32 - 1);
-    TERMINAL_FONT_SIZES[to as usize]
+        .unwrap_or(sizes.len() - 1) as i32;
+    let to = (at + steps).clamp(0, sizes.len() as i32 - 1);
+    sizes[to as usize]
+}
+
+pub fn step_terminal_font_size(current: u8, steps: i32) -> u8 {
+    step_font_size(&TERMINAL_FONT_SIZES, current, steps)
 }
 
 fn default_terminal_font_size() -> u8 {
     13
+}
+
+fn default_ui_font_size() -> u8 {
+    DEFAULT_UI_FONT_SIZE
 }
 
 /// Glass effect style.
@@ -544,6 +558,9 @@ pub struct AppearanceSettings {
     pub terminal_font: TerminalFont,
     #[serde(default = "default_terminal_font_size")]
     pub terminal_font_size: u8,
+    /// The app's zoom: the base font size every `rem` resolves to.
+    #[serde(default = "default_ui_font_size")]
+    pub ui_font_size: u8,
 }
 
 impl Default for AppearanceSettings {
@@ -561,6 +578,7 @@ impl Default for AppearanceSettings {
             terminal_opacity: default_panel_opacity(),
             terminal_font: TerminalFont::default(),
             terminal_font_size: default_terminal_font_size(),
+            ui_font_size: default_ui_font_size(),
         }
     }
 }
@@ -1088,9 +1106,21 @@ mod tests {
             terminal_opacity: WindowOpacity::SoftGlass,
             terminal_font: TerminalFont::Menlo,
             terminal_font_size: 14,
+            ui_font_size: 18,
         };
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: AppearanceSettings = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn ui_zoom_steps_hold_at_both_ends_and_older_files_get_the_default() {
+        assert_eq!(step_font_size(&UI_FONT_SIZES, DEFAULT_UI_FONT_SIZE, 1), 18);
+        assert_eq!(step_font_size(&UI_FONT_SIZES, DEFAULT_UI_FONT_SIZE, -1), 14);
+        assert_eq!(step_font_size(&UI_FONT_SIZES, 24, 3), 24);
+        assert_eq!(step_font_size(&UI_FONT_SIZES, 11, -3), 11);
+        assert_eq!(step_font_size(&UI_FONT_SIZES, 15, 0), 16);
+        let saved: AppearanceSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(saved.ui_font_size, DEFAULT_UI_FONT_SIZE);
     }
 }

@@ -1267,6 +1267,7 @@ impl Render for TerminalView {
                         }
                     }))
                     .on_pinch(cx.listener(|view, event: &PinchEvent, _window, cx| {
+                        cx.stop_propagation();
                         view.pinch += event.delta;
                         if view.pinch.abs() >= PINCH_STEP {
                             cx.emit(TerminalEvent::Zoom(view.pinch.signum() as i32));

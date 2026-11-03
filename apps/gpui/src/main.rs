@@ -62,7 +62,8 @@ use sjel_gpui_core::area::Area;
 use sjel_gpui_core::{route, shell};
 
 use workspace::{
-    OpenArea, OpenPalette, OpenSettings, OpenSoundscape, Refresh, ToggleSoundscapePanel, Workspace,
+    OpenArea, OpenPalette, OpenSettings, OpenSoundscape, Refresh, ToggleSoundscapePanel, UiZoomIn,
+    UiZoomOut, UiZoomReset, Workspace,
 };
 
 actions!(sjel, [Quit, CloseWindow]);
@@ -155,6 +156,15 @@ fn main() {
                         MenuItem::action("Refresh", Refresh),
                     ])
                     .collect(),
+                disabled: false,
+            },
+            Menu {
+                name: "View".into(),
+                items: vec![
+                    MenuItem::action("Actual Size", UiZoomReset),
+                    MenuItem::action("Zoom In", UiZoomIn),
+                    MenuItem::action("Zoom Out", UiZoomOut),
+                ],
                 disabled: false,
             },
             Menu {

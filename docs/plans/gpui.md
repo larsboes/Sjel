@@ -168,8 +168,7 @@ Open work:
 - The stay ranking board an unfinished session left in the dashboard. It held one trip's hotels
   as constants and kept its ranking in memory. A port stores the candidates as `stay` items and
   needs an item update route in `trips` to hold a rank.
-- The public page that replaces the demo site ([`restructure.md`](restructure.md)). Until then
-  the Pages root redirects to the self-model page.
+- Screenshots of the app for the public landing page ([`restructure.md`](restructure.md#4-the-public-page)).
 
 ## 4. Work packages
 

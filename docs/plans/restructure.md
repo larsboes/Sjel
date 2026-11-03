@@ -169,10 +169,12 @@ only on binaries a user types (`sjel`, `sjel-agent`, `sjel-mcp`).
 
 ## 4. The public page
 
-The demo site at `larsboes.github.io/Sjel/` goes away with the dashboard. Decided 2026-10-25
-(D2): a new site replaces it, with screenshots and animations of the GPUI app, the
-technical docs, and a description of what the app is. It comes after the dashboard is deleted,
-at the end of Lane A.
+The live demo is gone (decided 2026-11-03). `larsboes.github.io/Sjel/` is a landing page
+(`tools/generate-landing.ts`): what Sjel is, an architecture figure, the data classes, the
+capability index from `self.json`, the measured numbers, and links into the reference docs.
+`tools/build-site` builds it from tracked files; no capability runs in the Pages job.
+
+Open: screenshots and short animations of the GPUI app in the hero and the Two surfaces section.
 
 Screenshots are picked by hand once the GPUI port is done (decided 2026-10-28).
 `sjel demo up | mac <page> | down` (`tools/demo-shots`) captures the Mac app against the demo

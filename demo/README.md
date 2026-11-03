@@ -11,7 +11,7 @@ Those are true, checkable and completely useless to somebody asking what the thi
 
 ```
 tools/demo-up            start the stack, seed it, record it
-tools/demo-site          assemble site/ from the recording
+tools/build-site         assemble the public site; it no longer reads the recording
 tools/demo-origin        the synthetic remote, started by demo-up (--once prints its payloads)
 tools/demo-shots         run the stack in a container and screenshot the GPUI app against it
                          (also `sjel demo up | mac <page> | down`)

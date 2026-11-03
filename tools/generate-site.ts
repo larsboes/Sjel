@@ -15,8 +15,8 @@
 // Self-contained by requirement (#14) and by house rule: inline CSS, no script, no font, no image,
 // no request to any other host. The one interactive element (filtering by kind) is CSS-only.
 //
-// Since #168 this is the site's LANDING page rather than the whole site: the reference pages
-// (tools/generate-docs) and the live demo (tools/demo-site) sit beside it, and the shell, the
+// This is the self-model page under docs/. The reference pages (tools/generate-docs) and the
+// landing page (tools/generate-landing.ts) sit beside it, and the shell, the
 // stylesheet and the nav that ties the three together moved to tools/lib/site-style.ts. What
 // stayed here is unchanged — the self-model tables, and the argument above about which of
 // them may honestly be published.

@@ -1,33 +1,14 @@
 name: Pages
 
-# Publish three surfaces from one build (#14, #168):
-#
-#   /        the self-model, generated from self.json, which is generated from the manifests
-#   /docs/   one reference page per unit, plus response shapes read out of the recording below
-#   /fixtures/  what the seeded capabilities answered, recorded by this job
-#
-# THE DEMO IS RECORDED, NOT WRITTEN. This job starts the actual capability servers against a
-# throwaway SQLite file, seeds them through their own HTTP write APIs, and captures what they
-# answer. Nobody hand-maintains a fixture, so a fixture cannot drift from the API: if a
-# response shape changes, the recording changes with it in the same commit, and if an endpoint
-# disappears the recording step fails rather than publishing a page describing it.
-#
-# WHY THIS RUNNER CANNOT LEAK. There is no overlay here, no vault, no credential and no real
-# database — the only data in the tree is what tools/demo-seed just generated from a fixed
-# seed. That is the primary guarantee. tools/check-site-payload.sh runs anyway, at the end,
-# over the assembled bytes: it is what protects a LOCAL demo build, where all three of those
-# things are a directory away, and running it here too is what keeps it honest.
-#
-# Every gate below fails the job rather than publishing something weaker.
+# Publish the public site from tracked files (tools/build-site): the landing page, one reference
+# page per unit and the self-model page. No capability runs here, and the payload gate at the end
+# refuses a build that carries anything it should not.
 
 on:
   push:
     branches: [main]
-  # Build on a pull request too, and deploy nothing. Without this the first full run of the
-  # seed-and-record pipeline would be the one that publishes it: a seeder written against a
-  # changed API fails here, on the branch, instead of taking the public page down with it.
-  # The `deploy` job below is gated on the event, not on the branch, so a fork PR cannot
-  # reach the Pages environment.
+  # Build on a pull request too, and deploy nothing: a broken build fails on the branch. The
+  # `deploy` job is gated on the event, so a fork PR cannot reach the Pages environment.
   pull_request:
   workflow_dispatch:
 
@@ -47,19 +28,6 @@ jobs:
     name: build the page
     runs-on: ubuntu-latest
 
-    # No service container. The demo's store is a file tools/demo-up creates under demo/state,
-    # since PRD Q45 (2026-08-27) replaced the Postgres instance with one SQLite file — so the
-    # job that builds the demonstration needs neither a database service nor the variable that
-    # used to address one. The reason this was a service container rather than Sjel's own
-    # postgres capability still holds for anything like it: the demo overlay enables no
-    # container runtime, and a demonstration should not need one to build.
-    env:
-      # A GitHub Pages PROJECT site is served from /<repo>, and a static SPA has to be told:
-      # its asset URLs and router links are baked in at build time.
-      SJEL_PAGES_BASE: /Sjel
-      # The record paths in demo/demo.toml are written for this date.
-      SJEL_DEMO_ANCHOR: "2026-03-16"
-
     steps:
       - name: Check out Sjel
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,7 +39,6 @@ jobs:
 
       # paths.sh resolves the overlay before anything else runs; with no sjel.local.toml it falls
       # back to sjel.toml's shipped default. Same minimal seed ci.yml uses.
-      # tools/demo-up overrides it for its own steps by exporting SJEL_OVERLAY_ROOT.
       - name: Minimal overlay for path resolution
         run: |
           mkdir -p "$HOME/.axon-overlay/config"
@@ -81,57 +48,23 @@ jobs:
           capabilities = []
           TOML
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       # The gate. A stale self.json means the page would describe a tree that no longer exists.
       # Deliberately before the build, so a stale input costs a fast failure rather than a
       # published lie.
       - name: self.json is current
         run: tools/self check
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # An "Install the pinned ledger engine" step stood here until 2026-08-28, when PRD Q50
-      # retired hledger. It downloaded the upstreams.toml pin so the demo would not be built
-      # against a different engine version than this repository describes. The engine is now
-      # compiled by the step below (capabilities/finance/src/journal.rs), so that is exactly
-      # what the demo is built against, and the download proved nothing but its own success:
-      # measured on this tree, no step in this job, no script under tools/ and no finance code
-      # path spawns the executable.
-      #
-      # Built explicitly and together rather than left to service-runner's on-demand build:
-      # one cargo invocation shares the compilation across all five, and a compile error
-      # fails here with a compiler's error message instead of inside a service start.
-      # --release because the manifests' command paths name target/release/ binaries.
-      - name: Build the demo's capability servers
-        run: cargo build --locked --release -p sjel-status -p sjel-calendar -p sjel-finance -p sjel-trips
-
-      # Starts the five capabilities against the demo overlay, seeds them through their own
-      # write APIs, and records every declared path. Refuses if anything is already listening
-      # or if any store is non-empty — on a runner both are trivially true, and the guards are
-      # there for the machine where they are not.
-      - name: Seed and record the demo
-        run: tools/demo-up
-
       - name: Assemble the site
-        run: tools/demo-site --base "$SJEL_PAGES_BASE"
+        run: tools/build-site
 
-      # demo-site runs the hygiene gate itself; this makes the refusal a named, visible step
-      # rather than one line inside another script's output.
+      # build-site runs the gate itself; this makes the refusal a named, visible step.
       - name: Payload hygiene
         run: tools/check-site-payload.sh site
-
-      # Only on failure, and only the capability logs: a seeding run that fails against a
-      # server whose stderr nobody printed is a red job with no cause in it.
-      - name: Capability logs
-        if: failure()
-        run: |
-          for log in /tmp/sjel-*.log /tmp/sjel-*.err; do
-            [ -s "$log" ] || continue
-            echo "───────── $log"
-            tail -80 "$log"
-          done
 
       - name: Configure Pages
         if: github.event_name != 'pull_request'

@@ -57,6 +57,11 @@ pub enum Open {
     },
     /// A server result's `sjel://` link, opened the way a deep link is.
     Link(String),
+    /// A saved web destination, whose local usage counter advances on explicit open.
+    WebDestination {
+        id: String,
+        url: String,
+    },
 }
 
 /// One result row.
@@ -204,14 +209,22 @@ impl Finder {
             let projects = repo.fetch_projects().await.unwrap_or_default();
             let tasks = repo.fetch_tasks(None).await.unwrap_or_default();
             let notes = repo.fetch_all_notes().await.unwrap_or_default();
-            (projects, tasks, notes)
+            let links = match repo.shell() {
+                Ok(shell) => shell
+                    .web_links()
+                    .await
+                    .map(|reply| reply.links)
+                    .unwrap_or_default(),
+                Err(_) => Vec::new(),
+            };
+            (projects, tasks, notes, links)
         });
         cx.spawn(async move |this, cx| {
-            let Some((projects, tasks, notes)) = reads.await else {
+            let Some((projects, tasks, notes, links)) = reads.await else {
                 return;
             };
             let _ = this.update(cx, |view, cx| {
-                view.records = record_hits(projects, tasks, notes);
+                view.records = record_hits(projects, tasks, notes, links);
                 cx.notify();
             });
         })
@@ -1283,6 +1296,7 @@ fn record_hits(
     projects: Vec<ProjectSummary>,
     tasks: Vec<GlobalTask>,
     notes: Vec<GlobalNote>,
+    links: Vec<sjel_gpui_core::web_links::WebLink>,
 ) -> Vec<Hit> {
     let projects = projects
         .into_iter()
@@ -1314,7 +1328,24 @@ fn record_hits(
         },
         title: note.title,
     });
-    projects.chain(tasks).chain(notes).collect()
+    let links = links.into_iter().map(|link| Hit {
+        kind: "link",
+        detail: format!(
+            "{}{} · {}",
+            link.group,
+            link.tenant
+                .as_ref()
+                .map(|tenant| format!(" · {tenant}"))
+                .unwrap_or_default(),
+            link.url
+        ),
+        open: Open::WebDestination {
+            id: link.id,
+            url: link.url,
+        },
+        title: link.title,
+    });
+    projects.chain(tasks).chain(notes).chain(links).collect()
 }
 
 impl Focusable for Finder {
@@ -1782,11 +1813,20 @@ mod tests {
             r#"{"path":"Atlas/Notes/n.md","title":"Anna notes","project":"Atlas"}"#,
         )
         .unwrap()];
-        let hits = record_hits(projects, tasks, notes);
+        let links = vec![sjel_gpui_core::web_links::WebLink {
+            id: "a".repeat(64),
+            url: "https://reddit.com/r/rust".into(),
+            title: "Rust community".into(),
+            host: "reddit.com".into(),
+            tenant: Some("r/rust".into()),
+            group: "Reddit".into(),
+            ..Default::default()
+        }];
+        let hits = record_hits(projects, tasks, notes, links);
         let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind).collect();
         assert_eq!(
             kinds,
-            ["project", "task", "note"],
+            ["project", "task", "note", "link"],
             "a done task is not a result"
         );
         assert_eq!(hits[1].detail, "Atlas · due 2026-10-24");

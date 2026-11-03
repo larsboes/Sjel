@@ -3699,6 +3699,45 @@ impl Shell {
         self.json(Method::GET, "/software/api/apps", None, 10).await
     }
 
+    pub async fn web_links(&self) -> ShellResult<crate::web_links::WebLinks> {
+        self.json(Method::GET, "/web-links/api/links", None, 10).await
+    }
+
+    pub async fn web_link_add(&self, body: serde_json::Value) -> ShellResult<crate::web_links::WebLink> {
+        self.json(Method::POST, "/web-links/api/links", Some(body), 10).await
+    }
+
+    pub async fn web_link_edit(&self, id: &str, body: serde_json::Value) -> ShellResult<crate::web_links::WebLink> {
+        let id = web_link_key(id)?;
+        self.json(Method::PATCH, &format!("/web-links/api/links/{id}"), Some(body), 10).await
+    }
+
+    pub async fn web_link_remove(&self, id: &str) -> ShellResult<()> {
+        let id = web_link_key(id)?;
+        self.send(Method::DELETE, &format!("/web-links/api/links/{id}"), None, 10).await.map(drop)
+    }
+
+    pub async fn web_link_open(&self, id: &str) -> ShellResult<crate::web_links::WebLink> {
+        let id = web_link_key(id)?;
+        self.json(Method::POST, &format!("/web-links/api/links/{id}/open"), Some(serde_json::json!({})), 10).await
+    }
+
+    pub async fn web_link_history_scan(&self, days: u16, min_visits: u16) -> ShellResult<crate::web_links::WebLinkHistoryReply> {
+        self.json(Method::POST, "/web-links/api/history/scan", Some(serde_json::json!({"days":days, "min_visits":min_visits})), 120).await
+    }
+
+    pub async fn web_link_history_candidates(&self) -> ShellResult<Vec<crate::web_links::WebLinkCandidate>> {
+        self.json(Method::GET, "/web-links/api/history/candidates", None, 10).await
+    }
+
+    pub async fn web_link_history_decide(&self, id: &str, decision: &str) -> ShellResult<()> {
+        let id = web_link_key(id)?;
+        if !matches!(decision, "keep" | "dismiss") {
+            return Err(ShellError::Refused(400, Some("Not a history decision.".into())));
+        }
+        self.send(Method::POST, &format!("/web-links/api/history/candidates/{id}/decision"), Some(serde_json::json!({"decision":decision})), 10).await.map(drop)
+    }
+
     pub async fn inventory_mail_proposals(
         &self,
     ) -> ShellResult<Vec<crate::inventory::MailProposal>> {
@@ -5822,6 +5861,14 @@ fn runtime() -> &'static tokio::runtime::Handle {
 /// A software row key as one URL path segment. Keys are a bundle id (`com.example.app`) or
 /// `<manager>:<name>`, where an npm name may be scoped (`npm:@playwright/cli`); `/` and `@` are
 /// percent-encoded so the key stays one segment. Anything else is refused before it reaches a URL.
+fn web_link_key(id: &str) -> ShellResult<&str> {
+    if id.len() == 64 && id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(id)
+    } else {
+        Err(ShellError::Refused(400, Some("Not a web-link id.".into())))
+    }
+}
+
 pub fn software_key(key: &str) -> ShellResult<String> {
     let allowed =
         |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '@' | '/');

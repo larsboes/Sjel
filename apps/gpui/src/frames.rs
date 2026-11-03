@@ -89,20 +89,20 @@ impl FrameProbe {
 /// per 8 ms, then quit. No OS input and no focus needed, so it runs behind other apps.
 pub fn drive_scroll_bench(
     probe: FrameProbe,
-    scroll: gpui_kit::ScrollHandle,
     cx: &mut gpui_kit::Context<crate::workspace::Workspace>,
 ) {
-    use gpui_kit::{point, px};
     use std::time::Duration;
     const STEPS: usize = 120;
     cx.spawn(async move |this, cx| {
         cx.background_executor().timer(Duration::from_secs(3)).await;
         probe.arm(true);
-        let max = scroll.max_offset().y;
         let path = (0..=STEPS).chain((0..STEPS).rev());
         for step in path {
-            scroll.set_offset(point(px(0.), -max * (step as f32 / STEPS as f32)));
-            if this.update(cx, |_, cx| cx.notify()).is_err() {
+            let fraction = step as f32 / STEPS as f32;
+            if this
+                .update(cx, |view, cx| view.bench_scroll(fraction, cx))
+                .is_err()
+            {
                 return;
             }
             cx.background_executor()

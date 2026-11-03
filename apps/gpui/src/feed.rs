@@ -11,8 +11,9 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    FontWeight, KeyBinding, ScrollHandle, SharedString, Subscription, Window,
+    actions, div, list, point, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity,
+    FocusHandle, FontWeight, KeyBinding, ListAlignment, ListOffset, ListState, Pixels,
+    ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
     self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
@@ -55,9 +56,6 @@ const DAYS: u32 = 30;
 
 /// The library reads the whole archive, as the dashboard's library does.
 const ARCHIVE_DAYS: u32 = 3650;
-
-/// How many library rows draw before `Show more`, as in `crate::documents`.
-const ROW_BATCH: usize = 200;
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
@@ -153,11 +151,29 @@ pub struct Feed {
     pub library_status: Option<Filter>,
     pub library_kind: Option<String>,
     library_query: String,
-    library_shown: usize,
     library_input: Option<(Entity<InputState>, Subscription)>,
+    /// The archive's scroller, and its order: the Library tab draws only the rows on screen.
+    library_list: ListState,
+    library_order: Vec<usize>,
+    library_key: Option<(u64, usize)>,
+    /// Counts a change to the archive's three filters, which the entries cannot report.
+    library_rev: u64,
     focus: FocusHandle,
     focus_next: bool,
+    /// The scroller every body but the Reading list uses, so a tab change keeps one scroll
+    /// position per page style rather than none at all.
+    tab_scroll: ScrollHandle,
+    /// The Reading list's scroller: it draws only the rows the window shows.
+    reading_list: ListState,
+    /// Indices into `rows` in draw order, rebuilt when the data, the filter or a status moves.
+    reading_order: Vec<usize>,
+    reading_key: Option<ReadingKey>,
+    /// Counts in-place status changes, which the entries themselves cannot report.
+    rows_rev: u64,
 }
+
+/// What `reading_order` was built from. The order is rebuilt when any part moves.
+type ReadingKey = (u64, usize, Filter, Option<&'static str>);
 
 impl Feed {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
@@ -196,10 +212,18 @@ impl Feed {
             library_status: None,
             library_kind: None,
             library_query: String::new(),
-            library_shown: ROW_BATCH,
             library_input: None,
+            library_list: ListState::new(0, ListAlignment::Top, px(600.)),
+            library_order: Vec::new(),
+            library_key: None,
+            library_rev: 0,
             focus: cx.focus_handle(),
             focus_next: true,
+            reading_list: ListState::new(0, ListAlignment::Top, px(600.)),
+            tab_scroll: ScrollHandle::new(),
+            reading_order: Vec::new(),
+            reading_key: None,
+            rows_rev: 0,
         }
     }
 
@@ -342,6 +366,7 @@ impl Feed {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
                 view.rows.settle(result);
+                view.rows_rev = view.rows_rev.wrapping_add(1);
                 cx.notify();
             });
         })
@@ -416,6 +441,7 @@ impl Feed {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
                 view.library.settle(result);
+                view.library_rev = view.library_rev.wrapping_add(1);
                 cx.notify();
             });
         })
@@ -431,7 +457,7 @@ impl Feed {
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
             if matches!(event, InputEvent::Change) {
                 view.library_query = input.read(cx).value().trim().to_lowercase();
-                view.library_shown = ROW_BATCH;
+                view.library_rev = view.library_rev.wrapping_add(1);
                 cx.notify();
             }
         });
@@ -444,7 +470,289 @@ impl Feed {
     }
 
     fn count(&self, filter: Filter) -> usize {
-        in_view(self.rows.value.iter().flatten(), filter, self.stream).len()
+        self.rows
+            .value
+            .iter()
+            .flatten()
+            .filter(|entry| entry.status == filter.status())
+            .filter(|entry| self.stream.is_none_or(|stream| entry.stream == stream))
+            .count()
+    }
+
+    /// The Reading order, rebuilt only when the entries, the filter or a status moved.
+    ///
+    /// The list asks for one row at a time, so this holds indices rather than entries: the
+    /// element a row draws is built on the frame it is visible and never for the rows beside it.
+    fn sync_reading(&mut self) {
+        let key: ReadingKey = (
+            self.rows_rev,
+            self.rows.value.as_ref().map_or(0, Vec::len),
+            self.filter,
+            self.stream,
+        );
+        if self.reading_key == Some(key) {
+            return;
+        }
+        // A status change or a refresh keeps the reader where it was; a new filter starts at the top.
+        let same_view = self
+            .reading_key
+            .is_some_and(|seen| (seen.2, seen.3) == (self.filter, self.stream));
+        let anchor = same_view.then(|| {
+            list_anchor(
+                &self.reading_list,
+                &self.reading_order,
+                self.rows.value.as_ref(),
+            )
+        });
+        let mut order: Vec<usize> = Vec::new();
+        if let Some(rows) = self.rows.value.as_ref() {
+            order.extend(
+                (0..rows.len())
+                    .filter(|index| rows[*index].status == self.filter.status())
+                    .filter(|index| {
+                        self.stream
+                            .is_none_or(|stream| rows[*index].stream == stream)
+                    }),
+            );
+            order.sort_by(|left, right| feed_order(&rows[*left], &rows[*right]));
+        }
+        self.reading_key = Some(key);
+        self.reading_list.reset(order.len());
+        restore_anchor(
+            &self.reading_list,
+            anchor.flatten(),
+            &order,
+            self.rows.value.as_ref(),
+        );
+        self.reading_order = order;
+    }
+
+    /// The archive's order, rebuilt only when its entries or one of its three filters move.
+    fn sync_library(&mut self) {
+        let key = (
+            self.library_rev,
+            self.library.value.as_ref().map_or(0, Vec::len),
+        );
+        if self.library_key == Some(key) {
+            return;
+        }
+        let anchor = self.library_key.is_some().then(|| {
+            list_anchor(
+                &self.library_list,
+                &self.library_order,
+                self.library.value.as_ref(),
+            )
+        });
+        let kind = self.library_kind.clone();
+        let query = self.library_query.clone();
+        let mut order: Vec<usize> = Vec::new();
+        if let Some(rows) = self.library.value.as_ref() {
+            order.extend((0..rows.len()).filter(|index| {
+                library_matches(&rows[*index], self.library_status, kind.as_deref(), &query)
+            }));
+            order.sort_by(|left, right| feed_order(&rows[*left], &rows[*right]));
+        }
+        self.library_key = Some(key);
+        self.library_list.reset(order.len());
+        restore_anchor(
+            &self.library_list,
+            anchor.flatten(),
+            &order,
+            self.library.value.as_ref(),
+        );
+        self.library_order = order;
+    }
+
+    /// One Library row, drawn from its place in the archive.
+    fn library_row_at(&self, ix: usize, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let Some(rows) = self.library.value.as_ref() else {
+            return div().into_any_element();
+        };
+        let Some(entry) = self
+            .library_order
+            .get(ix)
+            .and_then(|index| rows.get(*index))
+        else {
+            return div().into_any_element();
+        };
+        library_row(ix, entry, palette, cx)
+    }
+
+    /// One Reading row: the day header when the row opens a day, then the entry itself.
+    fn reading_row(&self, ix: usize, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let Some(rows) = self.rows.value.as_ref() else {
+            return div().into_any_element();
+        };
+        let Some(entry) = self
+            .reading_order
+            .get(ix)
+            .and_then(|index| rows.get(*index))
+        else {
+            return div().into_any_element();
+        };
+        let day_header = match ix.checked_sub(1) {
+            None => true,
+            Some(previous) => {
+                self.reading_order
+                    .get(previous)
+                    .and_then(|index| rows.get(*index))
+                    .map(|row| row.day.as_str())
+                    != Some(entry.day.as_str())
+            }
+        };
+        let id = entry.id.clone();
+        let chosen = self.cursor.as_deref() == Some(entry.id.as_str());
+        let preview = entry
+            .summary
+            .as_deref()
+            .or(entry.digest_preview.as_deref())
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let score = entry.score();
+        let score_badge = (score > 0.).then(|| {
+            let color = if score >= 0.8 {
+                palette.green
+            } else if score >= 0.5 {
+                palette.amber
+            } else {
+                palette.muted
+            };
+            div()
+                .px_1p5()
+                .py(px(0.5))
+                .rounded(px(3.))
+                .bg(rgba(tint(color, 0x18)))
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(color))
+                .child(format!("{:.0}%", score * 100.))
+        });
+        let keep_id = entry.id.clone();
+        let dismiss_id = entry.id.clone();
+        let quick_triage = (entry.status == "new").then(|| {
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(
+                    div()
+                        .id(("feed-quick-keep", ix))
+                        .px_2()
+                        .py(px(1.))
+                        .rounded(px(4.))
+                        .bg(rgba(tint(palette.green, 0x18)))
+                        .hover(move |style| style.bg(rgba(tint(palette.green, 0x33))))
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.green))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.decide(keep_id.clone(), "keeper", cx);
+                        }))
+                        .child("Keep"),
+                )
+                .child(
+                    div()
+                        .id(("feed-quick-dismiss", ix))
+                        .px_2()
+                        .py(px(1.))
+                        .rounded(px(4.))
+                        .bg(rgba(tint(palette.red, 0x18)))
+                        .hover(move |style| style.bg(rgba(tint(palette.red, 0x33))))
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(palette.red))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.decide(dismiss_id.clone(), "dismissed", cx);
+                        }))
+                        .child("Dismiss"),
+                )
+        });
+        let row = div()
+            .id(("feed-row", ix))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .px_3()
+            .py_2()
+            .rounded(px(6.))
+            .when(chosen, |el| el.bg(rgba(palette.raised)))
+            .hover(move |style| style.bg(rgba(palette.raised)))
+            .cursor_pointer()
+            .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_sm()
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(title(entry.title.as_deref(), &entry.url)),
+                    )
+                    .children(score_badge)
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(meta(entry)),
+                    )
+                    .children(quick_triage),
+            )
+            .when(!preview.is_empty(), |el| {
+                el.child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .line_clamp(2)
+                        .child(preview),
+                )
+            });
+        let mut item = div().flex().flex_col().gap_1().pb(px(4.));
+        if day_header {
+            item = item.child(
+                div()
+                    .pt_3()
+                    .pb_1()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child(entry.day.clone()),
+            );
+        }
+        item.child(row).into_any_element()
+    }
+
+    /// `SJEL_GPUI_BENCH_SCROLL`: step the Reading list to `fraction` of its rows.
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        let target = if self.reading.is_some() {
+            None
+        } else if self.tab == Tab::Reading {
+            self.sync_reading();
+            Some((self.reading_list.clone(), self.reading_order.len()))
+        } else if self.tab == Tab::Library {
+            self.sync_library();
+            Some((self.library_list.clone(), self.library_order.len()))
+        } else {
+            None
+        };
+        if let Some((state, rows)) = target {
+            let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+            state.scroll_to(ListOffset {
+                item_ix,
+                offset_in_item: px(0.),
+            });
+        } else {
+            let max = self.tab_scroll.max_offset().y;
+            self.tab_scroll.set_offset(point(px(0.), -max * fraction));
+        }
+        cx.notify();
     }
 
     fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
@@ -471,6 +779,20 @@ impl Feed {
             (Some(i), false) => i.saturating_sub(1),
         };
         self.cursor = ids.get(next).cloned();
+        // The list draws only the rows on screen, so a keyboard move has to bring its row there.
+        if self.tab == Tab::Reading && self.reading.is_none() {
+            self.sync_reading();
+            if let Some(ix) = self.reading_order.iter().position(|index| {
+                self.rows
+                    .value
+                    .as_ref()
+                    .and_then(|rows| rows.get(*index))
+                    .map(|row| Some(row.id.as_str()) == self.cursor.as_deref())
+                    .unwrap_or(false)
+            }) {
+                self.reading_list.scroll_to_reveal_item(ix);
+            }
+        }
         cx.notify();
     }
 
@@ -543,6 +865,7 @@ impl Feed {
                 row.status = status.to_owned();
             }
         }
+        self.rows_rev = self.rows_rev.wrapping_add(1);
         before
     }
 
@@ -1048,7 +1371,7 @@ impl Render for Feed {
                 .flex_col()
                 .gap_3()
                 .child(self.title_row(cx))
-                .child(div().flex_1().min_h_0().child(self.clips.clone()))
+                .child(self.clips.clone())
                 .into_any_element()
         } else if self.tab == Tab::Discover {
             div()
@@ -1066,6 +1389,23 @@ impl Render for Feed {
             self.library_list(palette, window, cx)
         } else {
             self.list(palette, cx)
+        };
+        // The two long lists scroll themselves, one row per item on screen. Every other body in
+        // this page keeps a scroller of its own, because the page no longer sits in the workspace's.
+        let own_list = self.reading.is_none() && matches!(self.tab, Tab::Reading | Tab::Library);
+        let body = if own_list {
+            body
+        } else {
+            let scroll = self.tab_scroll.clone();
+            div()
+                .id("feed-scroll")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .track_scroll(&scroll)
+                .vertical_scrollbar(&scroll)
+                .child(body)
+                .into_any_element()
         };
         div()
             .when(reading, |el| el.key_context("Feed"))
@@ -1095,7 +1435,8 @@ impl Render for Feed {
 }
 
 impl Feed {
-    fn list(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn list(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        self.sync_reading();
         let pill = |label: &'static str, filter: Filter, cx: &mut Context<Self>| {
             filter_pill(
                 label,
@@ -1126,21 +1467,31 @@ impl Feed {
             .child(stream_button("News", Some("news"), cx))
             .child(stream_button("Media", Some("media"), cx));
 
-        let mut list = div().flex().flex_col().gap_1();
+        let mut column = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .flex_1()
+            .min_h_0()
+            .child(self.title_row(cx))
+            .child(muted(
+                "j/k move · s keep · d dismiss · u undo · o read",
+                palette,
+            ))
+            .child(toolbar);
         if self.rows.value.is_none() && self.rows.loading {
-            list = list.child(muted("Loading the feed…", palette));
+            column = column.child(muted("Loading the feed…", palette));
         }
         if let Some(error) = &self.rows.error {
-            list = list.child(
+            column = column.child(
                 div()
                     .text_sm()
                     .text_color(rgb(palette.red))
                     .child(error.to_string()),
             );
         }
-        let visible = self.visible();
-        if visible.is_empty() && !self.rows.loading && self.rows.error.is_none() {
-            list = list.child(muted(
+        if self.reading_order.is_empty() && !self.rows.loading && self.rows.error.is_none() {
+            column = column.child(muted(
                 match self.filter {
                     Filter::New => "Nothing new. The inbox is clear.",
                     Filter::Kept => "Nothing kept in the last 30 days.",
@@ -1149,149 +1500,26 @@ impl Feed {
                 palette,
             ));
         }
-        let mut day = None;
-        for (i, entry) in visible.into_iter().enumerate() {
-            if day != Some(entry.day.as_str()) {
-                day = Some(entry.day.as_str());
-                list = list.child(
-                    div()
-                        .pt_3()
-                        .pb_1()
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.muted))
-                        .child(entry.day.clone()),
-                );
-            }
-            let id = entry.id.clone();
-            let chosen = self.cursor.as_deref() == Some(entry.id.as_str());
-            let preview = entry
-                .summary
-                .as_deref()
-                .or(entry.digest_preview.as_deref())
-                .unwrap_or_default()
-                .trim()
-                .to_owned();
-            let score = entry.score();
-            let score_badge = (score > 0.).then(|| {
-                let color = if score >= 0.8 {
-                    palette.green
-                } else if score >= 0.5 {
-                    palette.amber
-                } else {
-                    palette.muted
-                };
+        if !self.reading_order.is_empty() {
+            // One row per item on screen: the list asks for the rows it draws, not for all of them.
+            let entity = cx.entity();
+            let state = self.reading_list.clone();
+            column = column.child(
                 div()
-                    .px_1p5()
-                    .py(px(0.5))
-                    .rounded(px(3.))
-                    .bg(rgba(tint(color, 0x18)))
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(color))
-                    .child(format!("{:.0}%", score * 100.))
-            });
-            let keep_id = entry.id.clone();
-            let dismiss_id = entry.id.clone();
-            let quick_triage = (entry.status == "new").then(|| {
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
+                    .id("feed-reading")
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .vertical_scrollbar(&state)
                     .child(
-                        div()
-                            .id(("feed-quick-keep", i))
-                            .px_2()
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .bg(rgba(tint(palette.green, 0x18)))
-                            .hover(move |s| s.bg(rgba(tint(palette.green, 0x33))))
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.green))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.decide(keep_id.clone(), "keeper", cx);
-                            }))
-                            .child("Keep"),
-                    )
-                    .child(
-                        div()
-                            .id(("feed-quick-dismiss", i))
-                            .px_2()
-                            .py(px(1.))
-                            .rounded(px(4.))
-                            .bg(rgba(tint(palette.red, 0x18)))
-                            .hover(move |s| s.bg(rgba(tint(palette.red, 0x33))))
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.red))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.decide(dismiss_id.clone(), "dismissed", cx);
-                            }))
-                            .child("Dismiss"),
-                    )
-            });
-            list = list.child(
-                div()
-                    .id(("feed-row", i))
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .px_3()
-                    .py_2()
-                    .rounded(px(6.))
-                    .when(chosen, |el| el.bg(rgba(palette.raised)))
-                    .hover(move |style| style.bg(rgba(palette.raised)))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, _, cx| view.open(id.clone(), cx)))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_sm()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(title(entry.title.as_deref(), &entry.url)),
-                            )
-                            .children(score_badge)
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(meta(entry)),
-                            )
-                            .children(quick_triage),
-                    )
-                    .when(!preview.is_empty(), |el| {
-                        el.child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .line_clamp(2)
-                                .child(preview),
-                        )
-                    }),
+                        list(state.clone(), move |ix, _window, cx| {
+                            entity.update(cx, |feed, cx| feed.reading_row(ix, palette, cx))
+                        })
+                        .size_full(),
+                    ),
             );
         }
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(self.title_row(cx))
-            .child(muted(
-                "j/k move · s keep · d dismiss · u undo · o read",
-                palette,
-            ))
-            .child(toolbar)
-            .child(list)
-            .into_any_element()
+        column.into_any_element()
     }
 
     /// The page title and the native Feed task switch.
@@ -1320,6 +1548,20 @@ impl Feed {
             .child(tab("Discover", Tab::Discover, cx))
             .child(tab("Mail", Tab::Mail, cx))
             .child(tab("Clips", Tab::Clips, cx))
+            .child(div().flex_1())
+            .child(
+                Button::new("feed-quick-clip")
+                    .small()
+                    .label("+ Quick Clip")
+                    .on_click(cx.listener(|view, _, window, cx| {
+                        view.tab = Tab::Clips;
+                        view.reading = None;
+                        view.clips.update(cx, |clips, cx| {
+                            clips.open_composer(window, cx);
+                        });
+                        cx.notify();
+                    })),
+            )
             .into_any_element()
     }
 
@@ -2300,7 +2542,7 @@ impl Feed {
                 palette,
                 cx.listener(move |view, _, _, cx| {
                     view.library_status = status;
-                    view.library_shown = ROW_BATCH;
+                    view.library_rev = view.library_rev.wrapping_add(1);
                     cx.notify();
                 }),
             )
@@ -2314,7 +2556,7 @@ impl Feed {
                 .when(!active, |b| b.ghost())
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.library_kind = kind.clone();
-                    view.library_shown = ROW_BATCH;
+                    view.library_rev = view.library_rev.wrapping_add(1);
                     cx.notify();
                 }))
         };
@@ -2337,47 +2579,48 @@ impl Feed {
             .child(div().flex_1())
             .child(div().w(px(280.)).child(Input::new(&input).small()));
 
-        let visible = in_library(all.iter().copied(), self.library_status, kind, query);
-        let mut list = div().flex().flex_col();
+        self.sync_library();
+        let mut column = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .flex_1()
+            .min_h_0()
+            .child(self.title_row(cx))
+            .child(toolbar)
+            .child(kind_row);
         if let Some(error) = &self.library.error {
-            list = list.child(
+            column = column.child(
                 div()
                     .text_sm()
                     .text_color(rgb(palette.red))
                     .child(error.to_string()),
             );
         } else if self.library.value.is_none() && self.library.loading {
-            list = list.child(muted("Loading the archive…", palette));
-        } else if visible.is_empty() && !self.library.loading {
-            list = list.child(muted("No entries match these filters.", palette));
+            column = column.child(muted("Loading the archive…", palette));
+        } else if self.library_order.is_empty() && !self.library.loading {
+            column = column.child(muted("No entries match these filters.", palette));
         }
-        let hidden = visible.len().saturating_sub(self.library_shown);
-        for (i, entry) in visible.into_iter().take(self.library_shown).enumerate() {
-            list = list.child(library_row(i, entry, palette, cx));
-        }
-        if hidden > 0 {
-            list = list.child(
-                div().pt_2().child(
-                    Button::new("feed-library-more")
-                        .small()
-                        .ghost()
-                        .label(format!("Show more ({hidden} left)"))
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.library_shown += ROW_BATCH;
-                            cx.notify();
-                        })),
-                ),
+        if !self.library_order.is_empty() {
+            // The archive is the whole history; only the rows in the window are built.
+            let entity = cx.entity();
+            let state = self.library_list.clone();
+            column = column.child(
+                div()
+                    .id("feed-library")
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .vertical_scrollbar(&state)
+                    .child(
+                        list(state.clone(), move |ix, _window, cx| {
+                            entity.update(cx, |feed, cx| feed.library_row_at(ix, palette, cx))
+                        })
+                        .size_full(),
+                    ),
             );
         }
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(self.title_row(cx))
-            .child(toolbar)
-            .child(kind_row)
-            .child(list)
-            .into_any_element()
+        column.into_any_element()
     }
 }
 
@@ -2477,22 +2720,74 @@ fn in_library<'a>(
     query: &str,
 ) -> Vec<&'a FeedEntry> {
     let mut rows: Vec<&FeedEntry> = rows
-        .filter(|e| status.is_none_or(|s| e.status == s.status()))
-        .filter(|e| kind.is_none_or(|k| e.kind == k))
-        .filter(|e| {
-            query.is_empty()
-                || [
-                    e.title.as_deref(),
-                    e.author.as_deref(),
-                    Some(e.url.as_str()),
-                ]
-                .into_iter()
-                .flatten()
-                .any(|text| text.to_lowercase().contains(query))
-        })
+        .filter(|e| library_matches(e, status, kind, query))
         .collect();
-    rows.sort_by(|a, b| b.day.cmp(&a.day).then(b.score().total_cmp(&a.score())));
+    rows.sort_by(|left, right| feed_order(left, right));
     rows
+}
+
+/// Whether one archive entry survives the Library tab's three filters.
+fn library_matches(
+    entry: &FeedEntry,
+    status: Option<Filter>,
+    kind: Option<&str>,
+    query: &str,
+) -> bool {
+    status.is_none_or(|wanted| entry.status == wanted.status())
+        && kind.is_none_or(|wanted| entry.kind == wanted)
+        && (query.is_empty()
+            || [
+                entry.title.as_deref(),
+                entry.author.as_deref(),
+                Some(entry.url.as_str()),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|text| text.to_lowercase().contains(query)))
+}
+
+/// Newest day first, best score first within a day.
+fn feed_order(left: &FeedEntry, right: &FeedEntry) -> std::cmp::Ordering {
+    right
+        .day
+        .cmp(&left.day)
+        .then(right.score().total_cmp(&left.score()))
+}
+
+/// The entry at the top of a virtual list, so a rebuild can leave the reader where it was.
+///
+/// The anchor is the entry, not its index: a decision removes a row, and an index would slide the
+/// whole list up by one under the reader.
+fn list_anchor(
+    list: &ListState,
+    order: &[usize],
+    rows: Option<&Vec<FeedEntry>>,
+) -> Option<(String, usize, Pixels)> {
+    let top = list.logical_scroll_top();
+    let row = rows?.get(*order.get(top.item_ix)?)?;
+    Some((row.id.clone(), top.item_ix, top.offset_in_item))
+}
+
+/// Puts a list back where [`list_anchor`] found it, once its order has been rebuilt.
+fn restore_anchor(
+    list: &ListState,
+    anchor: Option<(String, usize, Pixels)>,
+    order: &[usize],
+    rows: Option<&Vec<FeedEntry>>,
+) {
+    let Some((id, anchored_at, offset)) = anchor else {
+        return;
+    };
+    let found = order.iter().position(|index| {
+        rows.and_then(|rows| rows.get(*index))
+            .is_some_and(|row| row.id == id)
+    });
+    // The anchor can be the row a decision removed; then the same index, one row shorter.
+    let item_ix = found.unwrap_or_else(|| anchored_at.min(order.len().saturating_sub(1)));
+    list.scroll_to(ListOffset {
+        item_ix,
+        offset_in_item: offset,
+    });
 }
 
 /// Each kind in the archive with its count, most common first.
@@ -2608,6 +2903,8 @@ fn section(label: &str, body: String, palette: Palette) -> gpui_kit::Div {
 
 #[cfg(test)]
 mod tests {
+    use gpui::TestAppContext;
+
     use super::*;
 
     fn entry(id: char, day: &str, status: &str, score: f64) -> FeedEntry {
@@ -2628,6 +2925,28 @@ mod tests {
                 explanation: String::new(),
             }),
         }
+    }
+
+    /// The list draws one item per row the filter shows, and follows the filter without a re-read.
+    #[gpui::test]
+    fn the_reading_list_holds_one_item_per_row(cx: &mut TestAppContext) {
+        let repo = Repo::new(shell::Shell::new("http://127.0.0.1:1").map(std::sync::Arc::new));
+        let feed = cx.new(|cx| Feed::new(repo, cx));
+        feed.update(cx, |feed, cx| {
+            feed.rows.value = Some(vec![
+                entry('a', "2026-10-20", "new", 0.9),
+                entry('b', "2026-10-21", "new", 0.1),
+                entry('c', "2026-10-21", "keeper", 0.8),
+            ]);
+            feed.sync_reading();
+            assert_eq!(feed.reading_order.len(), 2);
+            assert_eq!(feed.reading_list.item_count(), 2);
+            feed.filter = Filter::Kept;
+            feed.sync_reading();
+            assert_eq!(feed.reading_order.len(), 1);
+            assert_eq!(feed.reading_list.item_count(), 1);
+            cx.notify();
+        });
     }
 
     #[test]

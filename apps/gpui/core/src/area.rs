@@ -67,6 +67,7 @@ impl Area {
                 Page::Backup,
                 Page::Setup,
                 Page::Software,
+                Page::Links,
             ],
         }
     }
@@ -171,8 +172,8 @@ mod tests {
 
     #[test]
     fn tabs_wrap_both_ways_and_a_single_page_area_stays_put() {
-        assert_eq!(Area::Sjel.step_tab(Page::Capabilities, -1), Page::Software);
-        assert_eq!(Area::Sjel.step_tab(Page::Software, 1), Page::Capabilities);
+        assert_eq!(Area::Sjel.step_tab(Page::Capabilities, -1), Page::Links);
+        assert_eq!(Area::Sjel.step_tab(Page::Software, 1), Page::Links);
         assert_eq!(Area::Inbox.step_tab(Page::Inbox, 1), Page::Feed);
         assert_eq!(Area::Calendar.step_tab(Page::Calendar, 1), Page::Calendar);
         assert_eq!(Area::Life.step_tab(Page::Inbox, 1), Page::People);

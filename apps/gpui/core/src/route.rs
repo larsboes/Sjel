@@ -26,6 +26,8 @@ pub enum Page {
     /// Apps on this Mac and the operator's decision about each (`sjel://software`). The
     /// dashboard has no page of that name, so it is not in `DESTINATIONS`.
     Software,
+    /// Local web destinations grouped for quick opening (`sjel://links`).
+    Links,
     /// Sort a folder into Sjel and see what each file became (`sjel://import`). The dashboard
     /// has no page of that name, so it is not in `DESTINATIONS`.
     Import,
@@ -53,7 +55,7 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 25] = [
+    pub const ALL: [Page; 26] = [
         Page::Home,
         Page::Context,
         Page::Capabilities,
@@ -69,6 +71,7 @@ impl Page {
         Page::People,
         Page::Inventory,
         Page::Software,
+        Page::Links,
         Page::Import,
         Page::Packs,
         Page::SelfModel,
@@ -97,6 +100,7 @@ impl Page {
             Self::People => "/people",
             Self::Inventory => "/inventory",
             Self::Software => "/software",
+            Self::Links => "/links",
             Self::Import => "/import",
             Self::Systems => "/systems",
             Self::Packs => "/packs",
@@ -117,6 +121,7 @@ impl Page {
             Self::Travel => "Location",
             Self::Settings => "Settings",
             Self::Software => "Software",
+            Self::Links => "Links",
             Self::Import => "Import",
             Self::Systems => "Systems",
             Self::Packs => "Packs",

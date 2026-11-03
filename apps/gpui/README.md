@@ -35,7 +35,9 @@ Media filter, newest day first and the best-ranked entry first within a day. The
 dashboard's: j and k move, s keeps, d dismisses, u undoes, Enter or o opens the reader, ⇧O opens the
 original, and Escape goes back. Decisions go through `POST /comms/feed/:id/status` only, which
 records them for the ranking model. The shell exchanges the app's deployment token for comms'
-own credential (`capabilities/sjel-status/src/proxy.rs`). Digests, cloud processing, the review
+own credential (`capabilities/sjel-status/src/proxy.rs`). The Reading list draws one row per item
+on screen and keeps its place when a decision removes a row, so a month of entries scrolls as
+cheaply as a day of them (`ListState` in `src/feed.rs`). Digests, cloud processing, the review
 queue and the library stay in the dashboard for now. Feed's **Clips** tab lists the pages saved with
 the Sjel Clipper and reads one. Clips and Clipper settings travel over comms' owner-only clip
 socket (`libs/clip-socket`), never through the shell, so they are read on the Mac only.

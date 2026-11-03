@@ -32,11 +32,6 @@ use sjel_gpui_ui::filter_pill;
 /// what a reader flips through; more than that is memory a 24-page scan would happily take.
 const CACHED_PAGES: usize = 6;
 
-/// How many rows the list draws at once. The list holds every record so the counts and the search
-/// stay honest, but a library of a few thousand draws in batches: the page is rebuilt every frame,
-/// and ten thousand elements per frame is what makes it stutter. `Show more` adds another batch.
-const ROW_BATCH: usize = 100;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
     Inbox,
@@ -116,6 +111,31 @@ fn grouping_key(row: &DocumentSummary, grouping: Grouping) -> String {
         },
         Grouping::Workflow => workflow_label(&row.workflow_stage).into(),
     }
+}
+
+/// One row of the list: where it comes from, and the group header it opens when it is first in one.
+struct DocRow {
+    /// Index into `rows.value`.
+    index: usize,
+    /// The group label and its size, when a header belongs above this row.
+    group: Option<(String, usize)>,
+}
+
+/// Whether one record answers the search box. The caller owns `search_applied`, which skips it.
+fn document_matches(row: &DocumentSummary, query: &str) -> bool {
+    row.filename.to_lowercase().contains(query)
+        || row
+            .extracted_title
+            .as_deref()
+            .is_some_and(|title| title.to_lowercase().contains(query))
+        || row
+            .category
+            .as_deref()
+            .is_some_and(|category| category.to_lowercase().contains(query))
+        || row
+            .project
+            .as_deref()
+            .is_some_and(|project| project.to_lowercase().contains(query))
 }
 
 fn workflow_label(stage: &str) -> &'static str {
@@ -242,10 +262,13 @@ pub struct Documents {
     search_input: Option<(Entity<InputState>, Subscription)>,
     sort_by_name: bool,
     selected: Option<String>,
-    /// How many rows the list draws now. Raised by `Show more`, reset whenever the view changes.
-    visible: usize,
-    /// The list is its own scroll area: the page column is bounded so the reader can fill it.
-    list_scroll: gpui::ScrollHandle,
+    /// The list's own scroller: it draws only the rows the window shows.
+    list: gpui::ListState,
+    /// The rows in draw order, each with the group header that opens its group.
+    order: Vec<DocRow>,
+    order_key: Option<(u64, usize)>,
+    /// Counts a change to the filters and the sort, which the records cannot report.
+    order_rev: u64,
     /// Extracted text is its own scroll area when reading text mode is on.
     text_scroll: gpui::ScrollHandle,
     reader: Reader,
@@ -290,8 +313,10 @@ impl Documents {
             search_input: None,
             sort_by_name: false,
             selected: None,
-            visible: ROW_BATCH,
-            list_scroll: gpui::ScrollHandle::new(),
+            list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
+            order: Vec::new(),
+            order_key: None,
+            order_rev: 0,
             text_scroll: gpui::ScrollHandle::new(),
             reader: Reader::default(),
             renderer,
@@ -1114,44 +1139,34 @@ impl Documents {
         }
     }
 
-    /// Step through documents in the active filter/search list by `by` (+1 next, -1 prev).
+    /// Step through the rows the list draws by `by` (+1 next, -1 prev).
+    ///
+    /// It walks the drawn order, so a category filter, a grouping or a search narrows what a key
+    /// steps through as well as what is on screen. Nothing is filtered here: the order the frame
+    /// already built is the order the keyboard moves through.
     pub fn select_relative(&mut self, by: isize, cx: &mut Context<Self>) {
-        let Some(rows) = self.rows.value.as_ref() else {
+        self.sync_order();
+        if self.order.is_empty() {
             return;
+        }
+        let current = self.selected.as_deref().and_then(|selected| {
+            let rows = self.rows.value.as_ref()?;
+            self.order.iter().position(|entry| {
+                rows.get(entry.index)
+                    .is_some_and(|row| row.id == selected)
+            })
+        });
+        let next = match current {
+            Some(at) => (at as isize + by).clamp(0, self.order.len() as isize - 1) as usize,
+            None => 0,
         };
-        let mut filtered: Vec<_> =
-            rows.iter()
-                .filter(|row| self.filter.matches(row))
-                .filter(|row| {
-                    self.search_query.is_empty()
-                        || row.filename.to_lowercase().contains(&self.search_query)
-                        || row
-                            .extracted_title
-                            .as_deref()
-                            .is_some_and(|title| title.to_lowercase().contains(&self.search_query))
-                        || row.category.as_deref().is_some_and(|category| {
-                            category.to_lowercase().contains(&self.search_query)
-                        })
-                        || row.project.as_deref().is_some_and(|project| {
-                            project.to_lowercase().contains(&self.search_query)
-                        })
-                })
-                .collect();
-        if self.sort_by_name {
-            filtered.sort_by_key(|row| row.filename.to_lowercase());
-        }
-        if filtered.is_empty() {
-            return;
-        }
-        let current_index = self
-            .selected
-            .as_deref()
-            .and_then(|sel| filtered.iter().position(|r| r.id == sel))
-            .unwrap_or(0);
-        let next_index =
-            (current_index as isize + by).clamp(0, filtered.len() as isize - 1) as usize;
-        if let Some(next_row) = filtered.get(next_index) {
-            let next_id = next_row.id.clone();
+        let next_id = self
+            .rows
+            .value
+            .as_ref()
+            .and_then(|rows| self.order.get(next).and_then(|entry| rows.get(entry.index)))
+            .map(|row| row.id.clone());
+        if let Some(next_id) = next_id {
             self.open(next_id, cx);
         }
     }
@@ -1410,7 +1425,7 @@ impl Documents {
                 InputEvent::Change => {
                     view.search_query = input.read(cx).value().trim().to_lowercase();
                     view.search_applied = false;
-                    view.visible = ROW_BATCH;
+                    view.order_rev = view.order_rev.wrapping_add(1);
                     cx.notify();
                 }
                 InputEvent::PressEnter { .. } => view.search_documents(cx),
@@ -1660,7 +1675,7 @@ impl Documents {
 
     fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
         self.filter = filter;
-        self.visible = ROW_BATCH;
+        self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
 
@@ -1881,8 +1896,7 @@ impl Documents {
 
     fn cycle_grouping(&mut self, cx: &mut Context<Self>) {
         self.grouping = self.grouping.next();
-        self.visible = ROW_BATCH;
-        self.list_scroll = gpui::ScrollHandle::new();
+        self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
 
@@ -1903,14 +1917,204 @@ impl Documents {
                 .and_then(|index| categories.get(index + 1).cloned()),
         };
         self.category_filter = next;
-        self.visible = ROW_BATCH;
-        self.list_scroll = gpui::ScrollHandle::new();
+        self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
 
-    fn show_more(&mut self, cx: &mut Context<Self>) {
-        self.visible += ROW_BATCH;
-        cx.notify();
+    /// The list's order, rebuilt only when the records, a filter, the grouping or the sort move.
+    ///
+    /// Group headers and their sizes are computed here, once per rebuild, rather than compared
+    /// row by row on every frame.
+    fn sync_order(&mut self) {
+        let key = (self.order_rev, self.rows.value.as_ref().map_or(0, Vec::len));
+        if self.order_key == Some(key) {
+            return;
+        }
+        let mut picked: Vec<usize> = Vec::new();
+        if let Some(rows) = self.rows.value.as_ref() {
+            picked.extend(
+                (0..rows.len())
+                    .filter(|index| self.filter.matches(&rows[*index]))
+                    .filter(|index| {
+                        self.category_filter.as_deref().is_none_or(|category| {
+                            rows[*index].category.as_deref().unwrap_or("") == category
+                        })
+                    })
+                    .filter(|index| {
+                        self.search_applied
+                            || self.search_query.is_empty()
+                            || document_matches(&rows[*index], &self.search_query)
+                    }),
+            );
+            match (self.grouping, self.sort_by_name) {
+                (Grouping::None, false) => {}
+                (Grouping::None, true) => picked.sort_by(|left, right| {
+                    rows[*left]
+                        .filename
+                        .to_lowercase()
+                        .cmp(&rows[*right].filename.to_lowercase())
+                }),
+                (grouping, by_name) => picked.sort_by(|left, right| {
+                    grouping_key(&rows[*left], grouping)
+                        .cmp(&grouping_key(&rows[*right], grouping))
+                        .then_with(|| {
+                            if by_name {
+                                rows[*left].filename.to_lowercase().cmp(
+                                    &rows[*right].filename.to_lowercase(),
+                                )
+                            } else {
+                                rows[*right].imported_at.cmp(&rows[*left].imported_at)
+                            }
+                        })
+                }),
+            }
+        }
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        if let Some(rows) = self.rows.value.as_ref().filter(|_| self.grouping != Grouping::None) {
+            for index in &picked {
+                let label = grouping_key(&rows[*index], self.grouping);
+                match counts.iter_mut().find(|(seen, _)| *seen == label) {
+                    Some((_, size)) => *size += 1,
+                    None => counts.push((label, 1)),
+                }
+            }
+        }
+        let mut order: Vec<DocRow> = Vec::with_capacity(picked.len());
+        let mut previous: Option<String> = None;
+        for index in picked {
+            let group = self
+                .rows
+                .value
+                .as_ref()
+                .filter(|_| self.grouping != Grouping::None)
+                .map(|rows| grouping_key(&rows[index], self.grouping))
+                .filter(|label| previous.as_deref() != Some(label.as_str()))
+                .map(|label| {
+                    let size = counts
+                        .iter()
+                        .find(|(seen, _)| *seen == label)
+                        .map_or(0, |(_, size)| *size);
+                    previous = Some(label.clone());
+                    (label, size)
+                });
+            order.push(DocRow { index, group });
+        }
+        self.order_key = Some(key);
+        self.list.reset(order.len());
+        self.order = order;
+    }
+
+    /// One list row: the group header when it opens one, then the record itself.
+    fn document_row(
+        &self,
+        ix: usize,
+        narrow: bool,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(entry) = self.order.get(ix) else {
+            return div().into_any_element();
+        };
+        let Some(row) = self
+            .rows
+            .value
+            .as_ref()
+            .and_then(|rows| rows.get(entry.index))
+        else {
+            return div().into_any_element();
+        };
+        let mut item = div().flex().flex_col();
+        if let Some((group, count)) = &entry.group {
+            item = item.child(
+                div()
+                    .pt_3()
+                    .pb_1()
+                    .px_3()
+                    .text_xs()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(rgb(palette.muted))
+                    .child(format!("{group} · {count}")),
+            );
+        }
+        let id = row.id.clone();
+        let chosen = self.selected.as_deref() == Some(row.id.as_str());
+        let category = row
+            .category
+            .as_deref()
+            .or(row.suggested_category.as_deref())
+            .unwrap_or("—");
+        let date = row.imported_at.get(..10).unwrap_or("—").to_owned();
+        let workflow = workflow_label(&row.workflow_stage);
+        item.child(
+            div()
+                .id(("document-row", ix))
+                .flex()
+                .items_center()
+                .min_h(px(40.))
+                .px_3()
+                .rounded(px(5.))
+                .when(chosen, |el| el.bg(rgba(palette.raised)))
+                .hover(move |style| style.bg(rgba(palette.raised)))
+                .cursor_pointer()
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    if view.selected.as_deref() == Some(id.as_str()) {
+                        view.close(cx);
+                    } else {
+                        view.open(id.clone(), cx);
+                    }
+                }))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(div().truncate().text_sm().child(row.filename.clone()))
+                        .when(row.status == "inbox", |column| {
+                            column.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(workflow),
+                            )
+                        })
+                        .when(!row.matched_pages.is_empty(), |column| {
+                            let pages = row
+                                .matched_pages
+                                .iter()
+                                .map(u32::to_string)
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            column.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!("Matches on page {pages}")),
+                            )
+                        }),
+                )
+                .when(!narrow, |cells| {
+                    cells.child(
+                        div()
+                            .w(px(110.))
+                            .truncate()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(category.to_owned()),
+                    )
+                })
+                .child(div().w(px(76.)).child(status_chip(&row.status, palette)))
+                .when(!narrow, |cells| {
+                    cells.child(
+                        div()
+                            .w(px(110.))
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(date),
+                    )
+                }),
+        )
+        .into_any_element()
     }
 
     /// The page, or the reason there is none. A drawn page is the whole of this element when it
@@ -1953,14 +2157,20 @@ impl Render for Documents {
                 )
                 .child(self.duplicate_workspace(window, cx));
         }
-        let rows = self.rows.value.clone().unwrap_or_default();
-        let inbox = rows.iter().filter(|d| d.status == "inbox").count();
-        let filed = rows.iter().filter(|d| d.status == "filed").count();
-        let active = rows.iter().filter(|d| d.status != "archived").count();
-        let next = rows
-            .iter()
-            .filter(|row| Filter::NeedsReview.matches(row))
-            .count();
+        // Counted from a borrow: the library is every record, and cloning it every frame was the
+        // page's whole cost.
+        let (total, inbox, filed, active, next) = {
+            let rows = self.rows.value.as_deref().unwrap_or_default();
+            (
+                rows.len(),
+                rows.iter().filter(|d| d.status == "inbox").count(),
+                rows.iter().filter(|d| d.status == "filed").count(),
+                rows.iter().filter(|d| d.status != "archived").count(),
+                rows.iter()
+                    .filter(|row| Filter::NeedsReview.matches(row))
+                    .count(),
+            )
+        };
         let selected = self.selected.clone();
         // With a document open the list keeps a column beside the reader. That column is too
         // narrow for four columns and a search box, so the view drops what it cannot show rather
@@ -1972,7 +2182,7 @@ impl Render for Documents {
             Some(category) => format!("Category: {category}"),
         };
 
-        let mut table = div().flex().flex_col().gap_1();
+        let mut table = div().flex().flex_col().gap_1().flex_1().min_h_0();
         let search = self.search_field(window, cx);
         let split_input = self.split_range_field(window, cx);
         table = table.child(
@@ -2061,7 +2271,7 @@ impl Render for Documents {
                         .text_xs()
                         .text_color(rgb(palette.muted))
                         .when(!narrow, |count| {
-                            count.child(format!("{} documents · local only", rows.len()))
+                            count.child(format!("{total} documents · local only"))
                         }),
                 ),
         );
@@ -2116,186 +2326,37 @@ impl Render for Documents {
                     .child(error.to_string()),
             );
         }
-        let mut filtered: Vec<_> =
-            rows.iter()
-                .filter(|row| self.filter.matches(row))
-                .filter(|row| match self.category_filter.as_deref() {
-                    None => true,
-                    Some(category) => row.category.as_deref().unwrap_or("") == category,
-                })
-                .filter(|row| {
-                    self.search_applied
-                        || self.search_query.is_empty()
-                        || row.filename.to_lowercase().contains(&self.search_query)
-                        || row
-                            .extracted_title
-                            .as_deref()
-                            .is_some_and(|title| title.to_lowercase().contains(&self.search_query))
-                        || row.category.as_deref().is_some_and(|category| {
-                            category.to_lowercase().contains(&self.search_query)
-                        })
-                        || row.project.as_deref().is_some_and(|project| {
-                            project.to_lowercase().contains(&self.search_query)
-                        })
-                })
-                .collect();
-        if self.grouping != Grouping::None {
-            filtered.sort_by(|left, right| {
-                grouping_key(left, self.grouping)
-                    .cmp(&grouping_key(right, self.grouping))
-                    .then_with(|| {
-                        if self.sort_by_name {
-                            left.filename
-                                .to_lowercase()
-                                .cmp(&right.filename.to_lowercase())
-                        } else {
-                            right.imported_at.cmp(&left.imported_at)
-                        }
-                    })
-            });
-        } else if self.sort_by_name {
-            filtered.sort_by_key(|row| row.filename.to_lowercase());
-        }
-        if filtered.is_empty() && !self.rows.loading {
+        self.sync_order();
+        if self.order.is_empty() && !self.rows.loading {
             table = table.child(div().py_5().text_sm().text_color(rgb(palette.muted)).child(
-                if rows.is_empty() {
+                if total == 0 {
                     "No documents yet."
                 } else {
                     "No documents in this view."
                 },
             ));
         }
-        let in_view = filtered.len();
-        let shown = in_view.min(self.visible);
-        let mut previous_group: Option<String> = None;
-        let mut group_counts = BTreeMap::new();
-        if self.grouping != Grouping::None {
-            for row in &filtered {
-                *group_counts
-                    .entry(grouping_key(row, self.grouping))
-                    .or_insert(0usize) += 1;
-            }
-        }
-        for (i, row) in filtered.into_iter().take(self.visible).enumerate() {
-            let group = (self.grouping != Grouping::None).then(|| grouping_key(row, self.grouping));
-            if let Some(group) = group
-                .as_ref()
-                .filter(|group| previous_group.as_ref() != Some(group))
-            {
-                let count = group_counts.get(group).copied().unwrap_or(0);
-                table = table.child(
-                    div()
-                        .pt_3()
-                        .pb_1()
-                        .px_3()
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.muted))
-                        .child(format!("{group} · {count}")),
-                );
-                previous_group = Some(group.clone());
-            }
-            let id = row.id.clone();
-            let chosen = selected.as_deref() == Some(row.id.as_str());
-            let category = row
-                .category
-                .as_deref()
-                .or(row.suggested_category.as_deref())
-                .unwrap_or("—");
-            let date = row.imported_at.get(..10).unwrap_or("—").to_owned();
-            let workflow = workflow_label(&row.workflow_stage);
+        if !self.order.is_empty() {
+            // The library holds every record; only the rows in the window are built.
+            let entity = cx.entity();
+            let state = self.list.clone();
+            let narrow = selected.is_some();
             table = table.child(
                 div()
-                    .id(("document-row", i))
-                    .flex()
-                    .items_center()
-                    .min_h(px(40.))
-                    .px_3()
-                    .rounded(px(5.))
-                    .when(chosen, |el| el.bg(rgba(palette.raised)))
-                    .hover(move |style| style.bg(rgba(palette.raised)))
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if view.selected.as_deref() == Some(id.as_str()) {
-                            view.close(cx);
-                        } else {
-                            view.open(id.clone(), cx);
-                        }
-                    }))
+                    .id("documents-list")
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .vertical_scrollbar(&state)
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .child(div().truncate().text_sm().child(row.filename.clone()))
-                            .when(row.status == "inbox", |column| {
-                                column.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child(workflow),
-                                )
+                        gpui::list(state.clone(), move |ix, _window, cx| {
+                            entity.update(cx, |documents, cx| {
+                                documents.document_row(ix, narrow, palette, cx)
                             })
-                            .when(!row.matched_pages.is_empty(), |column| {
-                                let pages = row
-                                    .matched_pages
-                                    .iter()
-                                    .map(u32::to_string)
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                column.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child(format!("Matches on page {pages}")),
-                                )
-                            }),
-                    )
-                    .when(!narrow, |cells| {
-                        cells.child(
-                            div()
-                                .w(px(110.))
-                                .truncate()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(category.to_owned()),
-                        )
-                    })
-                    .child(div().w(px(76.)).child(status_chip(&row.status, palette)))
-                    .when(!narrow, |cells| {
-                        cells.child(
-                            div()
-                                .w(px(110.))
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .child(date),
-                        )
-                    }),
-            );
-        }
-        if in_view > 0 {
-            let remaining = in_view - shown;
-            table = table.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .pt_2()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(format!("Showing {shown} of {in_view} in this view"))
-                    .when(remaining > 0, |footer| {
-                        footer.child(
-                            Button::new("documents-show-more")
-                                .small()
-                                .label(format!(
-                                    "Show {} more · {remaining} left",
-                                    ROW_BATCH.min(remaining)
-                                ))
-                                .on_click(cx.listener(|view, _, _, cx| view.show_more(cx))),
-                        )
-                    }),
+                        })
+                        .size_full(),
+                    ),
             );
         }
 
@@ -2481,17 +2542,16 @@ impl Render for Documents {
                             // this the column refuses to shrink and pushes the reader off screen.
                             .min_w_0()
                             .min_h_0()
-                            .id("documents-list")
+                            .id("documents-pane")
                             .overflow_hidden()
                             .child(
                                 div()
                                     .id("documents-rows")
+                                    .flex()
+                                    .flex_col()
                                     .flex_1()
                                     .min_h_0()
                                     .w_full()
-                                    .overflow_y_scroll()
-                                    .track_scroll(&self.list_scroll)
-                                    .vertical_scrollbar(&self.list_scroll)
                                     .child(table.w_full()),
                             ),
                     )
@@ -3293,8 +3353,66 @@ fn detail_panel(detail: &DocumentDetail, palette: Palette) -> AnyElement {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_page_ranges, workflow_label, Filter, Reader, Zoom};
-    use crate::shell::DocumentSummary;
+    use gpui::AppContext as _;
+    use gpui::TestAppContext;
+
+    use super::{parse_page_ranges, workflow_label, Documents, Filter, Reader, Zoom};
+    use crate::data::Repo;
+    use crate::shell::{DocumentSummary, ShellError};
+
+    fn summary(id: &str, category: Option<&str>, filename: &str) -> DocumentSummary {
+        DocumentSummary {
+            id: id.into(),
+            filename: filename.into(),
+            media_type: "application/pdf".into(),
+            byte_len: 1,
+            imported_at: "2026-11-01".into(),
+            status: "inbox".into(),
+            category: category.map(str::to_owned),
+            project: None,
+            extracted_title: None,
+            extractor: None,
+            extracted_chars: 0,
+            suggested_category: None,
+            suggestion_reason: None,
+            data_class: "c2".into(),
+            page_count: 0,
+            parent_id: None,
+            page_range: None,
+            matched_pages: Vec::new(),
+            workflow_stage: "analyze".into(),
+        }
+    }
+
+    /// The list's order is what the keyboard steps through, so a filter narrows both.
+    #[gpui::test]
+    fn the_order_follows_the_filters(cx: &mut TestAppContext) {
+        let page = cx.new(|_| Documents::new(Repo::new(Err(ShellError::NotSetUp))));
+        page.update(cx, |page, cx| {
+            page.rows.value = Some(vec![
+                summary("a", Some("Tax"), "b-tax.pdf"),
+                summary("b", Some("Home"), "a-home.pdf"),
+                summary("c", None, "c-unfiled.pdf"),
+            ]);
+            page.sync_order();
+            assert_eq!(page.order.len(), 3);
+            assert_eq!(page.list.item_count(), 3);
+
+            page.category_filter = Some("Tax".to_owned());
+            page.order_rev = page.order_rev.wrapping_add(1);
+            page.sync_order();
+            assert_eq!(page.order.len(), 1);
+            assert_eq!(page.list.item_count(), 1);
+
+            page.category_filter = None;
+            page.search_query = "home".to_owned();
+            page.order_rev = page.order_rev.wrapping_add(1);
+            page.sync_order();
+            assert_eq!(page.order.len(), 1);
+            assert_eq!(page.list.item_count(), 1);
+            cx.notify();
+        });
+    }
 
     #[test]
     fn filters_match_document_statuses() {
@@ -3376,14 +3494,6 @@ mod tests {
         // Page 20 and its neighbours survive; page 0 does not.
         assert!(reader.drawn.contains_key(&(20, width)));
         assert!(!reader.drawn.contains_key(&(0, width)));
-    }
-
-    #[test]
-    fn a_batch_is_a_screenful_not_the_whole_library() {
-        // The list draws `ROW_BATCH` rows and grows by that much per press, so a library of a few
-        // thousand cannot put every row in one frame.
-        assert_eq!(super::ROW_BATCH, 100);
-        const { assert!(super::ROW_BATCH < 3101) };
     }
 
     #[test]

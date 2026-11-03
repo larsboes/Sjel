@@ -100,14 +100,45 @@ fn styled_inline(text: &str, palette: Palette) -> AnyElement {
     if inline.text.is_empty() {
         return div().into_any_element();
     }
-    let shown: SharedString = inline.text.into();
-    let highlights = inline_highlights(&inline.marks, palette);
-    if highlights.is_empty() {
-        div().child(shown).into_any_element()
+    if inline.links.is_empty() {
+        let shown: SharedString = inline.text.into();
+        let highlights = inline_highlights(&inline.marks, palette);
+        if highlights.is_empty() {
+            div().child(shown).into_any_element()
+        } else {
+            StyledText::new(shown)
+                .with_highlights(highlights)
+                .into_any_element()
+        }
     } else {
-        StyledText::new(shown)
-            .with_highlights(highlights)
-            .into_any_element()
+        let mut row = div().flex().flex_wrap().items_baseline().gap_x(px(1.0));
+        let mut last = 0;
+        for (range, target) in &inline.links {
+            if range.start > last && range.start <= inline.text.len() {
+                let piece: SharedString = inline.text[last..range.start].to_string().into();
+                row = row.child(div().child(piece));
+            }
+            if range.end <= inline.text.len() {
+                let label = inline.text[range.clone()].to_string();
+                let url = target.clone();
+                let link_id = SharedString::from(format!("doc-link-{}", range.start));
+                row = row.child(
+                    div()
+                        .id(link_id)
+                        .cursor_pointer()
+                        .text_color(rgb(palette.accent))
+                        .hover(|h| h.opacity(0.8))
+                        .on_click(move |_, _, cx| cx.open_url(&url))
+                        .child(label),
+                );
+                last = range.end;
+            }
+        }
+        if last < inline.text.len() {
+            let piece: SharedString = inline.text[last..].to_string().into();
+            row = row.child(div().child(piece));
+        }
+        row.into_any_element()
     }
 }
 

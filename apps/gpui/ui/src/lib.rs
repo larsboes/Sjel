@@ -27,6 +27,7 @@ pub mod self_view;
 pub mod setup;
 pub mod sidebar;
 pub mod software;
+pub mod web_links;
 pub mod soundscape;
 pub mod systems;
 pub mod tasks;

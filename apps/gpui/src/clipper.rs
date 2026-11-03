@@ -8,14 +8,17 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_kit::component::Sizable;
-use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, Entity, FontWeight, Window};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
 use serde_json::Value;
 use sjel_gpui_core::blocks::Doc;
-use sjel_gpui_core::clipper::{self, ClipDocument, Settings, BEHAVIORS};
+use sjel_gpui_core::clipper::{
+    self, audit_citations, markdown_to_turns, turns_to_markdown, CitationStatus, ClipDocument,
+    ClipTurn, Settings, BEHAVIORS,
+};
 use sjel_gpui_ui::doc_view::render_doc;
 use sjel_gpui_ui::theme::Density;
 
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 use crate::ui::{list, note, section};
 
 /// The editor's inputs for the selected template.
@@ -420,11 +423,34 @@ impl Render for ClipperSettings {
     }
 }
 
+struct TurnState {
+    prompt: Entity<TextareaState>,
+    thoughts: Entity<TextareaState>,
+    show_thoughts: bool,
+    response: Entity<TextareaState>,
+}
+
+struct ComposerState {
+    title: Entity<InputState>,
+    url: Entity<InputState>,
+    turns: Vec<TurnState>,
+    saving: bool,
+    status: Option<(bool, String)>,
+}
+
+const CLIP_PAGE_BLOCKS: usize = 80;
+
 pub struct Clips {
     documents: Option<Result<Vec<ClipDocument>, String>>,
     loading: bool,
     open: Option<Result<ClipDocument, String>>,
+    parsed_doc: Option<Doc>,
+    reader_page: usize,
+    confirm_delete: Option<String>,
+    confirm_delete_all: bool,
+    delete_status: Option<(bool, String)>,
     palette: Option<Palette>,
+    composer: Option<ComposerState>,
 }
 
 impl Clips {
@@ -433,7 +459,13 @@ impl Clips {
             documents: None,
             loading: false,
             open: None,
+            parsed_doc: None,
+            reader_page: 0,
+            confirm_delete: None,
+            confirm_delete_all: false,
+            delete_status: None,
             palette: None,
+            composer: None,
         }
     }
 
@@ -468,8 +500,350 @@ impl Clips {
                 .spawn(async move { clipper::document(&key) })
                 .await;
             let _ = this.update(cx, |view, cx| {
+                view.parsed_doc = result
+                    .as_ref()
+                    .ok()
+                    .map(|document| Doc::parse(&document.markdown));
+                view.reader_page = 0;
+                view.confirm_delete = None;
                 view.open = Some(result);
                 cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn delete_document(&mut self, key: String, cx: &mut Context<Self>) {
+        if self.loading {
+            return;
+        }
+        self.loading = true;
+        self.delete_status = Some((true, "Removing clip…".into()));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { clipper::delete_document(&key) })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.loading = false;
+                view.confirm_delete = None;
+                match result {
+                    Ok(count) => {
+                        view.open = None;
+                        view.parsed_doc = None;
+                        view.delete_status = Some((true, format!("Removed {count} clip version(s).")));
+                        view.load(cx);
+                    }
+                    Err(error) => view.delete_status = Some((false, error)),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn delete_all_documents(&mut self, cx: &mut Context<Self>) {
+        if self.loading {
+            return;
+        }
+        self.loading = true;
+        self.delete_status = Some((true, "Removing all clips…".into()));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { clipper::delete_all_documents() })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                view.loading = false;
+                view.confirm_delete_all = false;
+                match result {
+                    Ok(count) => {
+                        view.open = None;
+                        view.parsed_doc = None;
+                        view.documents = Some(Ok(Vec::new()));
+                        view.delete_status = Some((true, format!("Removed {count} clip version(s).")));
+                    }
+                    Err(error) => view.delete_status = Some((false, error)),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn open_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open = None;
+        if self.composer.is_none() {
+            self.start_composer(String::new(), String::new(), Vec::new(), window, cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    pub fn start_composer(
+        &mut self,
+        title: String,
+        url: String,
+        turns: Vec<ClipTurn>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title_input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Clip Title (e.g. LLM Privacy and Routing Strategy)");
+            s.set_value(title, window, cx);
+            s
+        });
+        let url_input = cx.new(|cx| {
+            let mut s = InputState::new(window, cx).placeholder("Source URL (e.g. https://aistudio.google.com/...)");
+            s.set_value(url, window, cx);
+            s
+        });
+        let mut turn_states = Vec::new();
+        for turn in turns {
+            let prompt = cx.new(|cx| {
+                let mut s = TextareaState::new(window, cx).auto_grow(2, 8);
+                s.set_value(turn.prompt, window, cx);
+                s
+            });
+            let thoughts = cx.new(|cx| {
+                let mut s = TextareaState::new(window, cx).auto_grow(2, 6);
+                if let Some(t) = turn.thoughts.as_ref() {
+                    s.set_value(t.clone(), window, cx);
+                }
+                s
+            });
+            let show_thoughts = turn.thoughts.is_some();
+            let response = cx.new(|cx| {
+                let mut s = TextareaState::new(window, cx).auto_grow(4, 18);
+                s.set_value(turn.response, window, cx);
+                s
+            });
+            turn_states.push(TurnState {
+                prompt,
+                thoughts,
+                show_thoughts,
+                response,
+            });
+        }
+        if turn_states.is_empty() {
+            turn_states.push(TurnState {
+                prompt: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8)),
+                thoughts: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
+                show_thoughts: false,
+                response: cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 18)),
+            });
+        }
+        self.composer = Some(ComposerState {
+            title: title_input,
+            url: url_input,
+            turns: turn_states,
+            saving: false,
+            status: None,
+        });
+        cx.notify();
+    }
+
+    fn add_turn(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(composer) = &mut self.composer {
+            composer.turns.push(TurnState {
+                prompt: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 8)),
+                thoughts: cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 6)),
+                show_thoughts: false,
+                response: cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 18)),
+            });
+            cx.notify();
+        }
+    }
+
+    fn remove_turn(&mut self, idx: usize, cx: &mut Context<Self>) {
+        if let Some(composer) = &mut self.composer {
+            if composer.turns.len() > 1 && idx < composer.turns.len() {
+                composer.turns.remove(idx);
+                cx.notify();
+            }
+        }
+    }
+
+    fn move_turn(&mut self, idx: usize, up: bool, cx: &mut Context<Self>) {
+        if let Some(composer) = &mut self.composer {
+            let target = if up {
+                idx.checked_sub(1)
+            } else {
+                idx.checked_add(1).filter(|t| *t < composer.turns.len())
+            };
+            if let Some(t) = target {
+                composer.turns.swap(idx, t);
+                cx.notify();
+            }
+        }
+    }
+
+    fn paste_into_prompt(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((content, _)) = crate::clipboard::read_rich_clipboard() {
+            if let Some(composer) = &mut self.composer {
+                if let Some(turn) = composer.turns.get(idx) {
+                    turn.prompt.update(cx, |t, cx| t.set_value(content, window, cx));
+                    composer.status = Some((true, format!("Pasted prompt into Turn {}.", idx + 1)));
+                    cx.notify();
+                }
+            }
+        } else if let Some(composer) = &mut self.composer {
+            composer.status = Some((false, "Clipboard is empty.".into()));
+            cx.notify();
+        }
+    }
+
+    fn paste_into_thoughts(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((content, _)) = crate::clipboard::read_rich_clipboard() {
+            if let Some(composer) = &mut self.composer {
+                if let Some(turn) = composer.turns.get_mut(idx) {
+                    turn.show_thoughts = true;
+                    turn.thoughts.update(cx, |t, cx| t.set_value(content, window, cx));
+                    composer.status = Some((true, format!("Pasted thoughts into Turn {}.", idx + 1)));
+                    cx.notify();
+                }
+            }
+        } else if let Some(composer) = &mut self.composer {
+            composer.status = Some((false, "Clipboard is empty.".into()));
+            cx.notify();
+        }
+    }
+
+    fn toggle_thoughts(&mut self, idx: usize, cx: &mut Context<Self>) {
+        if let Some(composer) = &mut self.composer {
+            if let Some(turn) = composer.turns.get_mut(idx) {
+                turn.show_thoughts = !turn.show_thoughts;
+                cx.notify();
+            }
+        }
+    }
+
+    fn paste_rich_turn(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((content, is_html)) = crate::clipboard::read_rich_clipboard() {
+            if let Some(composer) = &mut self.composer {
+                if let Some(turn) = composer.turns.get(idx) {
+                    turn.response.update(cx, |t, cx| t.set_value(content, window, cx));
+                    composer.status = Some((
+                        true,
+                        if is_html {
+                            format!("Pasted rich response into Turn {} (links converted).", idx + 1)
+                        } else {
+                            format!("Pasted response into Turn {}.", idx + 1)
+                        },
+                    ));
+                    cx.notify();
+                }
+            }
+        } else if let Some(composer) = &mut self.composer {
+            composer.status = Some((false, "Clipboard is empty.".into()));
+            cx.notify();
+        }
+    }
+
+    fn auto_split_clipboard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((content, _)) = crate::clipboard::read_rich_clipboard() {
+            let turns = markdown_to_turns(&content);
+            if !turns.is_empty() {
+                let url = self
+                    .composer
+                    .as_ref()
+                    .map(|c| c.url.read(cx).value().to_string())
+                    .unwrap_or_default();
+                let title = self
+                    .composer
+                    .as_ref()
+                    .map(|c| c.title.read(cx).value().to_string())
+                    .unwrap_or_default();
+                self.start_composer(title, url, turns, window, cx);
+                if let Some(composer) = &mut self.composer {
+                    composer.status = Some((
+                        true,
+                        format!("Auto-split clipboard into {} dialogue turn(s).", composer.turns.len()),
+                    ));
+                    cx.notify();
+                }
+            } else if let Some(composer) = &mut self.composer {
+                composer.status = Some((
+                    false,
+                    "Could not detect dialogue turns in clipboard. Use individual paste buttons.".into(),
+                ));
+                cx.notify();
+            }
+        }
+    }
+
+    fn save_composer(&mut self, individual: bool, cx: &mut Context<Self>) {
+        let Some(composer) = &mut self.composer else { return };
+        let title = composer.title.read(cx).value().trim().to_string();
+        let url = composer.url.read(cx).value().trim().to_string();
+        let title = if title.is_empty() {
+            "Untitled Thread Clip".to_string()
+        } else {
+            title
+        };
+        let url = if url.is_empty() {
+            "https://aistudio.google.com/".to_string()
+        } else {
+            url
+        };
+
+        let mut turns = Vec::new();
+        for (i, turn) in composer.turns.iter().enumerate() {
+            let t_val = turn.thoughts.read(cx).value().trim().to_string();
+            turns.push(ClipTurn {
+                index: i + 1,
+                prompt: turn.prompt.read(cx).value().to_string(),
+                thoughts: if t_val.is_empty() { None } else { Some(t_val) },
+                response: turn.response.read(cx).value().to_string(),
+            });
+        }
+        composer.saving = true;
+        composer.status = Some((true, "Saving clip to Sjel…".into()));
+        cx.notify();
+
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    if individual {
+                        let mut last_key = String::new();
+                        for turn in &turns {
+                            let note_title = format!("{} - Turn {}", title, turn.index);
+                            let single = std::slice::from_ref(turn);
+                            let single_md = turns_to_markdown(single);
+                            last_key = clipper::save_clip(
+                                &url,
+                                &note_title,
+                                "create",
+                                &single_md,
+                                single,
+                                None,
+                            )?;
+                        }
+                        Ok(last_key)
+                    } else {
+                        let markdown = turns_to_markdown(&turns);
+                        clipper::save_clip(&url, &title, "create", &markdown, &turns, None)
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |view, cx| {
+                if let Some(composer) = &mut view.composer {
+                    composer.saving = false;
+                    match result {
+                        Ok(key) => {
+                            view.composer = None;
+                            view.load(cx);
+                            view.open(key, cx);
+                        }
+                        Err(err) => {
+                            composer.status = Some((false, err));
+                            cx.notify();
+                        }
+                    }
+                }
             });
         })
         .detach();
@@ -478,18 +852,76 @@ impl Clips {
     fn reader(
         &self,
         document: &ClipDocument,
+        doc: &Doc,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let doc = Doc::parse(&document.markdown);
+        let page_count = doc.blocks.len().max(1).div_ceil(CLIP_PAGE_BLOCKS);
+        let page = self.reader_page.min(page_count.saturating_sub(1));
+        let start = page * CLIP_PAGE_BLOCKS;
+        let end = (start + CLIP_PAGE_BLOCKS).min(doc.blocks.len());
+        let page_doc = Doc {
+            front: String::new(),
+            blocks: doc.blocks[start..end].to_vec(),
+            trailing: 0,
+        };
+        let page_markdown = page_doc.markdown();
         let url = document.url.clone();
+        let title = if document.title.is_empty() {
+            document.key.clone()
+        } else {
+            document.title.clone()
+        };
+        let doc_for_edit = document.clone();
+        let key = document.key.clone();
+        let key_for_delete = key.clone();
+        let confirm_delete = self.confirm_delete.as_deref() == Some(key.as_str());
+        let status = self.delete_status.as_ref().map(|(ok, message)| {
+            note(
+                message.clone(),
+                if *ok { palette.muted } else { palette.red },
+            )
+        });
+
+        let mut navigation = div().flex().items_center().gap_2();
+        if page > 0 {
+            navigation = navigation.child(
+                Button::new("clip-page-previous")
+                    .small()
+                    .ghost()
+                    .label("← Previous")
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.reader_page = view.reader_page.saturating_sub(1);
+                        cx.notify();
+                    })),
+            );
+        }
+        navigation = navigation.child(note(
+            format!("Page {} of {} · blocks {}–{} of {}", page + 1, page_count, start + 1, end, doc.blocks.len()),
+            palette.muted,
+        ));
+        if page + 1 < page_count {
+            navigation = navigation.child(
+                Button::new("clip-page-next")
+                    .small()
+                    .ghost()
+                    .label("Next →")
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.reader_page = (view.reader_page + 1).min(page_count - 1);
+                        cx.notify();
+                    })),
+            );
+        }
+
         div()
             .flex()
             .flex_col()
             .gap_4()
+            .children(status)
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap_2()
                     .child(
@@ -499,7 +931,25 @@ impl Clips {
                             .label("← Clips")
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.open = None;
+                                view.parsed_doc = None;
+                                view.confirm_delete = None;
                                 cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("clips-edit-composer")
+                            .small()
+                            .ghost()
+                            .label("Edit in Composer")
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                let turns = markdown_to_turns(&doc_for_edit.markdown);
+                                view.start_composer(
+                                    doc_for_edit.title.clone(),
+                                    doc_for_edit.url.clone(),
+                                    turns,
+                                    window,
+                                    cx,
+                                );
                             })),
                     )
                     .child(
@@ -508,15 +958,23 @@ impl Clips {
                             .ghost()
                             .label("Open original")
                             .on_click(move |_, _, cx| cx.open_url(&url)),
+                    )
+                    .child(
+                        Button::new("clips-delete-document")
+                            .small()
+                            .ghost()
+                            .label(if confirm_delete { "Confirm delete" } else { "Delete clip" })
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                if view.confirm_delete.as_deref() == Some(key_for_delete.as_str()) {
+                                    view.delete_document(key_for_delete.clone(), cx);
+                                } else {
+                                    view.confirm_delete = Some(key_for_delete.clone());
+                                    cx.notify();
+                                }
+                            })),
                     ),
             )
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(
-                if document.title.is_empty() {
-                    document.key.clone()
-                } else {
-                    document.title.clone()
-                },
-            ))
+            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child(title))
             .child(note(
                 format!(
                     "{} · {} version{} · {}",
@@ -527,14 +985,549 @@ impl Clips {
                 ),
                 palette.muted,
             ))
+            .child(navigation)
+            .child(render_citation_audit(&page_markdown, palette))
             .child(render_doc(
-                &doc,
+                &page_doc,
                 palette,
                 Density::Desktop,
                 None::<fn(usize, &gpui_kit::ClickEvent, &mut Window, &mut gpui_kit::App)>,
             ))
             .into_any_element()
     }
+
+    fn clips_header(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let clip_count = self
+            .documents
+            .as_ref()
+            .and_then(|result| result.as_ref().ok())
+            .map_or(0, Vec::len);
+        let delete_all_label = if self.confirm_delete_all {
+            format!("Confirm remove all ({clip_count})")
+        } else {
+            "Remove all".to_string()
+        };
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .py_1()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_0p5()
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_sm()
+                            .child("Saved Clips"),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Web pages and multi-turn LLM thread clips"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .children((clip_count > 0).then(|| {
+                        Button::new("clips-delete-all")
+                            .small()
+                            .ghost()
+                            .label(delete_all_label)
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                if view.confirm_delete_all {
+                                    view.delete_all_documents(cx);
+                                } else {
+                                    view.confirm_delete_all = true;
+                                    cx.notify();
+                                }
+                            }))
+                    }))
+                    .child(
+                        Button::new("clips-refresh")
+                            .small()
+                            .ghost()
+                            .label("Refresh")
+                            .on_click(cx.listener(|view, _, _, cx| view.load(cx))),
+                    )
+                    .child(
+                        Button::new("clips-new-thread")
+                            .small()
+                            .primary()
+                            .label("+ New Thread Clip")
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                view.start_composer("".into(), "".into(), vec![], window, cx);
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    fn render_composer(
+        &self,
+        cx: &mut Context<Self>,
+        palette: Palette,
+    ) -> AnyElement {
+        let Some(composer) = &self.composer else {
+            return div().into_any_element();
+        };
+
+        let saving = composer.saving;
+        let title_input = composer.title.clone();
+        let url_input = composer.url.clone();
+        let total_turns = composer.turns.len();
+
+        let mut turn_cards: Vec<AnyElement> = Vec::new();
+        for (i, turn) in composer.turns.iter().enumerate() {
+            let prompt_entity = turn.prompt.clone();
+            let thoughts_entity = turn.thoughts.clone();
+            let show_thoughts = turn.show_thoughts;
+            let response_entity = turn.response.clone();
+            let response_text = response_entity.read(cx).value().to_string();
+
+            let mut turn_nav = div().flex().items_center().gap_1();
+            if i > 0 {
+                turn_nav = turn_nav.child(
+                    Button::new(("turn-up", i))
+                        .small()
+                        .ghost()
+                        .label("↑")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.move_turn(i, true, cx);
+                        })),
+                );
+            }
+            if i + 1 < total_turns {
+                turn_nav = turn_nav.child(
+                    Button::new(("turn-down", i))
+                        .small()
+                        .ghost()
+                        .label("↓")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.move_turn(i, false, cx);
+                        })),
+                );
+            }
+            if total_turns > 1 {
+                turn_nav = turn_nav.child(
+                    Button::new(("turn-del", i))
+                        .small()
+                        .ghost()
+                        .label("✕ Delete")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.remove_turn(i, cx);
+                        })),
+                );
+            }
+
+            let card = div()
+                .id(("composer-turn-card", i))
+                .flex()
+                .flex_col()
+                .gap_3()
+                .p_4()
+                .rounded_lg()
+                .border_1()
+                .border_color(rgb(palette.border))
+                .bg(rgba(tint(palette.surface, 0x20)))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_sm()
+                                .child(format!("Turn {}", i + 1)),
+                        )
+                        .child(turn_nav),
+                )
+                // Prompt section
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("Prompt {}", i + 1)),
+                                )
+                                .child(
+                                    Button::new(("turn-paste-prompt", i))
+                                        .small()
+                                        .ghost()
+                                        .label("📋 Paste Prompt")
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.paste_into_prompt(i, window, cx);
+                                        })),
+                                ),
+                        )
+                        .child(Textarea::new(&prompt_entity)),
+                )
+                // Thoughts section
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    Button::new(("turn-toggle-thoughts", i))
+                                        .small()
+                                        .ghost()
+                                        .label(if show_thoughts {
+                                            "▼ Thoughts"
+                                        } else {
+                                            "▶ ✦ Thoughts (optional)"
+                                        })
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.toggle_thoughts(i, cx);
+                                        })),
+                                )
+                                .children(show_thoughts.then(|| {
+                                    Button::new(("turn-paste-thoughts", i))
+                                        .small()
+                                        .ghost()
+                                        .label("📋 Paste Thoughts")
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.paste_into_thoughts(i, window, cx);
+                                        }))
+                                })),
+                        )
+                        .children(show_thoughts.then(|| Textarea::new(&thoughts_entity))),
+                )
+                // Response section
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("Response {}", i + 1)),
+                                )
+                                .child(
+                                    Button::new(("turn-paste-rich", i))
+                                        .small()
+                                        .primary()
+                                        .label("📋 Paste Response (Rich + Links)")
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.paste_rich_turn(i, window, cx);
+                                        })),
+                                ),
+                        )
+                        .child(Textarea::new(&response_entity)),
+                )
+                .child(render_citation_audit(&response_text, palette));
+
+            turn_cards.push(card.into_any_element());
+        }
+
+        let header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        Button::new("composer-cancel")
+                            .small()
+                            .ghost()
+                            .label("← Cancel")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.composer = None;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Thread Composer"),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("composer-auto-split")
+                            .small()
+                            .ghost()
+                            .label("⚡ Auto-Split Clipboard")
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                view.auto_split_clipboard(window, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("composer-save-indiv")
+                            .small()
+                            .ghost()
+                            .label("Save Individual Notes")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.save_composer(true, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("composer-save-thread")
+                            .small()
+                            .primary()
+                            .label(if saving { "Saving…" } else { "Save 1 Thread Note" })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.save_composer(false, cx);
+                            })),
+                    ),
+            );
+
+        let fields = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child("Title"))
+                    .child(Input::new(&title_input)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("Source URL"),
+                    )
+                    .child(Input::new(&url_input)),
+            );
+
+        let footer_actions = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                Button::new("composer-add-turn")
+                    .small()
+                    .ghost()
+                    .label("+ Add Turn")
+                    .on_click(cx.listener(|view, _, window, cx| {
+                        view.add_turn(window, cx);
+                    })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("composer-save-indiv-bottom")
+                            .small()
+                            .ghost()
+                            .label("Save Individual Notes")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.save_composer(true, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("composer-save-thread-bottom")
+                            .small()
+                            .primary()
+                            .label(if saving { "Saving…" } else { "Save 1 Thread Note" })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.save_composer(false, cx);
+                            })),
+                    ),
+            );
+
+        let status_view = composer.status.as_ref().map(|(ok, msg)| {
+            note(
+                msg.clone(),
+                if *ok { palette.muted } else { palette.red },
+            )
+        });
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(header)
+            .children(status_view)
+            .child(fields)
+            .children(turn_cards)
+            .child(footer_actions)
+            .into_any_element()
+    }
+}
+
+fn render_citation_audit(text: &str, palette: Palette) -> AnyElement {
+    let citations = audit_citations(text);
+    if citations.is_empty() {
+        return div().into_any_element();
+    }
+    let resolved_count = citations
+        .iter()
+        .filter(|c| c.status == CitationStatus::Resolved)
+        .count();
+    let unlinked_count = citations
+        .iter()
+        .filter(|c| c.status == CitationStatus::UnlinkedRef)
+        .count();
+    let malformed_count = citations
+        .iter()
+        .filter(|c| c.status == CitationStatus::MalformedUrl)
+        .count();
+
+    let chips: Vec<AnyElement> = citations
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let (bg, border, text_color, desc) = match c.status {
+                CitationStatus::Resolved => (
+                    rgba(tint(palette.accent, 0x18)),
+                    rgb(palette.accent),
+                    rgb(palette.accent),
+                    c.url.clone().unwrap_or_default(),
+                ),
+                CitationStatus::UnlinkedRef => (
+                    rgba(tint(palette.amber, 0x24)),
+                    rgb(palette.amber),
+                    rgb(palette.amber),
+                    "Missing target URL (bare [N] from plain paste)".to_string(),
+                ),
+                CitationStatus::MalformedUrl => (
+                    rgba(tint(palette.red, 0x24)),
+                    rgb(palette.red),
+                    rgb(palette.red),
+                    format!("Invalid URL: {}", c.url.clone().unwrap_or_default()),
+                ),
+            };
+
+            let target_url = c.url.clone();
+            let mut chip = div()
+                .id(("citation-chip", i))
+                .flex()
+                .items_center()
+                .gap_1p5()
+                .px_2()
+                .py_0p5()
+                .rounded_md()
+                .border_1()
+                .border_color(border)
+                .bg(bg)
+                .text_xs();
+
+            if let Some(url) = target_url {
+                chip = chip
+                    .cursor_pointer()
+                    .on_click(move |_, _, cx| {
+                        let clean = sjel_gpui_core::clipper::unwrap_google_redirect(&url);
+                        if clean.contains("vertexaisearch.cloud.google.com/grounding-api-redirect/") {
+                            let clean_clone = clean.clone();
+                            cx.spawn(async move |cx| {
+                                let resolved = sjel_gpui_core::clipper::resolve_redirect_http(&clean_clone).await;
+                                let _ = cx.update(|cx| cx.open_url(&resolved));
+                            }).detach();
+                        } else {
+                            cx.open_url(&clean);
+                        }
+                    });
+            }
+
+            chip.child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(text_color)
+                    .child(c.label),
+            )
+            .child(
+                div()
+                    .text_color(rgb(palette.muted))
+                    .max_w(px(260.))
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .child(desc),
+            )
+            .into_any_element()
+        })
+        .collect();
+
+    let summary_text = format!(
+        "Citation & Link Audit: {} resolved{}, {} unlinked{}",
+        resolved_count,
+        if malformed_count > 0 {
+            format!(", {} malformed", malformed_count)
+        } else {
+            String::new()
+        },
+        unlinked_count,
+        if unlinked_count > 0 {
+            " (paste rich HTML from AI Studio to preserve citation links)"
+        } else {
+            ""
+        }
+    );
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .p_3()
+        .rounded_lg()
+        .bg(rgba(tint(palette.surface, 0x30)))
+        .border_1()
+        .border_color(if unlinked_count > 0 {
+            rgb(palette.amber)
+        } else {
+            rgb(palette.border)
+        })
+        .child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if unlinked_count > 0 {
+                    rgb(palette.amber)
+                } else {
+                    rgb(palette.muted)
+                })
+                .child(summary_text),
+        )
+        .child(div().flex().flex_wrap().gap_2().children(chips))
+        .into_any_element()
 }
 
 impl Render for Clips {
@@ -545,15 +1538,32 @@ impl Render for Clips {
         if self.documents.is_none() && !self.loading {
             self.load(cx);
         }
+
+        if self.composer.is_some() {
+            let body = self.render_composer(cx, palette);
+            return div()
+                .w_full()
+                .child(body);
+        }
+
         let body = match (&self.open, &self.documents) {
-            (Some(Ok(document)), _) => self.reader(&document.clone(), palette, cx),
+            (Some(Ok(document)), _) => match self.parsed_doc.as_ref() {
+                Some(doc) => self.reader(document, doc, palette, cx),
+                None => note("Preparing clip…", palette.muted),
+            },
             (Some(Err(error)), _) => note(error.clone(), palette.red),
             (None, None) => note("Reading clips from comms…", palette.muted),
             (None, Some(Err(error))) => note(error.clone(), palette.red),
-            (None, Some(Ok(documents))) if documents.is_empty() => note(
-                "No clips yet. Save a page with the Sjel Clipper in Chrome.",
-                palette.muted,
-            ),
+            (None, Some(Ok(documents))) if documents.is_empty() => div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(self.clips_header(palette, cx))
+                .child(note(
+                    "No clips yet. Save a page with the Sjel Clipper in Chrome, or create a thread clip.",
+                    palette.muted,
+                ))
+                .into_any_element(),
             (None, Some(Ok(documents))) => {
                 let rows = documents
                     .iter()
@@ -588,13 +1598,35 @@ impl Render for Clips {
                             .into_any_element()
                     })
                     .collect();
-                list(rows, palette)
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(self.clips_header(palette, cx))
+                    .child(list(rows, palette))
+                    .into_any_element()
             }
         };
-        div()
-            .id("clips-scroll")
-            .size_full()
-            .overflow_y_scroll()
-            .child(div().max_w(px(860.)).child(body))
+        let status = self.delete_status.as_ref().map(|(ok, message)| {
+            note(
+                message.clone(),
+                if *ok { palette.muted } else { palette.red },
+            )
+        });
+        div().w_full().child(
+            div()
+                .id("clips-scroll")
+                .size_full()
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .max_w(px(860.))
+                        .flex()
+                        .flex_col()
+                        .gap_3()
+                        .children(status)
+                        .child(body),
+                ),
+        )
     }
 }

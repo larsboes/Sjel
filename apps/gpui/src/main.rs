@@ -14,6 +14,7 @@ mod audio;
 mod backup;
 mod calendar_view;
 mod capabilities;
+pub mod clipboard;
 mod clipper;
 mod context_view;
 mod cv_view;
@@ -30,6 +31,7 @@ mod home;
 mod import;
 mod inbox;
 mod inventory_view;
+mod links;
 #[cfg(target_os = "macos")]
 mod macos_glass;
 mod mail;

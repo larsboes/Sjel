@@ -292,3 +292,46 @@ inside this list is by use.
    `cargo test --manifest-path apps/gpui/Cargo.toml`.
 3. Install and check the desktop build with `apps/gpui/install`.
 4. A shipped work package shrinks to one row in §4 with its commit.
+
+## 9. Frame cost
+
+`apps/gpui/bench-scroll <page>` drives the open page's own scroller (`Workspace::bench_scroll`) and
+reports p50, p95 and max CPU per frame from the probe in `src/frames.rs`. A page that owns its
+scroll answers the bench itself, so a virtual list is measured where it scrolls. The 120 Hz budget
+is 8.3 ms a frame. Release build, 2026-11-02:
+
+| page | p50 ms | over 8.3 ms | page | p50 ms |
+|---|---|---|---|---|
+| feed | 1.7–3.7 (was 71.7) | 0–3/240 (was 240/240) | self | 4.4 |
+| systems | 9.5 | 240/240 | capabilities, inbox | 3.7 |
+| inventory | 7.6 | 8/240 | software, settings, cv | 2.8–3.2 |
+| documents | 7.5 | 3/240 | home, research, calendar, travel | 1.4–2.6 |
+| packs | 5.7 | 2/238 | setup, backup, docs, media, links, import, finance, people | 0.7–2.3 |
+
+An empty page costs about 1.6 ms, so almost all of the figure above is the page's own rows: a rich
+Feed row costs about 0.2 ms to build, layout and paint.
+
+### Done
+
+| # | What | Result |
+|---|---|---|
+| E1 | Feed's Reading list draws one row per item on screen: `ListState` and `list()` in `src/feed.rs`, the order cached in `Feed::reading_order` and rebuilt only when the entries, the filter or a status move. Feed owns its scroller and every other tab in the page keeps one of its own. `j`/`k` reveals the cursor's row. | 71.7 → 1.7–3.7 ms p50 for 362 rows, of which about 15 are drawn. The spread is machine load across eight runs of the bench. Uncommitted. |
+
+### In progress: E2, the same list element on the other long pages
+
+| page | what it draws | state |
+|---|---|---|
+| Feed, Library tab | 1,074 archive rows | Done: `ListState` and a cached order; the `Show more` cap is gone. 26.2 ms before, unmeasured after. |
+| Documents | 7,154 records, 100 drawn | Done: the per-frame clone of every record is gone, the filter and sort moved into `sync_order`, and only the rows in the window are built. 7.5–8.2 ms before, unmeasured after. |
+| Inventory, Interior | grouped cards in one scroll container | Open. They build cards rather than uniform rows, so a conversion needs a looked-at window; not done blind. |
+| Packs | a matrix with a pinned header and a horizontal scroller | Open, and last: 5.7 ms with 2 of 238 frames over budget. |
+| Systems | six chart panels, not a row list | Not an E2 page: virtualization cannot help it. Its 9.5 ms is chart drawing every frame, which needs its own entry. |
+
+### Open
+
+| # | What | Done when |
+|---|---|---|
+| E2 | One helper in `ui/src/primitives.rs` for the list, its scrollbar and the height contract, so a page cannot repeat the zero-height mistake the first conversion made. | Three pages share it, and each `bench-scroll` shows no frame over 8.3 ms. |
+| E3 | Filter, sort and `Board::from_records` leave `render()`. Done for Feed and Documents; open for `ui/src/projects.rs:1739`, `:2531`, `:2851` (`Board::from_records` per frame) and the count pills on Feed. 241 `.clone()` and 165 `format!` calls still sit inside render functions across 79 of them. | An unchanged page re-renders without an allocation that scales with its row count. |
+| E4 | Poll hygiene. Done: the poll asks git at most every 5 minutes (`UPDATE_CHECK`), while ⌘⇧U and Settings → Updates still ask at once. Open: `Remote::settle` reports whether the value moved so the caller notifies only then. | An idle window paints nothing between polls, and one poll cycle forks no process. |
+| E5 | Systems redraws six chart panels every frame. Its beats (`MACMON_BEAT`, `AGENT_BEAT`) re-render whether or not the reading moved, and the charts are rebuilt rather than reused. | A beat that reports the same reading paints nothing. |

@@ -174,6 +174,7 @@ fn subtitle(view: &Workspace) -> SharedString {
             "Household inventory, wishlist budget, and interior spatial layout".into()
         }
         Page::Software => "Apps on this Mac: size, last used, and what to keep".into(),
+        Page::Links => "Your recurring web destinations, grouped and ready to open".into(),
         Page::Apps => "Standalone interfaces exposed by running capabilities".into(),
         Page::Docs => "Architecture, capability contracts, and operating guides".into(),
         Page::Record => "A record and the Sjel data connected to it".into(),

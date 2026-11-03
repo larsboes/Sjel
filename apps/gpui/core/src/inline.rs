@@ -120,6 +120,9 @@ fn span(src: &str, at: usize, rest: &str) -> Option<(Range<usize>, usize, Mark, 
     }
     if rest.starts_with('[') {
         let (label, close) = closed("[", "](")?;
+        if src[label.clone()].contains('[') || src[label.clone()].contains(']') {
+            return None;
+        }
         let url_end = src[close..].find(')')?;
         let target = src[close..close + url_end].trim().to_owned();
         return Some((label, close + url_end + 1, Mark::Link, Some(target)));

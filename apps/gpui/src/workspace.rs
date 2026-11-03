@@ -5,7 +5,7 @@
 //! row, each reading this view and calling back into it.
 
 use std::collections::BTreeSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::StreamExt;
 use gpui_kit::component::input::{InputEvent, InputState};
@@ -13,8 +13,8 @@ use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Theme, WindowExt};
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle, KeyBinding,
-    MouseButton, MouseMoveEvent, SharedString, Subscription, Window, WindowAppearance,
+    actions, div, point, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle,
+    KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window, WindowAppearance,
 };
 
 use crate::ask::Ask;
@@ -305,6 +305,11 @@ pub fn bind_keys(cx: &mut App) {
 /// How often the open window reads the shell again.
 const POLL: Duration = Duration::from_secs(10);
 
+/// How often the poll asks git whether the checkout moved. A checkout changes on the scale of a
+/// working session, so a fork of `git rev-parse` on every poll buys nothing; ⌘⇧U and Settings
+/// still ask at once.
+const UPDATE_CHECK: Duration = Duration::from_secs(300);
+
 pub struct Workspace {
     pub page: Page,
     /// The tab each area shows, so ⌘1–⌘8 return to where you left an area.
@@ -341,6 +346,7 @@ pub struct Workspace {
     pub backup_page: Entity<BackupPage>,
     pub inventory_page: Entity<InventoryPage>,
     pub software: Entity<crate::software::Software>,
+    pub links_page: Entity<crate::links::LinksPage>,
     pub apps_page: Entity<crate::apps::AppsPage>,
     pub docs_page: Entity<crate::docs::DocsPage>,
     pub record_page: Entity<crate::record::RecordPage>,
@@ -368,6 +374,8 @@ pub struct Workspace {
     pub settings_toc_visible: bool,
     pub settings_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
     pub update_info: Option<crate::update::UpdateInfo>,
+    /// When the last `git` check started, so the poll can skip the ones it does not need.
+    update_checked_at: Option<Instant>,
     pub rebuild_state: crate::update::RebuildState,
     /// Whether the failed rebuild shows cargo's whole output instead of the first error.
     pub show_rebuild_log: bool,
@@ -431,6 +439,7 @@ impl Workspace {
         let backup_page = cx.new(|cx| BackupPage::new(repo.clone(), cx));
         let inventory_page = cx.new(|cx| InventoryPage::new(repo.clone(), cx));
         let software = cx.new(|_| crate::software::Software::new(repo.clone()));
+        let links_page = cx.new(|_| crate::links::LinksPage::new(repo.clone()));
         let apps_page = cx.new(|_| crate::apps::AppsPage::new(repo.clone()));
         let docs_page = cx.new(|_| crate::docs::DocsPage::new());
         let record_page = cx.new(|_| crate::record::RecordPage::new(repo.clone()));
@@ -541,6 +550,7 @@ impl Workspace {
             backup_page,
             inventory_page,
             software,
+            links_page,
             apps_page,
             docs_page,
             record_page,
@@ -565,6 +575,7 @@ impl Workspace {
             settings_toc_visible: true,
             settings_search: Some((settings_search, settings_search_events)),
             update_info: None,
+            update_checked_at: None,
             rebuild_state: crate::update::RebuildState::Idle,
             show_rebuild_log: false,
             _appearance: Some(appearance),
@@ -586,7 +597,7 @@ impl Workspace {
             workspace.frames.clone(),
             std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_some(),
         ) {
-            crate::frames::drive_scroll_bench(frames, workspace.selection.scroll.clone(), cx);
+            crate::frames::drive_scroll_bench(frames, cx);
         }
         if let (Some(frames), Ok(path)) = (
             workspace.frames.clone(),
@@ -649,6 +660,11 @@ impl Workspace {
                 self.backup_page.update(cx, |b, cx| b.activate(cx));
             } else if page == Page::Software {
                 self.software.update(cx, |software, cx| software.load(cx));
+            } else if page == Page::Links {
+                self.links_page.update(cx, |links, cx| {
+                    links.load(cx);
+                    links.load_candidates(cx);
+                });
             } else if page == Page::Apps {
                 self.apps_page.update(cx, |apps, cx| apps.load(cx));
             } else if page == Page::Import {
@@ -775,7 +791,12 @@ impl Workspace {
             &repo_sound,
             move |r| async move { r.soundscape_state().await },
         );
-        self.check_updates(cx);
+        if self
+            .update_checked_at
+            .is_none_or(|at| at.elapsed() >= UPDATE_CHECK)
+        {
+            self.check_updates(cx);
+        }
     }
 
     /// A failed read keeps the last list: comms restarting must not blank the Today page.
@@ -812,6 +833,7 @@ impl Workspace {
     }
 
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {
+        self.update_checked_at = Some(Instant::now());
         cx.spawn(async move |this, cx| {
             let info = cx
                 .background_executor()
@@ -1252,6 +1274,16 @@ impl Workspace {
                         self.open_target(target, window, cx);
                     }
                 }
+                Open::WebDestination { id, url } => {
+                    cx.open_url(&url);
+                    if let Ok(client) = self.repo.shell() {
+                        let work = shell::run(async move { client.web_link_open(&id).await });
+                        cx.spawn(async move |_, _| {
+                            let _ = work.await;
+                        })
+                        .detach();
+                    }
+                }
                 Open::Record { project, path } => {
                     self.go(Page::Projects, cx);
                     self.projects.update(cx, |projects, cx| {
@@ -1304,11 +1336,36 @@ impl Workspace {
         self.refresh_current_page(cx);
     }
 
+    /// `SJEL_GPUI_BENCH_SCROLL`: step the open page's own scroller to `fraction` of its height.
+    ///
+    /// A page that draws a virtual list owns the scroll, so the bench asks the page rather than
+    /// reading the workspace's handle.
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if self.page == Page::Feed {
+            self.feed
+                .update(cx, |feed, cx| feed.bench_scroll(fraction, cx));
+            return;
+        }
+        let scroll = if self.page == Page::Travel {
+            self.travel.read(cx).scroll_handle()
+        } else {
+            self.selection.scroll.clone()
+        };
+        let max = scroll.max_offset().y;
+        scroll.set_offset(point(px(0.), -max * fraction));
+        cx.notify();
+    }
+
     pub fn refresh_current_page(&mut self, cx: &mut Context<Self>) {
         self.refresh(cx);
         if self.page == Page::Projects {
             self.projects
                 .update(cx, |projects, cx| projects.load_projects(cx));
+        } else if self.page == Page::Links {
+            self.links_page.update(cx, |links, cx| {
+                links.load(cx);
+                links.load_candidates(cx);
+            });
         } else if self.page == Page::Travel {
             self.travel.update(cx, |travel, cx| travel.refresh(cx));
         } else if self.page == Page::Documents {
@@ -1996,6 +2053,7 @@ impl Render for Workspace {
                 self.backup_page.clone().into_any_element()
             }
             Page::Software => self.software.clone().into_any_element(),
+            Page::Links => self.links_page.clone().into_any_element(),
             Page::Apps => self.apps_page.clone().into_any_element(),
             Page::Docs => self.docs_page.clone().into_any_element(),
             Page::Record => self.record_page.clone().into_any_element(),
@@ -2141,6 +2199,7 @@ impl Render for Workspace {
                                 | Page::Inbox
                                 | Page::Calendar
                                 | Page::Software
+                                | Page::Links
                                 | Page::Settings
                         ),
                         |frame| frame.key_context("Workspace"),
@@ -2179,6 +2238,7 @@ impl Render for Workspace {
                                         | Page::People
                                         | Page::Backup
                                         | Page::Inventory
+                                        | Page::Feed
                                         | Page::Packs
                                 ) {
                                     // Projects, Settings, Documents, Calendar, Finance, People,

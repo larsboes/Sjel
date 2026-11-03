@@ -2250,8 +2250,14 @@ mod tests {
       ]
     }"#;
 
+    static TEST_DIR_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     fn scratch(name: &str) -> (PlacesStore, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("places-timeline-{name}"));
+        let seq = TEST_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "places-timeline-{name}-{}-{seq}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         (PlacesStore::open(&dir.join("axon.db")).unwrap(), dir)
@@ -2353,7 +2359,11 @@ mod tests {
         // `Reviews.json` sits at the export root in old exports and under
         // `Maps (your places)/` in new ones. Reading only the root meant a
         // relayout imported nothing and reported success.
-        let dir = std::env::temp_dir().join("places-timeline-layout");
+        let seq = TEST_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "places-timeline-layout-{}-{seq}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let nested = dir.join("Maps (your places)").join("Saved");
         std::fs::create_dir_all(&nested).unwrap();
@@ -2366,7 +2376,9 @@ mod tests {
 
     #[test]
     fn the_semantic_location_history_tree_is_walked_by_shape_not_by_path() {
-        let dir = std::env::temp_dir().join("places-timeline-walk");
+        let seq = TEST_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("places-timeline-walk-{}-{seq}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let months = dir
             .join("Location History")

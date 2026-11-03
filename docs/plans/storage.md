@@ -225,6 +225,10 @@ Open:
    `/Volumes/Extreme/Backup/sjel/`, an external drive. First hypothesis to check: the scheduled
    runs started while that drive was not mounted. Either way, a started run must end in a receipt
    or an attempt record, and a missing target volume must show as a failed attempt.
+   Found 2026-11-03: the `backup-target` timer has been off (`interval_hours` NULL) since
+   2026-10-22 15:12Z, so finance, store, knowledge-base, packs, devices and projects only get
+   manual runs. `tools/doctor` now names an off timer. Open: whether it goes back on, and why
+   it was turned off.
 2. **A CLI for the runs.** `sjel backup status|runs` over `GET /api/sjel-status/backups` and
    `/backup/runs` (see [`tooling.md`](tooling.md)).
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only

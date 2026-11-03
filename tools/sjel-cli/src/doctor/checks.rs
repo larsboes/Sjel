@@ -1895,6 +1895,23 @@ fn data_freshness(ctx: &mut Ctx) {
     }
 }
 
+/// Each backup target's timer interval in hours, `None` when the timer is off. `None` overall
+/// when the store cannot be read, so the finding falls back to the generic cause.
+fn backup_timers() -> Option<std::collections::HashMap<String, Option<i64>>> {
+    let conn = rusqlite::Connection::open_with_flags(
+        sjel_config::database_path(),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let mut statement = conn
+        .prepare("SELECT target, interval_hours FROM backup_policy")
+        .ok()?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .ok()?;
+    rows.collect::<Result<_, _>>().ok()
+}
+
 fn backups(ctx: &mut Ctx) {
     if ctx.overlay_path.is_empty() || !exists(&ctx.overlay_path) {
         ctx.warn("skipped — no overlay to read backup receipts from");
@@ -1926,6 +1943,7 @@ fn backups(ctx: &mut Ctx) {
     }
     let now = now_secs().floor();
     let receipts = overlay_dir(ctx).join("backup/receipts");
+    let timers = backup_timers();
     for s in contracts {
         let name = registry_field(s, "name");
         let advise = declared_number(&registry_field(s, "backup_advise_days"));
@@ -2002,10 +2020,19 @@ fn backups(ctx: &mut Ctx) {
                 ctx.bad(format!("{name} — declares a backup contract and has no usable receipt; nothing has ever landed (tools/backup.sh {name})"));
                 continue;
             }
-            AgeState::Overdue => ctx.bad(format!(
-                "{name} — last backup {days}d ago, past its {}d stale threshold; the schedule that should refresh it is not working",
-                js_num(stale)
-            )),
+            AgeState::Overdue => {
+                let target = jtext(&receipt, "target");
+                let cause = match timers.as_ref().map(|t| t.get(&target).copied().flatten()) {
+                    Some(None) => format!(
+                        "the backup timer for target '{target}' is off; set an interval on the Backup page"
+                    ),
+                    _ => "the schedule that should refresh it is not working".to_owned(),
+                };
+                ctx.bad(format!(
+                    "{name} — last backup {days}d ago, past its {}d stale threshold; {cause}",
+                    js_num(stale)
+                ))
+            }
             AgeState::Due => ctx.warn(format!("{name} — last backup {days}d ago (due past {}d)", js_num(advise))),
             AgeState::Unknown => ctx.warn(format!("{name} — last backup {days}d ago, and the manifest declares no cadence to judge that against")),
             AgeState::Ok => ctx.ok(format!("{name} — backed up {days}d ago")),

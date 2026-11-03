@@ -48,6 +48,7 @@ pub mod notify;
 pub mod packs;
 pub mod people;
 pub mod places;
+pub mod prompts;
 pub mod record;
 pub mod research;
 pub mod route;

@@ -114,6 +114,9 @@ fn print_help() {
     println!("  clips [--limit N=20]            list Sjel Clipper documents, newest first");
     println!("  clips show <document-key>       print a clip document's current Markdown");
     println!("                                  Both read through comms-server's clip socket.");
+    println!("  prompts                         list prompt drafts waiting in the outbox");
+    println!("  prompts add --title T           queue a prompt draft; the body is read from stdin");
+    println!("  prompts take <id>               print a draft's body and remove it from the outbox");
     println!("  egress-log [--limit N=25]       show outbound cloud model calls with token counts");
     println!("       [--audit]                  and costs, or audit egress payloads for C2 leaks");
     println!("  --help, -h                      show this help");
@@ -144,6 +147,7 @@ fn main() {
         "relevance" => cmd_relevance(&args, &cfg),
         "egress-log" => cmd_egress_log(&args, &cfg),
         "clips" => cmd_clips(&args),
+        "prompts" => cmd_prompts(&args),
         other => {
             eprintln!("error: unknown command '{other}'\n");
             print_help();
@@ -190,6 +194,61 @@ fn cmd_clips(args: &[String]) {
             document["document_key"].as_str().unwrap_or(""),
             document["title"].as_str().unwrap_or(""),
         );
+    }
+}
+
+// -- prompts -------------------------------------------------------------
+
+/// The prompt outbox: drafts an agent wrote for the user to paste elsewhere. Same socket as clips.
+fn cmd_prompts(args: &[String]) {
+    let Some(socket) = comms::web_clip_socket::socket_path() else {
+        eprintln!("error: SJEL_PERSONAL_ROOT is not set, so the clip socket has no path");
+        std::process::exit(1);
+    };
+    let request = match args.get(2).map(String::as_str) {
+        Some("add") => {
+            let Some(title) = arg_after(args, "--title") else {
+                eprintln!("error: usage: comms prompts add --title <title> < body.txt");
+                std::process::exit(1);
+            };
+            let mut body = String::new();
+            if std::io::Read::read_to_string(&mut std::io::stdin(), &mut body).is_err() {
+                eprintln!("error: the body on stdin is not UTF-8 text");
+                std::process::exit(1);
+            }
+            serde_json::json!({ "type": "draft_add", "title": title, "body": body })
+        }
+        Some("take") => match args.get(3).and_then(|id| id.parse::<i64>().ok()) {
+            Some(id) => serde_json::json!({ "type": "draft_take", "id": id }),
+            None => {
+                eprintln!("error: usage: comms prompts take <id>");
+                std::process::exit(1);
+            }
+        },
+        None => serde_json::json!({ "type": "drafts" }),
+        Some(other) => {
+            eprintln!("error: unknown prompts command '{other}'");
+            std::process::exit(1);
+        }
+    };
+    let answer = comms::web_clip_socket::relay(&socket, &request);
+    if answer["ok"] != true {
+        eprintln!("error: {}", answer["error"].as_str().unwrap_or("unknown"));
+        std::process::exit(1);
+    }
+    match (args.get(2).map(String::as_str), answer.get("draft")) {
+        (Some("add"), Some(draft)) => println!("queued draft {}", draft["id"]),
+        (_, Some(draft)) => print!("{}", draft["body"].as_str().unwrap_or_default()),
+        _ => {
+            for draft in answer["drafts"].as_array().into_iter().flatten() {
+                println!(
+                    "{}  {}  {}",
+                    draft["id"],
+                    draft["created_at"].as_str().unwrap_or(""),
+                    draft["title"].as_str().unwrap_or(""),
+                );
+            }
+        }
     }
 }
 

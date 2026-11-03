@@ -22,10 +22,56 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
         .flex_col()
         .gap_8()
         .children(needs_you(view, palette, cx))
+        .children(prompt_outbox(view, palette, cx))
         .children(next_trip(view, palette, cx))
         .child(location(view, palette, cx))
         .child(focus_tasks(view, palette, cx))
         .child(today(view, palette, cx))
+}
+
+/// Prompts an agent drafted for you to paste elsewhere. Copy empties the card; none draws nothing.
+fn prompt_outbox(
+    view: &Workspace,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> Option<AnyElement> {
+    if view.prompt_drafts.is_empty() {
+        return None;
+    }
+    let rows = view
+        .prompt_drafts
+        .iter()
+        .map(|draft| {
+            let id = draft.id;
+            row()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(div().truncate().text_sm().child(draft.title.clone()))
+                        .child(
+                            div()
+                                .truncate()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(draft.body.lines().next().unwrap_or_default().to_string()),
+                        ),
+                )
+                .child(
+                    Button::new(SharedString::from(format!("copy-prompt-{id}")))
+                        .primary()
+                        .small()
+                        .label("Copy")
+                        .tooltip("Copy the prompt and remove it from this list")
+                        .on_click(cx.listener(move |view, _, _, cx| view.copy_prompt_draft(id, cx))),
+                )
+                .into_any_element()
+        })
+        .collect();
+    Some(section("Prompts for you", list(rows, palette), palette).into_any_element())
 }
 
 /// The trip that matters now, above the map: the nearest saved plan or Calendar draft.

@@ -34,7 +34,7 @@ If the user does not say, use the first route and offer the AI Studio route at t
 
 ## The AI Studio route
 
-1. **Draft the prompt.** Write it in one fenced code block so the user can copy it. Include:
+1. **Draft the prompt.** Include:
    - the question and the decision it serves;
    - the constraints from the conversation: budget, country, deadline, minimum specification;
    - the instruction to use Google Search for every factual claim, cite the source and its date
@@ -42,9 +42,17 @@ If the user does not say, use the first route and offer the AI Studio route at t
    - the output shape: a comparison table with named columns, then a recommendation that uses
      the numbers from the table;
    - placeholders in `<ANGLE_BRACKETS>` for facts you do not know, and tell the user to fill them.
-2. **Tell the user** to turn on "Grounding with Google Search" in AI Studio, send the prompt,
-   and save the answer with the Sjel Clipper.
-3. **Read the clip** when the user says it is saved:
+2. **Put it in the prompt outbox**, so it shows on the Sjel Today page with a Copy button:
+
+   ```bash
+   comms prompts add --title "<short title>" < prompt.txt   # prints: queued draft <id>
+   ```
+
+   If the outbox refuses it or `comms` is not available, show the prompt in one fenced code
+   block instead.
+3. **Tell the user** to copy it from Today, turn on "Grounding with Google Search" in AI Studio,
+   send the prompt, and save the answer with the Sjel Clipper.
+4. **Read the clip** when the user says it is saved:
 
    ```bash
    comms clips --limit 5             # newest first; find the document key by its title
@@ -53,7 +61,7 @@ If the user does not say, use the first route and offer the AI Studio route at t
 
    If `comms` is not on `PATH`, build it from the Sjel checkout:
    `cargo build --bin comms -p sjel-comms`, then run `target/debug/comms`.
-4. **Report** the answer to the user with its sources. Check the claims that decide the
+5. **Report** the answer to the user with its sources. Check the claims that decide the
    outcome against their cited pages with the fetch tool, and say which ones you checked.
 
 ## Grounded answers are a record, not a data source

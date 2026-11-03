@@ -15,7 +15,7 @@ pub use sjel_clip_socket::{
 };
 
 use crate::config::Config;
-use crate::store::{ClipError, SettingsError, Store, WebClipInput, WebClipWrite};
+use crate::store::{ClipError, DraftError, SettingsError, Store, WebClipInput, WebClipWrite};
 use crate::summarize::{self, Outcome, Reach};
 use crate::{digest, quiet};
 
@@ -194,8 +194,39 @@ pub fn handle(database: &Path, interpreter: &dyn Interpreter, request: &Value) -
                 _ => failure("invalid"),
             }
         }
+        "drafts" => match store.prompt_drafts() {
+            Ok(drafts) => json!({ "ok": true, "drafts": drafts }),
+            Err(error) => draft_error(&error),
+        },
+        "draft_add" => {
+            let text = |key: &str| request.get(key).and_then(Value::as_str);
+            match (text("title"), text("body")) {
+                (Some(title), Some(body)) => match store.add_prompt_draft(title, body) {
+                    Ok(draft) => json!({ "ok": true, "draft": draft }),
+                    Err(error) => draft_error(&error),
+                },
+                _ => failure("invalid"),
+            }
+        }
+        "draft_take" => match request.get("id").and_then(Value::as_i64) {
+            Some(id) => match store.take_prompt_draft(id) {
+                Ok(Some(draft)) => json!({ "ok": true, "draft": draft }),
+                Ok(None) => failure("not_found"),
+                Err(error) => draft_error(&error),
+            },
+            None => failure("invalid"),
+        },
         _ => failure("unknown_request"),
     }
+}
+
+fn draft_error(error: &DraftError) -> Value {
+    failure(match error {
+        DraftError::Invalid => "invalid",
+        DraftError::TooLarge => "too_large",
+        DraftError::Full => "full",
+        DraftError::Storage => "storage",
+    })
 }
 
 /// Serve clip requests on the socket until the process exits. Owner-only permissions on the
@@ -312,6 +343,22 @@ mod tests {
             handle(&db, &Stub, &json!({"type": "document", "key": "x"}))["error"],
             "not_found"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn drafts_are_queued_listed_and_taken_once_through_the_socket() {
+        let dir = std::env::temp_dir().join(format!("clip-drafts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("comms.db");
+        let ask = |request: Value| handle(&db, &Stub, &request);
+        let added = ask(json!({"type": "draft_add", "title": "Watch", "body": "Compare"}));
+        let id = added["draft"]["id"].as_i64().unwrap();
+        assert_eq!(ask(json!({"type": "drafts"}))["drafts"][0]["title"], "Watch");
+        assert_eq!(ask(json!({"type": "draft_take", "id": id}))["draft"]["body"], "Compare");
+        assert_eq!(ask(json!({"type": "draft_take", "id": id}))["error"], "not_found");
+        assert_eq!(ask(json!({"type": "draft_add", "title": "x"}))["error"], "invalid");
+        assert_eq!(ask(json!({"type": "drafts"}))["drafts"], json!([]));
         std::fs::remove_dir_all(dir).unwrap();
     }
 

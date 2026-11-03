@@ -64,7 +64,7 @@ pub fn error_line(code: &str) -> String {
     }
 }
 
-fn ask(request: Value) -> Result<Value, String> {
+pub(crate) fn ask(request: Value) -> Result<Value, String> {
     let Some(socket) = sjel_clip_socket::socket_path() else {
         return Err(error_line("unconfigured"));
     };

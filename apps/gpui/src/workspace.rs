@@ -312,6 +312,8 @@ pub struct Workspace {
     repo: Repo,
     pub health: Remote<NodeHealth>,
     pub agent: Remote<AgentView>,
+    /// Prompt drafts waiting in comms' outbox, for the Today page.
+    pub prompt_drafts: Vec<sjel_gpui_core::prompts::Draft>,
     pub installed_features: Remote<Vec<InstalledFeature>>,
     pub available_features: Remote<Vec<AvailableFeature>>,
     pub settings_feature_detail: Option<String>,
@@ -504,6 +506,7 @@ impl Workspace {
             repo,
             health: Remote::default(),
             agent: Remote::default(),
+            prompt_drafts: Vec::new(),
             installed_features: Remote::default(),
             available_features: Remote::default(),
             settings_feature_detail: None,
@@ -755,6 +758,7 @@ impl Workspace {
                 |s| async move { s.backups().await },
             );
         }
+        self.read_prompt_drafts(cx);
         let repo_tasks = self.repo.clone();
         data::read_repo(
             cx,
@@ -772,6 +776,39 @@ impl Workspace {
             move |r| async move { r.soundscape_state().await },
         );
         self.check_updates(cx);
+    }
+
+    /// A failed read keeps the last list: comms restarting must not blank the Today page.
+    fn read_prompt_drafts(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { sjel_gpui_core::prompts::drafts() })
+                .await;
+            if let Ok(drafts) = result {
+                let _ = this.update(cx, |view, cx| {
+                    if view.prompt_drafts != drafts {
+                        view.prompt_drafts = drafts;
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Copy a draft to the clipboard, then take it out of the outbox. The card goes at once;
+    /// if comms refuses the take, the next refresh brings it back.
+    pub fn copy_prompt_draft(&mut self, id: i64, cx: &mut Context<Self>) {
+        let Some(draft) = self.prompt_drafts.iter().find(|d| d.id == id) else {
+            return;
+        };
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(draft.body.clone()));
+        self.prompt_drafts.retain(|d| d.id != id);
+        cx.notify();
+        cx.background_executor()
+            .spawn(async move { sjel_gpui_core::prompts::take(id) })
+            .detach();
     }
 
     pub fn check_updates(&mut self, cx: &mut Context<Self>) {

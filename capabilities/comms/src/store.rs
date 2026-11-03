@@ -818,6 +818,7 @@ mod feed;
 mod feedback;
 mod migrations;
 mod origins;
+mod prompt_drafts;
 mod rows;
 mod source_state;
 mod triage;
@@ -856,6 +857,7 @@ pub struct OriginSummary {
 pub use captures::{split_tag, Capture, CapturePatch};
 pub use clipper_settings::{ClipperSettings, SettingsError};
 pub use event_scans::MailEventScan;
+pub use prompt_drafts::{DraftError, PromptDraft};
 use rows::{epoch_now, row_to_feed_full, row_to_feed_list, row_to_triage};
 pub use web_clips::{ClipError, WebClip, WebClipDocument, WebClipInput, WebClipWrite};
 

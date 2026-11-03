@@ -240,12 +240,14 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
    and a dry run; keep the originals.
 7. **Retire `axon-clip`** after the new extension carries daily use.
 8. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
-   example AI Studio with Search grounding (the `research` skill). The draft goes into a short
-   queue in `comms`, written through a CLI verb and the MCP server, and appears as a card on the
-   `Today` page in GPUI with one Copy action. Copy puts the text on the clipboard and removes the
-   card. The answer comes back as a clip. Done when an agent's draft shows on `Today` on the Mac,
-   Copy pastes it unchanged, and the card is gone after Copy. Open: whether an uncopied draft
-   expires, and whether the phone shows the queue too.
+   example AI Studio with Search grounding (the `research` skill). Built 2026-11-03: the
+   `comms_prompt_drafts` table, the clip-socket requests `drafts`, `draft_add` and `draft_take`,
+   `comms prompts [add --title T | take <id>]`, and a "Prompts for you" section on `Today` in
+   GPUI whose Copy puts the body on the clipboard and takes the draft out. Checked: store, socket
+   and core tests pass, the GPUI app compiles, and a draft queued through the restarted
+   `comms-server` lists and takes once. Open: the click check on `Today` on the Mac, an MCP tool
+   for agents without a shell (skipped: local agents use the CLI), whether an uncopied draft
+   expires, and the phone, which has no clip socket.
 
 Later: platform integrations such as Instagram saves, only where the platform's terms allow
 automated access; a capture of a page the operator is viewing stays the default.

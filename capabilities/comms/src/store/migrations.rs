@@ -631,6 +631,14 @@ impl Store {
                 revision INTEGER NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT ({now})
             );
+
+            CREATE TABLE IF NOT EXISTS {prefix}_prompt_drafts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                data_class TEXT NOT NULL DEFAULT 'c2' CHECK (data_class = 'c2'),
+                created_at TEXT NOT NULL DEFAULT ({now})
+            );
             ",
             prefix = prefix,
             now = sjel_store::NOW,

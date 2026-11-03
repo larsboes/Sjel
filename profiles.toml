@@ -1,205 +1,14 @@
-# Sjel Pack profiles — named use-cases that deploy a set of Packs together,
-# optionally narrowed to a per-Pack skill subset so a profile does not drag a
-# whole Pack into every session when the measurements say most of it is unused.
+# Sjel Pack profiles: named use-cases that deploy a set of Packs, optionally narrowed to a per-Pack
+# skill subset. The rules live in Packs/harness/README.md and docs/plans/packs.md.
 #
-#   tools/harnesses use <name> [--harness <id>]   apply to every installed harness
-#   tools/packs-claude use <name>                 apply to Claude Code
-#   tools/packs-pi use <name>                     apply to pi (rewrites settings.json)
-#   tools/packs-codex use <name>                  apply to Codex
+#   tools/harnesses use <name> [--harness <id>]   every installed harness
+#   tools/packs-claude|packs-pi|packs-codex use <name>   one harness
 #
-# ── 2026-10-09: Codex's 21 deployed skills were removed, and this is why ─────────────
-#
-# Codex's destination is `$HOME/.agents/skills` (registry.rs, CODEX_SKILLS_DIR), which is
-# ALSO one of pi's two automatic global discovery roots (pi.rs discovery_roots). Deploying a
-# Pack to Codex therefore loaded every one of its skills into pi a second time: 21 Pack
-# skills sat in both pi's settings.json registry and the Codex copy, and pi's loader keeps
-# the first and warns `name "X" collision` for the loser (skills.js, addSkills). The registry
-# entry won every time, so no content was ever wrong -- but a skill pi does NOT register
-# silently fell back to Codex's stale copy, which is how `gpui` was being loaded after it
-# was added to the coding Pack (2026-10-09, 949a9cb7) and before `tools/packs-pi deploy
-# coding` registered it. Two channels for one skill is the defect; only one should exist.
-#
-# So: a Pack is deployed either materialized (Claude Code, whose ~/.claude/skills pi does
-# not read) or through pi's registry, not both. Re-deploying to Codex reintroduces 21
-# collisions and the stale-copy fallback above -- read this first.
-#
-# Codex itself stays installed and usable; it simply carries no Sjel skills now. Its
-# superseded state is undone with `tools/packs-codex deploy <pack>...` per Pack.
-#
-# ── 2026-10-13: SUPERSEDED. Codex's root moved and it carries Packs again ────────────
-#
-# The paragraph above is why Codex was emptied, not a permanent rule. The defect was never
-# Codex: it was that Codex's destination WAS a pi discovery root. Measured 2026-10-13: Codex
-# reads `$CODEX_HOME/skills` (defaults to `~/.codex/skills`) -- its own binary says "Installs
-# into $CODEX_HOME/skills/<skill-name>", that is where `.system/` and the skill-installer
-# live, and `codex exec` in a neutral directory resolves skills no other root on this machine
-# supplies. pi reads `~/.pi/agent/skills`, `~/.agents/skills` and project `.agents/skills`
-# (pi.rs, discovery_roots) and does NOT read `~/.codex/skills`.
-#
-# So `registry.rs` now defaults the Codex destination to `$HOME/.codex/skills`. One channel,
-# one reader, no collision, and Codex holds the same Pack set as Claude Code. `~/.agents/skills`
-# keeps its other readers and its `npx skills --global` policy (tools/skills) unchanged.
-#
-# MIGRATING A MACHINE THAT HAD CODEX DEPLOYED: the ledger records the destination it belongs to
-# and `read_state` refuses a mismatch ("state file belongs to X, not Y"), so the move is not
-# silent and not automatic. In order: deploy the Packs to the new root (`tools/packs-codex
-# deploy <pack>...`), confirm Codex loads them, and only then remove the old copies at
-# `~/.agents/skills` -- they are also pi's, so removing first would strip pi. Where the old
-# ledger holds no rows (as here), repointing its `destination` field is the whole migration.
-# `codex.json` is backed up daily under `capabilities/packs`, so the pre-move file is
-# recoverable.
-#
-# The old note's own warning is what still applies to an OVERRIDE: set CODEX_SKILLS_DIR back to
-# `~/.agents/skills` by hand and the 21 collisions return. The guards that say so are keyed on
-# the configured destination, not on a hardcoded path, so they stay true either way --
-# `tools/harnesses <verb>`, `tools/packs-codex remove`, and the doctor's absent-harness check.
-# ── 2026-10-24: copilot was on `everything`, and nobody had said so ─────────────────
-#
-# Measured that morning: `~/.copilot/skills` held all 42 Pack skills — home-automation's ten,
-# travel, ytalbum, home-3d-printing and defuddle included — from a ledger written 06:34 the
-# same day. This file did not mention copilot once, so the largest deployed skill set on the
-# machine was the one no line recorded. `tools/harnesses use full --harness copilot` brought it
-# to the same 28 the other harnesses carry; there is nothing copilot-specific to declare,
-# because it wants the same set they do. If a future session wants the dormant Packs back on a
-# harness, activate `everything` there and write the date and the reason HERE.
-#
-# That command also exposed the bug it was meant to apply: `activate_profile` compared
-# destinations, never unit sets, so a Pack deployed whole kept the skills a profile stopped
-# naming and kept missing ones it added, while printing "already current". claude and opencode
-# had carried `academic-writing` since 2026-10-13 for exactly that reason. Fixed in
-# tools/sjel-cli/src/harnesses/mutate.rs the same day.
-#
-# A profile is a SELECTION, not a recommendation: activating it replaces what the
-# harness loads with exactly this set. What is deployed, and what is not, is the
-# operator's decision and it is written HERE — see `full` below, and see the note on
-# the retired `# pi: REFUSED` line that Packs/home-automation's pack.toml used to carry — that
-# Pack left the repository on 2026-10-24 — for why a harness veto is not written in a Pack any more.
-#
-# PI IS PROFILE-DRIVEN (2026-09-11, Lars: "I want to be able to change through sjel
-# profiles what's deployed"; pi is used from the home folder, so the GLOBAL registry
-# is the load set — no project scoping). The registry currently holds `full` minus
-# home-automation; switching it is one command: tools/harnesses use <name> --harness pi.
-#
-# ── 2026-09-17: five Packs became three, and this file is what paid for it ──────────
-#
-# Packs were merged by CO-DEPLOYMENT, not by resemblance: a Pack is a deployment
-# unit, so the test is whether this file already deployed them together. Merged:
-#   writing        <- academic-writing, unslop
-#   cognitive-load <- asd-ste100
-#   harness        <- sjel
-# Skills kept their names, so nothing changed about what loads — except where it
-# did, and those two are why the subsets below exist rather than a bare pack list:
-#   - `productive` held `sjel` but NOT `harness`. Listing the merged Pack would drag
-#     suggest-skills, trim and harness-sync into every session, so it narrows to sjel.
-#   - `coding` held writing + skill-creator + unslop + sjel and no academic-writing, so it
-#     names its three writing skills and takes sjel from harness.
-#
-# FIVE PROFILES WERE DELETED as aliases: writing, knowledge, harness, security, travel
-# each named exactly one Pack, so `use <pack>` already did the same thing and the
-# profile was a second name for one selection. What remains is the three genuinely
-# composite sets plus `full`.
-#
-# Usage evidence per Pack, measured 2026-09-11 over present-day transcripts
-# ("\"command\":…<script>" tool calls across ~/.claude/projects; audit-era baselines
-# from the 2026-08-22 skills audit named per Pack). A membership is a decision with
-# a number behind it; where the number is 0 the Pack is in by role and says so.
-# Counts keep the pack name they were measured under, since that is what the
-# transcripts say; the pack a skill now lives in is named beside it.
-#
-# Note on `sync` vs profiles: after activating a profile, a manual `sync <pack>`
-# deploys the WHOLE Pack again (the ledger does not remember the subset). Re-run
-# `use <name>` to re-trim.
+# A profile is a selection, not a recommendation: activating it replaces what the harness loads with
+# exactly this set. Re-run `use <name>` after a manual `sync <pack>`, which deploys the whole Pack.
 
-# ── Per-harness unit holds ──────────────────────────────────────────────────────────
-#
-# A unit a Pack carries that must NOT be deployed to one harness: `deploy` and `sync` skip
-# it, printing why, and `tools/doctor` reads this table instead of warning that the unit is
-# missing. It is also a violation doctor reports if the unit IS at that destination.
-#
-# It lives in this file, and not in a Pack manifest, for the reason
-# Packs/home-automation's pack.toml recorded for its retired `# pi: REFUSED` line: a
-# harness-specific rule does not belong in a manifest the schema keeps harness-neutral.
-# This file is where operator decisions live.
-#
-# claude: `harness/agents/` is Explore.md, which overrides the agent that carries a model pin.
-# It is deployed to pi only. pi's pin (`anthropic/claude-haiku-4-5`) reached no provider this
-# machine can use, so the override fixes pi; Claude Code is Anthropic-native, the pin resolves
-# there, and deploying this file would REMOVE a working Haiku tier from that harness. Measured
-# 2026-10-09: `tools/packs-claude sync harness` deployed it, because sync takes every unit —
-# this hold is what stops the next sync from repeating that. See
-# Packs/harness/README.md, "agents/Explore.md".
-#
-# Extend it with what is missing, never with what is merely unused: a dormant Pack is excluded
-# by a profile's `except`, which is a different decision.
-#
-# pi: `harness/pi-packages/accordion` was removed from pi's registry on 2026-10-09 (owner
-# decision), together with the ponytail extension — that one is a personal `git:` install in
-# ~/.pi/agent/settings.json and not a Pack unit, so `pi remove git:github.com/DietrichGebert/ponytail`
-# is its whole trace and no hold can express it. Measured before and after on a real session:
-# the system prompt fell 52,598 → 40,964 characters (−11,634, about 2.9k tokens a turn), of which
-# 5,252 was ponytail mode's block and the rest eight skill entries (six ponytail, two accordion);
-# TUI startup was 0.81s either way, so this is a per-turn cost and not a startup one. The hold is
-# what stops `tools/packs-pi deploy|sync harness` and `tools/harnesses use <profile> --harness pi`
-# from re-registering accordion, because both rediscover it from `pi-packages/` alone. The tree
-# stays in the Pack: accordion is vendored and deliberately owned (upstreams.toml [accordion]),
-# and a hold is a decision not to write a path, not a deletion.
-#
-# codex: `writing/skill-creator` is the one name Codex already has. Codex ships its own
-# `skill-creator` at `$CODEX_HOME/skills/.system/skill-creator`, and it resolves BOTH
-# `~/.codex/skills` and `~/.codex/skills/.system` as skill roots (measured 2026-10-13 with
-# `codex exec`, which listed two skills named exactly `skill-creator`). Two different skills
-# under one name is the same defect the pi/codex collision above was: one name, one channel.
-# Codex's own copy cannot be removed — it is a system skill and an update restores it — so the
-# hold is what gives that name one owner. Measured 2026-10-13: the collision existed only after
-# Codex's destination moved to `~/.codex/skills` and the writing Pack was deployed there, and
-# no other harness had it (claude's root and pi's two roots had no duplicate names).
-#
-# A hold does not delete what is already written (mutate.rs, sync_pack: "the hold means never
-# write this, not delete what is there"), so clearing this one was `tools/packs-codex remove
-# writing` followed by `deploy writing` — remove takes every recorded unit, deploy then skips
-# this one and prints why.
-#
-# defuddle: held from every harness (2026-10-13, owner decision). The skill's own first
-# instruction is "In pi, use the built-in `fetch_content` tool", and both other harnesses carry a
-# native page fetch — so it is a second path to something already built in, and it says so
-# itself. Held rather than deleted for the same reason as the 2026-10-13 trim in `full`: the Pack
-# source stays, and `everything` or a direct deploy brings it back.
-#
-# `"*"` is every harness, named or not, and it is why this decision is now ONE line. It used to be
-# five: claude, pi, codex, antigravity, opencode each carried `knowledge/defuddle` and each copy
-# was added by hand when that harness appeared (antigravity 2026-10-17, opencode 2026-10-20), which
-# meant a harness that arrived before somebody remembered inherited nothing. Copilot did exactly
-# that on 2026-10-24 and only the `full` profile's skill subset kept defuddle out of it. A
-# per-harness entry still ADDS to `"*"` — it cannot disagree with a decision the table says applies
-# everywhere — so the wildcard is the default and a harness line is the exception.
-#
-# THE KEY SHAPE DIFFERS BY CHANNEL, and this is the trap the wildcard has to survive. A
-# materialized channel matches a UNIT KEY (`knowledge/defuddle`), while pi's settings channels are
-# registered by PATH and match a path from the Pack root (`knowledge/skills/defuddle`) — see
-# pi_settings.rs, `held_for`. So one hold line is spelled two ways at the last moment, and getting
-# it wrong is silent: a hold that matches nothing looks exactly like one that works. Measured
-# 2026-10-13: `knowledge/defuddle` held it from claude and codex and left pi still registering it,
-# which only `tools/harnesses status` showed. `mutate::path_spellings` now emits both spellings for
-# a two-segment key, so the operator writes the unit key once and no channel's form is forgotten.
-#
-# writing/agents/: all eight files in that tree are academic-writing subagents, so this is the
-# agents half of the same 2026-10-13 decision that narrowed academic-writing out of `full`. It
-# has to be a hold rather than a profile narrowing, because the profile `skills` map names SKILLS
-# and the agents channel ignores it by design — `activate_agents_for_profile` calls sync_pack,
-# which takes every agent unit in the Pack. A hold is absolute, so unlike the skill, these agents
-# are NOT restored by activating a profile; restore them by removing this line. claude and pi are
-# the only two harnesses with an agents channel, so codex, opencode, copilot and antigravity need
-# no entry (`tree_convention: None`, `flat_file_convention: None`).
-#
-# The one asymmetry left, measured and deliberate: claude carries a Pack's `agents/` tree as a
-# SINGLE unit, so the eight reviewers cannot follow a profile there — the choice on claude is all
-# eight or none. pi materializes them per file, so a single reviewer can be named. That is why the
-# `thesis` profile below deploys academic-writing's skill on every harness and prints the one line
-# to remove when you want its reviewers too.
-#
-# This table applies to every machine. To hold a unit on one machine only, add a [unit_hold]
-# table to that machine's overlay machine.toml (schemas/machine.toml.example).
-
+# Units kept off named harnesses. "*" is every harness and a per-harness line adds to it. A
+# materialized channel matches `pack/unit`, pi matches the path from the Pack root.
 [unit_hold]
 "*" = ["knowledge/defuddle"]
 claude = ["harness/agents/", "writing/agents/"]
@@ -209,8 +18,7 @@ pi = [
 ]
 codex = ["writing/skill-creator"]
 
-# Default profiles for `tools/harnesses apply`; `"*"` covers unnamed harnesses.
-
+# Profile for `tools/harnesses apply`; "*" covers unnamed harnesses.
 [harness_profile]
 claude = "coding-harness"
 codex = "coding-harness"
@@ -223,32 +31,10 @@ pi = "full"
 name = "productive"
 description = "Daily driver — coding, prose, decks, deliberation, orientation, focus"
 packs = ["writing", "presentations", "deliberation", "cognitive-load", "harness"]
-# harness narrowed: this profile wants sjel (repo orientation), not the three
-# maintenance skills. See the 2026-09-17 note above.
-# writing narrowed: academic-writing left the daily set on 2026-10-13 (see that note below).
 skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", "unslop"] }
-# writing: human-writing 15 runs (430 audit-era) + skill-creator 12 runs · academic-writing 7
-#   runs (45 audit-era) + unslop 0 script runs (code-quality review pass by role). One Pack now;
-#   all four skills load, which is the same set this profile already carried.
-# presentations: 0 runs — new Pack (2026-09-11); in by role, deck work is adjacent to
-#   academic-writing and a deck request would otherwise land in a profile that has neither
-# deliberation: council/red-team drive subagents; role-keeper in the writing stack (0 runs)
-# cognitive-load: attention-control + asd-ste100; small focus metacognition; role (0 runs)
-# harness (sjel only): orientation for repo work; role (0 runs)
 
 [[profile]]
 name = "home"
-# RETIRED 2026-10-24, with the Packs it named. `home-automation` and `3d-printing` moved to
-# the household deployment's own repository, where its containers, skills and printctl live
-# beside the deployment they describe, and `cv`'s Pack left the repository for
-# `capabilities/cv/RUNBOOK.md`. A profile that names Packs this repository does not carry
-# would resolve to nothing and report a missing Pack on every `use`, so it is kept as the
-# record of a decision rather than as something to activate. Rebuilding the house stack as
-# Sjel capabilities means writing the profile again from the capability names it grows, not
-# restoring this one.
-#
-# Measured by use while it was live (2026-09-11 runs): homectl 13 · ha-cli 27 · pihole 63 ·
-# fritz 60 · netmon 12 · ha-deploy 7 · printctl 6 · cv build 2.
 description = "Retired 2026-10-24 — the home stack lives with the household's deployment now"
 packs = []
 
@@ -256,13 +42,7 @@ packs = []
 name = "coding"
 description = "Code quality and the tools that write it"
 packs = ["writing", "harness"]
-# Named skills rather than whole Packs: a coding session wants the code/UI tell scanner,
-# the prose skill, and the skill author — not academic-writing, and not trim/harness-sync.
 skills = { "writing" = ["unslop", "human-writing", "skill-creator"], "harness" = ["sjel"] }
-# unslop: 0 script runs — code-quality review pass by role · sjel: orientation for repo work
-
-# Codex is installed but carries no Sjel Pack (see the 2026-10-09 note above). Its
-# `use` verb therefore still applies here as recorded: declined, on this host.
 
 [[profile]]
 name = "lean"
@@ -274,8 +54,6 @@ skills = { "harness" = ["sjel"], "coding" = ["prior-art", "effective-rust", "gpu
 name = "repository"
 description = "Work on this repository from a cloud container: code, UI, orientation, focus, review"
 packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing"]
-# Default of tools/cloud-session-start. AGENTS.md names sjel and attention-control; coding and
-# design carry the Rust, GPUI and UI skills that repository work uses.
 skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
@@ -288,69 +66,22 @@ skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 name = "thesis"
 description = "DSR thesis and paper work: draft, critique and cite-check academic prose"
 packs = ["writing"]
-# academic-writing has loaded on NO harness since 2026-10-13, when it left `full` for size rather
-# than disuse (7 runs, 45 audit-era). A skill that loads nowhere is one nobody reaches for, and the
-# only route back was `everything`, which deploys every other Pack to get it. This is the narrow
-# route: one command, for a session whose subject is the thesis.
-#
-# No `skills` narrowing on purpose. Its own description says a thesis chapter is prose before it is
-# a citation, so human-writing's tell scanner and unslop read the same files, and a thesis session
-# tends to grow its own tooling (skill-creator). The four are exactly what `writing` carries.
-#
-# ITS EIGHT REVIEWERS ARE STILL HELD on claude and pi (`writing/agents/` in [unit_hold] above), and
-# this profile does not lift them: a hold is absolute, so `use thesis` prints
-# "- writing/agents/ held back from …" rather than deploying the skill quietly without the lenses
-# that are half its point. Restoring them is removing that one entry from the claude and pi lines.
-# claude cannot do better than all eight or none — it carries the Pack's `agents/` tree as a single
-# unit — while pi materializes them per file, so a single reviewer can be named there.
 
 [[profile]]
 name = "linux-cli"
 description = "Headless Linux: CLI agents only, no dashboard, native app or decks"
 packs = ["*"]
-# 2026-10-26: a Linux machine that runs agents in a terminal and nothing else. `*` rather than a
-# list, so a private overlay's own Packs join without this public file naming them; the except
-# list removes what only a GUI, a front-end codebase or a slide deck uses.
 except = ["coding", "deliberation", "design", "presentations"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "full"
-description = "Everything except the Packs marked dormant below"
+description = "Every Pack in the repository"
 packs = ["*"]
-# home-automation is dormant by decision (2026-09-11, Lars): not deployed to pi, and not to
-# Claude Code either. That used to be enforced by a `# pi: REFUSED` line in its own
-# pack.toml; retired 2026-09-17, because a harness-specific veto does not belong in a
-# manifest the schema keeps harness-neutral, and because it made this very profile mean
-# something other than what it says. Excluding it here is the same decision, recorded
-# where the operator records decisions.
-#
-# `*` rather than an explicit list, deliberately: an explicit list would have to name
-# every Pack, and it would silently stop deploying every Pack added later. `everything`
-# below is the raw, unfiltered set.
-#
-# ── 2026-10-24: the `except` list is empty, because the Packs it named left the repository ──
-#
-# home-automation, 3d-printing, travel and ytalbum are no longer dormant — they are gone.
-# A household's deployment belongs with the household, so the home stack and the printer moved
-# to the household deployment's own repository, ytalbum left the private overlay, and cv
-# followed them out of the Packs. What those Packs carried that is still Sjel's is now
-# documentation beside the tooling that replaced it: `capabilities/cv/RUNBOOK.md`,
-# `website/content/capabilities/travel.md` and `website/content/capabilities/travel-traps.md`. `full` therefore
-# needs no `except` at all: every Pack in the repository is deployed by it.
 except = []
-# The 2026-10-13 trim was a DEPLOYMENT decision, and the 2026-10-24 retirement is a different
-# one — those five trees no longer exist here, so there is nothing to put back. Re-activating
-# `everything` no longer changes anything; it is kept because a future dormant Pack would need
-# a profile that deploys it.
-#
-# 2026-10-17: `design` (ui-craftsmanship, 116 uses in a month) and `cv` (cv-builder) left the
-# except list. `cv`'s Pack has since left the repository entirely.
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "everything"
 description = "All Packs, dormant ones included"
 packs = ["*"]
-# No `except`: this is the honest "everything". Since 2026-10-24 it deploys the same set as
-# `full`, because no dormant Pack is left to distinguish them.

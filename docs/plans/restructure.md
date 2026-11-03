@@ -39,21 +39,22 @@ who changes the code reads it. `PLAN.md` keeps only decisions that span areas.
 
 ### `upstreams.toml`
 
-It stays the one registry of dependency and influence verdicts (152 entries: 73 `adopt`, 31
-`inspiration`, 23 `reject`, 15 `watch`, 6 `quarry`, 2 `evaluate`, 1 `adapt`, 1 `overlay`). A verdict
-and its review date are data and stay. The `why` text is the bloat: median 640 characters,
-maximum 3,856. Target shape per entry: verdict, review date, one or two sentences of why, and a
-link to `research/` when the analysis is longer. `watch` and `evaluate` entries get a revisit
-condition, or they become `reject`.
+It stays the one registry of dependency and influence verdicts (145 entries: 65 `adopt`, 31
+`inspiration`, 24 `reject`, 15 `watch`, 6 `quarry`, 2 `evaluate`, 1 `adapt`, 1 `overlay`). A verdict
+and its review date are data and stay. Shape per entry: verdict, review date, one or two sentences
+of why (median 334 characters, maximum 632), and a link to `research/` when the analysis is longer.
+Every `watch` and `evaluate` entry carries a `revisit` condition, or it becomes `reject`.
 
 ### Baseline
 
 Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 
 - 609 comment lines in `*.rs`, `*.toml`, `*.sh` carry a date. 337 say "measured" or "decided".
-- 3,143 of 8,862 TOML lines are comments. Worst: `profiles.toml` 268 of 313, `toolchain.toml` 168 of
-  456, `osv-scanner-installed.toml` 155 of 386, `Cargo.toml` 93 of 190, `systems.toml` 64 of 180,
-  and 922 comment lines across all `service.toml` files.
+- 3,143 of 8,862 TOML lines were comments. Worst: `profiles.toml` 268 of 313, `toolchain.toml` 168
+  of 456, `osv-scanner-installed.toml` 155 of 386, `Cargo.toml` 93 of 190, `systems.toml` 64 of 180,
+  and 922 comment lines across all `service.toml` files. Now: `profiles.toml` 11 of 87,
+  `toolchain.toml` 25 of 319, `systems.toml` 12 of 126, `Cargo.toml` 3 of 102, `upstreams.toml`
+  29 comment lines. Still open: `osv-scanner-installed.toml` and the `service.toml` files.
 - "Axon" appears 804 times in 299 files.
 - 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
   "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
@@ -62,8 +63,9 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 ### Order
 
 1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise.
-2. TOML first, one comment line per key at most (`Cargo.toml` and `apps/gpui/Cargo.toml` done).
-   Then `upstreams.toml` in its target shape.
+2. Done for `Cargo.toml`, `apps/gpui/Cargo.toml`, `profiles.toml`, `toolchain.toml`,
+   `systems.toml` and `upstreams.toml` (commit "Trim comment prose in the root TOMLs"). Open: one
+   comment line per key at most in `osv-scanner-installed.toml` and the `service.toml` files.
 3. Done: `tools/isa-hygiene.sh`, its test, the doctor ISA count, and every ISA ID citation in code,
    config and docs.
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs

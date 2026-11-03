@@ -1,98 +1,59 @@
-# Every host binary Sjel assumes is already installed on the machine. No entry, no check.
+# Every host binary Sjel assumes is installed. No entry, no check. Read by tools/toolchain-check,
+# wrapped by tools/install.sh and tools/doctor; single-line TOML only (tools/lib/toml.sh).
 #
-# WHY THIS IS NOT upstreams.toml. upstreams.toml is "external CODE Sjel builds or consumes,"
-# with an audit verdict + license (CONTRIBUTING.md#dependency-verdicts-and-provenance). This file is a different concern: "what
-# host tool must be on PATH for Sjel's own scripts to run, and how do you install it." Most
-# entries here (git, jq, uv, gh, restic, docker, cargo) are host infrastructure with no
-# upstreams.toml entry at all — Sjel doesn't build them, it just calls them. The few that are
-# ALSO adopted code (bun, bitwarden-cli, apfel, macmon, the scanners) carry `upstream = <id>`
-# pointing at their upstreams.toml section; the license/why live THERE, never restated here
-# (CONTRIBUTING.md#schemas-and-dependency-direction "import, never redefine"; CONTRIBUTING.md#one-manifest-per-concern no duplication).
-#
-# Read by tools/toolchain-check (the only parser), surfaced by tools/install.sh (bootstrap)
-# and tools/doctor (ongoing). Single-line TOML only (tools/lib/toml.sh contract, bash 3.2-safe).
-#
-# Fields, per [section] (the section name is the tool's id):
-#   required = "yes" | "optional" | "runtime"
-#       yes      — always required, a missing one is a doctor failure.
-#       optional — feature/gate-scoped; absence is a warning, not a failure.
-#       runtime  — a container runtime; the checker resolves this machine's chosen
-#                  container_runtime and checks ONLY that one (the others are alternatives).
-#   why          = one line: what Sjel uses it for.
-#   install_macos / install_linux = the copy-paste install hint for that OS.
-#   bin          = the executable name IF it differs from the section name (e.g. bitwarden-cli → bw).
-#   app          = the macOS app bundle this tool is (e.g. "LibreOffice.app"). `sjel storage
-#                  installed` never reports a named app as idle: Sjel runs it from the command
-#                  line, which Spotlight's last-used date does not record.
-#   os           = "macos" | "linux" — scope the entry to one OS; the checker skips it elsewhere.
-#   upstream     = the upstreams.toml section id, when this tool is also audited code.
-#   min_version / version_cmd = optional FLOOR -- the oldest release Sjel's use of the tool is
-#                  known to work on, never a version to install. Nothing holds a host at it:
-#                  capabilities/host-patch upgrades every package manager nightly (Q77), so a
-#                  healthy machine sits above every floor here. Checked only when BOTH are
-#                  present. version_cmd's output is scanned for the first dotted-number token,
-#                  compared via version.sh.
-#   needed_by    = WHERE this tool applies, as a bare single-line array. Absent = core: needed on
-#                  every machine, always checked. Otherwise one or more of:
-#                    "workflow:<name>"          only when that workflow is invoked
-#                                               (backup, restore, audit, build)
-#                    "capability-field:<field>" only when an ENABLED capability's service.toml
-#                                               declares that field
-#                    "overlay"                  only where a deployment overlay exists
-#
-# `required` and `needed_by` answer different questions and both are load-bearing. `required` is
-# how hard a miss is; `needed_by` is whether it is a miss HERE at all. A runtime node without a
-# SAST scanner is not a machine with a problem, and reporting it as one is how a check teaches
-# people to skim past it.
-#
-# Scope is DERIVED, never a hand-maintained machine-role list. There is no "maintainer machine"
-# concept in this file: there are workflows, and you ask about one when you are about to run it.
-# That is why `capability-field` reads the enabled set rather than naming hosts, and why the audit
-# scanners hang off `tools/audit` rather than off a box.
+#   required    "yes" (a miss fails doctor) | "optional" (a miss warns) | "runtime" (only this
+#               machine's container_runtime is checked, the others are alternatives)
+#   why         one line: what Sjel uses it for
+#   install_macos / install_linux   the copy-paste install hint for that OS
+#   bin         the executable name, when it differs from the section name
+#   app         the macOS app bundle, so `sjel storage installed` never reports it idle
+#   os          "macos" | "linux"; the checker skips the entry elsewhere
+#   upstream    the upstreams.toml section id, when this tool is also audited code
+#   min_version / version_cmd   an optional floor, checked only when both are present
+#   needed_by   where it applies: "workflow:<name>", "capability:<id>",
+#               "capability-field:<field>", "overlay". Absent = core, checked on every machine.
 #
 #   tools/toolchain-check                    # this machine: core + enabled capabilities + runtime
-#   tools/toolchain-check --workflow backup  # ...plus what a backup needs, BEFORE it holds a service
-#
-# Out-of-scope entries report as `n/a` naming the scope that would pull them in, never as missing.
+#   tools/toolchain-check --workflow backup  # ...plus what a backup needs, before it holds a service
 
 # ---- always required ------------------------------------------------------------------
 
 [git]
 required = "yes"
-why = "version control; the spine of update.sh, repos.ts, and every repo operation"
+why = "version control; the spine of update.sh and every repo operation"
 install_macos = "preinstalled with Xcode CLT — or: brew install git"
 install_linux = "apt-get install -y git"
 
 [bash]
 required = "yes"
-why = "every tools/*.sh runs here; Sjel targets bash 3.2 (CONTRIBUTING.md#portable-shell) so the stock macOS shell is enough"
+why = "every tools/*.sh runs here; Sjel targets bash 3.2 (CONTRIBUTING.md#portable-shell)"
 install_macos = "preinstalled (3.2)"
 install_linux = "preinstalled"
 
 [jq]
 required = "yes"
-why = "JSON in shell — tools/restore.sh, the secret setup and the security workflow; tools/audit built its own SBOM in Rust from 2026-10-04 and stopped needing it"
+why = "JSON in shell — the secret setup, tools/restore.sh and the security workflow"
 install_macos = "brew install jq"
 install_linux = "apt-get install -y jq"
 
 [bun]
 required = "yes"
 upstream = "bun"
-min_version = "1.4.0" # UI Security Scanner API; and lockfileVersion 2 (pi-subagents), which 1.3.14 cannot parse (measured 2026-10-26; 1.4.4 reads it).
+min_version = "1.4.0" # UI Security Scanner API; and the lockfileVersion 2 that 1.3.14 cannot parse
 version_cmd = "bun --version"
-why = "the TS runtime (CONTRIBUTING.md#language-tooling): doctor, packs-codex, the site build and the web clipper run on it"
+why = "the TS runtime (CONTRIBUTING.md#language-tooling): doctor, packs-codex, the site build and the web clipper"
 install_macos = "brew install oven-sh/bun/bun"
 install_linux = "curl -fsSL https://bun.sh/install | bash"
 
 [uv]
 required = "yes"
-why = "the Python runtime (CONTRIBUTING.md#language-tooling): printctl and any uv-run script assume it"
+why = "the Python runtime (CONTRIBUTING.md#language-tooling): printctl and any uv-run script"
 install_macos = "brew install uv"
 install_linux = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
 [gh]
 required = "yes"
-why = "GitHub CLI: repos.ts, systems.toml visibility checks, PR workflow"
+why = "GitHub CLI: repos.ts, systems.toml visibility checks, the PR workflow"
 install_macos = "brew install gh"
 install_linux = "apt-get install -y gh   # or: https://cli.github.com"
 
@@ -101,7 +62,7 @@ required = "yes"
 bin = "bw"
 needed_by = ["overlay"]
 upstream = "bitwarden-cli"
-why = "the canonical secret store CLI (CONTRIBUTING.md#secrets): setup-secret.sh, bw-unlock, backup restore"
+why = "the canonical secret store CLI (CONTRIBUTING.md#secrets): the secret setup, bw-unlock and backup restore"
 install_macos = "brew install bitwarden-cli"
 install_linux = "npm i -g @bitwarden/cli   # or the latest GitHub release"
 
@@ -110,14 +71,14 @@ install_linux = "npm i -g @bitwarden/cli   # or the latest GitHub release"
 [restic]
 required = "optional"
 needed_by = ["workflow:backup"]
-why = "encrypted 3-2-1 backups (CONTRIBUTING.md#backups-before-migrations); backup.sh needs it, nothing else does"
+why = "encrypted backups (CONTRIBUTING.md#backups-before-migrations); backup.sh and nothing else"
 install_macos = "brew install restic"
 install_linux = "apt-get install -y restic"
 
 [sqlite3]
 required = "optional"
 needed_by = ["capability-field:backup_sqlite", "capability-field:backup_sqlite_online", "workflow:restore"]
-why = "cold SQLite backup, the shared store's live `.backup` copy, and isolated restore integrity checks; required only for capabilities declaring one of those two fields"
+why = "cold SQLite backup, the store's live `.backup` copy and isolated restore integrity checks"
 install_macos = "preinstalled — or: brew install sqlite"
 install_linux = "apt-get install -y sqlite3"
 
@@ -125,27 +86,15 @@ install_linux = "apt-get install -y sqlite3"
 required = "optional"
 os = "macos"
 needed_by = ["workflow:backup"]
-why = "Foundation checks whether the store's iCloud Drive archive finished uploading and downloads an offloaded predecessor before retention; only used for that target"
+why = "Foundation checks that the store's iCloud Drive archive finished uploading and downloads an offloaded predecessor"
 install_macos = "install Xcode Command Line Tools: xcode-select --install"
 
 [python3]
 required = "optional"
 needed_by = ["workflow:backup"]
-why = "store-only iCloud retention verifies per-archive hashes and invokes an isolated restore; other backup targets do not use it"
+why = "store-only iCloud retention verifies per-archive hashes and invokes an isolated restore"
 install_macos = "preinstalled with Xcode Command Line Tools — or: brew install python"
 install_linux = "apt-get install -y python3"
-
-# [hledger] stood here until 2026-08-28, when PRD Q50 retired it. capabilities/finance
-# reads the journal itself now (capabilities/finance/src/journal.rs), so no machine needs
-# the executable to run Finance. The FILE FORMAT is unchanged and still hledger-compatible
-# — a host that wants to open the journal in hledger still can, which is a choice the
-# operator makes rather than a requirement this file can state. Deleted rather than kept:
-# toolchain.toml declares what a machine must have, and a host tool nothing calls is a
-# check that can only be noise. upstreams.toml [hledger] holds the dated verdict.
-
-# [bazel] stood here until 2026-08-25, when PRD Q44 retired it. cargo below is the whole Rust
-# build path now, so the entry was deleted rather than kept: toolchain.toml declares what a
-# machine must have, and a host tool nothing calls is a check that can only be noise.
 
 [apfel]
 required = "optional"
@@ -154,7 +103,7 @@ needed_by = ["capability:foundation-models"]
 upstream = "apfel"
 version_cmd = "apfel --version"
 min_version = "1.9.1"
-why = "capabilities/foundation-models runs `apfel --serve`. macOS 26+, Apple Silicon and Apple Intelligence enabled; on a host without them apfel starts and reports model_unavailable rather than refusing, so the capability's README says what that costs."
+why = "capabilities/foundation-models runs `apfel --serve`; needs macOS 26+, Apple Silicon and Apple Intelligence enabled"
 install_macos = "brew install apfel"
 
 [macmon]
@@ -164,8 +113,8 @@ needed_by = ["capability:macmon"]
 upstream = "macmon"
 version_cmd = "macmon --version"
 min_version = "0.7.0"
-why = "capabilities/macmon execs it as `macmon serve` for the app's Systems page; tools/sysmon power execs the same binary as a TUI. Absent for weeks while the capability was enabled, because a capability's own command was not a declared tool here and nothing else looked."
-install_macos = "cargo install macmon --locked"   # latest; min_version above is a floor, not a target (Q77)
+why = "capabilities/macmon runs `macmon serve` for the app's Systems page; tools/sysmon power runs it as a TUI"
+install_macos = "cargo install macmon --locked"   # latest; min_version is a floor, not a target
 
 [sqld]
 required = "optional"
@@ -174,7 +123,7 @@ needed_by = ["capability:sqld"]
 upstream = "libsql-server"
 version_cmd = "sqld --version"
 min_version = "0.24.32"
-why = "capabilities/sqld runs it as the libSQL primary other devices replicate from. On neither Homebrew nor crates.io, and the version is a compatibility fact rather than a preference: 0.24.32 is the release measured against the libsql 0.10.0 crate this repository links (pull, forwarded write, second replica, 2026-10-21). Pinned rather than latest, so this is the one entry here whose install hint is a repository script instead of a package manager."
+why = "capabilities/sqld runs it as the libSQL primary other devices replicate from"
 install_macos = "tools/install-sqld.sh"   # pinned version + digest, into ~/.local/bin
 
 [exiftool]
@@ -182,7 +131,7 @@ required = "optional"
 upstream = "exiftool"
 version_cmd = "exiftool -ver"
 min_version = "13.55"
-why = "media ingest calls ExifTool once per staged tree for DateTimeOriginal CSV; without it an ingest refuses before writing library bytes. The CLI has no service.toml or scheduled job, so a capability-field scope would never be checked."
+why = "media ingest calls it once per staged tree for DateTimeOriginal, and refuses before writing bytes without it"
 install_macos = "brew install exiftool"
 install_linux = "apt-get install -y libimage-exiftool-perl"
 
@@ -191,27 +140,16 @@ required = "optional"
 needed_by = ["capability:comms"]
 version_cmd = "yt-dlp --version"
 min_version = "2026.08.19"
-why = "capabilities/comms/src/media.rs execs it for share-link metadata and subtitles, always with --skip-download. Undeclared until 2026-08-29, so a host without it degraded silently — the same gap the macmon entry above records. Scoped to comms alone on purpose: this file is public, and a capability that keeps itself out of the public repo does not get its name and its intent published here by its dependency. Such a capability declares its own tools in its own preflight."
+why = "capabilities/comms/src/media.rs execs it for share-link metadata and subtitles, always with --skip-download"
 install_macos = "brew install yt-dlp"
 install_linux = "apt-get install -y yt-dlp   # or: uv tool install yt-dlp"
-
-# [visocr] is deliberately NOT declared here yet, and the two entries above are why. macmon and
-# yt-dlp are `capability:` entries because a capability execs those binaries; nothing in
-# capabilities/ reaches rung 2 of the extraction ladder today. libs/extraction/src/vision.rs execs
-# visocr and reports Unavailable when it is missing, naming tools/visocr/build.sh in the error, and
-# the only caller that gets that far is the corpus gate an operator runs by hand
-# (libs/extraction/eval/README.md). A `capability:comms` entry would put a standing
-# "visocr absent (optional)" on every macOS host with comms enabled, telling an operator to install
-# a binary no code path calls -- which is how a warning channel stops being read, the same reason
-# [hledger] and [bazel] were deleted above rather than kept. It gets an entry on the day a
-# capability execs it.
 
 [ollama]
 required = "optional"
 needed_by = ["capability:comms", "capability:scouting"]
 version_cmd = "ollama --version"
 min_version = "0.33.0"
-why = "serves the `embedding` and `summarization` inference roles: capabilities/comms/src/relevance.rs for Feed-TELOS ranking, capabilities/scouting/src/embed.rs for profile vectors, and the strong local digest rung an operator reaches by pressing Regenerate. Absent, both degrade rather than fail -- relevance drops to the deterministic `lexical` control -- which is why this is optional and also exactly why it must be declared: the same silence the macmon and yt-dlp entries above record. It is a systems.toml service ([ollama]), not adopted code, so no `upstream` id: Sjel calls it and builds nothing from it."
+why = "serves the `embedding` and `summarization` roles: comms relevance ranking, scouting vectors and the local digest rung"
 app = "Ollama.app"
 install_macos = "brew install --cask ollama"
 install_linux = "curl -fsSL https://ollama.com/install.sh | sh"
@@ -220,29 +158,14 @@ install_linux = "curl -fsSL https://ollama.com/install.sh | sh"
 required = "optional"
 version_cmd = "tailscale version"
 min_version = "1.98.9"
-why = "capabilities/host-net execs `tailscale status --json`, `tailscale debug prefs` and `tailscale lock status` for its `tailnet` verb; a host without it degrades to a named error rather than an empty posture. Undeclared until 2026-09-02, which is the same silence the macmon and yt-dlp entries above record. It is a host daemon Sjel calls and builds nothing from, so no `upstream` id, the reasoning [ollama] states. The floor is the release this entry was reviewed against, not the build host's incidental 1.102.3: the three subcommands are all long-standing, so the functional floor is far lower and unmeasured, and writing the build host's own version here would report every slightly older but working install as `outdated`. Below the reviewed release is the one statement this can make with a source."
-# NO needed_by, and that is the decision rather than an omission. `capability:host-net` cannot
-# fire: toolchain-check resolves a capability scope against machine.toml's `capabilities` array
-# (tools/toolchain-check:133-137), and by convention every capability without a service.toml —
-# host-audit, host-firewall, cv, host-net — is absent from that array, so the entry would report
-# `n/a (capability:host-net)` on every run forever. That is exactly the silent gap this entry
-# exists to close. `workflow:host-net` would be no better: nothing invokes toolchain-check with
-# that workflow. Core scope with required = "optional" is the shape that actually runs: checked
-# on every machine, absence is a warning with an install hint, never a failure.
+why = "capabilities/host-net execs `tailscale status --json`, `debug prefs` and `lock status` for its tailnet verb"
 install_macos = "brew install --cask tailscale"
 install_linux = "curl -fsSL https://tailscale.com/install.sh | sh"
 
 [libreoffice]
 required = "optional"
 bin = "soffice"
-# NO needed_by, the [tailscale] decision above. toolchain-check resolves `workflow:<name>`,
-# `capability:<id>` and `capability-field:<field>`; a *skill* is none of those, so any scope
-# would print `n/a` on every run forever -- the silent gap this entry exists to close. Core
-# scope with required = "optional" is the shape that runs: checked everywhere, a miss is a
-# warning with an install hint, never a failure. The one consumer is the slide-deck Pack
-# (Packs/presentations), whose `scripts/deck render` shells out to `soffice --headless
-# --convert-to pdf` and has no fallback: an unrendered deck is an unverified deck.
-why = "headless LibreOffice is the only renderer the slide-deck skill can use, and rendering is its verification step; `scripts/deck render` fails without it (Packs/presentations). Sjel calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. macOS note: the cask installs a .app and links a `soffice` shim into the Homebrew bin dir, which is what `shutil.which(\"soffice\")` finds; without that shim the binary sits at /Applications/LibreOffice.app/Contents/MacOS/soffice and render reports it as missing."
+why = "headless LibreOffice is the only renderer the slide-deck Pack has, and rendering is its verification step"
 app = "LibreOffice.app"
 install_macos = "brew install --cask libreoffice"
 install_linux = "apt-get install -y libreoffice"
@@ -252,110 +175,61 @@ required = "optional"
 bin = "xcodebuild"
 os = "macos"
 app = "Xcode.app"
-why = "builds and archives the iOS app: `tools/distribution/ios-archive`, which `sjel testflight` drives, runs xcodebuild. macOS only; Sjel builds nothing from it, so no `upstream` id."
+why = "builds and archives the iOS app through tools/distribution/ios-archive, which `sjel testflight` drives"
 install_macos = "xcode-select --install is not enough; install Xcode from the App Store"
 
 # ---- interactive terminal tools (this Mac's shell; absence warns) -----------------------
-#
-# These are the first entries in this file that NO Sjel script calls. They replace `cat`, `ls`
-# and git's default diff for the HUMAN at this Mac's shell, and the shell capability is their
-# consumer in the only sense that applies: capabilities/shell/init.zsh is what loads them into
-# an interactive shell, even though nothing execs a binary from a script.
-#
-# Declared 2026-10-01, on the decision that Sjel owns the interactive shell rather than leaving
-# it to whatever a machine happened to accumulate, with the standing intent to call these from
-# Sjel tooling as that tooling is rewritten. Absence stays a warning on purpose: this file
-# answers "is this machine what Sjel assumes", and a machine without eza runs Sjel completely.
-#
-# THE SCOPE, AND WHY THIS IS THE SHAPE. NO needed_by, core scope, narrowed by `os = "macos"`.
-# A new scope kind was considered for this and rejected on measurement, not on taste:
-# entry_scope in tools/toolchain-check resolves `workflow:<name>`, `capability-field:<field>`,
-# `capability:<id>` and bare `core`. An unrecognised token is deliberately reported as
-# `unknown scope '<s>'` and treated as out of scope, so `needed_by = ["operator:shell"]` would
-# print `n/a here — needed by operator:shell` on every run forever -- the dead-check shape this
-# file argues against at [visocr], [hledger] and [bazel]. `capability:shell` cannot fire either:
-# capabilities/shell/ has no service.toml, so it is absent from machine.toml's `capabilities`
-# array, which is precisely why [tailscale] carries no needed_by and writes that reasoning out.
-# When a Sjel script or capability starts calling one of these, its needed_by gains that
-# `capability:` or `workflow:` -- the existing kinds, which will fit it without a new one.
-#
-# `os = "macos"` because these are the interactive shell on the machine a human types at, and
-# core scope would print five optional warnings on every headless Linux host -- how a warning
-# channel stops being read. `required = "optional"` because the loss is one alias.
-#
-# NO min_version, deliberately. A floor is a measurement and none of these was measured; the
-# [tailscale] comment records what writing the build host's own release here costs, which is
-# that every slightly older but perfectly working install reports as `outdated`. The checker
-# computes a version only when BOTH min_version and version_cmd are present, so the pair is
-# omitted rather than half-written.
+# No Sjel script execs these; they replace cat, ls and git's default diff for the human at the shell.
 
 [bat]
 required = "optional"
 os = "macos"
-why = "colourised file reading. `cat` is `bat --style=plain --paging=never` in the personal shell config, MANPAGER pipes man pages through it, and ~/.config/bat/config holds the theme and style. Sjel calls it and builds nothing from it, so no `upstream` id, the [ollama] rule. Entirely cosmetic: without it `cat` is BSD cat and nothing else changes"
+why = "colourised file reading: `cat` and MANPAGER in the personal shell config"
 install_macos = "brew install bat"
 
 [eza]
 required = "optional"
 os = "macos"
-why = "`ls`/`ll`/`la`/`lt`/`ltt` in the personal shell config, and the only reason those aliases exist. The maintained fork of exa, which was archived in 2021 -- exa is deliberately not offered as an alternative because its flags stopped moving and the aliases use --git and --time-style=long-iso. Absence costs the five aliases and nothing else"
+why = "`ls`/`ll`/`la`/`lt`/`ltt` in the personal shell config"
 install_macos = "brew install eza"
 
 [git-delta]
 required = "optional"
 os = "macos"
 bin = "delta"
-# NOT tools/lib/delta.sh, which owns the word inside Sjel and means the version-to-version
-# diff between two of Sjel's own releases. This row is the diff COLOURISER for the git CLI.
-# Two different deltas, one word, and the collision is worth naming here rather than left for
-# the next reader to trip over.
-why = "git's pager for diff, log and blame, set once in ~/.gitconfig as `core.pager = delta` plus interactive.diffFilter, delta.navigate and delta.line-numbers. It is a git setting rather than a Sjel one, which is why nothing in the repository has to invoke it. Absence does not break the setting: git reports the pager failure and prints the diff unrendered"
+why = "git's pager for diff, log and blame, set once in ~/.gitconfig"
 install_macos = "brew install git-delta"
 
 [zoxide]
 required = "optional"
 os = "macos"
-why = "`z` and `zi`, the frecent-directory jump, from `eval \"$(zoxide init zsh)\"` in the personal shell config. Adds exactly those two functions and leaves `cd` alone -- no Sjel script navigates by it, and `cd` behaves identically without it"
+why = "`z` and `zi`, the frecent-directory jump"
 install_macos = "brew install zoxide"
 
 [fzf]
 required = "optional"
 os = "macos"
-why = "`eval \"$(fzf --zsh)\"` in the personal shell config, which is what turns Ctrl-R into history search, Ctrl-T into file picking and **<Tab> into completion; it is also the selector zoxide's `zi` reaches for. Declared on the same reasoning as the four above: nothing in Sjel calls it yet, and this row is where that changes the day a tool does"
+why = "Ctrl-R history search, Ctrl-T file picking and completion, and the selector zoxide's `zi` reaches for"
 install_macos = "brew install fzf"
 
-# Core since 2026-10-02, no longer `workflow:build` only. Sjel's own tooling moves into the
-# sjel-cli crate one script at a time, and each moved script's launcher builds that binary on
-# demand (tools/lib/sjel-cli.sh). A host without cargo cannot run those scripts, starting with
-# this file's own checker. Prebuilt release binaries were considered and deferred: they need
-# release and download machinery before the first port could ship.
+# ---- the Rust command-line baseline ----------------------------------------------------
+
 [cargo]
 required = "yes"
-why = "the Rust toolchain. Builds sjel-cli, which tools/toolchain-check and every other ported tools/ script exec (tools/lib/sjel-cli.sh), and every Rust capability: each service.toml declares `build = [\"cargo\", \"build\", ...]` and tools/service-runner.sh runs it before starting the binary (CONTRIBUTING.md#cargo-and-bun-are-the-build-path)"
+why = "the Rust toolchain: builds sjel-cli and every capability's `build` command"
 install_macos = "brew install rustup && rustup default stable   # or: brew install rust"
 install_linux = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-
-# ---- the Rust command-line baseline (decided 2026-10-02) --------------------------------
-#
-# Sjel standardises on the Rust replacements for grep and find on every host, and offers the
-# rest as optional. Required rows are core scope on both OSes, so scripts and agents can call
-# them without a fallback. Optional rows follow the interactive block above: `os = "macos"`,
-# no min_version, absence is a warning.
-#
-# Required is the floor, not a promise that every script already uses them. Today the shell
-# scripts still call grep and find; those calls go away as each script moves into sjel-cli, or
-# are rewritten when a script is next touched.
 
 [ripgrep]
 required = "yes"
 bin = "rg"
-why = "the search tool Sjel's agents and scripts use instead of grep (AGENTS.md, the sjel skill's orientation step). Respects .gitignore, so a search of the checkout skips target/ and node_modules/ by default"
+why = "the search tool Sjel's agents and scripts use instead of grep (AGENTS.md)"
 install_macos = "brew install ripgrep"
 install_linux = "apt-get install -y ripgrep"
 
 [fd]
 required = "yes"
-why = "the file finder Sjel uses instead of find. Respects .gitignore like rg, and its pattern syntax does not differ between BSD and GNU the way find's flags do"
+why = "the file finder Sjel uses instead of find"
 install_macos = "brew install fd"
 # Debian and Ubuntu ship the binary as `fdfind` because of a name clash with an older package.
 install_linux = "apt-get install -y fd-find && ln -sf \"$(command -v fdfind)\" ~/.local/bin/fd"
@@ -363,55 +237,44 @@ install_linux = "apt-get install -y fd-find && ln -sf \"$(command -v fdfind)\" ~
 [sd]
 required = "optional"
 os = "macos"
-why = "search and replace with one regex syntax on every OS, instead of sed, whose -i and -E behave differently under BSD and GNU (tools/lib/toml.sh works around exactly that). Nothing in Sjel calls it yet"
+why = "search and replace with one regex syntax on every OS, instead of sed"
 install_macos = "brew install sd"
 
 [jaq]
 required = "optional"
 os = "macos"
-why = "a faster jq clone. [jq] stays the required JSON tool because jaq is not fully jq-compatible; this row is where scripts can try it. Nothing in Sjel calls it yet"
+why = "a faster jq clone; [jq] stays the required JSON tool and no script calls this yet"
 install_macos = "brew install jaq"
 
 [hyperfine]
 required = "optional"
 os = "macos"
-why = "command benchmarks. Measures each script against its sjel-cli port before the port replaces it"
+why = "command benchmarks, for measuring a script against its sjel-cli port"
 install_macos = "brew install hyperfine"
 
 [tokei]
 required = "optional"
 os = "macos"
-why = "line counts per language. Tracks how much shell and TypeScript tooling is left to port into sjel-cli"
+why = "line counts per language, for how much shell and TypeScript is left to port"
 install_macos = "brew install tokei"
 
 [dust]
 required = "optional"
 os = "macos"
-why = "disk usage as a tree, for the interactive shell. `sjel storage` stays the policy-aware answer; dust is the quick look"
+why = "disk usage as a tree for the interactive shell"
 install_macos = "brew install dust"
 
 [procs]
 required = "optional"
 os = "macos"
-why = "process listing for the interactive shell, with ports and a tree view. Nothing in Sjel calls it"
+why = "process listing for the interactive shell, with ports and a tree view"
 install_macos = "brew install procs"
 
 # ---- container runtimes (the checker validates only this machine's chosen one) ---------
 
-# [apple-container] stood here until 2026-09-02, when Q75 retired it. This machine
-# declares container_runtime = "docker" and capabilities/agentbox invokes docker, so no machine
-# needs Apple's `container` executable to run Sjel. Deleted rather than kept: toolchain.toml
-# declares what a machine must have, and a host tool nothing calls is a check that can only be
-# noise. upstreams.toml [apple-container] holds the dated verdict.
-#
-# WHICH DAEMON supplies the docker CLI is a machine fact, not a second entry here. OrbStack does
-# on this Mac; Docker Desktop, colima or a Linux daemon do elsewhere. [docker] below is the whole
-# assumption Sjel makes, and it is the [ollama] rule above applied again: Sjel calls it and
-# builds nothing from it, so there is no upstreams.toml row either.
-
 [docker]
 required = "runtime"
-why = "container runtime (machine.toml container_runtime = docker). Since 2026-09-02 it is the only one this machine declares, and capabilities/agentbox depends on the CLI by name. `bin` is deliberately absent: the section name is the command, whichever daemon answers it. NB on macOS the OrbStack CLI lives at ~/.orbstack/bin/docker, which a login shell has on PATH and a bare launchd or cron environment does not -- tools/service-runner.sh injects its dirname into generated units for exactly that reason, and a hand-written invocation has to do the same"
+why = "container runtime (machine.toml container_runtime = docker); capabilities/agentbox depends on the CLI by name"
 install_macos = "brew install --cask orbstack   # or --cask docker, or colima — Sjel assumes the docker CLI, never one provider of it"
 install_linux = "apt-get install -y docker.io   # or Docker Engine per docs.docker.com"
 
@@ -421,17 +284,7 @@ why = "rootless container runtime alternative (machine.toml container_runtime = 
 install_macos = "brew install podman"
 install_linux = "apt-get install -y podman"
 
-# ---- audit scanners (absence warns). Two run in tools/audit since 2026-09-02 -----------
-
-# [semgrep] stood here until 2026-09-02, when Q74 retired it. CodeQL already runs rust,
-# javascript-typescript, python and actions with the security-extended suite
-# (.github/workflows/codeql.yml), which is total overlap -- and semgrep's `--config auto`
-# downloaded its rules at scan time, so the version recorded for it described nothing that ran.
-#
-# [trivy] stood here until the same date and ruling. .github/workflows/security.yml scans every
-# declared image with `grype registry:`, which needs no container runtime, and tools/audit no
-# longer scans images at all. The host-audit capability this entry's `why` promised was retired
-# in the same change. upstreams.toml holds both dated verdicts.
+# ---- audit scanners (absence warns) ----------------------------------------------------
 
 [gitleaks]
 required = "optional"
@@ -446,7 +299,7 @@ required = "optional"
 needed_by = ["workflow:audit"]
 bin = "osv-scanner"
 upstream = "osv-scanner"
-why = "dependency-CVE scan over every lockfile AND this machine's globally installed packages — tools/audit"
+why = "dependency-CVE scan over every lockfile and this machine's globally installed packages — tools/audit"
 install_macos = "brew install osv-scanner"
 install_linux = "go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
 
@@ -454,12 +307,7 @@ install_linux = "go install github.com/google/osv-scanner/cmd/osv-scanner@latest
 required = "optional"
 needed_by = ["workflow:audit"]
 upstream = "grype"
-# Scoped to the audit workflow so a machine that runs the audit by hand is told it can also
-# scan an image before declaring one. tools/audit does NOT call it: the automated image scan is
-# .github/workflows/security.yml, which installs its own copy and runs whether or not this
-# machine is awake. This row is the local copy, for triaging an image a service.toml is about
-# to adopt, and its absence is a warning by design rather than a failure.
-why = "container-image CVE scan by hand — `grype registry:<image>:<tag>`, no container runtime"
+why = "container-image CVE scan by hand, `grype registry:<image>:<tag>`, with no container runtime"
 install_macos = "brew install grype"
 install_linux = "apt-get install -y grype   # or the latest GitHub release"
 

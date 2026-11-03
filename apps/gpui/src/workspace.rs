@@ -28,6 +28,7 @@ use crate::finance_view::FinancePage;
 use crate::finder::{Finder, FinderEvent, Hit, Open};
 use crate::inbox::{Inbox, InboxEvent};
 use crate::inventory_view::InventoryPage;
+use crate::music::{Music, MusicEvent};
 use crate::people_view::PeoplePage;
 use crate::projects::Projects;
 use crate::route::{self, Page, Target};
@@ -37,7 +38,6 @@ use crate::shell::{
     ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{step_terminal_font_size, AppearanceSettings, GlassStyle, Palette};
-use crate::music::{Music, MusicEvent};
 use crate::{capabilities, header, home, sidebar};
 use sjel_gpui_core::area::{self, Area, Tabs};
 use sjel_gpui_core::terminal::Host;
@@ -705,8 +705,9 @@ impl Workspace {
             while let Some(snapshot) = events.next().await {
                 let applied = weak.update(cx, |this, cx| {
                     this.streaming = true;
-                    this.apply(snapshot);
-                    cx.notify();
+                    if this.apply(snapshot) {
+                        cx.notify();
+                    }
                 });
                 if applied.is_err() {
                     return;
@@ -716,30 +717,32 @@ impl Workspace {
         .detach();
     }
 
-    fn apply(&mut self, snapshot: Snapshot) {
+    fn apply(&mut self, snapshot: Snapshot) -> bool {
+        let mut changed = false;
         if let Some(health) = snapshot.health {
-            self.health.settle(Ok(health));
+            changed |= self.health.settle_changed(Ok(health));
         }
         if let Some(agent) = snapshot.agent {
-            self.agent.settle(Ok(agent));
+            changed |= self.agent.settle_changed(Ok(agent));
         }
         if let Some(error) = snapshot.error {
             let error = ShellError::Refused(502, Some(error));
-            self.health.settle(Err(error));
+            changed |= self.health.settle_changed(Err(error));
         }
+        changed
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         if !self.streaming {
-            data::read(
+            data::read_quiet(
                 cx,
                 self,
                 |w| &mut w.health,
                 &repo,
                 |s| async move { s.health().await },
             );
-            data::read(
+            data::read_quiet(
                 cx,
                 self,
                 |w| &mut w.agent,
@@ -749,7 +752,7 @@ impl Workspace {
         }
         // Only while the page is open: the answer reads a receipt per capability.
         if self.page == Page::Backup {
-            data::read(
+            data::read_quiet(
                 cx,
                 self,
                 |w| &mut w.backups,
@@ -759,7 +762,7 @@ impl Workspace {
         }
         self.read_prompt_drafts(cx);
         let repo_tasks = self.repo.clone();
-        data::read_repo(
+        data::read_repo_quiet(
             cx,
             self,
             |w| &mut w.focus_tasks,
@@ -767,7 +770,7 @@ impl Workspace {
             move |r| async move { r.fetch_tasks(Some("open")).await },
         );
         let repo_sound = self.repo.clone();
-        data::read_repo(
+        data::read_repo_quiet(
             cx,
             self,
             |w| &mut w.soundscape,

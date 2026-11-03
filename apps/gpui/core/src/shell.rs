@@ -33,14 +33,14 @@ const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
 
 /// `GET /api/sjel-status/health` (`SjelStatusHealth` in
 /// `capabilities/sjel-status/src/status/registry.rs`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct NodeHealth {
     pub version: String,
     pub uptime_seconds: u64,
     pub capabilities: BTreeMap<String, CapabilityHealth>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 pub struct CapabilityHealth {
     pub up: bool,
     /// Kept running by the machine. A shell from before the field kept every capability running.
@@ -49,7 +49,7 @@ pub struct CapabilityHealth {
 }
 
 /// One registry entry (`GET /api/sjel-status/capabilities`), as far as related-record links read it.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct RegistryEntry {
     pub name: String,
     #[serde(default)]
@@ -91,7 +91,7 @@ impl NodeHealth {
 }
 
 /// `GET /api/sjel-status/agent`.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct AgentView {
     /// False until this machine holds an agent token: every mode below is then unused.
     #[serde(default)]
@@ -113,7 +113,7 @@ pub struct AgentView {
 }
 
 /// One capability's agent gate: the mode it runs at, and the routes that always ask.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct AgentGate {
     pub capability: String,
     /// `off` · `read-only` · `ask` · `auto`.
@@ -128,7 +128,7 @@ pub struct AgentGate {
 }
 
 /// One agent write that waits for the owner.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct Approval {
     pub id: String,
     pub capability: String,
@@ -144,7 +144,7 @@ pub struct Approval {
 }
 
 /// One call an agent made through the gate (`AgentCall` in `libs/sjel-server/src/agent_policy.rs`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct AgentCall {
     /// Unix seconds.
     pub at: i64,
@@ -605,7 +605,7 @@ pub struct SoftwareApp {
 
 /// `GET /api/sjel-status/backups` (`backups_handler` in
 /// `capabilities/sjel-status/src/status/backup.rs`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Backups {
     pub backups: Vec<BackupStatus>,
     #[serde(default)]
@@ -613,7 +613,7 @@ pub struct Backups {
 }
 
 /// One capability with a backup contract.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct BackupStatus {
     pub capability: String,
     /// `ok`, `due`, `overdue`, `never` or `unknown` (`backup_state` in sjel-status).
@@ -633,7 +633,7 @@ pub struct BackupStatus {
     pub attempt: Option<crate::backup::BackupRunAttemptRecord>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct BackupRun {
     /// `running`, `succeeded` or `failed`.
     pub state: String,

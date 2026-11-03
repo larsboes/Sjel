@@ -1916,9 +1916,11 @@ impl Projects {
     ) -> AnyElement {
         let cols = self.columns();
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let board = sjel_gpui_core::data::Board::from_records(records.to_vec());
-        let open_count = board.open_tasks().count();
-        let all_count = board.tasks().count();
+        let open_count = records
+            .iter()
+            .filter(|r| r.kind == "task" && !r.done)
+            .count();
+        let all_count = records.iter().filter(|r| r.kind == "task").count();
         let done_count = all_count.saturating_sub(open_count);
 
         let filter_bar = div()
@@ -2703,14 +2705,11 @@ impl Render for Projects {
                 .value
                 .as_ref()
                 .map(|r| {
-                    let board = sjel_gpui_core::data::Board::from_records(r.clone());
-                    let open = board.open_tasks().count();
-                    let notes = board
-                        .notes()
-                        .filter(|t| {
-                            t.kind != "project"
-                                && t.path != format!("{project_name}/{project_name}.md")
-                        })
+                    let hub_path = format!("{project_name}/{project_name}.md");
+                    let open = r.iter().filter(|t| t.kind == "task" && !t.done).count();
+                    let notes = r
+                        .iter()
+                        .filter(|t| t.kind != "task" && t.kind != "project" && t.path != hub_path)
                         .count();
                     (open, notes)
                 })
@@ -3012,14 +3011,13 @@ impl Render for Projects {
                             }
                             (None, None) => placeholder(240.).into_any_element(),
                             (Some(records_list), None) => {
-                                let board =
-                                    sjel_gpui_core::data::Board::from_records(records_list.clone());
-                                let note_records: Vec<_> = board
-                                    .notes()
+                                let hub_path = format!("{project_name}/{project_name}.md");
+                                let note_records: Vec<_> = records_list
+                                    .iter()
                                     .filter(|record| {
-                                        record.kind != "project"
-                                            && record.path
-                                                != format!("{project_name}/{project_name}.md")
+                                        record.kind != "task"
+                                            && record.kind != "project"
+                                            && record.path != hub_path
                                     })
                                     .collect();
 

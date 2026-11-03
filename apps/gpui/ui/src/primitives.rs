@@ -1,7 +1,9 @@
 //! Shared UI primitives: sections, framed lists, cards, badges, pills, progress bars, and density-aware rows.
 
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, FontWeight, SharedString, Window,
+    div, list as gpui_list, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId,
+    FontWeight, ListState, SharedString, Window,
 };
 
 use crate::theme::{tint, Density, Palette};
@@ -71,6 +73,23 @@ pub fn list(rows: Vec<AnyElement>, palette: Palette) -> AnyElement {
         }
     }
     list.into_any_element()
+}
+
+/// Virtualized vertical list with a bound scrollbar and flex height contract (`flex_1` + `min_h_0`).
+pub fn virtual_list(
+    id: impl Into<ElementId>,
+    state: &ListState,
+    render_item: impl Fn(usize, &mut Window, &mut App) -> AnyElement + 'static,
+) -> AnyElement {
+    div()
+        .id(id.into())
+        .relative()
+        .flex_1()
+        .min_h_0()
+        .w_full()
+        .vertical_scrollbar(state)
+        .child(gpui_list(state.clone(), render_item).size_full())
+        .into_any_element()
 }
 
 /// Standard desktop row.

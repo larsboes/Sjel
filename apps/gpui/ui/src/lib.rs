@@ -24,6 +24,7 @@ pub mod media;
 pub mod music;
 pub mod nav;
 pub mod packs;
+pub mod pdf_kit;
 pub mod people;
 pub mod primitives;
 pub mod projects;
@@ -47,7 +48,8 @@ pub use doc_view::{render_block, render_doc, render_markdown};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 pub use primitives::{
     back_button, card, dot, due_badge, due_status, filter_pill, list, note, placeholder,
-    priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, DueStatus,
+    priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, virtual_list,
+    DueStatus,
 };
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{

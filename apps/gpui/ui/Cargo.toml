@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 description = "Shared GPUI design system, tokens, and primitives for Sjel desktop and mobile"
 
 [features]
-native-maps = ["dep:maplibre_native", "dep:image", "dep:metal"]
+native-maps = ["dep:maplibre_native", "dep:metal"]
 
 [dependencies]
 sjel-gpui-core = { path = "../core" }
@@ -20,10 +20,14 @@ futures = "0.3"
 tokio = { version = "1", features = ["sync"] }
 # The VT parser and grid model behind ui/src/terminal.rs. See its upstreams.toml row.
 alacritty_terminal = "0.26"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGAffineTransform", "CGBase", "CGBitmapContext", "CGColorSpace", "CGContext", "CGDataProvider", "CGGeometry", "CGImage", "CGPDFDocument", "CGPDFPage"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 maplibre_native = { version = "=0.10.0", default-features = false, features = ["metal"], optional = true }
-image = { version = "=0.25.10", default-features = false, features = ["png"], optional = true }
 metal = { version = "=0.33.0", optional = true }
 
 [[example]]

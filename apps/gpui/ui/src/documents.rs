@@ -25,8 +25,8 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::filter_pill;
-use crate::theme::Palette;
+use crate::primitives::{filter_pill, virtual_list};
+use crate::theme::{Density, Palette};
 
 /// Why a page could not be drawn. Every variant is shown to the reader rather than swallowed into
 /// an empty pane.
@@ -306,6 +306,7 @@ impl Reader {
 pub struct Documents {
     repo: Repo,
     palette: Option<Palette>,
+    density: Density,
     pub rows: Remote<Vec<DocumentSummary>>,
     pub detail: Remote<DocumentDetail>,
     pub filter: Filter,
@@ -321,6 +322,7 @@ pub struct Documents {
     list: gpui::ListState,
     /// The rows in draw order, each with the group header that opens its group.
     order: Vec<DocRow>,
+    counts: [usize; 5],
     order_key: Option<(u64, usize)>,
     /// Counts a change to the filters and the sort, which the records cannot report.
     order_rev: u64,
@@ -351,7 +353,7 @@ impl Documents {
     pub fn new(repo: Repo) -> Self {
         let renderer = match DEFAULT_RENDERER.get() {
             Some(factory) => factory(),
-            None => Err(PdfError::Unsupported.to_string()),
+            None => crate::pdf_kit::default_renderer(),
         };
         Self::with_renderer(repo, renderer)
     }
@@ -364,6 +366,7 @@ impl Documents {
         Self {
             repo,
             palette: None,
+            density: Density::Desktop,
             rows: Remote::default(),
             detail: Remote::default(),
             filter: Filter::Inbox,
@@ -377,6 +380,7 @@ impl Documents {
             selected: None,
             list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             order: Vec::new(),
+            counts: [0; 5],
             order_key: None,
             order_rev: 0,
             text_scroll: gpui::ScrollHandle::new(),
@@ -407,6 +411,18 @@ impl Documents {
             self.palette = Some(palette);
             cx.notify();
         }
+    }
+
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
+        }
+    }
+
+    pub fn set_repo(&mut self, repo: Repo, cx: &mut Context<Self>) {
+        self.repo = repo;
+        self.load(cx);
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
@@ -1543,6 +1559,7 @@ impl Documents {
                                             .find(|row| row.id == detail.document.id)
                                         {
                                             *row = detail.document.clone();
+                                            view.order_rev = view.order_rev.wrapping_add(1);
                                         }
                                     }
                                     view.detail.settle(Ok(detail));
@@ -1605,6 +1622,7 @@ impl Documents {
                                             .find(|row| row.id == detail.document.id)
                                         {
                                             *row = detail.document.clone();
+                                            view.order_rev = view.order_rev.wrapping_add(1);
                                         }
                                     }
                                     view.detail.settle(Ok(detail));
@@ -1668,6 +1686,7 @@ impl Documents {
                                             .find(|row| row.id == detail.document.id)
                                         {
                                             *row = detail.document.clone();
+                                            view.order_rev = view.order_rev.wrapping_add(1);
                                         }
                                     }
                                     view.detail.settle(Ok(detail));
@@ -1718,6 +1737,7 @@ impl Documents {
                     if let Some(rows) = &mut view.rows.value {
                         if let Some(row) = rows.iter_mut().find(|row| row.id == updated.id) {
                             *row = updated;
+                            view.order_rev = view.order_rev.wrapping_add(1);
                         }
                     }
                 }
@@ -1758,6 +1778,7 @@ impl Documents {
                     } else {
                         view.rows.value = Some(batch);
                     }
+                    view.order_rev = view.order_rev.wrapping_add(1);
                     cx.notify();
                 });
             }
@@ -1809,6 +1830,7 @@ impl Documents {
                                 rows.iter_mut().find(|row| row.id == detail.document.id)
                             {
                                 *row = detail.document.clone();
+                                view.order_rev = view.order_rev.wrapping_add(1);
                             }
                         }
                         view.detail.settle(Ok(detail));
@@ -1985,21 +2007,33 @@ impl Documents {
             return;
         }
         let mut picked: Vec<usize> = Vec::new();
+        let mut summary_counts = [0; 5];
         if let Some(rows) = self.rows.value.as_ref() {
-            picked.extend(
-                (0..rows.len())
-                    .filter(|index| self.filter.matches(&rows[*index]))
-                    .filter(|index| {
-                        self.category_filter.as_deref().is_none_or(|category| {
-                            rows[*index].category.as_deref().unwrap_or("") == category
-                        })
-                    })
-                    .filter(|index| {
-                        self.search_applied
-                            || self.search_query.is_empty()
-                            || document_matches(&rows[*index], &self.search_query)
-                    }),
-            );
+            summary_counts[0] = rows.len();
+            for (index, row) in rows.iter().enumerate() {
+                if row.status == "inbox" {
+                    summary_counts[1] += 1;
+                } else if row.status == "filed" {
+                    summary_counts[2] += 1;
+                }
+                if row.status != "archived" {
+                    summary_counts[3] += 1;
+                }
+                if Filter::NeedsReview.matches(row) {
+                    summary_counts[4] += 1;
+                }
+                if self.filter.matches(row)
+                    && self
+                        .category_filter
+                        .as_deref()
+                        .is_none_or(|category| row.category.as_deref().unwrap_or("") == category)
+                    && (self.search_applied
+                        || self.search_query.is_empty()
+                        || document_matches(row, &self.search_query))
+                {
+                    picked.push(index);
+                }
+            }
             match (self.grouping, self.sort_by_name) {
                 (Grouping::None, false) => {}
                 (Grouping::None, true) => picked.sort_by(|left, right| {
@@ -2024,6 +2058,7 @@ impl Documents {
                 }),
             }
         }
+        self.counts = summary_counts;
         let mut counts: Vec<(String, usize)> = Vec::new();
         if let Some(rows) = self
             .rows
@@ -2110,7 +2145,7 @@ impl Documents {
                 .id(("document-row", ix))
                 .flex()
                 .items_center()
-                .min_h(px(40.))
+                .min_h(self.density.row_height())
                 .px_3()
                 .rounded(px(5.))
                 .when(chosen, |el| el.bg(rgba(palette.raised)))
@@ -2217,25 +2252,13 @@ impl Render for Documents {
                 )
                 .child(self.duplicate_workspace(window, cx));
         }
-        // Counted from a borrow: the library is every record, and cloning it every frame was the
-        // page's whole cost.
-        let (total, inbox, filed, active, next) = {
-            let rows = self.rows.value.as_deref().unwrap_or_default();
-            (
-                rows.len(),
-                rows.iter().filter(|d| d.status == "inbox").count(),
-                rows.iter().filter(|d| d.status == "filed").count(),
-                rows.iter().filter(|d| d.status != "archived").count(),
-                rows.iter()
-                    .filter(|row| Filter::NeedsReview.matches(row))
-                    .count(),
-            )
-        };
+        self.sync_order();
+        let [total, inbox, filed, active, next] = self.counts;
         let selected = self.selected.clone();
-        // With a document open the list keeps a column beside the reader. That column is too
-        // narrow for four columns and a search box, so the view drops what it cannot show rather
-        // than squeezing every column into nothing.
-        let narrow = selected.is_some();
+        let mobile = self.density == Density::Mobile;
+        // With a document open the list keeps a column beside the reader on desktop; on mobile
+        // the reader takes the whole screen.
+        let narrow = selected.is_some() || mobile;
         let category_label = match self.category_filter.as_deref() {
             None => "Category: all".to_owned(),
             Some("") => "Category: unfiled".to_owned(),
@@ -2248,6 +2271,7 @@ impl Render for Documents {
         table = table.child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .mb_2()
@@ -2320,6 +2344,7 @@ impl Render for Documents {
                             })
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.sort_by_name = !view.sort_by_name;
+                                view.order_rev = view.order_rev.wrapping_add(1);
                                 cx.notify();
                             })),
                     )
@@ -2386,7 +2411,6 @@ impl Render for Documents {
                     .child(error.to_string()),
             );
         }
-        self.sync_order();
         if self.order.is_empty() && !self.rows.loading {
             table = table.child(div().py_5().text_sm().text_color(rgb(palette.muted)).child(
                 if total == 0 {
@@ -2399,25 +2423,15 @@ impl Render for Documents {
         if !self.order.is_empty() {
             // The library holds every record; only the rows in the window are built.
             let entity = cx.entity();
-            let state = self.list.clone();
-            let narrow = selected.is_some();
-            table = table.child(
-                div()
-                    .id("documents-list")
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .w_full()
-                    .vertical_scrollbar(&state)
-                    .child(
-                        gpui::list(state.clone(), move |ix, _window, cx| {
-                            entity.update(cx, |documents, cx| {
-                                documents.document_row(ix, narrow, palette, cx)
-                            })
-                        })
-                        .size_full(),
-                    ),
-            );
+            table = table.child(virtual_list(
+                "documents-list",
+                &self.list,
+                move |ix, _window, cx| {
+                    entity.update(cx, |documents, cx| {
+                        documents.document_row(ix, narrow, palette, cx)
+                    })
+                },
+            ));
         }
 
         // With a record open the list keeps a column and the reader takes the rest; with nothing
@@ -2432,11 +2446,12 @@ impl Render for Documents {
                 .value
                 .as_ref()
                 .and_then(|detail| detail.document.suggested_category.clone());
-            let can_open_externally = self
-                .detail
-                .value
-                .as_ref()
-                .is_some_and(|detail| detail.document.parent_id.is_none());
+            let can_open_externally = !mobile
+                && self
+                    .detail
+                    .value
+                    .as_ref()
+                    .is_some_and(|detail| detail.document.parent_id.is_none());
             let page_label = if pages == 0 {
                 "Page —".to_owned()
             } else if let Some(range) = self
@@ -2492,13 +2507,18 @@ impl Render for Documents {
                         .child(
                             Button::new("document-close")
                                 .small()
-                                .label("Close ✕ (Esc)")
+                                .label(if mobile {
+                                    "← Documents"
+                                } else {
+                                    "Close ✕ (Esc)"
+                                })
                                 .on_click(cx.listener(|view, _, _, cx| view.close(cx))),
                         ),
                 )
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap_2()
                         .child(
@@ -2561,6 +2581,7 @@ impl Render for Documents {
                 .into_any_element()
         });
 
+        let show_table = !(mobile && reader.is_some());
         div()
             .size_full()
             .flex()
@@ -2592,29 +2613,31 @@ impl Render for Documents {
                     .gap_4()
                     .flex_1()
                     .min_h_0()
-                    .child(
-                        div()
-                            .when(reader.is_some(), |el| el.w(px(380.)).min_w(px(320.)))
-                            .when(reader.is_none(), |el| el.flex_1())
-                            .flex()
-                            .flex_col()
-                            // A scroll area's min-content width is the table's whole width; without
-                            // this the column refuses to shrink and pushes the reader off screen.
-                            .min_w_0()
-                            .min_h_0()
-                            .id("documents-pane")
-                            .overflow_hidden()
-                            .child(
-                                div()
-                                    .id("documents-rows")
-                                    .flex()
-                                    .flex_col()
-                                    .flex_1()
-                                    .min_h_0()
-                                    .w_full()
-                                    .child(table.w_full()),
-                            ),
-                    )
+                    .when(show_table, |el| {
+                        el.child(
+                            div()
+                                .when(reader.is_some(), |el| el.w(px(380.)).min_w(px(320.)))
+                                .when(reader.is_none(), |el| el.flex_1())
+                                .flex()
+                                .flex_col()
+                                // A scroll area's min-content width is the table's whole width; without
+                                // this the column refuses to shrink and pushes the reader off screen.
+                                .min_w_0()
+                                .min_h_0()
+                                .id("documents-pane")
+                                .overflow_hidden()
+                                .child(
+                                    div()
+                                        .id("documents-rows")
+                                        .flex()
+                                        .flex_col()
+                                        .flex_1()
+                                        .min_h_0()
+                                        .w_full()
+                                        .child(table.w_full()),
+                                ),
+                        )
+                    })
                     .when_some(reader, |el, reader| el.child(reader)),
             )
     }

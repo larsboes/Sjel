@@ -158,7 +158,7 @@ impl SystemsPage {
 
     fn read_macmon(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.macmon,
@@ -169,7 +169,7 @@ impl SystemsPage {
 
     fn read_storage(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.storage,
@@ -180,7 +180,7 @@ impl SystemsPage {
 
     fn read_history(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.history,
@@ -191,7 +191,7 @@ impl SystemsPage {
 
     fn read_updates(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.updates,
@@ -202,7 +202,7 @@ impl SystemsPage {
 
     fn read_findings(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.findings,
@@ -213,7 +213,7 @@ impl SystemsPage {
 
     fn read_agent(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.agent,
@@ -224,7 +224,7 @@ impl SystemsPage {
 
     fn read_runtime(&mut self, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
-        data::read(
+        data::read_quiet(
             cx,
             self,
             |s| &mut s.runtime,

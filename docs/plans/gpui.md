@@ -21,7 +21,7 @@ names the rest.
 | 2 | `/context` | Ported (one page with `/`) | `Home` + `ContextPage` | `Today` tab | `projects`, `calendar` |
 | 3 | `/calendar` | Ported | `CalendarPage` | tab, reads and writes the replica | `calendar` |
 | 4 | `/projects` | Ported | `Projects` | behind `Today` | `projects` |
-| 5 | `/documents` | Ported | `Documents` | planned reader | `documents` |
+| 5 | `/documents` | Ported | `Documents` | behind `Today` | `documents` |
 | 6 | `/inbox` | Ported | `Inbox` | tab, capture only | `comms` |
 | 7 | `/feed` | Ported | `Feed`: Reading, Review, Library, Mail, Discover | planned | `comms`, `scouting` |
 | 8 | `/travel` | Partial | `Travel` | tab | `trips`, `traveler`, `transit` |
@@ -55,7 +55,7 @@ Documents and People open directly from Today 1-tap shortcuts, finder, and links
 
 | Area | Status | Notes |
 |---|---|---|
-| Documents | Mac only / mobile shortcut | PDFKit in `src/`. 1-tap shortcut on Today. |
+| Documents | Shared + mobile shortcut | `ui/src/documents.rs` + Core Graphics `ui/src/pdf_kit.rs` on macOS and iOS. 1-tap shortcut on Today, single-pane mobile reader with pinch zoom. |
 | Mail | Shared compact + mobile drawer | `ui/src/mail.rs` density toggle (Compact/Desktop/Comfortable), mobile 44pt touch targets, expandable message snippet drawer with direct triage (Dismiss, Waiting, Archive, Trash, Categorize). |
 | Calendar | Tab (replica + copy) | 24-hour day time grid with live red now-line, hour rail tapping to open Composer, Google & iCloud sync status mark. |
 | Travel | Tab | Grouped Day cards, transfer connection buffer badges, one-tap booking code copy chips, and offline-ready marks. |
@@ -78,8 +78,9 @@ Documents and People open directly from Today 1-tap shortcuts, finder, and links
 
 ### Documents
 
-1. Done: `Documents` lives in `ui/src/documents.rs` behind the `PdfRenderer` trait; Core Graphics
-   (`src/pdf_kit.rs`) implements it on macOS. Open: iOS `PdfRenderer` wiring.
+1. Done: `Documents` (`ui/src/documents.rs`) and Core Graphics PDF rendering (`ui/src/pdf_kit.rs`)
+   live in `sjel-gpui-ui` for both macOS and iOS, wired on the phone behind `Today` with single-pane
+   mobile layout and pinch zoom.
 2. The phone lists documents from `GET /api/documents` with cursor paging (§7), and opens the
    hash-verified original at fit width with pinch zoom.
 3. "Keep offline" stores the original and its metadata on the phone (rule 2).
@@ -372,12 +373,11 @@ build was performed for this handoff.
    manifests, and `gpui-mobile` at git rev `c24a1308e1`. Move all four pins in one commit of its
    own, with `cargo test` on core and ui and `ios/run-sim` before and after.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
-   eleven more modules (`documents`, `feed`, `scout`, `clipper`, `context`, `people::page`,
-   `calendar::page`, `inbox::triage`, `import`, `music`, `ask`) moved on 2026-11-03 behind
-   `PdfRenderer` and rich clipboard callbacks. Still in `src/`: `capabilities`, `docs` (Mermaid
-   renderer), `accounts` and `settings`. A platform call goes behind one small trait in the shell
-   (keychain, open URL, audio, notifications, scanner), never as a `cfg` in a page. Run `simplify`
-   on each page as it moves.
+   twelve more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
+   `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`) moved on 2026-11-03.
+   Still in `src/`: `capabilities`, `docs` (Mermaid renderer), `accounts` and `settings`. A platform
+   call goes behind one small trait in the shell (keychain, open URL, audio, notifications,
+   scanner), never as a `cfg` in a page. Run `simplify` on each page as it moves.
 3. **Phone tabs for moved pages.** The phone bar is full at five (`Today | Inbox | Calendar |
    People | Travel`, `ui/src/nav.rs`). A sixth page needs a different bar, not a sixth item.
    Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).
@@ -437,23 +437,15 @@ Feed row costs about 0.2 ms to build, layout and paint.
 
 | # | What | Result |
 |---|---|---|
-| E1 | Feed's Reading list draws one row per item on screen: `ListState` and `list()` in `src/feed.rs`, the order cached in `Feed::reading_order` and rebuilt only when the entries, the filter or a status move. Feed owns its scroller and every other tab in the page keeps one of its own. `j`/`k` reveals the cursor's row. | 71.7 → 1.7–3.7 ms p50 for 362 rows, of which about 15 are drawn. The spread is machine load across eight runs of the bench. Uncommitted. |
+| E1 | Feed's Reading list draws one row per item on screen: `ListState` and `list()` in `ui/src/feed.rs`, the order cached in `Feed::reading_order` and rebuilt only when the entries, the filter or a status move. Feed owns its scroller and every other tab in the page keeps one of its own. `j`/`k` reveals the cursor's row. | 71.7 → 1.7–3.7 ms p50 for 362 rows, of which about 15 are drawn. |
+| E2 | Shared `virtual_list` helper in `ui/src/primitives.rs` wraps `ListState`, scrollbar, and `flex_1 + min_h_0`, wired across Feed Reading, Feed Library, and Documents. | Three lists share `virtual_list`. |
+| E3 | Filter, sort, count pills, and `Board::from_records` removed from `render()` across `ui/src/projects.rs`, `ui/src/feed.rs` (`sync_reading`, `sync_library`), and `ui/src/documents.rs` (`sync_order`). | Unchanged frames allocate no per-row filter/sort vectors. |
+| E4 | Poll hygiene: `UPDATE_CHECK` runs at most every 5 minutes, and `Remote::settle_changed` + `data::read_quiet` / `read_repo_quiet` notify only when the value or error moved. | Idle polls and unchanged SSE snapshots wake no repaint. |
+| E5 | `SystemsPage` beats (`MACMON_BEAT`, `AGENT_BEAT`, storage, updates, findings, runtime) use `data::read_quiet` over `PartialEq` models. | Beats reporting an unchanged reading paint nothing. |
 
-### In progress: E2, the same list element on the other long pages
+### Open (E2 remaining non-uniform pages)
 
 | page | what it draws | state |
 |---|---|---|
-| Feed, Library tab | 1,074 archive rows | Done: `ListState` and a cached order; the `Show more` cap is gone. 26.2 ms before, unmeasured after. |
-| Documents | 7,154 records, 100 drawn | Done: the per-frame clone of every record is gone, the filter and sort moved into `sync_order`, and only the rows in the window are built. 7.5–8.2 ms before, unmeasured after. |
 | Inventory, Interior | grouped cards in one scroll container | Open. They build cards rather than uniform rows, so a conversion needs a looked-at window; not done blind. |
 | Packs | a matrix with a pinned header and a horizontal scroller | Open, and last: 5.7 ms with 2 of 238 frames over budget. |
-| Systems | six chart panels, not a row list | Not an E2 page: virtualization cannot help it. Its 9.5 ms is chart drawing every frame, which needs its own entry. |
-
-### Open
-
-| # | What | Done when |
-|---|---|---|
-| E2 | One helper in `ui/src/primitives.rs` for the list, its scrollbar and the height contract, so a page cannot repeat the zero-height mistake the first conversion made. | Three pages share it, and each `bench-scroll` shows no frame over 8.3 ms. |
-| E3 | Filter, sort and `Board::from_records` leave `render()`. Done for Feed and Documents; open for `ui/src/projects.rs:1739`, `:2531`, `:2851` (`Board::from_records` per frame) and the count pills on Feed. 241 `.clone()` and 165 `format!` calls still sit inside render functions across 79 of them. | An unchanged page re-renders without an allocation that scales with its row count. |
-| E4 | Poll hygiene. Done: the poll asks git at most every 5 minutes (`UPDATE_CHECK`), while ⌘⇧U and Settings → Updates still ask at once. Open: `Remote::settle` reports whether the value moved so the caller notifies only then. | An idle window paints nothing between polls, and one poll cycle forks no process. |
-| E5 | Systems redraws six chart panels every frame. Its beats (`MACMON_BEAT`, `AGENT_BEAT`) re-render whether or not the reading moved, and the charts are rebuilt rather than reused. | A beat that reports the same reading paints nothing. |

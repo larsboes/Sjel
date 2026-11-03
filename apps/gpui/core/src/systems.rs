@@ -19,7 +19,7 @@ use serde::Deserialize;
 /// Only the fields this page draws. `macmon serve` emits more (`ane_power`, `gpu_usage`,
 /// `gpu_ram_power`), and a field added upstream must not break the page, so unknown keys are
 /// ignored and every known one defaults.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct MacmonSample {
     #[serde(default)]
     pub all_power: f64,
@@ -50,7 +50,7 @@ pub struct MacmonSample {
 
 /// Bytes, despite the name: macmon reports memory in bytes and the dashboard divides by
 /// 1024³ to print GB.
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 pub struct MacmonMemory {
     #[serde(default)]
     pub ram_total: f64,
@@ -62,7 +62,7 @@ pub struct MacmonMemory {
     pub swap_usage: f64,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 pub struct MacmonTemperature {
     #[serde(default)]
     pub cpu_temp_avg: f64,
@@ -141,7 +141,7 @@ pub fn clock_label(stamp: &str) -> String {
 // ── storage ──────────────────────────────────────────────────────────────────
 
 /// `GET /api/sjel-status/storage`, which is `tools/storage report --json` verbatim.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageReport {
     #[serde(default)]
     pub disk: Disk,
@@ -161,7 +161,7 @@ pub struct StorageReport {
     pub unattributed_bytes: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Disk {
     #[serde(default)]
     pub total: u64,
@@ -172,7 +172,7 @@ pub struct Disk {
 }
 
 /// One reclaimable class in the policy.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageClass {
     pub name: String,
     #[serde(default)]
@@ -192,7 +192,7 @@ pub struct StorageClass {
 }
 
 /// A path the policy reports and never reclaims, with the reason it is safe to leave.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageProtected {
     pub path: String,
     #[serde(default)]
@@ -204,7 +204,7 @@ pub struct StorageProtected {
 }
 
 /// A service the policy declares, and the machine's answer.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct ExpectedService {
     pub name: String,
     #[serde(default)]
@@ -388,7 +388,7 @@ impl StorageReport {
 ///
 /// `samples` empty is "no history", not an error — a machine that has not yet completed an hour
 /// under sjel-status has none.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageHistory {
     #[serde(default)]
     pub retention_days: u32,
@@ -400,7 +400,7 @@ pub struct StorageHistory {
     pub classes: Vec<StorageClassSample>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageSample {
     /// The hour this reading belongs to, canonical UTC.
     pub hour: String,
@@ -411,7 +411,7 @@ pub struct StorageSample {
 }
 
 /// One name the machine no longer answers for, and since when.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct StorageAbsence {
     /// `class` · `protected` · `service`; the three lists a name can come from.
     pub kind: String,
@@ -423,7 +423,7 @@ pub struct StorageAbsence {
     pub capped: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct StorageClassSample {
     pub name: String,
     #[serde(default)]
@@ -596,7 +596,7 @@ pub fn dated_absences(
 // ── updates ──────────────────────────────────────────────────────────────────
 
 /// `GET /api/sjel-status/updates`, which is `tools/updates --json` verbatim.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct UpdatesReport {
     #[serde(default)]
     pub offline: bool,
@@ -638,7 +638,7 @@ impl Owner {
 
 /// One class as `tools/sjel-cli/src/updates/report.rs`'s `SURFACES` declares it, sent with the
 /// report so the page renders the tool's reasoning rather than a second copy of the table.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct UpdateSurface {
     pub id: String,
     #[serde(default)]
@@ -672,7 +672,7 @@ pub enum UpdateStatus {
 }
 
 /// One row: a package, a crate, an integration, or a class's own receipt line.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct UpdateRow {
     pub surface: String,
     #[serde(default)]
@@ -705,7 +705,7 @@ impl UpdateRow {
 
 /// What the last `apply` recorded. The apply route answers `202` before the work starts, so the
 /// report's own receipt is the only progress there is.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct ApplyReceipt {
     #[serde(default)]
     pub at: Option<String>,
@@ -887,7 +887,7 @@ fn since_label(stamp: &str, now: DateTime<Local>) -> String {
 // ── host watch ───────────────────────────────────────────────────────────────
 
 /// `GET /api/sjel-status/host-watch`: the hourly watch's open findings.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Findings {
     #[serde(default)]
     pub findings: Vec<Finding>,
@@ -895,7 +895,7 @@ pub struct Findings {
 
 /// One condition the hourly watch still sees. `key` names the command, never the pid, so a
 /// reboot does not look like a new problem.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Finding {
     pub key: String,
     #[serde(default)]
@@ -910,7 +910,7 @@ pub struct Finding {
 // ── runtime profile ──────────────────────────────────────────────────────────
 
 /// `GET /api/sjel-status/runtime` (`sjel_runtime::Status`).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RuntimeStatus {
     #[serde(default)]
     pub device: String,

@@ -83,6 +83,44 @@ pub fn read<C, T, F, Fut>(
     .detach();
 }
 
+/// Reads into `slot` from the shell on a timer beat, waking the view only when the settled
+/// reading or error differs from what the slot already holds.
+pub fn read_quiet<C, T, F, Fut>(
+    cx: &mut Context<C>,
+    this: &mut C,
+    slot: fn(&mut C) -> &mut Remote<T>,
+    repo: &Repo,
+    request: F,
+) where
+    C: 'static,
+    T: PartialEq + Send + 'static,
+    F: FnOnce(Arc<Shell>) -> Fut,
+    Fut: Future<Output = ShellResult<T>> + Send + 'static,
+{
+    let shell = match repo.shell() {
+        Ok(shell) => shell,
+        Err(error) => {
+            if slot(this).settle_changed(Err(error)) {
+                cx.notify();
+            }
+            return;
+        }
+    };
+    if !slot(this).begin() {
+        return;
+    }
+    let work = shell::run(request(shell));
+    cx.spawn(async move |weak, cx| {
+        let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+        let _ = weak.update(cx, |this, cx| {
+            if slot(this).settle_changed(result) {
+                cx.notify();
+            }
+        });
+    })
+    .detach();
+}
+
 /// Reads into `slot` via `Repo` (which can use direct local DB or Shell fallback),
 /// unless that slot is already loading.
 pub fn read_repo<C, T, F, Fut>(
@@ -108,6 +146,36 @@ pub fn read_repo<C, T, F, Fut>(
         let _ = weak.update(cx, |this, cx| {
             slot(this).settle(result);
             cx.notify();
+        });
+    })
+    .detach();
+}
+
+/// Reads into `slot` via `Repo` on a timer beat, waking the view only when the settled
+/// reading or error differs from what the slot already holds.
+pub fn read_repo_quiet<C, T, F, Fut>(
+    cx: &mut Context<C>,
+    this: &mut C,
+    slot: fn(&mut C) -> &mut Remote<T>,
+    repo: &Repo,
+    request: F,
+) where
+    C: 'static,
+    T: PartialEq + Send + 'static,
+    F: FnOnce(Repo) -> Fut,
+    Fut: Future<Output = ShellResult<T>> + Send + 'static,
+{
+    if !slot(this).begin() {
+        return;
+    }
+    let repo_clone = repo.clone();
+    let work = shell::run(request(repo_clone));
+    cx.spawn(async move |weak, cx| {
+        let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+        let _ = weak.update(cx, |this, cx| {
+            if slot(this).settle_changed(result) {
+                cx.notify();
+            }
         });
     })
     .detach();

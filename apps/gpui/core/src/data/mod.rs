@@ -68,6 +68,31 @@ impl<T> Remote<T> {
         }
     }
 
+    /// Settles `result` and reports whether the displayed value or error changed.
+    ///
+    /// Background poll beats use this so an identical reading still refreshes [`Self::loaded_at`]
+    /// without waking the window to repaint.
+    pub fn settle_changed(&mut self, result: ShellResult<T>) -> bool
+    where
+        T: PartialEq,
+    {
+        self.loading = false;
+        match result {
+            Ok(value) => {
+                let changed = self.value.as_ref() != Some(&value) || self.error.is_some();
+                self.value = Some(value);
+                self.error = None;
+                self.loaded_at = Some(Instant::now());
+                changed
+            }
+            Err(error) => {
+                let changed = self.error.as_ref() != Some(&error);
+                self.error = Some(error);
+                changed
+            }
+        }
+    }
+
     /// Neither loaded nor failed yet: the page reserves space and shows no error.
     pub fn first_load(&self) -> bool {
         self.value.is_none() && self.error.is_none()
@@ -145,6 +170,29 @@ mod tests {
         assert_eq!(slot.value, Some(1), "the page keeps drawing what it had");
         assert_eq!(slot.error, Some(ShellError::Unreachable));
         assert!(!slot.first_load());
+    }
+
+    #[test]
+    fn settle_changed_is_quiet_when_the_reading_did_not_move() {
+        let mut slot: Remote<u8> = Remote::default();
+        assert!(slot.settle_changed(Ok(4)), "first answer changes the slot");
+        assert!(
+            !slot.settle_changed(Ok(4)),
+            "same value and no error does not repaint"
+        );
+        assert!(
+            slot.settle_changed(Err(ShellError::Unreachable)),
+            "a new error changes the slot"
+        );
+        assert!(
+            !slot.settle_changed(Err(ShellError::Unreachable)),
+            "repeating the same error does not repaint"
+        );
+        assert!(
+            slot.settle_changed(Ok(4)),
+            "clearing the error changes the slot even at the same value"
+        );
+        assert!(slot.settle_changed(Ok(5)), "a new value changes the slot");
     }
 
     #[test]

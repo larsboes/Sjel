@@ -86,6 +86,8 @@ pub enum Tab {
     Settings,
     /// Triage and mail proposals synced from the Mac.
     Mail,
+    /// Document library and Core Graphics PDF reader, reached from Today.
+    Documents,
 }
 
 enum Event {
@@ -370,6 +372,8 @@ pub struct Capabilities {
     inbox: gpui::Entity<Inbox>,
     /// The Mail triage proposals synced from the Mac (`sjel_gpui_ui::mail`).
     mail: gpui::Entity<sjel_gpui_ui::mail::Mail>,
+    /// The Document library and PDF reader (`sjel_gpui_ui::documents`).
+    documents: gpui::Entity<sjel_gpui_ui::documents::Documents>,
     /// The soundscape drawer over the platform-free engine (`sjel_gpui_ui::soundscape`). The device
     /// is the host's (`host/Audio.swift`), started the first time the edge is opened on this seat.
     soundscape: gpui::Entity<Soundscape>,
@@ -508,6 +512,12 @@ impl Capabilities {
             )
         });
         mail.update(cx, |mail, cx| mail.set_density(Density::Mobile, cx));
+        let documents = cx.new(|_| {
+            sjel_gpui_ui::documents::Documents::new(sjel_gpui_core::data::Repo::new(Err(
+                sjel_gpui_core::shell::ShellError::NotSetUp,
+            )))
+        });
+        documents.update(cx, |docs, cx| docs.set_density(Density::Mobile, cx));
         let interior = cx.new(|cx| {
             #[allow(unused_mut)]
             let mut history = RoomPlanHistory::new(None, cx);
@@ -571,6 +581,8 @@ impl Capabilities {
                 cx.notify();
             }
             TodayEvent::Documents => {
+                view.active_tab = Tab::Documents;
+                view.documents.update(cx, |docs, cx| docs.load(cx));
                 cx.notify();
             }
         })
@@ -1021,6 +1033,12 @@ impl Capabilities {
                                 if steps != 0 {
                                     view.zoom_terminal(steps, cx);
                                 }
+                            } else if view.active_tab == Tab::Documents {
+                                let steps = pinch_steps(&mut view.pinch_base, scale);
+                                if steps != 0 {
+                                    view.documents
+                                        .update(cx, |docs, cx| docs.toggle_zoom(cx));
+                                }
                             }
                             if ended {
                                 view.pinch_base = 1.0;
@@ -1100,6 +1118,7 @@ impl Capabilities {
             interior,
             inbox,
             mail,
+            documents,
             soundscape,
             sidebar,
             today,
@@ -2452,6 +2471,7 @@ fn launch_tab() -> Tab {
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
         "mail" => Tab::Mail,
+        "documents" => Tab::Documents,
         _ => Tab::Today,
     }
 }
@@ -2824,8 +2844,11 @@ impl Render for Capabilities {
         let is_people = self.active_tab == Tab::People;
         let is_interior = self.active_tab == Tab::Interior;
         let is_mail = self.active_tab == Tab::Mail;
+        let is_documents = self.active_tab == Tab::Documents;
         self.mail
             .update(cx, |mail, cx| mail.set_palette(palette, cx));
+        self.documents
+            .update(cx, |docs, cx| docs.set_palette(palette, cx));
         self.travel
             .update(cx, |travel, cx| travel.set_palette(palette, cx));
         self.calendar
@@ -3313,6 +3336,26 @@ impl Render for Capabilities {
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
                     .when(is_people, |page| page.child(self.people.clone()))
+                    .when(is_documents, |page| {
+                        page.child(
+                            div()
+                                .id("documents-back")
+                                .flex()
+                                .items_center()
+                                .min_h(px(44.))
+                                .text_sm()
+                                .text_color(rgb(palette.accent))
+                                .child("← Today")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|view, _, _, cx| {
+                                        view.active_tab = Tab::Today;
+                                        cx.notify();
+                                    }),
+                                ),
+                        )
+                        .child(div().flex_1().min_h_0().child(self.documents.clone()))
+                    })
                     .when(is_interior, |page| {
                         page.child(
                             div()
@@ -3352,6 +3395,7 @@ impl Render for Capabilities {
                         !is_mac
                             && !is_today
                             && !is_mail
+                            && !is_documents
                             && !is_inbox
                             && !is_travel
                             && !is_calendar
@@ -3478,6 +3522,7 @@ impl Render for Capabilities {
                     Tab::Inbox => "today",
                     Tab::People => "today",
                     Tab::Interior => "today",
+                    Tab::Documents => "today",
                 };
                 let entity = cx.entity().clone();
                 mobile_tab_bar(

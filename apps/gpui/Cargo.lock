@@ -7104,6 +7104,8 @@ dependencies = [
  "image",
  "maplibre_native",
  "metal",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
  "serde",
  "serde_json",
  "sjel-gpui-core",

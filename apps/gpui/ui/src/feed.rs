@@ -11,9 +11,9 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    actions, div, list, point, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity,
-    FocusHandle, FontWeight, KeyBinding, ListAlignment, ListOffset, ListState, Pixels,
-    ScrollHandle, SharedString, Subscription, Window,
+    actions, div, point, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
+    FontWeight, KeyBinding, ListAlignment, ListOffset, ListState, Pixels, ScrollHandle,
+    SharedString, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
     self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
@@ -25,7 +25,7 @@ use crate::clipper::Clips;
 use crate::data::{Remote, Repo};
 use crate::doc_view::render_markdown;
 use crate::mail::Mail;
-use crate::primitives::filter_pill;
+use crate::primitives::{filter_pill, virtual_list};
 use crate::scout::ScoutingPage;
 use crate::theme::{tint, Density, Palette};
 
@@ -156,6 +156,8 @@ pub struct Feed {
     /// The archive's scroller, and its order: the Library tab draws only the rows on screen.
     library_list: ListState,
     library_order: Vec<usize>,
+    library_counts: [usize; 4],
+    library_kinds: Vec<(String, usize)>,
     library_key: Option<(u64, usize)>,
     /// Counts a change to the archive's three filters, which the entries cannot report.
     library_rev: u64,
@@ -168,6 +170,7 @@ pub struct Feed {
     reading_list: ListState,
     /// Indices into `rows` in draw order, rebuilt when the data, the filter or a status moves.
     reading_order: Vec<usize>,
+    reading_counts: [usize; 3],
     reading_key: Option<ReadingKey>,
     /// Counts in-place status changes, which the entries themselves cannot report.
     rows_rev: u64,
@@ -216,6 +219,8 @@ impl Feed {
             library_input: None,
             library_list: ListState::new(0, ListAlignment::Top, px(600.)),
             library_order: Vec::new(),
+            library_counts: [0; 4],
+            library_kinds: Vec::new(),
             library_key: None,
             library_rev: 0,
             focus: cx.focus_handle(),
@@ -223,6 +228,7 @@ impl Feed {
             reading_list: ListState::new(0, ListAlignment::Top, px(600.)),
             tab_scroll: ScrollHandle::new(),
             reading_order: Vec::new(),
+            reading_counts: [0; 3],
             reading_key: None,
             rows_rev: 0,
         }
@@ -471,13 +477,11 @@ impl Feed {
     }
 
     fn count(&self, filter: Filter) -> usize {
-        self.rows
-            .value
-            .iter()
-            .flatten()
-            .filter(|entry| entry.status == filter.status())
-            .filter(|entry| self.stream.is_none_or(|stream| entry.stream == stream))
-            .count()
+        match filter {
+            Filter::New => self.reading_counts[0],
+            Filter::Kept => self.reading_counts[1],
+            Filter::Dismissed => self.reading_counts[2],
+        }
     }
 
     /// The Reading order, rebuilt only when the entries, the filter or a status moved.
@@ -505,18 +509,26 @@ impl Feed {
                 self.rows.value.as_ref(),
             )
         });
+        let mut counts = [0; 3];
         let mut order: Vec<usize> = Vec::new();
         if let Some(rows) = self.rows.value.as_ref() {
-            order.extend(
-                (0..rows.len())
-                    .filter(|index| rows[*index].status == self.filter.status())
-                    .filter(|index| {
-                        self.stream
-                            .is_none_or(|stream| rows[*index].stream == stream)
-                    }),
-            );
+            for (index, row) in rows.iter().enumerate() {
+                if !self.stream.is_none_or(|stream| row.stream == stream) {
+                    continue;
+                }
+                match row.status.as_str() {
+                    "new" => counts[0] += 1,
+                    "keeper" => counts[1] += 1,
+                    "dismissed" => counts[2] += 1,
+                    _ => {}
+                }
+                if row.status == self.filter.status() {
+                    order.push(index);
+                }
+            }
             order.sort_by(|left, right| feed_order(&rows[*left], &rows[*right]));
         }
+        self.reading_counts = counts;
         self.reading_key = Some(key);
         self.reading_list.reset(order.len());
         restore_anchor(
@@ -546,13 +558,37 @@ impl Feed {
         });
         let kind = self.library_kind.clone();
         let query = self.library_query.clone();
+        let mut counts = [0; 4];
         let mut order: Vec<usize> = Vec::new();
+        let mut kind_counts: Vec<(String, usize)> = Vec::new();
         if let Some(rows) = self.library.value.as_ref() {
-            order.extend((0..rows.len()).filter(|index| {
-                library_matches(&rows[*index], self.library_status, kind.as_deref(), &query)
-            }));
+            for (index, row) in rows.iter().enumerate() {
+                match kind_counts.iter_mut().find(|(k, _)| *k == row.kind) {
+                    Some((_, n)) => *n += 1,
+                    None => kind_counts.push((row.kind.clone(), 1)),
+                }
+                if !library_matches(row, None, kind.as_deref(), &query) {
+                    continue;
+                }
+                counts[0] += 1;
+                match row.status.as_str() {
+                    "new" => counts[1] += 1,
+                    "keeper" => counts[2] += 1,
+                    "dismissed" => counts[3] += 1,
+                    _ => {}
+                }
+                if self
+                    .library_status
+                    .is_none_or(|wanted| row.status == wanted.status())
+                {
+                    order.push(index);
+                }
+            }
             order.sort_by(|left, right| feed_order(&rows[*left], &rows[*right]));
         }
+        kind_counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        self.library_counts = counts;
+        self.library_kinds = kind_counts;
         self.library_key = Some(key);
         self.library_list.reset(order.len());
         restore_anchor(
@@ -1504,21 +1540,13 @@ impl Feed {
         if !self.reading_order.is_empty() {
             // One row per item on screen: the list asks for the rows it draws, not for all of them.
             let entity = cx.entity();
-            let state = self.reading_list.clone();
-            column = column.child(
-                div()
-                    .id("feed-reading")
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .vertical_scrollbar(&state)
-                    .child(
-                        list(state.clone(), move |ix, _window, cx| {
-                            entity.update(cx, |feed, cx| feed.reading_row(ix, palette, cx))
-                        })
-                        .size_full(),
-                    ),
-            );
+            column = column.child(virtual_list(
+                "feed-reading",
+                &self.reading_list,
+                move |ix, _window, cx| {
+                    entity.update(cx, |feed, cx| feed.reading_row(ix, palette, cx))
+                },
+            ));
         }
         column.into_any_element()
     }
@@ -2531,10 +2559,14 @@ impl Feed {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let input = self.library_field(window, cx);
-        let all: Vec<&FeedEntry> = self.library.value.iter().flatten().collect();
-        let kind = self.library_kind.as_deref();
-        let query = self.library_query.as_str();
-        let count = |status| in_library(all.iter().copied(), status, kind, query).len();
+        self.sync_library();
+        let total = self.library.value.as_ref().map_or(0, Vec::len);
+        let count = |status: Option<Filter>| match status {
+            None => self.library_counts[0],
+            Some(Filter::New) => self.library_counts[1],
+            Some(Filter::Kept) => self.library_counts[2],
+            Some(Filter::Dismissed) => self.library_counts[3],
+        };
         let pill = |label: &'static str, status: Option<Filter>, cx: &mut Context<Self>| {
             filter_pill(
                 label,
@@ -2561,13 +2593,14 @@ impl Feed {
                     cx.notify();
                 }))
         };
-        let mut kind_row = div().flex().flex_wrap().gap_1().child(kind_button(
-            format!("All {}", all.len()),
-            None,
-            cx,
-        ));
-        for (kind, n) in kinds(&all) {
-            kind_row = kind_row.child(kind_button(format!("{kind} {n}"), Some(kind), cx));
+        let mut kind_row =
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_1()
+                .child(kind_button(format!("All {total}"), None, cx));
+        for (kind, n) in &self.library_kinds {
+            kind_row = kind_row.child(kind_button(format!("{kind} {n}"), Some(kind.clone()), cx));
         }
         let toolbar = div()
             .flex()
@@ -2580,7 +2613,6 @@ impl Feed {
             .child(div().flex_1())
             .child(div().w(px(280.)).child(Input::new(&input).small()));
 
-        self.sync_library();
         let mut column = div()
             .flex()
             .flex_col()
@@ -2605,21 +2637,13 @@ impl Feed {
         if !self.library_order.is_empty() {
             // The archive is the whole history; only the rows in the window are built.
             let entity = cx.entity();
-            let state = self.library_list.clone();
-            column = column.child(
-                div()
-                    .id("feed-library")
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .vertical_scrollbar(&state)
-                    .child(
-                        list(state.clone(), move |ix, _window, cx| {
-                            entity.update(cx, |feed, cx| feed.library_row_at(ix, palette, cx))
-                        })
-                        .size_full(),
-                    ),
-            );
+            column = column.child(virtual_list(
+                "feed-library",
+                &self.library_list,
+                move |ix, _window, cx| {
+                    entity.update(cx, |feed, cx| feed.library_row_at(ix, palette, cx))
+                },
+            ));
         }
         column.into_any_element()
     }
@@ -2714,6 +2738,7 @@ fn library_row(
 
 /// The library's rows for one status (`None`: all), kind and lowercase query, newest day first
 /// and best score first within a day.
+#[cfg(test)]
 fn in_library<'a>(
     rows: impl Iterator<Item = &'a FeedEntry>,
     status: Option<Filter>,
@@ -2792,6 +2817,7 @@ fn restore_anchor(
 }
 
 /// Each kind in the archive with its count, most common first.
+#[cfg(test)]
 fn kinds(rows: &[&FeedEntry]) -> Vec<(String, usize)> {
     let mut counts: Vec<(String, usize)> = Vec::new();
     for row in rows {
@@ -2938,10 +2964,12 @@ mod tests {
             feed.sync_reading();
             assert_eq!(feed.reading_order.len(), 2);
             assert_eq!(feed.reading_list.item_count(), 2);
+            assert_eq!(feed.reading_counts, [2, 1, 0]);
             feed.filter = Filter::Kept;
             feed.sync_reading();
             assert_eq!(feed.reading_order.len(), 1);
             assert_eq!(feed.reading_list.item_count(), 1);
+            assert_eq!(feed.reading_counts, [2, 1, 0]);
             cx.notify();
         });
     }

@@ -10,7 +10,9 @@ use serde_json::Value as Json;
 
 use crate::harnesses::engine::{read_state, SkillStatus};
 use crate::harnesses::mutate::hold_matches;
-use crate::harnesses::mutate::{held_sources, hold_source, recorded_profile_units};
+use crate::harnesses::mutate::{
+    bound_profile_at, held_sources, hold_source, recorded_profile_units, resolve_profile_packs,
+};
 use crate::harnesses::registry::{is_installed, Model, Registry};
 use crate::harnesses::statuses_for;
 
@@ -2151,6 +2153,63 @@ fn pack_sections(ctx: &mut Ctx) {
     }
 }
 
+/// Report deployed Packs outside the harness's bound profile.
+fn binding_lines(
+    root: &Path,
+    harness: &crate::harnesses::registry::Harness,
+    rows: &[crate::harnesses::engine::StatusRow],
+) -> Vec<(Level, String)> {
+    let profile = match bound_profile_at(root, harness.id) {
+        Ok(Some(profile)) => profile,
+        Ok(None) => return Vec::new(),
+        Err(e) => return vec![(Level::Bad, e)],
+    };
+    let wanted = match resolve_profile_packs(&harness.config, &profile) {
+        Ok(packs) => packs.into_iter().collect::<BTreeSet<String>>(),
+        Err(e) => return vec![(Level::Bad, e)],
+    };
+    let deployed: BTreeSet<String> = if harness.model == Model::Materialized {
+        match read_state(&harness.config) {
+            Ok(state) => state.packs.into_keys().collect(),
+            Err(e) => return vec![(Level::Bad, e)],
+        }
+    } else {
+        rows.iter()
+            .filter(|r| {
+                matches!(
+                    r.status,
+                    SkillStatus::Current
+                        | SkillStatus::Outdated
+                        | SkillStatus::Drifted
+                        | SkillStatus::MigrationRequired
+                        | SkillStatus::Missing
+                )
+            })
+            .map(|r| r.pack.clone())
+            .collect()
+    };
+    let outside: Vec<String> = deployed.difference(&wanted).cloned().collect();
+    if outside.is_empty() {
+        return vec![(
+            Level::Ok,
+            format!(
+                "no Packs outside profile '{}' ([harness_profile])",
+                profile.name
+            ),
+        )];
+    }
+    vec![(
+        Level::Bad,
+        format!(
+            "{} deployed outside profile '{}', which profiles.toml [harness_profile] binds to {} — run: tools/harnesses apply --harness {}",
+            outside.join(", "),
+            profile.name,
+            harness.id,
+            harness.id
+        ),
+    )]
+}
+
 /// One named section and its verdict lines, as the TypeScript sidecar handed them over.
 type PackSection = (String, Vec<(Level, String)>);
 
@@ -2171,6 +2230,7 @@ fn pack_state(root: &Path) -> Result<Vec<PackSection>, String> {
                 lines.push((Level::Warn, "no Packs/*/pack.toml found".to_owned()));
             }
             Ok(rows) => {
+                lines.extend(binding_lines(root, harness, &rows));
                 let mut unselected: Vec<String> = Vec::new();
                 // Units `profiles.toml` or this machine's machine.toml holds back from this
                 // harness. Read here so the "not deployed" warning can be replaced by the reason,
@@ -2911,7 +2971,109 @@ pub fn print_version(root: &Path, online: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{entries, Entry, CONTEXT, DEPLOYMENT};
+    use super::{binding_lines, entries, Entry, Level, CONTEXT, DEPLOYMENT};
+    use crate::harnesses::engine::{self, SkillStatus, StatusRow};
+    use crate::harnesses::mutate;
+    use crate::harnesses::registry::Registry;
+
+    #[test]
+    fn binding_check_reports_owned_outside_packs_but_not_discovered_skills() {
+        let root = std::env::temp_dir().join(format!("sjel-doctor-binding-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("Packs/coding")).unwrap();
+        std::fs::write(
+            root.join("Packs/coding/pack.toml"),
+            "name = \"coding\"\nskills = []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("profiles.toml"),
+            r#"
+[harness_profile]
+claude = "coding"
+[[profile]]
+name = "coding"
+packs = ["coding"]
+"#,
+        )
+        .unwrap();
+        let mut registry = Registry::new(&root);
+        let harness = registry
+            .harnesses
+            .iter_mut()
+            .find(|h| h.id == "claude")
+            .unwrap();
+        harness.config.pack_roots = None;
+        harness.config.destination = root.join("destination");
+        harness.config.state_file = root.join("state.json");
+        harness.config.tree_convention = None;
+        let source = root.join("Packs/learning/skills/teach");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(
+            root.join("Packs/learning/pack.toml"),
+            "name = \"learning\"\nskills = [\"teach\"]\n",
+        )
+        .unwrap();
+        std::fs::write(source.join("SKILL.md"), "invalid skill").unwrap();
+        let rows = engine::get_statuses(&harness.config, Some("learning")).unwrap();
+        assert_eq!(rows[0].status, SkillStatus::Invalid);
+        assert!(matches!(
+            binding_lines(&root, harness, &rows)[0].0,
+            Level::Ok
+        ));
+
+        let content = "---\nname: teach\ndescription: teaches a topic\n---\n\nTeach.\n";
+        std::fs::write(source.join("SKILL.md"), content).unwrap();
+        let destination = harness.config.destination.join("teach");
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::write(destination.join("SKILL.md"), content).unwrap();
+        let rows = engine::get_statuses(&harness.config, Some("learning")).unwrap();
+        assert_eq!(rows[0].status, SkillStatus::Collision);
+        assert!(matches!(
+            binding_lines(&root, harness, &rows)[0].0,
+            Level::Ok
+        ));
+
+        mutate::adopt_pack(&harness.config, "learning").unwrap();
+        let rows = engine::get_statuses(&harness.config, Some("learning")).unwrap();
+        assert_eq!(rows[0].status, SkillStatus::Current);
+        let lines = binding_lines(&root, harness, &rows);
+        assert!(matches!(lines[0].0, Level::Bad));
+        assert!(lines[0]
+            .1
+            .contains("learning deployed outside profile 'coding'"));
+        std::fs::write(source.join("SKILL.md"), "invalid again").unwrap();
+        let rows = engine::get_statuses(&harness.config, Some("learning")).unwrap();
+        assert_eq!(rows[0].status, SkillStatus::Invalid);
+        assert!(matches!(
+            binding_lines(&root, harness, &rows)[0].0,
+            Level::Bad
+        ));
+
+        harness.model = crate::harnesses::registry::Model::Registry;
+        for status in [
+            SkillStatus::Discovered,
+            SkillStatus::NotDeployed,
+            SkillStatus::Collision,
+            SkillStatus::Invalid,
+        ] {
+            let row = StatusRow {
+                pack: "learning".to_owned(),
+                skill: "teach".to_owned(),
+                status,
+                detail: None,
+            };
+            assert!(matches!(
+                binding_lines(&root, harness, &[row])[0].0,
+                Level::Ok
+            ));
+        }
+        std::fs::write(root.join("profiles.toml"), "harness_profile = 7").unwrap();
+        assert!(matches!(
+            binding_lines(&root, harness, &[])[0].0,
+            Level::Bad
+        ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn every_deployment_section_names_a_real_section_after_the_overlay() {

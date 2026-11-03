@@ -1078,6 +1078,71 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
         .collect()
 }
 
+/// The `[harness_profile]` key that binds every harness the table does not name.
+pub const BIND_ALL: &str = "*";
+
+/// Resolve a harness's named profile binding, falling back to `*`.
+///
+/// # Errors
+/// The file, binding table, profile name or profile definition is invalid.
+pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, String> {
+    let path = root.join("profiles.toml");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let parsed: toml::Table = text
+        .parse()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let Some(binding) = parsed.get("harness_profile") else {
+        return Ok(None);
+    };
+    let table = binding
+        .as_table()
+        .ok_or_else(|| format!("{}: harness_profile must be a table", path.display()))?;
+    let Some(value) = table.get(harness).or_else(|| table.get(BIND_ALL)) else {
+        return Ok(None);
+    };
+    let name = value.as_str().ok_or_else(|| {
+        format!(
+            "{}: harness_profile entries must be profile names (strings)",
+            path.display()
+        )
+    })?;
+    read_profiles_at(root)?
+        .into_iter()
+        .find(|p| p.name == name)
+        .map(Some)
+        .ok_or_else(|| {
+            format!(
+                "{}: harness_profile binds {harness} to '{name}', which no [[profile]] defines",
+                path.display()
+            )
+        })
+}
+
+/// Refuse a Pack outside the harness's bound profile; allow unbound harnesses.
+///
+/// # Errors
+/// The Pack is outside the bound profile, or the binding does not resolve.
+pub fn refuse_outside_binding(config: &DeployConfig, pack: &str) -> Result<(), String> {
+    let harness = config.adapter.as_str();
+    let Some(profile) = bound_profile_at(&config.axon_root, harness)? else {
+        return Ok(());
+    };
+    if resolve_profile_packs(config, &profile)?
+        .iter()
+        .any(|p| p == pack)
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "{pack} is not in profile '{}', which profiles.toml [harness_profile] binds to {harness}. \
+         Add the Pack to that profile or change the binding, then run: tools/harnesses apply --harness {harness}",
+        profile.name
+    ))
+}
+
 /// Per-harness unit holds, from a `[unit_hold]` table: `<harness> = ["<pack>/<unit>"]`.
 /// `profiles.toml` holds a unit on every machine; the overlay's machine.toml holds it on that
 /// machine only. `held_sources` merges the two.
@@ -1734,6 +1799,120 @@ mod tests {
             resolve_profile_packs(&config, thesis).unwrap(),
             vec!["writing".to_owned()]
         );
+    }
+
+    #[test]
+    fn profile_binding_prefers_named_then_wildcard_and_allows_unbound() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-profile-binding-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("profiles.toml");
+        fs::write(
+            &path,
+            r#"
+[harness_profile]
+"*" = "coding"
+pi = "full"
+[[profile]]
+name = "coding"
+[[profile]]
+name = "full"
+"#,
+        )
+        .unwrap();
+        assert_eq!(bound_profile_at(&root, "pi").unwrap().unwrap().name, "full");
+        assert_eq!(
+            bound_profile_at(&root, "codex").unwrap().unwrap().name,
+            "coding"
+        );
+        fs::write(
+            &path,
+            "[harness_profile]\npi = \"full\"\n[[profile]]\nname = \"full\"\n",
+        )
+        .unwrap();
+        assert!(bound_profile_at(&root, "codex").unwrap().is_none());
+        fs::write(&path, "").unwrap();
+        assert!(bound_profile_at(&root, "pi").unwrap().is_none());
+        fs::remove_file(&path).unwrap();
+        assert!(bound_profile_at(&root, "pi").unwrap().is_none());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn profile_binding_rejects_invalid_configuration() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-profile-binding-invalid-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        for (document, expected) in [
+            ("harness_profile = []", "must be a table"),
+            ("[harness_profile]\npi = 7", "must be profile names"),
+            (
+                "[harness_profile]\npi = \"missing\"",
+                "no [[profile]] defines",
+            ),
+        ] {
+            fs::write(root.join("profiles.toml"), document).unwrap();
+            let error = bound_profile_at(&root, "pi").unwrap_err();
+            assert!(error.contains(expected), "{error}");
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn profile_binding_refuses_outside_pack_before_deployment() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-profile-binding-deploy-{}",
+            std::process::id()
+        ));
+        let pack = root.join("Packs/coding");
+        fs::create_dir_all(&pack).unwrap();
+        fs::write(pack.join("pack.toml"), "name = \"coding\"\nskills = []\n").unwrap();
+        fs::write(
+            root.join("profiles.toml"),
+            r#"
+[harness_profile]
+claude = "coding"
+[[profile]]
+name = "coding"
+packs = ["coding"]
+"#,
+        )
+        .unwrap();
+        let mut config = DeployConfig {
+            axon_root: root.clone(),
+            pack_roots: None,
+            destination: root.join("destination"),
+            state_file: root.join("state.json"),
+            adapter: "claude".to_owned(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        };
+        refuse_outside_binding(&config, "coding").unwrap();
+        let error = refuse_outside_binding(&config, "learning").unwrap_err();
+        assert!(error.contains("not in profile 'coding'"), "{error}");
+        assert!(!config.destination.exists());
+        assert!(!config.state_file.exists());
+        config.adapter = "unbound".to_owned();
+        refuse_outside_binding(&config, "learning").unwrap();
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn shipped_harness_bindings_resolve_and_keep_learning_on_pi() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for harness in ["claude", "codex", "antigravity", "opencode", "copilot"] {
+            let profile = bound_profile_at(&root, harness).unwrap().unwrap();
+            assert_eq!(profile.name, "coding-harness");
+            assert!(!profile.packs.contains(&"knowledge".to_owned()));
+            assert!(!profile.packs.contains(&"learning".to_owned()));
+        }
+        assert_eq!(bound_profile_at(&root, "pi").unwrap().unwrap().name, "full");
+        assert!(bound_profile_at(&root, "sjel-agent").unwrap().is_none());
     }
 
     #[test]

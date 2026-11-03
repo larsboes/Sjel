@@ -172,6 +172,9 @@ fn status(config: &DeployConfig, target: Option<&str>) -> Result<(), String> {
 
 fn deploy(config: &DeployConfig, packs: &[String], header: bool) -> Result<(), String> {
     for pack in packs {
+        mutate::refuse_outside_binding(config, pack)?;
+    }
+    for pack in packs {
         let lines = mutate::deploy_pack(config, pack, None)?;
         emit(&lines, if header { Some(pack) } else { None });
     }
@@ -511,6 +514,9 @@ fn pi(registry: &Registry, args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "deploy" | "sync" => {
+            for pack in rest.iter().filter(|a| !a.starts_with('-')) {
+                mutate::refuse_outside_binding(&config, pack)?;
+            }
             for line in pi_settings::deploy_packs(&config, rest)? {
                 println!("{line}");
             }
@@ -591,6 +597,45 @@ pub fn list_public(root: &Path, args: &[String]) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deploy_preflights_all_pack_bindings_before_writing() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-pack-binding-preflight-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(root.join("Packs/coding")).unwrap();
+        std::fs::write(
+            root.join("Packs/coding/pack.toml"),
+            "name = \"coding\"\nskills = []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("profiles.toml"),
+            r#"
+[harness_profile]
+claude = "coding"
+[[profile]]
+name = "coding"
+packs = ["coding"]
+"#,
+        )
+        .unwrap();
+        let mut config = config(&Registry::new(&root), "claude").unwrap();
+        config.pack_roots = None;
+        config.destination = root.join("destination");
+        config.state_file = root.join("state.json");
+        let error = deploy(
+            &config,
+            &["coding".to_owned(), "learning".to_owned()],
+            false,
+        )
+        .unwrap_err();
+        assert!(error.contains("learning is not in profile"), "{error}");
+        assert!(!config.destination.exists());
+        assert!(!config.state_file.exists());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn leading_int_reads_digits_the_way_parse_int_did() {

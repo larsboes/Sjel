@@ -49,9 +49,29 @@ tools/harnesses list                     # which harnesses exist, and which are 
 tools/harnesses status [<pack>]          # one matrix: every Pack skill x every harness
 tools/harnesses drift [<pack>] [--diff]  # per-file detail, with the diff
 tools/harnesses sync <pack>|--all        # one-way Sjel -> harness
+tools/harnesses apply [--harness <id>]   # activate each harness's bound profile
 tools/harnesses promote <skill> --pack <p>   # a harness skill Sjel does not own
 tools/harnesses accept <pack> <skill>        # an edit to a skill Sjel already owns
 ```
+
+### Harness profiles
+
+`profiles.toml` binds harnesses to profiles through `[harness_profile]`. A named entry takes
+precedence over `"*"`; an unbound harness is left unchanged by `tools/harnesses apply`.
+Claude Code, Codex, Antigravity, opencode and Copilot use `coding-harness`. It includes repository
+work, design, deliberation, prose and skill authoring, presentations and secret handling, but
+excludes vault, learning and academic-writing skills. pi uses `full`; sjel-agent remains unbound.
+
+`apply` reconciles the selected units, including removals. For materialized harnesses, existing
+copies whose unit set is unchanged still need `sync` to receive source updates. A per-Pack
+`deploy` refuses a Pack outside the binding, and doctor reports owned Packs outside it. Explicit
+`use <profile>` remains available as an override; changing the binding makes that choice durable.
+
+These checks cover Sjel-managed Packs, not every discovery root a harness reads. External skills
+such as Anatomy and application-owned skill links load independently. `tools/skills add` and
+`update` stage third-party content through `tools/intake`; direct upstream installers bypass that
+screening. The install-integrity limits and external-skill management work are tracked in
+[`docs/plans/packs.md`](../../docs/plans/packs.md).
 
 GitHub Copilot CLI settings are managed separately from Pack contents:
 

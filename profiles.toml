@@ -209,6 +209,16 @@ pi = [
 ]
 codex = ["writing/skill-creator"]
 
+# Default profiles for `tools/harnesses apply`; `"*"` covers unnamed harnesses.
+
+[harness_profile]
+claude = "coding-harness"
+codex = "coding-harness"
+antigravity = "coding-harness"
+opencode = "coding-harness"
+copilot = "coding-harness"
+pi = "full"
+
 [[profile]]
 name = "productive"
 description = "Daily driver — coding, prose, decks, deliberation, orientation, focus"
@@ -267,6 +277,12 @@ packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writi
 # Default of tools/cloud-session-start. AGENTS.md names sjel and attention-control; coding and
 # design carry the Rust, GPUI and UI skills that repository work uses.
 skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", "unslop"] }
+
+[[profile]]
+name = "coding-harness"
+description = "Coding agents: repository work, decks and secret handling; no vault, no learning"
+packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing", "presentations", "security"]
+skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]
 name = "thesis"

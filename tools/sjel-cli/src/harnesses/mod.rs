@@ -39,6 +39,7 @@ const HELP: &str = "tools/harnesses — Packs across every agent harness at once
   drift [<pack>] [--diff]               per-file detail for anything that drifted
   sync <pack>|--all                     one-way Sjel -> harness (installed harnesses only)
   use <profile> [--harness <id>]        activate a profile on every installed harness (or one)
+  apply [--harness <id>]                activate the profile profiles.toml [harness_profile] binds to each harness
   promote <skill> --pack <p> [--from h] bring a harness-level skill Sjel does not own into a Pack
   accept <pack> <skill> [--from h]      keep a destination edit to a skill Sjel already owns
   discard <pack> <skill> [--from h] [--force]
@@ -56,7 +57,8 @@ pub fn run(args: &[String]) -> ExitCode {
             println!("{HELP}");
             return ExitCode::SUCCESS;
         }
-        "list" | "status" | "drift" | "sync" | "use" | "promote" | "accept" | "discard" => {}
+        "list" | "status" | "drift" | "sync" | "use" | "apply" | "promote" | "accept"
+        | "discard" => {}
         other => {
             eprintln!("{HELP}");
             eprintln!("harnesses: unknown verb '{other}'");
@@ -77,6 +79,7 @@ pub fn run(args: &[String]) -> ExitCode {
         "drift" => drift(&registry, args),
         "sync" => sync(&registry, args),
         "use" => use_profile(&registry, &root, args),
+        "apply" => apply(&registry, &root, args),
         "promote" => promote(&registry, &root, args),
         "accept" => accept(&registry, &root, args),
         "discard" => discard(&registry, &root, args),
@@ -153,24 +156,43 @@ fn use_profile(registry: &Registry, root: &Path, args: &[String]) -> Result<(), 
     };
     for harness in selected_harnesses(registry, args)? {
         println!("── {}", harness.label);
-        if harness.id == "sjel-agent" {
-            for line in agent::activate_profile_on_agent(&harness.config, name)? {
-                println!("{line}");
-            }
-        } else if harness.id == "antigravity" {
-            for line in antigravity::activate_profile(&harness.config, name)? {
-                println!("{line}");
-            }
-        } else if harness.model == Model::Registry {
-            for line in pi_settings::activate_profile_on_pi(&harness.config, name)? {
-                println!("{line}");
-            }
-        } else {
-            for line in mutate::activate_profile(&harness.config, profile)? {
-                println!("  {line}");
-            }
-        }
+        activate_on(harness, profile)?;
     }
+    Ok(())
+}
+
+/// Activate bound profiles; leave unbound harnesses unchanged.
+fn apply(registry: &Registry, root: &Path, args: &[String]) -> Result<(), String> {
+    for harness in selected_harnesses(registry, args)? {
+        let Some(profile) = mutate::bound_profile_at(root, harness.id)? else {
+            println!(
+                "── {}: no [harness_profile] binding, left as it is",
+                harness.label
+            );
+            continue;
+        };
+        println!("── {} (bound to '{}')", harness.label, profile.name);
+        activate_on(harness, &profile)?;
+    }
+    Ok(())
+}
+
+/// One harness, one profile, through the delivery model that harness uses.
+fn activate_on(harness: &Harness, profile: &mutate::Profile) -> Result<(), String> {
+    let name = profile.name.as_str();
+    let lines = if harness.id == "sjel-agent" {
+        agent::activate_profile_on_agent(&harness.config, name)?
+    } else if harness.id == "antigravity" {
+        antigravity::activate_profile(&harness.config, name)?
+    } else if harness.model == Model::Registry {
+        pi_settings::activate_profile_on_pi(&harness.config, name)?
+    } else {
+        mutate::activate_profile(&harness.config, profile)?
+            .into_iter()
+            .map(|l| format!("  {l}"))
+            .collect()
+    };
+    lines.iter().for_each(|l| println!("{l}"));
     Ok(())
 }
 
@@ -1061,6 +1083,49 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn apply_uses_each_binding_and_preserves_unbound_harnesses() {
+        let root = std::env::temp_dir().join(format!("sjel-harness-apply-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("profiles.toml"),
+            r#"
+[harness_profile]
+claude = "coding"
+codex = "full"
+[[profile]]
+name = "coding"
+packs = []
+[[profile]]
+name = "full"
+packs = []
+"#,
+        )
+        .unwrap();
+        let mut registry = Registry::new(&root);
+        registry
+            .harnesses
+            .retain(|h| ["claude", "codex", "opencode"].contains(&h.id));
+        for harness in &mut registry.harnesses {
+            harness.marker = root.clone();
+            harness.config.pack_roots = None;
+            harness.config.destination = root.join(harness.id).join("skills");
+            harness.config.state_file = root.join(format!("{}.json", harness.id));
+        }
+        apply(&registry, &root, &args(&["apply"])).unwrap();
+        for (id, expected) in [("claude", "coding"), ("codex", "full")] {
+            let state = engine::read_state(&registry.by_id(id).unwrap().config).unwrap();
+            assert_eq!(state.profile.as_deref(), Some(expected));
+        }
+        assert!(!registry
+            .by_id("opencode")
+            .unwrap()
+            .config
+            .state_file
+            .exists());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -92,6 +92,17 @@ no profile until the next `use <profile>` on that machine.
 4. **Approved external skills.** Whether an approved upstream skill is installed project-locally
    or registered from an isolated, content-pinned store per harness. The route must preserve
    upstream ownership, avoid global name collisions and support pi sessions started in the vault.
+   The user decides. P7 does not start before this is decided.
+   - **Project-local install.** This is what `tools/skills add` does today. It needs one copy per
+     project, plus one in the vault for pi. The profile never sees these copies, so defect 3
+     stays open, and Anatomy still needs a second channel to reach the vault.
+   - **Content-pinned store.** Approved bytes go into a store keyed by the P6 digest. The deploy
+     engine reads the store as one more Pack root. It copies into the materialized harnesses
+     (Claude, Codex, OpenCode, Copilot) and registers the store in the registry harnesses (pi,
+     sjel-agent, Antigravity) (`tools/sjel-cli/src/harnesses/registry.rs`, `Model`). Profiles then
+     select external skills like Pack skills. Cost: a store layout and a name-collision rule.
+   - Recommendation (an estimate, not measured): the store. It closes defect 3 and the vault
+     case with the engine that exists, and the P6 digest binds each copy to its approval.
 
 Decided 2026-11-03: coding harnesses use `coding-harness`; pi keeps `full`. Profile reconciliation
 precedes installer hardening. Anatomy remains unchanged until the external-skill policy is settled.

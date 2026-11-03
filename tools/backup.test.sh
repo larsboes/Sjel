@@ -316,7 +316,7 @@ if "$BACKUP" --stream vaultwarden > "$stream_archive" 2> "$stream_log"; then :; 
 fi
 mv "$OVERLAY/config/systems.local.toml.saved" "$OVERLAY/config/systems.local.toml"
 tar -tzf "$stream_archive" >/dev/null 2>&1 || fail "stream stdout was not a valid gzip archive"
-tar -tzf "$stream_archive" | grep -q './axon-backup.toml' \
+tar -tzf "$stream_archive" | grep './axon-backup.toml' >/dev/null \
   || fail "stream archive omitted its backup contract"
 grep -q 'stream vaultwarden archive' "$stream_log" \
   || fail "stream diagnostics were not written to stderr"

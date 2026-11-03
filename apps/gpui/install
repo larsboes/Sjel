@@ -81,9 +81,6 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
   <key>SjelBuildCommit</key><string>$commit</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <!-- Without a purpose string macOS refuses the read silently and never lists the app. -->
-  <key>NSPhotoLibraryUsageDescription</key><string>Sjel measures how much space the Photos library takes. It does not read or copy photos.</string>
-  <key>NSAppleMusicUsageDescription</key><string>Sjel measures how much space the Music folder takes. It does not read the library.</string>
   <!-- sjel://<dashboard path>: route.rs opens it natively or in the dashboard. -->
   <key>CFBundleURLTypes</key>
   <array>

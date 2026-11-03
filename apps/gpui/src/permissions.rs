@@ -1,9 +1,10 @@
-//! The macOS privacy grants Sjel needs from the person, and a way to ask for each.
+//! The macOS privacy grants Sjel needs from the person, and where each one is given.
 //!
-//! The storage report measures folders macOS guards (`storage-policy.toml` in the overlay).
-//! When the shell runs under this app, macOS asks on the app's behalf. Asking from here, with
-//! the same read the report makes, puts the dialog in front of the person when they choose to
-//! answer it, not in the middle of a scheduled run.
+//! The shell runs under launchd through the signed `sjel-fda-launcher`
+//! (`tools/fda-launcher`, `full_disk_access` in `capabilities/sjel-status/service.toml`), so
+//! every process it starts, the storage report included, reads guarded folders such as the
+//! Photos library and the Music folder under that one grant. Full Disk Access never prompts:
+//! the person adds the launcher with + in System Settings.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -11,56 +12,30 @@ use std::process::Command;
 pub struct Grant {
     pub title: &'static str,
     pub why: &'static str,
-    /// Relative to the home folder: what the storage report reads.
-    pub path: &'static str,
+    /// Relative to the overlay root: the binary the grant is for.
+    pub binary: &'static str,
     /// The System Settings pane that holds this grant.
     pub pane: &'static str,
 }
 
-pub const GRANTS: [Grant; 2] = [
-    Grant {
-        title: "Photos",
-        why: "The storage report measures the Photos library. Sjel does not read or copy photos.",
-        path: "Pictures/Photos Library.photoslibrary",
-        pane: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos",
-    },
-    Grant {
-        title: "Media & Apple Music",
-        why: "The storage report measures the Music folder. Sjel does not read the library.",
-        path: "Music",
-        pane: "x-apple.systempreferences:com.apple.preference.security?Privacy_Media",
-    },
-];
+pub const GRANTS: [Grant; 1] = [Grant {
+    title: "Full Disk Access for sjel-fda-launcher",
+    why: "The Sjel shell runs under this launcher. One grant lets the storage report measure the \
+          Photos library and the Music folder without asking again. In System Settings, click +, \
+          then choose the launcher that Show in Finder selects.",
+    binary: "bin/sjel-fda-launcher",
+    pane: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+}];
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Status {
-    /// Not asked in this session. Opening the section asks nothing.
-    #[default]
-    Unchecked,
-    Checking,
-    Granted,
-    /// macOS refused the read: denied now, or denied earlier and not asking again.
-    Denied,
-    /// The folder does not exist on this Mac, so nothing needs a grant.
-    Absent,
+/// The binary the grant is for, when the overlay root is known and the launcher is installed.
+pub fn installed(grant: &Grant) -> Option<PathBuf> {
+    let root = std::env::var_os("SJEL_PERSONAL_ROOT")?;
+    let path = PathBuf::from(root).join(grant.binary);
+    path.is_file().then_some(path)
 }
 
-/// Reads the folder the way the storage report does. Blocks while macOS shows its dialog.
-pub fn request(grant: &Grant) -> Status {
-    let Some(home) = std::env::var_os("HOME") else {
-        return Status::Denied;
-    };
-    let path = PathBuf::from(home).join(grant.path);
-    if !path.exists() {
-        return Status::Absent;
-    }
-    match Command::new("/usr/bin/du").arg("-sk").arg(&path).output() {
-        Ok(out) if String::from_utf8_lossy(&out.stderr).contains("Operation not permitted") => {
-            Status::Denied
-        }
-        Ok(_) => Status::Granted,
-        Err(_) => Status::Denied,
-    }
+pub fn reveal(path: &PathBuf) {
+    let _ = Command::new("/usr/bin/open").arg("-R").arg(path).spawn();
 }
 
 pub fn open_pane(grant: &Grant) {

@@ -643,4 +643,4 @@ Every page reads and writes through the capabilities' HTTP contracts. The app ha
 database access and holds no capability credentials.
 
 Settings → macOS permissions lists the privacy grants only the person can give, says why each is
-needed, and asks for one with the same read the storage report makes (`src/permissions.rs`).
+needed, and opens the pane where it is given (`src/permissions.rs`).

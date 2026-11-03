@@ -348,7 +348,7 @@ pub fn render(
         Section::Connection => connection(view, palette, cx),
         Section::Accounts => vec![view.accounts.clone().into_any_element()],
         Section::Clipper => vec![view.clipper_settings.clone().into_any_element()],
-        Section::Permissions => permissions(view, palette, cx),
+        Section::Permissions => permissions(palette),
         Section::Updates => updates(view, palette, cx),
         Section::Shortcuts => shortcuts(
             palette,
@@ -1442,48 +1442,38 @@ fn explore_features(view: &Workspace, palette: Palette, cx: &mut Context<Workspa
     section("Explore features", body, palette).into_any_element()
 }
 
-fn permissions(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> Vec<AnyElement> {
-    use crate::permissions::{open_pane, Status, GRANTS};
+fn permissions(palette: Palette) -> Vec<AnyElement> {
+    use crate::permissions::{installed, open_pane, reveal, GRANTS};
     GRANTS
         .iter()
         .enumerate()
         .map(|(index, grant)| {
-            let status = view.permissions[index];
-            let (text, color) = match status {
-                Status::Unchecked => ("Not checked", palette.muted),
-                Status::Checking => ("Waiting for macOS…", palette.accent),
-                Status::Granted => ("Allowed", palette.green),
-                Status::Denied => ("Not allowed. Turn it on in System Settings", palette.amber),
-                Status::Absent => ("Not on this Mac", palette.muted),
+            let binary = installed(grant);
+            let state = match &binary {
+                Some(_) => value("Installed".into(), palette.muted),
+                None => value(
+                    "Not installed. Run tools/fda-launcher/install".into(),
+                    palette.amber,
+                ),
             };
-            row(
-                grant.title,
-                Some(grant.why),
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(value(text.into(), color))
-                    .child(
-                        Button::new(("open-pane", index))
-                            .ghost()
-                            .small()
-                            .label("Open System Settings")
-                            .on_click(move |_, _, _| open_pane(&GRANTS[index])),
-                    )
-                    .child(
-                        Button::new(("allow", index))
-                            .primary()
-                            .small()
-                            .label("Allow")
-                            .loading(status == Status::Checking)
-                            .disabled(matches!(status, Status::Checking | Status::Granted))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.request_permission(index, cx)
-                            })),
-                    ),
-                palette,
-            )
+            let mut control = div().flex().items_center().gap_2().child(state);
+            if let Some(path) = binary {
+                control = control.child(
+                    Button::new(("reveal", index))
+                        .ghost()
+                        .small()
+                        .label("Show in Finder")
+                        .on_click(move |_, _, _| reveal(&path)),
+                );
+            }
+            control = control.child(
+                Button::new(("open-pane", index))
+                    .primary()
+                    .small()
+                    .label("Open System Settings")
+                    .on_click(move |_, _, _| open_pane(&GRANTS[index])),
+            );
+            row(grant.title, Some(grant.why), control, palette)
         })
         .collect()
 }

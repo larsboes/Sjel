@@ -375,13 +375,15 @@ build was performed for this handoff.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
-   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. Still in `src/`: `settings`
-   (desktop shell window & shortcut settings). A platform call goes behind one small trait in the
-   shell (keychain, open URL, audio, notifications, scanner), never as a `cfg` in a page. Run
-   `simplify` on each page as it moves.
-3. **Phone tabs for moved pages.** The phone bar is full at five (`Today | Inbox | Calendar |
-   People | Travel`, `ui/src/nav.rs`). A sixth page needs a different bar, not a sixth item.
-   Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).
+   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. Still in `src/`: desktop shell
+   orchestration and host window management (`workspace.rs`, `finder.rs`, `settings.rs`, `soundscape.rs`,
+   `sidebar.rs`, `header.rs`, `update.rs`, `home.rs`, `agent_run.rs`, `audio.rs`). A platform call goes
+   behind one small trait in the shell (keychain, open URL, audio, notifications, scanner), never as
+   a `cfg` in a page. Run `simplify` on each page as it moves.
+3. **Phone tabs for moved pages.** The phone bar is five items (`Today | Mail | Calendar | Travel |
+   Agent`, `ios/src/lib.rs` and `ui/src/nav.rs`). Inbox capture lives on Today; Documents, People
+   and Places open via 1-tap shortcuts and finder. A sixth tab needs a different bar, not a sixth
+   item. Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).
 4. **Linux, Windows, Android.** The Mac shell checks on Linux (`4cd60961`), and CI checks every
    leg (`578e6948`). Linux credentials use the Secret Service (`37adf658`). Open: a Windows
    keychain crate, a PDF renderer off macOS, a launch on a real Linux desktop, packaging, and an

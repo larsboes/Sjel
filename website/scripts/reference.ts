@@ -52,9 +52,10 @@ function sidebar(units: Unit[], current: string): string {
 
 function contract(unit: Unit): string {
   const svc = unit.service;
-  const rows: Array<[string, string]> = [["Kind", LABEL[unit.kind] ?? unit.kind]];
+  const rows: Array<[string, string]> = [["Kind", `<span class="pill">${esc(LABEL[unit.kind] ?? unit.kind)}</span>`]];
   if (svc) {
-    rows.push(["Runs as", esc(svc.kind)]);
+    const pillClass = svc.kind === "process" ? "proc" : svc.kind === "container" ? "cont" : "data";
+    rows.push(["Runs as", `<span class="pill ${pillClass}">${esc(svc.kind)}</span>`]);
     if (svc.port) rows.push(["Port", `<code>${esc(svc.port)}</code>`]);
     if (svc.image) rows.push(["Image", `<code>${esc(svc.image)}</code>`]);
     rows.push(["Requires", svc.requires?.length ? svc.requires.map((r) => `<a href="${esc(r)}.html"><code>${esc(r)}</code></a>`).join(" ") : "nothing"]);
@@ -69,7 +70,7 @@ function routesSection(routes: DeclaredRoute[], dir: string): string {
   return `<h2 id="routes">Routes <span class="count">${routes.length}</span></h2>
 <p class="blurb">Read from the <code>const ROUTES</code> block in <a href="${REPO}/tree/main/${esc(dir)}/src"><code>${esc(dir)}/src</code></a>, the same manifest the capability serves at <code>GET /routes</code>. <span class="schema">schema</span> marks a route that declares its request body.</p>
 <div class="scroll"><table><thead><tr><th scope="col">Route</th><th scope="col">What it does</th></tr></thead><tbody>${routes
-    .map((r) => `<tr><td class="route"><span class="method">${esc(r.method)}</span><code>${esc(r.path)}</code>${r.schema ? ' <span class="schema">schema</span>' : ""}</td><td>${esc(r.summary).replace(/`([^`]+)`/g, "<code>$1</code>")}</td></tr>`)
+    .map((r) => `<tr><td class="route"><span class="method ${esc(r.method).toLowerCase()}">${esc(r.method)}</span><code>${esc(r.path)}</code>${r.schema ? ' <span class="schema">schema</span>' : ""}</td><td>${esc(r.summary).replace(/`([^`]+)`/g, "<code>$1</code>")}</td></tr>`)
     .join("")}</tbody></table></div>`;
 }
 
@@ -129,8 +130,10 @@ ${KINDS.map(([kind, label]) => {
   return `<h2 id="${kind}">${label} <span class="count">${list.length}</span></h2><ul class="cards">${list
     .map((u) => {
       const svc = u.service;
-      const detail = svc ? `${svc.kind}${svc.port ? ` · port ${svc.port}` : ""}${svc.requires?.length ? ` · needs ${svc.requires.join(", ")}` : ""}` : "code only";
-      return `<li><a href="${esc(u.name)}.html"><strong>${esc(u.name)}</strong><span>${esc(detail)}</span></a></li>`;
+      const pillClass = svc?.kind === "process" ? "proc" : svc?.kind === "container" ? "cont" : svc?.kind ? "data" : "";
+      const kindBadge = svc ? `<span class="pill ${pillClass}">${esc(svc.kind)}</span>` : '<span class="pill">code</span>';
+      const detail = svc ? `${kindBadge}${svc.port ? ` · <code>${svc.port}</code>` : ""}${svc.requires?.length ? ` · needs ${svc.requires.join(", ")}` : ""}` : kindBadge;
+      return `<li><a href="${esc(u.name)}.html"><strong>${esc(u.name)}</strong><span>${detail}</span></a></li>`;
     })
     .join("")}</ul>`;
 }).join("\n")}`,

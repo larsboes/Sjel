@@ -130,10 +130,26 @@ const CSS = `
   color-scheme: light dark;
   --ink: #0b1d22; --ink-2: #10292f; --teal: #16748d; --teal-2: #1f8fab; --cream: #f7f4ec;
   --bg: #f3f5f5; --fg: #13201f; --dim: #55615f; --line: #d9dfde; --card: #ffffff;
+  --pill-bg: #e2e8e7; --pill-fg: #2c4240;
+  --method-get: #16748d; --method-post: #2a8a5b; --method-put: #b27318;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0e1517; --fg: #e4eae9; --dim: #93a19f; --line: #22302f; --card: #131d1f; }
+  :root:not([data-theme="light"]) {
+    --bg: #0e1517; --fg: #e4eae9; --dim: #93a19f; --line: #22302f; --card: #131d1f;
+    --pill-bg: #1c2b2d; --pill-fg: #b2c5c3;
+    --method-get: #5cc2dc; --method-post: #48bb78; --method-put: #ecc94b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1517; --fg: #e4eae9; --dim: #93a19f; --line: #22302f; --card: #131d1f;
+  --pill-bg: #1c2b2d; --pill-fg: #b2c5c3;
+  --method-get: #5cc2dc; --method-post: #48bb78; --method-put: #ecc94b;
+}
+:root[data-theme="light"] {
+  --bg: #f3f5f5; --fg: #13201f; --dim: #55615f; --line: #d9dfde; --card: #ffffff;
+  --pill-bg: #e2e8e7; --pill-fg: #2c4240;
+  --method-get: #16748d; --method-post: #2a8a5b; --method-put: #b27318;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg);
@@ -165,8 +181,12 @@ nav.bar .links a:hover { opacity: 1; }
 .btn.ghost { border: 1px solid #2d4a50; color: var(--cream); }
 .btn.ghost:hover { background: var(--ink-2); }
 .btn:active { transform: translateY(1px); }
-.install { margin-top: 1.75rem; font-size: .9rem; line-height: 2; color: #9fb3b1; }
-.install code { font: .82rem var(--mono); color: var(--cream); background: var(--ink-2); padding: .3rem .55rem; border-radius: 4px; border: 1px solid #1d3a40; }
+
+.quickstart { margin-top: 1.75rem; background: var(--ink-2); border: 1px solid #1d3a40; border-radius: 8px; overflow: hidden; max-width: 34rem; }
+.quickstart-head { display: flex; align-items: center; justify-content: space-between; padding: .5rem .85rem; background: rgba(0,0,0,0.25); border-bottom: 1px solid #1d3a40; font: 500 .74rem var(--mono); color: #8fd0df; text-transform: uppercase; letter-spacing: .06em; }
+.quickstart-head span.sub { font-size: .72rem; color: #9fb3b1; text-transform: none; letter-spacing: normal; }
+.quickstart pre { margin: 0; padding: .85rem 1rem; background: transparent; font: .8rem/1.65 var(--mono); color: #d5e2e0; border: none; }
+.com { color: #6f8a88; }
 .mark { justify-self: center; width: min(100%, 26rem); }
 .mark img { width: 100%; height: auto; border-radius: 22px; display: block; }
 
@@ -220,15 +240,30 @@ h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -.025em; line-height
 .rule { display: flex; gap: .6rem; align-items: baseline; font-size: .95rem; margin: .35rem 0; }
 .rule::before { content: "→"; color: var(--teal); font-family: var(--mono); }
 
+.playground { display: grid; grid-template-columns: 1fr auto 1fr; gap: 1.25rem; align-items: center; margin-top: 2rem; }
+@media (max-width: 800px) { .playground { grid-template-columns: 1fr; } .play-arrow { transform: rotate(90deg); margin: .5rem auto; } }
+.play-pane { border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
+.play-header { display: flex; justify-content: space-between; align-items: center; padding: .6rem 1rem; border-bottom: 1px solid var(--line); font: 600 .82rem var(--mono); background: var(--bg); }
+.play-pane pre { margin: 0; padding: 1rem; background: var(--ink); color: #d5e2e0; font: .78rem/1.55 var(--mono); border: none; }
+.play-arrow { display: flex; flex-direction: column; align-items: center; gap: .35rem; text-align: center; font: 500 .75rem var(--mono); color: var(--teal); }
+.play-arrow code { font-size: .72rem; color: var(--dim); background: var(--card); border: 1px solid var(--line); padding: .15rem .45rem; border-radius: 4px; }
+.pill { display: inline-flex; align-items: center; gap: .3rem; font: 500 .7rem var(--mono); padding: .12rem .45rem; border-radius: 999px; }
+.pill.proc { background: rgba(42, 138, 91, 0.15); color: var(--method-post); }
+.pill.data { background: rgba(178, 115, 24, 0.15); color: var(--method-put); }
+
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
 .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 1.5rem; }
 .panel h3 { margin: 0 0 .5rem; font-size: 1.1rem; }
 .panel p { margin: 0 0 1rem; color: var(--dim); font-size: .95rem; }
-.term { background: var(--ink); color: #d5e2e0; border-radius: 6px; font: .8rem/1.6 var(--mono); padding: 1rem 1.1rem; overflow-x: auto; margin: 0; }
+.term { background: var(--ink); color: #d5e2e0; border-radius: 6px; font: .8rem/1.6 var(--mono); padding: 1rem 1.1rem; overflow-x: auto; margin: 0; position: relative; border: 1px solid rgba(255,255,255,0.06); }
 .term .p { color: #6cc3d8; }
 .term .k { color: #9fb3b1; }
 .term .v { color: #f1d9a6; }
+pre .copy-btn { position: absolute; top: .6rem; right: .6rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #a0b2b0; border-radius: 4px; padding: .25rem .45rem; cursor: pointer; transition: all .15s; font: 500 .72rem var(--mono); line-height: 1; }
+pre .copy-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+pre .copy-btn.copied { background: #2a8a5b; color: #fff; border-color: #2a8a5b; }
+
 .glass { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
 .glass div { border: 1px solid var(--line); border-radius: 6px; padding: .7rem .8rem; font-size: .85rem; background: var(--bg); }
 .glass b { display: block; font-size: .78rem; font-family: var(--mono); color: var(--dim); font-weight: 500; }
@@ -258,6 +293,7 @@ td code { font: .78rem var(--mono); color: var(--dim); overflow-wrap: anywhere; 
 .docs b { display: block; margin-bottom: .25rem; }
 .docs span { font-size: .88rem; color: var(--dim); }
 footer { padding: 2.5rem 0 3rem; font-size: .85rem; color: var(--dim); display: flex; flex-wrap: wrap; gap: 1rem 2rem; }
+
 `;
 
 export function renderLanding(model: SelfModel): string {
@@ -268,8 +304,8 @@ export function renderLanding(model: SelfModel): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sjel — a private layer under the tools you already use</title>
-<meta name="description" content="Sjel keeps the facts of a household's life as typed, local data and shows them in one native app on the Mac and the iPhone.">
+<title>Sjel — local-first data kernel and native GPUI client</title>
+<meta name="description" content="Sjel stores personal life facts as deterministic, typed SQLite data on hardware you own. Sub-10ms native GPUI interface across macOS and iOS with mathematical data-class sandboxing.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>${CSS}</style>
 </head>
@@ -289,14 +325,22 @@ export function renderLanding(model: SelfModel): string {
     </nav>
     <div class="hero">
       <div>
-        <p class="eyebrow">Local-first · Rust · macOS and iOS</p>
-        <h1>A private layer under the tools you already use.</h1>
-        <p class="lede">Sjel keeps the facts of a life as typed data: people, places, trips, money, home and calendar. The data stays on hardware you control. One native app on the Mac and the iPhone shows it, and an assistant works on it.</p>
+        <p class="eyebrow">Local-first kernel · Rust · macOS &amp; iOS</p>
+        <h1>A local-first data kernel and native GPUI client.</h1>
+        <p class="lede">Sjel stores personal life facts as deterministic, typed SQLite data on hardware you own. Cryptographically signed peering over Tailscale, sub-10ms native rendering across macOS and iOS, and mathematical data-class sandboxing for local and cloud models.</p>
         <div class="cta">
           <a class="btn primary" href="docs/index.html">Read the docs</a>
           <a class="btn ghost" href="${REPO}">View the source</a>
         </div>
-        <p class="install"><code>tools/doctor</code> tells a checkout what its machine still needs.</p>
+        <div class="quickstart">
+          <div class="quickstart-head">
+            <span>Evaluate in 2 minutes</span>
+            <span class="sub">No personal credentials needed</span>
+          </div>
+          <pre class="term"><span class="p">$</span> git clone https://github.com/larsboes/Sjel.git &amp;&amp; cd Sjel
+<span class="p">$</span> tools/demo-up    <span class="com"># run seeded demo stack &amp; mock services</span>
+<span class="p">$</span> tools/doctor     <span class="com"># verify machine toolchain &amp; local health</span></pre>
+        </div>
       </div>
       <div class="mark"><img src="hedgehog.png" alt="The Sjel hedgehog" width="680" height="461"></div>
     </div>
@@ -318,10 +362,10 @@ export function renderLanding(model: SelfModel): string {
       <p class="intro">A capability is a small local service with its own store and HTTP routes. The node runs the ones a household enables. The apps read and write through it, and model calls leave it only through a gate.</p>
       <div class="figure">${ARCHITECTURE}</div>
       <div class="steps">
-        <div><b>01</b><p><strong>One writer.</strong> A Mac or a Linux machine accepts every write. When the phone and the Mac both edit a note, the Mac refuses the phone's write and the phone keeps its text.</p></div>
-        <div><b>02</b><p><strong>Paired once.</strong> A phone signs every request with a key in its Keychain, on the same Wi-Fi, over Tailscale or through your own server.</p></div>
-        <div><b>03</b><p><strong>Typed, with a source.</strong> Every value carries where it came from, so a trip can explain a spend and an event can explain a trip.</p></div>
-        <div><b>04</b><p><strong>Quiet by default.</strong> Today shows only what still waits for a decision.</p></div>
+        <div><b>01 · Deterministic Kernel</b><p><strong>One writer.</strong> Authoritative state lives in local SQLite stores on hardware you control. Peer devices sync via signed cryptographic keys over Tailscale or LAN.</p></div>
+        <div><b>02 · Type-Level Privacy</b><p><strong>Four data classes.</strong> Facts about others (<code>c2</code>) and secrets (<code>c3</code>) never reach cloud models. Cloud calls receive strictly pseudonymized derivatives (<code>c1</code>).</p></div>
+        <div><b>03 · Zero-Web-Lag Native UI</b><p><strong>Pure GPUI in Rust.</strong> Sub-10ms first-frame response across macOS and iOS. Zero Electron memory footprint, offline-first execution, and native Metal composition.</p></div>
+        <div><b>04 · Grounded Agent Seat</b><p><strong>Sandboxed workflows.</strong> Assistant workflows run with bounded repository context, explicit command policies, and one-tap user approvals for write actions.</p></div>
       </div>
     </div>
   </section>
@@ -340,6 +384,34 @@ export function renderLanding(model: SelfModel): string {
       <p class="rule">A class goes up by itself. Only a person, with a written reason, can lower it.</p>
       <p class="rule">A pseudonymizer sits in front of cloud model calls and admitted agent reads.</p>
       <p class="rule">Secrets live in the OS keychain. Everything else holds a reference to them.</p>
+
+      <div class="playground">
+        <div class="play-pane">
+          <div class="play-header"><span>Household Fact</span><span class="pill data">c2 · Others</span></div>
+          <pre class="term"><code>{
+  "entity": "trip-booking-489",
+  "traveler": "Elena Rostova",
+  "email": "elena@example.com",
+  "destination": "Köln Hbf",
+  "fare_cents": 4290
+}</code></pre>
+        </div>
+        <div class="play-arrow">
+          <span>Class Gate</span>
+          <code>content_item::cloud_admission</code>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M12 5l7 7-7 7" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="play-pane">
+          <div class="play-header"><span>Admitted Cloud Payload</span><span class="pill proc">c1 · Derivative</span></div>
+          <pre class="term"><code>{
+  "entity": "anon-person-7f2a",
+  "traveler": "P-7f2a",
+  "destination": "Köln Hbf",
+  "fare_eur": 42.90,
+  "_redacted": ["email"]
+}</code></pre>
+        </div>
+      </div>
     </div>
   </section>
 

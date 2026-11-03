@@ -2,7 +2,7 @@
 
 Sjel's record store for projects, tasks, notes and their attachments. The CLI and API share the same write operations.
 
-## Why this shape: Sjel owns projects, tasks and habits
+## Why this shape: records and rendered files
 
 A record's Markdown path and bytes are stored together, with queryable properties derived from that content. Writes render the complete record under the overlay's `data/projects/` tree. The store remains authoritative; the rendered tree provides ordinary files for inspection and backup.
 

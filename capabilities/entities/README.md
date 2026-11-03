@@ -10,6 +10,10 @@ Dated location facts preserve moves and absences without overwriting earlier his
 
 People records are C2 data and live in the private overlay's shared store. The service has no permissive CORS, and its origin guard refuses foreign browser origins.
 
+## Import
+
+Google Contacts synchronization is inbound and read-only. Imported values retain `google` as their source, so later synchronization can distinguish adapter-owned values from facts entered in Sjel.
+
 ## Run
 
 The service is managed through `tools/service-runner.sh` and its `service.toml` manifest. The live HTTP contract is available at `GET /routes`.

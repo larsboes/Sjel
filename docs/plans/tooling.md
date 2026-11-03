@@ -160,6 +160,12 @@ covers it.
   `git rev-parse --show-toplevel` plus the *common* git dir (`git rev-parse --git-common-dir`), so a
   worktree inherits the primary's identity instead of its own directory name.
 
+- **Pi TUI math probe.** Checking what Pi's terminal renders needed an ad-hoc `node -e` call
+  to `renderLatex` in the installed `pi-tui/dist/latex.js`. A second ad-hoc call loaded the
+  obsidian-access extension against a stub API to print its live `promptGuidelines`. Smallest
+  change: a `tools/pi-render` command that prints the Unicode output of a LaTeX string (inline
+  and display) and the prompt guidelines that the configured Packs register.
+
 ## Done
 
 - `tools/intake review <dir> --source <name> --reviewer claude` runs a fresh `claude -p` with

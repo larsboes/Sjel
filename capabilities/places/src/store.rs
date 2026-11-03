@@ -1,5 +1,5 @@
 //! Persistence for the place registry, the permanent geocode cache, the
-//! transaction links and the companion register (`README.md` schema section).
+//! transaction links and the companion register.
 //!
 //! Writes happen only under this store's own table prefix.
 //! Cross-capability reads live in `layers.rs` and `backfill.rs` as plain

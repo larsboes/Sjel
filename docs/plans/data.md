@@ -103,7 +103,7 @@ Decisions (2026-10-23):
    hashes a file and asks media through a read-only route whether a library holds it. A new file
    waits until a library drive is mounted. Nothing is copied to the laptop.
 2. **The vault keeps knowledge only** (2026-10-20,
-   [projects README](../../capabilities/projects/README.md#why-this-shape-sjel-owns-projects-tasks-and-habits)).
+   [projects README](../../capabilities/projects/README.md#why-this-shape-records-and-rendered-files)).
    Finance, Items, Interior, People, Events, Media, Reflections and Journal have moved. Open:
    Documents, Focus and Personal. Then three follow-ups: `Knowledge/` cites Media sources with 140
    wikilinks Obsidian no longer resolves (the store paths are unchanged, `Atlas/Media/X.md`).

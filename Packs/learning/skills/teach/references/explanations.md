@@ -36,7 +36,7 @@ property, one column per mode.
 
 - One idea per paragraph. Short turns, so the learner's thinking arrives often.
 - Use the learner's own words for their system, and the field's terms for the concept.
-- A strong image is allowed when it carries the mechanism ("removing the thermometer does not cure
+- Use a strong image when it carries the mechanism ("removing the thermometer does not cure
   the fever"). Use at most one per step.
 - No emoji, no mode announcements, no closing offers.
 

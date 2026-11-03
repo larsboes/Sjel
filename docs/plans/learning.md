@@ -36,6 +36,23 @@ Open:
 Not checked: no figure built by `figures.md` has rendered in Obsidian yet, and no Anatomy
 page has been checked inside `html-embed`. Also not checked: the `🧩 Claims` view renders only in Obsidian, and no one has looked at it yet. Also not checked: no session has run on the new skill text yet.
 
+Shipped 2026-11-04:
+- The vault contract (`Knowledge/Meta/Vault/Vault-Contract.md`, configured as `contract_path`) now
+  defines agent access, `status: verified` (facts checked against `sources:`), note anatomy,
+  interactive material and teaching records. Interactive figures are full parts of their notes,
+  with no static fallback.
+- `teach/references/explanations.md` sets the shape of one explanation step.
+- `figures.md` adds the teaching-figure anatomy, the loop around a figure and the defects of
+  imported figures.
+- `teach` Phase 3 adds retrieval, a response to the reasoning, and adaptation by correctness and
+  confidence.
+- `quiz` and `ask` render inline LaTeX through pi-tui's `renderLatex`
+  (`tools/pack-extensions.test.ts`, "quiz math").
+
+Not checked: no session has run on this text. No figure has been checked against the new anatomy
+in Obsidian. Display math and matrices in quiz text stay raw source, because a widget line holds
+one row.
+
 ## 2. Stage 2: practice on the phone
 
 Open. Decide after stage 1 between Obsidian mobile with a due-for-practice Base view, an

@@ -687,6 +687,45 @@ impl<'a> Svc<'a> {
         Ok(())
     }
 
+    /// A capability with `full_disk_access = "true"` must start under its launchd job, which
+    /// runs through the signed sjel-fda-launcher. Started from a terminal or an app instead,
+    /// macOS would ask on behalf of that app. `None` when the watchdog itself is starting it
+    /// (`SJEL_WATCHDOG`), or no job is loaded.
+    fn launchd_start(&self) -> Option<u8> {
+        if self.platform.os != "macos"
+            || self.full_disk_access != "true"
+            || std::env::var_os("SJEL_WATCHDOG").is_some()
+        {
+            return None;
+        }
+        let job = format!("gui/{}/com.sjel.{}", crate::persist::uid(), self.cap);
+        let loaded = Command::new("launchctl")
+            .args(["print", &job])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success());
+        if !loaded {
+            return None;
+        }
+        let code = status_of(Command::new("launchctl").args(["kickstart", "-k", &job]));
+        if code != 0 {
+            return Some(code);
+        }
+        for _ in 0..60 {
+            if self.process_healthy() {
+                return Some(0);
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        eprintln!(
+            "service-runner.sh: '{}' was handed to {job} and never answered — tail {}",
+            self.cap,
+            self.err.display()
+        );
+        Some(1)
+    }
+
     /// 0 as soon as the service answers; 1 after 30 s or when the process dies first.
     fn wait_healthy(&self) -> u8 {
         let Some(url) = self.health_url() else {
@@ -746,6 +785,9 @@ impl<'a> Svc<'a> {
                 self.cap, self.port
             );
             return Ok(0);
+        }
+        if let Some(code) = self.launchd_start() {
+            return Ok(code);
         }
         self.maybe_build(false)?;
         let open = |p: &Path| {

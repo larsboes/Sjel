@@ -4,8 +4,11 @@
 <dict>
   <key>Label</key>
   <string>__LABEL__</string>
+  <!-- __LAUNCHER__: the signed sjel-fda-launcher for full_disk_access = true, so every process
+       the watchdog starts is attributed to its Full Disk Access grant. Dropped otherwise. -->
   <key>ProgramArguments</key>
   <array>
+__LAUNCHER__
     <string>__WATCHDOG_PATH__</string>
     <string>__CAPABILITY__</string>
   </array>

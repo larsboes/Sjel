@@ -256,6 +256,28 @@ fn launchd_trigger(secs: u64, cap: &str) -> String {
     )
 }
 
+/// For `full_disk_access = "true"`: the plist line that starts the job through the signed
+/// sjel-fda-launcher, which holds the Full Disk Access grant, instead of as /bin/bash. Empty
+/// otherwise.
+fn fda_launcher_line(s: &Svc) -> R<String> {
+    if s.full_disk_access != "true" {
+        return Ok(String::new());
+    }
+    let personal = std::env::var("SJEL_PERSONAL_ROOT").unwrap_or_default();
+    let fda = PathBuf::from(format!("{personal}/bin/sjel-fda-launcher"));
+    if which(&fda.display().to_string()).is_none() {
+        return fail(
+            1,
+            format!(
+                "service-runner.sh: {} declares full_disk_access but {} is not installed.\n  Run tools/fda-launcher/install, grant it Full Disk Access, then install-persistence again.",
+                s.cap,
+                fda.display()
+            ),
+        );
+    }
+    Ok(format!("    <string>{}</string>", fda.display()))
+}
+
 fn render_unit(s: &mut Svc) -> R<String> {
     let m = match mode(s, true) {
         Ok(Some(m)) => m,
@@ -289,6 +311,7 @@ fn render_unit(s: &mut Svc) -> R<String> {
         ("macos", Mode::Watchdog) => render(
             &t("launchd-watchdog.plist.tmpl"),
             &[
+                ("__LAUNCHER__", fda_launcher_line(s)?),
                 ("__LABEL__", label),
                 ("__WATCHDOG_PATH__", watchdog),
                 (
@@ -306,23 +329,7 @@ fn render_unit(s: &mut Svc) -> R<String> {
             let trigger = schedule::seconds(&s.schedule)
                 .map(|n| launchd_trigger(n, &cap))
                 .map_err(|e| Fail { code: 1, msg: e })?;
-            // full_disk_access: the run starts through the signed sjel-fda-launcher, which holds
-            // the Full Disk Access grant, instead of as /bin/bash, which has none.
-            let mut launcher_line = String::new();
-            if s.full_disk_access == "true" {
-                let personal = std::env::var("SJEL_PERSONAL_ROOT").unwrap_or_default();
-                let fda = PathBuf::from(format!("{personal}/bin/sjel-fda-launcher"));
-                if which(&fda.display().to_string()).is_none() {
-                    return fail(
-                        1,
-                        format!(
-                            "service-runner.sh: {cap} declares full_disk_access but {} is not installed.\n  Run tools/fda-launcher/install, grant it Full Disk Access, then install-persistence again.",
-                            fda.display()
-                        ),
-                    );
-                }
-                launcher_line = format!("    <string>{}</string>", fda.display());
-            }
+            let launcher_line = fda_launcher_line(s)?;
             render(
                 &t("launchd-schedule.plist.tmpl"),
                 &[
@@ -539,7 +546,7 @@ pub fn status(s: &mut Svc) {
     }
 }
 
-fn uid() -> String {
+pub(crate) fn uid() -> String {
     Command::new("id")
         .arg("-u")
         .output()

@@ -7,3 +7,5 @@ sign        = "dev.sjel.sjel-status"
 port        = "8082"
 health_path = "/health"
 autostart   = "true"
+# The storage report it runs reads guarded folders (Photos, Music); one grant covers them.
+full_disk_access = "true"

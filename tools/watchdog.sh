@@ -9,6 +9,9 @@
 set -euo pipefail
 CAP="${1:?usage: watchdog.sh <capability>}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Tells service-runner.sh this start comes from the job itself, so it starts the process here
+# rather than handing the start back to launchd.
+export SJEL_WATCHDOG=1
 while true; do
   # stdout is noise (the runtime echoes the container name whenever it actually starts
   # one); stderr is the only thing anyone ever needs, so it lands in the plist's

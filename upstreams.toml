@@ -1,8 +1,8 @@
 # Every external project Sjel touches: one row per dependency or influence, with its verdict.
+# verdict = "adopt" | "contribute" | "overlay" | "fork" | "build" | "inspiration" | "quarry" | "reject" | "watch" | "evaluate" | "adapt"
 #
-#   verdict  adopt | contribute | overlay | fork | build | inspiration | quarry | reject | watch |
-#            evaluate | adapt. Preference order is adopt > contribute > overlay > fork, and fork is
-#            a PR vehicle only. watch and evaluate grant nothing and carry the condition that ends them.
+#   verdict  Preference order is adopt > contribute > overlay > fork, and fork is a PR vehicle only.
+#            watch and evaluate grant nothing and carry the condition that ends them.
 #   url      where it comes from.
 #   license  what it is licensed under.
 #   summary  what the project is and what Sjel does with it, under 110 characters.

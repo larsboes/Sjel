@@ -17,6 +17,7 @@ use std::process::{Command, ExitCode, ExitStatus};
 
 mod app;
 mod audit;
+mod backup;
 mod capability;
 mod copilot;
 mod credentials;
@@ -201,6 +202,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "credentials" => credentials::run(root, rest),
         "distribution" => distribution::run(root, rest),
         "testflight" => testflight::run(root, rest),
+        "backup" => backup::run(root, rest),
         "agent" => match rest.first().map(String::as_str) {
             Some("enroll") => exec(
                 Command::new(tool("tools/capability-auth/capability-auth"))

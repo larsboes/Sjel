@@ -14,6 +14,8 @@ Discover Sjel:
   storage <report|discover|installed|reclaim|target>
                                  What is filling this disk, what is installed and looks
                                  unused, and what is safe to reclaim
+  backup policy [<target> <hours>|off]
+                                 Show or set the backup timer's interval per target
   update [--json|--offline]      Software installed outside this checkout, and what is stale
   update apply [--only <class>]  Move what Sjel owns, and delegate the rest
   app [update|install|status|open] [desktop|mac|all]

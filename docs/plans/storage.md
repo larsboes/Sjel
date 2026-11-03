@@ -227,10 +227,11 @@ Open:
    or an attempt record, and a missing target volume must show as a failed attempt.
    Found 2026-11-03: the `backup-target` timer has been off (`interval_hours` NULL) since
    2026-10-22 15:12Z, so finance, store, knowledge-base, packs, devices and projects only get
-   manual runs. `tools/doctor` now names an off timer. Open: whether it goes back on, and why
-   it was turned off.
-2. **A CLI for the runs.** `sjel backup status|runs` over `GET /api/sjel-status/backups` and
-   `/backup/runs` (see [`tooling.md`](tooling.md)).
+   manual runs. `tools/doctor` now names an off timer, and the timer is back on at 24h
+   (2026-11-03). Open: why it was turned off.
+2. **A CLI for the runs.** `sjel backup policy` shows and sets the timer. Open:
+   `sjel backup status|runs` over `GET /api/sjel-status/backups` and `/backup/runs` (see
+   [`tooling.md`](tooling.md)).
 3. **Per-kind proof.** A target kind counts as verified only when its own restore passes. Only
    the local kind is rehearsed. iCloud and ssh are unproven.
 4. **Documents on the external SSD.** Originals are local. Done when a restore from the selected

@@ -47,6 +47,7 @@ signal-hook = "=0.4.6"
 # exits. First tool in this crate to link SQLite: measured 4.9 MB -> 6.9 MB on this Mac, and a
 # single `cargo build -p sjel-cli` no longer links only pure-Rust code — bundled SQLite needs a C
 # compiler, which is already the linker cargo picks on both macOS and Linux.
+backup = { package = "sjel-backup", path = "../../capabilities/backup" }
 sjel-config = { path = "../../libs/sjel-config" }
 sjel-runtime = { path = "../../libs/runtime" }
 sjel-store = { path = "../../libs/sjel-store" }

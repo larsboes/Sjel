@@ -127,14 +127,14 @@ the Mac's last sync time.
    resolving names like `Valencia, Spain → Nice, France` and `Hamburg, Frankfurt`, which are two
    places in one string: a single geocoded point for those is worse than a null, so the backfill
    needs a decision about compound names before it runs.
-1. **Itinerary timeline.** One card per day. Each stage shows its mode, times and the connection
-   time to the next stage. Trip details include linked events and nearby calendar events, each
-   with its full start–end time range and any extracted programme details; nearby matches stay
-   marked as unlinked until explicitly added to the itinerary. A tap copies the booking code.
-2. **Map.** Category pins for stays, stations, airports and places. A tap opens a card with the
-   stop's name, address, date, and "Open in Apple Maps". A "fit trip" control. The tile model,
-   zoom, dateline wrap and `fit()` already exist in `apps/gpui/core/src/travel.rs`; the pins and
-   the card do not.
+1. **Itinerary timeline.** Shipped: one card per day with date header, day summary counts,
+   transport modes with icons, and connection buffer badges (seamless same-hub vs required buffer,
+   plus overnight layover notes). Day cards embed linked trip events and nearby calendar events
+   with full start–end ranges, locations, and formatted markdown programme notes. Items render
+   type badges, address mapping, and 1-tap booking code copy chips.
+2. **Map.** Shipped: category pins for stays (🛏), stations (🚆), airports (✈) and places (📍).
+   Interactive stop card on map overlay with stop name, category badge, address, dates, and "Open in
+   Apple Maps" deep link. "Fit trip" control re-centers and fits all trip stops.
 3. **Offline-ready mark.** Shown per trip when its details, its booking PDFs (kept under rule 2)
    and the map tiles for its bounds at zoom 10–15 are on the phone.
 4. **Fare alerts.** Work Package 27, verified on a device.
@@ -212,7 +212,7 @@ Open work:
 | 19 | Feed library | `e420c4b5` |
 | 20 | Inbox triage on the Mac | `4aaccef5` |
 | 21 | Train connections | `77ae56f7` |
-| 29 | A record's title is its file name, so the note header renames it: `POST /projects/api/record/rename` moves the file within its folder and rewrites every `[[old]]`, `[[old|alias]]` and `[[old#Heading]]` that named it, refusing a taken name. Mac only; the phone's title stays read-only because its replica is keyed by path. The same change keeps each block's reader view between frames in the note editor and notifies once per click, so a click no longer parses every visible block twice. | `ebf64d4c`, `63cf19e3` |
+| 29 | A record's title is its file name, so the note header renames it: `POST /projects/api/record/rename` moves the file within its folder and rewrites every `[[old]]`, `[[old|alias]]` and `[[old#Heading]]` that named it (not one written as code), refusing a taken name. Mac only; the phone's title stays read-only because its replica is keyed by path. The same change keeps each block's reader view between frames in the note editor and notifies once per click, so a click no longer parses every visible block twice. | `ebf64d4c`, `63cf19e3`, `a93a6445`, `0aac9507` |
 
 ### Open
 

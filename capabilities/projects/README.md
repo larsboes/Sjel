@@ -73,13 +73,18 @@ written back into a journal entry.
   The server checks `priority` (1 to 3), `due` and `scheduled` (dates), and a task's `status`.
 - `POST /api/record {path, content, base}`: replace a record. A `base` that no longer matches the
   store returns 409 with the current content and writes nothing.
+- `POST /api/record/rename {path, title}`: rename a record. Its title is its file name, so the
+  file moves within its folder, keeping its bytes, and every record whose content names it —
+  `[[old]]`, `[[old|alias]]`, `[[old#Heading]]`, but not a link written as code — is rewritten to
+  the new title with its alias and heading. `links` answers the records that moved with it and
+  `failed` the ones that still name the old title, for which the rename stands.
 - `GET /api/files`, `GET /api/file?path=`, `POST /api/file {path, base64}`: list, serve (sandboxed
   with `Content-Security-Policy: sandbox` and `nosniff`), and store project attachments under live
   projects; refuses a second add of different bytes with `409 Conflict`.
 - CLI `projects`: `list`, `projects`, `add`, `new-project`, `new-note`, `edit` (opens `$EDITOR`), `put` (creates a record from a file, or with `--base` replaces it
   while the stored content still equals the base file),
-  `done`, `reopen`, `set`, `attach`, `remove`, `normalize`, `import`, `freeze-vault`, `verify`,
-  `render`.
+  `done`, `reopen`, `set`, `attach`, `remove`, `rename`, `normalize`, `import`, `freeze-vault`,
+  `verify`, `render`.
 
 ## Inventory references
 

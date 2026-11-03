@@ -72,6 +72,8 @@ pub(crate) struct Route {
     /// Comms uses its capability-specific credential. The shared deployment token is injected
     /// for other capabilities; this flag prevents mixing the two secrets.
     pub(crate) inject_comms_auth: bool,
+    /// The registry name, started on demand when the upstream refuses the connection.
+    pub(crate) capability: String,
 }
 
 #[derive(Clone)]
@@ -168,6 +170,7 @@ impl Proxy {
                 target: target.clone(),
                 strip: Some(format!("/{}", svc.name)),
                 inject_comms_auth: comms,
+                capability: svc.name.clone(),
             });
             for extra in &svc.proxy_extra {
                 routes.push(Route {
@@ -175,6 +178,7 @@ impl Proxy {
                     target: target.clone(),
                     strip: None,
                     inject_comms_auth: comms,
+                    capability: svc.name.clone(),
                 });
             }
         }
@@ -334,13 +338,24 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
         insert_authorization_if_absent(&mut headers, proxy.deployment_authorization.as_ref());
     }
 
-    let upstream = proxy
-        .client
-        .request(parts.method.clone(), &url)
-        .headers(headers)
-        .body(bytes)
-        .send()
-        .await;
+    let send = || {
+        proxy
+            .client
+            .request(parts.method.clone(), &url)
+            .headers(headers.clone())
+            .body(bytes.clone())
+            .send()
+    };
+    let mut upstream = send().await;
+    // A refused connection means the request never reached the capability, so replaying it after
+    // a start is safe for writes too. `start` keeps a maintenance hold in place.
+    if matches!(&upstream, Err(e) if e.is_connect())
+        && crate::status::lifecycle(route.capability.clone(), "start")
+            .await
+            .is_ok()
+    {
+        upstream = send().await;
+    }
 
     let upstream = match upstream {
         Ok(r) => r,

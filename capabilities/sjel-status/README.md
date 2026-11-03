@@ -43,6 +43,9 @@ capability that refused this process would otherwise be reported as not running.
   surface, each backed by a live 2s-timeout `GET`. `ok` means the **autostart set**
   is up. Once capabilities start on demand, a stopped on-demand capability is the
   normal state, not a fault.
+- `/<capability>/...` — proxied to that capability. When the connection is refused, the
+  proxy starts the capability (`service-runner.sh start`, which keeps a maintenance hold) and
+  sends the request once more.
 - `GET /api/sjel-status/events` — server-sent events, `snapshot` frames carrying `health` and
   `agent` in one object. A frame is sent when the current one is read and then only when the
   answers change, so a client that follows this stream reads neither endpoint above on a timer.

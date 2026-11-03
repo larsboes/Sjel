@@ -19,7 +19,7 @@ use sjel_gpui_core::people::edit::{
     edit_fields, FactDraft, FieldDecl, NewPerson as NewPersonDraft, PersonEdit, FACT_PREDICATES,
 };
 use sjel_gpui_core::people::{filter_people, Person};
-use sjel_gpui_core::shell::{self, EntityField, EntityRecord, Shell, ShellError};
+use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
 use crate::theme::Palette;
@@ -114,12 +114,19 @@ enum Work {
     AddFact(String, Value),
     RemoveFact(String, String),
     DeclareField(Value),
+    Merge {
+        keep: String,
+        other: String,
+        name: String,
+    },
+    Distinct(String, String),
 }
 
 enum Saved {
     Person(String),
     Removed,
     Fields,
+    Pair,
 }
 
 pub struct PeoplePage {
@@ -128,6 +135,9 @@ pub struct PeoplePage {
     pub people: Remote<Vec<EntityRecord>>,
     /// The fields the registry declares for a person: what a form may offer.
     pub fields: Remote<Vec<EntityField>>,
+    /// Probable duplicates, read when the Duplicates view opens.
+    duplicates: Remote<Vec<DuplicatePair>>,
+    show_duplicates: bool,
     /// The open form, when one is.
     form: Option<Form>,
     /// The person whose removal the next press confirms.
@@ -151,6 +161,8 @@ impl PeoplePage {
             palette: None,
             people: Remote::default(),
             fields: Remote::default(),
+            duplicates: Remote::default(),
+            show_duplicates: false,
             form: None,
             confirm_remove: None,
             write_error: None,
@@ -210,6 +222,21 @@ impl PeoplePage {
         if self.fields.value.is_none() && !self.fields.loading {
             self.load_fields(shell, cx);
         }
+    }
+
+    fn load_duplicates(&mut self, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else { return };
+        self.duplicates.loading = true;
+        let work = shell::run(async move { shell.entity_duplicates(20).await });
+        cx.spawn(async move |this, cx| {
+            let res = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.duplicates.settle(res);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
     }
 
     fn load_fields(&mut self, shell: Arc<Shell>, cx: &mut Context<Self>) {
@@ -513,6 +540,14 @@ impl PeoplePage {
                     .entity_declare_field(body)
                     .await
                     .map(|_| Saved::Fields),
+                Work::Merge { keep, other, name } => shell
+                    .entity_merge(&keep, &other, &name)
+                    .await
+                    .map(|()| Saved::Pair),
+                Work::Distinct(a, b) => shell
+                    .entity_mark_distinct(&a, &b)
+                    .await
+                    .map(|()| Saved::Pair),
             }
         });
         cx.spawn(async move |this, cx| {
@@ -527,6 +562,7 @@ impl PeoplePage {
                             Saved::Person(id) => page.selected_id = Some(id),
                             Saved::Removed => page.selected_id = None,
                             Saved::Fields => {}
+                            Saved::Pair => page.load_duplicates(cx),
                         }
                         page.load(cx);
                     }
@@ -770,6 +806,115 @@ impl PeoplePage {
     }
 }
 
+impl PeoplePage {
+    /// Probable duplicates with the registry's default merge: the side to keep and the name.
+    fn render_duplicates(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let pairs = self.duplicates.value.clone().unwrap_or_default();
+        let status = if self.duplicates.loading && pairs.is_empty() {
+            Some("Looking for duplicates…".to_owned())
+        } else if let Some(error) = self.duplicates.error.as_ref() {
+            Some(format!("Could not read duplicates: {error}"))
+        } else if pairs.is_empty() {
+            Some("No probable duplicates.".to_owned())
+        } else {
+            None
+        };
+        let mut list = div().flex().flex_col().gap_2().w_full();
+        for (i, pair) in pairs.into_iter().enumerate() {
+            let (keep, other) = if pair.keep == "b" {
+                (&pair.b, &pair.a)
+            } else {
+                (&pair.a, &pair.b)
+            };
+            let name_of = |side: &sjel_gpui_core::shell::DuplicateSide| {
+                side.profile["name"].as_str().unwrap_or("?").to_owned()
+            };
+            let (keep_id, other_id, name) =
+                (keep.id.clone(), other.id.clone(), pair.merged_name.clone());
+            let (a, b) = (pair.a.id.clone(), pair.b.id.clone());
+            let why = if pair.reasons.is_empty() {
+                pair.strength.clone()
+            } else {
+                format!("{} · {}", pair.strength, pair.reasons.join(", "))
+            };
+            list = list.child(
+                div()
+                    .p_3()
+                    .rounded(px(6.))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .bg(rgba(palette.surface))
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.text))
+                            .child(format!("{} ↔ {}", name_of(&pair.a), name_of(&pair.b))),
+                    )
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child(why))
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new(SharedString::from(format!("dup-merge-{i}")))
+                                    .xsmall()
+                                    .primary()
+                                    .label(format!("Merge into \"{}\"", pair.merged_name))
+                                    .on_click(cx.listener(move |page, _, window, cx| {
+                                        let Some(shell) = page.writer() else { return };
+                                        let work = Work::Merge {
+                                            keep: keep_id.clone(),
+                                            other: other_id.clone(),
+                                            name: name.clone(),
+                                        };
+                                        page.write(shell, work, window, cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new(SharedString::from(format!("dup-distinct-{i}")))
+                                    .xsmall()
+                                    .ghost()
+                                    .label("Different people")
+                                    .on_click(cx.listener(move |page, _, window, cx| {
+                                        let Some(shell) = page.writer() else { return };
+                                        page.write(
+                                            shell,
+                                            Work::Distinct(a.clone(), b.clone()),
+                                            window,
+                                            cx,
+                                        );
+                                    })),
+                            ),
+                    ),
+            );
+        }
+        div()
+            .id("people-duplicates")
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .overflow_y_scroll()
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("The kept side has a note or more filled fields. Its values win where both have one."),
+            )
+            .when_some(status, |el, status| {
+                el.child(div().text_sm().text_color(rgb(palette.muted)).child(status))
+            })
+            .child(list)
+            .into_any_element()
+    }
+}
+
 fn label_placeholder(label: &str) -> String {
     format!("Enter {}", label.to_lowercase())
 }
@@ -835,6 +980,24 @@ impl Render for PeoplePage {
                             .label("Declare field")
                             .on_click(cx.listener(|page, _, window, cx| {
                                 page.open_form(FormKind::Field, window, cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("people-duplicates")
+                            .small()
+                            .ghost()
+                            .label(if self.show_duplicates {
+                                "Close duplicates"
+                            } else {
+                                "Duplicates"
+                            })
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.show_duplicates = !page.show_duplicates;
+                                page.form = None;
+                                if page.show_duplicates {
+                                    page.load_duplicates(cx);
+                                }
+                                cx.notify();
                             })),
                     )
                     .child(
@@ -976,6 +1139,8 @@ impl Render for PeoplePage {
         // Right Detail Pane
         let detail_pane = if let Some(form) = self.render_form(palette, window, cx) {
             form
+        } else if self.show_duplicates {
+            self.render_duplicates(palette, cx)
         } else if let Some(p) = selected_person {
             self.render_person_detail(p, palette, cx)
         } else {

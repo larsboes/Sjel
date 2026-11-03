@@ -233,6 +233,30 @@ impl Mail {
         .detach();
     }
 
+    /// Retries or cancels a Gmail action that stopped after its automatic retries.
+    fn gmail_job(&mut self, id: String, decision: &'static str, cx: &mut Context<Self>) {
+        let Ok(shell) = self.repo.shell() else { return };
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        let work = shell::run(async move { shell.mail_gmail_job(&id, decision).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                view.busy = false;
+                view.notice = Some(match result {
+                    Ok(()) if decision == "retry" => ("Gmail action retried.".into(), false),
+                    Ok(()) => ("Gmail action canceled.".into(), false),
+                    Err(error) => (format!("Not applied: {error}"), true),
+                });
+                view.load(cx);
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
     fn advance_past(&mut self, id: &str) {
         let ids: Vec<String> = self.visible().iter().map(|m| m.id.clone()).collect();
         if let Some(at) = ids.iter().position(|i| i == id) {
@@ -629,6 +653,12 @@ impl Mail {
                 cx,
             ))
             .child(action("mail-bulk-trash", "Trash", MailAction::Trash, cx))
+            .child(action(
+                "mail-bulk-secret",
+                "Mark Secret",
+                MailAction::SetDataClass("c3".into()),
+                cx,
+            ))
             .into_any_element()
     }
 
@@ -668,6 +698,30 @@ impl Mail {
         if m.status != "proposed" {
             meta.push(m.status.clone());
         }
+        let model_line = m.model.as_ref().map(|verdict| {
+            let proposed = verdict.proposes_change(&m.stream).map(str::to_owned);
+            let mut text = match &proposed {
+                Some(stream) => format!("Model proposes {}", category_label(stream)),
+                None if verdict.state == "generated" => "Model agrees".to_owned(),
+                None => verdict.state_text().to_owned(),
+            };
+            if let Some(bp) = verdict.confidence_bp.filter(|_| proposed.is_some()) {
+                text.push_str(&format!(" · {}% (self-reported)", bp / 100));
+            }
+            if let Some(why) = verdict.rationale.as_deref().filter(|_| proposed.is_some()) {
+                text.push_str(&format!(" · {why}"));
+            }
+            if let Some(held) = verdict
+                .held_reason
+                .as_deref()
+                .filter(|_| verdict.mode == "held")
+            {
+                text.push_str(&format!(" · Held for you: {held}"));
+            }
+            (text, proposed)
+        });
+        let accept_id = m.id.clone();
+        let attention = (m.gmail_sync_status.as_deref() == Some("attention")).then(|| m.id.clone());
         let select = m.id.clone();
         let toggle = m.id.clone();
         let id_for_triage = m.id.clone();
@@ -738,6 +792,82 @@ impl Mail {
                                     .text_color(rgb(palette.muted))
                                     .child(meta.join(" · ")),
                             )
+                            .when_some(model_line, |el, (text, proposed)| {
+                                el.child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .truncate()
+                                                .text_xs()
+                                                .text_color(rgb(palette.muted))
+                                                .child(text),
+                                        )
+                                        .when_some(proposed, |el, stream| {
+                                            el.child(
+                                                Button::new(SharedString::from(format!(
+                                                    "mail-model-accept-{i}"
+                                                )))
+                                                .xsmall()
+                                                .ghost()
+                                                .label(format!(
+                                                    "Accept {}",
+                                                    category_label(&stream)
+                                                ))
+                                                .on_click(cx.listener(move |view, _, _, cx| {
+                                                    cx.stop_propagation();
+                                                    view.direct_action(
+                                                        accept_id.clone(),
+                                                        MailAction::Categorize(stream.clone()),
+                                                        cx,
+                                                    );
+                                                })),
+                                            )
+                                        }),
+                                )
+                            })
+                            .when_some(attention, |el, id| {
+                                let retry = id.clone();
+                                el.child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div().text_xs().text_color(rgb(palette.muted)).child(
+                                                "Automatic retries stopped after five attempts.",
+                                            ),
+                                        )
+                                        .child(
+                                            Button::new(SharedString::from(format!(
+                                                "mail-job-retry-{i}"
+                                            )))
+                                            .xsmall()
+                                            .ghost()
+                                            .label("Retry")
+                                            .on_click(cx.listener(move |view, _, _, cx| {
+                                                cx.stop_propagation();
+                                                view.gmail_job(retry.clone(), "retry", cx);
+                                            })),
+                                        )
+                                        .child(
+                                            Button::new(SharedString::from(format!(
+                                                "mail-job-cancel-{i}"
+                                            )))
+                                            .xsmall()
+                                            .ghost()
+                                            .label("Cancel action")
+                                            .on_click(cx.listener(move |view, _, _, cx| {
+                                                cx.stop_propagation();
+                                                view.gmail_job(id.clone(), "cancel", cx);
+                                            })),
+                                        ),
+                                )
+                            })
                             .when(!is_mobile && m.snippet.is_some(), |el| {
                                 el.child(
                                     div()
@@ -880,6 +1010,7 @@ mod tests {
             waiting: false,
             relevance: Vec::new(),
             authenticity: None,
+            model: None,
         }
     }
 

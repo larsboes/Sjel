@@ -47,7 +47,7 @@ use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 actions!(
     sjel,
     [
-        /// Search pages and dashboard destinations.
+        /// Search pages and actions.
         OpenPalette,
         /// Focus the active page's search field or open the search palette.
         FocusSearch,
@@ -60,8 +60,6 @@ actions!(
         /// Step to the previous area in the sidebar.
         PrevArea,
         Refresh,
-        /// Open the current page in the web dashboard, logged in.
-        OpenInDashboard,
         SelectNext,
         SelectPrevious,
         /// Allow, start, or open the selected row.
@@ -118,7 +116,7 @@ pub struct OpenArea(pub Area);
 /// Every page an area holds, in sidebar then tab order. Settings has ⌘, instead, and the old
 /// Today page is part of Home.
 /// Everything the command palette offered, as finder results: every page with its breadcrumb,
-/// the app's actions, and the dashboard pages that have no native page yet.
+/// and the app's actions.
 fn finder_commands() -> Vec<Hit> {
     let pages = nav_pages().chain([Page::Settings]).map(|page| Hit {
         kind: "page",
@@ -145,9 +143,6 @@ fn finder_commands() -> Vec<Hit> {
             "theme dark light accent glass transparency",
             || OpenAppearance.boxed_clone(),
         ),
-        action("Open this page in the dashboard", "web browser", || {
-            OpenInDashboard.boxed_clone()
-        }),
         action(
             "Soundscape",
             "music audio focus ambient lofi player ⌘0",
@@ -161,20 +156,7 @@ fn finder_commands() -> Vec<Hit> {
         detail: "shell claude codex pi on this Mac".to_owned(),
         open: Open::Link("sjel://terminal".to_owned()),
     });
-    let dashboard = route::DESTINATIONS
-        .iter()
-        .filter(|destination| destination.page().is_none())
-        .map(|destination| Hit {
-            kind: "dashboard",
-            title: destination.label.to_owned(),
-            detail: destination.href.to_owned(),
-            open: Open::Dashboard(destination.href),
-        });
-    pages
-        .chain(actions)
-        .chain(terminal)
-        .chain(dashboard)
-        .collect()
+    pages.chain(actions).chain(terminal).collect()
 }
 
 pub fn nav_pages() -> impl Iterator<Item = Page> {
@@ -208,7 +190,6 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-k", OpenPalette, None),
         KeyBinding::new("cmd-f", FocusSearch, None),
         KeyBinding::new("cmd-r", Refresh, None),
-        KeyBinding::new("cmd-d", OpenInDashboard, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         // Inside the terminal the same key starts a new one (`ui/src/terminal.rs`).
         KeyBinding::new("cmd-t", OpenTerminal, None),
@@ -1133,26 +1114,6 @@ impl Workspace {
         );
     }
 
-    /// Opens `path` in the browser, logged in with a single-use ticket.
-    pub fn open_dashboard(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                window.push_notification(Notification::error(error.to_string()), cx);
-                return;
-            }
-        };
-        let work = shell::run(async move { shell.dashboard_url(&path).await });
-        cx.spawn_in(window, async move |_, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = cx.update(|window, cx| match result {
-                Ok(url) => cx.open_url(url.as_str()),
-                Err(error) => window.push_notification(Notification::error(error.to_string()), cx),
-            });
-        })
-        .detach();
-    }
-
     pub fn open_target(&mut self, target: Target, window: &mut Window, cx: &mut Context<Self>) {
         match target {
             Target::Native(Page::Travel) => {
@@ -1197,7 +1158,23 @@ impl Workspace {
                 .finder
                 .update(cx, |finder, cx| finder.ask(question, cx)),
             Target::Terminal => self.open_terminal(window, cx),
-            Target::Dashboard(path) => self.open_dashboard(path, window, cx),
+            Target::Unknown(path) => {
+                // The first segment's page, so `/calendar/2026-10-15` still lands on Calendar.
+                let first = format!(
+                    "/{}",
+                    path.trim_start_matches('/')
+                        .split(['/', '?'])
+                        .next()
+                        .unwrap_or("")
+                );
+                match Page::ALL.into_iter().find(|page| page.href() == first) {
+                    Some(page) => self.go(page, cx),
+                    None => window.push_notification(
+                        Notification::error(format!("No page answers {path}.")),
+                        cx,
+                    ),
+                }
+            }
         }
     }
 
@@ -1267,7 +1244,6 @@ impl Workspace {
                 Open::Page(Page::Settings) => self.go(Page::Settings, cx),
                 Open::Page(page) => self.go(page, cx),
                 Open::Action(action) => window.dispatch_action(action(), cx),
-                Open::Dashboard(href) => self.open_dashboard(href.to_owned(), window, cx),
                 Open::Project(name) => self.go_to_project(name, cx),
                 Open::Link(link) => {
                     if let Some(target) = route::parse_deep_link(&link) {
@@ -1405,15 +1381,6 @@ impl Workspace {
         } else if self.page == Page::Setup {
             self.setup_page.update(cx, |p, cx| p.refresh(cx));
         }
-    }
-
-    fn on_open_in_dashboard(
-        &mut self,
-        _: &OpenInDashboard,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_dashboard(self.page.href().to_owned(), window, cx);
     }
 
     fn on_open_terminal(&mut self, _: &OpenTerminal, window: &mut Window, cx: &mut Context<Self>) {
@@ -2142,7 +2109,6 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_area))
             .on_action(cx.listener(Self::on_prev_area))
             .on_action(cx.listener(Self::on_refresh))
-            .on_action(cx.listener(Self::on_open_in_dashboard))
             .on_action(cx.listener(Self::on_select_next))
             .on_action(cx.listener(Self::on_select_previous))
             .on_action(cx.listener(Self::on_clear_selection))

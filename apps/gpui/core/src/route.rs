@@ -1,8 +1,5 @@
-//! Destinations shared with the web dashboard, and `sjel://` deep links.
-//!
-//! `DESTINATIONS` mirrors `PRIMARY_NAV` and `UTILITY_NAV` in `dashboard/src/lib/nav.ts`; the
-//! `matches_dashboard_nav` test fails when the two drift. Native pages and recognized deep links
-//! open here; other destinations open the dashboard at the same path.
+//! The app's destinations and `sjel://` deep links. Every destination is a native page; a
+//! path no page answers is [`Target::Unknown`], and the app opens the nearest page instead.
 
 /// A page this app draws itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -223,14 +220,14 @@ pub enum Target {
     Ask(String),
     /// A terminal on the Mac: the newest one still running, or a new login shell.
     Terminal,
-    /// A dashboard path, query included.
-    Dashboard(String),
+    /// A path no native page answers, query included.
+    Unknown(String),
 }
 
-/// `sjel://calendar/2026-10-15` → the dashboard path `/calendar/2026-10-15`. `sjel://` and
+/// `sjel://calendar/2026-10-15` → the unknown path `/calendar/2026-10-15`. `sjel://` and
 /// `sjel://home` are Home. `sjel://ask` opens the finder; `sjel://ask?q=…` (or `sjel://?ask=…`)
 /// also asks the prompt. Travel also recognizes its trip subpages. Standalone capability panel
-/// links open the native Apps registry; unsupported subpaths and queries go to the dashboard.
+/// links open the native Apps registry; unsupported subpaths and queries are `Unknown`.
 pub fn parse_deep_link(url: &str) -> Option<Target> {
     let rest = url.strip_prefix("sjel://")?.trim_end_matches('/');
     let path = match rest {
@@ -320,7 +317,7 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
         let view = reqwest::Url::parse(&format!("http://127.0.0.1{path}"))
             .ok()?
             .query_pairs()
-            .find(|(key, _)| key == "view")
+            .find(|(key, _)| key == "view" || key == "tab")
             .map(|(_, value)| value.into_owned());
         match view.as_deref() {
             Some("discover") => return Some(Target::Feed(FeedTab::Discover)),
@@ -349,7 +346,7 @@ pub fn parse_deep_link(url: &str) -> Option<Target> {
             .or_else(|| destination(&path).and_then(Destination::page))
         {
             Some(page) => Target::Native(page),
-            None => Target::Dashboard(path),
+            None => Target::Unknown(path),
         },
     )
 }
@@ -360,34 +357,6 @@ mod tests {
 
     fn deep_link(href: &str) -> String {
         format!("sjel://{}", href.trim_start_matches('/'))
-    }
-
-    #[test]
-    fn matches_dashboard_nav() {
-        let nav = include_str!("../../../../dashboard/src/lib/nav.ts");
-        let start = nav
-            .find("export const PRIMARY_NAV")
-            .expect("PRIMARY_NAV in nav.ts");
-        let end = nav
-            .find("export const capabilityForPath")
-            .expect("capabilityForPath in nav.ts");
-        let field = |line: &str, key: &str| -> Option<String> {
-            let after = &line[line.find(&format!("{key}: \""))? + key.len() + 3..];
-            Some(after[..after.find('"')?].to_owned())
-        };
-        let web: Vec<(String, String)> = nav[start..end]
-            .lines()
-            .filter(|line| line.trim_start().starts_with("{ href:"))
-            .filter_map(|line| Some((field(line, "href")?, field(line, "label")?)))
-            .collect();
-        let native: Vec<(String, String)> = DESTINATIONS
-            .iter()
-            .map(|d| (d.href.to_owned(), d.label.to_owned()))
-            .collect();
-        assert_eq!(
-            native, web,
-            "route.rs DESTINATIONS drifted from dashboard/src/lib/nav.ts"
-        );
     }
 
     #[test]
@@ -426,6 +395,10 @@ mod tests {
             parse_deep_link("sjel://feed?view=discover"),
             Some(Target::Feed(FeedTab::Discover))
         );
+        assert_eq!(
+            parse_deep_link("sjel://feed?tab=mail"),
+            Some(Target::Feed(FeedTab::Mail))
+        );
         let feed_id = "a".repeat(64);
         assert_eq!(
             parse_deep_link(&format!("sjel://feed/{feed_id}")),
@@ -450,7 +423,7 @@ mod tests {
         );
         assert_eq!(
             parse_deep_link("sjel://calendar/2026-10-15"),
-            Some(Target::Dashboard("/calendar/2026-10-15".into()))
+            Some(Target::Unknown("/calendar/2026-10-15".into()))
         );
         assert_eq!(
             parse_deep_link("sjel://ask?q=what%20is%20up%3F"),

@@ -101,6 +101,7 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/duplicates",
         "People who are probably the same person, strongest first: a shared email or phone \
          (strong), the same name (name), a first name that begins a full name (partial). \
+         Each pair carries `keep` (a or b) and `merged_name`, the default merge. \
          ?limit= (default 10). ?judge=true asks the on-device model about each partial pair in \
          the page; its verdict is advice. Pairs marked distinct are never listed.",
     ),
@@ -481,6 +482,8 @@ async fn duplicates(State(state): State<Arc<AppState>>, Query(q): Query<Duplicat
                     "reasons": c.reasons,
                     "evidence": evidence,
                     "verdict": verdict,
+                    "keep": entities::duplicates::keep_side(&a, &b),
+                    "merged_name": entities::duplicates::merged_name(&a, &b),
                 })
             })
             .collect();

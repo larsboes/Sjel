@@ -154,6 +154,46 @@ pub fn profile(entity: &Entity, today: &str) -> Value {
     })
 }
 
+/// Which side of a pair to keep: the one with a note, else the one with more filled fields.
+/// The kept side's values win where both have one (`Store::merge`), so this also picks
+/// which values survive. A tie keeps `a`.
+pub fn keep_side(a: &Value, b: &Value) -> &'static str {
+    let weight = |p: &Value| {
+        let filled = p.as_object().map_or(0, |fields| {
+            fields
+                .iter()
+                .filter(|(key, value)| {
+                    !matches!(key.as_str(), "name" | "sources")
+                        && !value.is_null()
+                        && *value != &Value::Bool(false)
+                })
+                .count()
+        });
+        filled
+            + if p["has_note"] == Value::Bool(true) {
+                100
+            } else {
+                0
+            }
+    };
+    if weight(b) > weight(a) {
+        "b"
+    } else {
+        "a"
+    }
+}
+
+/// The longer of the two names, which is usually the full one ("Ron" → "Ron Mustermann").
+pub fn merged_name(a: &Value, b: &Value) -> String {
+    let name = |p: &Value| p["name"].as_str().unwrap_or_default().trim().to_owned();
+    let (a, b) = (name(a), name(b));
+    if b.chars().count() > a.chars().count() {
+        b
+    } else {
+        a
+    }
+}
+
 /// The fields both records carry, compared. A field only one side has says nothing about
 /// whether they are one person, so it is not compared and not shown to the model: on
 /// 2026-09-25 the on-device model called 13 of 16 pairs "different company" or "different
@@ -369,6 +409,19 @@ mod tests {
                 different: vec![]
             }
         );
+    }
+
+    #[test]
+    fn the_side_with_a_note_is_kept_and_the_longer_name_wins() {
+        let full = json!({ "name": "Ron Mustermann", "phones": ["+49 1"], "emails": ["r@example.org"],
+            "birthday": "1990-01-01", "lives_in": null, "sources": ["google"], "has_note": false });
+        let short = json!({ "name": "Ron", "phones": null, "sources": [], "has_note": true });
+        assert_eq!(keep_side(&full, &short), "b");
+        assert_eq!(merged_name(&full, &short), "Ron Mustermann");
+        let empty = |n: &str| json!({ "name": n, "phones": null, "has_note": false });
+        let with_phone = json!({ "name": "B", "phones": ["1"], "has_note": false });
+        assert_eq!(keep_side(&empty("A"), &with_phone), "b");
+        assert_eq!(keep_side(&empty("A"), &empty("B")), "a", "a tie keeps a");
     }
 
     #[test]

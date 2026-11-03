@@ -148,18 +148,31 @@ branches". A second trip planned this way shows whether the model needs it.
 Retirement needs three things beyond ported pages. No link falls back to the browser. No rule
 lives only in TypeScript. Nothing in the repository needs `dashboard/` to build or pass.
 
+Done: GPUI has no browser handoff. A path no page answers is `Target::Unknown` and opens the page
+of its first segment. ⌘D, the header and Settings buttons, the ticket URL and
+`dashboard-fallbacks.tsv` are gone, and so is `matches_dashboard_nav`.
+
 **Pages outside the matrix.** `/travel/connections`, `/feed/library`, `/feed/review`, `/apps`,
 `/docs`, `/panel/[name]`, `/record` and `/trips` are ported. Two are not finished:
 
 - `/feed/[id]` (1,929 lines): partial. GPUI reads the detail, edits calendar entries, handles
-  Google export consent and export, and previews and approves a local cloud derivative.
+  Google export consent and export, and previews and approves a local cloud derivative. Mail rows
+  show the model verdict with Accept, retry or cancel a stopped Gmail action, and Mark Secret
+  goes through `/triage/bulk`. Open: queueing and running a cloud job
+  (`/comms/content/cloud-jobs`), and lowering a data class, which needs a rationale.
 - `/scout`: built as Feed's Discover tab (Work Package 25). manual acceptance test pending.
 
-**Rules that live only in TypeScript.** `dashboard/vite/*.test.ts` tests about 40 modules in
-`dashboard/src/lib`. These had no Rust owner when checked by name: `merge-candidate`,
-`who-is-around` and `mail-model-proposal`. `finance-csv-mapping` and `finance-spending-review`
-now have Rust versions in `core/src/finance.rs`. Move each remaining rule into a capability or
-`core` before its page is called done.
+**Rules that live only in TypeScript.** None left. `merge-candidate` is
+`capabilities/entities/src/duplicates.rs` (`keep_side`, `merged_name`, served on
+`/api/duplicates`), drawn by People → Duplicates. `who-is-around` is
+`core/src/travel/around.rs`, drawn in a trip's Overview. `mail-model-proposal` is
+`ModelVerdict::proposes_change` in `core/src/mail.rs`; its `agreementRows` had no caller.
+`finance-csv-mapping` and `finance-spending-review` are in `core/src/finance.rs`. Not run: a
+manual check of the three new views in the running app.
+
+**Stay ranking.** `dashboard/src/lib/travel/StayRankingBoard.svelte` (uncommitted, another
+session) holds one trip's hotels as constants and keeps its ranking in memory. It is not ported:
+trip data does not belong in code, and trip items have no update route to hold a rank.
 
 **Infrastructure.**
 
@@ -170,24 +183,21 @@ now have Rust versions in `core/src/finance.rs`. Move each remaining rule into a
   watches that bundle, and distribution packaging copies it. Remove the fallback and the bundle
   copy. Keep the API host.
 - `/api/top-processes` is Vite dev middleware with no owner.
-- 78 files in `tools/`, `capabilities/`, `libs/`, `Packs/` and `schemas/` name `dashboard/`.
-  `route.rs` `matches_dashboard_nav` reads `nav.ts` and goes with it.
+- Needs `dashboard/` to build or pass: `capabilities/sjel-status` serves `dashboard/dist`
+  (`src/main.rs`, `src/status/runtime.rs`, `dashboard_freshness.rs`), `tools/sjel-cli` reads
+  `dashboard/service.toml` (`src/runner.rs`), and `.github/workflows/ci.yml`, `bunfig.toml` and
+  `.github/dependabot.yml` name it. 136 tracked files mention `dashboard/`; most are test
+  fixtures, comments and the `tools/dashboard-*.test.ts` files, which go with it.
 - The public demo (`demo/`, published at `larsboes.github.io/Sjel/`) is the dashboard. It goes
   with the dashboard. See [`restructure.md`](restructure.md) for what replaces the public page.
 
 **Gates (2026-10-25).**
 
 1. Delete `dashboard/` only after Work Packages 23 and 24 pass the manual acceptance test.
-2. Keep `dashboard/src-tauri` until three more things are true. Foundation Models availability is
-   ported to GPUI or retired. Fare alerts (Work Package 27) are verified on a device. Legacy
+2. Keep `dashboard/src-tauri` until two more things are true. (Foundation Models in the Tauri app
+   is retired, 2026-11-03: the agent seat is the phone's assistant.) Fare alerts (Work Package 27) are verified on a device. Legacy
    RoomPlan drafts migrate on a device that holds real Tauri scans.
-3. Then remove the 78 references, `matches_dashboard_nav`, ⌘D "Open in the dashboard", the
-   `sjel-status` static serve, and `demo/`.
-
-**Measure what is left.** Every dashboard handoff appends one line to
-`~/.config/sjel/dashboard-fallbacks.tsv` (`Shell::dashboard_url`). Read the counts with
-`cut -f2 ~/.config/sjel/dashboard-fallbacks.tsv | sort | uniq -c | sort -rn`. After a week of use
-the counts are the gap list.
+3. Then remove the references above, the `sjel-status` static serve, and `demo/`.
 
 ## 4. Work packages
 

@@ -24,8 +24,6 @@ use futures::channel::mpsc::UnboundedReceiver;
 /// The default shell endpoint, from `capabilities/sjel-status/service.toml`.
 pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8082";
 const KEYCHAIN_SERVICE: &str = "sjel-inbound-token";
-const TICKET_PATH: &str = "/api/sjel-status/session/ticket";
-const OPEN_PATH: &str = "/session/open?";
 const EVENTS_PATH: &str = "/api/sjel-status/events";
 
 /// The ceiling on one original, matching `MAX_BYTES` in `capabilities/documents/src/server.rs`.
@@ -459,6 +457,26 @@ pub struct SubscriptionRecord {
 }
 
 /// One entity record from `GET /entities/api/entities`.
+/// One side of a probable duplicate (`/entities/api/duplicates`).
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct DuplicateSide {
+    pub id: String,
+    pub profile: serde_json::Value,
+}
+
+/// A probable duplicate pair with the registry's default merge.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct DuplicatePair {
+    pub a: DuplicateSide,
+    pub b: DuplicateSide,
+    pub strength: String,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    /// `"a"` or `"b"`.
+    pub keep: String,
+    pub merged_name: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct EntityRecord {
     pub id: String,
@@ -3282,6 +3300,58 @@ impl Shell {
         .map(drop)
     }
 
+    /// Probable duplicate people, strongest first (`GET /entities/api/duplicates`). Each pair
+    /// carries the registry's default merge: which side to keep and the merged name.
+    pub async fn entity_duplicates(&self, limit: u32) -> ShellResult<Vec<DuplicatePair>> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            candidates: Vec<DuplicatePair>,
+        }
+        let path = with_query("/entities/api/duplicates", &[("limit", &limit.to_string())]);
+        let res: Envelope = self.json(Method::GET, &path, None, 15).await?;
+        Ok(res.candidates)
+    }
+
+    /// Merges `other` into `keep` under `name` (`POST /entities/api/entities/:keep/merge`).
+    pub async fn entity_merge(&self, keep: &str, other: &str, name: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "other": other, "name": name, "pick": [] });
+        self.send(
+            Method::POST,
+            &format!("/entities/api/entities/{keep}/merge"),
+            Some(body),
+            15,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// Marks two people as different (`POST /entities/api/duplicates/distinct`).
+    pub async fn entity_mark_distinct(&self, a: &str, b: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "a": a, "b": b });
+        self.send(
+            Method::POST,
+            "/entities/api/duplicates/distinct",
+            Some(body),
+            10,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// Where each person is on `day` (`GET /entities/api/located?day=`). C2: names.
+    pub async fn people_located(
+        &self,
+        day: &str,
+    ) -> ShellResult<Vec<crate::travel::around::Located>> {
+        #[derive(Deserialize)]
+        struct Envelope {
+            located: Vec<crate::travel::around::Located>,
+        }
+        let path = with_query("/entities/api/located", &[("day", day)]);
+        let res: Envelope = self.json(Method::GET, &path, None, 10).await?;
+        Ok(res.located)
+    }
+
     pub async fn project_inventory_links(
         &self,
         path: &str,
@@ -3700,42 +3770,93 @@ impl Shell {
     }
 
     pub async fn web_links(&self) -> ShellResult<crate::web_links::WebLinks> {
-        self.json(Method::GET, "/web-links/api/links", None, 10).await
+        self.json(Method::GET, "/web-links/api/links", None, 10)
+            .await
     }
 
-    pub async fn web_link_add(&self, body: serde_json::Value) -> ShellResult<crate::web_links::WebLink> {
-        self.json(Method::POST, "/web-links/api/links", Some(body), 10).await
+    pub async fn web_link_add(
+        &self,
+        body: serde_json::Value,
+    ) -> ShellResult<crate::web_links::WebLink> {
+        self.json(Method::POST, "/web-links/api/links", Some(body), 10)
+            .await
     }
 
-    pub async fn web_link_edit(&self, id: &str, body: serde_json::Value) -> ShellResult<crate::web_links::WebLink> {
+    pub async fn web_link_edit(
+        &self,
+        id: &str,
+        body: serde_json::Value,
+    ) -> ShellResult<crate::web_links::WebLink> {
         let id = web_link_key(id)?;
-        self.json(Method::PATCH, &format!("/web-links/api/links/{id}"), Some(body), 10).await
+        self.json(
+            Method::PATCH,
+            &format!("/web-links/api/links/{id}"),
+            Some(body),
+            10,
+        )
+        .await
     }
 
     pub async fn web_link_remove(&self, id: &str) -> ShellResult<()> {
         let id = web_link_key(id)?;
-        self.send(Method::DELETE, &format!("/web-links/api/links/{id}"), None, 10).await.map(drop)
+        self.send(
+            Method::DELETE,
+            &format!("/web-links/api/links/{id}"),
+            None,
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     pub async fn web_link_open(&self, id: &str) -> ShellResult<crate::web_links::WebLink> {
         let id = web_link_key(id)?;
-        self.json(Method::POST, &format!("/web-links/api/links/{id}/open"), Some(serde_json::json!({})), 10).await
+        self.json(
+            Method::POST,
+            &format!("/web-links/api/links/{id}/open"),
+            Some(serde_json::json!({})),
+            10,
+        )
+        .await
     }
 
-    pub async fn web_link_history_scan(&self, days: u16, min_visits: u16) -> ShellResult<crate::web_links::WebLinkHistoryReply> {
-        self.json(Method::POST, "/web-links/api/history/scan", Some(serde_json::json!({"days":days, "min_visits":min_visits})), 120).await
+    pub async fn web_link_history_scan(
+        &self,
+        days: u16,
+        min_visits: u16,
+    ) -> ShellResult<crate::web_links::WebLinkHistoryReply> {
+        self.json(
+            Method::POST,
+            "/web-links/api/history/scan",
+            Some(serde_json::json!({"days":days, "min_visits":min_visits})),
+            120,
+        )
+        .await
     }
 
-    pub async fn web_link_history_candidates(&self) -> ShellResult<Vec<crate::web_links::WebLinkCandidate>> {
-        self.json(Method::GET, "/web-links/api/history/candidates", None, 10).await
+    pub async fn web_link_history_candidates(
+        &self,
+    ) -> ShellResult<Vec<crate::web_links::WebLinkCandidate>> {
+        self.json(Method::GET, "/web-links/api/history/candidates", None, 10)
+            .await
     }
 
     pub async fn web_link_history_decide(&self, id: &str, decision: &str) -> ShellResult<()> {
         let id = web_link_key(id)?;
         if !matches!(decision, "keep" | "dismiss") {
-            return Err(ShellError::Refused(400, Some("Not a history decision.".into())));
+            return Err(ShellError::Refused(
+                400,
+                Some("Not a history decision.".into()),
+            ));
         }
-        self.send(Method::POST, &format!("/web-links/api/history/candidates/{id}/decision"), Some(serde_json::json!({"decision":decision})), 10).await.map(drop)
+        self.send(
+            Method::POST,
+            &format!("/web-links/api/history/candidates/{id}/decision"),
+            Some(serde_json::json!({"decision":decision})),
+            10,
+        )
+        .await
+        .map(drop)
     }
 
     pub async fn inventory_mail_proposals(
@@ -4695,18 +4816,6 @@ impl Shell {
         })
     }
 
-    /// A single-use URL that logs the browser in and lands on `next`
-    /// (`landing` in `capabilities/sjel-status/src/session.rs`).
-    pub async fn dashboard_url(&self, next: &str) -> ShellResult<Url> {
-        note_dashboard_fallback(next);
-        #[derive(Deserialize)]
-        struct Ticket {
-            open: String,
-        }
-        let ticket: Ticket = self.json(Method::POST, TICKET_PATH, None, 5).await?;
-        landing_url(&self.base, &ticket.open, next).ok_or(ShellError::Unreadable)
-    }
-
     /// Read soundscape state (`GET /soundscape/api/soundscape/state`).
     /// Stream document metadata in batches through `tx` (typically 500 records at a time).
     pub async fn documents_stream(
@@ -5364,9 +5473,29 @@ impl Shell {
             MailAction::Categorize(key) => Some(key.as_str()),
             _ => None,
         };
-        let body = serde_json::json!({"ids": ids, "action": action.key(), "stream": stream});
+        let data_class = match action {
+            MailAction::SetDataClass(class) => Some(class.as_str()),
+            _ => None,
+        };
+        let body = serde_json::json!({
+            "ids": ids, "action": action.key(), "stream": stream, "data_class": data_class,
+        });
         self.json(Method::POST, "/comms/triage/bulk", Some(body), 60)
             .await
+    }
+
+    /// Retries or cancels a Gmail action that stopped after its automatic retries
+    /// (`POST /comms/triage/:id/gmail-job`, `decision` is `retry` or `cancel`).
+    pub async fn mail_gmail_job(&self, id: &str, decision: &str) -> ShellResult<()> {
+        let body = serde_json::json!({ "decision": decision });
+        self.send(
+            Method::POST,
+            &format!("/comms/triage/{id}/gmail-job"),
+            Some(body),
+            60,
+        )
+        .await
+        .map(drop)
     }
 
     /// Reads a YouTube set's metadata and chapter-derived tracklist without downloading audio.
@@ -5792,49 +5921,9 @@ fn is_registry_name(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// Accepts only `/session/open?…` on the shell's own origin, so a wrong answer cannot send the
-/// browser anywhere else.
-fn landing_url(base: &Url, open: &str, next: &str) -> Option<Url> {
-    if !open.starts_with(OPEN_PATH) {
-        return None;
-    }
-    let mut url = base.join(open).ok()?;
-    if url.origin() != base.origin() {
-        return None;
-    }
-    url.query_pairs_mut().append_pair("next", next);
-    Some(url)
-}
-
 /// A check this client made before asking, in the same shape as the shell's own refusal.
 fn refused(why: String) -> ShellError {
     ShellError::Refused(400, Some(why))
-}
-
-/// Appends `<timestamp>\t<path>` to `dashboard-fallbacks.tsv`: each page still handed to the
-/// browser. A failed write loses the row, never the navigation.
-fn note_dashboard_fallback(next: &str) {
-    use std::io::Write;
-    let dir = match std::env::var("SJEL_CONFIG_DIR") {
-        Ok(dir) => std::path::PathBuf::from(dir),
-        Err(_) => match std::env::var("HOME") {
-            Ok(home) => std::path::PathBuf::from(home).join(".config/sjel"),
-            Err(_) => return,
-        },
-    };
-    let line = fallback_line(chrono::Local::now().to_rfc3339(), next);
-    let _ = std::fs::create_dir_all(&dir).and_then(|()| {
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(dir.join("dashboard-fallbacks.tsv"))?
-            .write_all(line.as_bytes())
-    });
-}
-
-/// A tab or newline in a path would split the row, so both become spaces.
-fn fallback_line(at: String, next: &str) -> String {
-    format!("{at}\t{}\n", next.replace(['\t', '\n'], " "))
 }
 
 /// Two worker threads for every request. GPUI's executor does not provide Tokio's reactor,
@@ -6101,26 +6190,6 @@ mod tests {
             Shell::new("http://127.0.0.1.evil:8082").err(),
             Some(ShellError::NotLoopback)
         );
-    }
-
-    #[test]
-    fn a_fallback_is_one_row() {
-        assert_eq!(
-            fallback_line("2026-10-24T14:00:00+02:00".into(), "/feed/review?q=a\tb\nc"),
-            "2026-10-24T14:00:00+02:00\t/feed/review?q=a b c\n"
-        );
-    }
-
-    #[test]
-    fn landing_stays_on_the_shell() {
-        let base = Url::parse(DEFAULT_ENDPOINT).unwrap();
-        let url = landing_url(&base, "/session/open?ticket=ab", "/calendar").unwrap();
-        assert_eq!(
-            url.as_str(),
-            "http://127.0.0.1:8082/session/open?ticket=ab&next=%2Fcalendar"
-        );
-        assert!(landing_url(&base, "//evil.example/session/open?x", "/").is_none());
-        assert!(landing_url(&base, "/elsewhere?ticket=ab", "/").is_none());
     }
 
     #[test]

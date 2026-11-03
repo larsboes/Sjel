@@ -63,8 +63,7 @@ use sjel_gpui_core::area::Area;
 use sjel_gpui_core::{route, shell};
 
 use workspace::{
-    OpenArea, OpenInDashboard, OpenPalette, OpenSettings, OpenSoundscape, Refresh,
-    ToggleSoundscapePanel, Workspace,
+    OpenArea, OpenPalette, OpenSettings, OpenSoundscape, Refresh, ToggleSoundscapePanel, Workspace,
 };
 
 actions!(sjel, [Quit, CloseWindow]);
@@ -153,7 +152,6 @@ fn main() {
                         MenuItem::separator(),
                         MenuItem::action("Search…", OpenPalette),
                         MenuItem::action("Refresh", Refresh),
-                        MenuItem::action("Open in Dashboard", OpenInDashboard),
                     ])
                     .collect(),
                 disabled: false,

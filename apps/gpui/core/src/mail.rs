@@ -28,6 +28,55 @@ pub struct MailProposal {
     /// `None` for a thread no authenticity rung has assessed yet.
     #[serde(default)]
     pub authenticity: Option<MailAuthenticity>,
+    /// The local model rung's verdict; `None` for a thread it never looked at.
+    #[serde(default)]
+    pub model: Option<ModelVerdict>,
+}
+
+/// comms' `TriageModelOut`: what the local model rung said about one thread.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ModelVerdict {
+    /// `shadow`, `applied` or `held`.
+    pub mode: String,
+    /// `generated` when the model answered; otherwise why it did not.
+    pub state: String,
+    pub model_stream: Option<String>,
+    pub confidence_bp: Option<i64>,
+    pub rationale: Option<String>,
+    /// Set when apply refused the verdict because it would raise the data class.
+    pub held_reason: Option<String>,
+    pub classification_version: String,
+}
+
+impl ModelVerdict {
+    /// The category worth an Accept button: a generated verdict that differs from the
+    /// category the row holds now. Compared with the held category, not the frozen
+    /// `rule_stream`, so an accepted proposal stops offering itself.
+    pub fn proposes_change(&self, current: &str) -> Option<&str> {
+        (self.state == "generated")
+            .then_some(self.model_stream.as_deref())
+            .flatten()
+            .filter(|stream| *stream != current)
+    }
+
+    /// The line shown when the model gave no category: a state, not an error.
+    pub fn state_text(&self) -> &str {
+        match self.state.as_str() {
+            "local_refused" => {
+                "Refused: a Secret mail never enters a prompt, local models included."
+            }
+            "skipped_over_window" => "Skipped: too long for the local model's window.",
+            "unconfigured" => "No local model is configured for this rung on this machine.",
+            "invalid_stream" => {
+                "The model named a category that does not exist. Nothing was stored."
+            }
+            "unparseable" => {
+                "The model's answer could not be read as JSON. It will be asked again."
+            }
+            "remote_refused" => "Refused: the resolved model was not on this machine.",
+            other => other,
+        }
+    }
 }
 
 /// comms' `AuthenticityOut`: the worst verdict over every rung, and each rung's findings.
@@ -150,6 +199,9 @@ pub enum MailAction {
     Trash,
     Waiting,
     ClearWaiting,
+    /// A hand-set data class. Comms refuses a lowering without a rationale, so clients
+    /// offer only the raise to Secret.
+    SetDataClass(String),
 }
 
 impl MailAction {
@@ -161,6 +213,7 @@ impl MailAction {
             Self::Trash => "trash",
             Self::Waiting => "waiting",
             Self::ClearWaiting => "clear-waiting",
+            Self::SetDataClass(_) => "set-data-class",
         }
     }
 
@@ -176,6 +229,10 @@ impl MailAction {
         match self {
             Self::Archive => Some(format!("Archive {threads} in Sjel and Gmail?")),
             Self::Trash => Some(format!("Move {threads} to Gmail Trash?")),
+            Self::SetDataClass(class) => Some(format!(
+                "Set data class {} on {threads}? A raise redacts the stored subject and preview for good.",
+                class.to_uppercase()
+            )),
             Self::Categorize(key) if CLASS_RAISING.contains(&key.as_str()) => Some(format!(
                 "Set {} on {threads}? The stored subject and preview are redacted for good.",
                 category_label(key)
@@ -266,6 +323,7 @@ mod tests {
             gmail_sync_action: None,
             waiting: false,
             authenticity: None,
+            model: None,
             relevance: score
                 .map(|score| FeedRelevance {
                     profile_label: "p".into(),
@@ -275,6 +333,32 @@ mod tests {
                 .into_iter()
                 .collect(),
         }
+    }
+
+    #[test]
+    fn a_proposal_is_offered_only_against_the_held_category() {
+        let verdict = |state: &str, stream: Option<&str>| ModelVerdict {
+            mode: "shadow".into(),
+            state: state.into(),
+            model_stream: stream.map(str::to_owned),
+            confidence_bp: None,
+            rationale: None,
+            held_reason: None,
+            classification_version: "v1".into(),
+        };
+        assert_eq!(
+            verdict("generated", Some("advertising")).proposes_change("active"),
+            Some("advertising")
+        );
+        assert_eq!(
+            verdict("generated", Some("advertising")).proposes_change("advertising"),
+            None
+        );
+        assert_eq!(
+            verdict("unparseable", Some("advertising")).proposes_change("active"),
+            None
+        );
+        assert_eq!(verdict("generated", None).proposes_change("active"), None);
     }
 
     #[test]
@@ -345,7 +429,11 @@ mod tests {
                 verdict: "suspicious".into(),
                 findings: vec![
                     finding("dmarc_pass", "verified", "DMARC passed."),
-                    finding("reply_to_mismatch", "suspicious", "Replies go to gmail.com."),
+                    finding(
+                        "reply_to_mismatch",
+                        "suspicious",
+                        "Replies go to gmail.com.",
+                    ),
                 ],
             }],
         });

@@ -1,7 +1,7 @@
 //! The finder: one input for a search and a prompt, over whatever page is open (⌘K).
 //!
-//! It replaces the command palette and keeps everything the palette offered -- pages, actions,
-//! dashboard destinations -- as search results, next to the projects, tasks and notes the Mac's
+//! It replaces the command palette and keeps everything the palette offered -- pages and
+//! actions -- as search results, next to the projects, tasks and notes the Mac's
 //! database already holds. The same input also asks: in *Auto* the words decide
 //! (`sjel_gpui_core::search::intent`), the decision is printed beside the input, and ⌘↩ goes the
 //! other way. A question is answered in place through the app's one `Ask` session, and the whole
@@ -49,7 +49,6 @@ pub enum Open {
     Page(Page),
     /// An app action, built fresh each time: an action is not `Clone`.
     Action(fn() -> Box<dyn Action>),
-    Dashboard(&'static str),
     Project(String),
     Record {
         project: String,
@@ -82,7 +81,7 @@ pub enum FinderEvent {
 pub struct Finder {
     repo: Repo,
     ask: Entity<Ask>,
-    /// Pages, actions and dashboard destinations: what the palette offered.
+    /// Pages and actions: what the palette offered.
     commands: Vec<Hit>,
     /// Projects, open tasks and notes, read when the finder opens.
     records: Vec<Hit>,

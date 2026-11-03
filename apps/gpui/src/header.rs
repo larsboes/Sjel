@@ -116,16 +116,6 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.open_settings(None, cx)),
                                 ),
-                        )
-                        .child(
-                            Button::new("open-in-dashboard")
-                                .ghost()
-                                .small()
-                                .icon(IconName::ExternalLink)
-                                .tooltip("Open in the dashboard (⌘D)")
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    view.open_dashboard(view.page.href().to_owned(), window, cx);
-                                })),
                         ),
                 ),
         )

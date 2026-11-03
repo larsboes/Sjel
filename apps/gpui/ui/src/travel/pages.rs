@@ -669,10 +669,90 @@ impl Travel {
                     )),
             );
         page = page.child(self.trip_calendar_timeline());
+        page = page.child(self.who_is_around(plan, &items));
         for (i, place) in plan.places().enumerate() {
             page = page.child(self.place_row(i, place, cx));
         }
         page.into_any_element()
+    }
+
+    /// People within reach of each dated leg, the hosts among them, and the plan's meetups.
+    fn who_is_around(&self, plan: &sjel_gpui_core::travel::Plan, items: &[Item]) -> AnyElement {
+        use sjel_gpui_core::travel::around;
+        let palette = self.palette;
+        let line = |text: String, color: u32| div().text_xs().text_color(rgb(color)).child(text);
+        let mut section = div().flex().flex_col().gap_1();
+        let mut any = false;
+        let mut stages: Vec<_> = plan.stages.iter().collect();
+        stages.sort_by_key(|stage| stage.sequence);
+        for stage in stages {
+            let Some(Some(located)) = stage.date.as_ref().and_then(|day| self.located.get(day))
+            else {
+                continue;
+            };
+            let near = around::around(stage, located);
+            if near.is_empty() {
+                continue;
+            }
+            any = true;
+            let people = near
+                .iter()
+                .map(|p| {
+                    let mut text = format!("{} ({:.0} km)", p.person, p.distance_km);
+                    if p.host {
+                        text.push_str(" · can host");
+                        if let Some(note) = p.note.as_deref().filter(|n| !n.is_empty()) {
+                            text.push_str(&format!(": {note}"));
+                        }
+                    }
+                    text
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            section = section.child(line(
+                format!(
+                    "{} · {}: {people}",
+                    stage.date.as_deref().unwrap_or_default(),
+                    stage.destination.name
+                ),
+                palette.text,
+            ));
+        }
+        let meetups = around::meetups(items);
+        for meetup in &meetups {
+            any = true;
+            let mut text = format!(
+                "Meetup · {} with {} · {}",
+                meetup.title,
+                meetup.people.join(", "),
+                meetup.status
+            );
+            if let Some(day) = &meetup.day {
+                text.push_str(&format!(" · {day}"));
+            }
+            if let Some(place) = &meetup.place {
+                text.push_str(&format!(" · {place}"));
+            }
+            section = section.child(line(text, palette.muted));
+        }
+        if !any {
+            return div().into_any_element();
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
+                    .child(format!(
+                        "Who is around (within {:.0} km)",
+                        around::AROUND_RADIUS_KM
+                    )),
+            )
+            .child(section)
+            .into_any_element()
     }
 
     fn readiness_strip(&self, plan: &sjel_gpui_core::travel::Plan, items: &[Item]) -> AnyElement {

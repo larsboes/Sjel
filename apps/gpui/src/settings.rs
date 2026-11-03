@@ -834,14 +834,11 @@ fn connection(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                     "A paired iPhone keeps its own copy and queues writes offline. It syncs \
                      when it finds this Mac on the network; its queue lives on the phone.",
                 ),
-                Button::new("open-dashboard")
+                Button::new("open-setup")
                     .outline()
                     .small()
-                    .icon(IconName::ExternalLink)
-                    .label("Dashboard")
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        view.open_dashboard("/".into(), window, cx)
-                    })),
+                    .label("Pairing")
+                    .on_click(cx.listener(|view, _, _, cx| view.go(Page::Setup, cx))),
                 palette,
             )],
             palette,
@@ -1764,7 +1761,7 @@ fn normalize_shortcut_query(query: &str) -> String {
         .collect()
 }
 
-/// `OpenInDashboard` → "Open in dashboard".
+/// `OpenSoundscape` → "Open soundscape".
 fn humanize(name: &str) -> String {
     let mut out = String::new();
     for (i, c) in name.chars().enumerate() {
@@ -1899,7 +1896,7 @@ mod tests {
     #[test]
     fn action_names_read_as_sentences() {
         assert_eq!(humanize("GoHome"), "Go home");
-        assert_eq!(humanize("OpenInDashboard"), "Open in dashboard");
+        assert_eq!(humanize("OpenSoundscape"), "Open soundscape");
         assert_eq!(humanize("Refresh"), "Refresh");
     }
 }

@@ -89,6 +89,9 @@ pub struct Travel {
     trip_draft_results: HashMap<String, TripMaterialization>,
     presence: HashMap<String, travel::places::Presence>,
     presence_loading: bool,
+    /// entities' `/located` answer by leg date; `None` while the read is in flight.
+    /// A device without entities (the phone) keeps `Some(vec![])` and shows nothing.
+    located: HashMap<String, Option<Vec<travel::around::Located>>>,
     presence_loaded: bool,
     presence_again: bool,
     compact_map: bool,
@@ -160,6 +163,7 @@ impl Travel {
             trip_draft_results: HashMap::new(),
             presence: HashMap::new(),
             presence_loading: false,
+            located: HashMap::new(),
             presence_loaded: false,
             presence_again: false,
             compact_map: false,
@@ -837,6 +841,53 @@ impl Travel {
         cx.notify();
     }
 
+    /// Reads who is where on each leg date of the open trip, once per date.
+    fn ensure_located(&mut self, cx: &mut Context<Self>) {
+        if !matches!(
+            self.route,
+            TravelRoute::Trip {
+                section: TripSection::Overview,
+                ..
+            }
+        ) {
+            return;
+        }
+        let Some(plan) = self.current() else { return };
+        let days: Vec<String> = plan
+            .stages
+            .iter()
+            .filter_map(|stage| stage.date.clone())
+            .filter(|day| !self.located.contains_key(day))
+            .collect();
+        if days.is_empty() {
+            return;
+        }
+        let Some(shell) = self.writer() else { return };
+        for day in &days {
+            self.located.insert(day.clone(), None);
+        }
+        let work = shell::run(async move {
+            futures::future::join_all(days.into_iter().map(|day| {
+                let shell = shell.clone();
+                async move {
+                    let result = shell.people_located(&day).await;
+                    (day, result.unwrap_or_default())
+                }
+            }))
+            .await
+        });
+        cx.spawn(async move |this, cx| {
+            let results = work.await.unwrap_or_default();
+            let _ = this.update(cx, |view, cx| {
+                for (day, located) in results {
+                    view.located.insert(day, Some(located));
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn select(&mut self, id: String, cx: &mut Context<Self>) {
         self.open_route(
             TravelRoute::Trip {
@@ -853,6 +904,7 @@ impl Render for Travel {
         if self.route == TravelRoute::Connections {
             self.ensure_connections(window, cx);
         }
+        self.ensure_located(cx);
         self.render_page(cx)
     }
 }

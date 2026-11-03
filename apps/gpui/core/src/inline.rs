@@ -34,7 +34,17 @@ impl Inline {
     pub fn parse(src: &str) -> Self {
         let mut out = Self::default();
         let flow = !src.trim_start().starts_with('|');
-        parse(src, 0, flow, &mut out);
+        parse(src, 0, flow, None, &mut out);
+        out.source.push(src.len());
+        out
+    }
+
+    /// Projects markdown for editing, revealing delimiters only in spans containing the source
+    /// caret. The source remains unchanged; offsets and marks describe the projected text.
+    pub fn preview(src: &str, caret: usize) -> Self {
+        let mut out = Self::default();
+        let flow = !src.trim_start().starts_with('|');
+        parse(src, 0, flow, Some(caret), &mut out);
         out.source.push(src.len());
         out
     }
@@ -84,7 +94,14 @@ impl Inline {
     }
 
     /// `inner` (at `base + start` in the source), parsed, under `mark`.
-    fn wrap(&mut self, src: &str, inner: Range<usize>, base: usize, mark: Mark) {
+    fn wrap(
+        &mut self,
+        src: &str,
+        inner: Range<usize>,
+        base: usize,
+        mark: Mark,
+        caret: Option<usize>,
+    ) {
         let shown = self.text.len();
         if mark == Mark::Code {
             let mut at = inner.start;
@@ -93,7 +110,7 @@ impl Inline {
                 at += src[at..].chars().next().map_or(1, char::len_utf8);
             }
         } else {
-            parse(&src[inner.clone()], base + inner.start, true, self);
+            parse(&src[inner.clone()], base + inner.start, true, caret, self);
         }
         if self.text.len() > shown {
             self.marks.push((shown..self.text.len(), mark));
@@ -101,7 +118,7 @@ impl Inline {
     }
 }
 
-fn parse(src: &str, base: usize, flow: bool, out: &mut Inline) {
+fn parse(src: &str, base: usize, flow: bool, caret: Option<usize>, out: &mut Inline) {
     let mut at = 0;
     while at < src.len() {
         let rest = &src[at..];
@@ -112,10 +129,22 @@ fn parse(src: &str, base: usize, flow: bool, out: &mut Inline) {
             continue;
         }
         if let Some((inner, end, mark, target)) = span(src, at, rest) {
+            let reveal = caret.is_some_and(|caret| (base + at..base + end).contains(&caret));
+            if reveal {
+                for (offset, _) in src[at..inner.start].char_indices() {
+                    out.push(src, at + offset, base);
+                }
+            }
             let shown = out.text.len();
-            out.wrap(src, inner, base, mark);
+            let inner_end = inner.end;
+            out.wrap(src, inner, base, mark, caret);
             if let Some(target) = target {
                 out.links.push((shown..out.text.len(), target));
+            }
+            if reveal {
+                for (offset, _) in src[inner_end..end].char_indices() {
+                    out.push(src, inner_end + offset, base);
+                }
             }
             at = end;
             continue;
@@ -244,6 +273,60 @@ mod tests {
             shown("**bold [link](u)**").1,
             vec![("link", "link".into()), ("bold", "bold link".into())]
         );
+    }
+
+    #[test]
+    fn preview_reveals_only_the_carets_span_and_keeps_its_style() {
+        let src = "a **bold** and *other* end";
+        let preview = Inline::preview(src, 5);
+        assert_eq!(preview.text, "a **bold** and other end");
+        assert_eq!(
+            preview.marks,
+            vec![(4..8, Mark::Bold), (15..20, Mark::Italic)]
+        );
+        assert_eq!(Inline::preview(src, 10).text, Inline::parse(src).text);
+        assert_eq!(
+            Inline::preview(src, src.len()).text,
+            Inline::parse(src).text
+        );
+        assert_eq!(Inline::preview("**bold**", 0).text, "**bold**");
+    }
+
+    #[test]
+    fn preview_reveals_nested_delimiters_but_not_a_sibling() {
+        let src = "**one *two* [three](url)**";
+        assert_eq!(Inline::preview(src, 8).text, "**one *two* three**");
+        let link = Inline::preview(src, src.find("url").unwrap());
+        assert_eq!(link.text, "**one two [three](url)**");
+        assert_eq!(link.links[0].1, "url");
+        assert_eq!(
+            Inline::preview("[[Plan|名前]] `code`", 8).text,
+            "[[Plan|名前]] code"
+        );
+    }
+
+    #[test]
+    fn preview_offsets_round_trip_every_visible_character() {
+        for src in [
+            "é **名前** 🦀 [label](url)",
+            "**a *b* c**",
+            "",
+            "one\n  two",
+        ] {
+            for caret in src.char_indices().map(|(at, _)| at).chain([src.len()]) {
+                let preview = Inline::preview(src, caret);
+                for (shown, ch) in preview.text.char_indices() {
+                    let source = preview.source_offset(shown);
+                    assert_eq!(preview.shown_offset(source), shown, "{src:?} at {caret}");
+                    assert!(src.is_char_boundary(source));
+                    if ch != ' ' || src.as_bytes()[source] != b'\n' {
+                        assert!(src[source..].starts_with(ch));
+                    }
+                }
+                assert!(preview.text.is_char_boundary(preview.shown_offset(caret)));
+                assert_eq!(preview.source_offset(preview.text.len()), src.len());
+            }
+        }
     }
 
     #[test]

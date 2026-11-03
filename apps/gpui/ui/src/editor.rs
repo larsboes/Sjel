@@ -6,6 +6,8 @@
 //! started from. The Mac sends it to the capability, which refuses an edit made elsewhere in the
 //! meantime; the phone writes its replica and queues the write for the Mac.
 
+mod preview;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -184,6 +186,7 @@ pub struct NoteEditor {
     pending_rename: Option<SharedString>,
     /// One per block: the reader view built last time. `None` until a block is drawn.
     shown: Vec<Option<Shown>>,
+    preview: Option<Entity<preview::LiveBlock>>,
 }
 
 impl EventEmitter<EditorEvent> for NoteEditor {}
@@ -218,6 +221,7 @@ impl NoteEditor {
             palette: None,
             pending_rename: None,
             shown: Vec::new(),
+            preview: None,
             doc,
         };
         if editor.doc.blocks.is_empty() {
@@ -232,7 +236,23 @@ impl NoteEditor {
             .map(|row| Some(row.input.read(cx).focus_handle(cx)))
             .collect();
         editor.list.splice_focusable(0..0, handles);
+        if std::env::var("SJEL_GPUI_LIVE_PREVIEW").as_deref() == Ok("1") {
+            editor.enable_preview(window, cx);
+        }
         editor
+    }
+
+    fn enable_preview(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if let Some(index) = self
+            .doc
+            .blocks
+            .iter()
+            .position(|block| block.kind == Kind::Paragraph)
+        {
+            let input = self.rows[index].input.clone();
+            let palette = self.palette(window);
+            self.preview = Some(cx.new(|cx| preview::LiveBlock::new(input, palette, cx)));
+        }
     }
 
     fn row(&self, index: usize, window: &mut Window, cx: &mut Context<Self>) -> Row {
@@ -737,7 +757,17 @@ impl NoteEditor {
             _ => div().into_any_element(),
         };
         // Code always shows its source; prose shows markdown only while the caret is in it.
-        let field = if self.active == Some(index) || kind == Kind::Code {
+        let live = self
+            .preview
+            .as_ref()
+            .filter(|preview| preview.read(cx).input == row.input && kind == Kind::Paragraph);
+        let field = if let Some(live) = live.filter(|_| self.active == Some(index)) {
+            live.update(cx, |live, _| {
+                live.palette = palette;
+                live.readonly = !self.editable;
+            });
+            live.clone().into_any_element()
+        } else if self.active == Some(index) || kind == Kind::Code {
             let field = Textarea::new(&row.input)
                 .appearance(false)
                 // Cancels the padding its editor gets from its size (`gpui-component`
@@ -1040,6 +1070,7 @@ impl NoteEditor {
         let inline = shown.inline.clone();
         div()
             .id(("formatted", index))
+            .debug_selector(move || format!("formatted-{index}"))
             .w_full()
             // The textarea's line height, so a block keeps its height when it gains the caret.
             .line_height(relative(1.3))
@@ -1429,6 +1460,14 @@ mod tests {
 
     /// The editor in a window, with a saver that refuses, so nothing is written.
     fn open(cx: &mut TestAppContext) -> (Entity<NoteEditor>, &mut VisualTestContext) {
+        open_with(cx, record(), false)
+    }
+
+    fn open_with(
+        cx: &mut TestAppContext,
+        record: ProjectRecord,
+        preview: bool,
+    ) -> (Entity<NoteEditor>, &mut VisualTestContext) {
         cx.update(|cx| {
             gpui_kit::init(cx);
             bind_keys(cx);
@@ -1438,7 +1477,13 @@ mod tests {
         let (_, cx) = cx.add_window_view(move |window, cx| {
             let saver: Saver =
                 Arc::new(|_| Box::pin(async { Err(SaveError::Failed("test".to_owned())) }));
-            let view = cx.new(|cx| NoteEditor::new(record(), saver, window, cx));
+            let view = cx.new(|cx| {
+                let mut editor = NoteEditor::new(record, saver, window, cx);
+                if preview {
+                    editor.enable_preview(window, cx);
+                }
+                editor
+            });
             found.replace(Some(view.clone()));
             gpui_kit::component::Root::new(view, window, cx)
         });
@@ -1458,6 +1503,104 @@ mod tests {
 
     fn markdown(editor: &Entity<NoteEditor>, cx: &mut VisualTestContext) -> String {
         editor.read_with(cx, |editor, _| editor.doc.markdown())
+    }
+
+    fn live_record() -> ProjectRecord {
+        ProjectRecord {
+            content: "---\ntype: note\n---\n# Plan\n\nBefore **bold** and [link](url).\n\nOther *block*.\n".into(),
+            ..record()
+        }
+    }
+
+    #[gpui::test]
+    fn live_preview_focus_outside_a_span_keeps_the_readers_wrapping(cx: &mut TestAppContext) {
+        let mut record = live_record();
+        record.content = format!(
+            "{}\n",
+            "Before **bold** and [link](https://example.org/a/long/target). ".repeat(30)
+        );
+        let (editor, cx) = open_with(cx, record, true);
+        cx.run_until_parked();
+        let before = cx.debug_bounds("formatted-0").unwrap();
+        cx.update(|window, cx| editor.update(cx, |editor, cx| editor.focus(0, 0, window, cx)));
+        cx.run_until_parked();
+        let after = cx.debug_bounds("live-block").unwrap();
+        assert_eq!(before.size, after.size);
+    }
+
+    #[gpui::test]
+    fn live_preview_keeps_markdown_typing_and_undo_in_the_native_input(cx: &mut TestAppContext) {
+        let (editor, cx) = open_with(cx, live_record(), true);
+        focus_end(&editor, 1, cx);
+        let before = markdown(&editor, cx);
+        cx.simulate_keystrokes("x");
+        assert!(markdown(&editor, cx).contains("[link](url).x"));
+        cx.simulate_keystrokes("cmd-z");
+        assert_eq!(markdown(&editor, cx), before);
+        cx.simulate_keystrokes("cmd-shift-z");
+        assert!(markdown(&editor, cx).contains("[link](url).x"));
+        assert!(editor.read_with(cx, |editor, cx| {
+            let live = editor.preview.as_ref().unwrap().read(cx);
+            live.input == editor.rows[1].input && live.input != editor.rows[2].input
+        }));
+    }
+
+    #[gpui::test]
+    fn live_preview_click_maps_formatted_text_to_source_and_keeps_bold(cx: &mut TestAppContext) {
+        let (editor, cx) = open_with(cx, live_record(), true);
+        focus_end(&editor, 1, cx);
+        let preview = editor.read_with(cx, |editor, _| editor.preview.clone().unwrap());
+        let position = preview.read_with(cx, |live, _| {
+            live.layout.position_for_index(9).unwrap() + gpui_kit::point(px(0.), px(2.))
+        });
+        cx.simulate_mouse_down(position, MouseButton::Left, Default::default());
+        cx.simulate_mouse_up(position, MouseButton::Left, Default::default());
+        cx.run_until_parked();
+        let (source, caret) = preview.read_with(cx, |live, cx| {
+            (
+                live.input.read(cx).value().to_string(),
+                live.input.read(cx).cursor(),
+            )
+        });
+        assert_eq!(caret, 11);
+        let inline = Inline::preview(&source, caret);
+        assert_eq!(inline.text, "Before **bold** and link.");
+        assert!(inline
+            .marks
+            .iter()
+            .any(|(range, mark)| *mark == Mark::Bold && &inline.text[range.clone()] == "bold"));
+        cx.simulate_keystrokes("x");
+        assert!(markdown(&editor, cx).contains("Before **boxld** and [link](url)."));
+        cx.simulate_keystrokes("cmd-z");
+        assert_eq!(markdown(&editor, cx), live_record().content);
+    }
+
+    #[gpui::test]
+    fn live_preview_composition_preserves_source_and_undo(cx: &mut TestAppContext) {
+        use gpui_kit::EntityInputHandler;
+
+        let (editor, cx) = open_with(cx, live_record(), true);
+        focus_end(&editor, 1, cx);
+        let before = markdown(&editor, cx);
+        let input = editor.read_with(cx, |editor, _| editor.rows[1].input.clone());
+        cx.update(|window, cx| {
+            input.update(cx, |input, cx| {
+                input.replace_and_mark_text_in_range(None, "名前", Some(2..2), window, cx);
+            })
+        });
+        cx.run_until_parked();
+        assert!(input.read_with(cx, |input, _| input.value().ends_with("名前")));
+        assert_eq!(markdown(&editor, cx), before);
+        cx.update(|window, cx| {
+            input.update(cx, |input, cx| {
+                input.replace_text_in_range(None, "名前", window, cx);
+                input.unmark_text(window, cx);
+            })
+        });
+        cx.run_until_parked();
+        assert!(markdown(&editor, cx).contains("[link](url).名前"));
+        cx.simulate_keystrokes("cmd-z");
+        assert_eq!(markdown(&editor, cx), before);
     }
 
     #[gpui::test]

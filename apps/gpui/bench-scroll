@@ -21,8 +21,10 @@ for _ in $(seq 50); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || 
 # SJEL_GPUI_BENCH_NOTE=<record path> types into that note instead of scrolling (src/frames.rs).
 bench="SJEL_GPUI_BENCH_SCROLL=1"
 [ -n "${SJEL_GPUI_BENCH_NOTE:-}" ] && bench="SJEL_GPUI_BENCH_NOTE=$SJEL_GPUI_BENCH_NOTE"
+[ -n "${SJEL_GPUI_BENCH_CLICK:-}" ] && bench="SJEL_GPUI_BENCH_CLICK=$SJEL_GPUI_BENCH_CLICK"
 open -g --env "SJEL_GPUI_FRAMES=$out" --env "$bench" --env SJEL_GPUI_NO_ACTIVATE=1 --env SJEL_GPUI_FLOAT=1 \
-  --env "SJEL_GPUI_OPEN=sjel://$PAGE" ${SJEL_GPUI_OPAQUE:+--env SJEL_GPUI_OPAQUE=1} "$APP"
+  --env "SJEL_GPUI_OPEN=sjel://$PAGE" --env "SJEL_GPUI_LIVE_PREVIEW=${SJEL_GPUI_LIVE_PREVIEW:-0}" \
+  ${SJEL_GPUI_OPAQUE:+--env SJEL_GPUI_OPAQUE=1} "$APP"
 sleep 1
 # The app quits itself when the bench ends.
 for _ in $(seq 150); do pgrep -f "Sjel Desktop.app/Contents/MacOS" >/dev/null || break; sleep 0.1; done

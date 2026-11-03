@@ -257,10 +257,12 @@ Prototype checks: parser tests cover nested spans, links, Unicode and source/pro
 headless window tests cover unchanged wrapping on focus outside a span, click-to-source mapping,
 editing inside bold with undo, typing with undo/redo, and composition commit with undo. These
 checks do not establish real-device IME behavior or visual acceptance. The full core and UI test
-suites, `cargo test -p sjel-projects`, host `cargo check --all-targets`, Rust 2021 formatting and
-`bash -n apps/gpui/bench-scroll` pass. The bench launcher now forwards the click mode and preview
-flag. Installation, click/typing measurements, manual rename checks and an iOS build have not
-run; concurrent GPUI edits prevent installing this checkout in isolation.
+suites, `cargo test -p sjel-projects`, the desktop app tests, host `cargo check --all-targets`,
+Rust 2021 formatting and `bash -n apps/gpui/bench-scroll` pass. Independent review passes for the
+prototype scope. Clippy completes with warnings outside the changed implementation. The bench
+launcher now forwards the click mode and preview flag. Installation, click/typing measurements,
+manual rename checks and an iOS build have not run. Installation was deferred while concurrent
+GPUI edits were in flight; app review remains the next gate before a full-build decision.
 
 Open before a full build: projected vertical navigation and IME candidate-window geometry
 (the textarea still uses source layout), bidirectional drag selection, double/triple-click

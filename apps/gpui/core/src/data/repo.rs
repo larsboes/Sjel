@@ -12,8 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
 use crate::shell::{
-    CalendarEntry, GlobalNote, GlobalTask, ProjectRecord, ProjectSummary, Shell, ShellError,
-    ShellResult, SoundscapeState,
+    CalendarEntry, GlobalNote, GlobalTask, ProjectRecord, ProjectSummary, RenamedRecord, Shell,
+    ShellError, ShellResult, SoundscapeState,
 };
 
 use crate::store::{StoreError, TursoStore, LOCAL_ENTRY_ID_PREFIX};
@@ -615,6 +615,22 @@ impl Repo {
         }
         self.notes.set_content(path, content);
         Ok(())
+    }
+
+    /// Renames a record, which moves its file and rewrites the `[[links]]` that named it.
+    ///
+    /// The Mac writes it through the capability. The phone's replica is keyed by path and syncs
+    /// one row at a time, so a move there would arrive as a new note beside the old one: the
+    /// title stays read-only on the phone until the replica can carry a move.
+    pub async fn rename_record(&self, path: &str, title: &str) -> ShellResult<RenamedRecord> {
+        if self.replica.is_some() {
+            return Err(ShellError::Store(
+                "renaming a note happens on the Mac".to_owned(),
+            ));
+        }
+        let renamed = self.shell()?.rename_record(path, title).await?;
+        self.notes.forget(path);
+        Ok(renamed)
     }
 
     /// Ticks or reopens a task, answering with its new frontmatter.

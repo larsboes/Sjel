@@ -80,6 +80,9 @@ pub fn repo_saver(repo: Repo) -> Saver {
 pub enum EditorEvent {
     /// `⌘[` or the back control: the page closes the note.
     Close,
+    /// The note is saved and its title should become this. The page owns the rename, because it
+    /// is the one that moves bundles of records and links; the editor only settles its text.
+    Rename(SharedString),
 }
 
 pub fn bind_keys(cx: &mut App) {
@@ -95,6 +98,20 @@ pub fn bind_keys(cx: &mut App) {
 struct Row {
     input: Entity<TextareaState>,
     _changes: Subscription,
+}
+
+/// A block as a reader sees it, kept between frames: its plain text, its marks, and the place
+/// every shown byte came from. A re-render then parses and shapes nothing; only the text element
+/// that draws it is built again.
+struct Shown {
+    /// The block text and palette this was built from. Either one moving rebuilds it.
+    text: String,
+    palette: Palette,
+    /// The block's text without its marks, which is what a reader sees.
+    label: SharedString,
+    /// Where each shown byte came from in the markdown, for a click.
+    inline: Arc<Inline>,
+    highlights: Vec<(std::ops::Range<usize>, HighlightStyle)>,
 }
 
 /// The kind menu under a block: from `/` in an empty paragraph, or from the block handle.
@@ -163,6 +180,10 @@ pub struct NoteEditor {
     saver: Saver,
     /// The page's palette. `None` follows the window's appearance; the phone sets its own.
     palette: Option<Palette>,
+    /// A title waiting for the last keystroke to be saved before the page renames the note.
+    pending_rename: Option<SharedString>,
+    /// One per block: the reader view built last time. `None` until a block is drawn.
+    shown: Vec<Option<Shown>>,
 }
 
 impl EventEmitter<EditorEvent> for NoteEditor {}
@@ -195,6 +216,8 @@ impl NoteEditor {
             menu: None,
             saver,
             palette: None,
+            pending_rename: None,
+            shown: Vec::new(),
             doc,
         };
         if editor.doc.blocks.is_empty() {
@@ -259,11 +282,16 @@ impl NoteEditor {
                 }
             }
             InputEvent::Focus => {
+                let moved = self.active != Some(index);
+                let closes_menu = self.menu.as_ref().is_some_and(|menu| menu.block != index);
                 self.active = Some(index);
-                if self.menu.as_ref().is_some_and(|menu| menu.block != index) {
+                if closes_menu {
                     self.menu = None;
                 }
-                cx.notify();
+                // A click already notified; this would be a second full render of the note.
+                if moved || closes_menu {
+                    cx.notify();
+                }
             }
             InputEvent::Blur if self.active == Some(index) => {
                 self.active = None;
@@ -382,6 +410,29 @@ impl NoteEditor {
         }
     }
 
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// Ask for the note's title to become `title` once nothing is left to save. The answer is
+    /// [`EditorEvent::Rename`], so the page renames a settled note rather than one whose last
+    /// keystroke is still in the air.
+    pub fn request_rename(&mut self, title: String, cx: &mut Context<Self>) {
+        self.pending_rename = Some(title.into());
+        self.save(cx);
+        self.settled(cx);
+    }
+
+    /// Answers a rename that is waiting, once the text is saved and nothing is in flight.
+    fn settled(&mut self, cx: &mut Context<Self>) {
+        if self.saving || self.revision != self.saved_revision {
+            return;
+        }
+        if let Some(title) = self.pending_rename.take() {
+            cx.emit(EditorEvent::Rename(title));
+        }
+    }
+
     /// Bench only: types one character at the end of the last block, the way a keystroke does.
     /// Draws with `palette` instead of the window's appearance.
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -394,6 +445,17 @@ impl NoteEditor {
     fn palette(&self, window: &Window) -> Palette {
         self.palette
             .unwrap_or_else(|| Palette::for_appearance(window.appearance()))
+    }
+
+    /// Bench only: puts the caret in a block the way a click on its rendered text does, cycling
+    /// through the note. Measures what leaving the reader view for the markdown costs.
+    pub fn bench_click(&mut self, step: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let count = self.rows.len();
+        if count == 0 {
+            return;
+        }
+        let index = step % count;
+        self.focus(index, 0, window, cx);
     }
 
     pub fn bench_type(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -531,12 +593,13 @@ impl NoteEditor {
     ) {
         // Set before the focus event, so the next frame already draws this block's textarea.
         self.active = Some(index);
-        cx.notify();
         self.list.scroll_to_reveal_item(index);
         self.rows[index].input.update(cx, |input, cx| {
             input.set_selected_range(offset..offset, cx);
             input.focus(window, cx);
         });
+        // One frame: the focus event's own notify is skipped while `active` already says so.
+        cx.notify();
     }
 
     fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
@@ -572,6 +635,7 @@ impl NoteEditor {
             if content == self.base {
                 self.saved_revision = self.revision;
             }
+            self.settled(cx);
             return;
         }
         self.saving = true;
@@ -595,6 +659,7 @@ impl NoteEditor {
                         editor.problem = None;
                         // Typing during the save left more to send.
                         editor.save(cx);
+                        editor.settled(cx);
                     }
                     Err(SaveError::Conflict) => {
                         editor.editable = false;
@@ -624,18 +689,29 @@ impl NoteEditor {
 
 impl NoteEditor {
     fn render_block(
-        &self,
+        &mut self,
         index: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (Some(block), Some(row)) = (self.doc.blocks.get(index), self.rows.get(index)) else {
+        let Some(block) = self.doc.blocks.get(index) else {
             return div().into_any_element();
         };
+        // Read once, so the cache below may take `&mut self` without holding the block.
+        let (kind, text, prefix, gap) = (
+            block.kind,
+            block.text.clone(),
+            block.prefix.clone(),
+            block.gap,
+        );
         let palette = self.palette(window);
         let mono = cx.theme().mono_font_family.clone();
-        let indent = block.prefix.len() - block.prefix.trim_start().len();
-        let gutter: AnyElement = match block.kind {
+        let indent = prefix.len() - prefix.trim_start().len();
+        self.settle_shown(index, &text, palette);
+        let Some(row) = self.rows.get(index) else {
+            return div().into_any_element();
+        };
+        let gutter: AnyElement = match kind {
             Kind::Bullet => div()
                 .text_sm()
                 .text_color(rgb(palette.accent))
@@ -645,7 +721,7 @@ impl NoteEditor {
                 .text_xs()
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(rgb(palette.muted))
-                .child(block.prefix.trim().to_owned())
+                .child(prefix.trim().to_owned())
                 .into_any_element(),
             Kind::Todo(done) => {
                 let editor = cx.entity().downgrade();
@@ -659,7 +735,7 @@ impl NoteEditor {
             _ => div().into_any_element(),
         };
         // Code always shows its source; prose shows markdown only while the caret is in it.
-        let field = if self.active == Some(index) || block.kind == Kind::Code {
+        let field = if self.active == Some(index) || kind == Kind::Code {
             let field = Textarea::new(&row.input)
                 .appearance(false)
                 // Cancels the padding its editor gets from its size (`gpui-component`
@@ -670,7 +746,7 @@ impl NoteEditor {
                 .line_height(relative(1.3))
                 .readonly(!self.editable);
             // The textarea sets its own text size, so a heading styles the textarea itself.
-            match block.kind {
+            match kind {
                 Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::BOLD),
                 Kind::Heading(2) => field.text_xl().font_weight(FontWeight::SEMIBOLD),
                 Kind::Heading(_) => field.text_lg().font_weight(FontWeight::SEMIBOLD),
@@ -678,9 +754,9 @@ impl NoteEditor {
             }
             .into_any_element()
         } else {
-            formatted(index, &block.text, palette, cx)
+            self.formatted(index, cx)
         };
-        let field = match block.kind {
+        let field = match kind {
             Kind::Heading(1) => div()
                 .text_2xl()
                 .font_weight(FontWeight::BOLD)
@@ -742,12 +818,16 @@ impl NoteEditor {
                 .child(div().p_3().child(field)),
             _ => div().child(field),
         };
-        let label: SharedString = Inline::parse(&block.text).text.into();
+        let label = self
+            .shown
+            .get(index)
+            .and_then(Option::as_ref)
+            .map_or_else(SharedString::default, |shown| shown.label.clone());
         let handle = div()
             .id(("handle", index))
             .absolute()
             .left(px(-24.))
-            .top(px(if block.gap > 0 { 8. } else { 0. }))
+            .top(px(if gap > 0 { 8. } else { 0. }))
             .w(px(20.))
             .h(px(20.))
             .flex()
@@ -791,7 +871,7 @@ impl NoteEditor {
                 }),
             )
             .child(handle)
-            .pt(px(if block.gap > 0 { 10. } else { 2. }))
+            .pt(px(if gap > 0 { 10. } else { 2. }))
             .capture_action(cx.listener(move |editor, _: &Backspace, window, cx| {
                 if editor.on_backspace(index, window, cx) {
                     cx.stop_propagation();
@@ -919,40 +999,62 @@ impl NoteEditor {
     }
 }
 
-/// A block as a reader sees it. A click puts the caret at the same place in the markdown.
-fn formatted(
-    index: usize,
-    text: &str,
-    palette: Palette,
-    cx: &mut Context<NoteEditor>,
-) -> AnyElement {
-    let inline = Inline::parse(text);
-    // An empty block keeps one line's height.
-    let shown: SharedString = if inline.text.is_empty() {
-        " ".into()
-    } else {
-        inline.text.clone().into()
-    };
-    let styled = StyledText::new(shown).with_highlights(runs(&inline.marks, palette));
-    let layout = styled.layout().clone();
-    div()
-        .id(("formatted", index))
-        .w_full()
-        // The textarea's line height, so a block keeps its height when it gains the caret.
-        .line_height(relative(1.3))
-        .cursor_text()
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(move |editor, event: &MouseDownEvent, window, cx| {
-                let shown = layout
-                    .index_for_position(event.position)
-                    .unwrap_or_else(|nearest| nearest);
-                editor.focus(index, inline.source_offset(shown), window, cx);
-                cx.stop_propagation();
-            }),
-        )
-        .child(styled)
-        .into_any_element()
+impl NoteEditor {
+    /// Builds a block's reader view when its text or the palette moved, and keeps it otherwise.
+    fn settle_shown(&mut self, index: usize, text: &str, palette: Palette) {
+        let current = self.shown.get(index).and_then(Option::as_ref);
+        if current.is_some_and(|shown| shown.text == text && shown.palette == palette) {
+            return;
+        }
+        let inline = Arc::new(Inline::parse(text));
+        // An empty block keeps one line's height.
+        let label: SharedString = if inline.text.is_empty() {
+            " ".into()
+        } else {
+            inline.text.clone().into()
+        };
+        let highlights = runs(&inline.marks, palette);
+        if self.shown.len() <= index {
+            self.shown.resize_with(index + 1, || None);
+        }
+        self.shown[index] = Some(Shown {
+            text: text.to_owned(),
+            palette,
+            label,
+            inline,
+            highlights,
+        });
+    }
+
+    /// A block as a reader sees it. A click puts the caret at the same place in the markdown.
+    fn formatted(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let Some(shown) = self.shown.get(index).and_then(Option::as_ref) else {
+            return div().into_any_element();
+        };
+        let styled = StyledText::new(shown.label.clone()).with_highlights(shown.highlights.clone());
+        // An `Rc` handle: the layout fills in when the element is laid out, which this closure
+        // reads after that. Kept per frame, but the work behind it is not.
+        let layout = styled.layout().clone();
+        let inline = shown.inline.clone();
+        div()
+            .id(("formatted", index))
+            .w_full()
+            // The textarea's line height, so a block keeps its height when it gains the caret.
+            .line_height(relative(1.3))
+            .cursor_text()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |editor, event: &MouseDownEvent, window, cx| {
+                    let shown = layout
+                        .index_for_position(event.position)
+                        .unwrap_or_else(|nearest| nearest);
+                    editor.focus(index, inline.source_offset(shown), window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .child(styled)
+            .into_any_element()
+    }
 }
 
 /// Marks as non-overlapping highlight runs; where marks nest, their styles combine.

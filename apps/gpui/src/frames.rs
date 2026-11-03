@@ -33,7 +33,8 @@ impl FrameProbe {
             render_end: 0,
             pending_input: 0,
             armed: std::env::var_os("SJEL_GPUI_BENCH_SCROLL").is_none()
-                && std::env::var_os("SJEL_GPUI_BENCH_NOTE").is_none(),
+                && std::env::var_os("SJEL_GPUI_BENCH_NOTE").is_none()
+                && std::env::var_os("SJEL_GPUI_BENCH_CLICK").is_none(),
             out,
         }))))
     }
@@ -148,6 +149,56 @@ pub fn drive_type_bench(
             probe.input();
             if editor
                 .update_in(cx, |editor, window, cx| editor.bench_type(window, cx))
+                .is_err()
+            {
+                return;
+            }
+            cx.background_executor()
+                .timer(Duration::from_millis(8))
+                .await;
+        }
+        probe.arm(false);
+        let _ = cx.update(|_, cx| cx.quit());
+    })
+    .detach();
+}
+
+/// `SJEL_GPUI_BENCH_CLICK=<record path>`: open that note with saving off, then move the caret
+/// into another block every 8 ms, 240 times, and quit. This is what clicking a paragraph costs:
+/// it leaves the reader view for the block's markdown and back.
+pub fn drive_click_bench(
+    probe: FrameProbe,
+    path: String,
+    projects: gpui_kit::Entity<crate::projects::Projects>,
+    window: &mut gpui_kit::Window,
+    cx: &mut gpui_kit::Context<crate::workspace::Workspace>,
+) {
+    use std::time::Duration;
+    cx.spawn_in(window, async move |_, cx| {
+        let editor = loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(200))
+                .await;
+            let opened = projects.update_in(cx, |projects, window, cx| {
+                projects
+                    .bench_open(&path, window, cx)
+                    .then(|| projects.editor())
+                    .flatten()
+            });
+            match opened {
+                Ok(Some(editor)) => break editor,
+                Ok(None) => continue,
+                Err(_) => return,
+            }
+        };
+        cx.background_executor().timer(Duration::from_secs(1)).await;
+        probe.arm(true);
+        for step in 0..240 {
+            probe.input();
+            if editor
+                .update_in(cx, |editor, window, cx| {
+                    editor.bench_click(step, window, cx)
+                })
                 .is_err()
             {
                 return;

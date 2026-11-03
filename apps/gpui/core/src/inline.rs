@@ -44,6 +44,32 @@ impl Inline {
         self.source[shown.min(self.source.len() - 1)]
     }
 
+    /// The shown offset for a source offset. A position inside a marker collects to the first
+    /// shown byte after it, which is where a caret at the start of `**bold**` belongs.
+    pub fn shown_offset(&self, source: usize) -> usize {
+        // `source` is monotone, so the first entry at or past `source` is the answer.
+        let at = self.source.partition_point(|mapped| *mapped < source);
+        at.min(self.text.len())
+    }
+
+    /// The source ranges the marks hide: the `**`, the backticks, and a link's `](url)`. What a
+    /// rendered view leaves out, and what a live-preview editor conceals everywhere but under the
+    /// caret.
+    pub fn concealed(&self) -> Vec<Range<usize>> {
+        let mut ranges: Vec<Range<usize>> = Vec::new();
+        let mut expected = 0;
+        for mapped in &self.source {
+            if *mapped > expected {
+                match ranges.last_mut() {
+                    Some(range) if range.end == expected => range.end = *mapped,
+                    _ => ranges.push(expected..*mapped),
+                }
+            }
+            expected = *mapped + 1;
+        }
+        ranges
+    }
+
     fn push(&mut self, src: &str, at: usize, base: usize) {
         let ch = src[at..].chars().next().expect("a char at a char boundary");
         for byte in 0..ch.len_utf8() {
@@ -236,6 +262,84 @@ mod tests {
         // `t` sits after the newline and its indent.
         assert_eq!(inline.source_offset(4), 6);
         assert_eq!(Inline::parse("| a |\n| b |").text, "| a |\n| b |");
+    }
+
+    #[test]
+    fn concealment_names_every_marker_and_maps_the_caret_back() {
+        let src = "a **bold** and `code` [[Inbox|there]]";
+        let inline = Inline::parse(src);
+        let hidden: String = inline
+            .concealed()
+            .iter()
+            .map(|range| &src[range.clone()])
+            .collect();
+        assert_eq!(hidden, "****``[[Inbox|]]");
+        // A caret anywhere in a marker lands on the text after it, never inside.
+        assert_eq!(inline.shown_offset(2), 2);
+        assert_eq!(inline.shown_offset(3), 2);
+        assert_eq!(inline.shown_offset(4), 2);
+        assert_eq!((src.as_bytes()[4] as char), 'b');
+        // Every shown byte maps back to the byte it came from.
+        for shown in 0..inline.text.len() {
+            assert_eq!(
+                inline.source_offset(inline.shown_offset(inline.source_offset(shown))),
+                inline.source_offset(shown)
+            );
+        }
+        assert_eq!(Inline::parse("plain").concealed(), vec![]);
+        assert_eq!(inline.shown_offset(src.len()), inline.text.len());
+    }
+
+    /// `SJEL_NOTES_DIR=<dir> cargo test --lib concealment_cost -- --ignored`: what live preview
+    /// would add to a note, in microseconds. Parses each block, names its concealed ranges and
+    /// maps every source byte to the shown one. Prints timings and counts only, never note text.
+    #[test]
+    #[ignore]
+    fn concealment_cost() {
+        use std::time::Instant;
+        let dir = std::env::var("SJEL_NOTES_DIR").expect("SJEL_NOTES_DIR");
+        let mut stack = vec![std::path::PathBuf::from(dir)];
+        let (mut notes, mut blocks, mut bytes) = (0usize, 0usize, 0usize);
+        let mut slowest = (0f64, 0usize);
+        let mut total = 0f64;
+        while let Some(path) = stack.pop() {
+            for entry in std::fs::read_dir(&path).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|e| e == "md") {
+                    let content = std::fs::read_to_string(&path).unwrap();
+                    let doc = crate::blocks::Doc::parse(&content);
+                    let start = Instant::now();
+                    let mut plan = 0usize;
+                    for block in &doc.blocks {
+                        let inline = Inline::parse(&block.text);
+                        plan += inline.concealed().len();
+                        // Every caret the block can hold, mapped to the shown text.
+                        for source in 0..=block.text.len() {
+                            plan += inline.shown_offset(source);
+                        }
+                    }
+                    std::hint::black_box(plan);
+                    let micros = start.elapsed().as_secs_f64() * 1e6;
+                    notes += 1;
+                    blocks += doc.blocks.len();
+                    bytes += content.len();
+                    total += micros;
+                    if micros > slowest.0 {
+                        slowest = (micros, doc.blocks.len());
+                    }
+                }
+            }
+        }
+        println!(
+            "{notes} notes, {blocks} blocks, {bytes} bytes: {:.1} µs a note, {:.2} µs a block; \
+             slowest note {:.1} µs over {} blocks",
+            total / notes.max(1) as f64,
+            total / blocks.max(1) as f64,
+            slowest.0,
+            slowest.1
+        );
     }
 
     #[test]

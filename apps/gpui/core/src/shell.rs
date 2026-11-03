@@ -3537,13 +3537,8 @@ impl Shell {
     /// Renames a record: its file takes the new title, and every record linking `[[old]]` follows.
     pub async fn rename_record(&self, path: &str, title: &str) -> ShellResult<RenamedRecord> {
         let body = serde_json::json!({ "path": path, "title": title });
-        self.json(
-            Method::POST,
-            "/projects/api/record/rename",
-            Some(body),
-            30,
-        )
-        .await
+        self.json(Method::POST, "/projects/api/record/rename", Some(body), 30)
+            .await
     }
 
     /// Marks a task done, or open again, and answers with the record's new frontmatter.

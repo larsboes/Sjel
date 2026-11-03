@@ -180,6 +180,53 @@ pub fn check_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
+/// The path a record takes when its title changes: the same folder, a new last segment.
+///
+/// # Errors
+/// The title fails [`check_name`] or the path has no folder above the file.
+pub fn renamed_path(path: &str, title: &str) -> Result<String, String> {
+    let title = check_name(title)?;
+    let (folder, _) = path
+        .rsplit_once('/')
+        .ok_or_else(|| format!("{path}: a record needs a project folder"))?;
+    Ok(format!("{folder}/{title}.md"))
+}
+
+/// Every `[[title]]` in `content` pointed at `to`: `[[from]]`, `[[from|alias]]` and
+/// `[[from#Heading]]` keep their alias and heading, and it answers whether any link moved. A link
+/// into a folder (`[[P/from]]`) is left alone, as are the bytes of anything else.
+pub fn rewrite_links(content: &str, from: &str, to: &str) -> (String, usize) {
+    let mut out = String::with_capacity(content.len());
+    let mut rest = content;
+    let mut moved = 0;
+    while let Some(start) = rest.find("[[") {
+        out.push_str(&rest[..start]);
+        let link = &rest[start + 2..];
+        let Some(end) = link.find("]]") else {
+            out.push_str(&rest[start..]);
+            return (out, moved);
+        };
+        let body = &link[..end];
+        // The target ends at the alias or the heading, so the rest stays as written.
+        let matched = body == from
+            || body
+                .strip_prefix(from)
+                .is_some_and(|rest| rest.starts_with(['|', '#']));
+        if matched {
+            out.push_str("[[");
+            out.push_str(to);
+            out.push_str(&body[from.len()..]);
+            out.push_str("]]");
+            moved += 1;
+        } else {
+            out.push_str(&rest[start..start + 2 + end + 2]);
+        }
+        rest = &link[end + 2..];
+    }
+    out.push_str(rest);
+    (out, moved)
+}
+
 /// The content of a new task note, with the keys of the vault's task template.
 pub fn new_task(project: &str, summary: &str, due: Option<&str>, priority: u8) -> String {
     format!(
@@ -362,6 +409,34 @@ mod tests {
     }
 
     const TASK: &str = "---\ntype: task\nsummary: \"x\"\ndone: false\nstatus: open\ndue: 2026-10-24\npriority: 1\nprojects:\n  - \"[[Waschmaschine]]\"\n---\n\n## Details\n\n> [!note] kept\n";
+
+    #[test]
+    fn rewritten_links_follow_a_rename_and_keep_aliases() {
+        let content = "---\nprojects:\n  - \"[[Alt]]\"\n---\n\nSee [[Alt]], [[Alt|kurz]], [[Alt#Teil]], [[Altar]] and [[P/Alt]].\n";
+        let (moved, count) = rewrite_links(content, "Alt", "Neue Notiz");
+        assert_eq!(count, 4);
+        assert!(moved.contains("  - \"[[Neue Notiz]]\"\n"));
+        assert!(moved.contains("[[Neue Notiz|kurz]]"));
+        assert!(moved.contains("[[Neue Notiz#Teil]]"));
+        assert!(moved.contains("[[Altar]]") && moved.contains("[[P/Alt]]"));
+        assert_eq!(rewrite_links(content, "Nichts", "X").1, 0);
+        assert_eq!(rewrite_links("[[Alt", "Alt", "X").0, "[[Alt");
+    }
+
+    #[test]
+    fn a_renamed_path_keeps_its_folder_and_checks_the_title() {
+        assert_eq!(
+            renamed_path("P/Tasks/Alt.md", "Neu").unwrap(),
+            "P/Tasks/Neu.md"
+        );
+        assert_eq!(
+            renamed_path("Archive/Loose/Alt.md", "Neu").unwrap(),
+            "Archive/Loose/Neu.md"
+        );
+        assert!(renamed_path("Loose.md", "Neu").is_err());
+        assert!(renamed_path("P/Alt.md", "a/b").is_err());
+        assert!(renamed_path("P/Alt.md", " ").is_err());
+    }
 
     #[test]
     fn derives_project_kind_and_fields() {

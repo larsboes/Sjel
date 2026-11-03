@@ -412,6 +412,63 @@ pub async fn save(
     Ok(record)
 }
 
+/// What `rename` moved, and which records it pointed at the new title.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Renamed {
+    /// The record's path after the move.
+    pub path: String,
+    /// The title the new path carries.
+    pub title: String,
+    /// The records whose `[[...]]` links now name the new title.
+    pub links: Vec<String>,
+}
+
+/// Rename a record: its file takes the new title, and every record linking `[[Old]]` follows.
+///
+/// The links are rewritten first, each against the content it was read with, so a link whose note
+/// changed meanwhile refuses the rename instead of overwriting that change.
+///
+/// # Errors
+/// The record is not in the store, the title cannot become a path, a record or file already
+/// carries the new name, or a link rewrite lost its base.
+pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Renamed> {
+    let record = projects
+        .get(path)
+        .await?
+        .ok_or_else(|| SaveError::Refused(format!("no record {path:?}")))?;
+    let to = record::renamed_path(path, title).map_err(SaveError::Refused)?;
+    let title = to
+        .rsplit_once('/')
+        .map(|(_, file)| file.strip_suffix(".md").unwrap_or(file))
+        .unwrap_or(to.as_str())
+        .to_string();
+    if to == path {
+        return Ok(Renamed {
+            path: to,
+            title,
+            links: Vec::new(),
+        });
+    }
+    if projects.get(&to).await?.is_some() || projects.root().join(&to).exists() {
+        return Err(SaveError::Refused(format!("{title:?} is already a record")).into());
+    }
+    let mut links = Vec::new();
+    for other in projects.all().await? {
+        let (rewritten, moved) = record::rewrite_links(&other.content, &record.title, &title);
+        if moved == 0 {
+            continue;
+        }
+        save(projects, &other.path, &rewritten, Some(&other.content)).await?;
+        links.push(other.path);
+    }
+    projects.move_record(path, &to).await?;
+    Ok(Renamed {
+        path: to,
+        title,
+        links,
+    })
+}
+
 /// The content of a new note, typed at birth like every vault note.
 pub fn new_note(project: &str, title: &str, summary: &str) -> Result<(String, String), String> {
     let project = check_name(project)?;
@@ -682,7 +739,7 @@ fn encode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::tests::scratch;
+    use crate::store::{tests::scratch, Drift};
 
     fn vault(dir: &Path) -> std::path::PathBuf {
         let v = dir.join("vault");
@@ -1071,6 +1128,67 @@ mod tests {
         );
         let decoded = decode_base64("data:application/pdf;base64,cGRmLTE=").unwrap();
         assert_eq!(decoded, b"pdf-1");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A rename moves the file and every `[[link]]` that named it, and refuses a taken name.
+    #[tokio::test]
+    async fn a_rename_moves_the_file_and_the_links_that_name_it() {
+        let (projects, dir) = scratch("rename").await;
+        let note = "W/Alt.md";
+        let task = "W/Tasks/Folgen.md";
+        add_project(&projects, "W", "").await.unwrap();
+        save(
+            &projects,
+            note,
+            "---\ntype: note\nprojects:\n  - \"[[W]]\"\n---\n\n# Alt\n\nSee [[Alt]] and [[W|das Projekt]].\n",
+            None,
+        )
+        .await
+        .unwrap();
+        save(
+            &projects,
+            task,
+            "---\ntype: task\ndone: false\npriority: 2\nprojects:\n  - \"[[W]]\"\n---\n\nFollow [[Alt]] and [[Alt#Steps]].\n",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let renamed = rename(&projects, note, "Neu").await.unwrap();
+        assert_eq!(renamed.path, "W/Neu.md");
+        assert_eq!(renamed.title, "Neu");
+        assert_eq!(renamed.links, vec![note.to_string(), task.to_string()]);
+        assert!(projects.get(note).await.unwrap().is_none());
+        assert!(!projects.root().join(note).exists());
+        let moved = projects.get("W/Neu.md").await.unwrap().unwrap();
+        assert_eq!(moved.title, "Neu");
+        assert!(moved.content.contains("See [[Neu]] and [[W|das Projekt]]"));
+        let task_text = projects.get(task).await.unwrap().unwrap().content;
+        assert!(
+            task_text.contains("[[Neu]] and [[Neu#Steps]]"),
+            "{task_text}"
+        );
+        assert_eq!(
+            fs::read_to_string(projects.root().join(&renamed.path)).unwrap(),
+            moved.content
+        );
+        assert_eq!(projects.verify().await.unwrap(), Drift::default());
+
+        // The name that is taken, and a title that cannot be a path, are refused.
+        save(
+            &projects,
+            "W/Tasks/Zwei.md",
+            "---\ntype: task\ndone: false\npriority: 2\n---\n\nz\n",
+            None,
+        )
+        .await
+        .unwrap();
+        assert!(rename(&projects, "W/Tasks/Zwei.md", "Folgen")
+            .await
+            .is_err());
+        assert!(rename(&projects, task, "a/b").await.is_err());
+        assert!(rename(&projects, "W/Nichts.md", "X").await.is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 }

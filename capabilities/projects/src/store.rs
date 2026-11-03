@@ -420,6 +420,43 @@ impl Projects {
         Ok(removed)
     }
 
+    /// Move one record to a new path: the row takes the new path and title, the file moves with
+    /// it, and its inventory links follow. Returns whether a row was there.
+    ///
+    /// # Errors
+    /// The new path is not a record path, or a row or file already sits there.
+    pub async fn move_record(&self, from: &str, to: &str) -> Fallible<bool> {
+        if self.get(to).await?.is_some() {
+            return Err(format!("{to}: a record is already there").into());
+        }
+        let Some(record) = self.get(from).await? else {
+            return Ok(false);
+        };
+        let moved =
+            Record::from_content(to, record.content).map_err(|why| format!("{to}: {why}"))?;
+        if self.root.join(to).exists() {
+            return Err(format!("{to}: a file is already there").into());
+        }
+        let tx = self.db.begin().await?;
+        tx.execute(
+            "UPDATE projects_inventory_links SET record_path = ?1 WHERE record_path = ?2",
+            [to, from],
+        )
+        .await?;
+        tx.execute(
+            "UPDATE projects_records SET path = ?1, title = ?2 WHERE path = ?3",
+            [to, moved.title.as_str(), from],
+        )
+        .await?;
+        tx.commit().await?;
+        self.render(&moved)?;
+        match fs::remove_file(self.root.join(from)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
+        }
+        Ok(true)
+    }
+
     pub async fn get(&self, path: &str) -> Fallible<Option<Record>> {
         Ok(self.get_timed(path).await?.map(|(record, _)| record))
     }

@@ -2,7 +2,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{Disableable, Sizable, WindowExt};
 use gpui_kit::{
@@ -181,6 +181,8 @@ pub struct Projects {
     editor: Option<Entity<NoteEditor>>,
     /// The note being read before its editor can open.
     opening: Option<String>,
+    /// The note whose title is being typed: its path, the title it had, the field and its events.
+    title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
     /// The note whose last read failed. The hub opens itself only once, so a failing read is not
     /// retried on every frame.
     failed: Option<String>,
@@ -238,6 +240,7 @@ impl Projects {
             link_generation: 0,
             editor: None,
             opening: None,
+            title_edit: None,
             failed: None,
             new_task: None,
             due_edit: None,
@@ -1277,6 +1280,163 @@ impl Projects {
 
     /// Opens one note. A note read in the last few minutes is in memory, so it opens in the frame
     /// the click lands in; otherwise this reads it first, because a list read carries no content.
+    /// The open note's title: a field while it is being typed, else a heading that opens one.
+    ///
+    /// A title is the record's file name (`capabilities/projects`), so renaming moves the file.
+    /// The phone and its replica keep it read-only: a move there would arrive at the Mac as a new
+    /// note beside the old one.
+    fn note_title(
+        &self,
+        editor: &Entity<NoteEditor>,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (path, title) = {
+            let editor = editor.read(cx);
+            (editor.path().to_owned(), editor.title.clone())
+        };
+        if let Some((editing, _, input, _)) = &self.title_edit {
+            if *editing == path {
+                let input = input.clone();
+                return div()
+                    .w_full()
+                    .max_w(px(560.))
+                    .text_2xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
+                        view.cancel_title(cx);
+                        cx.stop_propagation();
+                    }))
+                    .child(Input::new(&input).appearance(false))
+                    .into_any_element();
+            }
+        }
+        let renamable = self.density != Density::Mobile && !self.repo.is_replica();
+        let heading = div()
+            .text_2xl()
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(rgb(palette.text))
+            .child(title);
+        if !renamable {
+            return heading.into_any_element();
+        }
+        div()
+            .id("note-title")
+            .group("note-title")
+            .flex()
+            .items_center()
+            .gap_2()
+            .cursor_pointer()
+            .on_click(cx.listener(|view, _, window, cx| view.edit_title(window, cx)))
+            .child(
+                div()
+                    .rounded(px(4.))
+                    .px(px(2.))
+                    .mx(px(-2.))
+                    .border_b_1()
+                    .border_color(rgba(0x00000000))
+                    .group_hover("note-title", |style| {
+                        style.border_color(rgba(tint(palette.muted, 0x88)))
+                    })
+                    .child(heading),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .opacity(0.)
+                    .group_hover("note-title", |style| style.opacity(0.8))
+                    .child("✎"),
+            )
+            .into_any_element()
+    }
+
+    /// Turns the open note's title into a field, holding what it was, so `Esc` can put it back.
+    fn edit_title(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editor) = self.editor.clone() else {
+            return;
+        };
+        let (path, title) = {
+            let editor = editor.read(cx);
+            (editor.path().to_owned(), editor.title.to_string())
+        };
+        if self
+            .title_edit
+            .as_ref()
+            .is_some_and(|(open, _, _, _)| *open == path)
+        {
+            return;
+        }
+        let input = cx.new(|cx| {
+            let mut state = InputState::new(window, cx).placeholder("Note title… (Press ↩ or Esc)");
+            state.set_value(title.clone(), window, cx);
+            state
+        });
+        let subscription = cx.subscribe_in(&input, window, |view, _, event, _, cx| match event {
+            InputEvent::PressEnter { shift: false, .. } => view.commit_title(cx),
+            InputEvent::Blur => view.cancel_title(cx),
+            _ => {}
+        });
+        input.update(cx, |state, cx| state.focus(window, cx));
+        self.title_edit = Some((path, title, input, subscription));
+        cx.notify();
+    }
+
+    /// Takes the typed title and asks the editor for it once the note is saved.
+    fn commit_title(&mut self, cx: &mut Context<Self>) {
+        let Some((_, was, input, _)) = self.title_edit.take() else {
+            return;
+        };
+        cx.notify();
+        let title = input.read(cx).value().trim().to_owned();
+        if title.is_empty() || title == was {
+            return;
+        }
+        if let Some(editor) = self.editor.clone() {
+            editor.update(cx, |editor, cx| editor.request_rename(title, cx));
+        }
+    }
+
+    fn cancel_title(&mut self, cx: &mut Context<Self>) {
+        if self.title_edit.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    /// Moves the open note's file to the new title, and the `[[links]]` that named the old one.
+    fn rename_open_note(&mut self, title: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editor) = self.editor.clone() else {
+            return;
+        };
+        let path = editor.read(cx).path().to_owned();
+        let repo = self.repo.clone();
+        let work = shell::run(async move { repo.rename_record(&path, &title).await });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update_in(cx, |view, window, cx| {
+                match result {
+                    Ok(renamed) => {
+                        let links = renamed.links.len();
+                        view.refresh_records(cx);
+                        view.load_all_notes(cx);
+                        view.open_note(renamed.path, true, window, cx);
+                        let done = if links == 0 {
+                            format!("Renamed to {}", renamed.title)
+                        } else {
+                            format!("Renamed to {} · {links} link(s) rewritten", renamed.title)
+                        };
+                        window.push_notification(Notification::success(done), cx);
+                    }
+                    Err(error) => {
+                        window.push_notification(Notification::error(error.to_string()), cx)
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(record) = self.repo.notes().get(&path) {
             self.opening = None;
@@ -1331,9 +1491,16 @@ impl Projects {
     ) {
         let saver = editor::repo_saver(self.repo.clone());
         let editor = cx.new(|cx| NoteEditor::new(record, saver, window, cx));
-        cx.subscribe(&editor, |projects, _, event, cx| match event {
-            EditorEvent::Close => projects.close_note(cx),
-        })
+        cx.subscribe_in(
+            &editor,
+            window,
+            |projects, _, event, window, cx| match event {
+                EditorEvent::Close => projects.close_note(cx),
+                EditorEvent::Rename(title) => {
+                    projects.rename_open_note(title.to_string(), window, cx)
+                }
+            },
+        )
         .detach();
         if !save {
             editor.update(cx, |editor, _| editor.editable_saves = false);
@@ -1706,6 +1873,7 @@ impl Projects {
 
     /// Saves what the open note still holds and closes its editor. The write outlives it.
     fn put_away_editor(&mut self, cx: &mut Context<Self>) {
+        self.title_edit = None;
         if let Some(editor) = self.editor.take() {
             editor.update(cx, |editor, cx| editor.save(cx));
             cx.emit(ProjectsEvent::Editing(false));
@@ -2486,12 +2654,7 @@ impl Render for Projects {
                                             .child(title.clone()),
                                     ),
                             )
-                            .child(
-                                div()
-                                    .text_2xl()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(title),
-                            )
+                            .child(self.note_title(editor, palette, cx))
                             .child(div().flex_1().min_h_0().child(editor.clone())),
                     )
                     .into_any_element();
@@ -2722,12 +2885,7 @@ impl Render for Projects {
                                     .flex()
                                     .flex_col()
                                     .gap_3()
-                                    .child(
-                                        div()
-                                            .text_2xl()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(editor.read(cx).title.clone()),
-                                    )
+                                    .child(self.note_title(editor, palette, cx))
                                     .child(div().flex_1().min_h_0().child(editor.clone())),
                             )
                             .into_any_element()
@@ -2831,12 +2989,7 @@ impl Render for Projects {
                                                     .child(editor.read(cx).title.clone()),
                                             ),
                                     )
-                                    .child(
-                                        div()
-                                            .text_2xl()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(editor.read(cx).title.clone()),
-                                    )
+                                    .child(self.note_title(editor, palette, cx))
                                     .child(div().flex_1().min_h_0().child(editor.clone())),
                             )
                             .into_any_element()

@@ -122,6 +122,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
+        path: "/api/record/rename",
+        summary: "Rename a record: its file takes the new title, and every record linking [[old]] is rewritten to the new title with its alias and heading kept.",
+        request_schema: Some(route_manifest::schema_of::<RenameRecord>),
+    },
+    route_manifest::Route {
+        method: "POST",
         path: "/api/file",
         summary: "Store a project attachment (base64 body) under a live project folder; refuses to overwrite different bytes (409).",
         request_schema: Some(route_manifest::schema_of::<AttachFile>),
@@ -210,6 +216,13 @@ struct AddNote {
 #[derive(Deserialize, schemars::JsonSchema)]
 struct RemoveRecord {
     path: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+struct RenameRecord {
+    path: String,
+    /// The record's new title, which becomes its file's name in the same folder.
+    title: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -808,6 +821,20 @@ async fn remove_record(
     Ok(Json(json!({ "removed": removed })))
 }
 
+async fn rename_record(
+    State(projects): State<Shared>,
+    Json(body): Json<RenameRecord>,
+) -> Result<Json<Value>, ApiError> {
+    let renamed = ops::rename(&projects, &body.path, &body.title)
+        .await
+        .map_err(|e| api_error(true, e))?;
+    Ok(Json(json!({
+        "path": renamed.path,
+        "title": renamed.title,
+        "links": renamed.links,
+    })))
+}
+
 async fn attach_file(
     State(projects): State<Shared>,
     Json(body): Json<AttachFile>,
@@ -870,6 +897,7 @@ fn router(projects: Shared) -> Router {
         .route("/api/record", get(get_record).post(save_record))
         .route("/api/record/property", post(set_property))
         .route("/api/record/remove", post(remove_record))
+        .route("/api/record/rename", post(rename_record))
         .route("/api/notes", post(add_note))
         .layer(middleware::from_fn_with_state(
             "projects",
@@ -1168,6 +1196,41 @@ mod tests {
                 .0,
             StatusCode::BAD_REQUEST
         );
+        // A rename answers with the new path and the records whose links moved.
+        assert_eq!(
+            call(
+                &router,
+                post("/api/notes", json!({"project":"W","title":"Alt"}))
+            )
+            .await
+            .0,
+            StatusCode::CREATED
+        );
+        let (status, body) = call(
+            &router,
+            post(
+                "/api/record/rename",
+                json!({"path":"W/Alt.md","title":"Neu"}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["path"], "W/Neu.md");
+        assert_eq!(body["title"], "Neu");
+        assert_eq!(body["links"].as_array().map(Vec::len), Some(0));
+        assert_eq!(
+            call(
+                &router,
+                post(
+                    "/api/record/rename",
+                    json!({"path":"W/Neu.md","title":"a/b"})
+                )
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+
         let base = "---\nclass: c2\n---\n\nExisting note\n";
         assert_eq!(
             call(

@@ -15,6 +15,8 @@ const USAGE: &str = "usage: projects <command>
   set <path> <key> [value]                     set one property; no value clears it
   attach <path> <file>                         store a binary attachment in a live project
   remove <path>                                delete a record and its rendered file
+  rename <path> <title>                        move a record's file to the new title and
+                                               rewrite the [[links]] that name the old one
   normalize [--apply]                          put every task on the status schema; dry run first
   import <vault>/Projects [--only PROJECT]     copy vault project notes into the store
   import <vault> --folder Atlas/<Domain>       copy one domain folder, keeping its path
@@ -198,6 +200,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let path = positional(1)?;
             let removed = projects.remove(path).await?;
             println!("{} {path}", if removed { "removed" } else { "no record" });
+        }
+        "rename" => {
+            let renamed = ops::rename(&projects, positional(1)?, positional(2)?).await?;
+            println!(
+                "{} -> {} ({} link(s) rewritten)",
+                positional(1)?,
+                renamed.path,
+                renamed.links.len()
+            );
         }
         "normalize" => {
             let apply = args.iter().any(|a| a == "--apply");

@@ -1,6 +1,6 @@
 # Learning: teach, practice, and claims in the vault
 
-Learning runs in the vault first. The `teach` and `practice` skills in `Packs/knowledge/` hold
+Learning runs in the vault first. The `teach` and `practice` skills in `Packs/learning/` hold
 the method, and the vault holds the result as claim notes. A Sjel learning surface is built
 only when vault sessions show friction that a UI removes.
 
@@ -24,12 +24,17 @@ rather than defining a claim row. `quiz` takes thinking and
 confidence before the reveal. In Claude Code, `teach` uses `AskUserQuestion` with a confidence
 question and the option note. The `🧩 Claims` view in `Knowledge.base` lists a concept's claims.
 
+Shipped 2026-11-03: `teach` and `practice` moved to their own Pack, `Packs/learning`, and
+`teach/references/figures.md` covers figures, including Anatomy figures in `html-embed`.
+Anatomy is installed globally (`~/.agents/skills/anatomy`), so pi loads it from the vault.
+
 Open:
 
 1. Run five real `teach` sessions, each followed by `practice`. Done when
    `Knowledge/Meta/Learning Log.md` has five teach lines and five practice lines.
 
-Not checked: the `🧩 Claims` view renders only in Obsidian, and no one has looked at it yet. Also not checked: no session has run on the new skill text yet.
+Not checked: no figure built by `figures.md` has rendered in Obsidian yet, and no Anatomy
+page has been checked inside `html-embed`. Also not checked: the `🧩 Claims` view renders only in Obsidian, and no one has looked at it yet. Also not checked: no session has run on the new skill text yet.
 
 ## 2. Stage 2: practice on the phone
 
@@ -50,9 +55,9 @@ extends stage 1; it does not promote learning above its Priority 3 position in `
 
 ### Verified foundations
 
-- `Packs/knowledge/skills/teach/SKILL.md` already specifies probing, a linked learning path,
+- `Packs/learning/skills/teach/SKILL.md` already specifies probing, a linked learning path,
   prediction, explanation, application checks, concept-note updates and claim extraction.
-- `Packs/knowledge/skills/practice/SKILL.md` already specifies interleaved application problems,
+- `Packs/learning/skills/practice/SKILL.md` already specifies interleaved application problems,
   hints, reasoning and confidence, and retesting misses. It appends a session log but defines
   no persistent per-claim review schedule.
 - `Packs/knowledge/pi-packages/obsidian-access/` already supplies governed search, backlinks,
@@ -64,7 +69,7 @@ extends stage 1; it does not promote learning above its Priority 3 position in `
 
 The original [learn](https://github.com/amosblomqvist/learn) repository describes a Pi
 configuration of skills, extensions and agent definitions, and links the video
-“How I Use AI to Learn Things”. Its influence is already recorded in the knowledge Pack README
+“How I Use AI to Learn Things”. Its influence is already recorded in the learning Pack README
 and the `[learnharness]` entry in `upstreams.toml`.
 
 The saved source “I built an AI workflow to learn from long-form YouTube videos” was found in

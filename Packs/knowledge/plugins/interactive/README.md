@@ -25,7 +25,9 @@ frames and listeners before a rerender or note teardown. Read `native-renderer.t
 lifecycle code. Inspect `theme.ts` and use the
 plugin's theme variables and `obsidian-theme-change` event instead of fixing one theme.
 
-Use the plugin's `html-embed` iframe mode when isolation is needed. Check its script, resize
+Use the plugin's `html-embed` iframe mode when isolation is needed, and for any full HTML
+document that styles `<body>`: an Anatomy page puts `class="iso"` and `data-theme` there, and
+the native renderer keeps only the body's children. Check its script, resize
 and asset-loading contract first; native and iframe mode are different renderers.
 A static SVG or PNG is an optional export for print, sharing or a client without the plugin.
 It does not replace the interactive note embed by default.

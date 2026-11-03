@@ -2,10 +2,10 @@
 # The pack is the purpose (knowledge work), the skill is the tool (obsidian). Collapsed
 # 2026-08-22 from eight skills to three: the syntax references carried triggers broad
 # enough to fire instead of the skill that gates writes on the vault contract, so they
-# are references/ inside it now and cannot win a trigger.
+# are references/ inside it now and cannot win a trigger. teach and practice live in Packs/learning.
 name        = "knowledge"
-description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, taught learning sessions, practice on what was taught, and clean web capture."
-skills      = ["obsidian", "teach", "practice", "defuddle", "research"]
+description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, research, and clean web capture."
+skills      = ["obsidian", "defuddle", "research"]
 license     = "MIT"
 personal    = ["config/knowledge.toml", "config/obsidian-access.toml"]
 links       = ["knowledge-base"]

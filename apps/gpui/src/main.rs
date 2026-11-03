@@ -76,6 +76,8 @@ struct MainWindow {
 impl Global for MainWindow {}
 
 fn main() {
+    sjel_gpui_ui::documents::set_default_pdf_renderer(pdf_kit::default_renderer);
+    sjel_gpui_ui::clipper::set_rich_clipboard_reader(clipboard::read_rich_clipboard);
     let (url_tx, mut url_rx) = futures::channel::mpsc::unbounded::<String>();
     let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets::new(""));
     app.on_open_urls(move |urls| {

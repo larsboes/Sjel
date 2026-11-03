@@ -31,43 +31,13 @@ use objc2_core_graphics::{
     CGBitmapContextGetHeight, CGBitmapInfo, CGColorSpace, CGContext, CGDataProvider,
     CGImageAlphaInfo, CGImageByteOrderInfo, CGPDFBox, CGPDFDocument, CGPDFPage,
 };
+pub use sjel_gpui_ui::documents::{PdfError, PdfRenderer};
 
 /// The most one page may be drawn at. A PDF's media box is document-supplied data: a page claiming
 /// 100 000 points would otherwise ask for gigapixels of RAM. 64 MP is 256 MiB of BGRA, well past a
 /// 5 K display at 3× and far below anything that would exhaust this machine.
 #[cfg(target_os = "macos")]
 const MAX_PAGE_PIXELS: u64 = 64 * 1024 * 1024;
-
-/// Why a page could not be drawn. Every variant is shown to the reader rather than swallowed into
-/// an empty pane.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub enum PdfError {
-    /// The bytes are not a PDF Core Graphics can open.
-    Unreadable,
-    /// The page number is outside the document.
-    NoSuchPage,
-    /// The page box is empty, or drawing it would need more than [`MAX_PAGE_PIXELS`].
-    TooLarge,
-    /// Core Graphics would not build a bitmap for this page.
-    NoBitmap,
-    /// This platform has no PDF renderer.
-    #[cfg(not(target_os = "macos"))]
-    Unsupported,
-}
-
-impl std::fmt::Display for PdfError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Unreadable => "This file is not a PDF this Mac can read.",
-            Self::NoSuchPage => "That page is not in this document.",
-            Self::TooLarge => "This page is too large to draw here.",
-            Self::NoBitmap => "This page could not be drawn.",
-            #[cfg(not(target_os = "macos"))]
-            Self::Unsupported => "PDF pages cannot be drawn on this platform yet.",
-        })
-    }
-}
 
 /// One page's pixels, in the order GPUI's image atlas wants them.
 pub struct PageImage {
@@ -267,7 +237,7 @@ enum Job {
     Page {
         page: usize,
         width: u32,
-        reply: oneshot::Sender<Result<PageImage, PdfError>>,
+        reply: oneshot::Sender<Result<Arc<RenderImage>, PdfError>>,
     },
 }
 
@@ -285,7 +255,7 @@ impl Job {
                 let _ = reply.send(Ok(pdf.page_count()));
             }
             Self::Page { page, width, reply } => {
-                let _ = reply.send(pdf.render(page, width));
+                let _ = reply.send(pdf.render(page, width).map(PageImage::into_render_image));
             }
         }
     }
@@ -314,6 +284,10 @@ struct Request {
 /// reopened only when the bytes change, which for a reader means when another document is opened.
 pub struct PageRenderer {
     requests: mpsc::SyncSender<Request>,
+}
+
+pub fn default_renderer() -> Result<Arc<dyn PdfRenderer>, String> {
+    PageRenderer::new().map(|renderer| Arc::new(renderer) as Arc<dyn PdfRenderer>)
 }
 
 impl PageRenderer {
@@ -355,9 +329,10 @@ impl PageRenderer {
             .map_err(|error| format!("Starting the PDF page worker: {error}"))?;
         Ok(Self { requests })
     }
+}
 
-    /// How many pages the opened bytes hold. Asked once, so the reader can size its page strip.
-    pub fn info(&self, bytes: Arc<Vec<u8>>) -> oneshot::Receiver<Result<usize, PdfError>> {
+impl PdfRenderer for PageRenderer {
+    fn info(&self, bytes: Arc<Vec<u8>>) -> oneshot::Receiver<Result<usize, PdfError>> {
         let (reply, answer) = oneshot::channel();
         let _ = self.requests.send(Request {
             bytes,
@@ -366,19 +341,30 @@ impl PageRenderer {
         answer
     }
 
-    /// Ask for one page. The answer carries the pixels, or why there are none.
-    pub fn render(
+    fn render(
         &self,
         bytes: Arc<Vec<u8>>,
         page: usize,
         width: u32,
-    ) -> oneshot::Receiver<Result<PageImage, PdfError>> {
+    ) -> oneshot::Receiver<Result<Arc<RenderImage>, PdfError>> {
         let (reply, answer) = oneshot::channel();
         let _ = self.requests.send(Request {
             bytes,
             job: Job::Page { page, width, reply },
         });
         answer
+    }
+
+    #[cfg(target_os = "macos")]
+    fn open_external(&self, filename: &str, bytes: &[u8]) {
+        let dir = std::env::temp_dir().join("sjel-documents");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join(filename);
+        if std::fs::write(&path, bytes).is_ok() {
+            let _ = std::process::Command::new("/usr/bin/open")
+                .arg(&path)
+                .spawn();
+        }
     }
 }
 

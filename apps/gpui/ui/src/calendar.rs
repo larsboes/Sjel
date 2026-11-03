@@ -34,6 +34,9 @@ use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 use crate::data::{self, Press, Repo};
 use crate::{Density, Palette};
 
+pub mod page;
+pub use page::*;
+
 /// What the page asks its host to do. The host owns the network, the copy on disk, and the sync.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CalendarEvent {

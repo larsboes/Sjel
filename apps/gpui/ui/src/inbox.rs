@@ -23,6 +23,8 @@ use sjel_gpui_core::store::{LocalCapture, TursoStore};
 use crate::theme::tint;
 use crate::{Density, Palette};
 
+pub mod triage;
+
 /// What the page asks its host to do. The host owns the sync and the keyboard.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InboxEvent {

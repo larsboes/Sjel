@@ -78,8 +78,8 @@ Documents and People open directly from Today 1-tap shortcuts, finder, and links
 
 ### Documents
 
-1. Move the page into `ui/` behind a `PdfRenderer` trait in the shell. PDFKit implements it on
-   macOS and iOS.
+1. Done: `Documents` lives in `ui/src/documents.rs` behind the `PdfRenderer` trait; Core Graphics
+   (`src/pdf_kit.rs`) implements it on macOS. Open: iOS `PdfRenderer` wiring.
 2. The phone lists documents from `GET /api/documents` with cursor paging (§7), and opens the
    hash-verified original at fit width with pinch zoom.
 3. "Keep offline" stores the original and its metadata on the phone (rule 2).
@@ -371,11 +371,13 @@ build was performed for this handoff.
 1. **gpui-kit 0.8.0.** The app pins `gpui-kit = "=0.7.3"` and `gpui-pre = "=0.3.9"` in three
    manifests, and `gpui-mobile` at git rev `c24a1308e1`. Move all four pins in one commit of its
    own, with `cargo test` on core and ui and `ios/run-sim` before and after.
-2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`).
-   Still in `src/`: Documents (PDFKit), Feed (needs Documents), Capabilities, and the Mac wrappers
-   `people_view`, `context_view` and `calendar_view`. A platform call goes behind one small trait
-   in the shell (keychain, open URL, audio, notifications, scanner), never as a `cfg` in a page.
-   Run `simplify` on each page as it moves.
+2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
+   ten more modules (`documents`, `feed`, `scout`, `clipper`, `people::page`, `calendar::page`,
+   `inbox::triage`, `import`, `ytalbum`, `ask`) moved on 2026-11-03 behind `PdfRenderer` and rich
+   clipboard callbacks. Still in `src/`: `capabilities`, `context_view`, `docs` (Mermaid renderer),
+   `accounts` and `settings`. A platform call goes behind one small trait in the shell (keychain,
+   open URL, audio, notifications, scanner), never as a `cfg` in a page. Run `simplify` on each
+   page as it moves.
 3. **Phone tabs for moved pages.** The phone bar is full at five (`Today | Inbox | Calendar |
    People | Travel`, `ui/src/nav.rs`). A sixth page needs a different bar, not a sixth item.
    Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).

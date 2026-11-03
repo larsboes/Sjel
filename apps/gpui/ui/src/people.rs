@@ -27,6 +27,9 @@ use sjel_gpui_core::places::{self, PersonLink, Place};
 
 use crate::{Density, Palette};
 
+pub mod page;
+pub use page::*;
+
 /// What the page asks its host to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PeopleEvent {

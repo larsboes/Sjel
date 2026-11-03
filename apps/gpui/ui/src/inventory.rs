@@ -239,6 +239,7 @@ impl InventoryPage {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
         let source = repo.shell().ok().map(RoomPlanSource::Shell);
         let roomplan_history = cx.new(|cx| {
+            #[allow(unused_mut)]
             let mut history = RoomPlanHistory::new(source, cx);
             #[cfg(target_os = "macos")]
             history.set_cache_preview_handler(Some(cache_preview_roomplan));

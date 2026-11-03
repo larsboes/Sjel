@@ -7107,6 +7107,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sjel-gpui-core",
+ "tokio",
 ]
 
 [[package]]

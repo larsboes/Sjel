@@ -491,6 +491,16 @@ async fn create_place(
             json!({ "error": "place must have a name, query, note or link" }),
         );
     };
+
+    const VALID_KINDS: &[&str] = &["venue", "city", "station", "address", "region"];
+    if let Some(kind) = request.kind.as_deref() {
+        if !VALID_KINDS.contains(&kind) {
+            return respond(
+                StatusCode::BAD_REQUEST,
+                json!({ "error": format!("invalid kind '{kind}': must be venue, city, station, address, or region") }),
+            );
+        }
+    }
     let name = name.to_string();
     let database_path = state.database_path.clone();
     let now = today();
@@ -595,7 +605,13 @@ async fn create_place(
     .await
     {
         Ok(Ok(val)) => respond(StatusCode::OK, val),
-        Ok(Err(err)) => failed(err),
+        Ok(Err(err)) => {
+            if err.contains("CHECK constraint failed") || err.contains("constraint failed") {
+                respond(StatusCode::BAD_REQUEST, json!({ "error": err }))
+            } else {
+                failed(err)
+            }
+        }
         Err(_) => failed("task panicked".into()),
     }
 }
@@ -1641,6 +1657,29 @@ mod tests {
         assert_eq!(p2.name, "Cozy neighborhood bar");
         assert_eq!(p2.external_ref, Some("https://example.com/nice-bar".into()));
         assert_eq!(p2.latitude, None);
+    }
+
+    #[tokio::test]
+    async fn create_place_refuses_invalid_kind_with_bad_request() {
+        let path = scratch_database("create-place-invalid-kind");
+        let state = AppState {
+            database_path: Arc::new(path),
+        };
+        let req = CreatePlaceRequest {
+            name: Some("Invalid Kind Place".into()),
+            query: None,
+            link: None,
+            note: None,
+            address: None,
+            city: None,
+            country_code: None,
+            kind: Some("invalid_kind".into()),
+            latitude: Some(52.5),
+            longitude: Some(13.4),
+        };
+        let (status, Json(body)) = create_place(State(state), Json(req)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert!(body["error"].as_str().unwrap().contains("invalid kind"));
     }
 }
 

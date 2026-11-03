@@ -187,6 +187,9 @@ Open:
 
 1. iPhone screenshots. The simulator must join the container's node, not the Mac's live one,
    so the demo stack needs the LAN listener and the `devices` capability.
-2. Finance draws its key hints over the last visible row.
-3. Seeded calendar events carry no place, so Calendar groups no trip from them.
-4. `POST /places/api/places` answers 500, not 400, for a `kind` outside its CHECK constraint.
+
+Done:
+
+- Finance draws key hints without overlapping the last visible row (fixed with bounded flex-1, scroll containers, and bottom padding in `apps/gpui/ui/src/finance.rs`).
+- Seeded calendar events during trips carry the destination city and guarantee at least two events per trip, allowing Calendar to cluster trip drafts (`tools/demo-seed.ts`).
+- `POST /places/api/places` validates `kind` upfront and maps CHECK constraint failures to 400 Bad Request (`capabilities/places/src/server.rs`).

@@ -134,21 +134,56 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
       const event = ctx.rng.pick(VOCABULARY.events);
       const date = addDays(ctx.anchor, day);
       const window = eventWindow(ctx.rng, date, event.hours);
+      const activeTrip = VOCABULARY.trips.find(
+        (t) => day >= t.offsetDays && day <= t.offsetDays + t.nights
+      );
       await post(entries, {
-        kind: event.kind,
+        kind: activeTrip ? (event.kind === "nightlife" ? "nightlife" : "event") : event.kind,
         // Past entries are settled, near ones are planned, far ones are still ideas. A
         // calendar where everything is equally certain cannot demonstrate a tool whose
         // whole model is that they are not.
         commitment: day < 0 ? "committed" : day < 14 ? "planned" : "possible",
-        title: event.title,
+        title: activeTrip ? `${event.title} (${activeTrip.city})` : event.title,
         starts_at: window.starts_at,
         ends_at: window.ends_at,
         all_day: false,
-        location: ctx.rng.bool(0.6) ? VOCABULARY.home.name : null,
+        location: activeTrip ? activeTrip.city : (ctx.rng.bool(0.6) ? VOCABULARY.home.name : null),
         notes: null,
         source: "manual",
       });
       count++;
+    }
+
+    // Ensure each trip within range has at least two away events so Calendar clusters them into a trip draft.
+    for (const trip of VOCABULARY.trips) {
+      if (trip.offsetDays < -26 || trip.offsetDays > 44) continue;
+      const day1 = trip.offsetDays + 1;
+      const day2 = trip.offsetDays + 2;
+      const w1 = eventWindow(ctx.rng, addDays(ctx.anchor, day1), 2);
+      const w2 = eventWindow(ctx.rng, addDays(ctx.anchor, day2), 3);
+      await post(entries, {
+        kind: "event",
+        commitment: trip.offsetDays < 0 ? "committed" : "planned",
+        title: `Explore ${trip.city}`,
+        starts_at: w1.starts_at,
+        ends_at: w1.ends_at,
+        all_day: false,
+        location: trip.city,
+        notes: null,
+        source: "manual",
+      });
+      await post(entries, {
+        kind: "nightlife",
+        commitment: trip.offsetDays < 0 ? "committed" : "planned",
+        title: `Dinner in ${trip.city}`,
+        starts_at: w2.starts_at,
+        ends_at: w2.ends_at,
+        all_day: false,
+        location: trip.city,
+        notes: null,
+        source: "manual",
+      });
+      count += 2;
     }
 
     for (const trip of VOCABULARY.trips.filter((t) => t.offsetDays > 0)) {

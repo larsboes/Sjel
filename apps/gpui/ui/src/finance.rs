@@ -1042,11 +1042,19 @@ impl Render for FinancePage {
             .size_full()
             .flex()
             .flex_col()
-            .gap_4()
+            .gap_3()
             .child(header)
-            .child(div().flex_1().min_h_0().child(content))
             .child(
                 div()
+                    .flex_1()
+                    .min_h_0()
+                    .size_full()
+                    .overflow_hidden()
+                    .child(content),
+            )
+            .child(
+                div()
+                    .flex_none()
                     .flex()
                     .items_center()
                     .gap_3()
@@ -1983,10 +1991,14 @@ impl FinancePage {
         }
         let mut view = div()
             .id("finance-import-review-scroll")
+            .size_full()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap_3()
             .overflow_y_scroll()
+            .pb_6()
             .child(
                 div()
                     .flex()
@@ -2263,10 +2275,14 @@ impl FinancePage {
 
         div()
             .id("finance-overview-scroll")
+            .size_full()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap_4()
             .overflow_y_scroll()
+            .pb_6()
             .child(stat_cards)
             .child(balance_panel)
             .child(balance_editor)
@@ -2542,6 +2558,7 @@ impl FinancePage {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
+                    .pb_6()
                     .child(table_body),
             )
             .into_any_element()
@@ -2703,6 +2720,7 @@ impl FinancePage {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
+                    .pb_6()
                     .child(cards_grid),
             )
             .into_any_element()

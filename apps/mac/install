@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # apps/mac/install — build, sign and install the Sjel menu-bar app as ~/Applications/Sjel.app.
 #
-# The app is what a person without a terminal uses to open the dashboard (ISA ISC-45): one click
-# in the menu bar, and the browser arrives logged in. `swift build` makes a bare executable, and
-# both a login item (SMAppService) and a stable Keychain permission need a signed app bundle, so
+# The app is the menu-bar companion: node health, agent approvals and Open App. `swift build`
+# makes a bare executable, and both a login item (SMAppService) and a stable Keychain permission need a signed app bundle, so
 # this script assembles one.
 #
 # Signed with the first valid code-signing identity in the keychain, or SJEL_CODESIGN_IDENTITY,

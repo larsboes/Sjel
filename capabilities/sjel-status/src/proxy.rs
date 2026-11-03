@@ -321,16 +321,8 @@ async fn forward(proxy: &Proxy, route: Route, req: Request) -> Response {
         if is_hop_by_hop(name) || name == axum::http::header::HOST {
             continue;
         }
-        // The browser's session cookie authenticates it to this shell and nowhere else.
+        // No client of the shell authenticates with a cookie, so none is passed on.
         if name == axum::http::header::COOKIE {
-            if let Some(rest) = value
-                .to_str()
-                .ok()
-                .and_then(crate::session::without_session_cookie)
-                .and_then(|rest| axum::http::HeaderValue::from_str(&rest).ok())
-            {
-                headers.append(name.clone(), rest);
-            }
             continue;
         }
         headers.insert(name.clone(), value.clone());
@@ -589,7 +581,7 @@ mod tests {
             upstream(Some(("x-sjel-token", "deployment-token"))),
             "Bearer comms-token"
         );
-        // The browser: a session cookie and no header.
+        // No credential header at all.
         assert_eq!(upstream(None), "Bearer comms-token");
         // An agent's own token reaches comms as itself.
         assert_eq!(

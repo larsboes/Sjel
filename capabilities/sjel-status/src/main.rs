@@ -27,7 +27,6 @@ use tower::Layer;
 mod device_gate;
 mod lan;
 mod proxy;
-mod session;
 mod status;
 mod storage_history;
 
@@ -254,21 +253,6 @@ const ROUTES: &[route_manifest::Route] = &[
         summary: "Allow or deny one agent write that waits in ask mode. Body: { allow }.",
         request_schema: Some(route_manifest::schema_of::<status::DecisionBody>),
     },
-    r(
-        "POST",
-        "/api/sjel-status/session/ticket",
-        "A single-use, 60-second ticket for the browser login. The Mac app calls it with the deployment token.",
-    ),
-    r(
-        "GET",
-        "/session/open",
-        "Trade ?ticket= for a 30-day browser session cookie and redirect to the dashboard. Needs no other credential.",
-    ),
-    r(
-        "POST",
-        "/api/sjel-status/session/logout",
-        "End this browser's session and clear its cookie.",
-    ),
     route_manifest::Route {
         method: "POST",
         path: "/api/sjel-status/capabilities/{name}/backup",
@@ -393,11 +377,6 @@ async fn main() {
         None => sjel_server::InboundAuth::from_deployment(),
     }
     .require_credential();
-    // A browser on this Mac logs in through the menu-bar app (ISA ISC-45, src/session.rs).
-    // Only this listener exempts the ticket route: the LAN admits paired devices and the socket
-    // admits the tailnet, and the session verifier itself is installed by `from_deployment` for
-    // every capability (sjel_server::session).
-    let auth = auth.with_session_open();
     // The same router on the local network, for paired devices only, when the deployment
     // enabled it. Without the registry there is nothing to admit, so it does not start.
     if let Some(verifier) = verifier {
@@ -555,15 +534,6 @@ fn build_router(shell: proxy::Proxy) -> Router {
             "/api/sjel-status/updates/apply",
             post(updates_apply_handler),
         )
-        .route(
-            "/api/sjel-status/session/ticket",
-            post(session::ticket_handler),
-        )
-        .route(
-            "/api/sjel-status/session/logout",
-            post(session::logout_handler),
-        )
-        .route(sjel_server::SESSION_OPEN_PATH, get(session::open_handler))
         .route(
             "/api/sjel-status/runtime",
             get(runtime_handler).post(runtime_update_handler),

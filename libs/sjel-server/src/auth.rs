@@ -36,11 +36,6 @@
 //! | yes | the operator | served, without a token |
 //! | yes | anyone else | `401` |
 //!
-//! A third identity is the local browser session ([`crate::session`]): the shell mints a signed
-//! cookie after the menu-bar app trades the Keychain token for a ticket, and every capability
-//! verifies it from the request alone. That is what lets a capability's own panel — loaded by the
-//! browser from the capability's port, carrying no token — reach its own API.
-//!
 //! `require_credential` refuses direct loopback requests, including requests that forge a
 //! tailnet identity header. `tailnet_proxy_only` is reserved for a Unix-socket listener that
 //! only Tailscale Serve can reach; the managed agent sandbox denies that socket path.
@@ -147,30 +142,6 @@ pub fn normalize_legacy_headers(headers: &mut HeaderMap) {
 /// proxy (`capabilities/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
 const MAX_SIGNED_BODY_BYTES: usize = 8 * 1024 * 1024;
 
-/// The cookie a local browser session presents to the shell (ISA ISC-45). The shell's TCP
-/// listener requires a credential, and a browser at `127.0.0.1:8082` can carry neither the
-/// deployment token nor a tailnet identity, so the Mac app trades the token for one of these.
-pub const SESSION_COOKIE: &str = "sjel_session";
-
-/// Where a single-use ticket becomes a session. Exempt from the gate only on a server that
-/// installed a [`SessionVerifier`]: the browser that arrives here holds no credential yet. The
-/// ticket in its query is the credential, and the handler checks and consumes it.
-pub const SESSION_OPEN_PATH: &str = "/session/open";
-
-/// Checks a browser session cookie. A trait for the same reason as [`DeviceVerifier`]: the
-/// session table belongs to the shell, and this crate is under every capability.
-pub trait SessionVerifier: Send + Sync {
-    /// `true` when `session` names a live session. An implementation may extend its expiry.
-    fn verify(&self, session: &str) -> bool;
-
-    /// A refreshed cookie value when a live session should slide its expiry, or `None` when it
-    /// is fresh enough. The gate writes the `Set-Cookie` for whichever capability the browser
-    /// reached, which is what keeps a sliding session stateless.
-    fn renew(&self, _session: &str) -> Option<String> {
-        None
-    }
-}
-
 /// Checks one `axon-device-auth/v1` signed request against the device registry.
 ///
 /// A trait rather than a dependency because the registry is a capability
@@ -261,14 +232,6 @@ pub struct InboundAuth {
     lan_devices_only: bool,
     /// Set by [`InboundAuth::admit_agents`] when the deployment enrolled an agent (ISA F9).
     agent: Option<Arc<crate::agent::AgentAccess>>,
-    /// The browser sessions every capability can verify, keyed by the deployment token
-    /// ([`crate::session`]). Installed by [`InboundAuth::resolve`].
-    session_verifier: Option<Arc<dyn SessionVerifier>>,
-    /// Whether [`SESSION_OPEN_PATH`] reaches its handler without a credential. Set only on the
-    /// shell, which is the only listener that has that route: the browser arriving with a ticket
-    /// holds no credential yet, and a capability exempting a path it does not serve would be an
-    /// unauthenticated route for nothing.
-    session_open_exempt: bool,
 }
 
 /// Redacts the token. A capability that logs its own config must not turn this
@@ -287,8 +250,6 @@ impl std::fmt::Debug for InboundAuth {
             .field("device_verifier", &self.device_verifier.is_some())
             .field("lan_devices_only", &self.lan_devices_only)
             .field("admits_agents", &self.agent.is_some())
-            .field("session_verifier", &self.session_verifier.is_some())
-            .field("session_open_exempt", &self.session_open_exempt)
             .finish()
     }
 }
@@ -323,12 +284,6 @@ impl InboundAuth {
             device_verifier: None,
             lan_devices_only: false,
             agent: None,
-            // Every capability verifies the browser session the shell minted, keyed by the
-            // deployment token. No I/O past the token read `resolve` already did, so this is
-            // the gate admitting a third identity rather than a second gate.
-            session_verifier: crate::session::SignedSessions::from_deployment()
-                .map(|s| Arc::new(s) as Arc<dyn SessionVerifier>),
-            session_open_exempt: false,
         }
     }
 
@@ -346,8 +301,6 @@ impl InboundAuth {
             device_verifier: None,
             lan_devices_only: false,
             agent: None,
-            session_verifier: None,
-            session_open_exempt: false,
         }
     }
 
@@ -371,21 +324,6 @@ impl InboundAuth {
     /// tailnet identity, a device key does not satisfy [`Self::refuse_without_token`].
     pub fn with_device_verifier(mut self, verifier: Arc<dyn DeviceVerifier>) -> Self {
         self.device_verifier = Some(verifier);
-        self
-    }
-
-    /// Admit a browser that presents a live [`SESSION_COOKIE`]. [`InboundAuth::resolve`] already
-    /// installs the signed-session verifier; this replaces it, for tests and for a caller that
-    /// resolved its own.
-    pub fn with_session_verifier(mut self, verifier: Arc<dyn SessionVerifier>) -> Self {
-        self.session_verifier = Some(verifier);
-        self
-    }
-
-    /// Let [`SESSION_OPEN_PATH`] reach its handler without a credential, because the browser
-    /// arriving with a single-use ticket holds none yet. For the shell's listener only.
-    pub fn with_session_open(mut self) -> Self {
-        self.session_open_exempt = true;
         self
     }
 
@@ -507,7 +445,6 @@ impl InboundAuth {
             || self.tailnet_operator.is_some()
             || self.device_verifier.is_some()
             || self.agent.is_some()
-            || self.session_verifier.is_some()
     }
 
     /// `Some(rejection)` when this request must not reach a handler.
@@ -683,58 +620,10 @@ async fn gate(State(auth): State<InboundAuth>, mut request: Request, next: Next)
             return crate::agent::admit_agent(Arc::clone(agent), name, request, next).await;
         }
     }
-    // A browser session stands in for the token, never for `refuse_without_token`: a route
-    // that wants the secret itself still wants it.
-    if let Some(sessions) = auth.session_verifier.as_ref() {
-        if !auth.refuse_without_token {
-            if auth.session_open_exempt
-                && request.method() == Method::GET
-                && request.uri().path() == SESSION_OPEN_PATH
-            {
-                return next.run(request).await;
-            }
-            let presented = (!exempt)
-                .then(|| session_cookie(request.headers()).map(str::to_owned))
-                .flatten();
-            if let Some(presented) = presented {
-                if sessions.verify(&presented) {
-                    let mut response = next.run(request).await;
-                    // A session slides on use, and the capability the browser happened to reach
-                    // is what writes the new cookie — so no store is needed for that either.
-                    if let Some(fresh) = sessions.renew(&presented) {
-                        if let Ok(value) = axum::http::HeaderValue::from_str(
-                            &crate::session::session_cookie_header(
-                                &fresh,
-                                crate::session::SESSION_TTL_SECONDS,
-                            ),
-                        ) {
-                            response
-                                .headers_mut()
-                                .insert(axum::http::header::SET_COOKIE, value);
-                        }
-                    }
-                    return response;
-                }
-            }
-        }
-    }
     match auth.reject(request.method(), request.uri().path(), request.headers()) {
         Some(rejection) => rejection,
         None => next.run(request).await,
     }
-}
-
-/// The value of [`SESSION_COOKIE`] in the request's `Cookie` headers, if any.
-pub fn session_cookie(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get_all(axum::http::header::COOKIE)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(';'))
-        .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(name, _)| *name == SESSION_COOKIE)
-        .map(|(_, value)| value)
-        .filter(|value| !value.is_empty())
 }
 
 async fn admit_device(

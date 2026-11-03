@@ -25,19 +25,20 @@ projects         0
 punctuality      1
 scouting         3
 software         0
-# 5, not 0: `POST /capabilities/{name}/start`, `/stop` and `/restart`,
-# `/session/ticket` and `/session/logout` read no body at all, and a `Route`
+# 3, not 0: `POST /capabilities/{name}/start`, `/stop` and `/restart`
+# read no body at all, and a `Route`
 # cannot say so — the field that would say it, `request_schema`, means the
 # opposite when absent. The twelve that do parse `Json<T>` declared
-# `schema_of::<T>()` on 2026-10-21, which is what took this from 17 to 5. A way
+# `schema_of::<T>()` on 2026-10-21, which is what took this from 17 to 5. The browser
+# session routes went with the dashboard, which took it to 3. A way
 # for `Route` to declare no body takes the rest to zero without inventing one.
 #
-# 6 on 2026-10-21: `POST /api/sjel-status/mirror/rebuild` joined the same list for
+# 4 with `POST /api/sjel-status/mirror/rebuild`, which joined the same list for
 # the same reason. A device asks for a fresh copy; it does not choose what the
 # copy holds, so there is no body to describe. It rose rather than fell because
 # the alternative was a `request_schema` for a body nothing reads, which would
 # make the manifest describe a contract this route does not have.
-sjel-status      6
+sjel-status      4
 soundscape       2
 transit          1
 traveler         0

@@ -17,11 +17,21 @@ vault contents. The contract path is set per machine with `contract_path` in the
 no-doubling law, naming, and frontmatter typing. When none is configured, follow the vault's
 existing conventions: read neighbouring notes, their folders and frontmatter before writing.
 
-In Pi, use the governed `obsidian_*` tools. Call `obsidian_contract` before the first mutation in
-a session. It loads the configured contract from the vault through Obsidian and gates writes
-against its current digest, or reports that no contract is configured for this machine. If a
+In Pi, use the governed `obsidian_*` tools by default. Call `obsidian_contract` before the first
+mutation in a session. It loads the configured contract from the vault through Obsidian and gates
+writes against its current digest, or reports that no contract is configured for this machine. If a
 contract is configured but missing, stop and say so — do not improvise structure or substitute an
 overlay-local contract.
+
+If the Obsidian access tools are unavailable, a user may provide an exact absolute path to a local
+vault note and ask for it to be read. Before using the filesystem read tool, establish that the
+active model is allowed to read that exact note under the vault's C0–C3, `agent_access`, and path
+rules. Permit this fallback only for C0 notes whose effective agent access is standard, when the
+full access decision is known and the session has no stricter clearance or egress requirement; stop
+if the classification or policy cannot be checked. C1, C2, C3, restricted, or unclassified notes
+must not enter context through this fallback. Read only the named file; do not search the vault, follow links,
+or read adjacent notes. This fallback is read-only and cannot bypass a refusal from an available
+governed tool. State that the note was read outside the vault access policy.
 
 Outside Pi, resolve the vault and contract through the bundled helper:
 
@@ -40,8 +50,8 @@ block, and frontmatter targets; `obsidian_outline`, `obsidian_search`, `obsidian
 `obsidian_base_read`; validate drafts with `obsidian_note_validate` or `obsidian_base_validate`
 before writing. Create with `obsidian_create`, extend with `obsidian_append`, and make structural
 edits with `obsidian_patch`. Reserve `obsidian_write` for deliberate whole-note replacement.
-Moves and deletes require confirmation; never work around a refusal by switching to shell or
-direct filesystem access.
+Moves and deletes require confirmation; never work around a mutation refusal by switching to
+shell or direct filesystem access.
 
 ## Read before writing
 

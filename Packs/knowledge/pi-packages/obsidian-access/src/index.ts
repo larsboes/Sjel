@@ -248,7 +248,7 @@ export default function obsidianAccess(pi: ExtensionAPI) {
 		description: "Read one policy-admitted UTF-8 note from Obsidian. Restricted notes appear unavailable.",
 		promptSnippet: "Read a policy-admitted Obsidian note by vault-relative path",
 		promptGuidelines: [
-			"Use obsidian_read instead of filesystem reads or the raw REST API for Obsidian notes.",
+			"Use obsidian_read by default. If Obsidian access tools are unavailable, a user-provided exact absolute local note path may be read directly only after the active model's C0-C3, agent_access, and path-policy admission is established; allow only fully admitted C0 notes with effective standard agent_access, and only when the session has no stricter clearance or egress requirement. Stop if classification or policy is unknown, and never admit C1, C2, C3, restricted, or unclassified notes. Read only that file; do not search, follow links, edit, or bypass an available-tool refusal.",
 		],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative note path, for example Projects/Sjel/ISA.md" }),

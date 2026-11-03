@@ -74,8 +74,12 @@ The read surface covers whole or targeted note reads, validated Base reads, outl
 search, active-file state, backlinks, tags, and access explanations. Draft validators check strict
 Markdown frontmatter or Base YAML without writing. Controlled Markdown mutations provide create, append,
 whole-note write, targeted patch, copy, move, and delete; destructive operations and policy-field
-edits require confirmation, while version preconditions reject concurrent changes. The private
-overlay supplies
+edits require confirmation, while version preconditions reject concurrent changes. When these tools are unavailable, the Obsidian skill permits a read-only filesystem fallback
+only for an exact local note path supplied by the user and fully admitted as C0 under the active
+model's access policy, with effective standard agent access and no stricter session clearance or
+egress requirement. Unknown, restricted, C1, C2, and C3 notes remain unavailable; the fallback does not
+permit vault discovery, edits, or bypassing an available tool's refusal. The private overlay
+supplies
 `config/obsidian-access.toml`; an absent policy admits C0 only. C0–C3 folder decisions use the
 local `vault classify` command and therefore the canonical Rust implementation. If that binary is
 unavailable, undeclared notes use C2 as a conservative fallback. The package does not configure

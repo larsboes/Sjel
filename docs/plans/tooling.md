@@ -10,6 +10,14 @@ covers it.
 
 ## Open
 
+- **Read-only global skill update checks.** `tools/skills list --global --json` inventories
+  installations but has no update-check verb. The upstream CLI exposes `update` without a
+  documented dry-run mode, and `sjel update` reports Interceptor integration state without
+  checking the latest release. Workaround: compare Anatomy's global lock hash with upstream
+  Git HEAD, and compare the installed Interceptor version with its public appcast; its normal
+  check can open a native update window. Smallest change: `tools/skills check --global --json`
+  reports installed and available revisions through each owner's read-only metadata, without
+  installation or focus changes. Link this inventory to P7 in [`packs.md`](packs.md).
 - **Clipper browser smoke checks.** `tools/clipper build` compiles the extension and `check`
   pings its native host; neither verifies a live page capture. YouTube verification required
   reloading the extension and inspecting its popup through native Chrome controls because

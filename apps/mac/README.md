@@ -41,7 +41,7 @@ agent approvals (`InboundToken`, `CachedToken`). The token never leaves this app
 ## Agent writes that ask
 
 In ask mode, and for an action that leaves Sjel or cannot be undone, an agent's write waits for
-the owner (ISA F10). The app reads the waiting writes from the shell every five seconds. It lists
+the owner. The app reads the waiting writes from the shell every five seconds. It lists
 them in its menu with **Allow** and **Deny**, and posts a notification with the same two
 buttons. The first notification asks macOS for permission to notify.
 

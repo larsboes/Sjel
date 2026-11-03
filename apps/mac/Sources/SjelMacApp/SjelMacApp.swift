@@ -30,7 +30,7 @@ final class SjelMacViewModel: ObservableObject {
     @Published var openProblem: String? = nil
     @Published var launchesAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
-    /// Agent writes that wait for the owner in ask mode (ISA F10).
+    /// Agent writes that wait for the owner in ask mode.
     @Published var pendingWrites: [AgentApproval] = []
     /// The agents' recent calls through the gate, newest first.
     @Published var agentCalls: [AgentCallRecord] = []

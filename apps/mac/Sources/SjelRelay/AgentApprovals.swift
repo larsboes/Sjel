@@ -1,6 +1,6 @@
 import Foundation
 
-/// One agent write that waits for the owner (ISA F10, ask mode).
+/// One agent write that waits for the owner in ask mode.
 public struct AgentApproval: Sendable, Equatable, Identifiable, Decodable {
     public let id: String
     public let capability: String

@@ -71,7 +71,7 @@ reason = "Unmaintained rustybuzz 0.20.1, runtime, via usvg 0.46 <- gpui-pre 0.3.
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0384"
 ignoreUntil = 2026-12-01
-reason = "Unmaintained instant 0.1.13, via gpui-base and gpui-component 0.6.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype, and notify-types. An informational advisory: no affected functions, CVSS, or fixed version. The successor is web-time. Revisit when gpui-kit drops it or the prototype bumps gpui-kit (ISA.md Decisions 2026-10-15, step 0)."
+reason = "Unmaintained instant 0.1.13, via gpui-base and gpui-component 0.6.6 <- gpui-kit 0.6.0 <- apps/gpui-prototype, and notify-types. An informational advisory: no affected functions, CVSS, or fixed version. The successor is web-time. Revisit when gpui-kit drops it or the prototype bumps gpui-kit."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0134"

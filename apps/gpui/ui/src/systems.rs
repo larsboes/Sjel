@@ -5,7 +5,7 @@
 //! - **Runtime profile** — which profile is in force and what it admits (`sjel_runtime`).
 //! - **Mac** — temperature, power, CPU and memory from macmon, every three seconds.
 //! - **Agent** — the agent's reach on this machine: one mode per capability, the writes
-//!   waiting for the owner, and the latest calls (ISA F10).
+//!   waiting for the owner, and the latest calls.
 //! - **Storage** — what fills the disk, from `tools/storage report --json`, plus the disk's own
 //!   hourly history so a slope reads where a snapshot cannot.
 //! - **Updates** — installed software outside this checkout and who moves it, with one button

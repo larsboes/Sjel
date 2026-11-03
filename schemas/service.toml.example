@@ -40,8 +40,8 @@ tag      = "stable"                       # REQUIRED, and it names a CHANNEL, no
                                           # never a byte pin either: publishers rebuild under the
                                           # same tag. So the declared tag has never answered "what
                                           # is running" — ask the runtime for the digest instead
-                                          # (`docker inspect <name> --format '{{.Image}}'`, ISA.md
-                                          # C4). Write a literal only when an upstream publishes
+                                          # (`docker inspect <name> --format '{{.Image}}'`).
+                                          # Write a literal only when an upstream publishes
                                           # no rolling tag, and say in a comment why.
 
 # Optional — runtime dependencies on OTHER capabilities, by directory name.

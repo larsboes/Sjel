@@ -147,8 +147,8 @@ disables the capability, removes receipt-owned payload files and retains capabil
 package directory.
 
 The owner rehearses on a separate clean Mac user or clean machine before involving a friend.
-Allow 30–60 minutes after the release files and first-run UI are ready. Record failures in the
-owning ISA and keep any screenshots or logs containing personal values private.
+Allow 30–60 minutes after the release files and first-run UI are ready. Record failures with the
+owning area plan and keep any screenshots or logs containing personal values private.
 
 1. Download the notarized DMG through the release channel, install the app, and launch without
    Git, Cargo, Bun or Xcode. Record download, installed and peak setup size separately.

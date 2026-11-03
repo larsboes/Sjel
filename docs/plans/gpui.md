@@ -212,7 +212,7 @@ Open work:
 | 19 | Feed library | `e420c4b5` |
 | 20 | Inbox triage on the Mac | `4aaccef5` |
 | 21 | Train connections | `77ae56f7` |
-| 29 | A record's title is its file name, so the note header renames it: `POST /projects/api/record/rename` moves the file within its folder and rewrites every `[[old]]`, `[[old|alias]]` and `[[old#Heading]]` that named it, refusing a taken name. Mac only; the phone's title stays read-only because its replica is keyed by path. The same change keeps each block's reader view between frames in the note editor and notifies once per click, so a click no longer parses every visible block twice. | `ebf64d4c` |
+| 29 | A record's title is its file name, so the note header renames it: `POST /projects/api/record/rename` moves the file within its folder and rewrites every `[[old]]`, `[[old|alias]]` and `[[old#Heading]]` that named it, refusing a taken name. Mac only; the phone's title stays read-only because its replica is keyed by path. The same change keeps each block's reader view between frames in the note editor and notifies once per click, so a click no longer parses every visible block twice. | `ebf64d4c`, `63cf19e3` |
 
 ### Open
 

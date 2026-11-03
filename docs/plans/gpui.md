@@ -246,6 +246,10 @@ one costs 1.5 µs a block, 80 µs a typical note and 3.0 ms for the largest of 1
 --ignored`). A keystroke touches one block, so the work live preview adds is ~2 µs: the cost sits
 in shaping and editor integration, not in the mapping.
 
+Prototype shipped in `bdcd538b`: one paragraph uses route 2 behind `SJEL_GPUI_LIVE_PREVIEW=1`;
+the default editor is unchanged. Implementation: `core/src/inline.rs`, `ui/src/editor.rs` and
+`ui/src/editor/preview.rs` under `apps/gpui/`.
+
 Decided 2026-11-03: prototype route 2 on one paragraph behind `SJEL_GPUI_LIVE_PREVIEW=1`, then
 review before choosing a full implementation. The flag is off by default. The first paragraph's
 existing textarea keeps the source markdown, keys, composition and undo history; a separate
@@ -256,11 +260,11 @@ blocks keep the existing editor. Converting that paragraph into another kind end
 Prototype checks: parser tests cover nested spans, links, Unicode and source/projection offsets;
 headless window tests cover unchanged wrapping on focus outside a span, click-to-source mapping,
 editing inside bold with undo, typing with undo/redo, and composition commit with undo. These
-checks do not establish real-device IME behavior or visual acceptance. The full core and UI test
-suites, `cargo test -p sjel-projects`, the desktop app tests, host `cargo check --all-targets`,
-Rust 2021 formatting and `bash -n apps/gpui/bench-scroll` pass. Independent review passes for the
-prototype scope. Clippy completes with warnings outside the changed implementation. The bench
-launcher now forwards the click mode and preview flag. Installation, click/typing measurements,
+checks do not establish real-device IME behavior or visual acceptance. At `bdcd538b`, the full
+core and UI test suites, `cargo test -p sjel-projects`, the desktop app tests, host
+`cargo check --all-targets`, Rust 2021 formatting and `bash -n apps/gpui/bench-scroll` passed.
+Independent review passed for the prototype scope. Clippy completed with warnings outside the
+changed implementation. The bench launcher now forwards the click mode and preview flag. Installation, click/typing measurements,
 manual rename checks and an iOS build have not run. Installation was deferred while concurrent
 GPUI edits were in flight; app review remains the next gate before a full-build decision.
 
@@ -279,6 +283,73 @@ The candidate routes remain:
    and the revealed markers; a transparent textarea stays mounted for keys, IME and undo. Risks:
    caret, selection and preedit painting are ours, and both layouts must agree on the block's
    height.
+
+#### Resume checklist
+
+Paused 2026-11-03 after the one-block prototype. No full-build route is authorized. Continue in
+this order:
+
+1. **Review the prototype in the app.** Read `AGENTS.md`, load the `sjel` skill, run
+   `git status --short --branch` and `tools/doctor`, and preserve concurrent work on `main` in the
+   primary checkout. Install only when no other session has uncommitted GPUI changes. Select a
+   project-relative note path with the user; no benchmark target has been selected. Check the
+   first paragraph with the flag off and on: focus outside a span keeps wrapping, bold stays
+   styled, delimiters reveal only under the caret, and typing, selection, undo/redo and actual
+   IME composition remain usable. Headless tests are not visual acceptance.
+2. **Measure click and typing cost.** Use the same note and release build with the flag off and
+   on. Record p50, p95, maximum CPU and frames over 8.3 ms in §9. No click or typing baseline
+   exists yet. The benchmarks disable note saving. `NoteEditor::bench_type` targets the last
+   block and `bench_click` cycles through every block, but the prototype covers only the initial
+   first paragraph. Use a user-approved one-paragraph note to isolate the prototype, or add
+   explicit block targeting before interpreting a multi-block run as its cost. Use
+   `CARGO_TARGET_DIR="$HOME/.cargo-target"` for the app build; capability binaries under
+   `./target/release` may be stale, so use `$HOME/.cargo-target/release` for any capability CLI work.
+3. **Choose the full-build route with the user.** Present the app findings and measurements,
+   including the source/projected geometry mismatch, before extending beyond one paragraph.
+   Resolve the open input/layout risks above or choose projected text with an explicit undo/IME
+   strategy. Done when the chosen route passes real app checks without unrelated spans revealing
+   their source, unintended wrapping changes or lost edits/history. Do not enable it by default
+   before that acceptance check.
+4. **Validate rename separately.** In the app, click the title and confirm Enter moves the file
+   and updates `[[links]]`; Esc and blur revert. Check a non-round-tripping note, a hub note and
+   the phone's read-only title. Build the iOS target and verify on the phone; neither has run
+   since the rename change. Rename spans `capabilities/projects/src/{ops,record,store}.rs`,
+   `apps/gpui/core/src/{shell.rs,data/repo.rs}` and `apps/gpui/ui/src/{projects,editor}.rs`.
+
+After the installation precondition is met, substitute the selected note path:
+
+```sh
+CARGO_TARGET_DIR="$HOME/.cargo-target" apps/gpui/install
+SJEL_GPUI_LIVE_PREVIEW=0 SJEL_GPUI_BENCH_CLICK="<project>/<Note>.md" apps/gpui/bench-scroll projects
+SJEL_GPUI_LIVE_PREVIEW=1 SJEL_GPUI_BENCH_CLICK="<project>/<Note>.md" apps/gpui/bench-scroll projects
+SJEL_GPUI_LIVE_PREVIEW=0 SJEL_GPUI_BENCH_NOTE="<project>/<Note>.md" apps/gpui/bench-scroll projects
+SJEL_GPUI_LIVE_PREVIEW=1 SJEL_GPUI_BENCH_NOTE="<project>/<Note>.md" apps/gpui/bench-scroll projects
+```
+
+Known rename gaps, not fixed by the prototype:
+
+- Typing during an in-flight rename is lost when the note reopens. Preserve or prevent those
+  edits before claiming rename is lossless under concurrent typing.
+- Renaming a hub moves `P/P.md` to `P/Other.md` but leaves the folder name unchanged. Folder
+  semantics need a product decision before changing that behavior.
+- List rows have no rename affordance; only the open note's title supports it.
+- `ops::save` compares `base` in one read and writes in another. A write between them can be
+  overwritten. Make comparison and write atomic in `store::put` before claiming stale-base safety.
+
+For the next implementation change, use the shared Cargo target and rerun:
+
+```sh
+export CARGO_TARGET_DIR="$HOME/.cargo-target"
+cargo test -p sjel-projects
+cargo test --manifest-path apps/gpui/core/Cargo.toml
+cargo test --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui
+cargo check --manifest-path apps/gpui/Cargo.toml --all-targets
+rustfmt --edition 2021 --check <changed Rust files>
+```
+
+Commit only the task's paths on `main`, state the checks that ran and did not run, and update this
+section with the remaining acceptance work. No installation, benchmark, rename check or iOS
+build was performed for this handoff.
 
 ## 5. Finder and right edge
 

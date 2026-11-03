@@ -758,17 +758,183 @@ fn forwarded_sender(text: &str) -> Option<String> {
         .find_map(sender_domain)
 }
 
-/// Both rungs for one stored thread, fetched fresh from Gmail. The body is
-/// read, assessed and dropped; only the findings are stored. `None` when the
-/// thread is not in the store or no longer in Gmail.
+pub const MODEL_PROMPT_REVISION: &str = "mail-authenticity-model-v1";
+
+/// The model reads the start of the body only: a lure sits near the top, and
+/// the light local model has a small window.
+const MODEL_BODY_CHARS: usize = 2_500;
+const MODEL_REPLY_TOKENS: u32 = 200;
+const MODEL_RATIONALE_CHARS: usize = 200;
+
+/// The signals the model may name. Anything else in its answer is dropped.
+pub const MODEL_SIGNALS: [(&str, &str); 7] = [
+    ("credential_request", "asks for a password, a code or a login"),
+    ("payment_request", "asks for a payment, bank details or a gift card"),
+    ("pressure", "sets a short deadline or threatens a loss to force a fast reaction"),
+    ("threat", "threatens a block, a fee, legal action or exposure"),
+    ("prize_lure", "promises a prize, a refund or an offer that is too good"),
+    ("impersonation", "claims to be a brand, a bank, an authority or a colleague it may not be"),
+    ("attachment_lure", "pushes the reader to open an attachment or enable content"),
+];
+
+pub fn model_prompt(sender_domain: Option<&str>, subject: &str, body: &str) -> String {
+    let mut prompt = String::from(
+        "You check one email for signs of phishing or fraud. Judge only the wording. \
+         The sender's authentication is checked elsewhere. Marketing that is legitimate \
+         but pushy is low risk. Answer with a single JSON object and nothing else.\n\n\
+         Signals you may name:\n",
+    );
+    for (code, meaning) in MODEL_SIGNALS {
+        prompt.push_str(&format!("- {code}: {meaning}\n"));
+    }
+    prompt.push_str(
+        "\nAnswer shape: {\"risk\": \"low\" | \"medium\" | \"high\", \"signals\": [codes], \
+         \"rationale\": \"one sentence\"}\n\n",
+    );
+    prompt.push_str(&format!(
+        "Sender domain: {}\nSubject: {subject}\nBody (first {MODEL_BODY_CHARS} characters):\n{}",
+        sender_domain.unwrap_or("unknown"),
+        body.chars().take(MODEL_BODY_CHARS).collect::<String>()
+    ));
+    prompt
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ModelAnswer {
+    pub verdict: Verdict,
+    pub signals: Vec<String>,
+    pub rationale: String,
+}
+
+#[derive(Deserialize)]
+struct RawModelAnswer {
+    #[serde(default)]
+    risk: String,
+    #[serde(default)]
+    signals: Vec<String>,
+    #[serde(default)]
+    rationale: String,
+}
+
+/// The model's risk is uncalibrated, so it can raise doubt but never fail a mail.
+pub fn parse_model_answer(answer: &str) -> Option<ModelAnswer> {
+    let raw = [
+        crate::mail_model::brace_span(answer),
+        crate::mail_model::brace_span(crate::mail_model::strip_fence(answer)),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(|span| serde_json::from_str::<RawModelAnswer>(span).ok())
+    .find(|raw| !raw.risk.trim().is_empty())?;
+    let verdict = match raw.risk.trim().to_ascii_lowercase().as_str() {
+        "low" => Verdict::Verified,
+        "medium" => Verdict::Unverified,
+        "high" => Verdict::Suspicious,
+        _ => return None,
+    };
+    let signals = raw
+        .signals
+        .iter()
+        .map(|signal| signal.trim().to_ascii_lowercase())
+        .filter(|signal| MODEL_SIGNALS.iter().any(|(code, _)| code == signal))
+        .collect();
+    Some(ModelAnswer {
+        verdict,
+        signals,
+        rationale: raw.rationale.trim().chars().take(MODEL_RATIONALE_CHARS).collect(),
+    })
+}
+
+/// The model rung. Every outcome is an assessment: a refusal or an unavailable
+/// model is a finding that changes nothing, so the reader sees why no model
+/// judged the mail.
+pub fn assess_with_model(
+    cfg: &crate::config::Config,
+    runtime: &sjel_runtime::Status,
+    data_class: &str,
+    from: &str,
+    subject: &str,
+    body: &str,
+) -> Assessment {
+    use crate::summarize::{self, Outcome, Reach};
+    let note = |code: &str, detail: &str| {
+        Assessment::from_findings(
+            Source::Model,
+            vec![Finding::new(code, Verdict::Verified, detail)],
+        )
+    };
+    if !crate::content_item::local_prompt_allowed(data_class) {
+        return note("model_refused", "Secret mail: no model reads it.");
+    }
+    let prompt = model_prompt(sender_domain(from).as_deref(), subject, body);
+    let chars = prompt.chars().count();
+    let role = match crate::quiet::rung(&cfg.inference, chars, MODEL_REPLY_TOKENS) {
+        crate::quiet::Rung::Light(role) => *role,
+        crate::quiet::Rung::OverWindow => {
+            return note("model_skipped", "The prompt does not fit the local model's window.")
+        }
+        crate::quiet::Rung::Unconfigured => {
+            return note("model_unavailable", "No local model is configured.")
+        }
+    };
+    if crate::quiet::runtime_admission(runtime, &role, chars, MODEL_REPLY_TOKENS).is_err() {
+        return note("model_deferred", "The runtime profile defers local model work.");
+    }
+    let target = crate::digest::to_target(cfg, &role, runtime);
+    let answer =
+        match summarize::ask(Some(&target), &prompt, MODEL_REPLY_TOKENS, Reach::LoopbackOnly) {
+            Outcome::Ok(answer) => answer,
+            other => {
+                return note(
+                    "model_error",
+                    &format!("The local model gave no answer ({}).", other.state()),
+                )
+            }
+        };
+    let Some(parsed) = parse_model_answer(&answer) else {
+        return note("model_unparseable", "The local model's answer was not readable.");
+    };
+    // The model's sentence is free text about the mail, so it is always redacted.
+    let mut redactions = Vec::new();
+    let rationale =
+        crate::cloud_derivative::redact_review_field(Some(&parsed.rationale), &mut redactions)
+            .unwrap_or_default();
+    let signals = if parsed.signals.is_empty() {
+        "no listed signal".to_string()
+    } else {
+        parsed.signals.join(", ")
+    };
+    let risk = match parsed.verdict {
+        Verdict::Verified => "low",
+        Verdict::Unverified => "medium",
+        _ => "high",
+    };
+    let mut detail = format!("Local model: {risk} risk ({signals}).");
+    if !rationale.is_empty() {
+        detail.push(' ');
+        detail.push_str(&rationale);
+    }
+    let mut assessment = Assessment::from_findings(
+        Source::Model,
+        vec![Finding::new("model_risk", parsed.verdict, detail)],
+    );
+    assessment.revision = format!("{AUTHENTICITY_REVISION}+{MODEL_PROMPT_REVISION}");
+    assessment
+}
+
+/// The rungs for one stored thread, fetched fresh from Gmail. The body is read,
+/// assessed and dropped; only the findings are stored. `model` carries the
+/// config and runtime when the model rung should run. `None` when the thread
+/// is not in the store or no longer in Gmail.
 pub fn audit(
     store: &crate::store::Store,
     token: &str,
     id: &str,
+    model: Option<(&crate::config::Config, &sjel_runtime::Status)>,
 ) -> Result<Option<Vec<Assessment>>, String> {
-    if store.get_triage(id).map_err(|e| e.to_string())?.is_none() {
+    let Some(item) = store.get_triage(id).map_err(|e| e.to_string())? else {
         return Ok(None);
-    }
+    };
     let Some(meta) = crate::google::thread_meta_lookup(token, id).map_err(|e| e.to_string())?
     else {
         return Ok(None);
@@ -800,6 +966,21 @@ pub fn audit(
             text: parts.text.as_deref(),
             sender_authenticated: authenticated,
         }));
+        if let Some((cfg, runtime)) = model {
+            let body = parts
+                .text
+                .clone()
+                .or_else(|| parts.html.as_deref().map(sjel_extraction::html_to_lines))
+                .unwrap_or_default();
+            assessments.push(assess_with_model(
+                cfg,
+                runtime,
+                &item.data_class,
+                &from,
+                &subject,
+                &body,
+            ));
+        }
     }
     for assessment in &assessments {
         store
@@ -1018,5 +1199,36 @@ mod tests {
                 label: "Hi there".into()
             }]
         );
+    }
+
+    #[test]
+    fn the_model_answer_maps_risk_and_drops_unknown_signals() {
+        let answer = "Sure.\n```json\n{\"risk\": \"High\", \"signals\": \
+                      [\"credential_request\", \"made_up\"], \"rationale\": \"Asks to log in.\"}\n```";
+        let parsed = parse_model_answer(answer).unwrap();
+        assert_eq!(parsed.verdict, Verdict::Suspicious);
+        assert_eq!(parsed.signals, ["credential_request"]);
+        assert_eq!(parse_model_answer("{\"risk\": \"certain\"}"), None);
+        assert_eq!(parse_model_answer("no json"), None);
+    }
+
+    #[test]
+    fn the_prompt_names_every_signal_and_caps_the_body() {
+        let body = "x".repeat(MODEL_BODY_CHARS + 100);
+        let prompt = model_prompt(Some("shop.example"), "Sale", &body);
+        for (code, _) in MODEL_SIGNALS {
+            assert!(prompt.contains(code));
+        }
+        assert!(prompt.contains("Sender domain: shop.example"));
+        assert!(!prompt.contains(&"x".repeat(MODEL_BODY_CHARS + 1)));
+    }
+
+    #[test]
+    fn a_secret_mail_reaches_no_model() {
+        let cfg = crate::config::Config::load();
+        let runtime = sjel_runtime::current().expect("runtime status");
+        let a = assess_with_model(&cfg, &runtime, "c3", "x@bank.example", "Code", "123456");
+        assert_eq!(a.verdict, Verdict::Verified);
+        assert_eq!(codes(&a), ["model_refused"]);
     }
 }

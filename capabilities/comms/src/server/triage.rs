@@ -1170,14 +1170,25 @@ pub(super) async fn triage_body_handler(
     }
 }
 
-/// Both authenticity rungs for one stored mail. The answer carries findings,
+#[derive(Debug, Deserialize)]
+pub(super) struct AuthenticityQuery {
+    /// `false` skips the model rung.
+    model: Option<bool>,
+}
+
+/// The authenticity rungs for one stored mail. The answer carries findings,
 /// which name domains only, so it needs no tier beyond the write gate.
-pub(super) async fn triage_authenticity_handler(Path(id): Path<String>) -> HttpResponse {
+pub(super) async fn triage_authenticity_handler(
+    Path(id): Path<String>,
+    Query(query): Query<AuthenticityQuery>,
+) -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
         let cfg = Config::load();
         let store = Store::open(&cfg.database_path).map_err(|e| e.to_string())?;
         let token = google::access_token(&cfg.google_env_path).map_err(|e| e.to_string())?;
-        let assessments = comms::mail_authenticity::audit(&store, &token, &id)?;
+        let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
+        let model = query.model.unwrap_or(true).then_some((&cfg, &runtime));
+        let assessments = comms::mail_authenticity::audit(&store, &token, &id, model)?;
         Ok(assessments.map(|assessments| {
             json!({
                 "id": id,

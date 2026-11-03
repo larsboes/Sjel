@@ -192,6 +192,14 @@ that sender. Because nothing authenticates that line, a forward never reaches `v
 misleading link label from an authenticated sender is `unverified`, not `suspicious`, because a
 real sender may label its own redirect domain loosely.
 
+**The model rung runs with the body rung**, unless `--no-model` or `?model=false` is given. The
+light local model reads the sender domain, the subject and the first 2,500 characters of the body,
+and names a risk and signals from a fixed list (`MODEL_SIGNALS`). The rung has the same bounds as
+the classification model: a `c3` mail is refused before a prompt exists, only the light role
+answers, and every call is loopback-only. The model is not calibrated, so `high` risk gives
+`suspicious` and no answer gives `failed`. Its sentence is redacted before it is stored. A refusal,
+a missing model or an unreadable answer is stored as a finding that changes nothing.
+
 ### Collecting on a schedule
 
 `inbox_sweep_minutes` lets comms-server pull proposals unattended. It ships as

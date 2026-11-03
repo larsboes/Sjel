@@ -400,7 +400,7 @@ fn stored_error(detail: &str, data_class: &str) -> String {
 }
 
 /// Drop a ```json (or ``` or ```JSON) fence, keeping the body.
-fn strip_fence(answer: &str) -> &str {
+pub(crate) fn strip_fence(answer: &str) -> &str {
     let Some((_, rest)) = answer.split_once("```") else {
         return answer;
     };
@@ -416,7 +416,7 @@ fn strip_fence(answer: &str) -> &str {
 }
 
 /// The first balanced `{...}` span, so trailing prose costs nothing.
-fn brace_span(body: &str) -> Option<&str> {
+pub(crate) fn brace_span(body: &str) -> Option<&str> {
     let start = body.find('{')?;
     let mut depth = 0usize;
     let mut in_string = false;

@@ -1165,9 +1165,10 @@ fn guessed_language(candidate: &comms::store::ModelCandidate) -> &'static str {
 /// Check whether stored mails come from the sender they name. Reads each body
 /// once from Gmail and stores only the findings.
 fn cmd_mail_audit(args: &[String], cfg: &Config) {
-    let ids = &args[3..];
+    let no_model = args.iter().any(|a| a == "--no-model");
+    let ids: Vec<&String> = args[3..].iter().filter(|a| *a != "--no-model").collect();
     if ids.is_empty() || ids.len() > 50 {
-        eprintln!("error: usage: comms mail audit <thread-id>...  (1 to 50 IDs)");
+        eprintln!("error: usage: comms mail audit <thread-id>... [--no-model]  (1 to 50 IDs)");
         std::process::exit(2);
     }
     let store = open_store(cfg);
@@ -1178,6 +1179,8 @@ fn cmd_mail_audit(args: &[String], cfg: &Config) {
             std::process::exit(1);
         }
     };
+    let runtime = runtime_status();
+    let model = (!no_model).then_some((cfg, &runtime));
     let mut report = serde_json::Map::new();
     let mut failed = false;
     for id in ids {
@@ -1186,7 +1189,7 @@ fn cmd_mail_audit(args: &[String], cfg: &Config) {
         let value = if failed {
             serde_json::json!({ "error": "not attempted after an earlier Gmail error" })
         } else {
-            match comms::mail_authenticity::audit(&store, &token, id) {
+            match comms::mail_authenticity::audit(&store, &token, id, model) {
                 Ok(Some(assessments)) => serde_json::json!({
                     "verdict": assessments.iter().map(|a| a.verdict).max(),
                     "assessments": assessments,
@@ -1217,7 +1220,7 @@ fn cmd_mail(args: &[String], cfg: &Config) {
         _ => {
             eprintln!("error: usage: comms mail classify [--shadow|--apply] [--limit N] [--report] [--revert <id>|--revert-all]");
             eprintln!("              comms mail corpus --out <path> [--force]");
-            eprintln!("              comms mail audit <thread-id>...\n");
+            eprintln!("              comms mail audit <thread-id>... [--no-model]\n");
             std::process::exit(2);
         }
     }

@@ -15,9 +15,11 @@ drifting copies.
   materialized copies. pi gets registry entries (`pi_settings.rs`).
 - **Ledgers.** One per harness under `~/.local/state/axon/pack-deployments/`, owned and backed up by
   `capabilities/packs`. A ledger records each unit, its Pack and the installed digest.
-- **Profiles.** 8 in `profiles.toml`. `use <profile>` replaces a harness's set with the profile's
-  units. `[unit_hold]` keeps named units off named harnesses. pi runs `lean` (7 skills), because
-  its default model is a small one.
+- **Profiles.** `profiles.toml` defines the available profiles and `[harness_profile]` bindings.
+  `tools/harnesses apply` reconciles each installed harness to its binding; `use <profile>` is an
+  explicit override. `[unit_hold]` keeps named units off named harnesses. Claude Code, Codex,
+  Antigravity, opencode and Copilot bind to `coding-harness`; pi binds to `full`. sjel-agent is
+  unbound and retains its overlay-owned selection.
 - **Agent model tiers on pi.** A Pack agent's Claude `model:` tier maps to a pi model through
   `[tiers]` in the overlay's `config/pi-models.toml` (`harnesses/agentfile.rs`). An unmapped tier
   is dropped and the agent inherits the session model. The `review` agent (`opus`) is how a small
@@ -37,6 +39,17 @@ drifting copies.
 
 1. **Account copies drift silently.** Nothing in Sjel knows the account-synced copies exist, so
    the six above drifted with no report. A session cannot tell which `council` is current.
+
+2. **Third-party screening does not bind the installed bytes.** `tools/skills add` and `update`
+   stage a copy and call `tools/intake gate`, then upstream's CLI fetches again for installation.
+   A source change between the two fetches can install unread bytes (`tools/skills`). Model-review
+   failure falls back to fixed rules (`tools/sjel-cli/src/intake/mod.rs`). Approval records do not
+   prove that a human reviewed the findings. No general installer containment is enforced.
+3. **External skills bypass Pack profile selection.** Anatomy is globally discovered outside the
+   Pack ledger, and application-owned skill symlinks have their own installer. The current scope
+   rule in `tools/skills` rejects global non-Pack installs, while `upstreams.toml [anatomy]`
+   records a direct global install. Removing a Pack from a coding profile does not remove these
+   independent channels. Anatomy remains unchanged pending an external-skill policy.
 
 Fixed in `383cb67`: `sync` ignored the profile, the doctor warned for units the profile leaves
 out, and its Claude Code fix hint named the `tools/packs.sh` shim. A ledger now records the
@@ -67,6 +80,12 @@ no profile until the next `use <profile>` on that machine.
    remove them from the account and rely on Pack deployment alone.
 3. **Profile per level.** Whether the user level and the project level may carry different
    profiles on one machine, and which one wins for a skill both select.
+4. **Approved external skills.** Whether an approved upstream skill is installed project-locally
+   or registered from an isolated, content-pinned store per harness. The route must preserve
+   upstream ownership, avoid global name collisions and support pi sessions started in the vault.
+
+Decided 2026-11-03: coding harnesses use `coding-harness`; pi keeps `full`. Profile reconciliation
+precedes installer hardening. Anatomy remains unchanged until the external-skill policy is settled.
 
 ## 5. Work packages
 
@@ -76,3 +95,16 @@ no profile until the next `use <profile>` on that machine.
 | P2 | Done in `383cb67`: the doctor reports units outside the recorded profile as not selected, and names `tools/packs-claude deploy`. | Checked in a cloud container. Not checked on the Mac: run `tools/packs-claude use full` once there first. |
 | P3 | Report account-synced skills that share a name with a Pack skill, with their drift (defect 1). | In a cloud session, `tools/harnesses status` lists the six names above with "differs". |
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
+| P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
+| P6 | Bind third-party installation to screened content and define review-failure policy (defect 2). | Add and update install the screened digest even if upstream changes; tests cover held content, review failure and an untrusted baseline. |
+| P7 | Manage approved external skills per harness (defect 3), after decision 4.4. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
+
+Verification: all 401 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy passes. A parallel
+rerun hit a managed-settings lock failure in
+`pi_config::tests::repeated_apply_retains_first_original_and_is_byte_idempotent`; that test passed
+in isolation. Live `harnesses status` reports no active-unit defects, no knowledge or learning
+units on the five coding harnesses, and both Packs retained by pi. Doctor has seven unrelated
+failures: four stale backups, two failed scheduled runs and one host-patch audit finding.
+
+Profile validation does not exercise Anatomy rendering or Obsidian embedding. Those live checks
+remain in [`learning.md`](learning.md). Full-workspace checks did not run.

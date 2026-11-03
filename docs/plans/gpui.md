@@ -212,6 +212,7 @@ Open work:
 | 19 | Feed library | `e420c4b5` |
 | 20 | Inbox triage on the Mac | `4aaccef5` |
 | 21 | Train connections | `77ae56f7` |
+| 29 | A record's title is its file name, so the note header renames it: `POST /projects/api/record/rename` moves the file within its folder and rewrites every `[[old]]`, `[[old|alias]]` and `[[old#Heading]]` that named it, refusing a taken name. Mac only; the phone's title stays read-only because its replica is keyed by path. The same change keeps each block's reader view between frames in the note editor and notifies once per click, so a click no longer parses every visible block twice. | `ebf64d4c` |
 
 ### Open
 
@@ -228,6 +229,29 @@ reads People or Finance records. It uses source, planted fixtures and synthetic 
 | 26 | Inventory and wishlist create, edit with the read revision, state changes. Inventory stays the only writer. | Both views refresh without restart. A stale edit is refused and the entry reloads. State history and layout impact preview stay separate work. |
 | 27 | Low-fare alerts on the iPhone: rule in `core/src/travel.rs`, unseen `sparpreis-low:` notes through the local notification host, ten-minute throttle, works from saved trips offline | A new low notifies once. A repeat check does not. It works offline. |
 | 28 | Wish comparison. Built: a wish group's candidates carry numeric specs (`inventory specs`, `PUT /api/items/{id}/specs`), the group carries needs (`inventory needs`), and each candidate has dated price observations, one per source and day (`inventory price`, `POST /api/items/{id}/prices`). `GET /api/wish-comparison` reads it all. The daily job [`wish-prices`](../../capabilities/wish-prices/README.md) runs `inventory prices refresh`. It reads only geizhals product pages, never a search page, which geizhals' `robots.txt` disallows. It identifies itself as Sjel, never as a browser, and takes the page's `og:price:amount`. The first price at or below `cost_max_cents` is the alert. The wishlist tab shows, for the selected group, price against a chosen spec with the need and limit lines, a price history, and per candidate the latest price, fit to needs, and € per unit of each spec. The rules are in `core/src/inventory_compare.rs`. A wish group marked as alternatives (`inventory alternatives`, the "Pick one" button) counts only its cheapest member in every budget. | Built: a daily run adds one observation per candidate, and a second run on the same day adds none. A search URL is refused as a source. A price at the limit alerts once (`capabilities/inventory/tests/compare.rs`). Not run: the manual check in the app with three priced candidates. |
+
+### Notes editor: live preview (open)
+
+Clicking a block leaves its rendered text for its markdown, so the line reflows: `**bold**` takes
+the width of `bold`, and a link shows its URL. Obsidian hides those markers and shows them only
+where the caret is. Neither `gpui-base`'s input nor `gpui-kit`'s `Textarea` can hide a range — they
+expose fold ranges for whole lines and highlight runs — and `apps/gpui` patches no crate.
+
+Measured (release): naming a block's concealed ranges and mapping every source byte to the shown
+one costs 1.5 µs a block, 80 µs a typical note and 3.0 ms for the largest of 1,230 notes
+(`Inline::concealed` and `Inline::shown_offset` in `core/src/inline.rs`, `concealment_cost
+--ignored`). A keystroke touches one block, so the work live preview adds is ~2 µs: the cost sits
+in shaping and editor integration, not in the mapping.
+
+Two routes, neither taken:
+
+1. **Projected text.** The textarea holds the shown text; a change is mapped back onto the markdown
+   and the caret re-set. Caret, selection and hit-testing stay native. Risks: resetting the value
+   per keystroke drops the input's undo history, and an IME composition's offsets move under it.
+2. **Own text, invisible input.** `formatted()` draws the block, extended with a caret, a selection
+   and the revealed markers; a transparent textarea stays mounted for keys, IME and undo. Risks:
+   caret, selection and preedit painting are ours, and both layouts must agree on the block's
+   height.
 
 ## 5. Finder and right edge
 
@@ -291,7 +315,10 @@ inside this list is by use.
 ## 9. Frame cost
 
 `apps/gpui/bench-scroll <page>` drives the open page's own scroller (`Workspace::bench_scroll`) and
-reports p50, p95 and max CPU per frame from the probe in `src/frames.rs`. A page that owns its
+reports p50, p95 and max CPU per frame from the probe in `src/frames.rs`.
+`SJEL_GPUI_BENCH_NOTE=<record path>` types into that note instead, and `SJEL_GPUI_BENCH_CLICK=<record
+path>` moves the caret into another block 240 times: what a click costs the note editor. Neither
+number is taken yet. A page that owns its
 scroll answers the bench itself, so a virtual list is measured where it scrolls. The 120 Hz budget
 is 8.3 ms a frame. Release build, 2026-11-02:
 

@@ -32,7 +32,8 @@ covers it.
   offers took raw `interceptor` reads of comparison, refurbisher and classifieds pages, and
   each refurbisher shows variant prices differently. Smallest change: an `inventory` command
   that records a dated price observation (source URL, price, configuration) on a wish row, so
-  the snapshot lives with the wish instead of in notes.
+  the snapshot lives with the wish instead of in notes. Planned as GPUI WP 28
+  ([`gpui.md`](gpui.md#4-work-packages)).
 
 - **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`

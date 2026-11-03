@@ -1,8 +1,4 @@
-# See schemas/service.toml.example for the field reference.
-#
-# The Journal sync for capabilities/entities, every 6h: `last_contact` from the Journal in
-# projects (entities/src/journal.rs). Until 2026-10-20 it was the Obsidian adapter's sync over
-# vault's Atlas/People. Google Contacts has its own schedule (entities-google-sync).
+# Inbound journal last_contact sync for capabilities/entities.
 kind     = "process"
 name     = "entities-sync"
 command  = ["target/release/entities-server", "sync-journal"]

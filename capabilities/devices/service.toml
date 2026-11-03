@@ -1,14 +1,12 @@
 # Device enrollment and revocation for one Sjel deployment.
-# The service is reached through sjel-status' same-origin proxy; it owns durable device
-# security state, not host health or capability lifecycle.
-kind            = "process"
-name            = "devices"
-command         = ["target/release/devices-server"]
-build           = ["cargo", "build", "--locked", "--release", "--bin", "devices-server"]
-port            = "8098"
-health_path     = "/health"
-ready_path      = "/ready"
-autostart       = "true"
-proxy_api_only  = "true"
-backup_target   = "backup-target"
+kind                 = "process"
+name                 = "devices"
+command              = ["target/release/devices-server"]
+build                = ["cargo", "build", "--locked", "--release", "--bin", "devices-server"]
+port                 = "8098"
+health_path          = "/health"
+ready_path           = "/ready"
+autostart            = "true"
+proxy_api_only       = "true"
+backup_target        = "backup-target"
 backup_sqlite_online = "data/axon/axon.db"

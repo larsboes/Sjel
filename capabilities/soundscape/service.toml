@@ -1,8 +1,4 @@
-# soundscape — host process, not a container. Shape: schemas/service.toml.example.
-#
-# autostart = false: nothing depends on this being up, and a soundscape that starts
-# itself on boot is a machine that makes noise decisions nobody asked for. The
-# app's Capabilities page starts it through sjel-status when it is wanted.
+# Generative ambient soundscape service, started on demand.
 kind        = "process"
 name        = "soundscape"
 command     = ["target/release/soundscape"]

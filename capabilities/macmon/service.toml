@@ -1,34 +1,8 @@
-# macmon — host process, not a container. Shape: schemas/service.toml.example.
-#
-# An adopted binary rather than code this repo builds, so there is no `build` line: the
-# host is expected to have it (toolchain.toml [macmon]). command[0] is a bare name on
-# purpose — PATH's job, and the generated unit's PATH is derived from `command -v macmon`
-# at install time, so a cargo-installed binary needs no absolute path in a tracked file.
-kind        = "process"
-name        = "macmon"
-command     = ["macmon", "serve", "--port", "${SJEL_PORT}", "--interval", "5000"]
-port        = "9911"
-health_path = "/json"
-# No `GET /routes`: macmon is an upstream binary, and its surface is upstream's.
+# Apple Silicon hardware metrics sampler (vladkens/macmon).
+kind          = "process"
+name          = "macmon"
+command       = ["macmon", "serve", "--port", "${SJEL_PORT}", "--interval", "5000"]
+port          = "9911"
+health_path   = "/json"
 routes_absent = "upstream binary (vladkens/macmon); serves /json only"
-
-# Why ${SJEL_PORT} rather than the literal: macmon takes its port on argv and cannot read
-# the SJEL_PORT env var an Sjel-owned process would. Writing 9911 twice — once here, once
-# in `port` above — would let the machine.toml override move one and not the other, and
-# the dashboard proxies whatever `port` says. One fact, one home.
-#
-# The interval IS spelled out, because it is not a machine fact. macmon samples hardware
-# counters on a timer whether or not anything is polling it, and the only consumer is a
-# dashboard page a human has open. At the 1000 ms default that cost ~2% of a core
-# continuously — an hour of CPU across two days on a machine whose Systems page was never
-# open. 5000 ms is imperceptible on a page you are reading and five times cheaper to leave
-# running.
-# false since 2026-08-29. macmon polls the SMC every 5 s forever, and its only consumer is one
-# page you open occasionally — which is precisely the idle draw R2 refuses to enable by default.
-# sjel-status starts it when /systems is opened, the same way finance and punctuality now start.
-#
-# It was `true` while the binary was not installed, so the Systems page has been degrading to
-# "no metrics" for weeks and the watchdog logged "nohup: macmon: No such file or directory".
-# toolchain.toml now declares the binary under `needed_by = ["capability:macmon"]`, so an enabled
-# capability whose command is missing is a reported miss rather than a silent one.
-autostart   = "false"
+autostart     = "false"

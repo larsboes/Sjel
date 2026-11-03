@@ -1,9 +1,4 @@
-# See schemas/service.toml.example for the field reference.
-#
-# The Google Contacts adapter's inbound sync for capabilities/entities (PRD Q117), every 12h.
-# Read only (contacts.readonly); the token is the overlay's entities.env. A contact whose
-# person the operator deleted is not recreated, and a value edited elsewhere is not
-# overwritten (entities/src/sync.rs).
+# Inbound Google Contacts sync for capabilities/entities.
 kind     = "process"
 name     = "entities-google-sync"
 command  = ["target/release/entities-server", "sync-google"]

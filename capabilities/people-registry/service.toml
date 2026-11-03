@@ -1,28 +1,7 @@
-# people-registry — rung 0's known-person registry, refreshed from capabilities/entities.
-#
-# The other orphan unit. Same story as capabilities/backup: hand-written, unversioned, and
-# reported by tools/doctor with advice that would have deleted a job doing real work.
-#
-# Declaring it fixes something the hand-written unit had to work around. That plist carried an
-# explicit `SJEL_PERSONAL_ROOT` with a comment explaining that "launchd gives a job none of the
-# shell's exports" — true, and unnecessary here: a scheduled capability runs through
-# tools/service-runner.sh, which sources tools/lib/paths.sh, which exports it (paths.sh:49). One
-# fewer machine-local value copied into a generated file.
-#
-# No `requires`. The script uses the `vault` BINARY, not the vault server, so declaring the
-# capability would start an HTTP surface on :8094 that nothing in this job talks to.
-kind     = "process"
-name     = "people-registry"
-command  = ["tools/people-registry-refresh.sh"]
-# The refresh drives the vault CLI (target/release/vault), which the vault service does not build:
-# its manifest builds vault-server only. Without these two lines a fresh or cleaned checkout ran
-# this job into "vault binary not built" every 6h. build_output names the artifact to look for,
-# because the command itself is a script that always exists.
+# Rung-0 known-person registry refresh from capabilities/entities.
+kind         = "process"
+name         = "people-registry"
+command      = ["tools/people-registry-refresh.sh"]
 build        = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
 build_output = "target/release/entities-server"
-
-# 6h, carried over from the unit it replaces. The registry is derived from Atlas/People and goes
-# stale the moment a person note is added; the script refuses to install an empty or malformed
-# result, so a failed vault read leaves the previous good file in place rather than blanking
-# rung 0.
-schedule = "6h"
+schedule     = "6h"

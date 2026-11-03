@@ -1,114 +1,24 @@
-# finance — reviewed imports, journal projections and subscriptions.
-kind        = "process"
-name        = "finance"
-command     = ["target/release/finance-server"]
-build       = ["cargo", "build", "--locked", "--release", "--bin", "finance-server"]
-port        = "8090"
-health_path = "/health"
-ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
-# false since 2026-08-29 (PRD B20). Measured before demoting, in both capabilities: no
-# `tokio::spawn` of a timer, no `interval`, no ticker. The only `sleep` is a download retry
-# backoff, and every `spawn_blocking` is per-request work moved off the async thread. So nothing
-# here observes anything between visits, and a process that is up only because it was up at boot
-# is R3's definition of a cost with no purpose.
-#
-# Starting it is not manual: sjel-status owns capability lifecycle and the shell routes start
-# requests through it (`capabilities/sjel-status/src/status/lifecycle.rs`), so the page that needs
-# this capability is what brings it up.
-autostart   = "false"
-# `/finance` is a dashboard route, so only `/finance/api` is proxied to this process.
-# Without this the uniform rule in vite.config.ts claims the whole `/finance` prefix and
-# the page becomes unreachable — the same trap trips documented (#136).
+# Reviewed imports, journal projections, and subscriptions.
+kind           = "process"
+name           = "finance"
+command        = ["target/release/finance-server"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "finance-server"]
+port           = "8090"
+health_path    = "/health"
+ready_path     = "/ready"
+autostart      = "false"
 proxy_api_only = "true"
-# Transactions reference trips by the `sjel-trip-id` tag; `GET /api/links?to=trip:plan:…`
-# answers them (website/content/capabilities/links.md D1). src/links.rs holds the same list and a test keeps them equal.
-links_to = ["trip:plan"]
-imports  = ["csv", "hledger-journal", "obsidian-markdown"]
-exports  = ["hledger-journal", "json"]
+links_to       = ["trip:plan"]
+imports        = ["csv", "hledger-journal", "obsidian-markdown"]
+exports        = ["hledger-journal", "json"]
 
-# `ledger = "hledger"` stood here until 2026-08-28. It selected the separately
-# installed accounting engine and carried the toolchain scope that made hosts
-# running Finance provide it. PRD Q50 retired that dependency — the engine is
-# capabilities/finance/src/journal.rs, in-process — so the field selected
-# nothing and scoped nothing, and toolchain.toml [hledger] went with it.
-
-# No `requires`: subscriptions, candidates and the two projections live in the
-# shared SQLite file this process opens itself, so there is no database service to
-# start first (PRD Q45).
-
-# --- backup (tools/backup.sh) ---
-# Declared 2026-08-28, closing the exposure PRD Q47 named in writing and left open:
-# the plaintext journal, `config/finance.json` and the reviewed-holdings snapshot are
-# canonical financial truth, they are gitignored, and until this line they were in no
-# backup contract at all — one disk, no copy.
-#
-# None of it is in the shared SQLite file, so `capabilities/store`'s contract does not
-# reach it. The journal is what every reviewed posting is appended to and the only
-# record of one; `config/finance.json` holds commitments, spending behaviour and the
-# CSV mappings that make an import readable, all typed by hand; the snapshots are
-# holdings and balances after an explicit human review. Nothing here is re-derivable
-# and nothing here is fetched again from anywhere.
-#
-# `data/finance` as a whole rather than the three files by name. The individual paths
-# (`journal`, `investment_snapshot`, `balance_snapshot`) are declared in
-# `config/finance.json`, which is overlay data; naming them here would be a second
-# declaration of a path this manifest does not own, and it would ship nothing the day
-# the operator moved one. The directory is the capability's data by the overlay's own
-# layout. The residual gap, said out loud: a snapshot configured OUTSIDE `data/finance`
-# is outside this contract, and nothing checks that today.
-#
-# `config/finance.json` is a FILE in a directory this capability must not claim —
-# `config/` also holds every other capability's configuration and vaultwarden's
-# credentials. backup.sh copies a declared file as itself; see stage_host_paths.
-#
-# No `backup_sqlite`: this process is not the owner of the shared database, and the one
-# manifest that is (`capabilities/store`) copies it live. A second contract on that file
-# would take a second copy of it under this capability's name.
-backup_paths  = ["data/finance", "config/finance.json"]
-backup_target = "backup-target"
-backup_retain = "14"
-
-# A reviewed posting is a human decision that no re-import reproduces, so a day is the
-# advice. Two days, not seven, for what counts as overdue: the schedule is daily, and a
-# threshold of seven lets six consecutive silent failures read as merely "due" — which
-# is exactly what happened to the store contract between 2026-08-24 and 2026-08-26
-# (Q47). A stale threshold must be reachable by the cadence that is supposed to meet it.
+# Canonical plaintext journal, snapshots, and finance configuration.
+backup_paths       = ["data/finance", "config/finance.json"]
+backup_target      = "backup-target"
+backup_retain      = "14"
 backup_advise_days = "1"
 backup_stale_days  = "2"
 
-# --- freshness (tools/doctor, "Data freshness (declared contracts)") ---
-# Declared 2026-09-08, closing the second half of PRD B47. The row held these two keys
-# back on one argument — "a contract whose producer has never run answers with a fault
-# on day one" — and it wrote them in the right order: the ROUTE first, the KEYS second,
-# because declaring a contract for a path that 404s IS the day-one fault.
-# `GET /__sjel/freshness` is served now (capabilities/finance/src/server.rs), so this is
-# the second step and not the first.
-#
-# What arrival means here: the newest `finance_price_fetches` row with `status = 'ok'`,
-# which is a provider handing over observations. NOT the newest observation date — a
-# market shut over a long weekend is quiet, not broken — and not merely the newest
-# attempt, because a run that refused still ran. `store.rs:newest_price_arrival` carries
-# the reasoning and `tests/db.rs` plants a refused, an errored and an empty attempt on
-# top of an older success to prove none of the three moves it.
-#
-# 48 and 96, from `capabilities/finance-prices`' own `schedule = "24h"` and the same
-# arithmetic comms uses on feed-sweep's 6h: advise at two missed runs, stale at four.
-# Not a rounder 24 and 72 — the daily job and the daily threshold would be the same
-# number, so one late run would advise, every time.
-#
-# THIS WILL GO RED HERE, and that is the declaration doing its job rather than a
-# mistake to work around. Measured 2026-09-08: `~/Library/LaunchAgents` holds ten
-# `com.axon.*.plist` files and none of them is `finance-prices`, so the only thing that
-# has ever fed this table is a hand-run `finance-cli prices fetch` (PRD B47, 2026-09-07).
-# Four days after the last one, doctor says so. That is the same coupling comms declares
-# against feed-sweep, and it is the D13 condition — nine days of an empty Inbox with
-# every check on the machine green — pointed at prices. The fix is
-# `tools/service-runner.sh install-persistence finance-prices`, which is already the one
-# open command in B47's own table.
-#
-# The other honest failure this can produce: a machine that enables finance with no
-# instruments configured has no fetch to make, so nothing ever arrives and doctor reports
-# "nothing has ever arrived". Correct, and the reason the keys waited for the first real
-# run rather than shipping with the code.
+# Hours since the newest successful price fetch before tools/doctor advises or reports stale.
 freshness_advise_hours = "48"
 freshness_stale_hours  = "96"

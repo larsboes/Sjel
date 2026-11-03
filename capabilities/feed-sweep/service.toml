@@ -1,50 +1,7 @@
-# See schemas/service.toml.example for the field reference.
-#
-# Restored 2026-08-30, having been deleted on 2026-08-25 by PRD D6 as "a duplicate owner":
-# *"comms owns the feed, so the schedule belongs with it"*. The premise was right and the move
-# was never made, so what the deletion actually removed was the feed's only unattended producer.
-# `POST /sources/scan` kept working the whole time and nothing called it: the newest feed item on
-# 2026-08-30 was dated 2026-08-21, and one manual scan the same morning returned 24 new items
-# from two sources with zero errors. Nine days of an empty Inbox, on a machine reporting healthy.
-#
-# The move it described is also not available. `schedule` is MUTUALLY EXCLUSIVE with `autostart`
-# and refused rather than resolved (schemas/service.toml.example: *"autostart = a service,
-# schedule = a job"*), and comms is autostart as of 2026-08-30 because the Home page reads its
-# feed daily. So the schedule cannot live on comms' manifest, and a job manifest beside it is not
-# a duplicate owner -- it is the same shape sparpreis-watch has carried, unremarked, the whole
-# time: a periodic caller of another capability's HTTP contract, kept enabled with it by
-# `requires`. Ownership is about who holds the data. comms still does.
-#
-# The first manifest to declare `schedule`. The field landed in c3458ee with launchd and systemd
-# backends, a shared duration parser and a schema gate, and nothing declaring it — so nothing had
-# ever proved the path end to end. Writing this found two things a feature without a consumer
-# could not have shown: the gate required a `port` of every kind = "process" manifest, which a
-# job that exits can never have, and comms' own scan aborted the whole run when one source
-# rate-limited, which is survivable while a human clicks a button and fatal on a timer.
+# Periodic caller of comms' POST /sources/scan.
 kind     = "process"
 name     = "feed-sweep"
 command  = ["target/release/sjel-cli", "feed-sweep"]
-# The built binary, not a launcher and no longer an interpreter, the shape host-watch carries.
-# service-runner.sh derives the generated unit's PATH from command[0] and from each `build` word,
-# so naming `cargo` here is what puts it on the job's PATH — a bare launcher would leave the
-# six-hourly job unable to rebuild a stale binary. `bun run tools/feed-sweep.ts` was what this
-# named until 2026-10-04, when the tool moved to tools/sjel-cli/src/feed_sweep.rs: the units
-# already installed need no reinstall, because launchd runs service-runner and the runner reads
-# this manifest.
 build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
-
-# Six hours. Both live sources publish on a slower cycle than that — GitHub's trending page is
-# daily and the arXiv listing settles once a day — so this is already oversampling; the value is
-# a ceiling on staleness, not a guess at their cadence. Short enough that opening the dashboard
-# never shows a day-old feed, long enough that a source rate-limiting one run has recovered long
-# before the next.
 schedule = "6h"
-
-# No `port`, and the gate now refuses one alongside a schedule: this runs, collects, and exits.
-# Nothing can reach a process that is not there, and a port would put an entry in the dashboard's
-# proxy table pointing at exactly that.
-
-# The contract it calls, not the code it shares (CONTRIBUTING.md#schemas-and-dependency-direction).
-# `requires` keeps the two enabled together, so a machine cannot end up scheduling a sweep
-# against a capability it does not have.
 requires = ["comms"]

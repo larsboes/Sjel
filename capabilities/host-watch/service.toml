@@ -1,34 +1,6 @@
-# See schemas/service.toml.example for the field reference.
-#
-# The host watch (Sjel#177): one pass over the machine's own vital signs, then exit. It
-# writes a row per finding into its own table in the shared store and nothing at all when
-# the machine is healthy.
-#
-# Hourly, and the number is measured rather than assumed. The expensive half is the
-# storage scan it shells out to, which is 6.6s wall and almost entirely I/O wait on this
-# machine — 0.2% of an hour. The cheap half is `ps`. Anything slower than hourly makes
-# the runaway check pointless: the incident that produced this capability ran for 3h29m
-# of CPU before a human noticed, and a watcher that reports it the next morning has only
-# written the postmortem.
+# Hourly pass over host vital signs and runaway processes.
 kind     = "process"
 name     = "host-watch"
-# The built binary, not a launcher and no longer an interpreter. This shape is the one the
-# other Rust capabilities use (sjel-status, punctuality): service-runner.sh derives the generated
-# unit's PATH from command[0] and from each `build` word, so naming `cargo` here is what puts it
-# on the job's PATH — a bare launcher would leave the hour-long job unable to rebuild a stale
-# binary, and `bun run` would start an interpreter every hour for four lines of `ps`. The same
-# rule the tool applies to its own dependency: an hourly job must not be the thing that starts a
-# build it cannot finish.
 command  = ["target/release/sjel-cli", "host-watch"]
 build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
 schedule = "1h"
-
-# No `port`: it runs, observes, and exits. `schedule` and `autostart` are mutually
-# exclusive and the runner refuses a manifest carrying both — this is a job, not a service.
-# That exclusion is also why the findings are READ somewhere else: nothing is listening
-# here, so sjel-status publishes them (see README.md, "How it reports").
-#
-# No `requires` since PRD Q48 (2026-08-27). It required `tasks` because filing a task WAS
-# the alert surface; the capability retired, and the findings became rows in this
-# capability's own table in the shared store. A file this process opens is not a service
-# to wait for, so there is nothing left to declare.

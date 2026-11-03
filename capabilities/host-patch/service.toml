@@ -1,22 +1,4 @@
-# host-patch — the daily upgrade of this machine's tools, and the audit that follows it.
-#
-# Q74 (2026-09-02) deleted the seven-to-fourteen-day adoption hold. This is what replaces
-# it: nothing waits, so something has to move. tools/host-patch.sh runs brew, uv and rustup,
-# then tools/audit over the machine it just patched, and writes a receipt tools/doctor reads.
-#
-# 24h, matching capabilities/backup: `schedule` takes a duration and deliberately not a cron
-# expression (schemas/service.toml.example — both backends want a duration anyway, and a second
-# scheduling language in a manifest is a language to translate out of).
-#
-# The honest caveat, stated here rather than discovered: a launchd StartInterval job does not
-# fire while the Mac sleeps. It runs once on wake, so "every 24 hours" means at most one run per
-# waking day, and a machine closed for a long weekend patches on Monday. RunAtLoad in
-# tools/templates/launchd-schedule.plist.tmpl means installing the unit triggers an immediate
-# run — the first one upgrades whatever has accumulated, so run it by hand once first.
-#
-# No `port`, and that is required rather than optional: tools/check-service-tomls.sh refuses a
-# port on a scheduled process. This runs, does its work and exits; there is nothing to reach,
-# and a port would put an entry in the proxy table aimed at a process that is not there.
+# Daily upgrade and security audit of host toolchains.
 kind     = "process"
 name     = "host-patch"
 command  = ["tools/host-patch.sh"]

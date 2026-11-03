@@ -1,23 +1,7 @@
-# See schemas/service.toml.example for the field reference.
-#
-# The Sparpreis price watch (travel PRD R4): re-prices the rail searches upcoming trip
-# plans already record, appends the observation, and writes a note item on a drop. The
-# research behind the cadence: drops come from late-released contingents and DB promo
-# windows, both slow-moving — twice a day is already oversampling, and each run costs
-# real bahn.de requests through transit's self-paced client, so the ceiling stays low.
+# Twice-daily rail fare re-pricing for upcoming trip plans.
 kind     = "process"
 name     = "sparpreis-watch"
-# The built binary, not a launcher and no longer an interpreter, the shape host-watch carries.
-# service-runner.sh derives the generated unit's PATH from command[0] and from each `build` word,
-# so naming `cargo` here is what puts it on the job's PATH — a bare launcher would leave the
-# twelve-hourly job unable to rebuild a stale binary. `bun run tools/sparpreis-watch.ts` was what
-# this named until 2026-10-04, when the tool moved to tools/sjel-cli/src/sparpreis_watch/: the
-# units already installed need no reinstall, because launchd runs service-runner and the runner
-# reads this manifest.
 command  = ["target/release/sjel-cli", "sparpreis-watch"]
 build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-cli", "--bin", "sjel-cli"]
 schedule = "12h"
-
-# No `port`: this runs, observes, and exits. The contracts it calls, not the code it
-# shares — both must be enabled on a machine that schedules the watch.
 requires = ["transit", "trips"]

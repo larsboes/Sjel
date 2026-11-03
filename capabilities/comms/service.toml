@@ -1,47 +1,21 @@
-# comms — host process, not a container. Shape: schemas/service.toml.example.
+# Feed and mail triage service.
 kind        = "process"
 name        = "comms"
 command     = ["target/release/comms-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "comms-server"]
 port        = "8083"
-# A person's mail is the triage rows from their emails, as entities holds them; `GET /api/links?to=ent:…`
-# answers it and stores nothing (website/content/capabilities/links.md D10). src/links.rs holds the same list.
-links_to = ["ent"]
-imports  = ["rss-atom", "imap-jmap", "youtube-transcript", "hackernews"]
-exports  = ["json"]
+links_to    = ["ent"]
+imports     = ["rss-atom", "imap-jmap", "youtube-transcript", "hackernews"]
+exports     = ["json"]
 health_path = "/health"
-ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
-
-# autostart, decided 2026-08-30. B20 demoted finance and punctuality because neither observes
-# anything between visits, and that reasoning was correct for them and silent about these two.
-# The Home page is the surface opened daily (PRD M1), and it aggregates the feed without
-# opening the capability's own page -- so the on-demand trigger, which fires when you open a
-# capability's surface, never fires for the panel that needs it. The result was a Home page
-# reporting its own core panels unavailable. Always-on is the honest reading of "I open it
-# daily without being reminded to".
+ready_path  = "/ready"
 autostart   = "true"
 
-# No proxy_extra: comms-server serves bare paths (/feed, /triage) precisely so its
-# contract stays dashboard-independent, and the uniform stripped /comms prefix is
-# what the dashboard client already calls.
-
-# No `requires`: the nineteen tables live in the shared SQLite file this process
-# opens itself, so there is no database service to start first (PRD Q45).
-
-# The freshness contract (schemas/service.toml.example). comms owns the Feed, so "is data still
-# arriving" is a question about this capability -- but what satisfies it is capabilities/feed-sweep,
-# whose 6h schedule is the only unattended caller of `POST /sources/scan`. 12h is two missed passes
-# and 24h is four, which is the age that needs a stopped collector rather than a quiet source.
-#
-# The coupling is deliberate and is the point: on a machine running comms without feed-sweep this
-# contract fails, and it should. Nothing is feeding the Inbox there, which is precisely the
-# condition that went unnoticed for nine days (PRD D13) and precisely what a declaration nobody
-# verifies looks like from the outside.
+# Hours since the newest feed arrival before tools/doctor advises or reports stale.
 freshness_advise_hours = "12"
 freshness_stale_hours  = "24"
 
-# The Google grant for Gmail and Calendar (schemas/service.toml.example, "Credentials").
-# Calendar reads the same grant. Connected in the desktop app, Settings › Accounts.
+# Google OAuth grant shared by Gmail and Calendar (Settings › Accounts).
 [[credentials]]
 id           = "google-comms"
 type         = "google-oauth"

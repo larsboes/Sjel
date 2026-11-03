@@ -1,30 +1,8 @@
-# vault — the Obsidian vault read as data, over HTTP. Field reference:
-# schemas/service.toml.example.
-#
-# The HTTP front end serves the Journal and People reads. It served band 620's
-# tasks from 2026-08-27 (PRD Q48) until 2026-10-18, when `capabilities/projects`
-# became their owner (capabilities/projects/README.md).
+# HTTP read surface over the Obsidian vault's Journal and People notes.
 kind        = "process"
 name        = "vault"
 command     = ["target/release/vault-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "vault-server"]
-
-# 8094, the next free slot after places' 8093. Not 8089: that was `tasks`, and a
-# freed port re-used in the same change is a port where a stale process answers
-# for the capability that replaced it. 8092 is spoken for by the interior
-# capability (capabilities/places/src/config.rs), which sat in the private
-# overlay when this was written and moved here 2026-08-30 (PRD Q59).
 port        = "8094"
 health_path = "/health"
-
-# Availability is judged here, not on liveness (#126). The vault lives in iCloud
-# Drive: the process can be perfectly healthy while the folder it exists to read
-# is not there yet.
 ready_path  = "/ready"
-
-# No `requires`: the vault is a directory this process opens, named by the
-# overlay's config/knowledge.toml. Nothing has to be started first.
-#
-# No `autostart` either. The ladder starts it on demand the same way it starts
-# every other read surface, and a server whose only job is to read files a human
-# edits has nothing to do while nobody is looking.

@@ -1,51 +1,9 @@
-# interior — Raumplanung, als Rust-Prozess. Shape: schemas/service.toml.example.
-#
-# Loest die TypeScript-Fassung im privaten Overlay ab (2026-08-30) und ist am selben Tag durch
-# PRD Q59 hierher gezogen. Der Port bleibt 8092, damit vorhandene Lesezeichen weiter stimmen —
-# er war seit 2026-08-20 fuer diese Capability vergeben und ist in capabilities/vault und
-# capabilities/places als belegt vermerkt.
-#
-# `autostart = false`: die Seite zeigt Grundriss und private Fotos einer Wohnung, und ein Prozess,
-# der das ab dem Boot ausliefert, ist keine gute Idee. Das Dashboard startet ihn, wenn `/interior`
-# geoeffnet wird — und danach **bleibt er stehen**: er hat kein `panel_port`, und ohne das ist
-# `idle_timeout` wirkungslos (`sjel_status::status::registry::idle_timeout_secs` gibt `None`
-# zurueck, sobald `panel_port` leer ist). Hier stand bis 2026-10-05 `idle_timeout = "300"`, und
-# das war eine Zeile, die nichts tat und einen Entwurf beschrieb, den B27 am 2026-08-31 beendet
-# hat. Wer diese Capability wirklich abschalten will, tut es mit `service-runner.sh idle-stop`.
-#
-# **Was das fuer andere kostet:** `capabilities/trips` liest `GET /api/inventory` ueber HTTP
-# (`trips/src/server.rs`, 3 s Timeout) und meldet `interior_reachable: false`, wenn hier nichts
-# laeuft. Nach einem Neustart verliert damit jede Packliste ihre Gewichte und Ausruestungsfelder,
-# bis jemand den Grundriss oeffnet. Das ist eine Kopplung, die in `trips/service.toml` **nicht**
-# als `requires` steht.
-#
-# Die Seite wird bei JEDER Anfrage aus dem Modell erzeugt, nicht beim Start gebaut. Ein
-# vorgebauter Plan waere ein Plan, der den Zahlen widerspricht, aus denen er zu stammen
-# behauptet — genau die Drift, gegen die diese Capability existiert. Das ist zugleich der
-# Grund, warum sie oeffentlich stehen darf: das Bundle enthaelt kein Foto mehr.
-kind         = "process"
-name         = "interior"
-command      = ["target/release/interior", "serve"]
-build        = ["cargo", "build", "--locked", "--release", "--bin", "interior"]
-port         = "8092"
-health_path  = "/health"
-autostart    = "false"
-
-# Ein Ziel in der Shell, kein Panel. Bis zum 2026-08-31 stand hier `panel_port`, und das war
-# die Aussage "diese Capability liefert ihre eigene Oberflaeche aus, haengt sie in einen
-# iframe". Seit `dashboard/src/routes/interior/` (PRD B27) ist das falsch: die Seite gehoert
-# der Shell, und die Capability liefert die Zahlen.
-#
-# `proxy_api_only` ist die Folge und keine Verzierung. Ohne sie haengt sjel-status die
-# Capability unter `/interior` ein und faengt damit genau den Pfad ab, unter dem die
-# Dashboard-Route liegt — die Seite waere durch ihre eigene API ersetzt. So mountet die
-# Capability nur `/interior/api`, und `/interior` bleibt die Shell. calendar, finance und
-# trips stehen aus demselben Grund so da.
-#
-# Private photos and RoomPlan captures are resolved from the overlay's interior.json assets_root;
-# they are never bundled into this public capability.
+# Apartment floor-plan and room layout service.
+kind           = "process"
+name           = "interior"
+command        = ["target/release/interior", "serve"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "interior"]
+port           = "8092"
+health_path    = "/health"
+autostart      = "false"
 proxy_api_only = "true"
-
-# `GET /` liefert weiterhin eine vollstaendige HTML-Seite. Sie ist der Weg ohne Shell — fuer
-# `interior plan --out` und fuer einen Blick direkt auf den Port — und nicht mehr die
-# Oberflaeche, die das Dashboard zeigt.

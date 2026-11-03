@@ -1,20 +1,14 @@
-# See schemas/service.toml.example for the field reference.
-#
-# The entity core, PRD Q117 (2026-09-25): Sjel is the system of record for people,
-# organisations, places and the operator's own context. Obsidian, Google Contacts and TELOS
-# are adapters. Serves C2 (facts about named people), so no CORS; the dashboard reaches it
-# through its same-origin proxy.
-kind        = "process"
-name        = "entities"
-command     = ["target/release/entities-server"]
-build       = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
-port        = "8097"
-health_path = "/health"
-ready_path  = "/ready"
+# Canonical registry for people, organisations, places, and operator context.
+kind           = "process"
+name           = "entities"
+command        = ["target/release/entities-server"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "entities-server"]
+port           = "8097"
+health_path    = "/health"
+ready_path     = "/ready"
 proxy_api_only = "true"
 
-# The Google grant for Contacts, read only and separate from comms' Gmail grant
-# (schemas/service.toml.example, "Credentials"). Connected in Settings › Accounts.
+# Read-only Google Contacts OAuth grant (Settings › Accounts).
 [[credentials]]
 id           = "google-entities"
 type         = "google-oauth"

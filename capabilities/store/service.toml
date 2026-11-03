@@ -1,49 +1,8 @@
-# store — the one SQLite file every capability's tables live in (PRD Q45, 2026-08-27).
-# See schemas/service.toml.example for the field reference.
-#
-# `kind = "data"`: no image, no command, nothing to start. Nine capabilities open this
-# file themselves through `sjel_config::database_path()`, so there is no process here to
-# supervise — `tools/service-runner.sh` refuses every lifecycle verb by name rather than
-# looking for an image this manifest deliberately does not have.
-#
-# It exists because a file still needs one owner for the one thing a file needs an owner
-# for: backup. That owner was capabilities/postgres/ until the ruling retired it, and the
-# fields below are its contract, carried over unchanged where the reason still holds.
-kind = "data"
-name = "store"
-
-# The archive path is overlay-relative. `tools/backup.sh` reads the source from
-# `SJEL_DB_PATH` when set, matching `sjel_config::database_path()`.
-#
-# `backup_sqlite_online`, not `backup_sqlite`: the copy is taken with `sqlite3 .backup`
-# while readers hold the file open, because there is no single service to hold down —
-# nine of them have it open, and stopping all nine to copy one file is an outage, not a
-# backup. Safe here for exactly the reason it was NOT safe for vaultwarden (the
-# 2026-07-25 outage recorded in tools/backup.sh): SQLite's WAL coordinates readers and
-# writers through shared memory and needs every connection on one host, and this file
-# sits on the host's own filesystem with no virtiofs mount between it and its readers.
-#
-# The `axon-local-*.lock` files beside it are not declared and are not backed up. They
-# are cross-process locks (capabilities/comms/src/local_gate.rs), not state: restoring
-# one would restore a held lock.
+# Online SQLite backup contract for the shared database file.
+kind                 = "data"
+name                 = "store"
 backup_sqlite_online = "data/axon/axon.db"
-
-# The backup ROLE, not a host. Same systems.toml id every other backed-up capability
-# names; the private coordinates live in the overlay's systems.local.toml.
-backup_target = "backup-target"
-backup_retain = "14"
-
-# Every capability's data is in this one file, so this cadence is the whole deployment's
-# cadence rather than one capability's. Daily is what the human-decision tables deserve:
-# a saved or dismissed verdict is not re-fetchable.
-#
-# `backup_stale_days` was 7, inherited unchanged from capabilities/postgres. It was
-# wrong for a daily schedule and 2026-08-26 proved it: the daily run had failed silently
-# on every attempt since 2026-08-24 — the launchd plist's PATH omitted `/usr/local/bin`,
-# so `container` was never found — and sjel-status reported "due" for three days,
-# because "overdue" waited for day 7. Three missed runs of a daily job is a fault, not a
-# reminder. 2 (2026-08-28, PRD Q47): one missed run is "due", two is a problem. A stale
-# threshold has to be reachable by the cadence that is supposed to meet it, and seven
-# days is not reachable by a job that runs every one.
-backup_advise_days = "1"
-backup_stale_days  = "2"
+backup_target        = "backup-target"
+backup_retain        = "14"
+backup_advise_days   = "1"
+backup_stale_days    = "2"

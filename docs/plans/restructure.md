@@ -54,7 +54,8 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
   of 456, `osv-scanner-installed.toml` 155 of 386, `Cargo.toml` 93 of 190, `systems.toml` 64 of 180,
   and 922 comment lines across all `service.toml` files. Now: `profiles.toml` 11 of 87,
   `toolchain.toml` 25 of 319, `systems.toml` 12 of 126, `Cargo.toml` 3 of 102, `upstreams.toml`
-  29 comment lines. Still open: `osv-scanner-installed.toml` and the `service.toml` files.
+  29 comment lines, `osv-scanner-installed.toml` 6 of 246, and 51 of 455 across all `service.toml`
+  files.
 - "Axon" appears 804 times in 299 files.
 - 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
   "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
@@ -64,8 +65,7 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 
 1. A ratchet in `tools/doctor` or CI: each count above may fall, never rise.
 2. Done for `Cargo.toml`, `apps/gpui/Cargo.toml`, `profiles.toml`, `toolchain.toml`,
-   `systems.toml` and `upstreams.toml` (commit "Trim comment prose in the root TOMLs"). Open: one
-   comment line per key at most in `osv-scanner-installed.toml` and the `service.toml` files.
+   `systems.toml`, `upstreams.toml`, `osv-scanner-installed.toml`, and `capabilities/*/service.toml`.
 3. Done: `tools/isa-hygiene.sh`, its test, the doctor ISA count, and every ISA ID citation in code,
    config and docs.
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs

@@ -1,14 +1,7 @@
-# sjel-status — host process, not a container. Shape: schemas/service.toml.example.
-#
-# autostart, because this is the piece that starts the others: the dashboard asks it
-# to bring a capability up when you open that capability's surface. Something has to
-# be listening for that ask, and it is deliberately the smallest process in the set.
+# Host status, capability lifecycle, and same-origin API gateway.
 kind        = "process"
 name        = "sjel-status"
 command     = ["target/release/sjel-status"]
-# Signed after each build, by the runner, so the firewall grant for the Same Wi-Fi listener
-# survives rebuilds (tools/codesign-binary.sh says why). The build command stays plain cargo: the
-# launchd unit's PATH comes from its first word.
 build       = ["cargo", "build", "--locked", "--release", "--bin", "sjel-status"]
 sign        = "dev.sjel.sjel-status"
 port        = "8082"

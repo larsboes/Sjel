@@ -1,41 +1,8 @@
-# punctuality — host process, not a container. Shape: schemas/service.toml.example.
+# Train-reliability aggregate queried synchronously during transit journey ranking.
 kind        = "process"
 name        = "punctuality"
 command     = ["target/release/punctuality-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "punctuality-server"]
 port        = "8085"
 health_path = "/health"
-
-# No `requires`: the aggregate lives in the shared SQLite file this process opens
-# itself, so there is no database service to start first (PRD Q45).
-
-# Always-on, and it is the one capability here that genuinely is. The old comment claimed
-# "the shell starts it when something asks", which was never true: nothing asks. Its only
-# caller is transit's server-side enrichment (capabilities/transit/src/punctuality.rs),
-# which reaches it over HTTP and — by explicit design — degrades to no delay score rather
-# than failing when it is absent. So there is no request that could start it on demand,
-# and no page to hang a start call off.
-#
-# That left it running purely because an installed watchdog contradicted an on-demand
-# declaration. Two honest options: declare it always-on, or accept that delay enrichment
-# silently never happens. A hard `requires` on transit's side is the wrong third one — it
-# would turn a degradable dependency into a startup failure, which is the trade transit's
-# own module documents refusing.
-#
-# Was `false` from 2026-08-29 (PRD B20) on a measurement: no timer, no interval, no ticker,
-# so nothing here observes anything between visits and a process up only because it was up
-# at boot is R3's definition of a cost with no purpose. That measurement still holds and is
-# still the reason this is a small process rather than a daemon.
-#
-# **Back to `true` on 2026-09-23, because the consumer is synchronous.** `transit`'s journey
-# ranking reads `reliability` inside the search request, against a three-second budget, and
-# the same is true of `punctuality::enrich` before it. A process start cannot be paid for
-# out of that budget, so "bring it up on demand" was never available for this consumer — it
-# is not a page that can wait, and nothing else asks either. The result was that the highest
-# weighted term in a ranked search silently disappeared, which the response showed only by
-# the factor's absence.
-#
-# So the choice the old comment named — always-on, or enrichment never happens — is settled
-# the first way, and `sjel-status`' lifecycle route stays the thing that stops and starts it
-# by hand (`capabilities/sjel-status/src/status/lifecycle.rs`).
 autostart   = "true"

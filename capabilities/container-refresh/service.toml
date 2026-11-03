@@ -1,24 +1,4 @@
-# container-refresh — the daily pull of every image this machine declares, and the recreate
-# for the ones whose digest moved.
-#
-# Q77 (2026-09-02) made every service.toml `tag` a rolling channel — `:stable`, `:latest`,
-# `:alpine`. A channel moves in the registry and nothing on the host notices: `docker run`
-# resolved the digest once, at creation. This is what makes the channel real.
-#
-# The container half of capabilities/host-patch, and the same shape deliberately: one scheduled
-# process, `command -v` guards, a receipt tools/doctor reads. Enable it on a host that runs
-# containers; on a workstation with none, tools/container-refresh.sh writes a receipt saying so
-# and exits 0.
-#
-# 24h, matching capabilities/host-patch and capabilities/backup: `schedule` takes a duration and
-# deliberately not a cron expression (schemas/service.toml.example).
-#
-# The same caveat host-patch states applies here: a launchd StartInterval job does not fire while
-# the Mac sleeps, so "every 24 hours" is at most one run per waking day. On a Pi under systemd it
-# fires on time, which is where this capability is actually meant to run.
-#
-# No `port`: tools/check-service-tomls.sh refuses one on a scheduled process, and rightly — this
-# runs, pulls, recreates and exits, so there is nothing to reach.
+# Daily pull of declared container images and recreation when a digest moves.
 kind     = "process"
 name     = "container-refresh"
 command  = ["tools/container-refresh.sh"]

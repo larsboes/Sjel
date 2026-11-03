@@ -1,14 +1,8 @@
-# transit — host process, not a container. Shape: schemas/service.toml.example.
+# Rail journey search, ticket import, and itinerary scoring service.
 kind        = "process"
 name        = "transit"
 command     = ["target/release/transit-server"]
 build       = ["cargo", "build", "--locked", "--release", "--bin", "transit-server"]
 port        = "3000"
 health_path = "/health"
-
-# transit-server answers /api/* directly and the dashboard's client has always called
-# it that way, so /api is proxied through unstripped alongside the uniform /transit.
 proxy_extra = ["/api"]
-
-# No `requires`: trips/legs/sessions live in the shared SQLite file this process
-# opens itself, so there is no database service to start first (PRD Q45).

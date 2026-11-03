@@ -1,35 +1,13 @@
-# trips — persistent plan/itinerary state for the dashboard's cross-capability view.
-kind        = "process"
-name        = "trips"
-command     = ["target/release/trips-server"]
-build       = ["cargo", "build", "--locked", "--release", "--bin", "trips-server"]
-port        = "8086"
-health_path = "/health"
-ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
-# `/trips` is a dashboard route (the redirect stub to `/travel`), so only
-# `/trips/api` is proxied to this process. Without this the uniform rule in
-# vite.config.ts claims the whole `/trips` prefix, the SvelteKit page becomes
-# unreachable, and an old `/trips` bookmark gets the trips server's bare 404
-# instead of the redirect. Every dashboard call already targets `/trips/api/…`
-# (dashboard/src/lib/api.ts), and every server route already lives under `/api`.
+# Persistent trip plans, itineraries, and packing lists.
+kind           = "process"
+name           = "trips"
+command        = ["target/release/trips-server"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "trips-server"]
+port           = "8086"
+health_path    = "/health"
+ready_path     = "/ready"
 proxy_api_only = "true"
-# Traveller names decided as people answer `GET /api/links?to=ent:…`, and the undecided ones are
-# listed at `/api/people/open` (website/content/capabilities/links.md D11). src/people.rs holds the same list.
-links_to = ["ent"]
-imports  = ["json"]
-exports  = ["json", "ics-projection"]
-
-# No `requires` for the store: it is a file this process opens, not a service to wait for
-# (PRD Q45).
-#
-# **`inventory` is a service, and this process calls it.** `src/server.rs` reads
-# `GET /api/inventory` over HTTP on a 3 s timeout to resolve every pack-list item, and
-# `src/interior_client.rs` POSTs gear proposals to `POST /api/items`. Until 2026-10-05 both
-# pointed at `interior` (8092), which is on demand — so after a restart, until somebody opened
-# `/interior`, every list lost its weights and equipment fields, and the dependency was not
-# declared anywhere. That is what this line fixes, and it is a real fix now: `inventory` is
-# `autostart = true`, so `up` starts it before this process.
-requires = ["inventory"]
-# `places` is called and is deliberately NOT required: `src/place_resolve.rs` asks it for a
-# destination's coordinate on every save, and with it down the plan is stored with that
-# coordinate null. A requirement would turn a missing coordinate into a refused save.
+links_to       = ["ent"]
+imports        = ["json"]
+exports        = ["json", "ics-projection"]
+requires       = ["inventory"]

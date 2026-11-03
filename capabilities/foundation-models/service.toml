@@ -1,69 +1,8 @@
-# foundation-models — host process, not a container. Shape: schemas/service.toml.example.
-#
-# Apple's on-device model behind the OpenAI chat-completions shape, so Sjel
-# reaches it as a backend in inference.json rather than through a binding.
-#
-# MAC ONLY, and there is no manifest field that says so. Capabilities are enabled per machine, so
-# the Pi simply never enables this one.
-#
-# ONE CONTRACT WAS LOST IN THE SWAP, and it is recorded here rather than discovered. The retired
-# afm-server REFUSED to start when the framework was missing or Apple Intelligence was off, so a
-# misconfigured host failed loudly at startup. apfel binds the port regardless and reports
-# `"status": "model_unavailable"` on /health instead (Sources/Server.swift: "an unavailable model
-# never crashes startup"). On such a host this capability now reads as up while answering nothing.
-#
-# Accepted rather than worked around, because the consumer already handles it: libs/inference
-# resolves a role through a model-readiness probe, and comms falls back to the strong
-# summarization role when the light one does not resolve. The failure surfaces one layer later
-# than it used to, and it does still surface. If that ever proves optimistic, `ready_path` is the
-# seam — apfel has no endpoint that fails on unavailability today, which is why this is a note and
-# not a field.
-kind        = "process"
-name        = "foundation-models"
-
-# apfel, not a server Sjel writes. `upstreams.toml [apfel]` carries the verdict;
-# toolchain.toml declares the binary under `needed_by = ["capability:foundation-models"]`, so an
-# enabled capability with the binary missing is reported rather than discovered in a watchdog log.
-#
-# It replaced 311 lines of Swift that did strictly less: three endpoints, no streaming, no tool
-# calling, no structured output. There is no `build` any more — `brew install apfel`.
-#
-# `--port ${SJEL_PORT}` is load-bearing. apfel defaults to 11434, which is Ollama's port and is
-# already a declared backend in this deployment's inference.json; two things fighting over one
-# port is the kind of collision that presents as a model answering wrongly rather than as an
-# error. Its README documents no port option and is wrong about that — Sources/CLI/CLIArguments.swift
-# has --port/--host and APFEL_PORT/APFEL_HOST. Read the source, not the README.
-command     = ["apfel", "--serve", "--port", "${SJEL_PORT}"]
-port        = "8091"
-health_path = "/health"
-# No `GET /routes`: apfel is an upstream binary. Its surface is the OpenAI shape.
+# Apple on-device model served via apfel behind the OpenAI chat-completions API.
+kind          = "process"
+name          = "foundation-models"
+command       = ["apfel", "--serve", "--port", "${SJEL_PORT}"]
+port          = "8091"
+health_path   = "/health"
 routes_absent = "upstream binary (apfel); serves the OpenAI chat-completions API under /v1"
-
-# No `requires`: this talks to nothing. It reads a prompt, asks the OS, and
-# answers. The dependency runs the other way — comms names it in inference.json
-# as the `summarization_light` role, and a role that does not resolve is simply
-# not offered work.
-#
-# autostart, decided 2026-08-30, reversing the reasoning below.
-#
-# It read: "the light role is an optimisation, not a floor: a machine where this is not running
-# digests everything on the strong model exactly as it did before, so starting it is a choice
-# rather than a prerequisite." That was true while there was a strong model to fall back to. There
-# is not: oMLX is retired, so the local strong role this argument assumed is gone, and the
-# unattended pass never falls back to the light one anyway -- `quiet::rung` refuses that
-# fallthrough on purpose -- so the light role IS the floor for every drain on this machine.
-#
-# CORRECTED 2026-10-11. This read "oMLX and Ollama are both retired". Only oMLX is. Measured that
-# day: nothing listens on :8000, no omlx-server process runs, and ~/.omlx does not exist. Ollama is
-# the opposite -- it listens on :11434, and the overlay's inference.json assigns it three roles
-# (embedding bge-m3, summarization axon-qwen3-4b:ctx8k, coding qwen3:4b, the last added the same
-# day). So `summarization` does resolve locally, to Ollama, which is not what the sentence above
-# said. The correction sits beside the original rather than replacing it because the tension is
-# unresolved, and it is a real fork rather than a wording problem: either a local strong model does
-# exist and the reversal above needs re-arguing, or Ollama's model is not the "strong model to fall
-# back to" that sentence was written about and this comment should say why. Do not read this as a
-# record that Ollama is gone, and do not retire it on the strength of the old sentence.
-#
-# The original sentence is kept rather than replaced because the reversal is a fact about the
-# machine, not about the argument: restore a local strong model and the old reasoning holds again.
-autostart   = "true"
+autostart     = "true"

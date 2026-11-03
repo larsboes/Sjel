@@ -1,27 +1,13 @@
-# calendar — Sjel's calendar layer: availability windows, scoped rhythms, events.
-kind        = "process"
-name        = "calendar"
-command     = ["target/release/calendar-server"]
-build       = ["cargo", "build", "--locked", "--release", "--bin", "calendar-server"]
-port        = "8087"
-health_path = "/health"
-ready_path  = "/ready"   # availability is judged on this, not on liveness (#126)
-
-# autostart, decided 2026-08-30. B20 demoted finance and punctuality because neither observes
-# anything between visits, and that reasoning was correct for them and silent about these two.
-# The Home page is the surface opened daily (PRD M1), and it aggregates calendar events without
-# opening the capability's own page -- so the on-demand trigger, which fires when you open a
-# capability's surface, never fires for the panel that needs it. The result was a Home page
-# reporting its own core panels unavailable. Always-on is the honest reading of "I open it
-# daily without being reminded to".
-autostart   = "true"
-# `/calendar` is the dashboard workspace, so only `/calendar/api` is proxied
-# to this process (with `/calendar` stripped).
+# Calendar layer: availability windows, scoped rhythms, and events.
+kind           = "process"
+name           = "calendar"
+command        = ["target/release/calendar-server"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "calendar-server"]
+port           = "8087"
+health_path    = "/health"
+ready_path     = "/ready"
+autostart      = "true"
 proxy_api_only = "true"
-# Calendar answers trip links from trip-owned payloads and its materialization ledger.
-links_to = ["trip:plan"]
-imports  = ["ics", "google-calendar"]
-exports  = ["ics", "json"]
-
-# No `requires`: entries, rhythms and contexts live in the shared SQLite file this
-# process opens itself, so there is no database service to start first (PRD Q45).
+links_to       = ["trip:plan"]
+imports        = ["ics", "google-calendar"]
+exports        = ["ics", "json"]

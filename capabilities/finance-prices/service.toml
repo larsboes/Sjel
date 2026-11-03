@@ -1,37 +1,7 @@
-# See schemas/service.toml.example for the field reference.
-#
-# A job, not a service, and the manifest has to be its own file for a mechanical reason:
-# `schedule` is MUTUALLY EXCLUSIVE with `autostart` and refused rather than resolved
-# (tools/check-service-tomls.sh -- "autostart = a service, schedule = a job"), and
-# capabilities/finance/service.toml declares autostart. So the schedule cannot live on
-# finance's manifest. A job manifest beside it is not a duplicate owner: it is the shape
-# capabilities/feed-sweep already carries, a periodic caller of another capability's own
-# code, kept enabled with it by `requires`. Ownership is about who holds the data.
-# finance still does -- these rows land in finance's own tables under finance's prefix.
+# Daily reference-rate and daily-bar fetch into finance's tables.
 kind     = "process"
 name     = "finance-prices"
-
-# The capability's own binary, not an HTTP call. The work is a store write and two
-# outbound fetches, and routing it through a port would mean the job could only run while
-# the server was up -- which is the opposite of what an unattended nightly job is for.
 command  = ["target/release/finance-cli", "prices", "fetch"]
-
-# Declared here because nothing else builds this binary: capabilities/finance/service.toml
-# builds `--bin finance-server` only, and `tools/service-runner.sh:440` skips `maybe_build`
-# entirely for a manifest with no `build`. Without this line the timer execs a path that
-# exists on no machine but the one where it was compiled by hand, every 24h, and a job with
-# no port and no health_path fails where nobody is looking.
 build    = ["cargo", "build", "--locked", "--release", "--bin", "finance-cli"]
-
-# Daily. The sources publish once a day and no faster: the ECB publishes one reference
-# rate per currency per working day, and Yahoo's daily bar closes once. Anything shorter
-# would re-fetch the same observation, which the UNIQUE tuple on finance_prices makes
-# free but pointless. Anything longer and a gap in the return series opens, which the
-# risk model reports as a longer holding period rather than filling in.
 schedule = "24h"
-
-# No `port`, and the gate refuses one alongside a schedule: this runs, collects and exits.
-
-# The tables it writes, not the code it shares. `requires` keeps the two enabled together,
-# so a machine cannot schedule a price fetch against a capability it does not have.
 requires = ["finance"]

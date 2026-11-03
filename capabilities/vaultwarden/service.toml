@@ -1,55 +1,17 @@
-# See schemas/service.toml.example for the field reference.
-name     = "vaultwarden"
-image    = "vaultwarden/server"
-# ROLLING, not a pin (Q77, 2026-09-02). `alpine` is Vaultwarden's rolling alpine-base
-# channel, which is the base F6 chose on 2026-07-10 and this keeps. capabilities/container-refresh
-# pulls it daily and recreates the container when the digest moves. The declared tag names a
-# channel; the running digest is the version fact (`docker inspect vaultwarden --format '{{.Image}}'`).
-tag      = "alpine"
-ports    = ["127.0.0.1:8080:80"]
-volumes  = ["data/vaultwarden/data:/data", "data/vaultwarden/tls:/tls"]
-env_file = "config/vaultwarden.env"
-
-# Vaultwarden's own liveness route — verified 200 in ~70 ms against a running instance rather
-# than taken from documentation. It earns a line here because a machine that CONSUMES this vault
-# resolves an endpoint for it (retired-tracker#169) and has to know what to ask; `health_path` is
-# the only manifest field such a machine inherits, since every other one describes how the OWNER
-# runs the service. On a host that runs it nothing changes: this is a container, so it declares
-# `ports` rather than a scalar `port`, and the loopback health URL needs both.
+# Self-hosted Bitwarden-compatible password vault container.
+name        = "vaultwarden"
+image       = "vaultwarden/server"
+tag         = "alpine"
+ports       = ["127.0.0.1:8080:80"]
+volumes     = ["data/vaultwarden/data:/data", "data/vaultwarden/tls:/tls"]
+env_file    = "config/vaultwarden.env"
 health_path = "/alive"
+autostart   = "true"
 
-# A password vault has no dashboard surface to be started from, and "your vault is down
-# until you go looking for it" is not a state worth having. Always-on, said out loud
-# rather than left to a watchdog install nobody can see from the manifest.
-autostart = "true"
-
-# --- backup (tools/backup.sh) ---
-# RUN MANUALLY, ON PURPOSE — decided 2026-07-30, not an oversight. Three things must be
-# true at once for a run to succeed: the container held down (a cold SQLite copy means
-# downtime), an ssh hop authenticated by a vault-only key, and therefore the Bitwarden
-# desktop app running with the vault unlocked and its agent prompt approved. A scheduled
-# job cannot satisfy the third without either hanging on the prompt or moving the key out
-# of the vault, and the vault-only key model is the thing worth keeping. So this stays a
-# deliberate act:
-#
-#   tools/backup.sh vaultwarden
-#
-# A receiver may instead initiate a manual encrypted pull. The archive is the only
-# stdout payload; do not redirect it to a plaintext file:
-#
-#   tools/backup.sh --stream vaultwarden | <encrypted repository consumer>
-#
-# Revisit if backup_target ever resolves to a host this capability itself depends on: a
-# target that dies with its source is the real gap, and scheduling would not close it.
-#
-# backup_paths: overlay-relative dirs, like volumes' host side (no inline
-# comment on the array line — toml_array wants it bare).
-backup_paths  = ["data/vaultwarden/data", "data/vaultwarden/tls"]
-backup_sqlite = "data/vaultwarden/data/db.sqlite3"   # cold copy, container held down; never opened from the host while it runs
-backup_target = "backup-target"                    # push-mode systems.toml id; ignored by --stream
-backup_retain = "14"
-# Nothing in here is re-derivable, and a backup run stops the container for the cold
-# copy — so daily is advised rather than enforced, and a week is the point where the
-# only copy of the credentials is the live one.
+# Cold SQLite backup contract (run manually with tools/backup.sh vaultwarden).
+backup_paths       = ["data/vaultwarden/data", "data/vaultwarden/tls"]
+backup_sqlite      = "data/vaultwarden/data/db.sqlite3"
+backup_target      = "backup-target"
+backup_retain      = "14"
 backup_advise_days = "1"
-backup_stale_days  = "7"                                 # keep the last N tarballs on the target
+backup_stale_days  = "7"

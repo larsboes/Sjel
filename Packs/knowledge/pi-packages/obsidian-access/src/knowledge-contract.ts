@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse } from "smol-toml";
 
@@ -49,6 +50,18 @@ export function loadKnowledgeSettings(configPath?: string): KnowledgeSettings {
 		throw new Error(`${path}: contract_path must be a vault-relative .md path`);
 	}
 	return { profile: (raw.profile as string | undefined) ?? null, contractPath };
+}
+
+/** Returns the absolute vault root when `knowledge.toml` sets `local_files = true`, otherwise null. */
+export function localVaultRoot(configPath?: string): string | null {
+	const path = knowledgeConfigPath(configPath);
+	if (path === null || !existsSync(path)) return null;
+	const raw = parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+	if (raw.local_files === undefined || raw.local_files === false) return null;
+	if (raw.local_files !== true) throw new Error(`${path}: local_files must be true or false`);
+	const root = raw.vault_root;
+	if (typeof root !== "string" || !root.trim()) throw new Error(`${path}: local_files = true requires vault_root`);
+	return resolve(root.trim().replace(/^~(?=\/|$)/, homedir()));
 }
 
 /** Returns null when no contract is configured; fails closed when a configured contract is unusable. */

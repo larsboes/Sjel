@@ -6,7 +6,7 @@ import { SessionClearance } from "./clearance.ts";
 import { loadConfig } from "./config.ts";
 import type { AccessConfig, AccessDecision, ModelIdentity, PatchInstruction } from "./contracts.ts";
 import { GovernedObsidian } from "./governed.ts";
-import { loadKnowledgeContract, loadKnowledgeSettings, NO_CONTRACT_MESSAGE } from "./knowledge-contract.ts";
+import { loadKnowledgeContract, loadKnowledgeSettings, localVaultRoot, NO_CONTRACT_MESSAGE } from "./knowledge-contract.ts";
 import { validateBase, validateNote, type Diagnostic } from "./validate.ts";
 
 interface Runtime {
@@ -65,7 +65,23 @@ function mutationResult(result: { path: string; classification: AccessDecision["
 	});
 }
 
+const GOVERNED_READ_GUIDELINE =
+	"Use obsidian_read by default. If Obsidian access tools are unavailable, a user-provided exact absolute local note path may be read directly only after the active model's C0-C3, agent_access, and path-policy admission is established; allow only fully admitted C0 notes with effective standard agent_access, and only when the session has no stricter clearance or egress requirement. Stop if classification or policy is unknown, and never admit C1, C2, C3, restricted, or unclassified notes. Read only that file; do not search, follow links, edit, or bypass an available-tool refusal.";
+
+/** The `local_files` opt-in in `knowledge.toml` selects local file tools for one vault; every other vault stays governed. */
+function readGuideline(localRoot: string | null): string {
+	if (localRoot === null) return GOVERNED_READ_GUIDELINE;
+	return `The user selected local file access for the vault at ${localRoot}. For files under that directory, use the local read, search, edit and write tools directly, and use obsidian_* tools only when an Obsidian-aware operation is necessary. Before the first change, read the vault contract file that the obsidian skill command "scripts/vault contract" names. These local reads do not pass the Obsidian access policy. For notes in any other vault: ${GOVERNED_READ_GUIDELINE}`;
+}
+
 export default function obsidianAccess(pi: ExtensionAPI) {
+	let localRoot: string | null = null;
+	try {
+		localRoot = localVaultRoot();
+	} catch {
+		// A malformed knowledge.toml keeps the governed rule.
+		localRoot = null;
+	}
 	const clearance = new SessionClearance();
 	const removedEgress = new Set<string>();
 	let loadedContractDigest: string | null = null;
@@ -180,7 +196,11 @@ export default function obsidianAccess(pi: ExtensionAPI) {
 		description:
 			"Load the vault-writing contract configured for this machine from Obsidian. Use before any vault mutation. Reports when no contract is configured.",
 		promptSnippet: "Load the vault-writing contract configured for this machine",
-		promptGuidelines: ["Call obsidian_contract before creating, editing, moving, or deleting vault notes in a session."],
+		promptGuidelines: [
+			localRoot === null
+				? "Call obsidian_contract before creating, editing, moving, or deleting vault notes in a session."
+				: `Call obsidian_contract before creating, editing, moving, or deleting vault notes in a session. For the local vault at ${localRoot}, reading the contract file directly is equivalent.`,
+		],
 		parameters: Type.Object({}),
 		async execute() {
 			const contract = await currentKnowledgeContract();
@@ -247,9 +267,7 @@ export default function obsidianAccess(pi: ExtensionAPI) {
 		label: "Obsidian Read",
 		description: "Read one policy-admitted UTF-8 note from Obsidian. Restricted notes appear unavailable.",
 		promptSnippet: "Read a policy-admitted Obsidian note by vault-relative path",
-		promptGuidelines: [
-			"Use obsidian_read by default. If Obsidian access tools are unavailable, a user-provided exact absolute local note path may be read directly only after the active model's C0-C3, agent_access, and path-policy admission is established; allow only fully admitted C0 notes with effective standard agent_access, and only when the session has no stricter clearance or egress requirement. Stop if classification or policy is unknown, and never admit C1, C2, C3, restricted, or unclassified notes. Read only that file; do not search, follow links, edit, or bypass an available-tool refusal.",
-		],
+		promptGuidelines: [readGuideline(localRoot)],
 		parameters: Type.Object({
 			path: Type.String({ description: "Vault-relative note path, for example Projects/Sjel/ISA.md" }),
 			targetType: Type.Optional(Type.Union([Type.Literal("heading"), Type.Literal("block"), Type.Literal("frontmatter")])),

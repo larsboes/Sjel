@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadKnowledgeContract, loadKnowledgeSettings } from "../src/knowledge-contract.ts";
+import { loadKnowledgeContract, loadKnowledgeSettings, localVaultRoot } from "../src/knowledge-contract.ts";
 
 const CONTRACT = "Meta/Vault-Contract.md";
 
@@ -70,5 +70,23 @@ describe("configured vault contract", () => {
 			const { config } = fixture(`version = 1\ncontract_path = "${value}"\n`);
 			expect(() => loadKnowledgeSettings(config)).toThrow("contract_path");
 		}
+	});
+});
+
+describe("local vault opt-in", () => {
+	test("is off when local_files is absent or false", () => {
+		expect(localVaultRoot(fixture('vault_root = "/v"\n').config)).toBeNull();
+		expect(localVaultRoot(fixture('vault_root = "/v"\nlocal_files = false\n').config)).toBeNull();
+		expect(localVaultRoot(join(tmpdir(), "absent-knowledge.toml"))).toBeNull();
+	});
+
+	test("returns the absolute vault root and expands ~", () => {
+		expect(localVaultRoot(fixture('vault_root = "/v/kb"\nlocal_files = true\n').config)).toBe("/v/kb");
+		expect(localVaultRoot(fixture('vault_root = "~/kb"\nlocal_files = true\n').config)).toBe(join(homedir(), "kb"));
+	});
+
+	test("fails closed on a non-boolean flag or a missing vault_root", () => {
+		expect(() => localVaultRoot(fixture('vault_root = "/v"\nlocal_files = "yes"\n').config)).toThrow("local_files must be true or false");
+		expect(() => localVaultRoot(fixture("local_files = true\n").config)).toThrow("requires vault_root");
 	});
 });

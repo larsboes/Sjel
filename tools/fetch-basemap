@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Thin launcher: the basemap vendoring is implemented in fetch-basemap.ts because it rewrites
-# a JSON style document and writes binary glyph and sprite files, neither of which
-# tools/lib/toml.sh covers. Mirrors the tools/discover-ui-packages launcher pattern.
-_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/fetch-basemap.ts" "$@"

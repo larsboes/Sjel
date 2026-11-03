@@ -37,21 +37,21 @@ mechanisms, the generative/intelligent UI evolution, and the upstream references
 
 ## 2. Note Embed Architecture
 
-Project notes split their content into sequential segments via [`dashboard/src/lib/projects/database.ts`](../../dashboard/src/lib/projects/database.ts):
+Project notes split their content into sequential segments via `dashboard/src/lib/projects/database.ts` (retired dashboard):
 
 | Syntax | Segment Kind | Behavior |
 | --- | --- | --- |
 | Regular text / headings | `markdown` | Rendered via `MarkdownDocument.svelte` with interactive task checkboxes. |
 | `![[file.png]]` | `file` (image) | Rendered as an inline responsive image (`<img class="attachment">`). |
 | `![[doc.pdf]]` | `file` (document) | Rendered as a secure attachment link. |
-| `![[Tasks.base#Active Tasks]]` | `embed` (Bases) | Rendered as a live interactive [`DatabaseTable.svelte`](../../dashboard/src/lib/projects/DatabaseTable.svelte) over Sjel's SQLite records. |
+| `![[Tasks.base#Active Tasks]]` | `embed` (Bases) | Rendered as a live interactive `DatabaseTable.svelte` (retired dashboard) over Sjel's SQLite records. |
 | `![[figure:<id>]]` | `figure` (Registered) | Rendered as a live, interactive Svelte 5 component from the audited figure registry. |
 
 ### The Figure Embed Registry
 
 Untrusted HTML attachments cannot run arbitrary JavaScript in the dashboard origin. Instead, interactive
 figures (such as isometric system schematics produced via the `anatomy` skill) are implemented as reviewed
-Svelte 5 components and registered in [`dashboard/src/lib/figures/index.ts`](../../dashboard/src/lib/figures/index.ts).
+Svelte 5 components and registered in `dashboard/src/lib/figures/index.ts` (retired dashboard).
 
 The first registered figure is `miele-w961-filter` (Miele W 961 Mains Filter), embedded in
 `Washing Machine/Washing Machine Connect and Test.md` to provide interactive isometric exploded views and
@@ -139,7 +139,7 @@ Hovering any wikilink or reference chip triggers a rich, interactive preview pop
 
 Following the pattern established for tasks, notes now offer a dual representation:
 1. **Cards View (`📑 Cards`)**: Collapsible Notion-like cards displaying full rendered markdown, inline checkbox toggling, and interactive figures.
-2. **Database Table View (`🗂️ Database Table`)**: A dynamic, reactive table powered by [`DatabaseTable.svelte`](../../dashboard/src/lib/projects/DatabaseTable.svelte) querying SQLite directly (`projects.records("note")`).
+2. **Database Table View (`🗂️ Database Table`)**: A dynamic, reactive table powered by `DatabaseTable.svelte` (retired dashboard) querying SQLite directly (`projects.records("note")`).
    - Grouping, sorting, and dynamic column visibility persisted to local storage.
    - Inline cell editing writes directly through `POST /api/record/property` to SQLite and synchronizes to the rendered markdown tree.
    - Clicking any note title displays an opened detail view directly beneath the table with the full Markdown/Preview editor and backlink references.
@@ -178,19 +178,19 @@ Instead of unvetted arbitrary HTML or raw prose, models and markdown notes speci
 
 1. **`metric-grid`**:
    - KPI & telemetry grid with live status indicators (`nominal`, `good`, `warning`, `critical`, `idle`, `active`), unit labels, and delta markers.
-   - Component: [`MetricGrid.svelte`](../../dashboard/src/lib/genui/MetricGrid.svelte).
+   - Component: `MetricGrid.svelte` (retired dashboard).
 2. **`decision-matrix`**:
    - Multi-criteria deliberation matrix for engineering trade-offs.
    - Interactive criteria weight sliders (1–5) and option score inputs (1–10).
    - Computes live weighted totals and ranks candidate options with visual proportional score bars in real time.
-   - Component: [`DecisionMatrix.svelte`](../../dashboard/src/lib/genui/DecisionMatrix.svelte).
+   - Component: `DecisionMatrix.svelte` (retired dashboard).
 3. **`simulator`**:
    - Interactive parameter simulator with sliders and segmented controls.
    - Real-time sandboxed formula evaluation (e.g. cycle energy kWh and electricity cost €).
-   - Component: [`ParameterSimulator.svelte`](../../dashboard/src/lib/genui/ParameterSimulator.svelte).
+   - Component: `ParameterSimulator.svelte` (retired dashboard).
 4. **`status-timeline`**:
    - Sequential milestone tracker with status markers (`done`, `current`, `pending`, `blocked`) and expandable details.
-   - Component: [`StatusTimeline.svelte`](../../dashboard/src/lib/genui/StatusTimeline.svelte).
+   - Component: `StatusTimeline.svelte` (retired dashboard).
 
 ### Authoring & AI Workflow
 

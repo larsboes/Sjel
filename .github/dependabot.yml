@@ -10,10 +10,9 @@
 # a human to end it is a hold that ends late.
 #
 # THE VALUE IS NO LONGER THE SAME IN EVERY BLOCK, and that is the change of 2026-09-22 (Q109).
-# `default-days: 0` remains the ruling for cargo and github-actions; it is `1` for the two `bun`
-# blocks. The three-day default is not what this rules out — a LONG hold is — and the measured
-# basis for the split is in dashboard/bunfig.toml, which is where the npm-only hold is configured
-# for a human running `bun add`. One sentence of it matters here: a malicious npm publish is
+# `default-days: 0` remains the ruling for cargo and github-actions; it is `1` for the `bun`
+# block. The three-day default is not what this rules out — a LONG hold is — and the npm-only
+# hold for a human running `bun add` is configured in capabilities/soundscape/ui/bunfig.toml. One sentence of it matters here: a malicious npm publish is
 # caught in hours (chalk/debug ~2.5h, Shai-Hulud ~12h, Mini Shai-Hulud / TanStack ~3h), so one
 # day is the whole window, while a malicious Cargo crate or a compromised `actions/*` tag is
 # close to unheard of and a hold there buys nothing.
@@ -30,7 +29,7 @@
 # window to 0, and Job::CooldownDefinition passes an explicit 0 straight through), while the
 # community JSON schema at json.schemastore.org/dependabot-2.0.json declares `default-days`
 # minimum 1, and GitHub's own validator is closed. The validator sided with dependabot-core, so
-# the `default-days: 1` fallback is not needed. 2026-09-22: the `1` in the two `bun` blocks above
+# the `default-days: 1` fallback is not needed. 2026-09-22: the `1` in the `bun` block
 # is NOT that fallback coming back. It is the Q109 hold, chosen on its own reasoning, and the
 # blocks that needed no hold still read 0.
 #
@@ -49,8 +48,8 @@
 #
 # `bun` is a first-class ecosystem, read from dependabot/dependabot-core upstream: a top-level
 # bun/ directory, and bun/lib/dependabot/bun/package_manager.rb declaring ECOSYSTEM = "bun". It
-# reads bun.lock directly, so the npm ecosystem is not needed. Both trees are verified present
-# beside their package.json: dashboard/bun.lock and capabilities/soundscape/ui/bun.lock.
+# reads bun.lock directly, so the npm ecosystem is not needed. The tree is
+# capabilities/soundscape/ui/bun.lock.
 #
 # capabilities/agentbox/Containerfile is deliberately NOT watched. Its only FROM is
 # `FROM ${BASE_IMAGE}` over an ARG default, and whether Dependabot resolves that shape is
@@ -69,32 +68,6 @@ updates:
       cargo:
         patterns: ["*"]
         update-types: ["minor", "patch"]
-
-  - package-ecosystem: "bun"
-    directory: "/dashboard"
-    schedule:
-      interval: "daily"
-    cooldown:
-      default-days: 1          # 24h — the npm-only hold, Q109. Not 0, and not the 3-day default.
-    open-pull-requests-limit: 3
-    groups:
-      dashboard:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-    # `typescript` is held on 6.x here, for the same reason it is in the soundscape block
-    # below: svelte-check 4.7.6 declares `typescript: ^5.0.0 || ^6.0.0`, so 7 in the primary
-    # slot fails `bun run check` -- the failure #204 was refused for, where svelte-check names
-    # the two-version setup as its own fix. Since 2026-10-01 this tree runs that setup too:
-    # `@typescript/native` (npm:typescript@^7.0.2) beside `typescript` ~6.0.0, driven by
-    # `--tsgo` in the check script.
-    #
-    # This became correct on 2026-09-30 and was not before. The tree moved to 6.0.3 in
-    # d25a7353, so its next major is a 7 rather than a 6; a blanket major ignore would have
-    # blocked that legitimate 5.9 -> 6 step had it been here a day earlier. Only majors are
-    # ignored: 6.x patches still arrive.
-    ignore:
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "bun"
     directory: "/capabilities/soundscape/ui"

@@ -83,7 +83,7 @@ captures with Apple RoomPlan ([Apple's guide](https://developer.apple.com/docume
 
 1. **Device validation (Q-RP4).** On a LiDAR iPhone with real Tauri scans: capture quality,
    alignment against the measured flat, and the Files export and import. Simulator checks cannot
-   cover this. This also gates the Tauri deletion in [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes).
+   cover this. The Tauri app is deleted; this check is open in [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes).
 2. **Gemini interior ideas.** Groundwork exists in `capabilities/assistant/src/main.rs`: a typed
    request and response, a per-request consent flag, bounded JPEG and geometry checks, paid-role
    admission, a daily usage ledger. Missing: the route, the provider review, a paid role pointed

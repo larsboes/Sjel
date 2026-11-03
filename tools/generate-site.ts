@@ -134,7 +134,7 @@ export function renderSite(model: SelfModel, demoed: string[] = [], root = "../"
   return page({
     title: "Sjel — one tree that knows what it runs",
     description:
-      "What Sjel is: its capabilities, their contracts, and how they connect — generated from the repository's own manifests, with a live demo running on synthetic data.",
+      "What Sjel is: its capabilities, their contracts, and how they connect — generated from the repository's own manifests.",
     root,
     current: "overview",
     body: `
@@ -150,9 +150,8 @@ ${counts.map(([k, n]) => `    <li><strong>${n}</strong> ${esc(KIND_LABEL[k].toLo
 
 <section>
   <h2>Where else to look</h2>
-  <p class="blurb">Nothing on this site is written by hand. The tables below are generated from the manifests, the reference pages from those plus a live recording, and the dashboard at the root runs against data that was never real.</p>
+  <p class="blurb">Nothing on this site is written by hand. The tables below are generated from the manifests, and the reference pages from those plus a recording of capabilities seeded with generated data.</p>
   <ul class="cards">
-    <li><a href="../"><strong>Dashboard →</strong><span>The actual shell, on ${demoed.length} capabilities seeded with generated data. Writing is disabled; nothing in it is real.</span></a></li>
     <li><a href="index.html"><strong>Reference →</strong><span>One page per unit: declared contract, what it is coupled to, and response shapes read out of the recording.</span></a></li>
     <li><a href="https://github.com/larsboes/Sjel"><strong>Source →</strong><span>The repository, its README, and the manifests every page here is generated from.</span></a></li>
   </ul>

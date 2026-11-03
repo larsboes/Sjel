@@ -8,9 +8,9 @@ Sjel separates the runtime, domain services, and agent workflows. The
 
 ### 1. The Spine
 
-The spine contains root manifests, `schemas/`, operator tools in `tools/`, shared libraries in
-`libs/`, and the `dashboard/` shell. The dashboard presents capability surfaces and owns no domain
-state. Its [manifest](../../dashboard/service.toml) declares its service configuration.
+The spine contains root manifests, `schemas/`, operator tools in `tools/` and shared libraries in
+`libs/`. The client is the native app in [`apps/gpui`](../../apps/gpui/README.md). It presents
+capability surfaces and owns no domain state.
 
 ### 2. Capabilities
 

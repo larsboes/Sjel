@@ -91,17 +91,6 @@
       "kind": "capability"
     },
     {
-      "name": "dashboard",
-      "kind": "spine",
-      "service": {
-        "kind": "process",
-        "requires": [
-          "sjel-status"
-        ],
-        "port": "47117"
-      }
-    },
-    {
       "name": "deliberation",
       "kind": "pack"
     },
@@ -567,7 +556,22 @@
     },
     {
       "name": "web-links",
-      "kind": "capability"
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [],
+        "port": "8109"
+      }
+    },
+    {
+      "name": "wish-prices",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": [
+          "inventory"
+        ]
+      }
     },
     {
       "name": "writing",
@@ -1005,16 +1009,6 @@
       ],
       "evidence": [
         "capabilities/cv/Cargo.toml"
-      ]
-    },
-    {
-      "from": "dashboard",
-      "to": "device-auth",
-      "kinds": [
-        "cargo-dep"
-      ],
-      "evidence": [
-        "dashboard/src-tauri/Cargo.toml"
       ]
     },
     {
@@ -2599,6 +2593,46 @@
       ],
       "evidence": [
         "capabilities/vault/Cargo.toml"
+      ]
+    },
+    {
+      "from": "web-links",
+      "to": "route-manifest",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/web-links/Cargo.toml"
+      ]
+    },
+    {
+      "from": "web-links",
+      "to": "sjel-config",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/web-links/Cargo.toml"
+      ]
+    },
+    {
+      "from": "web-links",
+      "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/web-links/Cargo.toml"
+      ]
+    },
+    {
+      "from": "web-links",
+      "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "capabilities/web-links/Cargo.toml"
       ]
     }
   ],

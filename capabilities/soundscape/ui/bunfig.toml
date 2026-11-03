@@ -1,24 +1,10 @@
-# bunfig.toml — the soundscape UI, the second and (today) last tree in this repository that
-# resolves its own dependencies. Added 2026-09-22 (Q109).
+# bunfig.toml for the soundscape UI, the one tree in this repository that resolves its own
+# npm dependencies. Bun does not read a parent bunfig.toml, so the install settings live here.
 #
-# THE REASONING LIVES IN dashboard/bunfig.toml AND IS NOT REPEATED HERE. Read that file first:
-# the attack windows the 24-hour hold is sized against, why `--frozen-lockfile` is unaffected by
-# it, why the scanner must be a real devDependency, and why its network-backed availability is
-# an operational dependency rather than a property of the lockfile. CI runs `bun pm scan` for
-# every discovered UI tree.
-#
-# What belongs here is what is true of THIS tree:
-#
-#   - It resolves its own dependencies. Bun does not inherit a parent bunfig.toml (measured on
-#     1.4.2, 2026-09-22), so without this file neither setting would apply here at all, and the
-#     capability would look covered while being the open door.
-#   - `tools/discover-ui-packages` finds it, so both this file's requirements and CI's ui-check
-#     job -- which asserts the scanner actually ran -- reach it without anyone listing it.
-#   - tools/check-bun-install-policy.sh fails if this file, or either block, goes missing.
-#
-# A devDependency for a *scanner* in a capability whose whole job is audio in a browser is the
-# intended shape rather than a mistake: the setting is read by `bun install`, which needs the
-# package present. It ships no code to the browser bundle.
+# minimumReleaseAge holds a new npm release for 24 hours before `bun add` or a lockfile
+# regeneration may resolve it. `bun install --frozen-lockfile` is not held.
+# The Socket scanner checks each package for malware at install time. It is network-backed.
+# tools/check-bun-install-policy.sh fails if this file or either block goes missing.
 [install]
 minimumReleaseAge = 86400
 

@@ -60,5 +60,4 @@ Always:
    record what is still open, and state each check that did not run.
 4. A tooling gap you hit goes to [`docs/plans/tooling.md`](docs/plans/tooling.md) (see Always).
 
-Do not start new feature work in `dashboard/`. A rule both clients share goes into a capability
-or `apps/gpui/core`.
+A rule the Mac and the phone share goes into a capability or `apps/gpui/core`.

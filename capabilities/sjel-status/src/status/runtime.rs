@@ -130,11 +130,7 @@ mod tests {
         // agent access is intentional: even an enrolled token cannot act as the owner.
         let router = || {
             sjel_server::authenticated(
-                crate::build_router(crate::proxy::Proxy::new(
-                    &[],
-                    "8082",
-                    "dashboard/dist".into(),
-                )),
+                crate::build_router(crate::proxy::Proxy::new(&[], "8082")),
                 sjel_server::InboundAuth::with_token(Some("owner-test-token".into()))
                     .require_credential(),
             )

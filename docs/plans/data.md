@@ -349,8 +349,8 @@ exist:
   Profile proposals are served on `GET /api/profile/proposals`, and pseudonymous companion
   patterns on `GET /api/profile/derived`. Open: the offered-versus-chosen half. 28 `option_set`
   items exist on one plan, and one plan is one observation, not a preference.
-- The dashboard fallback log ([`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes)) as
-  a model for measuring use before changing a surface.
+- The retired dashboard fallback log (`dashboard-fallbacks.tsv`, removed in `f0c81f6b`) as a
+  model for measuring use before changing a surface.
 
 A proposal comes after Lane A, and it starts from measured use, not from guesses.
 

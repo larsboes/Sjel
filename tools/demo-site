@@ -2,10 +2,9 @@
 # tools/demo-site — assemble everything that gets published (#168).
 #
 #   site/
-#     index.html      tools/generate-site   — the self-model, and the three ways in
-#     docs/           tools/generate-docs   — one reference page per unit
-#     demo/           the dashboard bundle, built with the fetch shim compiled in
-#     demo/fixtures/  tools/demo-record     — what the seeded capabilities answered
+#     index.html      a redirect to docs/self-model.html
+#     docs/           tools/generate-docs and tools/generate-site — reference pages, self-model
+#     fixtures/       tools/demo-record     — what the seeded capabilities answered
 #
 # Every step is a tool that also runs on its own; this is the order they go in and the one
 # place the base path is decided. It does NOT start capabilities or seed them — tools/demo-up
@@ -54,24 +53,9 @@ echo "demo-site: demo.toml against $FIXTURES"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-# The dashboard IS the site (#170). A visitor used to land on a page of generated tables with
-# the demo one click away behind a card, which is backwards: the whole reason this site exists
-# is to show what Sjel looks like. So the shell is served from the root, and the generated
-# reference — self-model included — lives under /docs where a reader goes looking for it.
-echo "demo-site: dashboard bundle (base ${BASE:-/})"
-(
-  cd "$SJEL_ROOT/dashboard"
-  # SJEL_DEMO compiles the fetch shim in (vite.config.ts turns it into a literal, so a normal
-  # build drops it); SJEL_DEMO_BASE is what svelte.config.js bakes into every URL.
-  SJEL_DEMO=1 SJEL_DEMO_BASE="$BASE" bun run build >/dev/null
-)
-cp -R "$SJEL_ROOT/dashboard/dist/." "$OUT/"
 cp -R "$FIXTURES" "$OUT/fixtures"
-
-# GitHub Pages has no SPA fallback. It serves 404.html for any path it cannot match, and knows
-# nothing about adapter-static's `fallback: index.html` — so before this every deep link and
-# every refresh returned GitHub's own 404 page, even with correct links. One copy is the fix.
-cp "$OUT/index.html" "$OUT/404.html"
+cp "$_here/lib/site-favicon.svg" "$OUT/favicon.svg"
+printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=docs/self-model.html"><a href="docs/self-model.html">Sjel</a>\n' > "$OUT/index.html"
 
 echo "demo-site: reference pages"
 "$_here/generate-docs" --out "$OUT/docs" --fixtures "$FIXTURES"
@@ -79,11 +63,7 @@ echo "demo-site: reference pages"
 echo "demo-site: self-model page"
 "$_here/generate-site" --out "$OUT/docs" --name self-model.html
 
-# /research is a dashboard route (dashboard/src/routes/research/), so it ships in the bundle above.
-
-# GitHub Pages serves this tree through Jekyll unless told not to, and Jekyll drops every
-# directory beginning with an underscore — which is where SvelteKit puts the entire bundle.
-# Without this the demo is a blank page whose console reports a 404 for _app.
+# GitHub Pages runs Jekyll unless told not to, and Jekyll drops directories that begin with `_`.
 touch "$OUT/.nojekyll"
 
 echo "demo-site: hygiene gate"

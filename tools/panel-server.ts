@@ -91,38 +91,6 @@ const HEARTBEAT = `<script>
 </script>`;
 
 /**
- * A way back to the shell, injected for the same reason the heartbeat is: a panel is
- * opened in its own tab on its own port, and without this it is a leaf you can only
- * leave with the back button. Every panel gets it, including ones that do not exist
- * yet, and no panel project contains a line about it.
- *
- * The port comes from the environment (service-runner reads dashboard/service.toml, the
- * one place it lives); the HOST comes from the browser's `location`, because the
- * dashboard reached over Tailscale is not on 127.0.0.1 — the same trap api.ts's
- * panelUrl documents from the other direction. No env var means no link rather than a
- * guessed one, so a panel started by hand is simply linkless.
- */
-const shellPort = process.env.SJEL_SHELL_PORT ?? "";
-const BACKLINK = /^\d+$/.test(shellPort)
-  ? `<a id="axon-back" href="#" title="Back to Sjel">← Sjel</a>
-<style>
-#sjel-back {
-  position: fixed; left: 1rem; bottom: 1rem; z-index: 2147483647;
-  padding: .4rem .7rem; border-radius: 999px;
-  font: 500 12px/1 ui-sans-serif, system-ui, sans-serif; text-decoration: none;
-  color: #e6f6ff; background: rgba(15, 23, 42, .82); border: 1px solid rgba(56, 189, 248, .45);
-  backdrop-filter: blur(6px); opacity: .55; transition: opacity .15s ease;
-}
-#sjel-back:hover, #sjel-back:focus-visible { opacity: 1; }
-@media print { #axon-back { display: none; } }
-</style>
-<script>
-document.getElementById("axon-back").href =
-  location.protocol + "//" + location.hostname + ":${shellPort}/";
-</script>`
-  : "";
-
-/**
  * Resolve a URL path to a file inside `root`, or null.
  *
  * Normalised and then re-checked against the root prefix, so "..%2f..%2fetc/passwd"
@@ -195,12 +163,7 @@ Bun.serve({
       const withHeartbeat = html.includes("</head>")
         ? html.replace("</head>", `${HEARTBEAT}</head>`)
         : html + HEARTBEAT;
-      // The backlink goes last, after the app's own markup, so nothing it renders can
-      // sit on top of the one control that gets you out of the panel.
-      const injected = withHeartbeat.includes("</body>")
-        ? withHeartbeat.replace("</body>", `${BACKLINK}</body>`)
-        : withHeartbeat + BACKLINK;
-      return new Response(injected, {
+      return new Response(withHeartbeat, {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
       });
     }

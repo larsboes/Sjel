@@ -23,7 +23,6 @@ describe("this repository's GPUI inputs", () => {
   test("files compiled in from outside the crates are inputs", () => {
     expect(runs("self.json")).toBe(true);
     expect(runs("docs/plans/gpui.md")).toBe(true);
-    expect(runs("dashboard/src/lib/nav.ts")).toBe(true);
     expect(runs("Cargo.toml")).toBe(true);
   });
 

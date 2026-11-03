@@ -139,10 +139,6 @@ function build(options: Options) {
   const targets = options.kind === "capability" ? [binaryName(options.capability)]
     : options.kind === "macos" ? [...binaries, "sjel-desktop-launcher"] : binaries;
   run(["cargo", "build", "--locked", "--release", "--target-dir", options.target, ...targets.flatMap((name) => ["--bin", name])]);
-  if (options.kind !== "capability") {
-    run(["bun", "install", "--frozen-lockfile", "--ignore-scripts"], join(root, "dashboard"));
-    run(["bun", "run", "build"], join(root, "dashboard"));
-  }
   if (options.kind === "macos") {
     run(["cargo", "build", "--locked", "--release", "--manifest-path", "apps/gpui/Cargo.toml", "--package", "sjel-gpui", "--target-dir", options.target]);
   }
@@ -166,10 +162,6 @@ function runtime(options: Options, stage: string) {
   for (const name of ["storage/storage", "capability-auth/capability-auth"]) copy(join(root, "tools", name), join(stage, "tools", name));
   copy(join(root, "toolchain.toml"), join(stage, "toolchain.toml"));
   for (const name of ["schemas", "docs"]) copyPublicTree(name, join(stage, name));
-  copy(join(root, "dashboard/dist"), join(stage, "dashboard/dist"));
-  const dashboard = readFileSync(join(root, "dashboard/service.toml"), "utf8")
-    .replace(/^build\s*=.*\n/gm, "").replace(/^command\s*=.*$/m, 'command = ["false"]');
-  writeFileSync(join(stage, "dashboard/service.toml"), dashboard);
   writeFileSync(join(stage, "distribution.json"), JSON.stringify({ schema: 1, version: options.version, platform, core, source_builds: false }, null, 2) + "\n");
   files(stage); // Refuse developer symlinks in the portable payload.
 }

@@ -1,4 +1,4 @@
-//! The shell's front door: capability routes, then the built dashboard bundle.
+//! The shell's front door: capability routes under one origin.
 //!
 //! # Why this is here rather than in the dashboard
 //!
@@ -53,8 +53,6 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, Uri};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use std::sync::Arc;
-use tower::ServiceExt;
-use tower_http::services::{ServeDir, ServeFile};
 
 /// One prefix and where it goes. `strip` is the difference between the uniform rule and the
 /// grandfathered `proxy_extra` paths, and it is the only difference.
@@ -92,7 +90,6 @@ pub(crate) struct Proxy {
     /// The same deployment credential, to recognise it on a request bound for comms.
     deployment: sjel_server::InboundAuth,
     client: reqwest::Client,
-    ui_dir: String,
 }
 
 /// Hop-by-hop headers, which belong to one connection and must not be forwarded across another
@@ -144,7 +141,7 @@ fn matches(path: &str, prefix: &str) -> bool {
 }
 
 impl Proxy {
-    pub(crate) fn new(services: &[crate::status::Service], own_port: &str, ui_dir: String) -> Self {
+    pub(crate) fn new(services: &[crate::status::Service], own_port: &str) -> Self {
         let mut routes: Vec<Route> = Vec::new();
         for svc in services {
             // Same two exclusions as the Vite proxy: the spine is the shell itself, and a
@@ -196,7 +193,6 @@ impl Proxy {
                 .and_then(|value| HeaderValue::from_str(&value).ok()),
             deployment: sjel_server::InboundAuth::from_deployment(),
             client: reqwest::Client::new(),
-            ui_dir,
         }
     }
 
@@ -279,61 +275,14 @@ pub(crate) async fn strip_self_prefix(mut req: Request, next: Next) -> Response 
     next.run(req).await
 }
 
-/// Router fallback: proxy when a prefix claims the path, otherwise serve the SPA.
+/// Router fallback: proxy when a prefix claims the path, otherwise 404.
 pub(crate) async fn fallback(State(proxy): State<Proxy>, req: Request) -> Response {
     let path = req.uri().path().to_string();
     match proxy.route_for(&path) {
         Some(route) => forward(&proxy, route.clone(), req).await,
-        // Not a capability path, so it is a page. `adapter-static` emits one entry point and
-        // routes client-side, which makes an unknown path a route rather than a 404.
-        //
-        // The trap, since it cost a misread: an API path for a capability with NO route falls here
-        // and answers 200 with `text/html`. `GET /foundation-models/health` looked like a passing
-        // health check and was the shell's index page. The routing table is resolved once at
-        // startup, so a capability enabled afterwards has no route until this process restarts —
-        // which is the documented behaviour above, not a bug, but it fails as a plausible success.
-        // When a capability path answers HTML, restart sjel-status before believing anything else.
-        None => serve_ui(&proxy.ui_dir, req).await,
-    }
-}
-
-/// SvelteKit's build-output root. Every URL under it is generated and content-hashed by the
-/// build; none of it is a page a person can navigate to.
-const BUILD_OUTPUT_PREFIX: &str = "/_app/";
-
-/// Whether a miss on this path must be a 404 rather than the SPA shell.
-///
-/// The SPA fallback is right for a page: `adapter-static` emits one entry point and routes
-/// client-side, so an unknown *route* is a route. It is wrong for a build artifact, and the cost
-/// of getting that wrong is not a confusing 200 -- it is a silent, undebuggable failure.
-///
-/// Measured 2026-09-06. `dashboard/vite.config.ts` never emitted MapLibre's worker, because
-/// MapLibre asks for it through a template literal Rollup cannot follow. The browser requested
-/// `/_app/immutable/chunks/maplibre-gl-worker.mjs`, this function's caller answered **200
-/// `text/html`** with the app shell, and `new Worker` was handed HTML and died. MapLibre reports
-/// nothing in that case, so every map in the dashboard rendered a blank canvas and sat on
-/// "Loading map…" forever -- with no error, and no failed request in the network log to find.
-/// It shipped that way for a month. A 404 would have named it in seconds.
-///
-/// Narrow on purpose. The rule is not "anything with a file extension", which would break a
-/// client-side route that happens to contain a dot; it is one directory the build owns outright.
-fn is_build_output(path: &str) -> bool {
-    path.starts_with(BUILD_OUTPUT_PREFIX)
-}
-
-async fn serve_ui(dir: &str, req: Request) -> Response {
-    let served = if is_build_output(req.uri().path()) {
-        // No fallback: a missing build artifact is a 404, and the caller finds out.
-        ServeDir::new(dir).oneshot(req).await
-    } else {
-        ServeDir::new(dir)
-            .fallback(ServeFile::new(format!("{dir}/index.html")))
-            .oneshot(req)
-            .await
-    };
-    match served {
-        Ok(res) => res.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("static: {e}")).into_response(),
+        // The routing table is resolved at startup: a capability enabled later has no route
+        // until this process restarts.
+        None => (StatusCode::NOT_FOUND, "no capability serves this path").into_response(),
     }
 }
 
@@ -450,40 +399,6 @@ mod tests {
         uri.split_once('?').map(|(p, _)| p).unwrap_or(uri)
     }
 
-    /// The rule that turns a missing build artifact into a 404 instead of the app shell.
-    /// A silent `new Worker(html)` cost a month of dead maps; see `is_build_output`.
-    #[test]
-    fn a_missing_build_artifact_is_not_answered_with_the_page_shell() {
-        assert!(is_build_output(
-            "/_app/immutable/chunks/maplibre-gl-worker.mjs"
-        ));
-        assert!(is_build_output(
-            "/_app/immutable/workers/maplibre-gl-worker-B6z8KlkX.js"
-        ));
-        assert!(is_build_output("/_app/immutable/entry/app.hash.js"));
-        assert!(is_build_output("/_app/version.json"));
-    }
-
-    /// A page still gets the shell, which is the whole point of an SPA fallback. These are the
-    /// dashboard's real routes, including one carrying a dot -- the reason the rule names one
-    /// directory rather than testing for a file extension.
-    #[test]
-    fn a_page_still_reaches_the_client_router() {
-        for path in [
-            "/",
-            "/map",
-            "/travel",
-            "/feed/abc",
-            "/projects/some.name",
-            "/basemap/style.json",
-        ] {
-            assert!(
-                !is_build_output(path),
-                "{path} must still reach the SPA shell"
-            );
-        }
-    }
-
     #[test]
     fn self_prefix_is_stripped_so_own_routes_match() {
         // Every sjelStatus.* call in dashboard/src/lib/api.ts has this shape.
@@ -552,10 +467,7 @@ mod tests {
     }
 
     fn table(services: &[crate::status::Service]) -> Vec<Route> {
-        Proxy::new(services, "8082", "dist".into())
-            .routes
-            .as_ref()
-            .clone()
+        Proxy::new(services, "8082").routes.as_ref().clone()
     }
 
     /// The rule that broke in the first draft. `proxy_api_only` moves the MOUNT to

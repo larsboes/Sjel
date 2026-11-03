@@ -6,13 +6,12 @@ comments and documentation in the same pass. Lane A in [`PLAN.md`](../../PLAN.md
 
 ## 1. Delete
 
-Gated by [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes) §3.
+Done: `dashboard/` with `src-tauri`, the Tauri plugins in `plugins/`, the dashboard bundle on
+the Pages site, the `sjel-status` static serve and `matches_dashboard_nav`. `demo/` stays: its
+seeded stack feeds `tools/demo-shots`. Open:
 
-- `dashboard/`, then `dashboard/src-tauri` when its own gate passes.
-- `demo/` and its publishing workflow. The demo site is the dashboard.
-- The Tauri plugins in `plugins/` (`roomplan`, `device-identity`, `local-network`,
-  `foundation-models`) once nothing builds against them. Each one is ported or retired first.
-- The 78 references to `dashboard/`, `matches_dashboard_nav`, and the `sjel-status` static serve.
+- Prose that still describes the dashboard: 69 Markdown files and many code comments. This is
+  the sweep in §2.
 - Svelte skills and tooling that only the dashboard uses (`svelte-*` skills, `bun` checks over
   `dashboard/`). Check every consumer before removing one.
 

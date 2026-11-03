@@ -127,7 +127,7 @@ tools/service-runner.sh start sjel-status
 Migrated from its dissolved `decisions/` entry on 2026-07-28: this governs one
 thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-owner).
 
-**Decision:** the health-aggregation capability for the root `dashboard` is `capabilities/sjel-status`,
+**Decision:** the health-aggregation capability is `capabilities/sjel-status`,
 binary `sjel-status`, default port `8082`. Not `pulse`, not `31337`.
 
 **Why:** the shelved bulk-port attempt preserved in Git history named its capability `pulse` and
@@ -140,37 +140,12 @@ migration — the shelved capability was three stub routes returning hardcoded s
 Pulse's actual functionality. `capabilities/sjel-status` replaces it with real aggregation:
 live `GET /health` calls out to every enabled capability with a health surface — read from
 the registry, not a hand-list — reporting actual reachability, not a canned response. `8082`
-sits next to scouting's `8081`... — actually next to nothing taken (`8081` was never real;
-scouting's true default is `8084`, since `8080` belongs to vaultwarden — see
-`dashboard/README.md`) — chosen simply as the next free, unclaimed port.
+was the next free, unclaimed port (`8080` belongs to vaultwarden, and scouting's default is
+`8084`).
 
 **Forecloses:** no Sjel capability may claim port `31337` or the name "Pulse"/"pulse" — that
-identity belongs to LifeOS, whether or not any machine still runs it. The root `dashboard`
-proxied LifeOS Pulse as a distinct upstream from `sjel-status`, never conflated into one
-capability; that proxy and the panel behind it were deleted on 2026-08-25 with the rest of
-the LifeOS delta (PRD D6). A reader who wants that data again adds it back as an upstream,
-not as a route on this capability.
-
-## The SPA fallback stops at the build's own directory
-
-This capability serves the dashboard bundle, and `adapter-static` emits one entry point that
-routes client-side — so an unknown *path* is a client route, and answering it with `index.html`
-is correct. It is not correct for a **build artifact**, and the difference is not cosmetic.
-
-`/_app/` is SvelteKit's build-output root: every URL under it is generated and content-hashed by
-the build, and none of it is a page. A miss there is now a **404** (`is_build_output` in
-`src/proxy.rs`), because the alternative is a failure nobody can see. Measured 2026-09-06: Vite
-never emitted MapLibre's worker, the browser asked for
-`/_app/immutable/chunks/maplibre-gl-worker.mjs`, this server answered **200 `text/html`** with the
-app shell, and `new Worker` was handed HTML and died silently. Every map in the dashboard rendered
-a blank canvas and sat on "Loading map…" — for a month, with no error and no failed request in the
-network log. A 404 would have named it in seconds.
-
-The rule is deliberately narrow: one directory the build owns outright, not "any path with a file
-extension", which would break a client route containing a dot. A related trap is documented at
-`fallback` in `src/proxy.rs` — a capability path with no route also lands on the shell and answers
-HTML, which is why a capability endpoint returning HTML means "restart sjel-status" rather than
-"the endpoint is healthy".
+identity belongs to LifeOS, whether or not any machine still runs it. A reader who wants
+LifeOS Pulse data adds it as an upstream, not as a route on this capability.
 
 ## Considered and declined
 

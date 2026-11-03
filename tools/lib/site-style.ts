@@ -128,8 +128,6 @@ export interface PageOptions {
 export function page(opts: PageOptions): string {
   const link = (href: string, label: string, key: PageOptions["current"]) =>
     `<a href="${opts.root}${href}"${opts.current === key ? ' aria-current="page"' : ""}>${label}</a>`;
-  // The root is the running dashboard, not a generated page (#170), so "Dashboard" is an
-  // empty href against `root` rather than a filename.
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -138,7 +136,6 @@ export function page(opts: PageOptions): string {
 <title>${esc(opts.title)}</title>
 <meta name="description" content="${esc(opts.description)}">
 <link rel="icon" href="${opts.root}favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" sizes="180x180" href="${opts.root}apple-touch-icon.png">
 <style>${SITE_CSS}</style>
 </head>
 <body>
@@ -149,10 +146,8 @@ export function page(opts: PageOptions): string {
     <span>Sjel</span>
   </a>
   <nav class="sitenav" aria-label="Site">
-    ${link("", "Dashboard", "demo")}
     ${link("docs/index.html", "Reference", "docs")}
     ${link("docs/self-model.html", "Self-model", "overview")}
-    ${link("research", "Research", "research")}
     <span class="sep"></span>
     <a href="https://github.com/larsboes/Sjel">Source</a>
   </nav>
@@ -161,10 +156,8 @@ ${opts.body}
 <footer>
 ${opts.footer}
 <p class="sitenav">
-  ${link("", "Dashboard", "demo")}
   ${link("docs/index.html", "Reference", "docs")}
   ${link("docs/self-model.html", "Self-model", "overview")}
-  ${link("research", "Research", "research")}
   <span class="sep"></span>
   <a href="https://github.com/larsboes/Sjel">Source</a>
 </p>

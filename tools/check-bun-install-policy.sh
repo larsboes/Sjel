@@ -7,15 +7,11 @@
 # needs lifecycle hooks. Keep that invariant in every place that performs or teaches a frontend
 # dependency install.
 #
-# tools/bazel/bun/deps.bzl was the fourth such place until 2026-08-25, when PRD Q44 retired the
-# hermetic bun toolchain along with the rest of Bazel. pages.yml and the soundscape README took
-# its place in this list because they install and teach the same thing — pages.yml had been
-# doing so unchecked.
 #
 # THE SECOND INVARIANT, added 2026-09-22 (Q109). Two settings belong in every tree that resolves
 # dependencies, and BOTH are per tree rather than repository-wide because Bun does not inherit a
-# parent directory's bunfig.toml — measured on 1.4.2 on 2026-09-22, an install run from dashboard/
-# ignores ../bunfig.toml. The hold is a real control only where resolution happens:
+# parent directory's bunfig.toml — measured on 1.4.2 on 2026-09-22, an install run from a
+# subdirectory ignores ../bunfig.toml. The hold is a real control only where resolution happens:
 #
 #   [install] minimumReleaseAge = 86400            the npm-only 24h adoption hold
 #   [install.security] scanner = "@socketsecurity/bun-security-scanner"
@@ -47,8 +43,6 @@ require() { # require <path> <literal>
 
 require ".github/workflows/ci.yml" "bun install --frozen-lockfile --ignore-scripts"
 require ".github/workflows/ci.yml" "bun pm scan"
-require ".github/workflows/pages.yml" "bun install --frozen-lockfile --ignore-scripts"
-require "dashboard/README.md" "bun install --frozen-lockfile --ignore-scripts"
 require "capabilities/soundscape/README.md" "bun install --frozen-lockfile --ignore-scripts"
 
 # Trees that resolve dependencies: a package.json with a committed bun.lock beside it.
@@ -103,4 +97,4 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "bun install policy passed (both workflows and both operator READMEs disable lifecycle hooks; every resolving tree carries the 24h hold and the scanner)."
+echo "bun install policy passed (CI and the soundscape README disable lifecycle hooks; every resolving tree carries the 24h hold and the scanner)."

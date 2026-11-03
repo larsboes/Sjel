@@ -9,7 +9,7 @@
 # silently, which is the whole reason the check exists.
 #
 # macmon is an ordinary enabled capability now, so it covers the plain "enabled" case here
-# rather than the exemption case. The exemption path is still exercised by dashboard.
+# rather than the exemption case.
 #
 # So both directions are asserted here, against the real doctor rather than a reimplementation
 # of its rule.
@@ -44,7 +44,6 @@ plant_unit() { printf '<plist/>\n' > "$UNIT_DIR/com.axon.$1.plist"; }
 
 # The three cases the issue names, planted together so one run covers all of them.
 plant_unit comms       # enabled          -> never an orphan
-plant_unit dashboard   # spine component  -> exempt via its own root manifest
 plant_unit macmon      # enabled capability -> never an orphan (was a dashboard sidecar)
 plant_unit trips       # a disabled capability's leftover unit -> ORPHAN
 plant_unit nothing-declares-this                                # -> UNMANAGED
@@ -57,7 +56,7 @@ PERSIST="$(printf '%s\n' "$OUT" | grep -E 'persistence is installed for|is unman
 flagged() { printf '%s\n' "$PERSIST" | grep -q "persistence is installed for '$1'"; }
 
 # --- must NOT be flagged ------------------------------------------------------------------
-for name in comms dashboard macmon; do
+for name in comms macmon; do
   if flagged "$name"; then
     fail "'$name' was reported as an orphan. Persistence notes were:
 $PERSIST"
@@ -80,12 +79,7 @@ if printf '%s\n' "$PERSIST" | grep -q "remove-persistence nothing-declares-this"
   fail "'nothing-declares-this' has no manifest, and doctor suggested removing it"
 fi
 
-# --- the exemption is derived, not spelled ------------------------------------------------
-# If a name that no manifest mentions is exempt, the derivation has been replaced by a list.
-# dashboard is exempt because it HAS a root-level service.toml, never because it is named.
-if [ ! -f "$_root/dashboard/service.toml" ]; then
-  fail "dashboard/service.toml is gone — the spine exemption derives from it, so nothing is left to derive"
-fi
+# --- the doctor never names a capability to exempt it ------------------------------------
 if grep -rqE '"macmon"' "$_root/tools/sjel-cli/src/doctor/"; then
   fail "the doctor (tools/sjel-cli/src/doctor/) names macmon directly — the exemption must come from the manifest"
 fi

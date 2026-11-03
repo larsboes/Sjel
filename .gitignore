@@ -112,14 +112,5 @@ axon-local-*.lock
 # source, so only the suite that produced them is committed.
 *-workspace/
 
-# Tauri plugin build output. `tauri-plugin` regenerates `.tauri/tauri-api` in every plugin, but
-# only plugins/roomplan/.tauri is referenced: device-identity and foundation-models point their
-# Package.swift at it so one Tauri runtime is linked. SwiftPM's own `.build`/`.swiftpm` are caches.
-/plugins/device-identity/.tauri/
-/plugins/foundation-models/.tauri/
-/plugins/*/ios/.build/
-/plugins/*/ios/.swiftpm/
-/plugins/local-network/.tauri/
-
 # Interceptor research ledgers: per-machine scratch from a browsing session, not project source.
 /.interceptor-research/

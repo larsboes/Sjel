@@ -24,7 +24,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tower::Layer;
 
-mod dashboard_freshness;
 mod device_gate;
 mod lan;
 mod proxy;
@@ -356,24 +355,13 @@ async fn main() {
 
     // Resolved once at startup, from the same registry every other surface here reads. A
     // capability added later needs a restart to be proxied, which is honest: the shell's shape
-    // follows the machine's, and `dashboard/vite.config.ts` said the same about its own proxy.
+    // follows the machine's.
     let services = registry().await.unwrap_or_else(|e| {
         eprintln!(
             "[sjel-status] registry unavailable ({e}); serving the shell with no capability routes"
         );
         Vec::new()
     });
-    let ui_dir = sjel_config::env_var("SJEL_DASHBOARD_DIST")
-        .unwrap_or_else(|_| "dashboard/dist".to_string());
-    // Said at startup rather than discovered as a blank page. The bundle is a build artifact
-    // (`dashboard/service.toml` `build`), so a fresh checkout has none until it is built, and a
-    // shell that 404s every page while every API route works is a confusing way to learn that.
-    if !std::path::Path::new(&ui_dir).is_dir() {
-        eprintln!(
-            "[sjel-status] no dashboard bundle at {ui_dir} — API routes work, pages will 404. Build it: cd dashboard && bun run build"
-        );
-    }
-    dashboard_freshness::spawn(std::path::PathBuf::from(&ui_dir));
 
     // The disk's history: one sample an hour, so "is it growing" has an answer a single
     // report cannot give. It runs here because this is the one always-up surface, and it
@@ -387,7 +375,7 @@ async fn main() {
             eprintln!("[sjel-status] storage history not started: no overlay root");
         }
     }
-    let shell = proxy::Proxy::new(&services, &port.to_string(), ui_dir);
+    let shell = proxy::Proxy::new(&services, &port.to_string());
     eprintln!(
         "[sjel-status] shell: {} capability route(s)",
         shell.route_count()
@@ -1031,7 +1019,7 @@ mod origin_tests {
     /// No services, so the proxy table is empty and the fallback serves pages.
     /// The guard runs before either, which is what these tests are about.
     fn router() -> Router {
-        build_router(proxy::Proxy::new(&[], "8082", "dashboard/dist".into()))
+        build_router(proxy::Proxy::new(&[], "8082"))
     }
 
     async fn answer(method: &str, path: &str, origin: Option<&str>) -> StatusCode {

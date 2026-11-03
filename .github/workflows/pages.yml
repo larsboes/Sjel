@@ -4,7 +4,7 @@ name: Pages
 #
 #   /        the self-model, generated from self.json, which is generated from the manifests
 #   /docs/   one reference page per unit, plus response shapes read out of the recording below
-#   /demo/   the real dashboard bundle, running on data this job generated minutes earlier
+#   /fixtures/  what the seeded capabilities answered, recorded by this job
 #
 # THE DEMO IS RECORDED, NOT WRITTEN. This job starts the actual capability servers against a
 # throwaway SQLite file, seeds them through their own HTTP write APIs, and captures what they
@@ -106,10 +106,6 @@ jobs:
       # --release because the manifests' command paths name target/release/ binaries.
       - name: Build the demo's capability servers
         run: cargo build --locked --release -p sjel-status -p sjel-calendar -p sjel-finance -p sjel-trips
-
-      - name: Install dashboard dependencies
-        working-directory: dashboard
-        run: bun install --frozen-lockfile --ignore-scripts
 
       # Starts the five capabilities against the demo overlay, seeds them through their own
       # write APIs, and records every declared path. Refuses if anything is already listening

@@ -741,12 +741,6 @@ impl<'a> Svc<'a> {
         })
     }
 
-    fn shell_port(&self) -> String {
-        read_table(&self.paths.root.join("dashboard/service.toml"))
-            .map(|t| get_str(&t, "port"))
-            .unwrap_or_default()
-    }
-
     fn start_process(&self) -> R<u8> {
         if self.hold_active(false) {
             println!(
@@ -799,10 +793,7 @@ impl<'a> Svc<'a> {
         for (k, v) in self.cap_env()? {
             c.env(k, v);
         }
-        c.env("SJEL_SHELL_PORT", self.shell_port())
-            .stdin(Stdio::null())
-            .stdout(out)
-            .stderr(err);
+        c.stdin(Stdio::null()).stdout(out).stderr(err);
         if !self.port.is_empty() {
             c.env("SJEL_PORT", &self.port);
         }
@@ -907,7 +898,6 @@ impl<'a> Svc<'a> {
         for (k, v) in self.cap_env()? {
             cmd.env(k, v);
         }
-        cmd.env("SJEL_SHELL_PORT", self.shell_port());
         let code = status_of(&mut cmd);
         for d in &started {
             println!(

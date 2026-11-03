@@ -104,9 +104,8 @@ outside the checkout: an ignored test beside the code it measures, or a script u
 comment or README that states the number names that probe, so the next person can repeat it on
 their own machine and see whether it still holds.
 
-Run `bun run check` and `bun run build` in `dashboard/` when dashboard code changes. The
-check does not compile a template; the build does. A package that `tools/discover-ui-packages`
-reports is checked and built the same way in CI, so run both there too. Manifest or
+Run `bun run check` and `bun run build` in a package that `tools/discover-ui-packages` reports
+when its code changes. The check does not compile a template; the build does. CI runs both. Manifest or
 generated-architecture changes also require:
 
 ~~~sh

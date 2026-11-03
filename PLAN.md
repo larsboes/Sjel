@@ -38,8 +38,8 @@ belongs to Priority 1.
 
 ## Priority 2: one app, a smaller repository
 
-1. Finish the gates for deleting the dashboard, then delete the dashboard, Tauri and the demo
-   ([`gpui.md`](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes)).
+1. Done: the dashboard, the Tauri app and its plugins are deleted. The device checks that were
+   gates are open checks ([`gpui.md`](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes)).
 2. Restructure into one workspace with flat `crates/`, and sweep comments, TOML and READMEs in
    the same pass ([`restructure.md`](docs/plans/restructure.md)).
 3. The agent's plugins, the Pi port and the measured comparison with Pi

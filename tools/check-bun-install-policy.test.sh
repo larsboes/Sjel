@@ -16,28 +16,26 @@ fails=0
 # between the cases the missing file rather than the missing directory.
 plant() { # plant <name> <ci-install> [<mode>]
   local root="$SCRATCH/$1" mode="${3:-full}"
-  mkdir -p "$root/.github/workflows" "$root/dashboard" "$root/capabilities/soundscape"
+  mkdir -p "$root/.github/workflows" "$root/ui" "$root/capabilities/soundscape"
   printf '%s\n' "$2" > "$root/.github/workflows/ci.yml"
   printf 'bun pm scan\n' >> "$root/.github/workflows/ci.yml"
-  printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/.github/workflows/pages.yml"
-  printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/dashboard/README.md"
   printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/capabilities/soundscape/README.md"
 
-  printf '{"name":"planted-ui"}\n' > "$root/dashboard/package.json"
-  printf '{}\n' > "$root/dashboard/bun.lock"
+  printf '{"name":"planted-ui"}\n' > "$root/ui/package.json"
+  printf '{}\n' > "$root/ui/bun.lock"
   case "$mode" in
     no-bunfig) : ;; # a tree that resolves dependencies and declares nothing
     hold-only)
-      printf '[install]\nminimumReleaseAge = 86400\n' > "$root/dashboard/bunfig.toml" ;;
+      printf '[install]\nminimumReleaseAge = 86400\n' > "$root/ui/bunfig.toml" ;;
     *)
       printf '[install]\nminimumReleaseAge = 86400\n\n[install.security]\nscanner = "@socketsecurity/bun-security-scanner"\n' \
-        > "$root/dashboard/bunfig.toml" ;;
+        > "$root/ui/bunfig.toml" ;;
   esac
 
   # A vendored tree WITH a lockfile and NO bunfig, and a directory with a bunfig and NO lockfile.
   # Neither resolves this repository's dependencies, so neither may be demanded of: the first is
   # another project's configuration, the second is not a tree at all (it would also catch a
-  # dashboard/ tree that lost its lockfile as a missing-bunfig failure, which is the wrong name
+  # ui/ tree that lost its lockfile as a missing-bunfig failure, which is the wrong name
   # for the fault).
   mkdir -p "$root/Packs/planted/pi-packages/vendored" "$root/not-a-tree"
   printf '{"name":"vendored"}\n' > "$root/Packs/planted/pi-packages/vendored/package.json"

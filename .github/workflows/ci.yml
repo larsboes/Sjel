@@ -116,10 +116,8 @@ jobs:
         if: always()
         run: du -sh target 2>/dev/null || true
 
-  # One rootward `bun test`, not a list of directories. The list said ./tools/ and
-  # Packs/sjel/evals/, which is how dashboard/vite/comms-proxy-auth.test.ts and
-  # libs/overlay/overlay.test.ts came to run nowhere: both were written, committed, and
-  # never once executed by CI. bun discovers *.test.ts itself and skips node_modules, so a
+  # One rootward `bun test`, not a list of directories. A list of directories let
+  # test files run nowhere. bun discovers *.test.ts itself and skips node_modules, so a
   # test file added anywhere is gated by existing (Sjel#116). No install step: every one of
   # these imports bun:test, node builtins and local sources only, which is what keeps a
   # dependency-free runner honest.
@@ -141,16 +139,6 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
-      # The dashboard's tests import its modules, and mac-bridge.ts imports @tauri-apps/api, so its
-      # locked dependencies are installed first. --frozen-lockfile --ignore-scripts, as
-      # tools/check-bun-install-policy.sh requires of every install here.
-      # svelte-kit sync writes .svelte-kit/tsconfig.json, which is where the $lib alias the
-      # dashboard's modules import through is declared.
-      - name: install the dashboard's dependencies
-        working-directory: dashboard
-        run: |
-          bun install --frozen-lockfile --ignore-scripts
-          bunx svelte-kit sync
       - name: install local subagent dependencies
         working-directory: Packs/harness/pi-packages/pi-subagents
         run: bun install --frozen-lockfile --ignore-scripts
@@ -222,8 +210,8 @@ jobs:
           bun-version: latest
 
       # vitePreprocess() resolves the package's Vite config to run the style preprocessors,
-      # and the dashboard's derives its dev proxy table from `tools/capability.sh registry`,
-      # which hard-fails without <overlay>/config/machine.toml. Every <style> block then
+      # and a UI that derives its dev proxy table from `tools/capability.sh registry`
+      # hard-fails without <overlay>/config/machine.toml. Every <style> block then
       # reports that failure, so the first run of this job came back with 31 errors in 31
       # files — one per file, none of them type errors.
       #
@@ -285,11 +273,8 @@ jobs:
             exit 1
           fi
 
-      # The check compiles nothing, and the gap is measured rather than argued: on 2026-10-17 an
-      # unterminated HTML comment in dashboard/src/routes/interior/+page.svelte was reported as
-      # "0 errors and 0 warnings" by the step above (`svelte-check --tsgo`), while `bun run build`
-      # failed on the same file with "Expected token -->". Nothing else in CI parsed a .svelte
-      # file, so an unbuildable dashboard reached main (the file is unparseable in HEAD).
+      # The check compiles nothing: `svelte-check` passes a .svelte file that `bun run build`
+      # cannot parse, so the build runs too.
       #
       # The package set is still tools/discover-ui-packages', never a list here. A `build` script
       # is optional, so a package that declares only a check is named as skipped rather than

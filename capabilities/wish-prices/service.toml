@@ -1,0 +1,10 @@
+# See schemas/service.toml.example for the field reference.
+#
+# The wish price refresh: reads each wish-group candidate's geizhals product page and records
+# the lowest offer, once per day. No port: it runs, records, and exits.
+kind     = "process"
+name     = "wish-prices"
+command  = ["target/release/inventory", "prices", "refresh"]
+build    = ["cargo", "build", "--locked", "--release", "--bin", "inventory"]
+schedule = "24h"
+requires = ["inventory"]

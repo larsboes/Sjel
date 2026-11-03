@@ -24,6 +24,9 @@ The dashboard pages are `/inventory` and `/wishlist`.
 | `inventory_item_state` | `owned`, `wanted` or `gone`, appended over time; a bought wish is a second row |
 | `inventory_sync_operation` | operation ids already applied from a phone, so a retry is not applied twice |
 | `inventory_mail_proposal` | source-linked mail evidence and reviewed decisions |
+| `inventory_wish_spec` | a wish's numeric specs, compared within its wish group |
+| `inventory_wish_group_need` | a wish group's needs, in the same keys |
+| `inventory_price_observation` | dated prices per wish, one per source and day, the first at or below the limit marked as the alert |
 
 `kind` is `piece` (a thing), `slot` (a need with target sizes and no product yet) or `gear`.
 
@@ -48,6 +51,10 @@ German columns next to the renamed ones.
 | `POST /api/wish-groups` | create or update a wish group with its title and constraint |
 | `PUT /api/wish-groups/{id}/items` | set the item members of a wish group |
 | `DELETE /api/wish-groups/{id}` | delete a wish group |
+| `PUT /api/wish-groups/{id}/needs` | replace a group's needs: numeric keys its candidates are compared to |
+| `PUT /api/items/{id}/specs` | replace a wish's numeric specs (`memory_gb`, `bandwidth_gb_s`) |
+| `POST /api/items/{id}/prices` | record a dated price; one per source and day, the first at or below `cost_max_cents` alerts |
+| `GET /api/wish-comparison` | every group with its needs, and its candidates' specs and price histories |
 | `POST /api/items` | create an entry; `state` is required |
 | `PUT /api/items/{id}` | replace an entry |
 | `PATCH /api/items/{id}` | change the named fields; `null` clears one, an unknown field is refused |

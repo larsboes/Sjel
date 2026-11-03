@@ -66,6 +66,33 @@ pub fn fetch(url: &str) -> Result<Page, FetchError> {
     Ok(parse_with_url(&body, Some(url)))
 }
 
+/// Reads a candidate's product page for the daily price refresh.
+///
+/// Unlike [`fetch`], which serves a link the user shares by hand, this runs unattended, so it
+/// identifies itself as Sjel (`sjel_http`'s user-agent) and never as a browser. A site that
+/// refuses that client is reported as unreachable; nothing works around a refusal. Only
+/// [`refresh_source`] URLs are read.
+pub fn fetch_for_refresh(url: &str) -> Result<Page, FetchError> {
+    refresh_source(url).map_err(FetchError::Refused)?;
+    sjel_http::guard::check_destination(url, Vec::new)
+        .map_err(|e| FetchError::Refused(e.to_string()))?;
+    let client = sjel_http::builder(sjel_http::Purpose::new("inventory-prices"), TIMEOUT)
+        .build()
+        .map_err(|e| FetchError::Unreachable(e.to_string()))?;
+    let response = client
+        .get(url)
+        .send()
+        .map_err(|e| FetchError::Unreachable(e.without_url().to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(FetchError::Unreachable(format!("{url}: {status}")));
+    }
+    let body = response
+        .text()
+        .map_err(|e| FetchError::Unreachable(e.to_string()))?;
+    Ok(parse_with_url(&body, Some(url)))
+}
+
 pub fn parse(page: &str) -> Page {
     parse_with_url(page, None)
 }
@@ -89,6 +116,27 @@ pub fn per_shop_price(url: Option<&str>, page: &str) -> Option<(i64, String)> {
         }
     }
     None
+}
+
+/// Whether the daily price refresh may read this URL. Only geizhals product pages: `https`, a
+/// geizhals host, no query string, and a path that ends in `.html`. Their `og:price:amount` is the
+/// lowest current offer (measured 2026-11-03), which [`price`] already reads. The search pages
+/// (`/?fs=...`) are disallowed by geizhals' robots.txt for every agent.
+pub fn refresh_source(url: &str) -> Result<(), String> {
+    let rest = url
+        .strip_prefix("https://")
+        .ok_or_else(|| format!("{url}: only https product pages are refreshed"))?;
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.strip_prefix("www.").unwrap_or(host);
+    if !matches!(host, "geizhals.de" | "geizhals.at" | "geizhals.eu") {
+        return Err(format!("{url}: only geizhals product pages are refreshed"));
+    }
+    if path.contains('?') || path.contains('#') || !path.ends_with(".html") || path.contains('/') {
+        return Err(format!(
+            "{url}: not a geizhals product page (a search or list page is never read)"
+        ));
+    }
+    Ok(())
 }
 
 /// Uniqlo pages embed price in FastRetailing JSON objects or HTML price spans.
@@ -422,6 +470,20 @@ mod tests {
   <meta property="og:price:amount" content="79.90">
   <meta property="og:price:currency" content="EUR">
 </head><body><p>Ab 79.90 EUR</p></body></html>"#;
+
+    #[test]
+    fn only_geizhals_product_pages_are_refresh_sources() {
+        assert!(refresh_source("https://geizhals.de/apple-mac-mini-z1ud-a3928770.html").is_ok());
+        assert!(
+            refresh_source("https://geizhals.de/apple-mac-mini-m5-pro-2026-v247578.html").is_ok()
+        );
+        assert!(refresh_source("https://geizhals.de/?fs=mac+mini").is_err());
+        assert!(refresh_source("https://geizhals.de/apple-mac-mini-a1.html?hloc=at").is_err());
+        assert!(refresh_source("https://geizhals.de/hardware/x.html").is_err());
+        assert!(refresh_source("http://geizhals.de/apple-mac-mini-a1.html").is_err());
+        assert!(refresh_source("https://www.refurbed.de/p/x.html").is_err());
+        assert!(refresh_source("https://geizhals.de.evil.example/a1.html").is_err());
+    }
 
     #[test]
     fn og_title_beats_title() {

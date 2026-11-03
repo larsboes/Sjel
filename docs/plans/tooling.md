@@ -28,12 +28,6 @@ covers it.
   `$EDITOR` without a shell. Workaround: a two-line script as `$EDITOR` that copies a prepared
   file over the scratch file. Smallest change: `projects put <path> <file>`, which creates or
   replaces a record with a base check, the same path `POST /api/record` takes.
-- **Price snapshots for a wish.** Pricing a wishlist item across new, refurbished and used
-  offers took raw `interceptor` reads of comparison, refurbisher and classifieds pages, and
-  each refurbisher shows variant prices differently. Smallest change: an `inventory` command
-  that records a dated price observation (source URL, price, configuration) on a wish row, so
-  the snapshot lives with the wish instead of in notes. Planned as GPUI WP 28
-  ([`gpui.md`](gpui.md#4-work-packages)).
 
 - **`tools/packs-pi deploy` ignores the active profile.** Deploying `harness` and `deliberation`
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
@@ -146,6 +140,9 @@ covers it.
 
 ## Done
 
+- `inventory price` records a dated price on a wish by hand, and the daily `wish-prices` job
+  (`inventory prices refresh`) records each wish-group candidate's geizhals product page. See
+  GPUI WP 28 in [`gpui.md`](gpui.md#4-work-packages).
 - `tools/audit` reads an installed crate's published `Cargo.lock` from the `.crate` archive in
   `~/.cargo/registry/cache` when the extracted `registry/src` copy is gone, and names every crate
   whose lockfile survived nowhere as not scanned, which exits 2 rather than reporting clean.

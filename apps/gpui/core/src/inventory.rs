@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+#[path = "inventory_compare.rs"]
+pub mod compare;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InventoryState {

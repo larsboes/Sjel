@@ -1,6 +1,8 @@
 //! inventory: what the household owns. The only writer of the `inventory_` tables; `interior`
 //! reads them to compute plans, and `trips` reads them over HTTP.
 
+mod compare_cli;
+
 use sjel_inventory::intake::{self, FetchError, Page};
 use sjel_inventory::store::{Item, Kind, State, Store};
 
@@ -31,6 +33,11 @@ fn usage() -> ! {
                                  [--price 79,90] [--category kleidung] [--kind piece]
                                  [--size M] [--color white] [--seasons winter,spring]
                                  [--id some-id])
+  compare [group]                wish groups: needs, candidates, latest price, specs
+  specs <id> k=v[:unit]...       replace a wish's numeric specs (memory_gb=32)
+  needs <group> k=v[:unit]...    replace a wish group's needs (memory_gb=29)
+  price <id> <amount>            record a dated price [--source X] [--config Y] [--on DATE]
+  prices refresh                 read each candidate's geizhals product page once (daily job)
   {import}                       inventory/*.toml into the tables (repeatable)
   {serve}                        HTTP API for the dashboard
 "#,
@@ -93,6 +100,7 @@ async fn main() {
         "inventory" => show(),
         "categories" => categories_show(),
         "add" => add(&argv).await,
+        "prices" | "price" | "specs" | "needs" | "compare" => compare_cli::run(cmd, &argv).await,
         _ => usage(),
     };
     std::process::exit(code);

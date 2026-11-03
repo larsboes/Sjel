@@ -22,6 +22,9 @@ use sjel_gpui_core::inventory::{
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
+#[path = "wish_compare.rs"]
+mod wish_compare;
+
 #[cfg(target_os = "macos")]
 fn cache_preview_roomplan(revision_id: &str, draft_json: &str, asset_bytes: Vec<u8>) {
     let revision_id = revision_id.to_owned();
@@ -202,6 +205,10 @@ pub struct InventoryPage {
     pub rows: Remote<Vec<InventoryRow>>,
     pub wishlist: Remote<InventoryWishlist>,
     pub wish_groups: Remote<Vec<WishGroup>>,
+    /// Every group's needs and candidates, for the comparison view.
+    pub comparisons: Remote<Vec<sjel_gpui_core::inventory::compare::GroupComparison>>,
+    /// The spec the comparison's scatter is drawn against. None opens on the group's default.
+    compare_axis: Option<String>,
     pub layouts: Remote<Vec<InteriorLayoutSummary>>,
     mail_proposals: Remote<Vec<MailProposal>>,
     mail_form: Option<MailReviewForm>,
@@ -244,6 +251,8 @@ impl InventoryPage {
             rows: Remote::default(),
             wishlist: Remote::default(),
             wish_groups: Remote::default(),
+            comparisons: Remote::default(),
+            compare_axis: None,
             layouts: Remote::default(),
             mail_proposals: Remote::default(),
             mail_form: None,
@@ -358,7 +367,19 @@ impl InventoryPage {
         })
         .detach();
 
-        // 4. Fetch Interior Layouts
+        // 4. Fetch the wish comparison: needs, specs and price histories per group.
+        let s_c = shell.clone();
+        let c_work = shell::run(async move { s_c.inventory_wish_comparison().await });
+        cx.spawn(async move |this, cx| {
+            let res = c_work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.comparisons.settle(res);
+                cx.notify();
+            });
+        })
+        .detach();
+
+        // 5. Fetch Interior Layouts
         let s_l = shell.clone();
         let l_work = shell::run(async move { s_l.interior_layouts().await });
         cx.spawn(async move |this, cx| {
@@ -2097,6 +2118,9 @@ impl InventoryPage {
                     .child(error.clone()),
             );
         }
+        let comparison = group
+            .as_ref()
+            .and_then(|group| self.render_comparison(&group.id, palette, cx));
         content
             .when_some(
                 self.render_inventory_edit_form(palette, cx),
@@ -2171,6 +2195,7 @@ impl InventoryPage {
                             }))
                     })),
             )
+            .children(comparison)
             .child(if shown.is_empty() {
                 div()
                     .p_8()

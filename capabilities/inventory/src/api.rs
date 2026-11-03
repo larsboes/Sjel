@@ -34,6 +34,28 @@ pub struct SetWishGroupItemsRequest {
     pub item_ids: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct SetSpecsRequest {
+    pub specs: Vec<crate::store::compare::Spec>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct SetNeedsRequest {
+    pub needs: Vec<crate::store::compare::Spec>,
+}
+
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct RecordPriceRequest {
+    pub price_cents: i64,
+    /// A product URL, or a short label for a manual entry.
+    pub source: String,
+    #[serde(default)]
+    pub configuration: String,
+    /// `YYYY-MM-DD` or a timestamp. Absent means now.
+    #[serde(default)]
+    pub observed_at: Option<String>,
+}
+
 pub struct AppState {
     pub device_store: devices::store::DevicesStore,
     /// Resolved once at start, so a test can point the router at a temp file.
@@ -121,6 +143,30 @@ const ROUTES: &[route_manifest::Route] = &[
         path: "/api/wish-groups/{id}/items",
         summary: "Set the items assigned to a wish group.",
         request_schema: Some(route_manifest::schema_of::<SetWishGroupItemsRequest>),
+    },
+    r(
+        "GET",
+        "/api/wish-comparison",
+        "Every wish group with its needs, and its candidates' specs and price histories.",
+    ),
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/wish-groups/{id}/needs",
+        summary: "Replace a wish group's needs: numeric keys a candidate's specs are compared to.",
+        request_schema: Some(route_manifest::schema_of::<SetNeedsRequest>),
+    },
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/items/{id}/specs",
+        summary: "Replace a wish's numeric specs.",
+        request_schema: Some(route_manifest::schema_of::<SetSpecsRequest>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/items/{id}/prices",
+        summary:
+            "Record a dated price. One per source and day; the first at or below the limit alerts.",
+        request_schema: Some(route_manifest::schema_of::<RecordPriceRequest>),
     },
     r(
         "POST",
@@ -307,6 +353,54 @@ async fn api_put_wish_group_items(
     let st = store(&s)?;
     st.set_wish_group_items(&id, &body.item_ids).map_err(boom)?;
     Ok(StatusCode::OK)
+}
+
+/// A refused write (unknown id, bad key) is the caller's mistake, not the server's.
+fn refused<E: std::fmt::Display>(e: E) -> HttpError {
+    (StatusCode::BAD_REQUEST, e.to_string())
+}
+
+async fn api_wish_comparison(
+    State(s): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, HttpError> {
+    let st = store(&s)?;
+    let groups = st.comparisons().map_err(boom)?;
+    Ok(Json(serde_json::json!({ "groups": groups })))
+}
+
+async fn api_put_needs(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<SetNeedsRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    store(&s)?.set_needs(&id, &body.needs).map_err(refused)?;
+    Ok(StatusCode::OK)
+}
+
+async fn api_put_specs(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<SetSpecsRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    store(&s)?.set_specs(&id, &body.specs).map_err(refused)?;
+    Ok(StatusCode::OK)
+}
+
+async fn api_post_price(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<RecordPriceRequest>,
+) -> Result<impl IntoResponse, HttpError> {
+    let recorded = store(&s)?
+        .record_price(
+            &id,
+            &body.source,
+            body.price_cents,
+            &body.configuration,
+            body.observed_at.as_deref(),
+        )
+        .map_err(refused)?;
+    Ok(Json(recorded))
 }
 
 #[derive(Deserialize)]
@@ -772,6 +866,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/wish-groups/{id}", delete(api_delete_wish_group))
         .route("/api/wish-groups/{id}/items", put(api_put_wish_group_items))
+        .route("/api/wish-groups/{id}/needs", put(api_put_needs))
+        .route("/api/wish-comparison", get(api_wish_comparison))
+        .route("/api/items/{id}/specs", put(api_put_specs))
+        .route("/api/items/{id}/prices", post(api_post_price))
         .route(
             "/api/items/{id}/mail-match-snapshot",
             get(crate::mail_proposals::snapshot),

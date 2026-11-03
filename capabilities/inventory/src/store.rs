@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+#[path = "compare.rs"]
+pub mod compare;
+
 /// A side of a piece, in the piece's own orientation. `interior` reads the same text from the
 /// column, so the stored word is the contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -718,6 +721,7 @@ impl Store {
         Self::add_column_if_missing(conn, prefix, "revision", "INTEGER NOT NULL DEFAULT 1")?;
         Self::move_from_interior(conn)?;
         Self::translate_legacy_values(conn, prefix)?;
+        compare::migrate(conn, prefix)?;
         Ok(())
     }
 

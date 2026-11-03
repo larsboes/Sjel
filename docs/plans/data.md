@@ -356,7 +356,7 @@ Open items that belong to one capability and to no priority yet.
   `wunsch-apple-watch`, with a dated price snapshot in `notes`; the duplicates `newer-iphone` and
   `newer-apple-watch` are `gone` with a note naming the row they merged into. Open: a merge
   action for duplicate wishes (today a duplicate can only become `gone`, which reads as given
-  away), and a price watch that alerts when a listed offer falls below `cost_max_cents`. Done
-  when a wish with a target and a price limit raises an alert for a real offer below it.
+  away). The price watch is built (GPUI WP 28, `wish-prices`): on 2026-11-03 the daily refresh
+  raised the alert for `mac-mini-m4-pro` at €1,401.02 against a €1,500 limit.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.

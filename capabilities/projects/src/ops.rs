@@ -421,16 +421,20 @@ pub struct Renamed {
     pub title: String,
     /// The records whose `[[...]]` links now name the new title.
     pub links: Vec<String>,
+    /// The records still naming the old title: the move stands, and these are the links left
+    /// behind. A record saved by someone else while the rename ran is the usual cause.
+    pub failed: Vec<String>,
 }
 
 /// Rename a record: its file takes the new title, and every record linking `[[Old]]` follows.
 ///
-/// The links are rewritten first, each against the content it was read with, so a link whose note
-/// changed meanwhile refuses the rename instead of overwriting that change.
+/// The move comes first, so a link rewrite that fails — a record saved by someone else in the
+/// meantime, or one too large to write — leaves the note moved and names the link in
+/// [`Renamed::failed`] instead of leaving links to a name that no longer exists.
 ///
 /// # Errors
-/// The record is not in the store, the title cannot become a path, a record or file already
-/// carries the new name, or a link rewrite lost its base.
+/// The record is not in the store, the title cannot become a path, or a record or file already
+/// carries the new name.
 pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Renamed> {
     let record = projects
         .get(path)
@@ -447,26 +451,40 @@ pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Re
             path: to,
             title,
             links: Vec::new(),
+            failed: Vec::new(),
         });
     }
     if projects.get(&to).await?.is_some() || projects.root().join(&to).exists() {
         return Err(SaveError::Refused(format!("{title:?} is already a record")).into());
     }
-    let mut links = Vec::new();
-    for other in projects.all().await? {
-        let (rewritten, moved) = record::rewrite_links(&other.content, &record.title, &title);
-        if moved == 0 {
-            continue;
-        }
-        save(projects, &other.path, &rewritten, Some(&other.content)).await?;
-        links.push(other.path);
-    }
+    // Read the links before the move, so the scan sees the content the store holds now.
+    let linking: Vec<Record> = projects
+        .all()
+        .await?
+        .into_iter()
+        .filter(|other| record::rewrite_links(&other.content, &record.title, &title).1 > 0)
+        .collect();
     projects.move_record(path, &to).await?;
-    Ok(Renamed {
+    let mut renamed = Renamed {
         path: to,
         title,
-        links,
-    })
+        links: Vec::new(),
+        failed: Vec::new(),
+    };
+    for other in linking {
+        // The renamed record's own self-links are written at its new path, which is where it is.
+        let at = if other.path == path {
+            renamed.path.clone()
+        } else {
+            other.path.clone()
+        };
+        let (rewritten, _) = record::rewrite_links(&other.content, &record.title, &renamed.title);
+        match save(projects, &at, &rewritten, Some(&other.content)).await {
+            Ok(_) => renamed.links.push(at),
+            Err(_) => renamed.failed.push(at),
+        }
+    }
+    Ok(renamed)
 }
 
 /// The content of a new note, typed at birth like every vault note.
@@ -1158,7 +1176,10 @@ mod tests {
         let renamed = rename(&projects, note, "Neu").await.unwrap();
         assert_eq!(renamed.path, "W/Neu.md");
         assert_eq!(renamed.title, "Neu");
-        assert_eq!(renamed.links, vec![note.to_string(), task.to_string()]);
+        assert_eq!(
+            renamed.links,
+            vec!["W/Neu.md".to_string(), task.to_string()]
+        );
         assert!(projects.get(note).await.unwrap().is_none());
         assert!(!projects.root().join(note).exists());
         let moved = projects.get("W/Neu.md").await.unwrap().unwrap();
@@ -1189,6 +1210,24 @@ mod tests {
             .is_err());
         assert!(rename(&projects, task, "a/b").await.is_err());
         assert!(rename(&projects, "W/Nichts.md", "X").await.is_err());
+
+        // A link whose note cannot be written leaves the rename standing and names the link.
+        let big = "W/Gross.md";
+        let oversized = format!(
+            "---\ntype: note\n---\n\n[[Neu]]\n{}",
+            "x".repeat(MAX_CONTENT_BYTES)
+        );
+        let record = Record::from_content(big, oversized).unwrap();
+        projects.put(&record).await.unwrap();
+        let renamed = rename(&projects, "W/Neu.md", "Vier").await.unwrap();
+        assert_eq!(renamed.path, "W/Vier.md");
+        assert_eq!(
+            renamed.links,
+            vec!["W/Vier.md".to_string(), task.to_string()]
+        );
+        assert_eq!(renamed.failed.len(), 1, "{:?}", renamed.failed);
+        assert_eq!(renamed.failed, vec![big.to_string()]);
+        assert!(projects.get("W/Vier.md").await.unwrap().is_some());
         fs::remove_dir_all(dir).unwrap();
     }
 }

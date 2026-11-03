@@ -6,6 +6,7 @@
 //! across the import.
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use markdown_root::frontmatter_spanned;
 use serde::Serialize;
@@ -172,9 +173,9 @@ pub fn check_name(name: &str) -> Result<&str, String> {
     if name.is_empty() || name.chars().count() > MAX_TITLE_CHARS {
         return Err(format!("a name needs 1 to {MAX_TITLE_CHARS} characters"));
     }
-    if name.starts_with('.') || name.contains(['/', '\\', '\n', '\r', '"']) {
+    if name.starts_with('.') || name.contains(['/', '\\', '"']) || name.contains(char::is_control) {
         return Err(format!(
-            "{name:?}: a name cannot start with '.' or contain / \\ \" or a line break"
+            "{name:?}: a name cannot start with '.' or contain / \\ \", a line break or another control character"
         ));
     }
     Ok(name)
@@ -192,18 +193,90 @@ pub fn renamed_path(path: &str, title: &str) -> Result<String, String> {
     Ok(format!("{folder}/{title}.md"))
 }
 
+/// The byte ranges `content` shows as code, so a link written in a code span or a fenced block
+/// keeps its bytes: a reader sees source there, not a link.
+fn code_spans(content: &str) -> Vec<Range<usize>> {
+    let mut spans: Vec<Range<usize>> = Vec::new();
+    // Where the text of an open fenced block starts.
+    let mut fence: Option<usize> = None;
+    let mut line_start = 0;
+    for line in content.split_inclusive('\n') {
+        let bytes = line.as_bytes();
+        let indent = bytes.iter().take_while(|b| b.is_ascii_whitespace()).count();
+        let opens = |marker: u8, at: usize| {
+            let run = bytes[at..].iter().take_while(|b| **b == marker).count();
+            run >= 3
+        };
+        if (bytes.len() > indent) && (bytes[indent] == b'`' || bytes[indent] == b'~') {
+            let marker = bytes[indent];
+            if opens(marker, indent) {
+                match fence {
+                    Some(start) => {
+                        spans.push(start..line_start);
+                        fence = None;
+                    }
+                    None => fence = Some(line_start + line.len()),
+                }
+                line_start += line.len();
+                continue;
+            }
+        }
+        if fence.is_none() {
+            // A code span runs between two backtick runs of the same length, on one line.
+            let mut at = 0;
+            while at < bytes.len() {
+                if bytes[at] != b'`' {
+                    at += 1;
+                    continue;
+                }
+                let run = bytes[at..].iter().take_while(|b| **b == b'`').count();
+                let close = (at + run..bytes.len()).find(|start| {
+                    bytes[*start] == b'`'
+                        && bytes[*start..].iter().take_while(|b| **b == b'`').count() == run
+                });
+                match close {
+                    Some(close) => {
+                        spans.push(line_start + at..line_start + close + run);
+                        at = close + run;
+                    }
+                    None => at += run,
+                }
+            }
+        }
+        line_start += line.len();
+    }
+    if let Some(start) = fence {
+        spans.push(start..content.len());
+    }
+    spans
+}
+
 /// Every `[[title]]` in `content` pointed at `to`: `[[from]]`, `[[from|alias]]` and
-/// `[[from#Heading]]` keep their alias and heading, and it answers whether any link moved. A link
-/// into a folder (`[[P/from]]`) is left alone, as are the bytes of anything else.
+/// `[[from#Heading]]` keep their alias and heading, and it answers how many links moved. A link
+/// into a folder (`[[P/from]]`) is left alone, as is one written in code.
 pub fn rewrite_links(content: &str, from: &str, to: &str) -> (String, usize) {
     let mut out = String::with_capacity(content.len());
     let mut rest = content;
     let mut moved = 0;
-    while let Some(start) = rest.find("[[") {
-        out.push_str(&rest[..start]);
-        let link = &rest[start + 2..];
+    let mut code = code_spans(content);
+    let mut code_at = 0;
+    let mut at = 0;
+    while let Some(found) = rest.find("[[") {
+        let start = at + found;
+        // Ranges come in order, so the span that could hold this offset is the current one.
+        while code_at < code.len() && code[code_at].end <= start {
+            code_at += 1;
+        }
+        if code_at < code.len() && code[code_at].contains(&start) {
+            out.push_str(&rest[..found + 2]);
+            at = start + 2;
+            rest = &rest[found + 2..];
+            continue;
+        }
+        out.push_str(&rest[..found]);
+        let link = &rest[found + 2..];
         let Some(end) = link.find("]]") else {
-            out.push_str(&rest[start..]);
+            out.push_str(&rest[found..]);
             return (out, moved);
         };
         let body = &link[..end];
@@ -219,8 +292,9 @@ pub fn rewrite_links(content: &str, from: &str, to: &str) -> (String, usize) {
             out.push_str("]]");
             moved += 1;
         } else {
-            out.push_str(&rest[start..start + 2 + end + 2]);
+            out.push_str(&rest[found..found + 2 + end + 2]);
         }
+        at = start + 2 + end + 2;
         rest = &link[end + 2..];
     }
     out.push_str(rest);
@@ -421,6 +495,21 @@ mod tests {
         assert!(moved.contains("[[Altar]]") && moved.contains("[[P/Alt]]"));
         assert_eq!(rewrite_links(content, "Nichts", "X").1, 0);
         assert_eq!(rewrite_links("[[Alt", "Alt", "X").0, "[[Alt");
+    }
+
+    #[test]
+    fn a_link_written_as_code_keeps_its_bytes() {
+        let content = "Read `[[Alt]]` and ``[[Alt|kurz]]`` but see [[Alt]].\n\n```\n[[Alt]]\n```\n\n~~~\n[[Alt]]\n~~~\n";
+        let (moved, count) = rewrite_links(content, "Alt", "Neu");
+        assert_eq!(count, 1);
+        assert!(moved.contains("`[[Alt]]`"), "{moved}");
+        assert!(moved.contains("``[[Alt|kurz]]``"), "{moved}");
+        assert!(moved.contains("but see [[Neu]]."), "{moved}");
+        assert!(moved.contains("```\n[[Alt]]\n```"), "{moved}");
+        assert!(moved.contains("~~~\n[[Alt]]\n~~~"), "{moved}");
+        // An unclosed backtick is literal text, as `Inline::parse` reads it, so both links move.
+        assert_eq!(rewrite_links("`[[Alt]] and [[Alt]]", "Alt", "Neu").1, 2);
+        assert!(renamed_path("P/Alt.md", "Neu\u{0}").is_err());
     }
 
     #[test]

@@ -629,7 +629,11 @@ impl Repo {
             ));
         }
         let renamed = self.shell()?.rename_record(path, title).await?;
+        // The move and every rewritten link read wrong from the cache now.
         self.notes.forget(path);
+        for rewritten in renamed.links.iter().chain(&renamed.failed) {
+            self.notes.forget(rewritten);
+        }
         Ok(renamed)
     }
 

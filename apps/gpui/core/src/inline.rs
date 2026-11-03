@@ -48,8 +48,13 @@ impl Inline {
     /// shown byte after it, which is where a caret at the start of `**bold**` belongs.
     pub fn shown_offset(&self, source: usize) -> usize {
         // `source` is monotone, so the first entry at or past `source` is the answer.
-        let at = self.source.partition_point(|mapped| *mapped < source);
-        at.min(self.text.len())
+        let mut at = self.source.partition_point(|mapped| *mapped < source);
+        at = at.min(self.text.len());
+        // A source offset inside a multi-byte character lands before that character, never in it.
+        while at > 0 && !self.text.is_char_boundary(at) {
+            at -= 1;
+        }
+        at
     }
 
     /// The source ranges the marks hide: the `**`, the backticks, and a link's `](url)`. What a
@@ -288,6 +293,17 @@ mod tests {
         }
         assert_eq!(Inline::parse("plain").concealed(), vec![]);
         assert_eq!(inline.shown_offset(src.len()), inline.text.len());
+        // An offset inside a multi-byte character lands before it, on a boundary.
+        let accented = Inline::parse("é **bold**");
+        for source in 0..=accented_source_len() {
+            assert!(accented
+                .text
+                .is_char_boundary(accented.shown_offset(source)));
+        }
+        assert_eq!(accented.shown_offset(1), 0);
+        fn accented_source_len() -> usize {
+            "é **bold**".len()
+        }
     }
 
     /// `SJEL_NOTES_DIR=<dir> cargo test --lib concealment_cost -- --ignored`: what live preview

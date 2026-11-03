@@ -1409,6 +1409,7 @@ impl Projects {
             return;
         };
         let path = editor.read(cx).path().to_owned();
+        let was = path.clone();
         let repo = self.repo.clone();
         let work = shell::run(async move { repo.rename_record(&path, &title).await });
         cx.spawn_in(window, async move |this, cx| {
@@ -1417,14 +1418,25 @@ impl Projects {
                 match result {
                     Ok(renamed) => {
                         let links = renamed.links.len();
+                        let left = renamed.failed.len();
                         view.refresh_records(cx);
                         view.load_all_notes(cx);
-                        view.open_note(renamed.path, true, window, cx);
-                        let done = if links == 0 {
-                            format!("Renamed to {}", renamed.title)
-                        } else {
-                            format!("Renamed to {} · {links} link(s) rewritten", renamed.title)
-                        };
+                        // Only follow the note that was renamed: whatever is on screen now, if it
+                        // moved meanwhile, is not this one.
+                        let still_open = view
+                            .editor
+                            .as_ref()
+                            .is_some_and(|editor| editor.read(cx).path() == was);
+                        if still_open {
+                            view.open_note(renamed.path, true, window, cx);
+                        }
+                        let mut done = format!("Renamed to {}", renamed.title);
+                        if links > 0 {
+                            done.push_str(&format!(" · {links} link(s) moved"));
+                        }
+                        if left > 0 {
+                            done.push_str(&format!(" · {left} still name the old title"));
+                        }
                         window.push_notification(Notification::success(done), cx);
                     }
                     Err(error) => {

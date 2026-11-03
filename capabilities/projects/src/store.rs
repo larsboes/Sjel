@@ -437,19 +437,35 @@ impl Projects {
         if self.root.join(to).exists() {
             return Err(format!("{to}: a file is already there").into());
         }
+        // The file first: a rename that cannot render its new path leaves the store as it was.
+        self.render(&moved)?;
         let tx = self.db.begin().await?;
         tx.execute(
             "UPDATE projects_inventory_links SET record_path = ?1 WHERE record_path = ?2",
             [to, from],
         )
         .await?;
+        // Every column is derived from the path and the bytes, so a loose archive note's project
+        // follows the new title too.
         tx.execute(
-            "UPDATE projects_records SET path = ?1, title = ?2 WHERE path = ?3",
-            [to, moved.title.as_str(), from],
+            "UPDATE projects_records
+                SET path = ?1, project = ?2, kind = ?3, title = ?4, done = ?5, due = ?6,
+                    priority = ?7, archived = ?8
+              WHERE path = ?9",
+            (
+                to,
+                moved.project.as_str(),
+                moved.kind.as_str(),
+                moved.title.as_str(),
+                moved.done,
+                moved.due.as_deref(),
+                moved.priority,
+                moved.archived,
+                from,
+            ),
         )
         .await?;
         tx.commit().await?;
-        self.render(&moved)?;
         match fs::remove_file(self.root.join(from)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
             _ => {}
@@ -766,6 +782,41 @@ pub(crate) mod tests {
         projects.put(&second).await.unwrap();
         assert_eq!(fs::read_to_string(&file).unwrap(), second.content);
         assert_eq!(projects.verify().await.unwrap(), Drift::default());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A loose archive note's project is its own name, so the move carries it.
+    #[tokio::test]
+    async fn a_move_takes_every_derived_column_with_it() {
+        let (projects, dir) = scratch("move-columns").await;
+        let loose = Record::from_content(
+            "Archive/Alt.md",
+            "---\ntype: task\ndone: true\npriority: 1\ndue: 2026-11-01\n---\n\nx\n".into(),
+        )
+        .unwrap();
+        projects.put(&loose).await.unwrap();
+        assert!(projects
+            .move_record("Archive/Alt.md", "Archive/Neu.md")
+            .await
+            .unwrap());
+        let moved = projects.get("Archive/Neu.md").await.unwrap().unwrap();
+        assert_eq!(
+            (
+                moved.project.as_str(),
+                moved.archived,
+                moved.done,
+                moved.priority
+            ),
+            ("Neu", true, true, 1)
+        );
+        assert_eq!(moved.due.as_deref(), Some("2026-11-01"));
+        assert!(!projects.root().join("Archive/Alt.md").exists());
+        assert_eq!(projects.verify().await.unwrap(), Drift::default());
+        // A name that is taken, and a title that is not a path, are refused without a write.
+        assert!(projects
+            .move_record("Archive/Neu.md", "Archive/Neu.md")
+            .await
+            .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 

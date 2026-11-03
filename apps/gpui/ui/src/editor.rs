@@ -662,6 +662,8 @@ impl NoteEditor {
                         editor.settled(cx);
                     }
                     Err(SaveError::Conflict) => {
+                        // A rename waiting on this write has nothing to settle on a read-only note.
+                        editor.pending_rename = None;
                         editor.editable = false;
                         editor.problem = Some(
                             "This note changed elsewhere since you opened it. Nothing was overwritten; open it again to see the current text."

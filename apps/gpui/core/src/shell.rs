@@ -696,6 +696,9 @@ pub struct RenamedRecord {
     /// The records whose `[[...]]` links now name the new title.
     #[serde(default)]
     pub links: Vec<String>,
+    /// The records still naming the old title, and why. The move stands; these are left behind.
+    #[serde(default)]
+    pub failed: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

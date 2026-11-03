@@ -209,6 +209,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 renamed.path,
                 renamed.links.len()
             );
+            for left in &renamed.failed {
+                println!("  still names the old title: {left}");
+            }
         }
         "normalize" => {
             let apply = args.iter().any(|a| a == "--apply");

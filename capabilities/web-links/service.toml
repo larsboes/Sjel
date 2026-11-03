@@ -1,0 +1,11 @@
+kind           = "process"
+name           = "web-links"
+command        = ["target/release/web-links-server"]
+build          = ["cargo", "build", "--locked", "--release", "--bin", "web-links-server"]
+port           = "8109"
+autostart      = "true"
+health_path    = "/health"
+ready_path     = "/ready"
+proxy_api_only = "true"
+imports        = ["json"]
+exports        = ["json"]

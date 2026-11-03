@@ -566,6 +566,10 @@
       }
     },
     {
+      "name": "web-links",
+      "kind": "capability"
+    },
+    {
       "name": "writing",
       "kind": "pack"
     }

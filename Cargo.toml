@@ -23,6 +23,7 @@ members = [
     "capabilities/traveler",
     "capabilities/operator-profile",
     "capabilities/software",
+    "capabilities/web-links",
     "capabilities/assistant",
     "capabilities/transit",
     "capabilities/trips",

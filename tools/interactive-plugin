@@ -1,0 +1,46 @@
+#!/bin/bash
+# tools/interactive-plugin — build the `interactive` Obsidian plugin, and install it into the vault.
+#
+#   tools/interactive-plugin build     rebuild dist/main.js from src/
+#   tools/interactive-plugin install   build, then copy into the active vault's .obsidian/plugins/
+#
+# The first line of dist/main.js records the SHA-256 of src/. tools/interactive-plugin.test.ts
+# fails when src/ changes without a rebuild. Install keeps the previous bundle in
+# .obsidian/interactive-plugin.prev/, outside the plugins folder so Obsidian does not load it.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -euo pipefail
+
+SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+PLUGIN="$SJEL_ROOT/Packs/knowledge/plugins/interactive"
+
+src_hash() {
+  (cd "$PLUGIN" && find src -name '*.ts' | LC_ALL=C sort | xargs cat) | shasum -a 256 | cut -d' ' -f1
+}
+
+build() {
+  tmp="$(mktemp -d)"
+  bun build "$PLUGIN/src/main.ts" --target browser --format cjs --external obsidian \
+    --outfile "$tmp/main.js" >/dev/null
+  { echo "// src-sha256: $(src_hash)"; cat "$tmp/main.js"; } > "$PLUGIN/dist/main.js"
+  rm -rf "$tmp"
+  echo "built $PLUGIN/dist/main.js"
+}
+
+install_plugin() {
+  vault="$(python3 "$SJEL_ROOT/Packs/knowledge/skills/obsidian/scripts/vault" root)"
+  dest="$vault/.obsidian/plugins/interactive"
+  prev="$vault/.obsidian/interactive-plugin.prev"
+  mkdir -p "$dest"
+  if [ -f "$dest/main.js" ]; then
+    rm -rf "$prev" && mkdir -p "$prev"
+    cp "$dest"/main.js "$dest"/manifest.json "$dest"/styles.css "$prev"/ 2>/dev/null || true
+  fi
+  cp "$PLUGIN/dist/main.js" "$PLUGIN/manifest.json" "$PLUGIN/styles.css" "$dest/"
+  echo "installed into $dest; reload the plugin in Obsidian to activate it"
+}
+
+case "${1:-}" in
+  build) build ;;
+  install) build && install_plugin ;;
+  *) echo "usage: tools/interactive-plugin build|install" >&2; exit 2 ;;
+esac

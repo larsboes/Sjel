@@ -26,21 +26,25 @@ question and the option note. The `🧩 Claims` view in `Knowledge.base` lists a
 
 Shipped 2026-11-03: `teach` and `practice` moved to their own Pack, `Packs/learning`, and
 `teach/references/figures.md` covers figures, including Anatomy figures in `html-embed`.
-Anatomy is installed globally (`~/.agents/skills/anatomy`), so pi loads it from the vault.
+Anatomy is installed globally in `~/.agents/skills/anatomy`, which Pi scans, with a Claude Code symlink (installed 2026-11-04 with the command in [`Packs/learning/README.md`](../../Packs/learning/README.md)).
 
 Open:
 
 1. Run five real `teach` sessions, each followed by `practice`. Done when
-   `Knowledge/Meta/Learning Log.md` has five teach lines and five practice lines.
+   `Resources/Learning Log.md` has five teach lines and five practice lines.
 
 Not checked: no figure built by `figures.md` has rendered in Obsidian yet, and no Anatomy
 page has been checked inside `html-embed`. Also not checked: the `🧩 Claims` view renders only in Obsidian, and no one has looked at it yet. Also not checked: no session has run on the new skill text yet.
 
 Shipped 2026-11-04:
-- The vault contract (`Knowledge/Meta/Vault/Vault-Contract.md`, configured as `contract_path`) now
+- The vault contract (`Resources/Vault-Contract.md`, configured as `contract_path`) now
   defines agent access, `status: verified` (facts checked against `sources:`), note anatomy,
   interactive material and teaching records. Interactive figures are full parts of their notes,
   with no static fallback.
+- Vault layout, decided 2026-11-04: `Knowledge/` holds only what is learned (concept notes enter
+  as seedlings while taught). `Resources/` holds the Bases, the contract, the Learning Log,
+  learning paths in `Resources/Learning/` and verified reference notes. `Knowledge.md` at the
+  vault root is the home note.
 - `teach/references/explanations.md` sets the shape of one explanation step.
 - `figures.md` adds the teaching-figure anatomy, the loop around a figure and the defects of
   imported figures.
@@ -48,6 +52,12 @@ Shipped 2026-11-04:
   confidence.
 - `quiz` and `ask` render inline LaTeX through pi-tui's `renderLatex`
   (`tools/pack-extensions.test.ts`, "quiz math").
+
+- `interactive` plugin 0.3.2: the installed build was stale and never sent `interactive-dispose`.
+  It is rebuilt with `tools/interactive-plugin`, and `tools/interactive-plugin.test.ts` fails when
+  `src/` changes without a rebuild. The plugin also sends `interactive-visibility`, styles
+  `.sr-only`, and no longer grants `allow-same-origin` to `html-embed` frames.
+- `tools/figure-shot` renders an `interactive` figure to PNG in light and dark with headless Chrome.
 
 Not checked: no session has run on this text. No figure has been checked against the new anatomy
 in Obsidian. Display math and matrices in quiz text stay raw source, because a widget line holds
@@ -144,7 +154,7 @@ review-evidence fields and vault placement still require the convention check be
 
 ### Vault convention reconciliation
 
-Inspected 2026-11-03: the vault's `Knowledge/Meta/Vault/Vault-Contract.md` exists, but
+Inspected 2026-11-03: the vault's `Knowledge/Meta/Vault-Contract.md` exists, but
 `obsidian/scripts/vault contract` reports no configured contract. The Obsidian skill explicitly
 permits following existing conventions in this case. Reading that note establishes conventions;
 it does not mean the Pi extension's digest gate is enabled. Configuration of the optional gate

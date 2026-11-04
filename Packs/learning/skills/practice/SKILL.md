@@ -45,7 +45,7 @@ its concept note or in the domain's `Claims/` folder, so find claims by `type`, 
    each success. Lower one of them after a stall.
 4. **Retest.** Before the session ends, retest every miss, every problem that needed many
    hints, and every problem the student gave up. Use a new surface, never the original one.
-5. **Close.** Append one line to `Knowledge/Meta/Learning Log.md`:
+5. **Close.** Append one line to `Resources/Learning Log.md`:
    `- YYYY-MM-DD · practice · <topic> · claims: [[A]], [[B]] · weak: [[C]] · next: <suggestion>`.
    Write no other note.
 

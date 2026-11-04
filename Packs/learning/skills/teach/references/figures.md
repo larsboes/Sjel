@@ -22,7 +22,8 @@ Read this at Phase 3, step 3, when a figure carries the idea better than text do
 | Physical mechanism: a lock, a pump, a gauge | Anatomy figure | `html-embed` block |
 
 Most teaching figures are the second row. Use Anatomy only when the student understands the
-concept by recognizing a machine.
+concept by recognizing a machine. Anatomy's own description matches any diagram request. In a
+teaching session this table decides, and Anatomy loads only for the third row.
 
 ## Anatomy of a teaching figure
 
@@ -38,7 +39,8 @@ A small simulation of one mechanism, usually 2–8 KB of HTML. From top to botto
 6. A caption with the model's assumptions ("each queue holds 20 units, each stage passes at most
    10 per tick").
 
-A visually hidden heading describes the whole behaviour in one sentence, for screen readers and
+A visually hidden heading (`class="sr-only"`, styled by the plugin) describes the whole
+behaviour in one sentence, for screen readers and
 for search.
 
 ## Rules for every interactive figure
@@ -84,6 +86,10 @@ height: 380
   root with `document.currentScript.parentElement` and scope every DOM lookup to it.
 - Register one `interactive-dispose` listener on the root. It clears timers, animation frames
   and global listeners.
+- Listen for `interactive-visibility` on the root. Pause animation when `event.detail.visible`
+  is false and resume it when true. Assume the figure is visible when its script starts.
+- Native scripts run with Obsidian's own privileges. Never call `require`, `fetch`, or any API
+  outside the figure's root.
 - Use the vault theme variables `--text-normal`, `--text-muted`, `--background-secondary`,
   `--interactive-accent` and `--font-monospace`. Listen for `obsidian-theme-change`.
 
@@ -92,8 +98,11 @@ height: 380
 - Anatomy is an upstream skill (`upstreams.toml`, `[anatomy]`), installed globally in
   `~/.agents/skills/anatomy`. Load it by name. If it is not installed, write a hand-written
   figure instead.
-- Build only Anatomy's Figure tier (one mechanism, 40–80 parts) during a session. A Hero or an
-  Epic takes hours. Propose it as follow-up work, not as a teaching step.
+- Build only Anatomy's Figure tier (one mechanism, 40–80 parts) during a session. A Figure can
+  take up to an hour, so do not make the student wait: start the build in a background `Agent`
+  (pi-subagents in Pi, the Agent tool in Claude Code) and keep teaching. Use a hand-written
+  figure or no figure for the current step, and embed the Anatomy figure when the agent reports.
+- A Hero or an Epic takes hours. Propose it as follow-up work, not as a teaching step.
 - Anatomy's `build.mjs` writes a standalone page. Copy that page to
   `<note folder>/Assets/<kebab-name>.html`, or to the place the vault contract sets.
 - Embed it with `html-embed`, not `interactive`. The native renderer keeps only the children of
@@ -104,8 +113,10 @@ height: 380
 
 ## Check before embedding
 
-1. Render the figure to a PNG and read the PNG. For SVG, use `qlmanage -t -s 1000 -o /tmp
-   <file>.svg`. For an Anatomy page, use its `scripts/capture.mjs`.
+1. Render the figure to a PNG and read the PNG. For an `interactive` figure, run
+   `tools/figure-shot <asset.html>` in the Sjel checkout; it renders light and dark. For SVG, use `qlmanage -t -s 1000 -o /tmp
+   <file>.svg`. For an Anatomy page, use
+   `node ~/.agents/skills/anatomy/scripts/capture.mjs` (Anatomy's `references/verify.md`).
 2. Open the note in Obsidian and check both themes, the note width, the controls and a reopen of
    the note.
 3. If step 2 did not run, say so in the session report.

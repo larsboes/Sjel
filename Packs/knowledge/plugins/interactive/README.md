@@ -21,7 +21,8 @@ The path above illustrates the installed block contract; resolve the actual dest
 the active vault's current rules. The optional `title:` names the figure; omit `height:` for
 automatic height. Keep selectors and DOM lookups scoped to the figure's root so multiple embeds
 do not interfere. Register a one-shot `interactive-dispose` listener on that root to clean up timers, animation
-frames and listeners before a rerender or note teardown. Read `native-renderer.ts` before adding
+frames and listeners before a rerender or note teardown. Listen for `interactive-visibility` on the root to pause
+animation while the figure is offscreen; `event.detail.visible` carries the state. Read `native-renderer.ts` before adding
 lifecycle code. Inspect `theme.ts` and use the
 plugin's theme variables and `obsidian-theme-change` event instead of fixing one theme.
 

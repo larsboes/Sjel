@@ -118,7 +118,7 @@ The renderer sends that event before replacing content, when a note block is rem
 the plugin unloads. Asset reads that finish after teardown or a newer render are ignored.
 [`plugins/interactive/README.md`](plugins/interactive/README.md) owns the embedding guidance for figures.
 
-Build with `bun build Packs/knowledge/plugins/interactive/src/main.ts --target browser
---format cjs --external obsidian --outfile <staging>/main.js`. The installed plugin lives in the
-active vault's `.obsidian/plugins/interactive/`; resolve the vault through the Obsidian skill,
-retain the previous bundle before replacing it, and reload the plugin to activate the build.
+Build with `tools/interactive-plugin build`, or build and install into the active vault with
+`tools/interactive-plugin install`. The install keeps the previous bundle in
+`.obsidian/interactive-plugin.prev/`. Reload the plugin in Obsidian to activate a build.
+`tools/interactive-plugin.test.ts` fails when the built or the installed copy is older than `src/`.

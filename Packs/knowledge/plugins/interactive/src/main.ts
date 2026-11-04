@@ -146,6 +146,13 @@ export default class HtmlEmbedPlugin extends Plugin {
       );
     }
 
+    // Figures pause offscreen by listening for this event on their root.
+    const visibility = new IntersectionObserver(([e]) => {
+      wrap.dispatchEvent(new CustomEvent('interactive-visibility', { detail: { visible: e.isIntersecting } }));
+    });
+    visibility.observe(wrap);
+    child.register(() => visibility.disconnect());
+
     this.nativeEntries.add(entry);
     child.register(() => {
       entry.destroy?.();
@@ -167,7 +174,8 @@ export default class HtmlEmbedPlugin extends Plugin {
     el.empty();
     const wrap = el.createDiv({ cls: 'html-embed' });
     const iframe = wrap.createEl('iframe', { cls: 'html-embed-frame' });
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+    // Without allow-same-origin: together with allow-scripts it lets the frame reach the parent window.
+    iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('title', opts.title ? String(opts.title) : opts.file ? `HTML embed: ${opts.file}` : 'HTML embed');

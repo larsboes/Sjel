@@ -1,0 +1,40 @@
+#!/bin/bash
+# tools/figure-shot — render an `interactive` figure to PNG, light and dark, with headless Chrome.
+#
+#   tools/figure-shot <asset.html> [width] [height]   -> <tmp>/<name>-light.png, <name>-dark.png
+#
+# The figure is mounted the way the interactive plugin mounts it: inside one root element, so
+# `document.currentScript.parentElement` is the root. The page sets approximate Obsidian theme
+# variables. This proves the figure runs and lays out. It does not prove the Obsidian render:
+# check the note in Obsidian as well.
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+set -euo pipefail
+
+asset="${1:?usage: tools/figure-shot <asset.html> [width] [height]}"
+width="${2:-760}"
+height="${3:-560}"
+styles="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)/Packs/knowledge/plugins/interactive/styles.css"
+chrome="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+[ -x "$chrome" ] || { echo "figure-shot: Chrome not found; set CHROME" >&2; exit 1; }
+
+out="$(mktemp -d)"
+name="$(basename "$asset" .html)"
+for theme in light dark; do
+  if [ "$theme" = light ]; then
+    vars='--background-primary:#ffffff;--background-secondary:#f6f6f6;--text-normal:#222222;--text-muted:#5c5c5c;--text-faint:#999999;--interactive-accent:#7b6cd9;--background-modifier-border:#e0e0e0;--text-error:#d04255;--text-success:#08b94e;--text-warning:#ec7500;'
+    bg='#ffffff'
+  else
+    vars='--background-primary:#1e1e1e;--background-secondary:#262626;--text-normal:#dadada;--text-muted:#a3a3a3;--text-faint:#666666;--interactive-accent:#8a7ce6;--background-modifier-border:#363636;--text-error:#fb464c;--text-success:#44cf6e;--text-warning:#e9973f;'
+    bg='#1e1e1e'
+  fi
+  page="$out/$name-$theme.html"
+  {
+    printf '<!doctype html><html><head><meta charset="utf-8"><style>%s</style><style>:root{%s--font-monospace:ui-monospace,Menlo,monospace;--font-text:-apple-system,sans-serif;--radius-s:4px;--radius-m:8px}body{margin:16px;background:%s;color:var(--text-normal);font-family:var(--font-text)}</style></head>' "$(cat "$styles")" "$vars" "$bg"
+    printf '<body class="theme-%s"><div class="interactive-native" data-theme="%s">' "$theme" "$theme"
+    cat "$asset"
+    printf '</div></body></html>'
+  } > "$page"
+  "$chrome" --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=3000 \
+    --window-size="$width,$height" --screenshot="$out/$name-$theme.png" "file://$page" >/dev/null 2>&1
+  echo "$out/$name-$theme.png"
+done

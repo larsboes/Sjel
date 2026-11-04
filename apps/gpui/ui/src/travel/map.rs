@@ -36,6 +36,31 @@ const TILE_LEVELS_KEPT: i32 = 4;
 /// the four kept levels, which is what stops a pan from discarding the level it just had.
 const TILE_BUDGET: usize = 400;
 
+#[cfg(target_os = "macos")]
+fn scroll_direction_factor() -> f64 {
+    use std::sync::atomic::{AtomicI8, Ordering};
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    static FACTOR: AtomicI8 = AtomicI8::new(1);
+
+    INIT.call_once(|| {
+        let natural = std::process::Command::new("defaults")
+            .args(["read", "-g", "com.apple.swipescrolldirection"])
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .map(|s| s.trim() == "1")
+            .unwrap_or(false);
+        FACTOR.store(if natural { -1 } else { 1 }, Ordering::Relaxed);
+    });
+    f64::from(FACTOR.load(Ordering::Relaxed))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn scroll_direction_factor() -> f64 {
+    1.0
+}
+
 impl Travel {
     pub(super) fn map_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut page = div().flex().flex_col().gap_3();
@@ -555,6 +580,7 @@ impl Travel {
         if delta == 0. {
             return;
         }
+        let delta = delta * scroll_direction_factor();
         let cursor = self.cursor_in_map(event.position);
         self.zoom_by(delta.clamp(-1.5, 1.5), cursor, cx);
     }
@@ -573,15 +599,18 @@ impl Travel {
     }
 
     /// Pointer position in map points. The event carries window coordinates, so the map's
-    /// own top-left corner, recorded by the canvas, is subtracted and the result clamped to
-    /// the map: a wheel event that lands on the border must not anchor outside the image.
+    /// own top-left corner, recorded by the canvas, is subtracted. If the pointer is outside
+    /// the map rectangle, None is returned so zooming falls back to the map center.
     fn cursor_in_map(&self, position: gpui::Point<gpui::Pixels>) -> Option<(f32, f32)> {
         let (width, height) = self.viewport;
         if width < 1. || height < 1. {
             return None;
         }
-        let x = (f32::from(position.x) - self.origin.0).clamp(0., width);
-        let y = (f32::from(position.y) - self.origin.1).clamp(0., height);
+        let x = f32::from(position.x) - self.origin.0;
+        let y = f32::from(position.y) - self.origin.1;
+        if x < 0. || x > width || y < 0. || y > height {
+            return None;
+        }
         Some((x, y))
     }
 
@@ -770,6 +799,7 @@ impl Travel {
             .border_1()
             .border_color(rgba(palette.border))
             .bg(rgb(palette.surface >> 8))
+            .track_focus(&self.focus)
             .child(
                 canvas(
                     move |bounds, window, cx| {
@@ -809,9 +839,21 @@ impl Travel {
                 cx.stop_propagation();
                 view.on_pinch(event, cx);
             }))
+            .on_key_down(cx.listener(|view, event: &gpui::KeyDownEvent, _, cx| {
+                let key = event.keystroke.key.as_str();
+                if key == "+" || key == "=" || key == "add" || key == "numpad_add" {
+                    cx.stop_propagation();
+                    view.zoom_by(1., None, cx);
+                } else if key == "-" || key == "_" || key == "subtract" || key == "numpad_subtract"
+                {
+                    cx.stop_propagation();
+                    view.zoom_by(-1., None, cx);
+                }
+            }))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
+                cx.listener(|view, event: &gpui::MouseDownEvent, window, cx| {
+                    view.focus.focus(window, cx);
                     if event.click_count == 2 {
                         let cursor = view.cursor_in_map(event.position);
                         let delta = if event.modifiers.shift { -1. } else { 1. };
@@ -824,13 +866,8 @@ impl Travel {
             )
             .on_mouse_down(
                 MouseButton::Middle,
-                cx.listener(|view, event: &gpui::MouseDownEvent, _, cx| {
-                    if event.modifiers.platform || event.modifiers.control {
-                        let cursor = view.cursor_in_map(event.position);
-                        let delta = if event.modifiers.shift { -1. } else { 1. };
-                        view.zoom_by(delta, cursor, cx);
-                        return;
-                    }
+                cx.listener(|view, event: &gpui::MouseDownEvent, window, cx| {
+                    view.focus.focus(window, cx);
                     view.drag = Some(event.position);
                     view.map_dragged = false;
                 }),
@@ -845,6 +882,14 @@ impl Travel {
                         return;
                     }
                     view.map_dragged = true;
+                    if event.modifiers.platform || event.modifiers.control {
+                        let dy = f64::from(f32::from(previous.y - event.position.y));
+                        if dy != 0. {
+                            let cursor = view.cursor_in_map(event.position);
+                            view.zoom_by(dy * 0.015, cursor, cx);
+                        }
+                        return;
+                    }
                     if let Some(center) = view.center {
                         let zoom = view.zoom;
                         let (x, y) = center.world_at(zoom);
@@ -868,10 +913,18 @@ impl Travel {
             )
             .on_mouse_up(
                 MouseButton::Middle,
-                cx.listener(|view, _, _, cx| {
-                    if view.drag.take().is_some() && view.map_dragged {
-                        view.settle_map(cx);
-                        cx.notify();
+                cx.listener(|view, event: &gpui::MouseUpEvent, _, cx| {
+                    if view.drag.take().is_some() {
+                        if !view.map_dragged
+                            && (event.modifiers.platform || event.modifiers.control)
+                        {
+                            let cursor = view.cursor_in_map(event.position);
+                            let delta = if event.modifiers.shift { -1. } else { 1. };
+                            view.zoom_by(delta, cursor, cx);
+                        } else if view.map_dragged {
+                            view.settle_map(cx);
+                            cx.notify();
+                        }
                     }
                 }),
             )
@@ -1366,7 +1419,7 @@ mod tests {
         let slot: Rc<RefCell<Option<Entity<Travel>>>> = Rc::new(RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| Travel::new(None, Density::Desktop));
+            let view = cx.new(|cx| Travel::new(None, Density::Desktop, cx));
             view.update(cx, |view, _| {
                 // A saved trip with two known stops: the Map subpage renders the map element
                 // only when there is a plan to draw.
@@ -1571,6 +1624,77 @@ mod tests {
         assert_eq!(
             view.read_with(cx, |view, _| (view.zoom, view.center)),
             before
+        );
+    }
+
+    #[gpui::test]
+    fn cmd_middle_drag_and_keys_zoom_map(cx: &mut TestAppContext) {
+        use gpui::{KeyDownEvent, Keystroke, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
+
+        let (view, cx) = map_view(cx);
+        let (origin, viewport) = view.read_with(cx, |view, _| (view.origin, view.viewport));
+        let start_zoom = view.read_with(cx, |view, _| view.zoom);
+        let at = point(
+            px(origin.0 + viewport.0 / 2.),
+            px(origin.1 + viewport.1 / 2.),
+        );
+
+        // Focus the map by clicking it
+        cx.simulate_mouse_move(at, None, Modifiers::none());
+        cx.simulate_click(at, Modifiers::none());
+
+        // 1. Plus key zooms in
+        cx.simulate_event(KeyDownEvent {
+            keystroke: Keystroke::parse("+").unwrap(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        let after_plus = view.read_with(cx, |view, _| view.zoom);
+        assert!(
+            after_plus > start_zoom,
+            "+ key zooms in: {after_plus} > {start_zoom}"
+        );
+
+        // 2. Minus key zooms out
+        cx.simulate_event(KeyDownEvent {
+            keystroke: Keystroke::parse("-").unwrap(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        let after_minus = view.read_with(cx, |view, _| view.zoom);
+        assert!(
+            after_minus < after_plus,
+            "- key zooms out: {after_minus} < {after_plus}"
+        );
+
+        // 3. Cmd + Middle mouse drag upward zooms in
+        let cmd = Modifiers {
+            platform: true,
+            ..Default::default()
+        };
+        cx.simulate_event(MouseDownEvent {
+            button: MouseButton::Middle,
+            position: at,
+            modifiers: cmd,
+            click_count: 1,
+            first_mouse: false,
+        });
+        let dragged = point(at.x, at.y - px(50.));
+        cx.simulate_event(MouseMoveEvent {
+            position: dragged,
+            pressed_button: Some(MouseButton::Middle),
+            modifiers: cmd,
+        });
+        cx.simulate_event(MouseUpEvent {
+            button: MouseButton::Middle,
+            position: dragged,
+            modifiers: cmd,
+            click_count: 1,
+        });
+        let after_drag = view.read_with(cx, |view, _| view.zoom);
+        assert!(
+            after_drag > after_minus,
+            "Cmd+Middle drag upward zooms in: {after_drag} > {after_minus}"
         );
     }
 }

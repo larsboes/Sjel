@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use futures::future::AbortHandle;
-use gpui::{point, prelude::*, px, AnyElement, Context, Point, Render, ScrollHandle, Window};
+use gpui::{
+    point, prelude::*, px, AnyElement, Context, FocusHandle, Point, Render, ScrollHandle, Window,
+};
 use gpui_kit::component::button::Button;
 use sjel_gpui_core::{
     calendar::{TripDraft, TripDrafts, TripMaterialization},
@@ -24,6 +26,7 @@ mod pages;
 mod vector;
 
 pub struct Travel {
+    pub(super) focus: FocusHandle,
     source: Option<Source>,
     plans: Vec<Plan>,
     selected: Option<String>,
@@ -183,8 +186,9 @@ pub struct LocationMarker {
 }
 
 impl Travel {
-    pub fn new(source: Option<Source>, density: Density) -> Self {
+    pub fn new(source: Option<Source>, density: Density, cx: &mut Context<Self>) -> Self {
         Self {
+            focus: cx.focus_handle(),
             source,
             plans: Vec::new(),
             selected: None,
@@ -254,6 +258,10 @@ impl Travel {
 
     pub fn scroll_handle(&self) -> ScrollHandle {
         self.scroll.clone()
+    }
+
+    pub fn focus_handle(&self) -> FocusHandle {
+        self.focus.clone()
     }
 
     pub fn route(&self) -> &TravelRoute {

@@ -250,7 +250,11 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("z", DocToggleZoom, Some(PAGE_KEYS)),
         KeyBinding::new("+", ZoomIn, Some(PAGE_KEYS)),
         KeyBinding::new("=", ZoomIn, Some(PAGE_KEYS)),
+        KeyBinding::new("shift-=", ZoomIn, Some(PAGE_KEYS)),
+        KeyBinding::new("shift-+", ZoomIn, Some(PAGE_KEYS)),
         KeyBinding::new("-", ZoomOut, Some(PAGE_KEYS)),
+        KeyBinding::new("_", ZoomOut, Some(PAGE_KEYS)),
+        KeyBinding::new("shift--", ZoomOut, Some(PAGE_KEYS)),
         KeyBinding::new("cmd-=", UiZoomIn, None),
         KeyBinding::new("cmd-+", UiZoomIn, None),
         KeyBinding::new("shift-cmd-=", UiZoomIn, None),
@@ -429,10 +433,11 @@ impl Workspace {
         let ask = cx.new(|_| Ask::new(repo.clone()));
         let accounts = cx.new(|_| crate::accounts::Accounts::new(repo.clone()));
         let clipper_settings = cx.new(|_| crate::clipper::ClipperSettings::new());
-        let travel = cx.new(|_| {
+        let travel = cx.new(|cx| {
             sjel_gpui_ui::travel::Travel::new(
                 repo.shell().ok().map(sjel_gpui_core::travel::Source::Shell),
                 sjel_gpui_ui::Density::Desktop,
+                cx,
             )
         });
         let documents = cx.new(|_| Documents::new(repo.clone()));
@@ -2263,7 +2268,9 @@ impl Render for Workspace {
                         _ => {
                             let lines = match event.delta {
                                 gpui::ScrollDelta::Lines(delta) => delta.y,
-                                gpui::ScrollDelta::Pixels(delta) => delta.y / px(UI_SCROLL_PIXELS_PER_STEP),
+                                gpui::ScrollDelta::Pixels(delta) => {
+                                    delta.y / px(UI_SCROLL_PIXELS_PER_STEP)
+                                }
                             };
                             view.ui_zoom_gesture += lines;
                             let steps = view.ui_zoom_gesture.trunc();

@@ -1111,7 +1111,7 @@ impl Capabilities {
             found: Vec::new(),
             joining: false,
             active_tab: launch_tab(),
-            travel: cx.new(|_| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile)),
+            travel: cx.new(|cx| sjel_gpui_ui::travel::Travel::new(None, Density::Mobile, cx)),
             projects: None,
             calendar,
             people,

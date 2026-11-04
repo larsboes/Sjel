@@ -91,6 +91,10 @@
       }
     },
     {
+      "name": "containment",
+      "kind": "lib"
+    },
+    {
       "name": "content-item",
       "kind": "lib"
     },

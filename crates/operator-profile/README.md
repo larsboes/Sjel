@@ -21,4 +21,4 @@ The test that the profile is wired in comes from the PRD's Q14: an answer names 
 operator that the prompt did not contain. Format rules (no preamble, earned length) are a floor,
 not this test.
 
-No actual profile data or generated instruction text belongs in this repository. Recommendations, automatic learning, dashboard editing, skills, and memory are outside this first slice.
+No actual profile data or generated instruction text belongs in this repository. Recommendations, automatic learning, interactive editing, skills, and memory are outside this first slice.

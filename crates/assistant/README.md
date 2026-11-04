@@ -1,6 +1,6 @@
 # Assistant
 
-An OpenAI-compatible chat client for the dashboard and native Ask. Local is the default. Optional
+An OpenAI-compatible chat client for GPUI Ask. Local is the default. Optional
 cloud roles may be configured in the private overlay; they appear in Ask only when the role,
 provider review, billing policy, and credential are ready.
 
@@ -18,7 +18,7 @@ Add a dedicated role to the overlay's `config/inference.json`; do not repurpose
 ```
 
 The backend must resolve to a loopback URL. `max_input_tokens` is required; the service enforces
-its value as a conservative UTF-8 byte ceiling, and the dashboard uses that ceiling when planning
+its value as a conservative UTF-8 byte ceiling, and clients use that ceiling when planning
 fits. The shared example is in
 [`crates/inference/inference.config.example.json`](../../crates/inference/inference.config.example.json).
 

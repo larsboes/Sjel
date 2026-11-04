@@ -162,7 +162,7 @@ owning area plan and keep any screenshots or logs containing personal values pri
 
 ## Install a shell-only node
 
-This is a source-based operator workflow. A shell-only node serves the dashboard and lifecycle
+This is a source-based operator workflow. A shell-only node serves the status and lifecycle
 API; it does not yet provide a household's populated calendar, feed or travel data. Capabilities
 are configuration choices within the checkout, not separately downloaded packages. The steps
 below describe the current implementation; a clean-machine installation has not been rehearsed
@@ -170,8 +170,8 @@ as part of this documentation update.
 
 ### 1. Prepare the source and host tools
 
-Use macOS or Linux with Git, Bash, a Rust toolchain and the platform compiler/linker. The web
-build also needs Bun. [toolchain.toml](../../../toolchain.toml) owns the full host-tool requirements
+Use macOS or Linux with Git, Bash, a Rust toolchain and the platform compiler/linker.
+[toolchain.toml](../../../toolchain.toml) owns the full host-tool requirements
 and platform installation hints; check its report after setup rather than assuming these four
 tools satisfy every enabled capability or maintenance workflow. Containers and local models
 are unnecessary for the shell-only service.
@@ -210,35 +210,19 @@ the value. The script uses the login Keychain plus a runtime file on macOS; on L
 file is the credential's only copy. Configuration holds its path, never the value. Provision
 this before starting the node; do not disable the gate to get through onboarding.
 
-### 3. Build and start the shell
+### 3. Build and start the status service
 
-From the checkout, build the static dashboard:
+From the checkout, start the `sjel-status` service:
 
 ```bash
-cd dashboard
-bun install --frozen-lockfile --ignore-scripts
-bun run build
-cd ..
 tools/service-runner.sh start sjel-status
 tools/service-runner.sh status sjel-status
 sjel capability url sjel-status
 ```
 
-The runner builds the service binary when required. `sjel-status` serves `dashboard/dist`, so
-the Vite development server is unnecessary during ordinary use. A missing web bundle leaves
-the API available but pages unavailable; a failed build must be resolved before continuing.
+The runner builds the service binary when required. `sjel-status` serves the status API.
 The printed URL reflects the current registry instead of assuming a port.
-
-For authenticated browser access on macOS, the operator installs the
-[Mac companion](../../../apps/mac/README.md#install) with `apps/mac/install`, then chooses
-**Open Dashboard** in its menu. This requires the Swift build tools and a valid code-signing
-identity. The companion exchanges its Keychain credential for a browser session without putting
-the credential in the URL. Opening the bare URL does not sign the browser in.
-
-Linux can run the node, but the Mac companion is unavailable there. An authenticated browser
-entry path must be configured and verified separately using the
-[listener and access contracts](../architecture/security.md). This workflow does not establish
-a turnkey Linux browser login. Phone pairing and the native clients have their own setup.
+Client applications connect through the native desktop and mobile interfaces (`apps/gpui`).
 
 ### 4. Verify persistence and the next login
 
@@ -250,9 +234,9 @@ tools/doctor
 
 Persistence installation changes the host's user service configuration. See
 [service persistence](persistence.md) for launchd, systemd and Linux lingering requirements.
-After the next reboot and user login, repeat the status and persistence checks and open the
-authenticated dashboard. A rendered unit alone does not prove recovery after reboot. Confirm
-the page and its API data load; `/health` alone does not establish that the interface works.
+After the next reboot and user login, repeat the status and persistence checks. A rendered unit
+alone does not prove recovery after reboot. Confirm the service and its API data load; `/health`
+alone does not establish that the interface works.
 
 ### 5. Disable a capability without deleting its data
 
@@ -275,18 +259,17 @@ shell once it is stopped; keep it enabled while retiring optional capabilities.
 Measure runtime artifacts separately from the source checkout and build caches:
 
 ```bash
-du -sk target/release/sjel-status target/release/sjel-cli dashboard/dist
+du -sk target/release/sjel-status target/release/sjel-cli
 sjel storage target --json
 ```
 
-The first command measures allocated disk blocks for the shell server, CLI and static web
-bundle at their deployment paths. The storage command resolves the active Cargo target
-directory, which may differ from the checkout's service binaries. Do not add a target directory
-total to the binaries it already contains. `dashboard/node_modules` is build input; serving the
-static dashboard does not require a Vite process.
+The first command measures allocated disk blocks for the status server and CLI at their
+deployment paths. The storage command resolves the active Cargo target directory, which may
+differ from the checkout's service binaries. Do not add a target directory total to the binaries
+it already contains.
 
-Measured on 2026-10-17, existing local artifacts occupied 13.77 MiB for `sjel-status`, 13.75 MiB
-for `sjel-cli`, and 12.45 MiB for `dashboard/dist`: **39.96 MiB combined**. This is a shell
+Measured on 2026-10-17, existing local artifacts occupied 13.77 MiB for `sjel-status` and 13.75 MiB
+for `sjel-cli`: **27.52 MiB combined**. This is a core runtime artifact inventory, not an
 artifact inventory, not an independently installable package or a minimum disk requirement.
 It excludes the source checkout, host tools and libraries, helper binaries, private configuration,
 database, logs, backups and any selected domain services, models or container images. Artifact

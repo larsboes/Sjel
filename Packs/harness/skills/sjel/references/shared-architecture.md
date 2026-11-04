@@ -8,8 +8,8 @@ facts here.
 
 Sjel has three architectural nouns:
 
-- **Spine**: repository identity, contracts, shared libraries, tools, and the dashboard shell.
-- **Capability**: one bounded domain, external system, or data store under `capabilities/`.
+- **Spine**: repository identity, contracts, shared libraries, tools, and the native GPUI client.
+- **Capability**: one bounded domain, external system, or data store under `crates/` or `services/`.
 - **Pack**: public, harness-neutral agent know-how that drives capabilities through contracts.
 
 The public repository owns reusable code and doctrine. Exactly one active private overlay owns
@@ -20,8 +20,8 @@ fork public capability code.
 
 - Capabilities depend downward on shared schemas and libraries.
 - Cross-capability runtime use goes through a declared service contract, not a source-code import.
-- Promote shared code to `libs/` only when it has multiple consumers and owns no domain.
-- Keep the dashboard presentation-only; domain state and behavior remain capability-owned.
+- Promote shared code to libraries only when it has multiple consumers and owns no domain.
+- Keep the UI presentation-only; domain state and behavior remain capability-owned.
 - Prefer integrating a self-authored project unless product identity, collaboration, device-sync,
   or overlay ownership gives it an independent lifecycle.
 

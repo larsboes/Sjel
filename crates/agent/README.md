@@ -178,7 +178,7 @@ that is the only reason this surface cannot leak a private value to a provider.
 
 - **A coding route on `crates/assistant`.** The stream, steer and stop plumbing is already
   there, which is what makes it tempting. It contradicts the README rule directly and puts `bash`
-  behind the port the dashboard already proxies.
+  behind the port clients already reach.
 - **The loop inside `apps/gpui`.** Declined above: no phone path, and a second copy of the gates.
 - **`tools/agentbox` as the runtime.** A container is a stronger fence than the guard, and
   agentbox already runs one. It also records the price — `--network none` takes the model with it,

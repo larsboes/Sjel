@@ -2,7 +2,7 @@
 
 UI craftsmanship, dense operational interface design, anti-vibe-coding doctrine, typography, and mechanical sympathy across Sjel's web and native interfaces.
 
-- **`ui-craftsmanship`**: Guides interface design across the Dashboard, capability UIs, and native clients. It keeps shared product concepts coherent across devices while adapting interaction patterns to each platform.
+- **`ui-craftsmanship`**: Guides interface design across capability surfaces and native clients (GPUI on macOS and iOS). It keeps shared product concepts coherent across devices while adapting interaction patterns to each platform.
 
 ## Activation
 

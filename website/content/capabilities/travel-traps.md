@@ -102,5 +102,4 @@ number describes.
 An all-day entry covering only 2026-08-14 stores `starts_at = "2026-08-14"`,
 `ends_at = "2026-08-15"`. A trips plan's date window is inclusive, so handing it to calendar
 means converting the `to` bound; forgetting moves the entry, or the query, by a day. The
-conversion lives once, in `whenOf` / `whenPatch` / `whenError` in
-`dashboard/src/lib/calendar/types.ts` — do not write a second one.
+conversion lives in `crates/calendar` and `apps/gpui/core/src/calendar.rs`.

@@ -1,7 +1,7 @@
 # CV
 
-Technical reference for `capabilities/cv`: one master file, filtered by profile and priority,
-rendered by Typst, edited from the dashboard, compared with LinkedIn.
+Technical reference for `crates/cv`: one master file, filtered by profile and priority,
+rendered by Typst, edited natively or via CLI, compared with LinkedIn.
 
 ```mermaid
 flowchart LR
@@ -10,7 +10,7 @@ flowchart LR
     A[applications/slug.yaml]
     L[linkedin/DOMAIN.json]
   end
-  UI["/cv page: form or YAML"] -->|PUT /cv/model, /cv/file| S[sjel-status]
+  UI["Client CV view"] -->|PUT /cv/model, /cv/file| S[sjel-status]
   S -->|stdin| C[cv-cli]
   CLI[cv launcher] --> C
   C -->|parse, render check, commit| M
@@ -29,14 +29,13 @@ flowchart LR
 
 | Path | Role |
 |---|---|
-| `capabilities/cv/src/model.rs` | Typed master and application. Unknown keys are parse errors. |
-| `capabilities/cv/src/lib.rs` | Auto-fit build, applications, checked writes, status. |
-| `capabilities/cv/src/linkedin.rs` | Snapshot pull, CSV-export import, diff, paste sheet. Read-only. |
-| `capabilities/cv/templates/cv.typ` | Filtering by profile, priority, pin and hide; the layout. |
-| `capabilities/cv/cv` | Launcher on PATH. Rebuilds `cv-cli` when a source is newer, then execs it. |
-| `capabilities/cv/check` | Every verb against a throwaway overlay built from the schema. |
-| `capabilities/sjel-status/src/status/cv.rs` | HTTP surface for the dashboard. Owner-only. |
-| `dashboard/src/lib/cv/` | Form editor components. |
+| `crates/cv/src/model.rs` | Typed master and application. Unknown keys are parse errors. |
+| `crates/cv/src/lib.rs` | Auto-fit build, applications, checked writes, status. |
+| `crates/cv/src/linkedin.rs` | Snapshot pull, CSV-export import, diff, paste sheet. Read-only. |
+| `crates/cv/templates/cv.typ` | Filtering by profile, priority, pin and hide; the layout. |
+| `crates/cv/cv` | Launcher on PATH. Rebuilds `cv-cli` when a source is newer, then execs it. |
+| `crates/cv/check` | Every verb against a throwaway overlay built from the schema. |
+| `crates/sjel-status/src/status/cv.rs` | HTTP surface. Owner-only. |
 
 ## Selection
 

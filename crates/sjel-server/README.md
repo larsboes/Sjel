@@ -20,8 +20,8 @@ call these ports: proxies and HTTP tooling that already speak `Authorization`, a
 browser extension and `curl` callers for which a dedicated header is one fewer thing to
 get wrong.
 
-`/health` and `/ready` answer before the gate. They are what the runner, the dashboard
-proxy and sjel-status poll to find out whether a process is alive; behind a token they
+`/health` and `/ready` answer before the gate. They are what the runner and sjel-status
+poll to find out whether a process is alive; behind a token they
 would report a healthy capability as down, and their answer carries nothing a caller
 could not learn by observing that the port accepts a connection. `/routes` is **not**
 exempt: a route manifest describes the surface, which is not liveness.
@@ -78,12 +78,12 @@ value; the token remains in the private file and Vaultwarden.
 
 Shared rather than per-capability because it gates one thing: whether an inbound request
 reached this machine legitimately. Twelve tokens would be twelve secrets for one boundary
-and twelve injections in every client that fans out across capabilities — the dashboard's
-Vite proxy and sjel-status' `/routes` aggregation both do exactly that.
+and twelve injections in every client that fans out across capabilities — sjel-status'
+`/routes` aggregation does exactly that.
 
 A capability may still pass its own token to `InboundAuth::resolve`, and it wins. comms'
-`api_secret_file` is the one caller that does, because the browser extension, `axon-clip`
-and the dashboard proxy already hold that value. A deployment converges the two by
+`api_secret_file` is the one caller that does, because the browser extension and `axon-clip`
+already hold that value. A deployment converges the two by
 pointing both references at one file.
 
 ### Why the loopback rule is now a type
@@ -121,7 +121,7 @@ none.
 
 A second, narrower gate, for the capabilities that serve C2 data to a browser.
 `origin::refuse_foreign_origins` answers **403** when a request carries an `Origin`
-header this deployment does not serve the dashboard from. Refusing the request — rather
+header this deployment does not recognize. Refusing the request — rather
 than merely omitting CORS response headers — is what also stops a hostile page's
 "simple" cross-site POST, which a browser sends before it reads any response header.
 

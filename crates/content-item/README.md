@@ -1,4 +1,4 @@
-# libs/content-item
+# crates/content-item
 
 The `content-item-v2` reader contract in Rust. Spine-owned shared code with no
 domain of its own — see [Three architectural nouns](../../CONTRIBUTING.md#three-architectural-nouns).
@@ -8,7 +8,7 @@ so that the capabilities emitting it cannot drift from one another by hand.
 
 ## Why a shared contract and not a shared table
 
-A unified **read** contract pays for itself: the dashboard owns one renderer,
+A unified **read** contract pays for itself: client UI surfaces own one renderer,
 and a new source costs an adapter instead of a second reader. A unified
 **store** would not. Calendar enforces an exclusive `ends_at` after `starts_at`,
 a `(source, external_id)` unique index and a commitment CHECK; mail enforces a

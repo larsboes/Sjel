@@ -1,8 +1,8 @@
 # Media Ledger & Ingest Gate Architecture
 
-Technical reference manual for `capabilities/media`: the exact-byte ingest gate, the volume
-integrity ledger, and the read-only HTTP surface the dashboard's `/media` page reads. The operator
-workflow — every verb, its guards and its flags — is in [`capabilities/media/README.md`](../../../capabilities/media/README.md).
+Technical reference manual for `crates/media`: the exact-byte ingest gate, the volume
+integrity ledger, and the read-only HTTP surface. The operator
+workflow — every verb, its guards and its flags — is in [`crates/media/README.md`](../../../crates/media/README.md).
 
 ```mermaid
 flowchart TD
@@ -12,13 +12,13 @@ flowchart TD
         Mirror["Second volume\n(mirror target)"]
     end
 
-    subgraph Gate["Ingest gate · capabilities/media"]
+    subgraph Gate["Ingest gate · crates/media"]
         Ingest["ingest\nhash → compare → reserve → link → verify"]
         Index["index\naudit the tree against the ledger"]
         Verbs["organize · supersede · relabel · reclaim · mirror\noperator-invoked, each with an approval list"]
     end
 
-    subgraph Store["Shared store · capabilities/store"]
+    subgraph Store["Shared store · services/store"]
         Volumes[("media_volumes")]
         Files[("media_files")]
         Locations[("media_locations")]
@@ -29,7 +29,7 @@ flowchart TD
     subgraph Read["Read surfaces"]
         CLI["media status · duplicates · audit · preview"]
         HTTP["media serve\nGET /api/status · /api/ingests · /api/ingests/{id}"]
-        Panel["Dashboard /media\n(lib/media/MediaLedger.svelte)"]
+        Panel["Native client /media view"]
     end
 
     Staging --> Ingest

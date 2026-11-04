@@ -11,7 +11,7 @@ be read. Why a per-candidate read is the wrong shape is in
 
 ## Controls
 
-The dashboard's Systems page offers Auto, Normal and On the go, plus persistent exceptions.
+The GPUI Systems view offers Auto, Normal and On the go, plus persistent exceptions.
 The shell badge shows the effective mode and active exceptions. The operator CLI uses the same
 protected API:
 

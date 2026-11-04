@@ -41,7 +41,7 @@ at all.
   process to keep alive for nothing.
 
   The write is **owner-only**, and that was the deciding fact on 2026-10-13 when the
-  dashboard's Packs page grew its buttons. Agent reach looked like it needed a route, and a
+  client Packs view grew its controls. Agent reach looked like it needed a route, and a
   route with agent admission looked like it needed a capability that admits agents —
   `sjel-status` deliberately does not (`status/runtime.rs`), so the third option was this
   capability taking a port. Measured instead of assumed: the agent deny policy
@@ -87,9 +87,9 @@ Cut this manifest the day the ledgers stop being state worth keeping — if a fu
 derives ownership from the destination itself rather than from a recorded digest, the file
 it protects is gone and so is the reason for the row.
 
-Promote it to a process capability with its own port and panel only when `sjel-status`
+Promote it to a process capability with its own port only when `sjel-status`
 starts needing logic that is specific to Packs rather than a passthrough. Until then, a
-process here would be a port, a binary, a health check and a dashboard mount bought for a
+process here would be a port, a binary, a health check and a client mount bought for a
 JSON file that another service already hands over for free.
 
 Checked against this line on 2026-10-13, when the write route was added: the condition is

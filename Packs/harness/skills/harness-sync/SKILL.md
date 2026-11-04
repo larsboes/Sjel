@@ -45,10 +45,10 @@ harness on this machine, and deploying to an absent one leaves skills in a direc
 Every verb defaults to installed harnesses only; `--all-harnesses` overrides it and needs a reason.
 
 **2 — Read the matrix.** `tools/harnesses status [<pack>]`. One row per Pack skill, one column per
-harness: `·` current, `o` outdated, `D` drifted, `M` missing, blank not deployed. The dashboard's
-**Packs** page is the same matrix, read through `sjel-status` — and its three buttons
-(`sync`/`deploy`/`remove`) are this skill's `sync` and the per-harness `deploy`, offered where the
-defect is. Fixing a cell from the page is the same move as running the command: the page shells the
+harness: `·` current, `o` outdated, `D` drifted, `M` missing, blank not deployed. The GPUI
+**Packs** view presents this matrix, read through `sjel-status` — and its controls
+(`sync`/`deploy`/`remove`) invoke this skill's `sync` and the per-harness `deploy`, offered where the
+defect is. Fixing a cell from the view is the same move as running the command: it invokes the
 same launcher, so its refusals are the tool's own words. A `D` cell has no button there, because
 `sync` refuses drift and the fix is the decision below, not a click.
 

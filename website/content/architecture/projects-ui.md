@@ -22,8 +22,8 @@ mechanisms, the generative/intelligent UI evolution, and the upstream references
                  │ HTTP API
                  ▼
 ┌─────────────────────────────────┐
-│  Web Dashboard                  │ (Svelte 5 / Runes)
-│  dashboard/src/routes/projects/ │ ProjectsBoard.svelte & DatabaseTable.svelte
+│  GPUI Native Client             │ (macOS & iOS)
+│  apps/gpui                      │ Projects view & database tables
 └─────────────────────────────────┘
 ```
 
@@ -31,7 +31,7 @@ mechanisms, the generative/intelligent UI evolution, and the upstream references
 2. **Second copy**: Every write to a record renders its markdown to `<overlay>/data/projects/`.
 3. **Security boundary**: Attachments (`GET /api/file`) serve images and PDFs inline, while all other
    mime types (including HTML and SVGs with scripts) are served with `Content-Disposition: attachment`
-   and `sandbox` restrictions ([`capabilities/projects/src/server.rs:271`](../../../capabilities/projects/src/server.rs#L271)).
+   and `sandbox` restrictions ([`crates/projects/src/server.rs`](../../../crates/projects/src/server.rs)).
 
 ---
 
@@ -97,7 +97,7 @@ Sjel maintains two distinct public content trees:
 - `docs/`: How the system is designed, operated, configured, and migrated.
 - `research/`: Why the system exists, empirical benchmarks, and upstream audit verdicts.
 
-Both are intended to be hosted persistently on the dashboard (`/docs` and `/research`). Future work will unify
+Both are hosted persistently on the documentation site (`website/content`). Future work will unify
 their shared navigation, search, and reading paths so that architecture decisions directly cite their supporting
 empirical research and upstream audit entries.
 
@@ -107,7 +107,7 @@ empirical research and upstream audit entries.
 
 Implemented 2026-10-20 per user directive:
 - **Interactive Whole-Machine Schematic (`miele-w961-machine`)**:
-  - Registered in `dashboard/src/lib/figures/index.ts`.
+  - Registered in figure assets.
   - Illustrates the complete Miele Gala W 961 washing machine in isometric projection: outer cabinet, rear wall opening, 230V mains cable, mains filter 4364110, control console & electronics (EDFU/EL), drive motor & belt, honeycomb drum & suspended suds container, 2000W heater with NTC sensor, water inlet solenoid valves, drain pump with lint filter, and drain hose 1995932.
   - Interactive subsystem filters: All Systems, Power & Filter, Water Circuit, Drive & Drum, Drain & Pump, Safety & M1–M5.
   - Interactive clickable hotspot pins with live component readout card and direct navigation to project notes.

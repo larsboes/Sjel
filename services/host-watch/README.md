@@ -79,7 +79,7 @@ this: a runaway process is machine state, not an action a human wrote. So the fi
 stayed machine data and moved into a table this capability owns.
 
 **Who serves them.** `sjel-status`, at `GET /api/sjel-status/host-watch`, and the
-dashboard's decision ladder ranks them at band 900. This capability is a scheduled job —
+native client surfaces them. This capability is a scheduled job —
 it runs and exits, and the manifest schema refuses a port on a job because nothing would
 be listening on it — so something always-on has to publish the rows. `sjel-status` is
 that process and already answers "what is wrong with this machine"; the shape is the one
@@ -155,8 +155,8 @@ stops working. Raising `min_cpu_ratio` is nearly always the better answer.
   used to give are handled elsewhere now: the tool refuses a directory a live process
   holds, so a build cache cannot be deleted mid-compile, and a class acts from a schedule
   only when the policy itself bounds it by size or age (`cap_gb`, `older_than_days`) —
-  which is what `capabilities/cargo-trim` runs daily.
-- **A dashboard panel.** The decision ladder on home already ranks these findings, beside
+  which is what `crates/cargo-trim` runs daily.
+- **A separate status panel.** The client decision ladder already ranks these findings, beside
   everything else waiting on a call. A second place to look is the failure this exists to
   prevent.
 - **A server of its own.** It would need `autostart`, which the manifest schema refuses

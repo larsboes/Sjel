@@ -155,7 +155,7 @@ The phone works without the Mac for notes, tasks, capture and calendar today.
 
 ### A sync contract per domain
 
-Today each writable domain replays through routes built for the dashboard, with rules spread over
+Today each writable domain replays through individual routes, with rules spread over
 `core/src/sync.rs`. Every new writable domain uses one contract instead, declared in its
 capability's API crate ([`restructure.md`](restructure.md#3-layout)):
 

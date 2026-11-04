@@ -19,8 +19,7 @@ not invalidate a focused change, but it must not be described as passing.
 ## Claiming that the gates pass
 
 Say "the gates pass" only after all of these pass: `cargo test --workspace --locked`,
-`bun test`, every `tools/check-*.sh` gate, and `tools/check-architecture-fresh.sh`. `bun test`
-reaches `tools/*.test.ts`, which includes the four dashboard build gates.
+`bun test`, every `tools/check-*.sh` gate, and `tools/check-architecture-fresh.sh`.
 
 `tools/self check` compares tracked inputs only. Verify a gate claim about `origin/main` in a
 worktree.
@@ -30,12 +29,9 @@ configuration.
 
 ## When the claim is that a UI renders
 
-The dashboard suite is pure functions over view models. Nothing mounts a component, so no test
-sees an import-time crash, a rune used outside a compiled file, or a panel that draws empty.
-Measured 2026-09-30: 183 tests and `svelte-check` were green while every route served SvelteKit's
-own 500 page in a browser, because a module-scope probe read `globalThis.$state` — a property a
-browser defines as a getter that throws. When the claim is "the panel shows X", read the DOM at
-the tab's real viewport and compare its numbers against the source of truth, not against a 200.
+GPUI renders natively across macOS and iOS (`apps/gpui`). Verify view models and components
+through native integration tests or headless render passes. When testing against a demo stack,
+use `sjel demo up` and inspect actual layout metrics.
 
 Two Interceptor traps, both measured 2026-09-30, both of which look like a broken page:
 

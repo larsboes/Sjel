@@ -38,7 +38,7 @@ records them for the ranking model. The shell exchanges the app's deployment tok
 own credential (`capabilities/sjel-status/src/proxy.rs`). The Reading list draws one row per item
 on screen and keeps its place when a decision removes a row, so a month of entries scrolls as
 cheaply as a day of them (`ListState` in `src/feed.rs`). Digests, cloud processing, the review
-queue and the library stay in the dashboard for now. Feed's **Clips** tab lists the pages saved with
+queue and the library are planned for native views. Feed's **Clips** tab lists the pages saved with
 the Sjel Clipper and reads one. Clips and Clipper settings travel over comms' owner-only clip
 socket (`libs/clip-socket`), never through the shell, so they are read on the Mac only.
 
@@ -47,22 +47,19 @@ or All, filtered by category and grouped in the order `core/src/mail.rs` owns. x
 dismisses from Sjel, w toggles Gmail's Waiting label, e archives and # trashes, and the category
 buttons recategorize. Every write goes through `POST /comms/triage/bulk`. Archive, trash and the
 Tax or Receipts category (which redacts the stored subject and preview) ask first; Enter confirms
-and Escape cancels. o opens the thread in Gmail. Sweeps, reconciling and classification passes
-stay in the dashboard for now. The list renders 200 rows at a time.
+and Escape cancels. o opens the thread in Gmail. The list renders 200 rows at a time.
 
 **Inbox** sorts the capture inbox (comms `/captures`): links and thoughts from `sjel capture`, the
 iOS share sheet or its own field, where `#buy`, `#look`, `#go` and `#learn` set the tag. The
 rules in `core/src/capture.rs` suggest where each item goes: wishlist (inventory), feed or places.
 Nothing moves until r or the row's button sends it, or Apply sends every suggestion. e marks
-done, d dismisses, t cycles the tag, o opens the link and n types a new capture. The rules
-mirror `dashboard/src/lib/capture.ts`; change both together until the web page retires.
+done, d dismisses, t cycles the tag, o opens the link and n types a new capture.
 
 **Calendar** draws the calendar capability as a month grid or a week of day columns, with the
 selected day's entries beside it. Arrows or h/j/k/l move the day, [ and ] page, t is today, m and
 w switch the view, e steps through the day's entries, n adds one (title, time or all day, kind,
 commitment) and ⌫ deletes the selected one after Enter confirms. A day window is `[from, to)`
-(`capabilities/calendar/src/store.rs`); grids and the entry draft live in `core/src/calendar.rs`.
-Contexts, rhythms, free days, Google import and export, and trip drafts stay in the dashboard.
+(`crates/calendar/src/store.rs`); grids and the entry draft live in `core/src/calendar.rs`.
 
 **Documents** is a native local library view over the Documents capability. It filters Inbox, Filed, or All; searches filenames, extracted titles, categories and project labels; sorts by filename; and opens one record's locally extracted text and original PDF. The reader shows independent source proposals, exact evidence, disagreement, and append-only review history. Agree, Reject and Override record a review only; **File as …** remains a separate explicit filing action. Regenerate rules creates a new proposal run without replacing earlier records. Model-based classification is not wired yet.
 
@@ -81,7 +78,7 @@ rendering and reads under `ui/src/travel/`; `core/src/travel/` holds detail cont
 The clients read `/trips/api/plans` and load `/trips/api/plans/<id>` when a trip is opened, using
 the Mac shell or the phone's signed device client. Successful reads are saved locally with their
 timestamps. Open a trip while connected once to retain its items for offline reading. Refresh
-failures keep the previous answer visible. Creating plans and editing bookings use the dashboard.
+failures keep the previous answer visible.
 
 The default map uses OpenStreetMap raster tiles, GPUI images and labelled stops, without a webview or
 another rendering dependency. Drag to pan; the scroll wheel and a trackpad pinch zoom, both about
@@ -109,14 +106,13 @@ The phone needs the Mac once to obtain trips, but loads map tiles directly over 
 Opening Map loads its visible area automatically.
 
 **A typed place gets its coordinate here, and only here.** Trips stores a place as it was typed:
-the dashboard's place field mints `place:<slug>` with a null coordinate unless the operator picks
-a suggested station, and `trips draft-intent` does the same on purpose. Both maps downstream then
-had nothing to draw — the world overview in this app, and no pin in the dashboard. `core/src/travel/places.rs`
+the place input mints `place:<slug>` with a null coordinate unless the operator picks
+a suggested station, and `trips draft-intent` does the same on purpose. The map downstream then
+had nothing to draw — the world overview in this app. `core/src/travel/places.rs`
 resolves those names through `POST /places/api/geocode` (the capability that owns geocoding,
 started on demand) and keeps the answers in `places.json` beside the plan snapshot. A coordinate
 that arrives with the record is never overridden. The cache is why the map is instant on a second
-open and still correct offline; the dashboard reads the stored record and stays unresolved until
-the capability resolves it server-side. Places the geocoder cannot place keep reading
+open and still correct offline. Places the geocoder cannot place keep reading
 "Coordinates not available" — the map falls back to its world overview and the stops that do
 resolve still draw. While the first answer is in flight the map holds back its world-overview tile
 request rather than spending it on twelve tiles the fitted view throws away.
@@ -222,11 +218,8 @@ count of writes still queued, for the badge and the sync. The Mac app keeps no r
 It reads the host's database through `Repo`, so `Board::default_path` names a file only in the
 phone's app container, and `SJEL_REPLICA_PATH` is how the Mac tries the phone's view.
 
-The app and the web dashboard share one set of destinations. `core/src/route.rs` copies the paths
-and labels of `dashboard/src/lib/nav.ts`, and a test fails when the two differ. A page with a
-native view opens here. Every other destination opens the dashboard in the browser, logged in
-through a single-use ticket. `sjel://<path>` links follow the same rule: `sjel://capabilities`
-opens the native page, `sjel://calendar` opens the dashboard at `/calendar`.
+Navigation routes and deep links are resolved directly by `core/src/route.rs`. Every destination
+opens natively within the client. Deep links (`sjel://<path>`) follow the same routing.
 
 ## Why this shape: GPUI for every client
 
@@ -511,8 +504,8 @@ opens the panel without taking the speakers.
 
 ## The finder: one input for a search or a question
 
-⌘K opens one input over the window. It searches the pages, the app's actions, the dashboard
-destinations, and the projects, open tasks and notes in the Mac's database, and it asks. In
+⌘K opens one input over the window. It searches the pages, the app's actions,
+and the projects, open tasks and notes in the Mac's database, and it asks. In
 **Auto** the words decide: a question mark, an opening question or request word ("what",
 "summarize", "wann"), or five words and more make a question; a name or two keywords make a
 search (`core/src/search.rs`). The decision shows beside the input, ⌘↩ goes the other way, and ⌘/
@@ -542,10 +535,9 @@ matches, the finder says what Enter will do instead.
 | ⌘⇧[ / ⌘⇧] (also ⌃⇥, ⌘⌥←/→) | The tab before or after the open area's |
 | `g` + a letter | A page by chord: `g x` Systems, `g k` Packs, `g y` CV, `g ,` Settings |
 | ⌘R | Refresh |
-| ⌘D | Open the current page in the dashboard |
 | ⌘0 or ⌘⇧M | Slide the Soundscape panel in or away |
 | J / K, ↓ / ↑ | Select the next or previous row |
-| ↩ | Run the selected row's main action: Allow, Start, or open the calendar in the dashboard |
+| ↩ | Run the selected row's main action: Allow or Start |
 | ⌘⌫ | Run the selected row's costly action: Deny or Stop |
 | Esc | Clear the selection |
 

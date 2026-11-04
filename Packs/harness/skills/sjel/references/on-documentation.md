@@ -48,8 +48,6 @@ durable rule into the skill or the area plan that owns it.
 - Plans live in `PLAN.md` (order, state, decisions) and one file per area in `docs/plans/`. A
   README or manifest describes what is built and why. It holds no open-work list: move that to the
   area plan or an issue.
-- Dashboard routes in `dashboard/src/routes/` are thin orchestrators. Put boards, panels, cards,
-  and sheets in `dashboard/src/lib/<domain>/<Component>.svelte`.
 
 ## Register
 

@@ -75,7 +75,7 @@ why   = "Apple-Silicon inference server behind an API-key-enforced OpenAI-compat
 url   = "https://github.com/vladkens/macmon"
 kind  = "tool"
 local = "yes"
-why   = "Sudoless Apple Silicon performance monitor: CPU/GPU temp, power, memory, utilisation over HTTP/JSON for the dashboard Systems page."
+why   = "Sudoless Apple Silicon performance monitor: CPU/GPU temp, power, memory, utilisation over HTTP/JSON for the GPUI Systems view."
 
 [apple-natural-language]
 url   = "https://developer.apple.com/documentation/naturallanguage"

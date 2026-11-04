@@ -19,8 +19,7 @@ A shift during a live update breaks the reader's trust in what they see.
 - Durations come from the motion tokens (`--motion-fast`, `--motion-base`, `--motion-slow`).
   Hover and focus feedback uses the fast token. Panels use the base token. Nothing everyday
   goes past 300 ms.
-- Name the property you transition. `transition: all` is a defect
-  (`tools/dashboard-disclosure.test.ts` blocks it).
+- Name the property you transition. Avoid transitioning layout properties across siblings.
 - Respect reduced motion. Browser: a `@media (prefers-reduced-motion: reduce)` block that
   removes the animation.
 
@@ -28,8 +27,7 @@ A shift during a live update breaks the reader's trust in what they see.
 
 - Body text: at least 4.5:1 against its surface. Large text (18 px and up): at least 3:1.
 - Control borders, icons and focus rings: at least 3:1.
-- `tools/dashboard-contrast.test.ts` checks the text and tone tokens. A colour outside the
-  tokens is not checked, which is one more reason not to use one.
+- Maintain accessible contrast across text and tone tokens. Avoid ad-hoc colours outside the system palette.
 
 ## Depth in the dark theme
 

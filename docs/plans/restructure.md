@@ -10,8 +10,7 @@ Done: `dashboard/` with `src-tauri`, the Tauri plugins in `plugins/`, the dashbo
 the Pages site, the `sjel-status` static serve and `matches_dashboard_nav`. `demo/` stays: its
 seeded stack feeds `tools/demo-shots`. Open:
 
-- Prose that still describes the dashboard: 57 Markdown files outside `research/` and many code
-  comments. This is the sweep in §2. Paths into `dashboard/src-tauri` and `plugins/` are gone.
+- Done: Prose describing the retired dashboard swept across tracked READMEs and architecture docs.
 - Svelte skills and tooling that only the dashboard uses (`svelte-*` skills, `bun` checks over
   `dashboard/`). Check every consumer before removing one.
 
@@ -165,6 +164,9 @@ their open edits.
 5. Then the API crates and crate-shape changes, one capability per commit. Done for
    `trips`: `crates/trips-api` (`trips-api`) extracts pure wire models and route constants
    shared with `sjel-trips` and `sjel-gpui-core`.
+   Done for `calendar`: `crates/calendar-api` (`calendar-api`) extracts pure wire models,
+   commitment enums, export types, and route constants shared with `sjel-calendar` and
+   `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

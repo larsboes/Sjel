@@ -1,9 +1,9 @@
 # feed-sweep
 
-The scheduled source collector for [`capabilities/comms`](../comms/). Every 6 hours it runs
-the `feed-sweep` verb of [`tools/sjel-cli`](../../tools/sjel-cli/README.md), which calls comms'
+The scheduled source collector for [`crates/comms`](../../crates/comms/). Every 6 hours it runs
+the `feed-sweep` verb of [`crates/sjel-cli`](../../crates/sjel-cli/README.md), which calls comms'
 `POST /sources/scan` once and exits. Before this job
-existed, only a dashboard button called that route. On 2026-08-30 the newest feed item was nine days
+existed, only manual triggers called that route. On 2026-08-30 the newest feed item was nine days
 old on a machine that reported healthy.
 
 The job talks to comms over HTTP and never opens comms' database

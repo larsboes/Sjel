@@ -1,7 +1,7 @@
 # Visual hierarchy, typography and density
 
 Sjel is read many times a day. Hierarchy tells the reader where to look first. Density lets
-them compare without scrolling. Token names below are the dashboard's (`dashboard/src/app.css`).
+them compare without scrolling.
 
 ## Typography
 

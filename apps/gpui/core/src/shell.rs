@@ -227,99 +227,16 @@ pub use transit_api::{
     ROUTE_TRIPS as ROUTE_TRANSIT_TRIPS,
 };
 
-/// One feature package installed into the writable runtime, from its package receipt.
-#[derive(Clone, Debug, Deserialize)]
-pub struct InstalledFeature {
-    pub name: String,
-    pub version: String,
-    pub platform: String,
-    pub feature: InstalledFeatureMetadata,
-    pub requires: Vec<String>,
-    pub package_sha256: String,
-    /// `verified` when every owned payload file still matches its receipt, otherwise `modified`.
-    pub integrity: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct InstalledFeatureMetadata {
-    pub schema: u32,
-    pub title: String,
-    pub summary: String,
-    pub category: String,
-    pub recommend_topics: Vec<String>,
-    pub data_access: Vec<String>,
-}
-
-/// A package advertised by the latest official Sjel release.
-#[derive(Clone, Debug, Deserialize)]
-pub struct AvailableFeature {
-    pub name: String,
-    pub version: String,
-    pub platform: String,
-    pub requires: Vec<String>,
-    pub feature: InstalledFeatureMetadata,
-    pub asset: String,
-    pub bytes: u64,
-    pub sha256: String,
-    pub download_url: String,
-    pub installable: bool,
-    pub unavailable_reason: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct GithubRelease {
-    tag_name: String,
-    assets: Vec<GithubReleaseAsset>,
-}
-
-#[derive(Deserialize)]
-struct GithubReleaseAsset {
-    name: String,
-    browser_download_url: String,
-}
-
-#[derive(Deserialize)]
-struct ReleaseCatalogue {
-    schema: u32,
-    version: String,
-    source: ReleaseSource,
-    friend_ready: bool,
-    assets: Vec<ReleaseAsset>,
-    capabilities: Vec<ReleaseCapability>,
-}
-
-#[derive(Deserialize)]
-struct ReleaseSource {
-    repository: String,
-    commit: String,
-    dirty: bool,
-    rebuilt: bool,
-}
-
-#[derive(Deserialize)]
-struct ReleaseAsset {
-    name: String,
-    bytes: u64,
-    sha256: String,
-    platform: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ReleaseCapability {
-    name: String,
-    version: String,
-    platform: String,
-    requires: Vec<String>,
-    feature: InstalledFeatureMetadata,
-    asset: String,
-    bytes: u64,
-    sha256: String,
-}
+pub use distribution_api::{
+    host_platform, valid_feature_metadata, valid_package_identifier, valid_release_version,
+    valid_sha256, AvailableFeature, FeatureMetadata as InstalledFeatureMetadata, GithubRelease,
+    GithubReleaseAsset, InstalledFeature, InstalledPackage, Package, PackageFile, PackageReceipt,
+    ReleaseAsset, ReleaseCapability, ReleaseCatalogue, ReleaseSource, Runtime as RuntimeIdentity,
+    CATALOGUE_LIMIT, MAX_MANIFEST, MAX_PACKAGE, OFFICIAL_RELEASE_URL as RELEASE_URL,
+};
 
 /// Reads the official latest release and checks its catalogue before exposing feature entries.
 pub async fn feature_catalogue() -> ShellResult<Vec<AvailableFeature>> {
-    const RELEASE_URL: &str = "https://api.github.com/repos/larsboes/Sjel/releases/latest";
-    const CATALOGUE_LIMIT: usize = 4 * 1024 * 1024;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()
@@ -650,69 +567,6 @@ pub async fn install_feature(
     .map_err(|error| ShellError::PackageManager(error.to_string()))?
 }
 
-fn valid_release_version(value: &str) -> bool {
-    let Some(version) = value.strip_prefix('v') else {
-        return false;
-    };
-    let parts: Vec<_> = version.split('.').collect();
-    parts.len() == 3
-        && parts
-            .iter()
-            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
-}
-
-fn valid_package_identifier(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 80
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-        && !value.starts_with('-')
-}
-
-fn valid_sha256(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-}
-
-fn valid_feature_metadata(feature: &InstalledFeatureMetadata) -> bool {
-    feature.schema == 1
-        && !feature.title.trim().is_empty()
-        && feature.title.len() <= 80
-        && !feature.summary.trim().is_empty()
-        && feature.summary.len() <= 240
-        && !feature.category.trim().is_empty()
-        && feature.category.len() <= 40
-        && !feature.recommend_topics.is_empty()
-        && feature.recommend_topics.len() <= 24
-        && feature.recommend_topics.iter().all(|topic| {
-            !topic.is_empty()
-                && topic.len() <= 48
-                && topic
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-        })
-        && feature
-            .recommend_topics
-            .iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-            == feature.recommend_topics.len()
-        && feature.data_access.len() <= 32
-        && feature
-            .data_access
-            .iter()
-            .all(|item| !item.trim().is_empty() && item.len() <= 120)
-        && feature
-            .data_access
-            .iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .len()
-            == feature.data_access.len()
-}
-
 fn validate_release_asset_url(value: &str, version: &str, asset: &str) -> ShellResult<()> {
     let url = Url::parse(value).map_err(|_| ShellError::Unreadable)?;
     if url.scheme() != "https"
@@ -726,21 +580,7 @@ fn validate_release_asset_url(value: &str, version: &str, asset: &str) -> ShellR
     Ok(())
 }
 
-fn host_platform() -> String {
-    let suffix = match std::env::consts::OS {
-        "macos" => "apple-darwin",
-        "linux" => "unknown-linux-gnu",
-        other => other,
-    };
-    format!("{}-{suffix}", std::env::consts::ARCH)
-}
-
 fn runtime_identity() -> Option<(String, String)> {
-    #[derive(Deserialize)]
-    struct RuntimeIdentity {
-        version: String,
-        platform: String,
-    }
     let root = std::env::var_os("SJEL_ROOT")?;
     let identity: RuntimeIdentity = serde_json::from_slice(
         &std::fs::read(std::path::PathBuf::from(root).join("distribution.json")).ok()?,

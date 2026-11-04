@@ -1422,6 +1422,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "distribution-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4823,6 +4832,7 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "civil-date",
+ "distribution-api",
  "getrandom 0.4.3",
  "libsql-auth",
  "regex",

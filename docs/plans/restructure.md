@@ -213,6 +213,10 @@ their open edits.
    stations, legs, journeys, punctuality cells, reliability, rankings, factors, train matches,
    split-ticket segments and confidences, contract boundaries, priorities presets, and route
    constants shared with `sjel-transit` and `sjel-gpui-core`.
+   Done for `distribution`: `crates/distribution-api` (`distribution-api`) extracts pure wire models,
+   feature metadata, package files, package receipts, installed packages/features, available features,
+   release catalogues, sources, assets, validation helpers, and limits shared with `sjel-cli`
+   and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

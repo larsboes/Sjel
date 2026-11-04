@@ -1743,6 +1743,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "distribution-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "dlib"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7146,6 +7155,7 @@ dependencies = [
  "calendar-api",
  "chrono",
  "device-auth",
+ "distribution-api",
  "documents-api",
  "entities-api",
  "feed-api",

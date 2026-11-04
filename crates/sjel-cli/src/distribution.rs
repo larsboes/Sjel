@@ -1,210 +1,22 @@
 //! Inspect release packages without activating them. Installation remains an explicit action.
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-const MAX_MANIFEST: u64 = 1_048_576;
-const MAX_PACKAGE: u64 = 1_073_741_824;
+use distribution_api::{
+    relative_file, valid_package_identifier as identifier, valid_sha256 as digest_valid,
+    FeatureMetadata, InstalledPackage, Package, PackageFile, PackageReceipt, Runtime, MAX_MANIFEST,
+};
+
 pub const USAGE: &str = "Usage: sjel distribution <verify|install-package> <archive> --sha256 <trusted-release-digest>\n       sjel distribution list --json\n       sjel distribution uninstall-package <name> --preserve-data\n       sjel distribution place\nVerify never installs. Install requires a writable packaged runtime of the same release; it never enables or starts a service. List reports installed feature receipts and file integrity. Uninstall stops and disables the package, removes only receipt-owned files, and retains data. Place copies the app's packaged runtime to a writable per-user location and creates an empty overlay; it never starts a service or creates a credential.";
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Package {
-    schema: u32,
-    name: String,
-    version: String,
-    platform: String,
-    requires: Vec<String>,
-    feature: FeatureMetadata,
-    files: Vec<PackageFile>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct FeatureMetadata {
-    schema: u32,
-    title: String,
-    summary: String,
-    category: String,
-    recommend_topics: Vec<String>,
-    data_access: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct PackageFile {
-    path: String,
-    bytes: u64,
-    sha256: String,
-    executable: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct PackageReceipt {
-    schema: u32,
-    package_sha256: String,
-    package: Package,
-}
-
-#[derive(Serialize)]
-struct InstalledPackage {
-    name: String,
-    version: String,
-    platform: String,
-    feature: FeatureMetadata,
-    requires: Vec<String>,
-    package_sha256: String,
-    integrity: &'static str,
-}
-
-#[derive(Deserialize)]
-struct Runtime {
-    schema: u32,
-    version: String,
-    platform: String,
-    #[serde(default)]
-    core: Vec<String>,
-}
-
-fn identifier(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 80
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        && !value.starts_with('-')
-}
-
-fn relative_file(value: &str) -> bool {
-    !value.is_empty()
-        && !value.contains('\\')
-        && !value.chars().any(char::is_control)
-        && value
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-        && Path::new(value)
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-}
 
 fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn digest_valid(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
-}
-
-fn platform() -> String {
-    let suffix = match std::env::consts::OS {
-        "macos" => "apple-darwin",
-        "linux" => "unknown-linux-gnu",
-        other => other,
-    };
-    format!("{}-{suffix}", std::env::consts::ARCH)
-}
-
-impl Package {
-    fn validate(&self) -> Result<(), String> {
-        if self.schema != 1 || !identifier(&self.name) || self.platform != platform() {
-            return Err("unsupported package schema, name or host platform".into());
-        }
-        let version = self
-            .version
-            .strip_prefix('v')
-            .ok_or("package version must start with v")?;
-        let parts: Vec<_> = version.split('.').collect();
-        if parts.len() != 3
-            || parts
-                .iter()
-                .any(|p| p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()))
-        {
-            return Err("package version must be vMAJOR.MINOR.PATCH".into());
-        }
-        if self
-            .requires
-            .iter()
-            .any(|r| !identifier(r) || r == &self.name)
-        {
-            return Err("invalid package prerequisites".into());
-        }
-        if self.requires.iter().collect::<BTreeSet<_>>().len() != self.requires.len() {
-            return Err("repeated package prerequisite".into());
-        }
-        let feature = &self.feature;
-        if feature.schema != 1
-            || feature.title.trim().is_empty()
-            || feature.title.len() > 80
-            || feature.summary.trim().is_empty()
-            || feature.summary.len() > 240
-            || feature.category.trim().is_empty()
-            || feature.category.len() > 40
-            || feature.recommend_topics.is_empty()
-            || feature.recommend_topics.len() > 24
-            || feature
-                .recommend_topics
-                .iter()
-                .any(|topic| !identifier(topic) || topic.len() > 48)
-            || feature
-                .recommend_topics
-                .iter()
-                .collect::<BTreeSet<_>>()
-                .len()
-                != feature.recommend_topics.len()
-            || feature.data_access.len() > 32
-            || feature
-                .data_access
-                .iter()
-                .any(|item| item.trim().is_empty() || item.len() > 120)
-            || feature.data_access.iter().collect::<BTreeSet<_>>().len()
-                != feature.data_access.len()
-        {
-            return Err("invalid package feature metadata".into());
-        }
-        if self.files.is_empty() || self.files.len() > 4096 {
-            return Err("package must contain 1–4096 files".into());
-        }
-        let mut paths = BTreeSet::new();
-        let mut total = 0_u64;
-        for file in &self.files {
-            if !relative_file(&file.path)
-                || file.path == "sjel-package.json"
-                || !digest_valid(&file.sha256)
-                || !paths.insert(&file.path)
-            {
-                return Err("invalid or repeated package file".into());
-            }
-            total = total
-                .checked_add(file.bytes)
-                .ok_or("package size overflow")?;
-            if total > MAX_PACKAGE {
-                return Err("package exceeds the 1 GiB unpacked limit".into());
-            }
-        }
-        if !paths.contains(&"service.toml".to_owned()) {
-            return Err("package is missing service.toml".into());
-        }
-        for path in &paths {
-            if Path::new(path).ancestors().skip(1).any(|parent| {
-                parent
-                    .to_str()
-                    .is_some_and(|p| paths.contains(&p.to_owned()))
-            }) {
-                return Err("a package file is also used as a directory".into());
-            }
-        }
-        Ok(())
-    }
 }
 
 fn archive_file(archive: &Path, member: &str, limit: u64) -> Result<Vec<u8>, String> {
@@ -535,7 +347,7 @@ fn installed_packages(root: &Path) -> Result<Vec<InstalledPackage>, String> {
             feature: package.feature,
             requires: package.requires,
             package_sha256: receipt.package_sha256,
-            integrity,
+            integrity: integrity.into(),
         });
     }
     installed.sort_by(|left, right| left.name.cmp(&right.name));

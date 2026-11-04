@@ -202,6 +202,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // implementation of both.
         "storage" => exec(Command::new(tool("tools/storage/storage")).args(rest)),
         "demo" => exec(Command::new(tool("tools/demo-shots")).args(rest)),
+        // A coding harness under its provider's ring (crates/containment).
+        "run" => exec(Command::new(tool("tools/contain/contain")).args(rest)),
         "update" => exec(Command::new(tool("tools/updates")).args(rest)),
         // The job names are CI's own: tools/ci-local reads the step list out of
         // .github/workflows/ci.yml, so neither verb can drift from what the push will run.
@@ -276,6 +278,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "distribution" => distribution::USAGE,
         "testflight" => testflight::USAGE,
         "demo" => "Usage: sjel demo up | app [page] | mac <page> [light|dark] [out.png] | down",
+        "run" => "Usage: sjel run <harness-bin> --provider <name> --project <dir> [-- <args...>]",
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

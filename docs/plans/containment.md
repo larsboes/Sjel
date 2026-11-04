@@ -79,10 +79,14 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    read-write. The ring and the provider's hosts come from `providers.toml` (`ring`, `hosts`);
    a provider without `ring = "trusted"` runs contained. Checked by
    `macos_sandbox_denies_reads_outside_the_project_and_still_builds`: a sibling read and
-   `ls ~` fail, a project write and `cargo test` pass. Not checked: pi and opencode
-   themselves under the profile, and their config directories (`--read`, `--write` are not
-   built). Open: `mach-lookup` is allowed without a filter, so a contained process can ask
-   `securityd` for a Keychain item. Whether the Keychain ACL then prompts is unverified.
+   `ls ~` fail, a project write and `cargo test` pass. The Keychain's Mach services are denied.
+   `sjel run <harness-bin> --provider <name> --project <dir>` starts it. A harness's own
+   directories are opened with `--read <dir>` and `--write <dir>`, and its provider credential
+   with `--keep-env <NAME>`, which passes that one variable and no other
+   (`the_launcher_opens_only_the_named_directories_and_variable`). A harness's auth file is never
+   opened: pi's holds every provider's key. Not checked: opencode and pi under the profile.
+   `pi` on this Mac is a shell alias or function, so its entry point for `sjel run` is open.
+   Which directories each one writes is unverified.
 2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
    loopback, and logs each refusal to stderr. Checked live: through the proxy
    `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.

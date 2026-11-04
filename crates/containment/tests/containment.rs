@@ -287,3 +287,42 @@ fn a_contained_run_points_at_the_demo_node() {
     assert_eq!(cmd.env["SJEL_ENV"], "dev");
     assert_eq!(cmd.env["NO_PROXY"], "127.0.0.1,localhost");
 }
+
+/// `--read`, `--write` and `--keep-env` through the real launcher: the read directory is
+/// readable but not writable, the write directory is writable, and only the named variable
+/// survives the sanitizer.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_launcher_opens_only_the_named_directories_and_variable() {
+    let base = std::env::temp_dir().join(format!("sjel-contain-flags-{}", std::process::id()));
+    let (project, ro, rw) = (base.join("project"), base.join("ro"), base.join("rw"));
+    for dir in [&project, &ro, &rw] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(ro.join("config"), "cfg").unwrap();
+    let script = format!(
+        "cat '{ro}/config'; echo; echo s > '{rw}/session' && echo write-ok; \
+         echo x > '{ro}/x' 2>/dev/null || echo ro-denied; \
+         echo \"keep=${{KEEP_PROBE:-unset}} drop=${{DROP_PROBE_TOKEN:-unset}}\"",
+        ro = ro.display(),
+        rw = rw.display()
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sjel-contain"))
+        .args(["/bin/sh", "--provider", "unlisted", "--project"])
+        .arg(&project)
+        .arg("--read")
+        .arg(&ro)
+        .arg("--write")
+        .arg(&rw)
+        .args(["--keep-env", "KEEP_PROBE", "--", "-c", &script])
+        .env("KEEP_PROBE", "kept")
+        .env("DROP_PROBE_TOKEN", "dropped")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("cfg"), "{stdout}");
+    assert!(stdout.contains("write-ok"), "{stdout}");
+    assert!(stdout.contains("ro-denied"), "{stdout}");
+    assert!(stdout.contains("keep=kept drop=unset"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&base);
+}

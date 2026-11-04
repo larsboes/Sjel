@@ -21,9 +21,10 @@ fn demo_token() -> Option<String> {
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
+    let own = args.iter().take_while(|a| *a != "--");
+    if args.is_empty() || own.into_iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [-- <harness-args...>]"
+            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [-- <harness-args...>]"
         );
         return ExitCode::from(2);
     }
@@ -32,6 +33,9 @@ async fn main() -> ExitCode {
     let mut provider = String::new();
     let mut project = String::new();
     let mut harness_args = Vec::new();
+    let mut read_dirs: Vec<PathBuf> = Vec::new();
+    let mut write_dirs: Vec<PathBuf> = Vec::new();
+    let mut keep_env: Vec<String> = Vec::new();
 
     let mut i = 0;
     while i < args.len() {
@@ -43,6 +47,15 @@ async fn main() -> ExitCode {
             i += 2;
         } else if args[i] == "--project" && i + 1 < args.len() {
             project = args[i + 1].clone();
+            i += 2;
+        } else if args[i] == "--read" && i + 1 < args.len() {
+            read_dirs.push(PathBuf::from(&args[i + 1]));
+            i += 2;
+        } else if args[i] == "--write" && i + 1 < args.len() {
+            write_dirs.push(PathBuf::from(&args[i + 1]));
+            i += 2;
+        } else if args[i] == "--keep-env" && i + 1 < args.len() {
+            keep_env.push(args[i + 1].clone());
             i += 2;
         } else if harness_bin.is_empty() {
             harness_bin = args[i].clone();
@@ -109,11 +122,24 @@ async fn main() -> ExitCode {
         let _ = proxy.run().await;
     });
 
-    let profile = SeatbeltProfile::new(&project_dir);
+    let profile = read_dirs.iter().fold(
+        write_dirs
+            .iter()
+            .fold(SeatbeltProfile::new(&project_dir), |p, d| {
+                p.with_read_write_path(d)
+            }),
+        |p, d| p.with_read_path(d),
+    );
     let mut contained = sjel_containment::ContainedCommand::new(&harness_bin, profile)
         .args(&harness_args)
         .with_proxy_port(proxy_port)
         .with_dev_node(&demo_endpoint());
+    // The provider's own credential, named on the command line; every other one stays out.
+    for name in &keep_env {
+        if let Ok(value) = std::env::var(name) {
+            contained.env.insert(name.clone(), value);
+        }
+    }
     match demo_token() {
         Some(token) => {
             contained.env.insert("SJEL_DEMO_TOKEN".into(), token);

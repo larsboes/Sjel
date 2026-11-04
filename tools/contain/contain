@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Thin launcher for sjel-contain (crates/containment): sources paths.sh for SJEL_ROOT, which the
+# launcher reads providers.toml and the demo token from, and builds the release binary when it
+# is missing or older than its sources.
+#
+#   tools/contain/contain <harness-bin> --provider <name> --project <dir> [-- <args...>]
+#
+# bash 3.2-safe.
+set -u
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/../lib/paths.sh"
+export SJEL_ROOT
+
+BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-contain"
+_crate="$SJEL_ROOT/crates/containment"
+if [ ! -x "$BIN" ] || [ -n "$(find "$_crate/src" "$_crate/Cargo.toml" "$SJEL_ROOT/crates/inference/src" -newer "$BIN" -print -quit 2>/dev/null)" ]; then
+  echo "contain: building sjel-contain (release)..." >&2
+  cargo build --locked --release -p sjel-containment --manifest-path "$SJEL_ROOT/Cargo.toml" >&2 || exit 2
+fi
+
+exec "$BIN" "$@"

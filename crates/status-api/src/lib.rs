@@ -2,8 +2,8 @@
 //!
 //! Shared across `crates/sjel-status`, `crates/backup`, and `apps/gpui/core`. Zero platform dependencies (pure `serde`).
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 // --- Route Constants ---
 

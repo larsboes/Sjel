@@ -3,8 +3,8 @@
 //! Shared across the conductor daemon (`crates/soundscape`) and the GPUI client
 //! (`apps/gpui/core`). Zero platform dependencies (pure `serde`).
 
-use std::time::Duration;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::time::Duration;
 
 /// The six presets the conductor knows, in canonical order.
 pub const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];

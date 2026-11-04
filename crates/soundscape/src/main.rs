@@ -535,10 +535,7 @@ async fn main() {
         .route(ROUTE_SOUNDSCAPE_HEALTH, get(health))
         .route(ROUTE_SOUNDSCAPE_STATE, get(get_state).post(post_state))
         .route(ROUTE_SOUNDSCAPE_STREAM, get(stream))
-        .route(
-            ROUTE_SOUNDSCAPE_HOST_CLAIM,
-            axum::routing::post(claim_host),
-        )
+        .route(ROUTE_SOUNDSCAPE_HOST_CLAIM, axum::routing::post(claim_host))
         .route(
             ROUTE_SOUNDSCAPE_HOST_RELEASE,
             axum::routing::post(release_host),

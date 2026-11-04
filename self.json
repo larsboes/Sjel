@@ -589,6 +589,10 @@
       }
     },
     {
+      "name": "transit-api",
+      "kind": "lib"
+    },
+    {
       "name": "traveler",
       "kind": "capability",
       "service": {
@@ -2682,6 +2686,16 @@
     {
       "from": "transit",
       "to": "station-time",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/transit/Cargo.toml"
+      ]
+    },
+    {
+      "from": "transit",
+      "to": "transit-api",
       "kinds": [
         "cargo-dep"
       ],

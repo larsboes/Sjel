@@ -4,160 +4,17 @@
 //! `dashboard/src/routes/travel/connections/+page.svelte`.
 
 use chrono::{Local, NaiveDate, NaiveTime};
-use serde::Deserialize;
 
 use super::Source;
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Station {
-    /// EVA code, e.g. `8000105`.
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Leg {
-    pub origin: Station,
-    pub destination: Station,
-    /// The time to plan around: real-time where HAFAS has one, scheduled otherwise.
-    pub departure_time: String,
-    pub arrival_time: String,
-    #[serde(default)]
-    pub scheduled_departure: Option<String>,
-    #[serde(default)]
-    pub realtime_departure: Option<String>,
-    #[serde(default)]
-    pub cancelled: bool,
-    pub train_name: String,
-    pub platform: Option<String>,
-    /// Covered by the Deutschland-Ticket.
-    pub is_regional: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Journey {
-    pub id: String,
-    pub start_station: Station,
-    pub end_station: Station,
-    pub legs: Vec<Leg>,
-    pub total_duration_minutes: u32,
-    /// `None` is "not priced here" (regional legs come back without a fare), never free.
-    pub total_price: Option<f64>,
-    /// The share of this train type's stops at the destination, in the arrival hour, that ran at
-    /// least six minutes late (`capabilities/punctuality`). Not the chance the trip works out.
-    pub delay_risk_score: Option<f64>,
-    #[serde(default)]
-    pub reliability: Option<Reliability>,
-    /// Where the journey placed against the traveller's weights. Absent: transit's own order.
-    #[serde(default)]
-    pub ranking: Option<Ranking>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Reliability {
-    /// How likely the whole journey holds together, from measured history.
-    pub probability: f64,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Ranking {
-    pub rank: usize,
-    pub factors: Vec<RankFactor>,
-    /// `profile` or `request`: where the weights came from.
-    pub source: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct RankFactor {
-    pub label: String,
-    pub weight: f64,
-    pub rationale: String,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TrainMatch {
-    Exact,
-    Partial,
-    Different,
-    Unknown,
-}
-
-impl TrainMatch {
-    /// Why a ticket may not be for the train you ride. `None` when it is.
-    pub fn label(self) -> Option<&'static str> {
-        match self {
-            Self::Exact => None,
-            Self::Partial => Some("partial train match"),
-            Self::Different => Some("different train"),
-            Self::Unknown => Some("train unknown"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct SplitSegment {
-    pub journey: Journey,
-    pub train_match: TrainMatch,
-    /// The trains the direct journey uses over this hop, in route order.
-    pub expected_trains: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Confidence {
-    Exact,
-    Partial,
-    Low,
-}
-
-impl Confidence {
-    /// Why the chain might not be buyable as shown. Each segment is priced by its own fare
-    /// search, and nothing forces that search to return the train you are on.
-    pub fn note(self) -> Option<&'static str> {
-        match self {
-            Self::Exact => None,
-            Self::Partial => Some(
-                "Some tickets could not be matched to the exact train on this route, or a fare \
-                 lookup failed. Check each ticket before buying.",
-            ),
-            Self::Low => Some(
-                "At least one ticket is priced for a different train than this journey uses. \
-                 Buying this chain does not buy a seat on this trip.",
-            ),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct SplitResult {
-    pub segments: Vec<SplitSegment>,
-    /// `None` when the direct fare is unknown, which is not the same as free.
-    pub original_price: Option<f64>,
-    pub split_price: f64,
-    pub savings: Option<f64>,
-    pub confidence: Confidence,
-    /// Stop pairs the solver wanted a fare for and got none.
-    pub unpriced_pairs: usize,
-    pub queried_pairs: usize,
-}
-
-impl SplitResult {
-    pub fn saved_percent(&self) -> Option<i64> {
-        let (savings, original) = (self.savings?, self.original_price?);
-        (original > 0.0).then(|| (savings / original * 100.0).round() as i64)
-    }
-}
-
-/// The presets transit knows (`capabilities/transit/src/ranking.rs`, `PRIORITIES`): the id is the
-/// contract, the label and hint are this page's.
-pub const PRIORITIES: [(&str, &str, &str); 5] = [
-    ("balanced", "Balanced", "no term dominates"),
-    ("cheapest", "Cheapest", "fare first"),
-    ("fastest", "Fastest", "door to door"),
-    ("fewest_changes", "Fewest changes", "direct where possible"),
-    ("reliable", "Most reliable", "measured, not fitted"),
-];
+pub use transit_api::{
+    clock, Confidence, ContractBoundary, Journey, JourneyRanking, JourneyReliability,
+    JourneyWeights, Leg, RankFactor, Ranking, Reliability, SplitConfidence, SplitResult,
+    SplitSegment, Station, TrainMatch, PRIORITIES, PRIORITY_WEIGHTS, PROXY_ROUTE_TRANSIT_HEALTH,
+    PROXY_ROUTE_TRANSIT_SEARCH, PROXY_ROUTE_TRANSIT_SPLIT, PROXY_ROUTE_TRANSIT_SUGGEST,
+    PROXY_ROUTE_TRANSIT_TRIPS, ROUTE_API_HEALTH, ROUTE_HEALTH, ROUTE_SEARCH, ROUTE_SPLIT,
+    ROUTE_SUGGEST, ROUTE_TRIPS,
+};
 
 /// What one search asked for instead of the profile's usual weights. Transit refuses more than
 /// one, so a typed phrase beats a pressed preset: it is the more specific thing to say.
@@ -204,13 +61,13 @@ impl Query {
         } else if let Some(priority) = self.rank.priority {
             pairs.push(("priority", priority));
         }
-        Ok(path("/transit/api/search", &pairs))
+        Ok(path(PROXY_ROUTE_TRANSIT_SEARCH, &pairs))
     }
 
     pub fn split_path(&self) -> Result<String, String> {
         let when = self.when()?;
         Ok(path(
-            "/transit/api/split",
+            PROXY_ROUTE_TRANSIT_SPLIT,
             &[
                 ("from", &self.from.id),
                 ("to", &self.to.id),
@@ -221,7 +78,7 @@ impl Query {
 }
 
 pub fn suggest_path(text: &str) -> String {
-    path("/transit/api/suggest", &[("q", text.trim())])
+    path(PROXY_ROUTE_TRANSIT_SUGGEST, &[("q", text.trim())])
 }
 
 fn path(base: &str, pairs: &[(&str, &str)]) -> String {
@@ -284,32 +141,6 @@ fn departure(journey: &Journey) -> &str {
         .map_or("", |l| l.departure_time.as_str())
 }
 
-impl Journey {
-    pub fn changes(&self) -> usize {
-        self.legs.len().saturating_sub(1)
-    }
-
-    pub fn departs(&self) -> &str {
-        self.legs.first().map_or("", |l| clock(&l.departure_time))
-    }
-
-    pub fn arrives(&self) -> &str {
-        self.legs.last().map_or("", |l| clock(&l.arrival_time))
-    }
-
-    /// Minutes the first leg leaves after its timetable, when HAFAS sent both times.
-    pub fn delay_minutes(&self) -> Option<i64> {
-        let leg = self.legs.first()?;
-        let parse = |t: &Option<String>| chrono::DateTime::parse_from_rfc3339(t.as_deref()?).ok();
-        let late = parse(&leg.realtime_departure)? - parse(&leg.scheduled_departure)?;
-        Some(late.num_minutes()).filter(|m| *m != 0)
-    }
-}
-
-/// `HH:MM` out of an ISO 8601 date-time, as transit's local time says it.
-pub fn clock(iso: &str) -> &str {
-    iso.get(11..16).unwrap_or(iso)
-}
 
 pub fn duration(minutes: u32) -> String {
     match minutes / 60 {
@@ -360,6 +191,7 @@ mod tests {
         Station {
             id: id.into(),
             name: format!("Station {id}"),
+            ..Default::default()
         }
     }
 
@@ -385,6 +217,7 @@ mod tests {
                 train_name: "ICE 1".into(),
                 platform: None,
                 is_regional: false,
+                ..Default::default()
             }],
             total_duration_minutes: minutes,
             total_price: price,
@@ -394,7 +227,9 @@ mod tests {
                 rank,
                 factors: Vec::new(),
                 source: "profile".into(),
+                ..Default::default()
             }),
+            ..Default::default()
         }
     }
 
@@ -555,6 +390,7 @@ mod tests {
             confidence: Confidence::Exact,
             unpriced_pairs: 0,
             queried_pairs: 4,
+            ..Default::default()
         };
         assert_eq!(split(Some(40.0), Some(10.0)).saved_percent(), Some(25));
         assert_eq!(split(None, None).saved_percent(), None);

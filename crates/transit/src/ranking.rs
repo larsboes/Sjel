@@ -31,7 +31,7 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::travel::{Journey, JourneyRanking, RankFactor};
 
@@ -46,14 +46,7 @@ pub fn base_url() -> String {
     sjel_config::env_var("SJEL_TRAVELER_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
-/// The weights, exactly as the profile serves them.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
-pub struct JourneyWeights {
-    pub price: f64,
-    pub duration: f64,
-    pub changes: f64,
-    pub reliability: f64,
-}
+pub use transit_api::JourneyWeights;
 
 /// `GET /api/profile`, as much of it as this reads.
 #[derive(Debug, Deserialize)]
@@ -157,53 +150,7 @@ pub fn read_profile() -> Option<ProfileSnapshot> {
 /// Every one sums to 1.0, and they are here rather than in the dashboard so an
 /// agent and a browser resolve `cheapest` to the same four numbers. A preset
 /// defined twice is the drift the resolution function exists to prevent.
-pub const PRIORITIES: &[(&str, JourneyWeights)] = &[
-    (
-        "cheapest",
-        JourneyWeights {
-            price: 0.55,
-            duration: 0.15,
-            changes: 0.10,
-            reliability: 0.20,
-        },
-    ),
-    (
-        "fastest",
-        JourneyWeights {
-            price: 0.15,
-            duration: 0.55,
-            changes: 0.10,
-            reliability: 0.20,
-        },
-    ),
-    (
-        "fewest_changes",
-        JourneyWeights {
-            price: 0.15,
-            duration: 0.15,
-            changes: 0.50,
-            reliability: 0.20,
-        },
-    ),
-    (
-        "reliable",
-        JourneyWeights {
-            price: 0.20,
-            duration: 0.15,
-            changes: 0.15,
-            reliability: 0.50,
-        },
-    ),
-    (
-        "balanced",
-        JourneyWeights {
-            price: 0.25,
-            duration: 0.25,
-            changes: 0.25,
-            reliability: 0.25,
-        },
-    ),
-];
+pub const PRIORITIES: &[(&str, JourneyWeights)] = transit_api::PRIORITY_WEIGHTS;
 
 /// What one trip asked for, resolved to four numbers.
 ///
@@ -380,11 +327,6 @@ fn parse_weights(spec: &str) -> Result<JourneyWeights, String> {
     Ok(weights)
 }
 
-impl JourneyWeights {
-    pub fn sum(&self) -> f64 {
-        self.price + self.duration + self.changes + self.reliability
-    }
-}
 
 /// The four quantities a ranking reads, pulled off a journey.
 ///

@@ -209,6 +209,10 @@ their open edits.
    conversation turns, assistant requests, cloud model provider discovery roles, key statuses,
    replies, streaming events, steer instructions, and route constants shared with `sjel-assistant`
    and `sjel-gpui-core`.
+   Done for `transit`: `crates/transit-api` (`transit-api`) extracts pure wire models,
+   stations, legs, journeys, punctuality cells, reliability, rankings, factors, train matches,
+   split-ticket segments and confidences, contract boundaries, priorities presets, and route
+   constants shared with `sjel-transit` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

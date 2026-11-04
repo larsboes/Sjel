@@ -212,6 +212,21 @@ pub use assistant_api::{
     ROUTE_ASK_PROVIDERS, ROUTE_ASK_STREAM, ROUTE_GENERATE,
 };
 
+pub use transit_api::{
+    Confidence as TransitConfidence, ContractBoundary as TransitContractBoundary,
+    Journey as TransitJourney, JourneyRanking as TransitJourneyRanking,
+    JourneyReliability as TransitJourneyReliability, JourneyWeights as TransitJourneyWeights,
+    Leg as TransitLeg, RankFactor as TransitRankFactor, Ranking as TransitRanking,
+    Reliability as TransitReliability, SplitConfidence as TransitSplitConfidence,
+    SplitResult as TransitSplitResult, SplitSegment as TransitSplitSegment,
+    Station as TransitStation, TrainMatch as TransitTrainMatch, PRIORITIES as TRANSIT_PRIORITIES,
+    PRIORITY_WEIGHTS as TRANSIT_PRIORITY_WEIGHTS, PROXY_ROUTE_TRANSIT_HEALTH,
+    PROXY_ROUTE_TRANSIT_SEARCH, PROXY_ROUTE_TRANSIT_SPLIT, PROXY_ROUTE_TRANSIT_SUGGEST,
+    PROXY_ROUTE_TRANSIT_TRIPS, ROUTE_SEARCH as ROUTE_TRANSIT_SEARCH,
+    ROUTE_SPLIT as ROUTE_TRANSIT_SPLIT, ROUTE_SUGGEST as ROUTE_TRANSIT_SUGGEST,
+    ROUTE_TRIPS as ROUTE_TRANSIT_TRIPS,
+};
+
 /// One feature package installed into the writable runtime, from its package receipt.
 #[derive(Clone, Debug, Deserialize)]
 pub struct InstalledFeature {

@@ -42,47 +42,7 @@ const MAX_COMMS_DAYS: i64 = 31;
 /// entire job of the field is to decide how hard a day is blocked, so a value
 /// nobody defined cannot be waved through. `Ord` runs least- to most-binding,
 /// which is what makes "worst commitment on a day" a `max()`.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default, Hash,
-)]
-#[serde(rename_all = "lowercase")]
-pub enum Commitment {
-    /// On the radar. Scouting found it, a friend mentioned it, you bookmarked
-    /// it. Never blocks a day; always shows up as evidence.
-    #[default]
-    Possible,
-    /// You decided, but nothing is booked. Blocks softly, with the cost named.
-    Planned,
-    /// Ticket bought, registration in, leave approved. Only here does `kind`
-    /// get to make a day hard.
-    Committed,
-}
-
-pub const COMMITMENTS: &[&str] = &["possible", "planned", "committed"];
-
-impl Commitment {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Commitment::Possible => "possible",
-            Commitment::Planned => "planned",
-            Commitment::Committed => "committed",
-        }
-    }
-
-    /// Reading a stored value. Total, and lenient in exactly one direction: a
-    /// row written by an older binary reads as `Possible`. That is the safe
-    /// failure direction for a planning system — a bug hands you a free day
-    /// you can check yourself, never a silently blocked one you never see.
-    /// Rejecting bad *input* is the API boundary's job (serde), not the
-    /// reader's.
-    pub fn from_db(text: &str) -> Self {
-        match text {
-            "committed" => Commitment::Committed,
-            "planned" => Commitment::Planned,
-            _ => Commitment::Possible,
-        }
-    }
-}
+pub use calendar_api::Commitment;
 
 /// Well-known entry sources. Same free-TEXT reasoning as kinds.
 pub const KNOWN_SOURCES: &[&str] = &[
@@ -441,14 +401,7 @@ impl NewContext {
 /// and opting out deletes it. `google_event_id` is `None` until the first push
 /// succeeds; after that it is what makes the next push an update rather than a
 /// second event on the Google side.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ExportOptIn {
-    pub entry_id: String,
-    pub google_calendar_id: String,
-    pub google_event_id: Option<String>,
-    pub pushed_at: Option<String>,
-    pub created_at: String,
-}
+pub use calendar_api::ExportOptIn;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Rhythm {

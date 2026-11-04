@@ -12,10 +12,6 @@
       }
     },
     {
-      "name": "agentbox",
-      "kind": "capability"
-    },
-    {
       "name": "archive",
       "kind": "capability",
       "service": {
@@ -44,6 +40,10 @@
         "requires": [],
         "port": "8087"
       }
+    },
+    {
+      "name": "calendar-api",
+      "kind": "lib"
     },
     {
       "name": "candidate-fingerprint",
@@ -129,6 +129,10 @@
       }
     },
     {
+      "name": "documents-api",
+      "kind": "lib"
+    },
+    {
       "name": "entities",
       "kind": "capability",
       "service": {
@@ -211,10 +215,6 @@
     {
       "name": "harness",
       "kind": "pack"
-    },
-    {
-      "name": "host-firewall",
-      "kind": "capability"
     },
     {
       "name": "host-net",
@@ -323,10 +323,6 @@
       }
     },
     {
-      "name": "overlay",
-      "kind": "lib"
-    },
-    {
       "name": "packs",
       "kind": "capability",
       "service": {
@@ -415,10 +411,6 @@
     {
       "name": "security",
       "kind": "pack"
-    },
-    {
-      "name": "shell",
-      "kind": "capability"
     },
     {
       "name": "sjel-agent",
@@ -567,6 +559,10 @@
         ],
         "port": "8086"
       }
+    },
+    {
+      "name": "trips-api",
+      "kind": "lib"
     },
     {
       "name": "vault",
@@ -759,6 +755,16 @@
       ],
       "evidence": [
         "crates/backup/Cargo.toml"
+      ]
+    },
+    {
+      "from": "calendar",
+      "to": "calendar-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/calendar/Cargo.toml"
       ]
     },
     {
@@ -1089,6 +1095,16 @@
       ],
       "evidence": [
         "crates/devices/Cargo.toml"
+      ]
+    },
+    {
+      "from": "documents",
+      "to": "documents-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/documents/Cargo.toml"
       ]
     },
     {
@@ -2644,6 +2660,16 @@
     {
       "from": "trips",
       "to": "station-time",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/trips/Cargo.toml"
+      ]
+    },
+    {
+      "from": "trips",
+      "to": "trips-api",
       "kinds": [
         "cargo-dep"
       ],

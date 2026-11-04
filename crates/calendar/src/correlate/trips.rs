@@ -1,47 +1,6 @@
 use super::*;
 
-/// A run of entries in one place, close enough in time to be one trip.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TripDraft {
-    /// The clustering key: the city, derived by `city_of` from whatever the
-    /// source recorded. The venue lives on the member entries, where a trip to
-    /// two places in one city can still show both.
-    pub place: String,
-    pub starts_on: String,
-    /// Exclusive, like every other end in this capability.
-    pub ends_before: String,
-    pub entry_ids: Vec<String>,
-    pub titles: Vec<String>,
-    /// The strongest commitment among the members. A cluster of things you
-    /// merely found is a possible trip; one booked ticket among them makes the
-    /// whole journey real, because you are going either way.
-    pub commitment: Commitment,
-    /// The Trips plan a member already became, so a client offers "open" instead of "create".
-    /// Filled by the server from the materialization ledger.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub plan_id: Option<String>,
-    /// With `plan_id`: the members not in that plan yet, such as a return leg booked later.
-    /// Materializing the draft adds them and widens the plan.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub unplanned_entry_ids: Vec<String>,
-}
-
-/// An entry that cannot be clustered, and why. Reported rather than dropped:
-/// 13 of 62 events in the last live Luma sweep had no usable place, and a
-/// silent filter is indistinguishable from a bug the first time something you
-/// wanted goes missing.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Unclustered {
-    pub entry_id: String,
-    pub title: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TripDrafts {
-    pub drafts: Vec<TripDraft>,
-    pub unclustered: Vec<Unclustered>,
-}
+pub use calendar_api::{TripDraft, TripDrafts, Unclustered};
 
 /// Where an entry is, as the sources actually record it.
 ///
@@ -247,10 +206,7 @@ pub fn cluster_trips(
     }
 
     drafts.sort_by(|a, b| a.starts_on.cmp(&b.starts_on).then(a.place.cmp(&b.place)));
-    Ok(TripDrafts {
-        drafts,
-        unclustered,
-    })
+    Ok(TripDrafts::new(drafts, unclustered))
 }
 
 /// A journey is evidence from multiple calendar anchors. A remote one-off is

@@ -6,7 +6,6 @@
 //! dashboard's (`dashboard/src/lib/calendar/types.ts`); this module owns them now.
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
-use serde::Deserialize;
 
 use crate::shell::CalendarEntry;
 
@@ -27,43 +26,9 @@ pub const KINDS: [(&str, &str, u32); 8] = [
 ];
 pub const FALLBACK_COLOR: u32 = 0x64748b;
 
-/// A journey candidate recomputed from dated Calendar entries. It remains evidence until the
-/// operator chooses to create a Trips plan.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct TripDraft {
-    pub place: String,
-    pub starts_on: String,
-    /// Exclusive end, like Calendar's own date windows.
-    pub ends_before: String,
-    pub entry_ids: Vec<String>,
-    pub titles: Vec<String>,
-    pub commitment: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct TripDrafts {
-    pub from: String,
-    pub to: String,
-    pub max_gap_days: i64,
-    pub home: Option<String>,
-    pub drafts: Vec<TripDraft>,
-    pub unclustered: Vec<UnclusteredTripEntry>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct UnclusteredTripEntry {
-    pub entry_id: String,
-    pub title: String,
-    pub reason: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct TripMaterialization {
-    pub plan_id: String,
-    pub created: bool,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
+pub use calendar_api::{
+    TripDraft, TripDrafts, TripMaterialization, TripMaterializeRequest, UnclusteredTripEntry,
+};
 
 /// How binding an entry is: `possible` blocks nothing, `planned` soft-blocks, `committed`
 /// blocks the day.

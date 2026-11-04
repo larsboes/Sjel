@@ -16,6 +16,7 @@ name = "documents"
 path = "src/cli.rs"
 
 [dependencies]
+documents-api = { path = "../documents-api" }
 axum.workspace = true
 route-manifest = { path = "../route-manifest" }
 schemars = "1.2.2"

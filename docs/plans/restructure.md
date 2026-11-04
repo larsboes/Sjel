@@ -167,6 +167,9 @@ their open edits.
    Done for `calendar`: `crates/calendar-api` (`calendar-api`) extracts pure wire models,
    commitment enums, export types, and route constants shared with `sjel-calendar` and
    `sjel-gpui-core`.
+   Done for `documents`: `crates/documents-api` (`documents-api`) extracts pure wire models,
+   duplicate review decisions, split suggestion/partition contracts, and route constants
+   shared with `sjel-documents` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

@@ -2837,6 +2837,7 @@ fn proposal_outcome_label(outcome: &ProposalOutcome) -> String {
                 shell::ProposalAbstentionReason::MissingEvidence => "evidence missing",
                 shell::ProposalAbstentionReason::ModelUnavailable => "source unavailable",
                 shell::ProposalAbstentionReason::CategoryNotConfigured => "category not configured",
+                shell::ProposalAbstentionReason::SafetyRefused => "safety refused",
             }
         ),
         ProposalOutcome::Invalid { reason } => format!(

@@ -874,6 +874,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "calendar-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "candidate-fingerprint"
 version = "0.1.0"
 dependencies = [
@@ -1410,6 +1419,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "documents-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4688,6 +4706,7 @@ name = "sjel-calendar"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "calendar-api",
  "civil-date",
  "content-item",
  "markdown-root",
@@ -4853,6 +4872,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "documents-api",
  "lopdf 0.46.0",
  "reqwest",
  "route-manifest",
@@ -5382,6 +5402,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tower-http 0.7.1",
+ "trips-api",
 ]
 
 [[package]]
@@ -6039,6 +6060,15 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
+]
+
+[[package]]
+name = "trips-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

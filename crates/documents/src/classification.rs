@@ -24,110 +24,12 @@ pub struct KeywordRule {
     keywords: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ClassificationProposal {
-    pub document_id: String,
-    pub source: ProposalSource,
-    pub outcome: ProposalOutcome,
-    /// `None` is serialized as JSON `null` when a source gives no confidence value.
-    pub confidence: Option<f32>,
-    pub review: Option<ProposalReview>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProposalSource {
-    Rules {
-        identity: String,
-        version: String,
-    },
-    Model {
-        role: String,
-        model: String,
-        revision: Option<String>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProposalOutcome {
-    Proposed {
-        category: String,
-        evidence: Evidence,
-    },
-    Abstained {
-        reason: AbstentionReason,
-    },
-    Invalid {
-        reason: InvalidProposalReason,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Evidence {
-    pub source: EvidenceSource,
-    /// Exact contiguous quote from the named source; validation belongs to the producer boundary.
-    pub quote: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EvidenceSource {
-    Filename,
-    ExtractedText,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AbstentionReason {
-    NoMatch,
-    MissingEvidence,
-    ModelUnavailable,
-    CategoryNotConfigured,
-    SafetyRefused,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InvalidProposalReason {
-    MalformedOutput,
-    EvidenceNotExact,
-    EvidenceTooLong,
-    InvalidCategory,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ProposalReview {
-    Accepted,
-    Rejected,
-    Overridden,
-}
-
-#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ProposalReviewRequest {
-    pub outcome: ProposalReview,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProposalReviewEvent {
-    pub id: i64,
-    pub outcome: ProposalReview,
-    pub reviewed_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct StoredProposal {
-    pub id: String,
-    pub generation_id: String,
-    pub generated_at: String,
-    pub proposal: ClassificationProposal,
-    pub review_history: Vec<ProposalReviewEvent>,
-}
+pub use documents_api::{
+    AbstentionReason, ClassificationProposal, Evidence, EvidenceSource, InvalidProposalReason,
+    ProposalAbstentionReason, ProposalEvidence, ProposalEvidenceSource, ProposalInvalidReason,
+    ProposalOutcome, ProposalReview, ProposalReviewEvent, ProposalReviewRequest, ProposalSource,
+    StoredProposal,
+};
 
 impl KeywordRule {
     pub fn id(&self) -> &str {

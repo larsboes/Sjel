@@ -18,31 +18,7 @@ pub use details::{
 pub use navigation::{TravelRoute, TripSection};
 pub use places::PlaceCoords;
 
-/// What `POST /trips/api/plans/{id}/resolve-places` returns.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct ResolvePlacesResult {
-    pub plan_id: String,
-    pub updated_at: String,
-    pub resolved: Vec<ResolvedPlace>,
-    pub unresolved: Vec<UnresolvedPlace>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct ResolvedPlace {
-    pub place_id: String,
-    pub name: String,
-    pub latitude: f64,
-    pub longitude: f64,
-    #[serde(default)]
-    pub source: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct UnresolvedPlace {
-    pub place_id: String,
-    pub name: String,
-    pub reason: String,
-}
+pub use trips_api::{ResolvePlacesRequest, ResolvePlacesResult, ResolvedPlace, UnresolvedPlace};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Place {

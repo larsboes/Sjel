@@ -984,14 +984,7 @@ async fn delete_plan(
     }
 }
 
-/// What `POST /api/plans/{id}/resolve-places` accepts: nothing, or one flag.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
-struct ResolvePlacesRequest {
-    /// Look every place up again, replacing the coordinate the plan already holds.
-    /// The repair for a wrong one; absent means only the places that have none.
-    #[serde(default)]
-    refresh: bool,
-}
+use trips_api::ResolvePlacesRequest;
 
 async fn resolve_plan_places(
     State(state): State<AppState>,

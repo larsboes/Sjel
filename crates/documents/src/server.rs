@@ -11,7 +11,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
@@ -119,57 +119,39 @@ fn binary_schema() -> Value {
     json!({"type": "string", "format": "binary", "maxLength": MAX_BYTES})
 }
 
-#[derive(Serialize)]
-struct Summary {
-    id: String,
-    filename: String,
-    media_type: String,
-    byte_len: i64,
-    imported_at: String,
-    status: String,
-    category: Option<String>,
-    project: Option<String>,
-    extracted_title: Option<String>,
-    extractor: Option<String>,
-    extracted_chars: usize,
-    suggested_category: Option<String>,
-    suggestion_reason: Option<String>,
-    data_class: &'static str,
-    page_count: usize,
-    parent_id: Option<String>,
-    page_range: Option<crate::split::PageRange>,
-    matched_pages: Vec<u32>,
-    workflow_stage: &'static str,
-}
+pub use documents_api::DocumentSummary as Summary;
 
-impl Summary {
-    fn from_document(document: &Document, pending_proposal: bool, has_children: bool) -> Self {
-        Self {
-            id: document.id.clone(),
-            filename: document.filename.clone(),
-            media_type: document.media_type.clone(),
-            byte_len: document.byte_len,
-            imported_at: document.imported_at.clone(),
-            status: document.status.clone(),
-            category: document.category.clone(),
-            project: document.project.clone(),
-            extracted_title: document.extracted_title.clone(),
-            extractor: document.extractor.clone(),
-            extracted_chars: document.extracted_text.as_deref().map_or(0, |text| {
-                text.chars()
-                    .filter(|character| !character.is_whitespace())
-                    .count()
-            }),
-            suggested_category: document.suggested_category.clone(),
-            suggestion_reason: document.suggestion_reason.clone(),
-            data_class: "c2",
-            page_count: document.pages.len(),
-            parent_id: document.parent_id.clone(),
-            page_range: document.page_range,
-            matched_pages: Vec::new(),
-            workflow_stage: crate::workflow::stage(document, pending_proposal, has_children)
-                .as_str(),
-        }
+fn summary_from_document(
+    document: &Document,
+    pending_proposal: bool,
+    has_children: bool,
+) -> Summary {
+    Summary {
+        id: document.id.clone(),
+        filename: document.filename.clone(),
+        media_type: document.media_type.clone(),
+        byte_len: document.byte_len,
+        imported_at: document.imported_at.clone(),
+        status: document.status.clone(),
+        category: document.category.clone(),
+        project: document.project.clone(),
+        extracted_title: document.extracted_title.clone(),
+        extractor: document.extractor.clone(),
+        extracted_chars: document.extracted_text.as_deref().map_or(0, |text| {
+            text.chars()
+                .filter(|character| !character.is_whitespace())
+                .count()
+        }),
+        suggested_category: document.suggested_category.clone(),
+        suggestion_reason: document.suggestion_reason.clone(),
+        data_class: "c2".to_string(),
+        page_count: document.pages.len(),
+        parent_id: document.parent_id.clone(),
+        page_range: document.page_range,
+        matched_pages: Vec::new(),
+        workflow_stage: crate::workflow::stage(document, pending_proposal, has_children)
+            .as_str()
+            .to_string(),
     }
 }
 
@@ -187,7 +169,7 @@ fn summarize_documents<'a>(
     Ok(documents
         .into_iter()
         .map(|document| {
-            Summary::from_document(
+            summary_from_document(
                 document,
                 pending.contains(&document.id),
                 parents_with_children.contains(&document.id),
@@ -200,7 +182,7 @@ fn summarize_document(library: &Library, document: &Document) -> Result<Summary,
     let pending = library.pending_proposal_documents(std::slice::from_ref(&document.id))?;
     let parents_with_children =
         library.documents_with_children(std::slice::from_ref(&document.id))?;
-    Ok(Summary::from_document(
+    Ok(summary_from_document(
         document,
         pending.contains(&document.id),
         parents_with_children.contains(&document.id),

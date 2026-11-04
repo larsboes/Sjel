@@ -17,97 +17,9 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 /// name — the fields stay positional, but the signature says what they are.
 type PlaceVisit = (String, usize, Option<String>, Option<String>, bool);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum PlaceKind {
-    Address,
-    Airport,
-    City,
-    #[default]
-    Station,
-    Venue,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct PlaceRef {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub kind: PlaceKind,
-    #[serde(default)]
-    pub address: Option<String>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TransportMode {
-    Bike,
-    Bus,
-    Car,
-    Ferry,
-    Flight,
-    Train,
-    Walk,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum StageStatus {
-    Booked,
-    Completed,
-    OptionSelected,
-    #[default]
-    Planning,
-    Open,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct TripStage {
-    pub id: String,
-    pub sequence: usize,
-    pub origin: PlaceRef,
-    pub destination: PlaceRef,
-    pub date: Option<String>,
-    #[serde(default)]
-    pub transport_modes: Vec<TransportMode>,
-    #[serde(default)]
-    pub travelers: Vec<String>,
-    #[serde(default)]
-    pub status: StageStatus,
-    #[serde(default)]
-    pub selected_option_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branch_note: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct PlanSource {
-    pub kind: String,
-    pub reference: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct CreatePlan {
-    pub title: String,
-    pub origin: PlaceRef,
-    pub destinations: Vec<PlaceRef>,
-    pub date_start: String,
-    pub date_end: String,
-    #[serde(default)]
-    pub interests: String,
-    #[serde(default)]
-    pub travelers: Vec<String>,
-    #[serde(default)]
-    pub transport_modes: Vec<TransportMode>,
-    #[serde(default)]
-    pub stages: Vec<TripStage>,
-    #[serde(default)]
-    pub cover_image_url: Option<String>,
-    #[serde(default)]
-    pub source: Option<PlanSource>,
-}
+pub use trips_api::{
+    CreatePlan, PlaceKind, PlaceRef, PlanSource, StageStatus, TransportMode, TripStage,
+};
 
 /// Present-and-null becomes `Some(None)`; an absent key stays `None`.
 ///
@@ -191,71 +103,7 @@ fn check_expected_revision(
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TripPlan {
-    pub id: String,
-    pub title: String,
-    pub origin: PlaceRef,
-    pub destinations: Vec<PlaceRef>,
-    pub date_start: String,
-    pub date_end: String,
-    pub interests: String,
-    pub status: String,
-    pub travelers: Vec<String>,
-    pub transport_modes: Vec<TransportMode>,
-    pub stages: Vec<TripStage>,
-    pub cover_image_url: Option<String>,
-    pub source: Option<PlanSource>,
-    pub created_at: String,
-    pub updated_at: String,
-    /// What this trip is meant to cost, in minor units, beside what it actually
-    /// did. Finance keeps every actual cent and already tags postings with an
-    /// `sjel-trip-id`; the intention had no home at all, so the two halves of
-    /// "did I overspend" were one HTTP call apart and never compared.
-    #[serde(default)]
-    pub budget_cents: Option<i64>,
-    #[serde(default)]
-    pub currency: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
-pub struct CreatePlanItem {
-    pub item_type: String,
-    pub day: Option<String>,
-    pub external_id: String,
-    pub title: String,
-    #[serde(default)]
-    pub payload: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PlanItem {
-    pub id: String,
-    pub plan_id: String,
-    pub item_type: String,
-    pub day: Option<String>,
-    pub external_id: String,
-    pub title: String,
-    pub payload: Value,
-    pub created_at: String,
-}
-
-/// One plan's close-out record: exactly the three fields PRD §8.2 rules, plus
-/// the plan key and the stamp.
-///
-/// `currency` is ECHOED from `trips_plans.currency` and is not a column here.
-/// `cost_cents` is denominated in the plan's own currency, so the money is named
-/// once and a second column cannot disagree with it; a plan with no currency
-/// refuses a cost with a message naming the fix.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Retrospective {
-    pub plan_id: String,
-    pub cost_cents: Option<i64>,
-    pub currency: Option<String>,
-    pub again: String,
-    pub change_note: String,
-    pub filled_at: String,
-}
+pub use trips_api::{CreatePlanItem, PlanItem, Retrospective, TripPlan};
 
 /// A closed trip the ladder should raise today. Carries what a row needs to
 /// render and nothing more — no traveler, which is what keeps this the same
@@ -284,17 +132,7 @@ fn default_plan_data_class() -> String {
 /// is not the same as being prompted.
 pub const RETROSPECTIVE_WINDOW_DAYS: i64 = 45;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PlanDetails {
-    #[serde(flatten)]
-    pub plan: TripPlan,
-    pub items: Vec<PlanItem>,
-    /// One more TOP-LEVEL key, because `plan` is flattened: the wire shape stays
-    /// the flat object `schemas/trip-plan.schema.json` and
-    /// `dashboard/src/lib/api.ts`'s `PlanDetails extends TripPlan` both encode.
-    #[serde(default)]
-    pub retrospective: Option<Retrospective>,
-}
+pub use trips_api::PlanDetails;
 
 pub struct TripsStore {
     /// Shared with every other store in this process on the same file, so

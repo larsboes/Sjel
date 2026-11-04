@@ -2,68 +2,15 @@
 //! `inventory` and are read through its store, so there is one schema and one migration.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
 pub use sjel_inventory::store::{Item, Kind, Side, State};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Placement {
-    pub item_id: String,
-    pub flat: String,
-    pub x: i32,
-    pub y: i32,
-    pub rot: i32,
-    #[serde(default)]
-    pub revision: i64,
-    #[serde(default)]
-    pub since: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PlacementHistory {
-    pub item_id: String,
-    pub flat: String,
-    pub x: i32,
-    pub y: i32,
-    pub rot: i32,
-    pub revision: i64,
-    pub source_revision_id: Option<String>,
-    pub source_observation_id: Option<String>,
-    pub validation: Option<serde_json::Value>,
-    pub recorded_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoomPlanSpace {
-    pub space_id: String,
-    pub flat: String,
-    pub label: String,
-    pub created_at: String,
-    #[serde(default)]
-    pub revision_ids: Vec<String>,
-    #[serde(default)]
-    pub alignments: Vec<RoomPlanAlignment>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoomPlanAlignment {
-    pub space_id: String,
-    pub revision_id: String,
-    pub reference_revision_id: String,
-    pub report: serde_json::Value,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RoomPlanObjectLink {
-    pub space_id: String,
-    pub revision_id: String,
-    pub observation_id: String,
-    pub item_id: String,
-    pub created_at: String,
-}
+pub use interior_api::{
+    Placement, PlacementHistory, RoomPlanObjectLink, RoomPlanSavedAlignment as RoomPlanAlignment,
+    RoomPlanSpace,
+};
 
 pub struct Store {
     pool: sjel_store::Pool,

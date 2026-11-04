@@ -1,0 +1,13 @@
+[package]
+name = "interior-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure wire models and route constants for Interior (room measurements, RoomPlan revisions, and layouts)"
+publish = false
+
+[dependencies]
+schemars = "1.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

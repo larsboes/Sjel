@@ -18,6 +18,7 @@ path = "src/lib.rs"
 [dependencies]
 # Pflicht, kein Komfort: doctors "Server bind policy" weist jede Capability zurueck, die sich
 # einen eigenen Listener baut.
+interior-api = { path = "../interior-api" }
 sjel-server = { path = "../sjel-server" }
 # Loest SJEL_PERSONAL_ROOT auf. Jede Zahl, die diese Capability rechnet, liegt unter
 # <overlay>/data/interior — hier liegt keine.

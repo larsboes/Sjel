@@ -2505,6 +2505,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "interior-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "interpolate_name"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5109,6 +5118,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "civil-date",
+ "interior-api",
  "rayon",
  "roomplan-contract",
  "route-manifest",

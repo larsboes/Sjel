@@ -287,6 +287,10 @@
       }
     },
     {
+      "name": "interior-api",
+      "kind": "lib"
+    },
+    {
       "name": "inventory",
       "kind": "capability",
       "service": {
@@ -1600,6 +1604,16 @@
     {
       "from": "interior",
       "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/interior/Cargo.toml"
+      ]
+    },
+    {
+      "from": "interior",
+      "to": "interior-api",
       "kinds": [
         "cargo-dep"
       ],

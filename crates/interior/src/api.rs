@@ -11,7 +11,8 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use base64::Engine as _;
-use serde::{Deserialize, Serialize};
+use interior_api::*;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -422,14 +423,6 @@ fn verdicts(model: &Model) -> Result<Verdict, (StatusCode, String)> {
     Ok(out)
 }
 
-#[derive(serde::Deserialize)]
-struct PlacementBody {
-    x: i32,
-    y: i32,
-    #[serde(default)]
-    rot: i32,
-}
-
 async fn api_put_placement(
     State(s): State<Arc<AppState>>,
     Path((flat, item)): Path<(String, String)>,
@@ -449,11 +442,6 @@ async fn api_put_placement(
     Ok(Json(
         serde_json::json!({ "flat": flat, "item": item, "ok": true }),
     ))
-}
-
-#[derive(serde::Deserialize)]
-struct LayoutBody {
-    items: Vec<crate::model::PlacedItem>,
 }
 
 /// Replace an existing layout's positions and check again at once. Answers with verdict and plan;
@@ -600,12 +588,6 @@ struct CaptureUpload {
     usdz_base64: String,
 }
 
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanReconcileRequest {
-    before_revision_id: String,
-    after_revision_id: String,
-}
-
 async fn api_roomplan_reconcile(
     State(s): State<Arc<AppState>>,
     Json(request): Json<RoomPlanReconcileRequest>,
@@ -631,14 +613,6 @@ async fn api_roomplan_reconcile(
         "after_revision_id": request.after_revision_id,
         "reconciliation": crate::roomplan::reconcile(&before_scan, &after_scan)
     })))
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanPlacementProposalRequest {
-    space_id: String,
-    revision_id: String,
-    observation_id: String,
-    item_id: String,
 }
 
 async fn api_roomplan_propose_placement(
@@ -744,25 +718,6 @@ async fn api_roomplan_propose_placement(
         "proposal": proposal,
         "requires_review": true
     })))
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanSpaceCreateRequest {
-    revision_id: String,
-    #[serde(default)]
-    label: Option<String>,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanSpaceRevisionRequest {
-    revision_id: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanObjectLinkRequest {
-    revision_id: String,
-    observation_id: String,
-    item_id: String,
 }
 
 async fn api_roomplan_spaces(
@@ -950,17 +905,6 @@ async fn api_roomplan_object_link(
         "observation_id": request.observation_id,
         "item_id": request.item_id
     })))
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct RoomPlanPlacementRequest {
-    revision_id: String,
-    observation_id: String,
-    expected_revision: i64,
-    x: i32,
-    y: i32,
-    #[serde(default)]
-    rot: i32,
 }
 
 async fn api_roomplan_apply_placement(
@@ -2045,13 +1989,7 @@ mod tests {
 /// HTTP request. A job is the smallest thing that works: a number, a state, a result, living in
 /// the process and dying with it. Its result is proposals, not facts about the flat; whoever wants
 /// one keeps it as a layout.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-pub enum JobState {
-    Running { since_ms: u128 },
-    Done { outcome: serde_json::Value },
-    Failed { reason: String },
-}
+pub use interior_api::JobState;
 
 #[derive(Default)]
 struct Jobs {
@@ -2141,26 +2079,6 @@ async fn api_job(Path(id): Path<u64>) -> Result<impl IntoResponse, (StatusCode, 
     Ok(Json(serde_json::json!({ "id": id, "state": by_id })))
 }
 
-#[derive(serde::Deserialize)]
-struct SearchRequest {
-    layout: String,
-    #[serde(default)]
-    move_refs: Vec<String>,
-    #[serde(default = "raster_standard")]
-    step: i32,
-    #[serde(default = "search_limit")]
-    limit: usize,
-}
-
-fn raster_standard() -> i32 {
-    20
-}
-/// The same number as `--limit` on the command line (`main.rs`, `cmd_search`); 0 would mean
-/// unlimited.
-fn search_limit() -> usize {
-    6
-}
-
 /// Start a search; answers with the job number, not the result.
 async fn api_search(
     State(s): State<Arc<AppState>>,
@@ -2186,33 +2104,6 @@ async fn api_search(
         serde_json::to_value(rep).map_err(|e| e.to_string())
     })?;
     Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "job": id }))))
-}
-
-#[derive(serde::Deserialize)]
-struct ComposeRequest {
-    refs: Vec<String>,
-    #[serde(default = "compose_raster")]
-    step: i32,
-    #[serde(default = "compose_beam")]
-    beam: usize,
-    #[serde(default = "compose_limit")]
-    limit: usize,
-    #[serde(default = "compose_rotations")]
-    rotations: Vec<i32>,
-}
-
-fn compose_raster() -> i32 {
-    25
-}
-fn compose_beam() -> usize {
-    60
-}
-/// The same number as `--limit` on the command line (`main.rs`, `cmd_compose`).
-fn compose_limit() -> usize {
-    5
-}
-fn compose_rotations() -> Vec<i32> {
-    vec![0, 90]
 }
 
 /// Furnish a whole flat. Also a job: the beam search takes minutes.

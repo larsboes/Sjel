@@ -484,21 +484,7 @@ pub type Catalogue = BTreeMap<String, crate::store::Item>;
 
 // ---------------------------------------------------------------- Layout
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PlacedItem {
-    #[serde(rename = "ref")]
-    pub reference: String,
-    pub x: i32,
-    pub y: i32,
-    #[serde(default)]
-    pub rot: i32,
-    /// Overrides the catalogue size, e.g. for the unfolded state of a folding piece.
-    #[serde(default)]
-    pub size: Option<[i32; 2]>,
-    #[serde(default)]
-    #[serde(alias = "typ")]
-    pub kind: Option<String>,
-}
+pub use interior_api::PlacedItem;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Layout {

@@ -108,8 +108,8 @@ fi
 SCRATCH_TARGET="${TMPDIR:-/tmp}/axon-cargo-hermetic-test/target"
 out=$(CARGO_TARGET_DIR="$SCRATCH_TARGET" "$TOOL" --print-env 2>&1); status=$?
 expect_ok "a scratch target dir outside every checkout is honoured"
-expect_ends_with "a warm target dir is reused rather than replaced" CARGO_TARGET_DIR \
-  "axon-cargo-hermetic-test/target"
+expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CARGO_TARGET_DIR \
+  "axon-cargo-hermetic-test/target/hermetic-$(printf %s "$(cd "$REPO" && pwd -P)" | shasum | cut -c1-12)"
 
 # --- the environment the run inherits --------------------------------------
 #

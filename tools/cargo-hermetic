@@ -105,6 +105,9 @@ _inside() {  # _inside <path> <root> -> exit 0 when path is root or below it
 
 TARGET="${CARGO_TARGET_DIR:-}"
 [ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/axon-cargo-hermetic/target"
+# One target per checkout: cargo reuses a member's test binary across checkouts that share a
+# target, and env!("CARGO_MANIFEST_DIR") inside it then names the other checkout.
+TARGET="$TARGET/hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
 TARGET="$(_canonical "$TARGET")"
 for forbidden in "$REPO" "$MAIN_CHECKOUT"; do
   if _inside "$TARGET" "$forbidden"; then

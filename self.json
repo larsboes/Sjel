@@ -508,6 +508,10 @@
       }
     },
     {
+      "name": "soundscape-api",
+      "kind": "lib"
+    },
+    {
       "name": "sparpreis-watch",
       "kind": "capability",
       "service": {
@@ -2488,6 +2492,16 @@
     {
       "from": "soundscape",
       "to": "sjel-server",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/soundscape/Cargo.toml"
+      ]
+    },
+    {
+      "from": "soundscape",
+      "to": "soundscape-api",
       "kinds": [
         "cargo-dep"
       ],

@@ -23,231 +23,24 @@ use axum::{
     routing::get,
     Router,
 };
-use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use tokio::sync::broadcast;
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-const PRESETS: [&str; 6] = ["edm", "ambient", "lofi", "focus", "relax", "sleep"];
-const SCENARIOS: [&str; 5] = ["deep-work", "reading", "reset", "wind-down", "timer"];
-const MAX_SESSION_MS: u64 = 8 * 60 * 60 * 1000;
-
-/// The six scene parameters, same names and range as the browser engine's. They
-/// live here rather than in the UI because a second surface has to be able to read
-/// what the first one set.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-struct Params {
-    pace: f32,
-    density: f32,
-    brightness: f32,
-    space: f32,
-    pulse: f32,
-    texture: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-struct Layers {
-    drums: f32,
-    bass: f32,
-    pads: f32,
-    melody: f32,
-    texture: f32,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct Session {
-    scenario: String,
-    duration_ms: u64,
-    elapsed_ms: u64,
-    running_since_ms: Option<u64>,
-}
-
-impl Session {
-    fn remaining_at(&self, now: u64) -> u64 {
-        let running = self
-            .running_since_ms
-            .map(|started| now.saturating_sub(started))
-            .unwrap_or(0);
-        self.duration_ms
-            .saturating_sub(self.elapsed_ms.saturating_add(running))
-    }
-
-    fn is_valid(&self, now: u64) -> bool {
-        SCENARIOS.contains(&self.scenario.as_str())
-            && self.duration_ms > 0
-            && self.duration_ms <= MAX_SESSION_MS
-            && self.elapsed_ms <= self.duration_ms
-            && self
-                .running_since_ms
-                .is_none_or(|started| started <= now.saturating_add(60_000))
-    }
-
-    fn pause_at(&mut self, now: u64) {
-        if let Some(started) = self.running_since_ms.take() {
-            self.elapsed_ms = self
-                .duration_ms
-                .min(self.elapsed_ms.saturating_add(now.saturating_sub(started)));
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct Scape {
-    preset: String,
-    params: Params,
-    layers: Layers,
-    seed: u32,
-    playing: bool,
-    volume: f32,
-    energy: f32,
-    #[serde(default)]
-    session: Option<Session>,
-}
-
-impl Default for Scape {
-    /// Mirrors the browser engine's own defaults. Two sources of truth for a
-    /// default is one too many, but until the param shape moves into schemas/
-    /// (CONTRIBUTING.md#one-manifest-per-concern, once both surfaces read it) keeping them equal is the contract.
-    fn default() -> Self {
-        Self {
-            preset: "edm".into(),
-            params: Params {
-                pace: 0.5,
-                density: 0.5,
-                brightness: 0.5,
-                space: 0.5,
-                pulse: 0.4,
-                texture: 0.4,
-            },
-            layers: Layers {
-                drums: 1.0,
-                bass: 1.0,
-                pads: 1.0,
-                melody: 1.0,
-                texture: 1.0,
-            },
-            seed: 0,
-            playing: false,
-            volume: 0.65,
-            energy: 0.7,
-            session: None,
-        }
-    }
-}
-
-fn deserialize_session_patch<'de, D>(deserializer: D) -> Result<Option<Option<Session>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Option::<Session>::deserialize(deserializer).map(Some)
-}
-
-/// Every field optional: a surface sends what it changed, not the whole state.
-/// A full-state PUT would let a stale client silently undo another one's edit.
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Patch {
-    preset: Option<String>,
-    params: Option<Params>,
-    layers: Option<Layers>,
-    seed: Option<u32>,
-    playing: Option<bool>,
-    volume: Option<f32>,
-    energy: Option<f32>,
-    #[serde(default, deserialize_with = "deserialize_session_patch")]
-    session: Option<Option<Session>>,
-    /// Who sent this. Echoed back on the stream so the sender can drop its own
-    /// change instead of applying a value it already has — without it a dragged
-    /// slider fights the round trip of every frame it just sent.
-    origin: Option<String>,
-}
-
-/// The client currently making sound. Not part of `Scape` on purpose: the scape is
-/// what should be playing and is worth persisting, a host is who is doing it right
-/// now and is worth nothing after a restart.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-struct Host {
-    id: String,
-    /// Free text from the client — "dashboard", "panel", "phone". For humans
-    /// reading "playing where", never for routing.
-    label: String,
-    since_ms: u64,
-}
-
-/// A host that has not checked in for this long is gone. Long enough to survive a
-/// backgrounded tab's throttled timers, short enough that a closed laptop stops
-/// claiming to play before you have walked away from it.
-const HOST_TTL: std::time::Duration = std::time::Duration::from_secs(15);
+pub use soundscape_api::{
+    deserialize_session_patch, Change, Claim, Host, Layers, Params, Patch, Preset, Release, Scape,
+    Session, StateView, HOST_TTL, MAX_SESSION_MS, PRESETS, ROUTE_SOUNDSCAPE_HEALTH,
+    ROUTE_SOUNDSCAPE_HOST_CLAIM, ROUTE_SOUNDSCAPE_HOST_RELEASE, ROUTE_SOUNDSCAPE_STATE,
+    ROUTE_SOUNDSCAPE_STREAM, SCENARIOS,
+};
 
 struct Holder {
     host: Host,
     last_seen: std::time::Instant,
 }
 
-/// What every surface reads: the scape, plus whether anyone is actually sounding it.
-/// `playing` alone answers "what should happen"; `host` answers "is it happening".
-#[derive(Clone, Debug, Serialize)]
-struct StateView {
-    #[serde(flatten)]
-    scape: Scape,
-    host: Option<Host>,
-}
-
-/// A state as it goes out on the stream: the view, flattened so a client that
-/// ignores `origin` still reads a plain state, plus who caused it.
-#[derive(Clone, Debug, Serialize)]
-struct Change {
-    #[serde(flatten)]
-    view: StateView,
-    origin: Option<String>,
-}
-
-/// A client claiming the audio output, or keeping its claim alive.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Claim {
-    id: String,
-    #[serde(default)]
-    label: String,
-    /// Take the output from a live host. Never implicit: two tabs both playing is
-    /// the defect #113 fixed, and silently stealing output is the other half of it.
-    #[serde(default)]
-    takeover: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Release {
-    id: String,
-}
-
 fn clamp01(v: f32) -> f32 {
     v.clamp(0.0, 1.0)
-}
-
-impl Params {
-    fn clamped(self) -> Self {
-        Self {
-            pace: clamp01(self.pace),
-            density: clamp01(self.density),
-            brightness: clamp01(self.brightness),
-            space: clamp01(self.space),
-            pulse: clamp01(self.pulse),
-            texture: clamp01(self.texture),
-        }
-    }
-}
-
-impl Layers {
-    fn clamped(self) -> Self {
-        Self {
-            drums: clamp01(self.drums),
-            bass: clamp01(self.bass),
-            pads: clamp01(self.pads),
-            melody: clamp01(self.melody),
-            texture: clamp01(self.texture),
-        }
-    }
 }
 
 /// Decrements the surface count when a stream ends, however it ends — dropped
@@ -359,19 +152,19 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
-        "/api/soundscape/health",
+        ROUTE_SOUNDSCAPE_HEALTH,
         "Liveness under the panel prefix. Same handler as /health.",
     ),
-    r("GET", "/api/soundscape/state", "Current playback state."),
-    r("GET", "/api/soundscape/stream", "The audio stream."),
+    r("GET", ROUTE_SOUNDSCAPE_STATE, "Current playback state."),
+    r("GET", ROUTE_SOUNDSCAPE_STREAM, "The audio stream."),
     r(
         "POST",
-        "/api/soundscape/host/claim",
+        ROUTE_SOUNDSCAPE_HOST_CLAIM,
         "Claim playback host for this browser.",
     ),
     r(
         "POST",
-        "/api/soundscape/host/release",
+        ROUTE_SOUNDSCAPE_HOST_RELEASE,
         "Release the playback host.",
     ),
 ];
@@ -739,15 +532,15 @@ async fn main() {
     let router = Router::new()
         .route("/routes", get(routes))
         .route("/health", get(health))
-        .route("/api/soundscape/health", get(health))
-        .route("/api/soundscape/state", get(get_state).post(post_state))
-        .route("/api/soundscape/stream", get(stream))
+        .route(ROUTE_SOUNDSCAPE_HEALTH, get(health))
+        .route(ROUTE_SOUNDSCAPE_STATE, get(get_state).post(post_state))
+        .route(ROUTE_SOUNDSCAPE_STREAM, get(stream))
         .route(
-            "/api/soundscape/host/claim",
+            ROUTE_SOUNDSCAPE_HOST_CLAIM,
             axum::routing::post(claim_host),
         )
         .route(
-            "/api/soundscape/host/release",
+            ROUTE_SOUNDSCAPE_HOST_RELEASE,
             axum::routing::post(release_host),
         )
         .with_state(app);

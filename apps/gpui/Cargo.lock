@@ -7137,6 +7137,7 @@ dependencies = [
  "sjel-credentials",
  "sjel-links",
  "software-api",
+ "soundscape-api",
  "tokio",
  "trips-api",
  "zeroize",
@@ -7279,6 +7280,14 @@ name = "software-api"
 version = "0.1.0"
 dependencies = [
  "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "soundscape-api"
+version = "0.1.0"
+dependencies = [
  "serde",
  "serde_json",
 ]

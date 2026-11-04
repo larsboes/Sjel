@@ -188,6 +188,9 @@ their open edits.
    Done for `software`: `crates/software-api` (`software-api`) extracts pure wire models,
    app records, decision models, and route constants
    shared with `sjel-software` and `sjel-gpui-core`.
+   Done for `soundscape`: `crates/soundscape-api` (`soundscape-api`) extracts pure wire models,
+   presets, scale definitions, scene parameters, layer mixes, sessions, claims, and route constants
+   shared with `sjel-soundscape` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

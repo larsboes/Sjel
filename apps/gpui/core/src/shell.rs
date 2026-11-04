@@ -673,193 +673,17 @@ pub struct MusicBuild {
 }
 
 /// The soundscape playback state (`GET /soundscape/api/soundscape/state`).
-///
-/// Every field but `preset` is optional on the wire, because a conductor from before a field
-/// existed still answers: a missing parameter falls back to the same default the conductor uses
-/// (`capabilities/soundscape/src/main.rs`). That equality is the contract, not a convenience --
-/// a surface that invents its own default opens a preset in the wrong place.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct SoundscapeState {
-    pub preset: String,
-    #[serde(default)]
-    pub playing: bool,
-    #[serde(default = "default_volume")]
-    pub volume: f32,
-    #[serde(default = "default_energy")]
-    pub energy: f32,
-    #[serde(default)]
-    pub params: SoundscapeParams,
-    #[serde(default)]
-    pub layers: SoundscapeLayers,
-    #[serde(default)]
-    pub seed: u32,
-    #[serde(default)]
-    pub session: Option<SoundscapeSession>,
-}
-
-fn default_volume() -> f32 {
-    0.65
-}
-
-fn default_energy() -> f32 {
-    0.7
-}
-
-/// The six scene parameters, same names and range as the browser engine's.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SoundscapeParams {
-    pub pace: f32,
-    pub density: f32,
-    pub brightness: f32,
-    pub space: f32,
-    pub pulse: f32,
-    pub texture: f32,
-}
-
-impl SoundscapeParams {
-    pub fn get(&self, name: crate::soundscape::ParamName) -> f32 {
-        self.into_params().get(name)
-    }
-
-    pub fn set(&mut self, name: crate::soundscape::ParamName, value: f32) {
-        let mut params = self.into_params();
-        params.set(name, value);
-        *self = params.into();
-    }
-
-    fn into_params(self) -> crate::soundscape::Params {
-        self.into()
-    }
-}
-
-impl Default for SoundscapeParams {
-    fn default() -> Self {
-        Self {
-            pace: 0.5,
-            density: 0.5,
-            brightness: 0.5,
-            space: 0.5,
-            pulse: 0.4,
-            texture: 0.4,
-        }
-    }
-}
-
-impl From<SoundscapeParams> for crate::soundscape::Params {
-    fn from(params: SoundscapeParams) -> Self {
-        Self {
-            pace: params.pace,
-            density: params.density,
-            brightness: params.brightness,
-            space: params.space,
-            pulse: params.pulse,
-            texture: params.texture,
-        }
-    }
-}
-
-impl From<crate::soundscape::Params> for SoundscapeParams {
-    fn from(params: crate::soundscape::Params) -> Self {
-        Self {
-            pace: params.pace,
-            density: params.density,
-            brightness: params.brightness,
-            space: params.space,
-            pulse: params.pulse,
-            texture: params.texture,
-        }
-    }
-}
-
-/// How much of each layer is in the mix, 0-1.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SoundscapeLayers {
-    pub drums: f32,
-    pub bass: f32,
-    pub pads: f32,
-    pub melody: f32,
-    pub texture: f32,
-}
-
-impl SoundscapeLayers {
-    pub fn get(&self, layer: crate::soundscape::LayerName) -> f32 {
-        let layers: crate::soundscape::Layers = (*self).into();
-        layers.get(layer)
-    }
-
-    pub fn set(&mut self, layer: crate::soundscape::LayerName, value: f32) {
-        let mut layers: crate::soundscape::Layers = (*self).into();
-        layers.set(layer, value);
-        *self = layers.into();
-    }
-}
-
-impl Default for SoundscapeLayers {
-    fn default() -> Self {
-        Self {
-            drums: 1.,
-            bass: 1.,
-            pads: 1.,
-            melody: 1.,
-            texture: 1.,
-        }
-    }
-}
-
-impl From<SoundscapeLayers> for crate::soundscape::Layers {
-    fn from(layers: SoundscapeLayers) -> Self {
-        Self {
-            drums: layers.drums,
-            bass: layers.bass,
-            pads: layers.pads,
-            melody: layers.melody,
-            texture: layers.texture,
-        }
-    }
-}
-
-impl From<crate::soundscape::Layers> for SoundscapeLayers {
-    fn from(layers: crate::soundscape::Layers) -> Self {
-        Self {
-            drums: layers.drums,
-            bass: layers.bass,
-            pads: layers.pads,
-            melody: layers.melody,
-            texture: layers.texture,
-        }
-    }
-}
-
-/// A timed session: a scenario, how long it runs, and how much of it has run. The conductor owns
-/// this because every surface has to agree whether a 50-minute focus session is still running.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SoundscapeSession {
-    pub scenario: String,
-    pub duration_ms: u64,
-    pub elapsed_ms: u64,
-    #[serde(default)]
-    pub running_since_ms: Option<u64>,
-}
-
-impl SoundscapeState {
-    /// The preset as the engine's own type, or `Edm` for a name this build does not know. The
-    /// conductor rejects unknown presets on the way in, so a name that does not parse here is a
-    /// conductor newer than this app.
-    pub fn preset(&self) -> crate::soundscape::Preset {
-        crate::soundscape::Preset::from_key(&self.preset).unwrap_or(crate::soundscape::Preset::Edm)
-    }
-
-    /// The parameters as the engine's own type.
-    pub fn params(&self) -> crate::soundscape::Params {
-        self.params.into()
-    }
-
-    pub fn layers(&self) -> crate::soundscape::Layers {
-        self.layers.into()
-    }
-}
+pub use soundscape_api::{
+    default_energy, default_volume, deserialize_session_patch, Change as SoundscapeChange,
+    Claim as SoundscapeClaim, Host as SoundscapeHost, LayerName as SoundscapeLayerName,
+    Layers as SoundscapeLayers, ParamName as SoundscapeParamName, Params as SoundscapeParams,
+    Patch as SoundscapePatch, Preset as SoundscapePreset, Release as SoundscapeRelease,
+    Scale as SoundscapeScale, Session as SoundscapeSession, StateView as SoundscapeStateView,
+    SoundscapeState, HOST_TTL, MAX_SESSION_MS, PRESETS as SOUNDSCAPE_PRESETS,
+    PROXY_ROUTE_SOUNDSCAPE_STATE, ROUTE_SOUNDSCAPE_HEALTH, ROUTE_SOUNDSCAPE_HOST_CLAIM,
+    ROUTE_SOUNDSCAPE_HOST_RELEASE, ROUTE_SOUNDSCAPE_STATE, ROUTE_SOUNDSCAPE_STREAM,
+    SCENARIOS as SOUNDSCAPE_SCENARIOS,
+};
 
 /// One message in an Ask conversation (`POST /assistant/api/ask`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -4920,7 +4744,7 @@ impl Shell {
     }
 
     pub async fn soundscape_state(&self) -> ShellResult<SoundscapeState> {
-        self.json(Method::GET, "/soundscape/api/soundscape/state", None, 3)
+        self.json(Method::GET, PROXY_ROUTE_SOUNDSCAPE_STATE, None, 3)
             .await
     }
 
@@ -4932,7 +4756,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -4947,7 +4771,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -4968,7 +4792,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -4986,7 +4810,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -5001,7 +4825,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -5016,7 +4840,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )
@@ -5034,7 +4858,7 @@ impl Shell {
         });
         self.json(
             Method::POST,
-            "/soundscape/api/soundscape/state",
+            PROXY_ROUTE_SOUNDSCAPE_STATE,
             Some(body),
             3,
         )

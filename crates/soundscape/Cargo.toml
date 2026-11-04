@@ -12,6 +12,7 @@ name = "soundscape"
 path = "src/main.rs"
 
 [dependencies]
+soundscape-api = { path = "../soundscape-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 route-manifest = { path = "../route-manifest" }

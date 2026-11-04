@@ -49,6 +49,7 @@ import-api = { path = "../../../crates/import-api" }
 inventory-api = { path = "../../../crates/inventory-api" }
 projects-api = { path = "../../../crates/projects-api" }
 software-api = { path = "../../../crates/software-api" }
+soundscape-api = { path = "../../../crates/soundscape-api" }
 trips-api = { path = "../../../crates/trips-api" }
 zeroize = "=1.9.1"
 

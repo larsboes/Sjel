@@ -51,7 +51,7 @@ harness_verdict() { # -> "<verdict>\t<mechanism-or-reason>"
     claude)
       printf 'supported\tSjel deny policy in the user-level ~/.claude/settings.json (tools/templates/claude-code/settings.base.json, applied by `sjel claude`) — permissions.deny + sandbox.filesystem.denyRead, with this deployment adding its own from <overlay>/config/claude-code/settings.fragment.json. Since the principal'"'"'s ruling of 2026-10-02 it sits in a file an agent session can edit; `sjel claude check` is what reports drift' ;;
     pi)
-      printf 'separately-profiled\tenforced inside the agentbox micro-VM, not on the host: capabilities/agentbox/profiles/pi/extensions/protected-paths blocks CONTAINER paths, and only /workspace is mounted. Says nothing about a host-installed pi' ;;
+      printf 'separately-profiled\tenforced inside the agentbox micro-VM, not on the host: tools/agentbox/profiles/pi/extensions/protected-paths blocks CONTAINER paths, and only /workspace is mounted. Says nothing about a host-installed pi' ;;
     codex|opencode)
       printf 'unsupported\tno path-deny mechanism verified in this repository. Nothing here enforces a protected path for this harness, so nothing here may claim one' ;;
     copilot)

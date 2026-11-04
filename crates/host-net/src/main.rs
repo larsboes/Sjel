@@ -1,6 +1,6 @@
 //! host-net — what this host exposes to the network, read without sudo.
 //!
-//! Four verbs, one flag, no mutation. This capability observes; `capabilities/host-firewall`
+//! Four verbs, one flag, no mutation. This capability observes; `tools/host-firewall`
 //! is the one that changes a rule, and nothing here proposes one.
 //!
 //! Exit codes, which `tools/host-watch` and any other caller depend on:
@@ -10,7 +10,7 @@
 //!   (`tailnet`) the running tailscaled is older than the newest release on its track.
 //! * `2` — could not check: a usage error, no policy file, an unsupported platform, or a
 //!   required command that is missing or refused. Two rather than three because `tools/audit`
-//!   and `capabilities/host-firewall/host-firewall` both already spell "usage or setup error"
+//!   and `tools/host-firewall/host-firewall` both already spell "usage or setup error"
 //!   as 2, and `tools/host-watch` already spells "no policy" as 2. A third meaning invented
 //!   here would be the one number in the repo that means something else.
 

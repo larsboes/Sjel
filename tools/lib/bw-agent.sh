@@ -1,6 +1,6 @@
 # Resolve the Bitwarden desktop app's SSH agent socket into SSH_AUTH_SOCK, if
 # present. Single source for WHERE that socket lives — sourced by both the shell
-# config (capabilities/shell/init.zsh) and any tool that needs the vault agent
+# config (tools/shell/init.zsh) and any tool that needs the vault agent
 # (tools/backup.sh). Guarded: a no-op when the app isn't running / not installed,
 # so it never points SSH_AUTH_SOCK at a dead socket. POSIX-ish on purpose so
 # zsh and bash can both source it. bash 3.2-safe.

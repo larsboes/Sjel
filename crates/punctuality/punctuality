@@ -1,7 +1,7 @@
 #!/bin/bash
 # capabilities/punctuality/punctuality — empirical rail punctuality from DB's own
 # published stop history. Named after its capability, which is what puts this directory
-# on PATH (capabilities/shell/init.zsh).
+# on PATH (tools/shell/init.zsh).
 # Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail
 

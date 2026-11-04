@@ -18,9 +18,9 @@ fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
 _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SRC_ROOT=""
 for _c in "$_dir/.." "$_dir"; do
-  if [ -f "$_c/capabilities/agentbox/agentbox" ]; then SRC_ROOT="$(cd "$_c" && pwd)"; break; fi
+  if [ -f "$_c/tools/agentbox/agentbox" ]; then SRC_ROOT="$(cd "$_c" && pwd)"; break; fi
 done
-[ -n "$SRC_ROOT" ] || { echo "agentbox: cannot find capabilities/agentbox/agentbox from $_dir" >&2; exit 1; }
+[ -n "$SRC_ROOT" ] || { echo "agentbox: cannot find tools/agentbox/agentbox from $_dir" >&2; exit 1; }
 
 SCRATCH="$(mktemp -d "/tmp/agentbox.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
@@ -33,14 +33,14 @@ OVERLAY="$SCRATCH/overlay"
 source "$SRC_ROOT/tools/lib/test-support.sh"
 isolate_sjel_env
 
-mkdir -p "$ROOT/tools/lib" "$ROOT/capabilities/agentbox" "$OVERLAY/config"
+mkdir -p "$ROOT/tools/lib" "$ROOT/tools/agentbox" "$OVERLAY/config"
 cp "$SRC_ROOT"/tools/lib/*.sh "$ROOT/tools/lib/"
-cp "$SRC_ROOT/capabilities/agentbox/agentbox" "$ROOT/capabilities/agentbox/"
-cp -R "$SRC_ROOT/capabilities/agentbox/profiles" "$ROOT/capabilities/agentbox/"
+cp "$SRC_ROOT/tools/agentbox/agentbox" "$ROOT/tools/agentbox/"
+cp -R "$SRC_ROOT/tools/agentbox/profiles" "$ROOT/tools/agentbox/"
 printf 'overlay = "%s"\n' "$OVERLAY" > "$ROOT/sjel.toml"
 printf 'agent = "pi"\nmodel_port = "8000"\n' > "$OVERLAY/config/agentbox.toml"
 
-BOX="$ROOT/capabilities/agentbox/agentbox"
+BOX="$ROOT/tools/agentbox/agentbox"
 
 # --- 1. the runtime gate ---------------------------------------------------
 # podman is the interesting rejection: its verbs match docker's closely enough that the box
@@ -77,7 +77,7 @@ done
 # The launcher resolves the latest release at build time (Q77). A version or checksum
 # literal reappearing in the profile would silently restore the freeze the ruling removed,
 # and nothing else in this file would notice.
-PROFILE="$SRC_ROOT/capabilities/agentbox/profiles/pi/profile.toml"
+PROFILE="$SRC_ROOT/tools/agentbox/profiles/pi/profile.toml"
 for forbidden in '^version *=' '^archive_sha256'; do
   if grep -Eq "$forbidden" "$PROFILE"; then
     fail "profile.toml declares '$forbidden' — the release is resolved at build time, not recorded here"
@@ -242,7 +242,7 @@ else
   # a one-line edit that this test follows instead of contradicting. It also has to be glibc:
   # resolver behaviour on `--network none` differs (glibc fails in ~2 ms, musl burns a 10 s
   # timeout).
-  PROBE_IMAGE="$(sed -n 's/^ARG BASE_IMAGE=//p' "$SRC_ROOT/capabilities/agentbox/Containerfile" | head -n1)"
+  PROBE_IMAGE="$(sed -n 's/^ARG BASE_IMAGE=//p' "$SRC_ROOT/tools/agentbox/Containerfile" | head -n1)"
   [ -n "$PROBE_IMAGE" ] || fail "could not read ARG BASE_IMAGE from the agentbox Containerfile"
   if ! docker image inspect "$PROBE_IMAGE" >/dev/null 2>&1; then
     docker pull -q "$PROBE_IMAGE" >/dev/null 2>&1 \

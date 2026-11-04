@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/host-firewall — what the renderer produces from declared inputs (Sjel#193).
+# tools/host-firewall — what the renderer produces from declared inputs (Sjel#193).
 #
 # The render layer is the whole of what this repository can honestly test: applying rules to a
 # real host is the overlay's work by the issue's own boundary, and this machine is a Mac with
@@ -11,7 +11,7 @@
 set -uo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-FW="$(cd "$_here/.." && pwd)/capabilities/host-firewall/host-firewall"
+FW="$(cd "$_here/.." && pwd)/tools/host-firewall/host-firewall"
 
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT

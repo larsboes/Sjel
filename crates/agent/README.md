@@ -180,7 +180,7 @@ that is the only reason this surface cannot leak a private value to a provider.
   there, which is what makes it tempting. It contradicts the README rule directly and puts `bash`
   behind the port the dashboard already proxies.
 - **The loop inside `apps/gpui`.** Declined above: no phone path, and a second copy of the gates.
-- **`capabilities/agentbox` as the runtime.** A container is a stronger fence than the guard, and
+- **`tools/agentbox` as the runtime.** A container is a stronger fence than the guard, and
   agentbox already runs one. It also records the price — `--network none` takes the model with it,
   so the box needs a route to the host's model server, which is the boundary it was adopted to
   remove. Available as a later runtime behind the same session API; not the first slice.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/agentbox/agentbox — run a coding agent inside a disposable container.
+# tools/agentbox/agentbox — run a coding agent inside a disposable container.
 # Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail
 
@@ -41,7 +41,7 @@ die() { echo "agentbox: $*" >&2; exit 1; }
 # --- config ----------------------------------------------------------------
 
 require_config() {
-  [ -f "$CONFIG" ] || die "no config at $CONFIG — copy capabilities/agentbox/agentbox.toml.example there and fill it in"
+  [ -f "$CONFIG" ] || die "no config at $CONFIG — copy tools/agentbox/agentbox.toml.example there and fill it in"
   AGENT="$(toml_get agent "$CONFIG")"
   [ -n "$AGENT" ] || die "$CONFIG has no 'agent'"
   PROFILE_DIR="$_dir/profiles/$AGENT"
@@ -151,7 +151,7 @@ read_api_key() {
 # There is nothing between them. `docker network create --internal` blocks egress and the
 # host alike: no default route, no host.docker.internal, host-gateway unreachable. That is
 # what apple-container's host-only network did give — its gateway WAS the Mac — and it is
-# the property Q75 traded away. See capabilities/agentbox/README.md.
+# the property Q75 traded away. See tools/agentbox/README.md.
 #
 # `--add-host host.docker.internal:host-gateway` is redundant on OrbStack, which publishes
 # the name itself, and is what makes the same launcher work on a plain Linux daemon, which
@@ -471,7 +471,7 @@ cmd_host_install() {
   repo="$(upstream_repo)" || die "profile $PROFILE declares no 'upstream' — cannot name the advisory list (Sjel#126)"
   echo "agentbox: advisories are NOT checked here — open the list before you accept:"
   echo "    https://github.com/$repo/security/advisories"
-  echo "  (capabilities/agentbox/README.md#what-host-install-refuses explains why this is manual)"
+  echo "  (tools/agentbox/README.md#what-host-install-refuses explains why this is manual)"
 
   resolve_release
 

@@ -4,7 +4,7 @@ A coding agent in a disposable container, talking to a model server on the host.
 
 ## Surface
 
-The `agentbox` CLI (`capabilities/agentbox/agentbox`) manages image builds, container lifecycle, and host installations:
+The `agentbox` CLI (`tools/agentbox/agentbox`) manages image builds, container lifecycle, and host installations:
 
 - `agentbox build` — fetch the latest agent release archive, verify sha256 checksums, and build the container image.
 - `agentbox run [--online] [--project <path>]` — launch disposable container running the coding agent.
@@ -41,14 +41,14 @@ Intermediate internal networks without host routing or complex in-container fire
 
 Agent binaries are downloaded as standalone release tarballs verified against published cryptographic checksums.
 
-Building the container image (`capabilities/agentbox/Containerfile`) directly from release archives avoids installing Node, npm, or runtime package managers, satisfying repository language tooling doctrine.
+Building the container image (`tools/agentbox/Containerfile`) directly from release archives avoids installing Node, npm, or runtime package managers, satisfying repository language tooling doctrine.
 
 ## Verification
 
 ```bash
 tools/agentbox.test.sh
-capabilities/agentbox/agentbox doctor
-capabilities/agentbox/agentbox run --online --project . -- -p "status"
+tools/agentbox/agentbox doctor
+tools/agentbox/agentbox run --online --project . -- -p "status"
 ```
 
 ## Considered and declined

@@ -651,14 +651,14 @@ license = "BSD-3-Clause (whole stack, control plane included)"
 summary = "Declined: open self-hostable mesh VPN that lacks the per-peer TLS certificate Sjel needs"
 why = "Rejected 2026-07-26 on capability, not merit: its whole stack including the control plane is BSD-3 and self-hostable, where Tailscale's is proprietary and its metadata visible to a hosted server. It has no per-peer TLS certificate -- netbirdio/netbird#5479 is open with no maintainer response and no roadmap, and the only workaround exposes the service publicly -- so adopting it would reintroduce the private CA mkcert was rejected for; `netbird cert` or DNS-PERSIST-01 in a release reopens the question."
 
-# --- agentbox: the sandboxed coding agent (capabilities/agentbox) -----------
+# --- agentbox: the sandboxed coding agent (tools/agentbox) -----------
 
 [pi-coding-agent]
 url = "https://github.com/earendil-works/pi"
 verdict = "adopt"
 license = "MIT"
 summary = "Coding agent that Sjel's agentbox runs in a container, taken from the release binary"
-why = "The coding agent capabilities/agentbox puts in a container, adopted from the GitHub release tarball rather than npm: releases ship a self-contained aarch64 ELF, so the image needs no Node and no npm. Upstream states pi has no built-in sandbox by design and that isolation must come from the OS or a virtualization boundary, which is the shape agentbox follows; `agentbox build` resolves GitHub's `/releases/latest` itself and verifies the tarball against that release's SHA256SUMS."
+why = "The coding agent tools/agentbox puts in a container, adopted from the GitHub release tarball rather than npm: releases ship a self-contained aarch64 ELF, so the image needs no Node and no npm. Upstream states pi has no built-in sandbox by design and that isolation must come from the OS or a virtualization boundary, which is the shape agentbox follows; `agentbox build` resolves GitHub's `/releases/latest` itself and verifies the tarball against that release's SHA256SUMS."
 
 [pi-ai-auth]
 url = "https://github.com/earendil-works/pi/tree/main/packages/ai"

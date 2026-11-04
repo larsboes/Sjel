@@ -2,7 +2,7 @@
 
 What this host exposes to the network, read without sudo. Four verbs over the listening
 sockets, the application firewall and the tailnet, plus one policy check a scheduled job can
-call. It observes and never changes a rule: `capabilities/host-firewall` is the half that
+call. It observes and never changes a rule: `tools/host-firewall` is the half that
 applies.
 
 ## Why it exists
@@ -36,7 +36,7 @@ host-net tailnet [--json] [--socket=PATH]
 host-net check [--json]      # wildcard listeners the overlay policy does not account for
 ```
 
-The CLI is on PATH automatically — `capabilities/shell/init.zsh` sweeps for
+The CLI is on PATH automatically — `tools/shell/init.zsh` sweeps for
 `capabilities/<name>/<name>`, so nothing is registered by hand.
 
 **Exit codes**, which `tools/host-watch` and any other caller depend on:
@@ -48,7 +48,7 @@ The CLI is on PATH automatically — `capabilities/shell/init.zsh` sweeps for
 | 2 | could not check: usage error, no policy file, unsupported platform, or a required command missing or refused |
 
 2 rather than 3 for "a required command is missing". `tools/audit` and
-`capabilities/host-firewall/host-firewall` both already spell "usage or setup error" as 2, and
+`tools/host-firewall/host-firewall` both already spell "usage or setup error" as 2, and
 `tools/host-watch` already spells "no policy" as 2. A third meaning invented here would be the
 one exit code in the repo that means something else.
 
@@ -113,12 +113,12 @@ never flagged.
 **No `service.toml`, and the schema proves it is the right answer rather than a shortcut.**
 `tools/check-service-tomls.sh` requires a `port` for `kind = "process"` without a `schedule`,
 and refuses a `port` alongside one. "A process, no schedule, run on demand" is not expressible,
-because it is not a service. Five capabilities already live with no manifest at all —
-`capabilities/host-firewall`, `crates/cv`, `capabilities/agentbox`,
-`capabilities/shell` — and the shell sweep puts their CLI on PATH with
+because it is not a service. Tools already live with no manifest at all —
+`tools/host-firewall`, `crates/cv`, `tools/agentbox`,
+`tools/shell` — and the shell sweep puts their CLI on PATH with
 nothing registered.
 
-**Rust, not the shell its siblings use.** `capabilities/host-firewall` is Bash because its job
+**Rust, not the shell its siblings use.** `tools/host-firewall` is Bash because its job
 is "render one ruleset and hand it to `nft`", and that verdict is the test. This job is four
 undocumented text formats — netstat's column layout, `socketfilterfw --listapps`,
 `ps`, `ifconfig` — parsed into one typed record that a second program reads as JSON. The

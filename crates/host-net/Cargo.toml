@@ -8,7 +8,7 @@ description = "What this host exposes to the network, read without sudo: listeni
 publish = false
 
 # host-net-cli, not host-net: capabilities/host-net/host-net is the shell entry point this
-# capability puts on PATH (capabilities/shell/init.zsh), and it is that script which execs this
+# capability puts on PATH (tools/shell/init.zsh), and it is that script which execs this
 # binary. Two things named `host-net` on PATH is the collision the suffix avoids. Same reason
 # capabilities/punctuality names its binary punctuality-cli.
 [[bin]]

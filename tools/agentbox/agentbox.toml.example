@@ -3,16 +3,16 @@
 #
 # What belongs here: which agent, which model, where the model answers, how much of
 # the machine the box may use. What does NOT: the agent's version and checksum (that
-# is capabilities/agentbox/profiles/<agent>/profile.toml, tracked and shared) and the
+# is tools/agentbox/profiles/<agent>/profile.toml, tracked and shared) and the
 # model API key (that is the gitignored env file below, CONTRIBUTING.md#secrets).
 
-agent = "pi"                     # a directory under capabilities/agentbox/profiles/
+agent = "pi"                     # a directory under tools/agentbox/profiles/
 
 # --- the model endpoint on the host ---------------------------------------
 # Left unset, the base URL is derived at run time: http://host.docker.internal:<model_port>/v1.
 # That name is the host as docker sees it, so no subnet is hardcoded here and a daemon that
 # renumbers its bridge changes nothing. It resolves ONLY in an `--online` box; the default
-# box has no network at all (Q75, and capabilities/agentbox/README.md).
+# box has no network at all (Q75, and tools/agentbox/README.md).
 model_port = "8000"
 # model_base_url = "http://<host>:<port>/v1"   # override, for an endpoint elsewhere
 

@@ -274,7 +274,7 @@ install_macos = "brew install procs"
 
 [docker]
 required = "runtime"
-why = "container runtime (machine.toml container_runtime = docker); capabilities/agentbox depends on the CLI by name"
+why = "container runtime (machine.toml container_runtime = docker); tools/agentbox depends on the CLI by name"
 install_macos = "brew install --cask orbstack   # or --cask docker, or colima — Sjel assumes the docker CLI, never one provider of it"
 install_linux = "apt-get install -y docker.io   # or Docker Engine per docs.docker.com"
 

@@ -1,4 +1,4 @@
-# capabilities/host-firewall — the overlay's inputs. Copy to
+# tools/host-firewall — the overlay's inputs. Copy to
 # <overlay>/config/host-firewall.toml and fill in for THIS machine.
 #
 # Nothing in this file ships with Sjel. Every address, interface and port below is an example

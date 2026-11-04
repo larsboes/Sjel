@@ -162,7 +162,12 @@ their open edits.
    commands, tools, CI and docs. A script does the rewrite, and it stays in `tools/` for review
    (`tools/migrate-layout.ts`). Done in this change.
 4. `cargo check --workspace`, `tools/doctor`, the CI legs, and a service restart prove it — done.
-5. Then the API crates and crate-shape changes, one capability per commit.
+5. Then the API crates and crate-shape changes, one capability per commit. Done for
+   `trips`: `crates/trips-api` (`trips-api`) extracts pure wire models and route constants
+   shared with `sjel-trips` and `sjel-gpui-core`.
+6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
+   and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
+   doctor updated.
 
 Naming (decided 2026-10-25): the directory name equals the package name. The `sjel-` prefix stays
 only on binaries a user types (`sjel`, `sjel-agent`, `sjel-mcp`).

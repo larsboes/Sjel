@@ -11,7 +11,7 @@
 # mirror of ~/.zshrc's first line — CONTRIBUTING.md#dynamic-paths-and-current-facts's single sanctioned rc exception). Without it
 # nothing below can resolve, so bail softly rather than guessing a hardcoded path.
 if [ -z "${SJEL_ROOT:-}" ]; then
-  echo "init.bash: SJEL_ROOT is unset — add it to ~/.bashrc (see capabilities/shell/README.md)" >&2
+  echo "init.bash: SJEL_ROOT is unset — add it to ~/.bashrc (see tools/shell/README.md)" >&2
   return 0 2>/dev/null || exit 0
 fi
 

@@ -27,7 +27,7 @@
 # on 2026-09-02 and `security_and_analysis.dependabot_security_updates` now reads "enabled";
 # this file alone would have left the reactive half switched off.
 #
-# capabilities/agentbox/Containerfile is deliberately NOT watched. Its only FROM is
+# tools/agentbox/Containerfile is deliberately NOT watched. Its only FROM is
 # `FROM ${BASE_IMAGE}` over an ARG default, and whether Dependabot resolves that shape is
 # unverified — an ecosystem block that may watch nothing is exactly the rot this change removes.
 # That base image is a dated Debian snapshot tag, bumped by hand.

@@ -1306,14 +1306,31 @@ fn state_mounts(ctx: &mut Ctx) {
 }
 
 fn env_templates(ctx: &mut Ctx) {
+    let mut dirs_to_check = Vec::new();
+    let crates = ctx.root.join("crates");
+    if crates.exists() {
+        for name in sorted_dir_names(&crates) {
+            dirs_to_check.push((name.clone(), crates.join(&name)));
+        }
+    }
+    let services = ctx.root.join("services");
+    if services.exists() {
+        for name in sorted_dir_names(&services) {
+            dirs_to_check.push((name.clone(), services.join(&name)));
+        }
+    }
     let caps = ctx.root.join("capabilities");
-    if !caps.exists() {
-        ctx.warn("no capabilities/ dir");
+    if caps.exists() {
+        for name in sorted_dir_names(&caps) {
+            dirs_to_check.push((name.clone(), caps.join(&name)));
+        }
+    }
+    if dirs_to_check.is_empty() {
+        ctx.warn("no units found");
         return;
     }
     let (mut checked, mut found) = (0, 0);
-    for name in sorted_dir_names(&caps) {
-        let dir = caps.join(&name);
+    for (name, dir) in dirs_to_check {
         let svc = dir.join("service.toml");
         if !svc.exists() {
             continue;
@@ -1587,8 +1604,8 @@ fn bind_policy(ctx: &mut Ctx) {
             "overlay capabilities",
         ),
     ];
-    if !ctx.root.join("capabilities").exists() {
-        ctx.warn("no capabilities/ dir");
+    if !ctx.root.join("crates").exists() && !ctx.root.join("capabilities").exists() {
+        ctx.warn("no crates/ or capabilities/ dir");
         return;
     }
     let router = Regex::new(r"\bRouter::new\s*\(").expect("pattern");

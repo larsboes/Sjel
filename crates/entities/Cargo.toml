@@ -17,6 +17,7 @@ path = "src/server.rs"
 
 [dependencies]
 civil-date = { path = "../civil-date" }
+entities-api = { path = "../entities-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-credentials = { path = "../sjel-credentials" }
 sjel-http = { path = "../sjel-http" }

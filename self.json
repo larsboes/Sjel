@@ -146,6 +146,10 @@
       }
     },
     {
+      "name": "entities-api",
+      "kind": "lib"
+    },
+    {
       "name": "entities-google-sync",
       "kind": "capability",
       "service": {
@@ -1196,6 +1200,16 @@
     {
       "from": "entities",
       "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/entities/Cargo.toml"
+      ]
+    },
+    {
+      "from": "entities",
+      "to": "entities-api",
       "kinds": [
         "cargo-dep"
       ],

@@ -43,6 +43,7 @@ sjel-clip-socket = { path = "../../../crates/clip-socket" }
 sjel-credentials = { path = "../../../crates/sjel-credentials" }
 calendar-api = { path = "../../../crates/calendar-api" }
 documents-api = { path = "../../../crates/documents-api" }
+entities-api = { path = "../../../crates/entities-api" }
 finance-api = { path = "../../../crates/finance-api" }
 inventory-api = { path = "../../../crates/inventory-api" }
 projects-api = { path = "../../../crates/projects-api" }

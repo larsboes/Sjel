@@ -178,84 +178,9 @@ pub use finance_api::{
     TrackedNetWorth, TransactionKind,
 };
 
-/// One entity record from `GET /entities/api/entities`.
-/// One side of a probable duplicate (`/entities/api/duplicates`).
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct DuplicateSide {
-    pub id: String,
-    pub profile: serde_json::Value,
-}
-
-/// A probable duplicate pair with the registry's default merge.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct DuplicatePair {
-    pub a: DuplicateSide,
-    pub b: DuplicateSide,
-    pub strength: String,
-    #[serde(default)]
-    pub reasons: Vec<String>,
-    /// `"a"` or `"b"`.
-    pub keep: String,
-    pub merged_name: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-pub struct EntityRecord {
-    pub id: String,
-    pub kind: String,
-    pub name: String,
-    #[serde(default)]
-    pub note_ref: Option<String>,
-    #[serde(default)]
-    pub revision: u32,
-    /// The registry serves `{ value, source, updated_at }` per key; the Mac's mirrored copy holds
-    /// the bare value. `people::field_value` reads both.
-    #[serde(default)]
-    pub values: std::collections::BTreeMap<String, serde_json::Value>,
-    /// Dated place facts. The mirrored copy does not select them, so a phone's list is empty.
-    #[serde(default)]
-    pub facts: Vec<EntityFact>,
-}
-
-/// One dated place fact (`capabilities/entities` `Fact`): a home base, or an away period.
-/// `places` resolves the coordinate from `place` when it can, and the fact is kept either way.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-pub struct EntityFact {
-    pub id: String,
-    #[serde(default)]
-    pub predicate: String,
-    #[serde(default)]
-    pub place: String,
-    #[serde(default)]
-    pub latitude: Option<f64>,
-    #[serde(default)]
-    pub longitude: Option<f64>,
-    #[serde(default)]
-    pub valid_from: Option<String>,
-    #[serde(default)]
-    pub valid_to: Option<String>,
-    #[serde(default)]
-    pub note: Option<String>,
-    #[serde(default)]
-    pub source: String,
-}
-
-/// A field a kind carries (`GET /entities/api/fields`): built in, or declared by the operator.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-pub struct EntityField {
-    #[serde(default)]
-    pub kind: String,
-    pub key: String,
-    pub label: String,
-    #[serde(default)]
-    pub field_type: String,
-    #[serde(default)]
-    pub options: Vec<String>,
-    #[serde(default)]
-    pub data_class: String,
-    #[serde(default)]
-    pub builtin: bool,
-}
+pub use entities_api::{
+    DuplicatePair, DuplicateSide, EntityFact, EntityField, EntityRecord,
+};
 
 /// `GET /import/api/import/plan` (`capabilities/import/src/server.rs`).
 #[derive(Clone, Debug, Default, Deserialize)]

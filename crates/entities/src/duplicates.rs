@@ -37,14 +37,7 @@ pub struct Candidate {
     pub reasons: Vec<String>,
 }
 
-/// The pair key, order-free, as stored in `entities_distinct`.
-pub fn pair(a: &str, b: &str) -> (String, String) {
-    if a <= b {
-        (a.to_string(), b.to_string())
-    } else {
-        (b.to_string(), a.to_string())
-    }
-}
+pub use entities_api::pair;
 
 /// The shared key (`sjel_links::name_key`), so trips and places key their decisions by the
 /// same rule this file matches by.

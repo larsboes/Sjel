@@ -10,11 +10,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
-use software::{discover, Decision, SoftwareStore};
+use software::{discover, SoftwareStore};
 
 /// How often the running service scans again. Sizes and last-used dates move over days, not
 /// minutes; the review page can always ask for a scan now.
@@ -49,20 +48,7 @@ const ROUTES: &[route_manifest::Route] = &[
     },
 ];
 
-/// `POST /api/apps/{bundle_id}/uninstall` takes no fields; the decision is the confirmation.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct UninstallRequest {}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct DecisionRequest {
-    decision: Decision,
-    #[serde(default)]
-    note: String,
-}
-
-/// `POST /api/apps/scan` takes no fields; the type exists so the manifest says so.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct ScanRequest {}
+pub use software_api::{DecisionRequest, ScanRequest, UninstallRequest};
 
 /// A note is a sentence or two about why, not a document.
 const MAX_NOTE_CHARS: usize = 2_000;

@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sjel_turso::{libsql, Store, NOW};
 
 use crate::discover::Found;
@@ -13,30 +13,7 @@ use crate::discover::Found;
 pub const PREFIX: &str = "software";
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// What the operator decided about one app.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum Decision {
-    /// In use, keep it.
-    Use,
-    /// Not needed; uninstall it.
-    Remove,
-    /// Keep for now, but look for a better app.
-    Replace,
-    /// Keep for now, but build the part that matters into Sjel.
-    Rebuild,
-}
-
-impl Decision {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Use => "use",
-            Self::Remove => "remove",
-            Self::Replace => "replace",
-            Self::Rebuild => "rebuild",
-        }
-    }
-}
+pub use software_api::Decision;
 
 /// One app with its current decision, as the API returns it.
 #[derive(Clone, Debug, Serialize)]

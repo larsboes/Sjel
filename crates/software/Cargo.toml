@@ -26,6 +26,7 @@ sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 # LibSQL through sjel-turso, as operator-profile: the tables live in the shared database file.
 sjel-turso = { path = "../sjel-turso" }
+software-api = { path = "../software-api" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "time"] }
 
 [dev-dependencies]

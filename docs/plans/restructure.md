@@ -185,6 +185,9 @@ their open edits.
    Done for `import`: `crates/import-api` (`import-api`) extracts pure wire models,
    import plans, routes, skipped tallies, background jobs, status ledgers, and route constants
    shared with `sjel-import` and `sjel-gpui-core`.
+   Done for `software`: `crates/software-api` (`software-api`) extracts pure wire models,
+   app records, decision models, and route constants
+   shared with `sjel-software` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

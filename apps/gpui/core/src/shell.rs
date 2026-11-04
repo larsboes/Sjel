@@ -191,36 +191,7 @@ struct ImportJobEnvelope {
     job: Option<ImportJob>,
 }
 
-/// `GET /software/api/apps` (`App` in `capabilities/software/src/store.rs`).
-#[derive(Clone, Debug, Deserialize)]
-pub struct SoftwareApps {
-    pub apps: Vec<SoftwareApp>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct SoftwareApp {
-    /// `app`, `leftover` or `tool`.
-    #[serde(default)]
-    pub kind: String,
-    /// Who installed it: `app-store`, `cask:<token>`, `other`, or a tool's manager.
-    #[serde(default)]
-    pub source: String,
-    pub bundle_id: String,
-    pub name: String,
-    #[serde(default)]
-    pub version: String,
-    pub app_bytes: u64,
-    pub data_bytes: u64,
-    /// `YYYY-MM-DD HH:MM:SS +0000`, or none when Spotlight holds no date.
-    pub last_used: Option<String>,
-    pub present: bool,
-    /// `use`, `remove`, `replace` or `rebuild`.
-    pub decision: Option<String>,
-    pub note: Option<String>,
-    /// Why the row is due another look, or none.
-    #[serde(default)]
-    pub review: Option<String>,
-}
+pub use software_api::{SoftwareApp, SoftwareApps};
 
 /// `GET /api/sjel-status/backups` (`backups_handler` in
 /// `capabilities/sjel-status/src/status/backup.rs`).

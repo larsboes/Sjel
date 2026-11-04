@@ -170,6 +170,12 @@ their open edits.
    Done for `documents`: `crates/documents-api` (`documents-api`) extracts pure wire models,
    duplicate review decisions, split suggestion/partition contracts, and route constants
    shared with `sjel-documents` and `sjel-gpui-core`.
+   Done for `finance`: `crates/finance-api` (`finance-api`) extracts pure wire models,
+   dashboard projections, transactions, review candidates, subscriptions, and route constants
+   shared with `sjel-finance` and `sjel-gpui-core`.
+   Done for `inventory`: `crates/inventory-api` (`inventory-api`) extracts pure wire models,
+   wishlist items, wish groups, mail proposals, comparison models, and route constants
+   shared with `sjel-inventory` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

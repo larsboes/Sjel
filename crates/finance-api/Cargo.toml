@@ -1,0 +1,16 @@
+[package]
+name = "finance-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Typed API contract, serde models, and route constants for the finance capability."
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+schemars = "1.2.2"
+
+[lints]
+workspace = true

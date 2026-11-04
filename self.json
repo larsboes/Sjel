@@ -194,6 +194,10 @@
       }
     },
     {
+      "name": "finance-api",
+      "kind": "lib"
+    },
+    {
       "name": "finance-prices",
       "kind": "capability",
       "service": {
@@ -270,6 +274,10 @@
         "requires": [],
         "port": "8101"
       }
+    },
+    {
+      "name": "inventory-api",
+      "kind": "lib"
     },
     {
       "name": "knowledge",
@@ -1313,6 +1321,16 @@
     },
     {
       "from": "finance",
+      "to": "finance-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/finance/Cargo.toml"
+      ]
+    },
+    {
+      "from": "finance",
       "to": "links",
       "kinds": [
         "cargo-dep"
@@ -1554,6 +1572,16 @@
     {
       "from": "inventory",
       "to": "devices",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/inventory/Cargo.toml"
+      ]
+    },
+    {
+      "from": "inventory",
+      "to": "inventory-api",
       "kinds": [
         "cargo-dep"
       ],

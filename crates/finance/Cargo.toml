@@ -39,6 +39,7 @@ markdown-root = { path = "../markdown-root" }
 route-manifest = { path = "../route-manifest" }
 # Typed ids and the `/api/links` body every capability answers alike (website/content/capabilities/links.md).
 sjel-links = { path = "../links" }
+finance-api = { path = "../finance-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not

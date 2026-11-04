@@ -34,6 +34,7 @@ sjel-http = { path = "../sjel-http" }
 # Shared Ed25519 device verification for the authenticated sync ingress, which carries
 # `interior.item` mutations from the phone.
 devices = { package = "sjel-devices", path = "../devices" }
+inventory-api = { path = "../inventory-api" }
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

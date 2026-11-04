@@ -1643,6 +1643,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2460,6 +2469,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "inventory-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -4949,6 +4967,7 @@ dependencies = [
  "civil-date",
  "content-item",
  "csv",
+ "finance-api",
  "markdown-root",
  "reqwest",
  "route-manifest",
@@ -5049,6 +5068,7 @@ name = "sjel-inventory"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "inventory-api",
  "route-manifest",
  "rusqlite",
  "schemars",

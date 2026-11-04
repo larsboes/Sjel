@@ -2060,6 +2060,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "finance-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3767,6 +3776,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6928282826c822ad91bf1c9a1cb90a30ba1c26770749929b4656cd6be829cd7c"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "inventory-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7075,7 +7093,9 @@ dependencies = [
  "chrono",
  "device-auth",
  "documents-api",
+ "finance-api",
  "futures",
+ "inventory-api",
  "libsql",
  "qrcode",
  "reqwest 0.13.5",

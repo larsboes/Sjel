@@ -87,3 +87,17 @@ describe("activeOverlay", () => {
     expect(() => activeOverlay(join(tmpdir(), "axon-demo-seed-absent", "paths.sh"))).toThrow();
   });
 });
+
+describe("minimalPdf", () => {
+  test("every xref offset lands on its object, and startxref on the table", async () => {
+    const { minimalPdf } = await import("./lib/demo-data.ts");
+    const pdf = new TextDecoder().decode(minimalPdf(["Title (draft)", "Line \\ two"]));
+    expect(pdf.startsWith("%PDF-1.4\n")).toBe(true);
+    const xref = Number(/startxref\n(\d+)\n%%EOF\n$/.exec(pdf)![1]);
+    expect(pdf.slice(xref, xref + 4)).toBe("xref");
+    const offsets = [...pdf.slice(xref).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => Number(m[1]));
+    expect(offsets.length).toBe(5);
+    offsets.forEach((o, i) => expect(pdf.slice(o).startsWith(`${i + 1} 0 obj`)).toBe(true));
+    expect(pdf).toContain("(Title \\(draft\\)) Tj");
+  });
+});

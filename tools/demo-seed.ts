@@ -25,6 +25,7 @@ import {
   daysBetween,
   eventWindow,
   monthStart,
+  minimalPdf,
   Rng,
   VOCABULARY,
 } from "./lib/demo-data.ts";
@@ -107,6 +108,16 @@ async function waitFor(url: string, seconds = 60): Promise<void> {
 // what it created, so a CI run says what the published demo actually contains.
 
 const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
+  async documents(ctx) {
+    for (const doc of VOCABULARY.documents) {
+      const body = doc.kind === "pdf" ? minimalPdf(doc.lines) : `${doc.lines.join("\n")}\n`;
+      const url = `${ctx.url("/documents/api/documents")}?filename=${encodeURIComponent(doc.filename)}`;
+      const res = await fetch(url, { method: "POST", headers: authHeaders(), body });
+      if (!res.ok) throw new Error(`POST ${url} → ${res.status}: ${(await res.text()).slice(0, 400)}`);
+    }
+    return `${VOCABULARY.documents.length} originals`;
+  },
+
   async calendar(ctx) {
     const entries = ctx.url("/calendar/api/entries");
     const rhythms = ctx.url("/calendar/api/rhythms");

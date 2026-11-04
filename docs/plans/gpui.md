@@ -481,8 +481,8 @@ Open, after the shell refactor in §6:
 3. **Switch in Settings.** "Open on dev node" relaunches the app with the dev environment, and
    the dev window offers the way back. No switch while the app runs. Done when: both directions
    work from Settings while the demo node is up, and the switch is disabled while it is down.
-4. **Seed coverage for Priority 1.** `demo/demo.toml` seeds calendar, trips, entities, places,
-   finance, comms, scouting, transit and sjel-status. Documents have no seed. Agent sessions
-   are unverified. Done when: Documents and Mail on the dev node show rows.
+4. **Seed coverage for Priority 1.** Documents are seeded: four PDFs and two text files
+   (`tools/lib/demo-data.ts`, `documents`). Agent sessions are unverified. Not checked: the
+   Documents page and the reader in `sjel demo app`.
 5. **Phone on the dev node.** Needs the LAN listener and the `devices` capability in the demo
    stack (also blocks the iPhone screenshots in [`restructure.md`](restructure.md)).

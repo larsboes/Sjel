@@ -89,6 +89,10 @@ expand = [
   { from = "/trips/api/plans", id_field = "id", into = "/trips/api/plans/{id}/pack" },
 ]
 
+[capability.documents]
+writes = "documents"
+paths = ["/documents/api/documents"]
+
 [capability.entities]
 writes = "entities"
 # Seeded through POST /api/entities and /facts, the routes the People page calls. The names,

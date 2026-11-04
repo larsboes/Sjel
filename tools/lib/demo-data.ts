@@ -464,7 +464,43 @@ export const VOCABULARY = {
     { label: "RE", gattung: "RB", regional: true },
     { label: "RB", gattung: "RB", regional: true },
   ],
+
+  /** Originals for Documents. Names avoid the words documents' intake refuses
+   *  (crates/documents/src/inbox.rs, sensitive_name). A `pdf` becomes a one-page PDF through
+   *  minimalPdf(), a `txt` is uploaded as text. Senders repeat the mail vocabulary. */
+  documents: [
+    { filename: "regiobahn-ticket-gent-brugge.pdf", kind: "pdf", lines: ["Regiobahn Tickets", "Order confirmation", "Gent-Sint-Pieters to Brugge, return", "2 adults, second class", "Total: 38,40 EUR, paid by card"] },
+    { filename: "kanto-music-receipt.pdf", kind: "pdf", lines: ["Kanto Music", "Receipt", "Monthly plan", "Amount: 10,99 EUR", "Paid by card"] },
+    { filename: "velo-kollektiv-service-invoice.pdf", kind: "pdf", lines: ["Velo Kollektiv", "Invoice", "Full service, city bike", "New chain and brake pads", "Total: 89,00 EUR"] },
+    { filename: "havn-systems-summit-registration.pdf", kind: "pdf", lines: ["Havn Systems Summit", "Registration confirmed", "Two days, main hall", "Badge pickup at the north entrance"] },
+    { filename: "lisbon-flat-house-rules.txt", kind: "txt", lines: ["House rules for the Lisbon flat", "", "Keys are with the neighbour on the second floor.", "Quiet hours from 22:00.", "Recycling goes out on Tuesday and Friday."] },
+    { filename: "dishwasher-manual-excerpt.txt", kind: "txt", lines: ["Dishwasher, quick guide", "", "Eco programme: 3 h 40 min.", "Refill rinse aid when the lamp is on.", "Clean the filter once a month."] },
+  ],
 } as const;
+
+/** A valid one-page PDF that draws `lines` in Helvetica. ASCII only. */
+export function minimalPdf(lines: readonly string[]): Uint8Array {
+  const esc = (t: string) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const text = lines.map((l, i) => `BT /F1 ${i === 0 ? 18 : 12} Tf 72 ${760 - i * 24} Td (${esc(l)}) Tj ET`).join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  out += offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(out);
+}
 
 /** Every string anywhere in VOCABULARY, flattened. The test sweeps this; the payload gate
  *  sweeps the built site. Two passes over the same rule, at the two moments it can fail. */

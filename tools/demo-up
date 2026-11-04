@@ -305,7 +305,7 @@ start_stack() {
   # Cleared, not reused. A journal left over from a previous run would be appended to, and the
   # demo's whole claim is that its numbers descend from one fixed seed. Ahead of the origin
   # rather than after it, because the origin logs in here.
-  rm -rf "$DEMO_STATE"
+  rm -rf "$DEMO_STATE" "$SJEL_OVERLAY_ROOT/data/documents"
   mkdir -p "$DEMO_STATE"
   write_scouting_source
   write_comms_config

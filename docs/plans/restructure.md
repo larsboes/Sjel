@@ -205,6 +205,10 @@ their open edits.
    event route kinds, routing bases, sources, opportunities, scored results, discover responses,
    calendar candidate and verdict contracts, and route constants shared with `sjel-scouting`
    and `sjel-gpui-core`.
+   Done for `assistant`: `crates/assistant-api` (`assistant-api`) extracts pure wire models,
+   conversation turns, assistant requests, cloud model provider discovery roles, key statuses,
+   replies, streaming events, steer instructions, and route constants shared with `sjel-assistant`
+   and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

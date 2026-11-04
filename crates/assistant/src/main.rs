@@ -13,6 +13,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use assistant_api::{
+    AskRequest, AskResponse, AskTurn, CloudProviderOption, GenerateRequest, GenerateResponse,
+    SteerRequest, ROUTE_ASK, ROUTE_ASK_PROVIDERS, ROUTE_ASK_STREAM, ROUTE_GENERATE, ROUTE_STEER,
+    ROUTE_STOP,
+};
+
 mod routing;
 
 const ROLE: &str = "assistant";
@@ -45,29 +51,6 @@ struct AppState {
 struct AskRun {
     input: AgentInput,
     stop: Arc<AtomicBool>,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct SteerRequest {
-    message: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct GenerateRequest {
-    prompt: String,
-    #[serde(default)]
-    instructions: Option<String>,
-    #[serde(default)]
-    max_tokens: Option<u32>,
-}
-
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct GenerateResponse {
-    text: String,
-    model: String,
-    source: &'static str,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -159,47 +142,6 @@ struct RoomPlanGuidancePosition {
     x_cm: u32,
     y_cm: u32,
     rotation_deg: u16,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct AskTurn {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct AskRequest {
-    prompt: String,
-    #[serde(default)]
-    history: Vec<AskTurn>,
-    #[serde(default)]
-    instructions: Option<String>,
-    /// Exact configured `cloud_*` role selected by the operator. Absent means local assistant.
-    #[serde(default)]
-    provider_role: Option<String>,
-    /// Per-request acknowledgement that this prompt is public (c0).
-    #[serde(default)]
-    confirm_public_send: bool,
-}
-
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct CloudProviderOption {
-    role: String,
-    provider: String,
-    model: String,
-    data_tier: String,
-    available: bool,
-    reason: Option<String>,
-}
-
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct AskResponse {
-    text: String,
-    model: String,
-    source: &'static str,
-    tools: Vec<String>,
 }
 
 /// The read-only Sjel capability tools, from `libs/agent`. Never includes `bash`, a file tool or
@@ -838,37 +780,37 @@ async fn routes() -> Json<Value> {
             ),
             route_manifest::get(
                 "GET",
-                "/api/ask/providers",
+                ROUTE_ASK_PROVIDERS,
                 "Discover cloud model roles without exposing endpoints or credential paths.",
             ),
             route_manifest::get("GET", "/routes", "This manifest."),
             route_manifest::Route {
                 method: "POST",
-                path: "/api/generate",
+                path: ROUTE_GENERATE,
                 summary: "Generate a bounded answer with the configured local assistant role.",
                 request_schema: Some(route_manifest::schema_of::<GenerateRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/ask",
+                path: ROUTE_ASK,
                 summary: "Run a multi-turn assistant session with read-only Sjel capability tools and no bash.",
                 request_schema: Some(route_manifest::schema_of::<AskRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/ask/stream",
+                path: ROUTE_ASK_STREAM,
                 summary: "Run an assistant session and stream text and read-only tool activity as server-sent events.",
                 request_schema: Some(route_manifest::schema_of::<AskRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/ask/{run_id}/steer",
+                path: ROUTE_STEER,
                 summary: "Queue an instruction for the next assistant model request during an active streamed session.",
                 request_schema: Some(route_manifest::schema_of::<SteerRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/ask/{run_id}/stop",
+                path: ROUTE_STOP,
                 summary: "Request cooperative cancellation of an active streamed assistant session.",
                 request_schema: None,
             },
@@ -1008,7 +950,7 @@ async fn generate(
     Ok(Json(GenerateResponse {
         text: text.to_string(),
         model: role.model,
-        source: "local",
+        source: "local".into(),
     }))
 }
 
@@ -1042,7 +984,7 @@ fn run_ask_with_input(
             return Ok(AskResponse {
                 text: answer.text,
                 model: role.model,
-                source: "cloud",
+                source: "cloud".into(),
                 tools: answer.tools,
             });
         }
@@ -1084,7 +1026,8 @@ fn run_ask_with_input(
                         "local-escalated"
                     } else {
                         "local"
-                    },
+                    }
+                    .into(),
                     tools: answer.tools,
                 });
             }
@@ -1510,14 +1453,14 @@ async fn stop_ask(
 fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/api/ask/providers", get(ask_providers))
+        .route(ROUTE_ASK_PROVIDERS, get(ask_providers))
         .route("/ready", get(ready))
         .route("/routes", get(routes))
-        .route("/api/generate", post(generate))
-        .route("/api/ask", post(ask))
-        .route("/api/ask/stream", post(ask_stream))
-        .route("/api/ask/{run_id}/steer", post(steer_ask))
-        .route("/api/ask/{run_id}/stop", post(stop_ask))
+        .route(ROUTE_GENERATE, post(generate))
+        .route(ROUTE_ASK, post(ask))
+        .route(ROUTE_ASK_STREAM, post(ask_stream))
+        .route(ROUTE_STEER, post(steer_ask))
+        .route(ROUTE_STOP, post(stop_ask))
         .with_state(state)
 }
 

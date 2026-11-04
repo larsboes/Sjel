@@ -205,30 +205,12 @@ pub use soundscape_api::{
     SCENARIOS as SOUNDSCAPE_SCENARIOS,
 };
 
-/// One message in an Ask conversation (`POST /assistant/api/ask`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AskTurn {
-    pub role: String,
-    pub content: String,
-}
-
-/// Configured cloud role exposed by the local assistant's privacy-safe discovery route.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct AskProvider {
-    pub role: String,
-    pub provider: String,
-    pub model: String,
-    pub data_tier: String,
-    pub available: bool,
-    pub reason: Option<String>,
-}
-
-/// Secret-free presence for one supported provider API key.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderKeyStatus {
-    pub provider: String,
-    pub present: bool,
-}
+pub use assistant_api::{
+    AskEvent, AskProvider, AskReply, AskRequest, AskResponse, AskTurn, GenerateRequest,
+    GenerateResponse, ProviderKeyStatus, SteerRequest, PROXY_ROUTE_ASSISTANT_ASK,
+    PROXY_ROUTE_ASSISTANT_ASK_STREAM, PROXY_ROUTE_ASSISTANT_PROVIDERS, ROUTE_ASK,
+    ROUTE_ASK_PROVIDERS, ROUTE_ASK_STREAM, ROUTE_GENERATE,
+};
 
 /// One feature package installed into the writable runtime, from its package receipt.
 #[derive(Clone, Debug, Deserialize)]
@@ -759,38 +741,6 @@ fn installer_available() -> bool {
             .is_some_and(|root| root.join("target/release/sjel-cli").is_file())
 }
 
-/// Reply from `POST /assistant/api/ask` (or deterministic capability fallback).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct AskReply {
-    pub text: String,
-    pub model: String,
-    pub source: String,
-    #[serde(default)]
-    pub tools: Vec<String>,
-}
-
-/// One streamed event from `POST /assistant/api/ask/stream`.
-#[derive(Clone, Debug, Deserialize)]
-pub struct AskEvent {
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(default)]
-    pub content: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub arguments: String,
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub model: String,
-    #[serde(default)]
-    pub source: String,
-    #[serde(default)]
-    pub tools: Vec<String>,
-    #[serde(default)]
-    pub message: String,
-}
 
 /// One frame of `GET /api/sjel-status/events`: both answers, pushed when either changes.
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -3072,14 +3022,19 @@ impl Shell {
     pub async fn ask(&self, prompt: &str, history: &[AskTurn]) -> ShellResult<AskReply> {
         let body = serde_json::json!({ "prompt": prompt, "history": history });
         match self
-            .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body.clone()), 60)
+            .json::<AskReply>(
+                Method::POST,
+                PROXY_ROUTE_ASSISTANT_ASK,
+                Some(body.clone()),
+                60,
+            )
             .await
         {
             Ok(reply) => return Ok(reply),
             Err(ShellError::Refused(502, _)) => {
                 let _ = self.set_running("assistant", true).await;
                 if let Ok(reply) = self
-                    .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body), 60)
+                    .json::<AskReply>(Method::POST, PROXY_ROUTE_ASSISTANT_ASK, Some(body), 60)
                     .await
                 {
                     return Ok(reply);
@@ -3087,7 +3042,7 @@ impl Shell {
             }
             Err(ShellError::NotSetUp | ShellError::Unreachable | ShellError::NotLoopback) => {
                 return self
-                    .json::<AskReply>(Method::POST, "/assistant/api/ask", Some(body), 5)
+                    .json::<AskReply>(Method::POST, PROXY_ROUTE_ASSISTANT_ASK, Some(body), 5)
                     .await;
             }
             Err(_) => {}
@@ -3098,13 +3053,18 @@ impl Shell {
     /// Lists configured provider roles without retrieving credential values or endpoint URLs.
     pub async fn ask_providers(&self) -> ShellResult<Vec<AskProvider>> {
         let result = self
-            .json::<Vec<AskProvider>>(Method::GET, "/assistant/api/ask/providers", None, 10)
+            .json::<Vec<AskProvider>>(Method::GET, PROXY_ROUTE_ASSISTANT_PROVIDERS, None, 10)
             .await;
         match result {
             Err(ShellError::Refused(502, _)) => {
                 let _ = self.set_running("assistant", true).await;
-                self.json::<Vec<AskProvider>>(Method::GET, "/assistant/api/ask/providers", None, 10)
-                    .await
+                self.json::<Vec<AskProvider>>(
+                    Method::GET,
+                    PROXY_ROUTE_ASSISTANT_PROVIDERS,
+                    None,
+                    10,
+                )
+                .await
             }
             other => other,
         }
@@ -3336,7 +3296,7 @@ impl Shell {
         let response = match self
             .send(
                 Method::POST,
-                "/assistant/api/ask/stream",
+                PROXY_ROUTE_ASSISTANT_ASK_STREAM,
                 Some(body.clone()),
                 600,
             )
@@ -3346,7 +3306,12 @@ impl Shell {
             Err(ShellError::Refused(502, _)) => {
                 let _ = self.set_running("assistant", true).await;
                 match self
-                    .send(Method::POST, "/assistant/api/ask/stream", Some(body), 600)
+                    .send(
+                        Method::POST,
+                        PROXY_ROUTE_ASSISTANT_ASK_STREAM,
+                        Some(body),
+                        600,
+                    )
                     .await
                 {
                     Ok(response) => response,

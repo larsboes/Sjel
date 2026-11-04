@@ -41,6 +41,7 @@ sjel-config = { path = "../../../crates/sjel-config" }
 sjel-links = { path = "../../../crates/links" }
 sjel-clip-socket = { path = "../../../crates/clip-socket" }
 sjel-credentials = { path = "../../../crates/sjel-credentials" }
+assistant-api = { path = "../../../crates/assistant-api" }
 calendar-api = { path = "../../../crates/calendar-api" }
 documents-api = { path = "../../../crates/documents-api" }
 feed-api = { path = "../../../crates/feed-api" }

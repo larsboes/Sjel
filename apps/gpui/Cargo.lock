@@ -375,6 +375,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "assistant-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7132,6 +7141,7 @@ dependencies = [
 name = "sjel-gpui-core"
 version = "0.1.0"
 dependencies = [
+ "assistant-api",
  "base64 0.22.1",
  "calendar-api",
  "chrono",

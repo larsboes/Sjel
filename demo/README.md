@@ -7,7 +7,7 @@ not published: the public site (`website/`) is built from tracked files and runs
 tools/demo-up            start the stack and seed it
 tools/demo-origin        the synthetic remote, started by demo-up (--once prints its payloads)
 tools/demo-shots         run the stack in a container and screenshot the GPUI app against it
-                         (also `sjel demo up | mac <page> | down`)
+                         (also `sjel demo up | app [page] | mac <page> | down`)
 ```
 
 Dates are relative to `[demo] anchor`. `"today"` means the run's local date, so the app shows

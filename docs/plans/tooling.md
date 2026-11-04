@@ -168,6 +168,8 @@ covers it.
 
 ## Done
 
+- `sjel demo app [page]` runs the Mac app against the seeded demo node, to debug on
+  synthetic data next to the live node. See [`gpui.md`](gpui.md#10-dev-and-prod).
 - `tools/intake review <dir> --source <name> --reviewer claude` runs a fresh `claude -p` with
   Read, Glob and Grep in a directory that holds only the staged text files, and records a receipt
   with the harness, model, digest and findings. The gate uses that receipt in place of the model

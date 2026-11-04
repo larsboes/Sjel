@@ -455,3 +455,34 @@ Feed row costs about 0.2 ms to build, layout and paint.
 |---|---|---|
 | Inventory, Interior | grouped cards in one scroll container | Open. They build cards rather than uniform rows, so a conversion needs a looked-at window; not done blind. |
 | Packs | a matrix with a pinned header and a horizontal scroller | Open, and last: 5.7 ms with 2 of 238 frames over budget. |
+
+## 10. Dev and prod
+
+The app runs against the live node (prod) or the demo node (dev). The dev node is the seeded
+stack in a container (`tools/demo-shots`, [`demo/README.md`](../../demo/README.md)), and its data
+is synthetic only. A copy of prod data is never a dev source: agents work on dev data.
+
+Built:
+
+- `sjel demo up | app [page] | down`. `up` builds, starts and reseeds the node on port 18082.
+  `app` starts the Mac app built from this checkout against it, with its own HOME and a fresh
+  store snapshot on each launch.
+
+Open, after the shell refactor in §6:
+
+1. **One resolved environment.** The endpoint is read from `SJEL_STATUS_URL` in
+   `src/main.rs`, `core/src/travel/connections.rs` and `src/soundscape.rs`, and the store paths
+   in `core/src/data/repo.rs` and `core/src/data/board.rs`. Resolve them once into one value
+   that the shell passes down. Done when: `rg 'SJEL_STATUS_URL|SJEL_DB_PATH|SJEL_REPLICA_PATH'
+   apps/gpui` finds one reader.
+2. **Dev badge.** A window on the dev node shows a permanent marker in the header and a
+   distinct accent. Done when: a screenshot from `sjel demo app` shows the marker and one from
+   the installed app does not.
+3. **Switch in Settings.** "Open on dev node" relaunches the app with the dev environment, and
+   the dev window offers the way back. No switch while the app runs. Done when: both directions
+   work from Settings while the demo node is up, and the switch is disabled while it is down.
+4. **Seed coverage for Priority 1.** `demo/demo.toml` seeds calendar, trips, entities, places,
+   finance, comms, scouting, transit and sjel-status. Documents have no seed. Agent sessions
+   are unverified. Done when: Documents and Mail on the dev node show rows.
+5. **Phone on the dev node.** Needs the LAN listener and the `devices` capability in the demo
+   stack (also blocks the iPhone screenshots in [`restructure.md`](restructure.md)).

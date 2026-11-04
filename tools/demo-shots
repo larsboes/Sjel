@@ -9,6 +9,7 @@
 # named sjel-gpui that this script started, never the installed Sjel Desktop.
 #
 #   tools/demo-shots up                      build, start and seed the demo node
+#   tools/demo-shots app [page]              run the Mac app against the node, to work with
 #   tools/demo-shots mac <page> [light|dark] [out.png]   capture one page of the Mac app
 #   tools/demo-shots down                    stop the node
 set -euo pipefail
@@ -75,9 +76,10 @@ function run(argv) {
 JXA
 }
 
-mac() {
-  local page="${1:?usage: demo-shots mac <page> [light|dark] [out.png]}" appearance="${2:-}"
-  local out="${3:-${TMPDIR:-/tmp}/sjel-demo-$page${appearance:+-$appearance}.png}"
+# Build the app from this checkout and start it against the demo node. $1 is the throwaway HOME;
+# the remaining arguments are extra environment assignments.
+launch() {
+  local home="$1"; shift
   curl -fsS -o /dev/null "http://127.0.0.1:$DEMO_PORT/health" \
     || { echo "demo-shots: no demo node on $DEMO_PORT. Run tools/demo-shots up." >&2; exit 1; }
   # The same shared cache apps/gpui/install uses.
@@ -88,8 +90,8 @@ mac() {
   local bin
   bin="$(cd "$SJEL_ROOT/apps/gpui" && cargo metadata --no-deps --format-version 1 \
     | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')/release/sjel-gpui"
-  local home="${TMPDIR:-/tmp}/sjel-demo-shots-home"
-  rm -rf "$home" && mkdir -p "$home"
+  mkdir -p "$home"
+  # A fresh snapshot each launch, so the local reads match the node.
   sqlite3 "$SJEL_ROOT/demo/state/axon.db" ".backup '$home/axon.db'"
   env -i HOME="$home" USER="$USER" PATH=/usr/bin:/bin TMPDIR="$home" LANG=en_US.UTF-8 \
     SJEL_STATUS_URL="http://127.0.0.1:$DEMO_PORT" \
@@ -97,9 +99,26 @@ mac() {
     SJEL_PERSONAL_ROOT="$SJEL_ROOT/demo/overlay" SJEL_OVERLAY_ROOT="$SJEL_ROOT/demo/overlay" \
     SJEL_DB_PATH="$home/axon.db" SJEL_CONFIG_DIR="$home/config" SJEL_NOTES_DIR="$home/notes" \
     SJEL_REPLICA_PATH="$home/replica.db" \
+    "$@" "$bin" >"$home/app.log" 2>&1 &
+}
+
+# The app as a working copy against synthetic data. HOME persists between launches; `up` reseeds.
+app() {
+  local home="${TMPDIR:-/tmp}/sjel-demo-app-home"
+  launch "$home" ${1:+SJEL_GPUI_OPEN="sjel://$1"}
+  echo "demo-shots: app on the demo node (pid $!, log $home/app.log)"
+}
+
+mac() {
+  local page="${1:?usage: demo-shots mac <page> [light|dark] [out.png]}" appearance="${2:-}"
+  local out="${3:-${TMPDIR:-/tmp}/sjel-demo-$page${appearance:+-$appearance}.png}"
+  local home="${TMPDIR:-/tmp}/sjel-demo-shots-home"
+  ! pgrep -x sjel-gpui >/dev/null \
+    || { echo "demo-shots: quit the running sjel-gpui (sjel demo app) before a capture" >&2; return 1; }
+  rm -rf "$home"
+  launch "$home" \
     SJEL_GPUI_NO_ACTIVATE=1 SJEL_GPUI_FLOAT=1 SJEL_GPUI_NO_AUDIO=1 SJEL_GPUI_NO_SAVE=1 SJEL_GPUI_OPAQUE=1 \
-    SJEL_GPUI_OPEN="sjel://$page" ${appearance:+SJEL_GPUI_APPEARANCE=$appearance} \
-    "$bin" >"$home/app.log" 2>&1 &
+    SJEL_GPUI_OPEN="sjel://$page" ${appearance:+SJEL_GPUI_APPEARANCE=$appearance}
   local pid=$! id=""
   trap 'kill "$pid" 2>/dev/null || true' RETURN
   for _ in $(seq 40); do id="$(window_of "$pid")"; [ -n "$id" ] && break; sleep 0.25; done
@@ -123,7 +142,8 @@ down() {
 
 case "${1:-}" in
   up) up ;;
+  app) shift; app "$@" ;;
   mac) shift; mac "$@" ;;
   down) down ;;
-  *) echo "usage: demo-shots up | mac <page> [light|dark] [out.png] | down" >&2; exit 2 ;;
+  *) echo "usage: demo-shots up | app [page] | mac <page> [light|dark] [out.png] | down" >&2; exit 2 ;;
 esac

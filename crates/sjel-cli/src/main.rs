@@ -251,7 +251,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "doctor" => "Usage: sjel doctor",
         "distribution" => distribution::USAGE,
         "testflight" => testflight::USAGE,
-        "demo" => "Usage: sjel demo up | mac <page> [light|dark] [out.png] | down",
+        "demo" => "Usage: sjel demo up | app [page] | mac <page> [light|dark] [out.png] | down",
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

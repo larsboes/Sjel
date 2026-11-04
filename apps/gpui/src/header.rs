@@ -36,6 +36,20 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                 cx.entity(),
             ))
         });
+    // Every page on the demo node says so, so synthetic data is never read as real.
+    let dev_badge = sjel_gpui_core::environment::current().dev.then(|| {
+        div()
+            .flex_none()
+            .mr_2()
+            .px_2()
+            .py_0p5()
+            .rounded_md()
+            .bg(rgb(palette.amber))
+            .text_xs()
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(rgb(palette.surface))
+            .child("DEV NODE")
+    });
     let shell_recovery = view.health.error.as_ref().map(|_| {
         Button::new("restart-shell")
             .small()
@@ -87,6 +101,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                         .flex_none()
                         .items_center()
                         .gap_1()
+                        .children(dev_badge)
                         .children(update_pill)
                         .children(shell_recovery)
                         .children(checked.map(|label| {

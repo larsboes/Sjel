@@ -313,6 +313,43 @@ pub fn execute_rebuild(repo_root: &Path) -> Result<String, BuildFailure> {
     Err(BuildFailure { first, log })
 }
 
+/// Starts the app on the other node. From the dev node it opens the installed app; from the
+/// live node it runs `tools/demo-shots app`, which fails when the demo node is down.
+pub fn launch_other_node() -> Result<(), String> {
+    if sjel_gpui_core::environment::current().dev {
+        let status = Command::new("/usr/bin/open")
+            .args(["-b", "dev.sjel.desktop"])
+            .status()
+            .map_err(|e| format!("Could not open Sjel Desktop: {e}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err("Sjel Desktop is not installed. Run apps/gpui/install.".to_owned())
+        };
+    }
+    let root = find_repo_root().ok_or("Could not locate the Sjel checkout.")?;
+    let home = std::env::var("HOME").unwrap_or_default();
+    let output = Command::new(root.join("tools/demo-shots"))
+        .arg("app")
+        .current_dir(&root)
+        .env(
+            "PATH",
+            format!("{home}/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
+        )
+        .output()
+        .map_err(|e| format!("Could not start the dev app: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(stderr
+            .lines()
+            .last()
+            .unwrap_or("The dev app did not start.")
+            .to_owned())
+    }
+}
+
 /// Rebuilds and restarts the local shell outside its own authenticated API.
 pub fn restart_local_shell(repo_root: &Path) -> Result<(), String> {
     let runner = repo_root.join("tools/service-runner.sh");

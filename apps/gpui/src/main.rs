@@ -228,8 +228,7 @@ fn main_window(cx: &mut App) -> Option<(WindowHandle<Root>, WeakEntity<Workspace
     }
 
     let activate = activates();
-    let endpoint =
-        std::env::var("SJEL_STATUS_URL").unwrap_or_else(|_| shell::DEFAULT_ENDPOINT.to_owned());
+    let endpoint = sjel_gpui_core::environment::current().endpoint.clone();
     let window_size = size(px(1040.), px(720.));
     // SJEL_GPUI_FLOAT=1: a test window in the bottom-right corner above other apps. It stays
     // visible, so GPUI keeps painting, and it takes no focus.

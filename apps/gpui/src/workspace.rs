@@ -1126,6 +1126,31 @@ impl Workspace {
         .detach();
     }
 
+    /// Relaunches on the other node: the live app from the dev one, or `sjel demo app` from
+    /// the live one. This process quits once the other is started.
+    pub fn switch_node(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        const BUSY_KEY: &str = "switch-node";
+        if !self.busy.start(BUSY_KEY) {
+            return;
+        }
+        cx.notify();
+        let work = cx
+            .background_executor()
+            .spawn(async move { crate::update::launch_other_node() });
+        cx.spawn_in(window, async move |weak, cx| {
+            let result = work.await;
+            let _ = weak.update_in(cx, |view, window, cx| {
+                view.busy.finish(BUSY_KEY);
+                match result {
+                    Ok(()) => cx.quit(),
+                    Err(error) => window.push_notification(Notification::error(error), cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     /// Starts a backup of every capability with a contract. Each run is accepted and returns;
     /// the poll shows them finish. Runs of different capabilities may overlap by design.
     pub fn back_up_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {

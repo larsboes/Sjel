@@ -151,7 +151,7 @@ pub struct Soundscape {
 
 impl Soundscape {
     /// Built with the workspace's repo: the panel talks to the same conductor through the same
-    /// endpoint, and a second resolution of `SJEL_STATUS_URL` here would be a second answer to
+    /// endpoint, and a second resolution of the endpoint here would be a second answer to
     /// "which shell is this app talking to".
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
         let audio = crate::audio::audio(cx);
@@ -1345,9 +1345,8 @@ fn device_line(error: &str) -> String {
 pub fn play_through_conductor(cx: &mut App) {
     let audio = crate::audio::audio(cx);
     audio.control.set_playing(true);
-    let endpoint = std::env::var("SJEL_STATUS_URL")
-        .unwrap_or_else(|_| sjel_gpui_core::shell::DEFAULT_ENDPOINT.to_owned());
-    let Ok(shell) = sjel_gpui_core::shell::Shell::new(&endpoint) else {
+    let endpoint = &sjel_gpui_core::environment::current().endpoint;
+    let Ok(shell) = sjel_gpui_core::shell::Shell::new(endpoint) else {
         return;
     };
     let shell = Arc::new(shell);

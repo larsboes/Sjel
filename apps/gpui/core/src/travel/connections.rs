@@ -403,10 +403,9 @@ mod tests {
     #[test]
     #[ignore = "needs this machine's Sjel and transit"]
     fn live_search_reads_transit() {
-        let endpoint = std::env::var("SJEL_STATUS_URL")
-            .unwrap_or_else(|_| crate::shell::DEFAULT_ENDPOINT.to_owned());
+        let endpoint = &crate::environment::current().endpoint;
         let source = Source::Shell(std::sync::Arc::new(
-            crate::shell::Shell::new(&endpoint).unwrap(),
+            crate::shell::Shell::new(endpoint).unwrap(),
         ));
         let (stations, journeys, split) =
             futures::executor::block_on(crate::shell::run(async move {

@@ -792,6 +792,7 @@ fn connection(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
     } else {
         "Reads and writes through the shell's HTTP API."
     };
+    let dev = sjel_gpui_core::environment::current().dev;
     let capabilities = view.health.value.as_ref().map_or_else(
         || "Unknown".to_owned(),
         |health| {
@@ -810,6 +811,24 @@ fn connection(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
                     "Endpoint",
                     Some("Set with SJEL_STATUS_URL before launch."),
                     value(view.endpoint(), palette.text),
+                    palette,
+                ),
+                row(
+                    "Node",
+                    Some(if dev {
+                        "The seeded demo node. Its data is synthetic."
+                    } else {
+                        "Open the app on the seeded demo node (sjel demo up)."
+                    }),
+                    Button::new("switch-node")
+                        .small()
+                        .label(if dev {
+                            "Back to live"
+                        } else {
+                            "Open on dev node"
+                        })
+                        .loading(view.busy.contains("switch-node"))
+                        .on_click(cx.listener(|view, _, window, cx| view.switch_node(window, cx))),
                     palette,
                 ),
                 row("Status", None, dot_value(status, status_color), palette),

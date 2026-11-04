@@ -105,7 +105,7 @@ launch() {
 # The app as a working copy against synthetic data. HOME persists between launches; `up` reseeds.
 app() {
   local home="${TMPDIR:-/tmp}/sjel-demo-app-home"
-  launch "$home" ${1:+SJEL_GPUI_OPEN="sjel://$1"}
+  launch "$home" SJEL_ENV=dev ${1:+SJEL_GPUI_OPEN="sjel://$1"}
   echo "demo-shots: app on the demo node (pid $!, log $home/app.log)"
 }
 

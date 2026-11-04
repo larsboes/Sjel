@@ -16,11 +16,9 @@ name = "sjel-contain"
 path = "src/main.rs"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
+civil-date = { path = "../civil-date" }
+sjel-inference = { path = "../inference" }
 tokio = { workspace = true, features = ["full"] }
-toml = { workspace = true }
 
 [lints]
 workspace = true

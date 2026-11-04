@@ -9,12 +9,19 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// A reviewed provider entry from `providers.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewedProvider {
     pub highest_data_class: String,
     pub reviewed_at: String,
     #[serde(default)]
     pub why: Option<String>,
+    /// `trusted` admits an agent harness on this provider without containment. Absent means
+    /// `contained` (docs/plans/containment.md, "The rule").
+    #[serde(default)]
+    pub ring: Option<String>,
+    /// The provider's API hosts, which a contained run's egress proxy admits.
+    #[serde(default)]
+    pub hosts: Vec<String>,
 }
 
 /// The collection of reviewed providers gating cloud calls.

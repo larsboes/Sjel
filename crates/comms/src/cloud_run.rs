@@ -1223,6 +1223,7 @@ mod tests {
                     highest_data_class: "c1".into(),
                     reviewed_at: "2024-01-01".into(),
                     why: Some("Reviewed in 2024".into()),
+                    ..Default::default()
                 },
             );
 
@@ -1244,6 +1245,7 @@ mod tests {
                     highest_data_class: "c0".into(),
                     reviewed_at: "2026-09-01".into(),
                     why: Some("Only cleared for public data".into()),
+                    ..Default::default()
                 },
             );
 

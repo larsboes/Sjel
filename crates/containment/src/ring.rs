@@ -1,6 +1,4 @@
-use serde::Deserialize;
-use std::collections::HashMap;
-use std::path::Path;
+use sjel_inference::ReviewedProvidersList;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ring {
@@ -8,39 +6,23 @@ pub enum Ring {
     Contained,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ProviderEntry {
-    pub highest_data_class: Option<String>,
-    pub reviewed_at: Option<String>,
-    pub why: Option<String>,
-    pub ring: Option<String>,
-}
-
-#[derive(Debug, Default, Clone, Deserialize)]
-pub struct ProvidersFile {
-    #[serde(flatten)]
-    pub providers: HashMap<String, ProviderEntry>,
-}
-
-impl ProvidersFile {
-    pub fn load_from_file(path: &Path) -> Result<Self, std::io::Error> {
-        let content = std::fs::read_to_string(path)?;
-        let parsed: ProvidersFile = toml::from_str(&content)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
-        Ok(parsed)
-    }
-
-    pub fn classify_ring(&self, provider: &str) -> Ring {
-        if let Some(entry) = self.providers.get(provider) {
-            if let Some(ref r) = entry.ring {
-                if r == "trusted" {
-                    return Ring::Trusted;
-                }
-            }
-            if provider == "openai" || provider == "anthropic" {
-                return Ring::Trusted;
-            }
-        }
+/// `trusted` only for a listed provider whose entry says `ring = "trusted"` and whose review
+/// has not expired. Every other provider, listed or not, is `contained`.
+pub fn classify_ring(providers: &ReviewedProvidersList, provider: &str, today: &str) -> Ring {
+    let trusted = providers
+        .check_admission(provider, "c0", today)
+        .is_ok_and(|entry| entry.ring.as_deref() == Some("trusted"));
+    if trusted {
+        Ring::Trusted
+    } else {
         Ring::Contained
     }
+}
+
+/// The API hosts the egress proxy admits for `provider`. Empty for an unlisted provider.
+pub fn provider_hosts(providers: &ReviewedProvidersList, provider: &str) -> Vec<String> {
+    providers
+        .get(provider)
+        .map(|entry| entry.hosts.clone())
+        .unwrap_or_default()
 }

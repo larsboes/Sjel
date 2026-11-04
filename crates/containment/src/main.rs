@@ -1,4 +1,7 @@
-use sjel_containment::{EgressPolicy, EgressProxy, ProvidersFile, Ring, SeatbeltProfile};
+use sjel_containment::{
+    classify_ring, provider_hosts, EgressPolicy, EgressProxy, Ring, SeatbeltProfile,
+};
+use sjel_inference::ReviewedProvidersList;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -51,15 +54,9 @@ async fn main() -> ExitCode {
         return ExitCode::from(2);
     }
 
-    // Determine ring
-    let providers_path = PathBuf::from("providers.toml");
-    let ring = if providers_path.exists() {
-        ProvidersFile::load_from_file(&providers_path)
-            .map(|f| f.classify_ring(&provider))
-            .unwrap_or(Ring::Contained)
-    } else {
-        Ring::Contained
-    };
+    let providers = ReviewedProvidersList::load();
+    let ring = classify_ring(&providers, &provider, &civil_date::today());
+    let hosts = provider_hosts(&providers, &provider);
 
     println!("[containment] harness={harness_bin} provider={provider} ring={ring:?}");
 
@@ -79,7 +76,14 @@ async fn main() -> ExitCode {
     }
 
     // Contained run: start egress proxy
-    let policy = EgressPolicy::new();
+    if hosts.is_empty() {
+        eprintln!(
+            "[containment] {provider} lists no hosts in providers.toml: its API is unreachable"
+        );
+    }
+    let policy = hosts
+        .into_iter()
+        .fold(EgressPolicy::new(), EgressPolicy::with_provider_host);
     let proxy = match EgressProxy::bind(policy).await {
         Ok(p) => p,
         Err(e) => {

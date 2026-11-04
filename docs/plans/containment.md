@@ -74,12 +74,23 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 
 ## 5. Order and done-when
 
-1. **Profile and launcher for pi and opencode.** Done: `crates/containment` implements the
-   seatbelt profile generator, environment sanitizer, and launcher under `sandbox-exec`.
-2. **Egress proxy.** Done: `EgressProxy` binds loopback, enforces domain allowlists, and logs
-   refusals (`crates/containment/src/proxy.rs`).
+1. **Profile and launcher.** Reads are denied by default: system paths and the home toolchains
+   (`~/.rustup`, `~/.cargo/bin` and its caches, `~/.bun`) are read-only, the project is
+   read-write. The ring and the provider's hosts come from `providers.toml` (`ring`, `hosts`);
+   a provider without `ring = "trusted"` runs contained. Checked by
+   `macos_sandbox_denies_reads_outside_the_project_and_still_builds`: a sibling read and
+   `ls ~` fail, a project write and `cargo test` pass. Not checked: pi and opencode
+   themselves under the profile, and their config directories (`--read`, `--write` are not
+   built). Open: `mach-lookup` is allowed without a filter, so a contained process can ask
+   `securityd` for a Keychain item. Whether the Keychain ACL then prompts is unverified.
+2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
+   loopback, and logs each refusal to stderr. Checked live: through the proxy
+   `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.
 3. **Sjel data for `contained`.** Done when a contained run reads a capability only through the
    agent gate, a c3 object is withheld, and a response above the provider's class is refused.
+   The gate exists (`crates/sjel-server/src/agent.rs`): named tokens select a tier, every
+   response is pseudonymized and c3 is withheld. Open decision before building: the
+   per-token data-class cap. See §6.
 4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1.
 5. **`capabilities/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
@@ -126,6 +137,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | # | Question | State |
 |---|---|---|
 | C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. |
-| C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Open. C1 is decided, so a derived ring is now possible. |
-| C3 | May a contained harness reach the macOS keychain for its own login? Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
+| C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Open. The launcher reads a `ring` field today (`crates/containment/src/ring.rs`), and no entry sets it, so every provider runs contained. |
+| C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
+| C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Open. |

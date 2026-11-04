@@ -5,13 +5,16 @@ Agent containment by provider: macOS seatbelt profile generator and loopback egr
 ## Surface
 
 ```rust
-use sjel_containment::{ContainedCommand, EgressPolicy, EgressProxy, ProvidersFile, Ring, SeatbeltProfile};
+use sjel_containment::{classify_ring, provider_hosts, ContainedCommand, EgressPolicy, EgressProxy, Ring, SeatbeltProfile};
 ```
 
 CLI launcher:
 ```bash
 sjel-contain <harness-bin> --provider <name> --project <dir> [-- <harness-args...>]
 ```
+
+The ring and the admitted hosts come from the provider's entry in `providers.toml` (`ring`,
+`hosts`), read through `sjel_inference::ReviewedProvidersList`.
 
 ## Why this shape: OS sandbox enforcement over cooperative agent policies
 

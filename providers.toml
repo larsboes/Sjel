@@ -7,31 +7,38 @@
 #   highest_data_class = "c0" | "c1"   # highest data class allowed off-host to this provider
 #   reviewed_at        = "YYYY-MM-DD"  # review date; valid for 12 months from this date
 #   why                = "..."         # review justification and privacy policy evaluation
+#   ring               = "trusted"     # optional; absent means a harness on it runs contained
+#   hosts              = ["..."]       # API hosts a contained run's egress proxy admits
 
 [nvidia-nim]
 highest_data_class = "c0"
 reviewed_at = "2026-08-30"
 why = "NVIDIA NIM free-tier hosted inference for public content (c0) and public feed summarization. Evaluated 2026-08-30."
+hosts = ["integrate.api.nvidia.com"]
 
 [openai]
 highest_data_class = "c1"
 reviewed_at = "2026-08-25"
 why = "OpenAI API zero-data-retention agreement, approved for pseudonymized c1 derivatives only. Evaluated 2026-08-25."
+hosts = ["api.openai.com"]
 
 [openrouter]
 highest_data_class = "c0"
 reviewed_at = "2026-08-30"
 why = "OpenRouter hosted inference with privacy logging disabled, approved for c0 public content only. Evaluated 2026-08-30."
+hosts = ["openrouter.ai"]
 
 [google]
 highest_data_class = "c0"
 reviewed_at = "2026-08-30"
 why = "Google AI Studio / Gemini API free tier, approved for c0 public content only. Evaluated 2026-08-30."
+hosts = ["generativelanguage.googleapis.com"]
 
 [deepseek]
 highest_data_class = "c0"
 reviewed_at = "2026-10-24"
 why = "DeepSeek API, approved for c0 public content only: the Pi/Sjel agent comparison on DeepSeek V4.1 Flash (operator decision 2026-10-24, research/benchmarks/agent-harness/README.md). Its privacy policy (last updated 2026-02-10, cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html) states that personal data is collected, processed and stored in the People's Republic of China, kept as long as the account exists, and may be used to train models; the only stated opt-out is an email to privacy@deepseek.com. Nothing above c0 goes to this provider."
+hosts = ["api.deepseek.com"]
 
 [some-provider]
 highest_data_class = "c1"

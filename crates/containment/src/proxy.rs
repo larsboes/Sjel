@@ -125,15 +125,23 @@ async fn handle_client(mut client: TcpStream, policy: EgressPolicy) -> Result<()
     let parts: Vec<&str> = first_line.split_whitespace().collect();
 
     if parts.len() >= 2 && parts[0].eq_ignore_ascii_case("CONNECT") {
-        // Read actual request to consume it from stream
-        let mut discard = vec![0u8; first_line.len() + 4];
-        let _ = client.read(&mut discard).await;
+        // Consume the whole request head, up to the blank line. Bytes after it belong to the
+        // tunnel; header bytes left in the stream would reach the target as TLS.
+        let Some(end) = buf[..n].windows(4).position(|w| w == b"\r\n\r\n") else {
+            client
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+                .await?;
+            return Ok(());
+        };
+        let mut head = vec![0u8; end + 4];
+        client.read_exact(&mut head).await?;
 
         let target = parts[1];
         let host = target.split(':').next().unwrap_or(target);
 
         if !policy.is_host_allowed(host) {
             policy.audit.refused_count.fetch_add(1, Ordering::SeqCst);
+            eprintln!("[containment] egress refused: {}", host);
             policy.audit.refusals.write().await.push(host.to_string());
             let response = b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nEgress denied by Sjel containment policy.\r\n";
             client.write_all(response).await?;
@@ -165,6 +173,7 @@ async fn handle_client(mut client: TcpStream, policy: EgressPolicy) -> Result<()
 
         if !policy.is_host_allowed(target_host) {
             policy.audit.refused_count.fetch_add(1, Ordering::SeqCst);
+            eprintln!("[containment] egress refused: {}", target_host);
             policy
                 .audit
                 .refusals

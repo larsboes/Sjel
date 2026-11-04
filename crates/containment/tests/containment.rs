@@ -1,7 +1,8 @@
 use sjel_containment::{
-    sanitize_environment, ContainedCommand, EgressPolicy, EgressProxy, ProvidersFile, Ring,
-    SeatbeltProfile,
+    classify_ring, provider_hosts, sanitize_environment, ContainedCommand, EgressPolicy,
+    EgressProxy, Ring, SeatbeltProfile,
 };
+use sjel_inference::ReviewedProvidersList;
 use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -12,17 +13,35 @@ fn ring_classification_follows_doctrine() {
 [openai]
 highest_data_class = "c1"
 reviewed_at = "2026-08-25"
-why = "OpenAI zero-retention"
+ring = "trusted"
+hosts = ["api.openai.com"]
 
 [deepseek]
 highest_data_class = "c0"
 reviewed_at = "2026-10-24"
-why = "DeepSeek public only"
+hosts = ["api.deepseek.com"]
+
+[expired]
+highest_data_class = "c1"
+reviewed_at = "2024-01-01"
+ring = "trusted"
 "#;
-    let file: ProvidersFile = toml::from_str(toml).unwrap();
-    assert_eq!(file.classify_ring("openai"), Ring::Trusted);
-    assert_eq!(file.classify_ring("deepseek"), Ring::Contained);
-    assert_eq!(file.classify_ring("unknown-provider"), Ring::Contained);
+    let list = ReviewedProvidersList::parse_toml(toml).unwrap();
+    assert_eq!(classify_ring(&list, "openai", "2026-11-04"), Ring::Trusted);
+    assert_eq!(
+        classify_ring(&list, "deepseek", "2026-11-04"),
+        Ring::Contained
+    );
+    assert_eq!(
+        classify_ring(&list, "expired", "2026-11-04"),
+        Ring::Contained
+    );
+    assert_eq!(
+        classify_ring(&list, "unknown-provider", "2026-11-04"),
+        Ring::Contained
+    );
+    assert_eq!(provider_hosts(&list, "deepseek"), vec!["api.deepseek.com"]);
+    assert!(provider_hosts(&list, "unknown-provider").is_empty());
 }
 
 #[test]
@@ -35,7 +54,7 @@ fn seatbelt_profile_contains_deny_default_and_project_paths() {
     assert!(profile.contains("(deny default)"));
     assert!(profile.contains("file-read* file-write*"));
     assert!(profile.contains(&tmp.to_string_lossy().to_string()) || profile.contains("/private"));
-    assert!(profile.contains("(remote tcp \"localhost:*\")"));
+    assert!(profile.contains("(remote ip \"localhost:*\")"));
 }
 
 #[test]
@@ -143,4 +162,103 @@ fn macos_sandbox_exec_enforces_directory_and_file_boundaries() {
     assert!(!denied_file.exists());
 
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// Plan item 1's done-when (docs/plans/containment.md §5): reads outside the project fail,
+/// listing the home directory fails, a project write succeeds and `cargo test` passes.
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_sandbox_denies_reads_outside_the_project_and_still_builds() {
+    let base = std::env::temp_dir().join(format!("sjel-seatbelt-read-{}", std::process::id()));
+    let project = base.join("project");
+    let outside = base.join("sibling");
+    std::fs::create_dir_all(project.join("probe/src")).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("canary"), "canary").unwrap();
+    std::fs::write(
+        project.join("probe/Cargo.toml"),
+        "[package]\nname = \"probe\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        project.join("probe/src/lib.rs"),
+        "#[test]\nfn adds() { assert_eq!(1 + 1, 2); }\n",
+    )
+    .unwrap();
+
+    let home = std::env::var("HOME").unwrap();
+    let cargo_bin = format!("{home}/.cargo/bin");
+    let run = |script: &str| {
+        let mut cmd = ContainedCommand::new("/bin/sh", SeatbeltProfile::new(&project))
+            .arg("-c")
+            .arg(script)
+            .build_command();
+        cmd.env("PATH", format!("{cargo_bin}:/usr/bin:/bin"))
+            .env("TMPDIR", project.join(".tmp"))
+            .env("CARGO_TARGET_DIR", project.join("target"));
+        cmd.output().expect("execute sandbox-exec")
+    };
+    std::fs::create_dir_all(project.join(".tmp")).unwrap();
+
+    let sibling = run(&format!("cat '{}'", outside.join("canary").display()));
+    assert!(
+        !sibling.status.success(),
+        "a sibling file must not be readable"
+    );
+
+    let listing = run("ls \"$HOME\"");
+    assert!(
+        !listing.status.success(),
+        "the home directory must not be listable"
+    );
+
+    let write = run(&format!("echo ok > '{}'", project.join("w.txt").display()));
+    assert!(write.status.success(), "a project write must succeed");
+
+    if std::path::Path::new(&cargo_bin).join("cargo").exists() {
+        let test = run(&format!(
+            "cd '{}' && cargo test -q --offline",
+            project.join("probe").display()
+        ));
+        assert!(
+            test.status.success(),
+            "cargo test in the project must pass: {}",
+            String::from_utf8_lossy(&test.stderr)
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// The request head ends at the blank line. Header bytes after the request line must not
+/// reach the target, or a TLS handshake through the tunnel fails.
+#[tokio::test]
+async fn egress_proxy_tunnels_only_the_bytes_after_the_request_head() {
+    let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let target_addr = target.local_addr().unwrap();
+    let proxy = EgressProxy::bind(EgressPolicy::new()).await.unwrap();
+    let proxy_addr = proxy.local_addr();
+    tokio::spawn(async move {
+        let _ = proxy.run().await;
+    });
+
+    let mut client = TcpStream::connect(proxy_addr).await.unwrap();
+    client
+        .write_all(
+            format!(
+                "CONNECT {target_addr} HTTP/1.1\r\nHost: {target_addr}\r\nUser-Agent: probe\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let (mut upstream, _) = target.accept().await.unwrap();
+    let mut established = [0u8; 39];
+    client.read_exact(&mut established).await.unwrap();
+    assert!(established.starts_with(b"HTTP/1.1 200"));
+
+    client.write_all(b"payload").await.unwrap();
+    let mut got = [0u8; 7];
+    upstream.read_exact(&mut got).await.unwrap();
+    assert_eq!(&got, b"payload");
 }

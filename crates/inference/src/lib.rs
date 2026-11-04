@@ -1642,6 +1642,7 @@ mod tests {
         assert!(nim.billing_active_on("2026-10-22"));
         assert_eq!(nim.max_requests_per_day, Some(1));
         nim.backend.api_key_file = None;
+        nim.backend.api_key_credential_id = None;
         assert!(
             !nim.dispatch_ready(),
             "a profile with no credential reference must stay inert"
@@ -1657,6 +1658,7 @@ mod tests {
             "example prepaid profile stays inactive until its real expiry is configured"
         );
         openai.backend.api_key_file = None;
+        openai.backend.api_key_credential_id = None;
         assert!(!openai.dispatch_ready());
 
         let mut google = config
@@ -1668,6 +1670,7 @@ mod tests {
         assert!(google.billing_active_on("2026-10-22"));
         assert_eq!(google.max_requests_per_day, Some(1));
         google.backend.api_key_file = None;
+        google.backend.api_key_credential_id = None;
         assert!(!google.dispatch_ready());
 
         let reviewed = ReviewedProvidersList::parse_toml(include_str!("../../../providers.toml"))

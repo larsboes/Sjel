@@ -632,6 +632,10 @@
       }
     },
     {
+      "name": "web-links-api",
+      "kind": "lib"
+    },
+    {
       "name": "wish-prices",
       "kind": "capability",
       "service": {
@@ -2900,6 +2904,16 @@
     {
       "from": "web-links",
       "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/web-links/Cargo.toml"
+      ]
+    },
+    {
+      "from": "web-links",
+      "to": "web-links-api",
       "kinds": [
         "cargo-dep"
       ],

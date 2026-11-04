@@ -3,11 +3,10 @@
 pub mod history;
 pub mod store;
 
-use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub use history::{collect as collect_history, Browser, HistoryCandidate};
-pub use store::{Candidate, CandidateDecision, Link, LinksStore};
+pub use store::{CandidateDecision, LinksStore};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Destination {
@@ -101,33 +100,11 @@ fn tenant(host: &str, path: &str) -> Option<String> {
     None
 }
 
-/// A user-editable write request for a destination.
-#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct WriteLink {
-    pub url: String,
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub group: Option<String>,
-    #[serde(default)]
-    pub pinned: bool,
-}
-
-/// User changes that do not replace the destination URL.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct EditLink {
-    pub title: Option<String>,
-    pub group: Option<String>,
-    pub pinned: Option<bool>,
-}
-
-/// A decision on a staged browser-history suggestion.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, schemars::JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum HistoryDecision {
-    Keep,
-    Dismiss,
-}
+pub use web_links_api::{
+    default_days, default_visits, Candidate, EditLink, HistoryDecision, HistoryDecisionRequest,
+    HistoryReply, HistoryScan, Link, LinksReply, WebLink, WebLinkCandidate, WebLinkHistoryReply,
+    WebLinks, WriteLink, ROUTE_HISTORY_CANDIDATES, ROUTE_HISTORY_SCAN, ROUTE_LINKS,
+};
 
 #[cfg(test)]
 mod tests {

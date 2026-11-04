@@ -53,6 +53,7 @@ software-api = { path = "../../../crates/software-api" }
 soundscape-api = { path = "../../../crates/soundscape-api" }
 status-api = { path = "../../../crates/status-api" }
 trips-api = { path = "../../../crates/trips-api" }
+web-links-api = { path = "../../../crates/web-links-api" }
 zeroize = "=1.9.1"
 
 

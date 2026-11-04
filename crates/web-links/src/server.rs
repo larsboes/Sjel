@@ -8,22 +8,24 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use web_links::{store::Fallible, EditLink, HistoryDecision, LinksStore, WriteLink};
+use web_links::{
+    store::Fallible, EditLink, HistoryDecision, HistoryDecisionRequest, HistoryReply, HistoryScan,
+    LinksReply, LinksStore, WriteLink, ROUTE_HISTORY_CANDIDATES, ROUTE_HISTORY_SCAN, ROUTE_LINKS,
+};
 
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", "/health", "Liveness."),
     route_manifest::get("GET", "/ready", "Liveness plus database readiness."),
     route_manifest::get("GET", "/routes", "This manifest."),
-    route_manifest::get("GET", "/api/links", "Saved web destinations, grouped by site and ordered by pin and name."),
-    route_manifest::Route { method: "POST", path: "/api/links", summary: "Save an HTTP(S) destination. Repeated normalized URLs return the existing row.", request_schema: Some(route_manifest::schema_of::<WriteLink>) },
+    route_manifest::get("GET", ROUTE_LINKS, "Saved web destinations, grouped by site and ordered by pin and name."),
+    route_manifest::Route { method: "POST", path: ROUTE_LINKS, summary: "Save an HTTP(S) destination. Repeated normalized URLs return the existing row.", request_schema: Some(route_manifest::schema_of::<WriteLink>) },
     route_manifest::Route { method: "PATCH", path: "/api/links/{id}", summary: "Edit title, group override or pin state for one saved destination.", request_schema: Some(route_manifest::schema_of::<EditLink>) },
     route_manifest::Route { method: "DELETE", path: "/api/links/{id}", summary: "Remove one saved destination.", request_schema: None },
     route_manifest::Route { method: "POST", path: "/api/links/{id}/open", summary: "Record an explicit open and return the destination.", request_schema: None },
-    route_manifest::Route { method: "POST", path: "/api/history/scan", summary: "Read Chrome and Safari history locally and stage candidates; no candidate is saved without review.", request_schema: Some(route_manifest::schema_of::<HistoryScan>) },
-    route_manifest::get("GET", "/api/history/candidates", "Pending browser-history candidates for review."),
+    route_manifest::Route { method: "POST", path: ROUTE_HISTORY_SCAN, summary: "Read Chrome and Safari history locally and stage candidates; no candidate is saved without review.", request_schema: Some(route_manifest::schema_of::<HistoryScan>) },
+    route_manifest::get("GET", ROUTE_HISTORY_CANDIDATES, "Pending browser-history candidates for review."),
     route_manifest::Route { method: "POST", path: "/api/history/candidates/{id}/decision", summary: "Keep or dismiss one pending browser-history candidate.", request_schema: Some(route_manifest::schema_of::<HistoryDecisionRequest>) },
 ];
 
@@ -75,10 +77,6 @@ async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("web-links", ROUTES))
 }
 
-#[derive(Serialize)]
-struct LinksReply {
-    links: Vec<web_links::Link>,
-}
 async fn list(State(state): State<Arc<AppState>>) -> Result<Json<LinksReply>, ApiError> {
     let store = state.store.clone();
     Ok(Json(LinksReply {
@@ -159,29 +157,6 @@ async fn open_link(
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "Destination not found.".into()))
 }
 
-#[derive(Clone, Debug, Deserialize, schemars::JsonSchema)]
-struct HistoryScan {
-    #[serde(default = "default_days")]
-    days: u16,
-    #[serde(default = "default_visits")]
-    min_visits: u16,
-}
-fn default_days() -> u16 {
-    90
-}
-fn default_visits() -> u16 {
-    3
-}
-#[derive(Clone, Debug, Deserialize, schemars::JsonSchema)]
-struct HistoryDecisionRequest {
-    decision: HistoryDecision,
-}
-#[derive(Serialize)]
-struct HistoryReply {
-    staged: usize,
-    candidates: Vec<web_links::Candidate>,
-}
-
 async fn scan_history(
     State(state): State<Arc<AppState>>,
     Json(request): Json<HistoryScan>,
@@ -238,13 +213,13 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/routes", get(routes))
-        .route("/api/links", get(list).post(add))
-        .route("/api/links/{id}", patch(edit).delete(remove))
-        .route("/api/links/{id}/open", post(open_link))
-        .route("/api/history/scan", post(scan_history))
-        .route("/api/history/candidates", get(history_candidates))
+        .route(ROUTE_LINKS, get(list).post(add))
+        .route(&format!("{ROUTE_LINKS}/{{id}}"), patch(edit).delete(remove))
+        .route(&format!("{ROUTE_LINKS}/{{id}}/open"), post(open_link))
+        .route(ROUTE_HISTORY_SCAN, post(scan_history))
+        .route(ROUTE_HISTORY_CANDIDATES, get(history_candidates))
         .route(
-            "/api/history/candidates/{id}/decision",
+            &format!("{ROUTE_HISTORY_CANDIDATES}/{{id}}/decision"),
             post(decide_candidate),
         )
         .layer(middleware::from_fn_with_state(

@@ -22,6 +22,7 @@ path = "src/server.rs"
 [dependencies]
 axum.workspace = true
 route-manifest = { path = "../route-manifest" }
+web-links-api = { path = "../web-links-api" }
 schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -5520,6 +5520,7 @@ dependencies = [
  "tokio",
  "tower",
  "url",
+ "web-links-api",
 ]
 
 [[package]]
@@ -6441,6 +6442,15 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "web-links-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

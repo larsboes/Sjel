@@ -7150,6 +7150,7 @@ dependencies = [
  "status-api",
  "tokio",
  "trips-api",
+ "web-links-api",
  "zeroize",
 ]
 
@@ -8647,6 +8648,15 @@ dependencies = [
  "log",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "web-links-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

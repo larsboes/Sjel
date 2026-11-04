@@ -2387,16 +2387,26 @@ impl Shell {
     }
 
     pub async fn web_links(&self) -> ShellResult<crate::web_links::WebLinks> {
-        self.json(Method::GET, "/web-links/api/links", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            crate::web_links::PROXY_ROUTE_WEB_LINKS,
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn web_link_add(
         &self,
         body: serde_json::Value,
     ) -> ShellResult<crate::web_links::WebLink> {
-        self.json(Method::POST, "/web-links/api/links", Some(body), 10)
-            .await
+        self.json(
+            Method::POST,
+            crate::web_links::PROXY_ROUTE_WEB_LINKS,
+            Some(body),
+            10,
+        )
+        .await
     }
 
     pub async fn web_link_edit(
@@ -2407,7 +2417,7 @@ impl Shell {
         let id = web_link_key(id)?;
         self.json(
             Method::PATCH,
-            &format!("/web-links/api/links/{id}"),
+            &format!("{}/{id}", crate::web_links::PROXY_ROUTE_WEB_LINKS),
             Some(body),
             10,
         )
@@ -2418,7 +2428,7 @@ impl Shell {
         let id = web_link_key(id)?;
         self.send(
             Method::DELETE,
-            &format!("/web-links/api/links/{id}"),
+            &format!("{}/{id}", crate::web_links::PROXY_ROUTE_WEB_LINKS),
             None,
             10,
         )
@@ -2430,7 +2440,7 @@ impl Shell {
         let id = web_link_key(id)?;
         self.json(
             Method::POST,
-            &format!("/web-links/api/links/{id}/open"),
+            &format!("{}/{id}/open", crate::web_links::PROXY_ROUTE_WEB_LINKS),
             Some(serde_json::json!({})),
             10,
         )
@@ -2444,7 +2454,7 @@ impl Shell {
     ) -> ShellResult<crate::web_links::WebLinkHistoryReply> {
         self.json(
             Method::POST,
-            "/web-links/api/history/scan",
+            crate::web_links::PROXY_ROUTE_HISTORY_SCAN,
             Some(serde_json::json!({"days":days, "min_visits":min_visits})),
             120,
         )
@@ -2454,8 +2464,13 @@ impl Shell {
     pub async fn web_link_history_candidates(
         &self,
     ) -> ShellResult<Vec<crate::web_links::WebLinkCandidate>> {
-        self.json(Method::GET, "/web-links/api/history/candidates", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            crate::web_links::PROXY_ROUTE_HISTORY_CANDIDATES,
+            None,
+            10,
+        )
+        .await
     }
 
     pub async fn web_link_history_decide(&self, id: &str, decision: &str) -> ShellResult<()> {
@@ -2468,7 +2483,10 @@ impl Shell {
         }
         self.send(
             Method::POST,
-            &format!("/web-links/api/history/candidates/{id}/decision"),
+            &format!(
+                "{}/{id}/decision",
+                crate::web_links::PROXY_ROUTE_HISTORY_CANDIDATES
+            ),
             Some(serde_json::json!({"decision":decision})),
             10,
         )

@@ -3,44 +3,14 @@
 use std::path::Path;
 
 use rusqlite::{params, OptionalExtension};
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sjel_store::{open_pool, QueryAll};
 
-use crate::{destination, HistoryCandidate, HistoryDecision, WriteLink};
+use crate::{destination, Candidate, HistoryCandidate, HistoryDecision, Link, WriteLink};
 
 const PREFIX: &str = "web_links";
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
-
-/// A saved web destination, with its derived site group and any user override.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct Link {
-    pub id: String,
-    pub url: String,
-    pub title: String,
-    pub host: String,
-    pub tenant: Option<String>,
-    pub group: String,
-    pub group_override: Option<String>,
-    pub pinned: bool,
-    pub opens: u64,
-    pub last_opened_at: Option<String>,
-    pub created_at: String,
-}
-
-/// One locally reviewed import candidate.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct Candidate {
-    pub id: String,
-    pub url: String,
-    pub title: String,
-    pub host: String,
-    pub tenant: Option<String>,
-    pub browser: String,
-    pub visits: u64,
-    pub last_visit: Option<String>,
-}
 
 /// Whether a review decision matched a pending suggestion, and the saved row when kept.
 #[derive(Clone, Debug)]

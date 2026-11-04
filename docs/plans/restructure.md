@@ -198,6 +198,9 @@ their open edits.
    feed entries, ranking relevance and evaluation, reader detail projections, data classification,
    cloud review and processing states, quality flags, refresh stats, and route constants
    shared with `sjel-gpui-core` and comms/feed services.
+   Done for `web-links`: `crates/web-links-api` (`web-links-api`) extracts pure wire models,
+   saved destinations, site groups, review candidates, history scan bounds, decision requests,
+   and route constants shared with `sjel-web-links` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

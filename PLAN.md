@@ -7,10 +7,9 @@ to its owner's README once it is built.
 
 ## Priority 0: agent containment by provider
 
-A coding agent on a provider that is not trusted with the user's data runs in a sandbox: one
-project directory, a network allow-list, and Sjel data only pseudonymized and capped at the
-provider's data class. Claude and GPT read Sjel data up to `c2`, with names readable, through
-the agent gate only. Plan:
+Claude Code, Codex, and pi on OpenAI read Sjel fully. A coding agent on any other provider
+runs in a sandbox: one project directory, a network allow-list, and the demo node as its only
+Sjel. Plan:
 [`containment.md`](docs/plans/containment.md).
 
 ## Priority 1: the phone app, used every day
@@ -87,6 +86,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Target one database per capability or agent. | 2026-10-23 |
 | Knowledge stays in the vault until moving it hurts. | 2026-10-23 |
 | The model provider sets an agent's reach. Untrusted providers run sandboxed, before Priority 1. | 2026-10-31 |
+| Anthropic and OpenAI harnesses read Sjel fully; every other provider gets the demo node only. | 2026-11-04 |
 | Priority order as above: the phone app first. | 2026-10-25 |
 | One workspace, flat `crates/`, one API crate per capability, third-party software in `services/`, a hybrid process model later. Directory name equals package name. The `sjel-` prefix stays only on binaries a user types. | 2026-10-25 |
 | Pantry stock is a domain inside `inventory`. | 2026-10-25 |

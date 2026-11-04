@@ -16,6 +16,11 @@ sjel-contain <harness-bin> --provider <name> --project <dir> [-- <harness-args..
 The ring and the admitted hosts come from the provider's entry in `providers.toml` (`ring`,
 `hosts`), read through `sjel_inference::ReviewedProvidersList`.
 
+A `trusted` provider runs the harness directly. Every other provider runs under
+`sandbox-exec` in dev mode: `SJEL_STATUS_URL` names the demo node (`sjel demo up`),
+`SJEL_ENV=dev`, and `SJEL_DEMO_TOKEN` carries the demo node's throwaway token, sent as
+`X-Sjel-Token`. The overlay and the Keychain are closed, so no live token is reachable.
+
 ## Why this shape: OS sandbox enforcement over cooperative agent policies
 
 A cooperative in-process command classifier cannot prevent unauthorized filesystem access, secret exfiltration, or unsanctioned network communication.

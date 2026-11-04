@@ -85,7 +85,11 @@ fn egress_policy_admits_package_registries_and_refuses_unauthorized_hosts() {
     assert!(policy.is_host_allowed("static.crates.io"));
     assert!(policy.is_host_allowed("registry.npmjs.org"));
     assert!(policy.is_host_allowed("api.deepseek.com"));
-    assert!(policy.is_host_allowed("127.0.0.1"));
+    assert!(
+        !policy.is_host_allowed("127.0.0.1"),
+        "the proxy never forwards to this machine"
+    );
+    assert!(!policy.is_host_allowed("localhost"));
 
     assert!(!policy.is_host_allowed("attacker.com"));
     assert!(!policy.is_host_allowed("unreviewed-external.net"));
@@ -236,7 +240,9 @@ fn macos_sandbox_denies_reads_outside_the_project_and_still_builds() {
 async fn egress_proxy_tunnels_only_the_bytes_after_the_request_head() {
     let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let target_addr = target.local_addr().unwrap();
-    let proxy = EgressProxy::bind(EgressPolicy::new()).await.unwrap();
+    let proxy = EgressProxy::bind(EgressPolicy::new().with_provider_host("127.0.0.1"))
+        .await
+        .unwrap();
     let proxy_addr = proxy.local_addr();
     tokio::spawn(async move {
         let _ = proxy.run().await;
@@ -261,4 +267,23 @@ async fn egress_proxy_tunnels_only_the_bytes_after_the_request_head() {
     let mut got = [0u8; 7];
     upstream.read_exact(&mut got).await.unwrap();
     assert_eq!(&got, b"payload");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_sandbox_closes_the_keychain() {
+    let tmp = std::env::temp_dir().join(format!("sjel-seatbelt-keychain-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let profile = SeatbeltProfile::new(&tmp).render();
+    assert!(profile.contains("(deny mach-lookup (global-name \"com.apple.SecurityServer\")"));
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn a_contained_run_points_at_the_demo_node() {
+    let cmd = ContainedCommand::new("/bin/true", SeatbeltProfile::new(std::env::temp_dir()))
+        .with_dev_node("http://127.0.0.1:18082");
+    assert_eq!(cmd.env["SJEL_STATUS_URL"], "http://127.0.0.1:18082");
+    assert_eq!(cmd.env["SJEL_ENV"], "dev");
+    assert_eq!(cmd.env["NO_PROXY"], "127.0.0.1,localhost");
 }

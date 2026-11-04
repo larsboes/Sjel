@@ -19,8 +19,16 @@ hosts = ["integrate.api.nvidia.com"]
 [openai]
 highest_data_class = "c1"
 reviewed_at = "2026-08-25"
-why = "OpenAI API zero-data-retention agreement, approved for pseudonymized c1 derivatives only. Evaluated 2026-08-25."
+why = "OpenAI API zero-data-retention agreement, approved for pseudonymized c1 derivatives only. Evaluated 2026-08-25. Operator decision 2026-11-04: ring trusted, so Codex and pi on OpenAI read Sjel fully."
 hosts = ["api.openai.com"]
+ring = "trusted"
+
+[anthropic]
+highest_data_class = "c1"
+reviewed_at = "2026-11-04"
+why = "Claude (Claude Code, API or subscription). Operator decision 2026-11-04: a harness on Anthropic or OpenAI reads Sjel fully; every other provider reaches only the demo node (docs/plans/containment.md). Training opt-out on the account: not recorded here, unverified."
+hosts = ["api.anthropic.com"]
+ring = "trusted"
 
 [openrouter]
 highest_data_class = "c0"

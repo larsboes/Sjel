@@ -89,6 +89,19 @@ impl ContainedCommand {
         self
     }
 
+    /// Points the run at the demo node: `SJEL_STATUS_URL`, `SJEL_ENV=dev`, and loopback
+    /// outside the proxy.
+    pub fn with_dev_node(mut self, endpoint: &str) -> Self {
+        self.env
+            .insert("SJEL_STATUS_URL".into(), endpoint.to_owned());
+        self.env.insert("SJEL_ENV".into(), "dev".into());
+        self.env
+            .insert("NO_PROXY".into(), "127.0.0.1,localhost".into());
+        self.env
+            .insert("no_proxy".into(), "127.0.0.1,localhost".into());
+        self
+    }
+
     pub fn build_command(&self) -> Command {
         #[cfg(target_os = "macos")]
         {

@@ -5,6 +5,19 @@ use sjel_inference::ReviewedProvidersList;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+/// The seeded demo node, the only Sjel a contained run reaches. The port is tools/demo-shots'.
+fn demo_endpoint() -> String {
+    let port = std::env::var("SJEL_DEMO_SHOTS_PORT").unwrap_or_else(|_| "18082".into());
+    format!("http://127.0.0.1:{port}")
+}
+
+/// The demo node's throwaway inbound token, written by tools/demo-up. Synthetic data only.
+fn demo_token() -> Option<String> {
+    let root = PathBuf::from(std::env::var_os("SJEL_ROOT")?);
+    let token = std::fs::read_to_string(root.join("demo/state/comms-api-secret")).ok()?;
+    Some(token.trim().to_owned()).filter(|t| !t.is_empty())
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -97,9 +110,16 @@ async fn main() -> ExitCode {
     });
 
     let profile = SeatbeltProfile::new(&project_dir);
-    let contained = sjel_containment::ContainedCommand::new(&harness_bin, profile)
+    let mut contained = sjel_containment::ContainedCommand::new(&harness_bin, profile)
         .args(&harness_args)
-        .with_proxy_port(proxy_port);
+        .with_proxy_port(proxy_port)
+        .with_dev_node(&demo_endpoint());
+    match demo_token() {
+        Some(token) => {
+            contained.env.insert("SJEL_DEMO_TOKEN".into(), token);
+        }
+        None => eprintln!("[containment] no demo node token: run `sjel demo up` for dev data"),
+    }
 
     let mut cmd = contained.build_command();
     cmd.current_dir(&project_dir);

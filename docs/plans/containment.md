@@ -10,18 +10,18 @@ Priority 0 in [`PLAN.md`](../../PLAN.md) (decided 2026-10-31). It also closes de
 
 ## 1. The rule
 
-Decided 2026-10-31.
+Decided 2026-10-31, rings redrawn 2026-11-04.
 
 - **The provider sets the ring, not the harness.** Most harnesses use one provider. A harness
   that can call several (pi, opencode) gets the ring of the provider it is started with.
-- **Two rings.**
+- **Two rings.** The ring is `ring = "trusted"` in the provider's `providers.toml` entry (C2).
 
 | Ring | Providers | Filesystem | Network | Sjel data |
 |---|---|---|---|---|
-| `trusted` | No training on user data, reviewed retention terms. Claude and GPT, by subscription or API. | As today, except the overlay `data/` directory | As today | Only through the agent gate, as `trusted_view`: `c0` to `c2` readable with full names, contact details and locations replaced, `c3` withheld. Development uses a synthetic store. |
-| `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. Toolchains and the harness's own config directory read-only. Nothing else. | The provider's endpoints, package registries and the Sjel gateway. Nothing else. | Only through the agent gate, pseudonymized, capped at the provider's `highest_data_class` |
+| `trusted` | `anthropic` and `openai`: Claude Code, Codex, and pi on OpenAI | As today, the overlay included | As today | The live node, fully: the agent gate at the `trusted` tier, `c3` still withheld |
+| `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. System paths and toolchains read-only. Nothing else. | The provider's `hosts` and the package registries through the proxy, and the demo node | The demo node only (`sjel demo up`). No live token is reachable: the overlay and the Keychain are closed. |
 
-- **A provider not listed in `providers.toml` is `contained` with no Sjel data.** This follows the
+- **A provider not listed in `providers.toml` is `contained`.** This follows the
   existing rule in `libs/inference/src/providers.rs:3`: a call is refused unless the provider is
   listed.
 - **The boundary is the operating system.** The command classifier
@@ -86,15 +86,13 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
    loopback, and logs each refusal to stderr. Checked live: through the proxy
    `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.
-3. **Sjel data for `contained`.** The gate applies a per-token data-class cap
-   (`sjel agent cap <name> <c0|c1|c2|none>`, `cap_view` in `crates/pseudonymize/src/view.rs`):
-   rows above the cap or without a class are removed and counted in `x-sjel-withheld`, and a
-   single item above the cap or without a class is refused. Checked by
-   `a_capped_token_reads_only_rows_at_or_below_its_cap`. Open: the launcher passes no agent
-   token yet. Owner steps: `sjel agent enroll contained-<provider>`, then
-   `sjel agent cap contained-<provider> <the provider's highest_data_class>`. Then the launcher
-   hands that token to the run. Done when a contained run reads a capability through the gate
-   with that token, and a c3 and an unclassified row are withheld.
+3. **Sjel data for `contained`: the demo node only.** The launcher sets `SJEL_STATUS_URL` to
+   the demo node, `SJEL_ENV=dev`, and `SJEL_DEMO_TOKEN` from `demo/state/comms-api-secret`.
+   The proxy forwards to no loopback address, and the Keychain's Mach services are denied:
+   a throwaway item readable by every app is found outside the sandbox and not inside it.
+   Not checked end to end: a contained read of the demo node with that token. Open: a contained
+   process can still connect to any loopback port directly, so the live node is closed by its
+   token alone; denying the live ports in the profile is the second layer.
 4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1.
 5. **`capabilities/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
@@ -118,17 +116,17 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 7. **`c2` to the `trusted` ring (C1).** `providers.toml` accepts `c2` as `highest_data_class`;
    `content_item::cloud_admission` admits `c2` as a `trusted_view` derivative to a `c2` provider
    only. The doctrine changes in the same commit: `website/content/architecture/security.md` (Data classes)
-   and `shared-data-boundaries.md`. The overlay `data/` is denied in the Claude Code and Codex
-   sandbox settings, and the demo node replaces it for debugging (`sjel demo up`, [`gpui.md`](gpui.md#10-dev-and-prod)). Done when: a
-   `trusted` agent token reads a `c2` mail with names readable and its sender's address replaced,
-   a `pseudonymized` token gets the same mail tokenized, `cat <overlay>/data/...` fails in a
-   Claude Code session, and `comms egress-log --audit` counts `c2` sent to a non-`c2` provider
-   as a violation.
+   and `shared-data-boundaries.md`. The trusted harnesses keep the overlay (§1, 2026-11-04).
+   Done when: a `trusted` agent token reads a `c2` mail with names readable and its sender's
+   address replaced, a `pseudonymized` token gets the same mail tokenized, and
+   `comms egress-log --audit` counts `c2` sent to a non-`c2` provider as a violation.
 8. **Session ratchet.** An agent session records the highest data class it has read. A session
    that has read `c2` cannot continue on a provider whose `highest_data_class` is lower, and its
    transcript cannot be handed to one. Item 7 opens this path, so it ships with item 7 or right
    after it. Done when: a session that read a `c2` mail and then switches from `anthropic` to
    `deepseek` is refused, and the refusal is in the call log.
+   A trusted pi run gets no proxy, so a provider switch inside the session is unbounded until
+   this ships.
 9. **Sjel from the Claude and ChatGPT apps.** `tools/sjel-mcp` is served over the tailnet, with
    an agent token on the `trusted` ring, so the phone apps of both subscriptions can read Sjel
    through `trusted_view`. Whether a consumer subscription may call a remote MCP server this way
@@ -140,7 +138,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 
 | # | Question | State |
 |---|---|---|
-| C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. |
+| C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. Amended 2026-11-04: the trusted ring keeps the overlay, and every other provider gets the demo node only (§1). |
 | C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Decided 2026-11-04: an explicit `ring = "trusted"` field (`crates/containment/src/ring.rs`). Deriving it from `c2` would make every `c2` provider trusted without a separate review. No entry sets it yet, so every provider runs contained. |
 | C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |

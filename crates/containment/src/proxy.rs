@@ -48,8 +48,6 @@ impl EgressPolicy {
         for host in STANDARD_PACKAGE_REGISTRIES {
             allowed.insert((*host).to_lowercase());
         }
-        allowed.insert("127.0.0.1".into());
-        allowed.insert("localhost".into());
         Self {
             allowed_hosts: allowed,
             audit: ProxyAudit::default(),

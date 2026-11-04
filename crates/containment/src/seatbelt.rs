@@ -87,6 +87,8 @@ impl SeatbeltProfile {
         out.push_str(
             "(allow process-exec process-fork signal sysctl-read mach-lookup ipc-posix-shm)\n",
         );
+        // The Keychain answers through these services; a contained run reads no credential.
+        out.push_str("(deny mach-lookup (global-name \"com.apple.SecurityServer\") (global-name \"com.apple.securityd.xpc\"))\n");
         // Metadata lets path resolution walk through parents. Listing a directory or reading a
         // file needs file-read-data, which only the paths below get.
         out.push_str("(allow file-read-metadata)\n");

@@ -7,16 +7,12 @@
 // failing. This is the claim: it writes the registration, then speaks MCP to the server it wrote
 // and reports the tool count it got back.
 //
-// ## Two harnesses, and why the list is short
+// ## Three harnesses, and why the list is short
 //
 // This is a table of MEASURED MCP registration paths, not a harness registry.
 // tools/sjel-cli/src/harnesses/registry.rs is the authority on which harnesses exist and which
-// are installed; what this file adds is the two whose MCP surface has actually been driven and
-// watched working. Codex is absent on purpose: it supports MCP, its config format is
-// documented elsewhere, and nothing here has run it — ~/.codex exists on the dev machine
-// while no `codex` binary does. That registry states the rule, from the day three Packs
-// were deployed for a Codex that was not installed: a row moves in when someone verifies the
-// format, never on the strength of a guess.
+// are installed. A row moves in here when someone has driven that harness's MCP surface: pi,
+// Claude Code (`claude mcp add`) and Codex (`codex mcp add`).
 //
 // ## Why pi is written directly and claude is not
 //
@@ -140,6 +136,27 @@ pub fn claude_add_args() -> Vec<String> {
     args
 }
 
+/// `codex mcp add sjel -- <server>`, from `codex mcp add --help` (codex-cli 0.166.0). Codex
+/// keeps MCP servers in `~/.codex/config.toml` and has no scope flag.
+pub fn codex_add_args() -> Vec<String> {
+    let mut args = vec![
+        "mcp".to_string(),
+        "add".to_string(),
+        SERVER_NAME.to_string(),
+        "--".to_string(),
+    ];
+    args.extend(server_command());
+    args
+}
+
+pub fn codex_remove_args() -> Vec<String> {
+    vec![
+        "mcp".to_string(),
+        "remove".to_string(),
+        SERVER_NAME.to_string(),
+    ]
+}
+
 pub fn claude_remove_args() -> Vec<String> {
     vec![
         "mcp".to_string(),
@@ -158,6 +175,7 @@ fn installed_marker(harness: &str) -> Option<PathBuf> {
     match harness {
         "pi" => Some(home().join(".pi/agent/settings.json")),
         "claude" => Some(home().join(".claude")),
+        "codex" => Some(home().join(".codex")),
         _ => None,
     }
 }
@@ -362,13 +380,14 @@ fn act(harness: &str, removing: bool) -> Outcome {
                 },
             }
         }
-        "claude" => {
-            let args = if removing {
-                claude_remove_args()
-            } else {
-                claude_add_args()
+        "claude" | "codex" => {
+            let args = match (harness, removing) {
+                ("claude", true) => claude_remove_args(),
+                ("claude", false) => claude_add_args(),
+                (_, true) => codex_remove_args(),
+                (_, false) => codex_add_args(),
             };
-            match run("claude", &args) {
+            match run(harness, &args) {
                 Err(error) => Outcome {
                     harness: harness.to_string(),
                     ok: false,
@@ -383,7 +402,7 @@ fn act(harness: &str, removing: bool) -> Outcome {
                     let combined = combined.trim();
                     if output.status.success() {
                         notes.push(if combined.is_empty() {
-                            format!("claude {} ok", args[..3].join(" "))
+                            format!("{harness} {} ok", args[..3].join(" "))
                         } else {
                             combined.to_string()
                         });
@@ -393,7 +412,10 @@ fn act(harness: &str, removing: bool) -> Outcome {
                             notes,
                         }
                     } else {
-                        notes.push(format!("claude {} failed: {combined}", args[..3].join(" ")));
+                        notes.push(format!(
+                            "{harness} {} failed: {combined}",
+                            args[..3].join(" ")
+                        ));
                         Outcome {
                             harness: harness.to_string(),
                             ok: false,
@@ -415,13 +437,11 @@ const USAGE: &str = "\
 tools/sjel-mcp — Sjel's capabilities as an MCP server, and its registration in a harness.
 
   sjel mcp                                            the stdio MCP server itself
-  tools/sjel-mcp/sjel-mcp register [<harness>...]     pi and Claude Code, or the named ones
+  tools/sjel-mcp/sjel-mcp register [<harness>...]     pi, Claude Code and Codex, or the named ones
   tools/sjel-mcp/sjel-mcp unregister [<harness>...]
 
 Each registration is followed by a real MCP handshake against the server, which reports the
 tool count it answered with. Restart a harness session, or /reload it, to pick the server up.
-
-Codex has no measured registration path in this repository and is reported, not guessed at.
 ";
 
 fn main() -> ExitCode {
@@ -456,7 +476,7 @@ fn registration(args: &[String]) -> ExitCode {
     // are installed: an uninstalled one reports that, which is more useful than being skipped
     // silently. Codex is only reached when it is named.
     let targets: Vec<String> = if names.is_empty() {
-        vec!["pi".to_string(), "claude".to_string()]
+        vec!["pi".to_string(), "claude".to_string(), "codex".to_string()]
     } else {
         names
     };
@@ -575,9 +595,17 @@ mod tests {
 
     #[test]
     fn an_unknown_harness_has_no_marker_and_is_never_touched() {
-        assert!(installed_marker("codex").is_none());
-        let outcome = act("codex", false);
+        assert!(installed_marker("opencode").is_none());
+        let outcome = act("opencode", false);
         assert!(!outcome.ok);
         assert!(outcome.notes[0].contains("no measured MCP registration path"));
+    }
+
+    #[test]
+    fn codex_is_registered_through_its_own_cli() {
+        let args = codex_add_args();
+        assert_eq!(&args[..4], ["mcp", "add", SERVER_NAME, "--"]);
+        assert_eq!(&args[4..], server_command().as_slice());
+        assert_eq!(codex_remove_args(), vec!["mcp", "remove", SERVER_NAME]);
     }
 }

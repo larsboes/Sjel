@@ -21,6 +21,12 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
 | `trusted` | `anthropic` and `openai`: Claude Code, Codex, and pi on OpenAI | As today, the overlay included | As today | The live node, fully: the agent gate at the `trusted` tier, `c3` still withheld |
 | `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. System paths and toolchains read-only. Nothing else. | The provider's `hosts` and the package registries through the proxy, and the demo node | The demo node only (`sjel demo up`). No live token is reachable: the overlay and the Keychain are closed. |
 
+- **The trusted harnesses reach Sjel through `sjel mcp`.** `tools/sjel-mcp/sjel-mcp register`
+  writes it into Claude Code, Codex and pi, with the default agent token. That token reads at
+  the `trusted` tier once the owner runs `sjel agent tier default trusted`. pi's registration
+  holds for every provider, so pi on any other provider must start through `sjel run`: inside
+  the sandbox `sjel mcp` cannot reach the checkout or the Keychain and fails closed. Not
+  checked: a Codex session calling a Sjel tool under its `sjel-auto` permissions.
 - **A provider not listed in `providers.toml` is `contained`.** This follows the
   existing rule in `libs/inference/src/providers.rs:3`: a call is refused unless the provider is
   listed.

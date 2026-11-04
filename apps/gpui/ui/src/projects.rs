@@ -3573,6 +3573,7 @@ mod tests {
                     item_ref: "inv:61".into(),
                     verified_revision: 2,
                     reviewed_at: "stamp".into(),
+                    provenance: None,
                 }]);
                 projects.link_review = Some(LinkReview {
                     record: ProjectLinkRecord {

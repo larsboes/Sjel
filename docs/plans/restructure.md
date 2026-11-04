@@ -194,6 +194,10 @@ their open edits.
    Done for `status`: `crates/status-api` (`status-api`) extracts pure wire models,
    health and liveness models, registry entries, agent gates and approval models, backup records
    and responses, search hits, and route constants shared with `sjel-status` and `sjel-gpui-core`.
+   Done for `feed`: `crates/feed-api` (`feed-api`) extracts pure wire models,
+   feed entries, ranking relevance and evaluation, reader detail projections, data classification,
+   cloud review and processing states, quality flags, refresh stats, and route constants
+   shared with `sjel-gpui-core` and comms/feed services.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

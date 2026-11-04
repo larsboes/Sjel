@@ -179,6 +179,10 @@
       "kind": "lib"
     },
     {
+      "name": "feed-api",
+      "kind": "lib"
+    },
+    {
       "name": "feed-sweep",
       "kind": "capability",
       "service": {

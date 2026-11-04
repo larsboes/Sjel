@@ -1,0 +1,15 @@
+[package]
+name = "feed-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure wire models, quality flags, content projections, and route constants for Sjel feed."
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

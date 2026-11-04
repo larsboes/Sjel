@@ -1641,6 +1641,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "feed-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "filedescriptor"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

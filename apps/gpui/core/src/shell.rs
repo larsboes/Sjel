@@ -111,327 +111,14 @@ pub use documents_api::{
     ProposalInvalidReason, ProposalOutcome, ProposalReview, ProposalReviewEvent, ProposalSource,
 };
 
-/// A feed entry's best profile match (`relevance` in `GET /comms/feed`).
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedRelevance {
-    pub profile_label: String,
-    pub score: f64,
-    pub rationale: String,
-}
-
-/// Why the evaluator ranked an entry where it did.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedEvaluation {
-    pub overall_score: f64,
-    pub explanation: String,
-}
-
-/// One row of `GET /comms/feed`. Comms' `FeedListItem` (`capabilities/comms/src/server/contracts.rs`)
-/// owns the shape; only what the native list draws is read.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedEntry {
-    pub id: String,
-    pub stream: String,
-    pub kind: String,
-    pub title: Option<String>,
-    pub url: String,
-    pub author: Option<String>,
-    pub summary: Option<String>,
-    /// The digest's opening, sent only when the entry has no summary of its own.
-    #[serde(default)]
-    pub digest_preview: Option<String>,
-    pub day: String,
-    pub status: String,
-    pub relevance: Option<FeedRelevance>,
-    pub evaluation: Option<FeedEvaluation>,
-}
-
-impl FeedEntry {
-    /// The order the dashboard ranks the inbox by (`dashboard/src/lib/home/kinds/feed.ts`): the
-    /// evaluator's score, else the relevance score, else nothing.
-    pub fn score(&self) -> f64 {
-        self.evaluation
-            .as_ref()
-            .map(|e| e.overall_score)
-            .or(self.relevance.as_ref().map(|r| r.score))
-            .unwrap_or(0.0)
-    }
-}
-
-/// `GET /comms/feed/:id`, comms' `FeedFullItem`.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedDetail {
-    pub id: String,
-    pub kind: String,
-    pub title: Option<String>,
-    pub url: String,
-    pub author: Option<String>,
-    pub summary: Option<String>,
-    pub transcript: Option<String>,
-    pub day: String,
-    pub status: String,
-    pub content_status: String,
-    #[serde(default)]
-    pub relevance: Vec<FeedRelevance>,
-    pub evaluation: Option<FeedEvaluation>,
-}
-
-/// The shared reader projection for a feed or mail item (`GET /comms/content/:source/:id`).
-/// The feed endpoint remains the source of feed triage state; this projection supplies the
-/// bounded source body and local digest without coupling the reader to Comms' storage.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct FeedContentDetail {
-    #[serde(default)]
-    pub source: String,
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub kind: String,
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub url: String,
-    #[serde(default)]
-    pub author: Option<String>,
-    #[serde(default)]
-    pub summary: Option<String>,
-    #[serde(default)]
-    pub content: Option<String>,
-    #[serde(default)]
-    pub content_label: String,
-    #[serde(default)]
-    pub day: String,
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub content_status: String,
-    #[serde(default)]
-    pub digest: Option<FeedDigest>,
-    #[serde(default)]
-    pub calendar: Option<FeedCalendarContent>,
-    #[serde(default)]
-    pub data_class: FeedDataClass,
-    #[serde(default)]
-    pub cloud_processing: FeedCloudProcessingState,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct FeedDataClass {
-    #[serde(default)]
-    pub value: String,
-    #[serde(default)]
-    pub label: String,
-    #[serde(default)]
-    pub rationale: String,
-    #[serde(default)]
-    pub method: String,
-    #[serde(default)]
-    pub version: String,
-}
-
-pub fn data_class_rank(value: &str) -> u8 {
-    match value {
-        "c0" => 0,
-        "c1" => 10,
-        "c2" => 20,
-        "c3" => 30,
-        _ => 30,
-    }
-}
-
-pub fn data_class_lowering_needs_rationale(current: &str, target: &str) -> bool {
-    !current.is_empty() && data_class_rank(target) < data_class_rank(current)
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct CloudProviderOption {
-    #[serde(default)]
-    pub role: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub model: String,
-    #[serde(default)]
-    pub provider_label: String,
-    #[serde(default)]
-    pub location: String,
-    #[serde(default)]
-    pub data_tier: String,
-    #[serde(default)]
-    pub billing_mode: String,
-    #[serde(default)]
-    pub failover_priority: u16,
-    #[serde(default)]
-    pub max_requests_per_day: u32,
-    #[serde(default)]
-    pub requests_used_today: Option<u32>,
-    #[serde(default)]
-    pub requests_remaining_today: Option<u32>,
-    #[serde(default)]
-    pub max_input_tokens: u32,
-    #[serde(default)]
-    pub credit_expires_on: Option<String>,
-    #[serde(default)]
-    pub available: bool,
-    #[serde(default)]
-    pub unavailable_reason: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct FeedCloudProcessingState {
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub preview_hash: Option<String>,
-    #[serde(default)]
-    pub approved_at: Option<String>,
-    #[serde(default)]
-    pub dispatch_status: String,
-    #[serde(default)]
-    pub job_id: Option<String>,
-    #[serde(default)]
-    pub provider_role: Option<String>,
-    #[serde(default)]
-    pub queued_at: Option<String>,
-    #[serde(default)]
-    pub provider_calls: u8,
-    #[serde(default)]
-    pub task: Option<String>,
-    #[serde(default)]
-    pub started_at: Option<String>,
-    #[serde(default)]
-    pub completed_at: Option<String>,
-    #[serde(default)]
-    pub last_error: Option<String>,
-    #[serde(default)]
-    pub result: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct CloudDerivativePreview {
-    #[serde(default)]
-    pub schema_version: String,
-    #[serde(default)]
-    pub source: String,
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub source_revision: String,
-    #[serde(default)]
-    pub preview_hash: String,
-    #[serde(default)]
-    pub original_data_class: String,
-    #[serde(default)]
-    pub derivative_data_class: String,
-    #[serde(default)]
-    pub transformation: String,
-    #[serde(default)]
-    pub document: String,
-    #[serde(default)]
-    pub redaction_count: usize,
-    #[serde(default)]
-    pub redactions: Vec<CloudRedactionFinding>,
-    #[serde(default)]
-    pub redaction_receipt: Option<String>,
-    #[serde(default)]
-    pub entity_detection: String,
-    #[serde(default)]
-    pub truncated: bool,
-    #[serde(default)]
-    pub approval_required: bool,
-    #[serde(default)]
-    pub provider_calls: u8,
-    #[serde(default)]
-    pub limitations: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct CloudRedactionFinding {
-    #[serde(default)]
-    pub entity_type: String,
-    #[serde(default)]
-    pub marker: String,
-    #[serde(default)]
-    pub count: usize,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct FeedDigest {
-    #[serde(default)]
-    pub text: Option<String>,
-    #[serde(default)]
-    pub state: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-pub struct FeedCalendarContent {
-    #[serde(default)]
-    pub starts_at: String,
-    #[serde(default)]
-    pub ends_at: String,
-    #[serde(default)]
-    pub all_day: bool,
-    #[serde(default)]
-    pub commitment: String,
-    #[serde(default)]
-    pub location: Option<String>,
-    #[serde(default)]
-    pub entry_source: String,
-    #[serde(default)]
-    pub rhythm_id: Option<String>,
-}
-
-/// One signal of `GET /comms/feed/quality`, comms' `QualityReviewRow`
-/// (`capabilities/comms/src/store.rs`). An entry with several signals comes back as several rows.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedQualityFlag {
-    pub feed_id: String,
-    pub title: Option<String>,
-    pub url: String,
-    pub status: String,
-    pub content_status: String,
-    pub signal: String,
-    pub reason: String,
-    pub evidence: String,
-    pub derived_at: String,
-}
-
-/// What `POST /comms/feed/quality/refresh` checked (`server/content.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct FeedQualityRefresh {
-    pub reviewed: usize,
-    pub flagged_items: usize,
-    pub flag_count: usize,
-    pub provider_calls: usize,
-}
-
-/// Where a keep, dismiss or open happened. Comms' ledger CHECK constraint
-/// (`capabilities/comms/src/store/migrations.rs`) holds the full list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FeedSurface {
-    Inbox,
-    Reader,
-    Library,
-}
-
-impl FeedSurface {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Inbox => "inbox",
-            Self::Reader => "reader",
-            Self::Library => "library",
-        }
-    }
-}
-
-/// Comms answers a failed list query with 200 and `{"error": …}` (`server/content.rs`), so the
-/// list reads either shape.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum FeedList {
-    Rows(Vec<FeedEntry>),
-    Failed { error: String },
-}
+pub use feed_api::{
+    data_class_lowering_needs_rationale, data_class_rank, CloudDerivativePreview,
+    CloudProviderOption, CloudRedactionFinding, FeedCalendarContent, FeedCloudProcessingState,
+    FeedContentDetail, FeedDataClass, FeedDetail, FeedDigest, FeedEntry, FeedEvaluation, FeedList,
+    FeedQualityFlag, FeedQualityRefresh, FeedRelevance, FeedSurface,
+    ROUTE_COMMS_CONTENT_CLOUD_PROVIDERS, ROUTE_COMMS_FEED, ROUTE_COMMS_FEED_QUALITY,
+    ROUTE_COMMS_FEED_QUALITY_REFRESH,
+};
 
 /// A feed or document id: 64 hex characters, a SHA-256. Anything else never reaches a URL.
 fn is_sha256(id: &str) -> bool {
@@ -4075,7 +3762,7 @@ impl Shell {
     pub async fn feed(&self, days: u32) -> ShellResult<Vec<FeedEntry>> {
         let days = days.to_string();
         let path = with_query(
-            "/comms/feed",
+            ROUTE_COMMS_FEED,
             &[("days", &days), ("include_dismissed", "true")],
         );
         match self.json(Method::GET, &path, None, 15).await? {
@@ -4088,7 +3775,7 @@ impl Shell {
         if !is_sha256(id) {
             return Err(ShellError::Refused(400, Some("Not a feed id.".into())));
         }
-        self.json(Method::GET, &format!("/comms/feed/{id}"), None, 10)
+        self.json(Method::GET, &format!("{ROUTE_COMMS_FEED}/{id}"), None, 10)
             .await
     }
 
@@ -4162,7 +3849,7 @@ impl Shell {
     }
 
     pub async fn content_cloud_providers(&self) -> ShellResult<Vec<CloudProviderOption>> {
-        self.json(Method::GET, "/comms/content/cloud-providers", None, 10)
+        self.json(Method::GET, ROUTE_COMMS_CONTENT_CLOUD_PROVIDERS, None, 10)
             .await
     }
 
@@ -4288,15 +3975,20 @@ impl Shell {
 
     /// The stored review queue: one row per signal, as the last refresh computed it.
     pub async fn feed_quality(&self) -> ShellResult<Vec<FeedQualityFlag>> {
-        self.json(Method::GET, "/comms/feed/quality?limit=500", None, 10)
-            .await
+        self.json(
+            Method::GET,
+            &format!("{ROUTE_COMMS_FEED_QUALITY}?limit=500"),
+            None,
+            10,
+        )
+        .await
     }
 
     /// Recomputes the queue from stored evidence. Comms checks at most 500 entries and calls no
     /// provider, so this changes no feed decision.
     pub async fn refresh_feed_quality(&self) -> ShellResult<FeedQualityRefresh> {
         let body = serde_json::json!({"days": 3650});
-        self.json(Method::POST, "/comms/feed/quality/refresh", Some(body), 60)
+        self.json(Method::POST, ROUTE_COMMS_FEED_QUALITY_REFRESH, Some(body), 60)
             .await
     }
 

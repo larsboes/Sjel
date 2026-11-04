@@ -4,7 +4,6 @@
 //! comes from the login Keychain item that `tools/setup-inbound-auth.sh` writes, through
 //! `/usr/bin/security`, which that script puts on the item's access list.
 
-use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
 use std::process::Command;
@@ -31,130 +30,17 @@ const EVENTS_PATH: &str = "/api/sjel-status/events";
 /// numbers are one edit apart on purpose.
 const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
 
-/// `GET /api/sjel-status/health` (`SjelStatusHealth` in
-/// `capabilities/sjel-status/src/status/registry.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct NodeHealth {
-    pub version: String,
-    pub uptime_seconds: u64,
-    pub capabilities: BTreeMap<String, CapabilityHealth>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-pub struct CapabilityHealth {
-    pub up: bool,
-    /// Kept running by the machine. A shell from before the field kept every capability running.
-    #[serde(default = "kept_running")]
-    pub autostart: bool,
-}
-
-/// One registry entry (`GET /api/sjel-status/capabilities`), as far as related-record links read it.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct RegistryEntry {
-    pub name: String,
-    #[serde(default)]
-    pub links_to: Vec<String>,
-}
-
-fn kept_running() -> bool {
-    true
-}
-
-/// What a capability's state means to the reader. On-demand capabilities that are stopped are
-/// normal, not down (`NodeHealth.down` in `apps/mac/Sources/SjelRelay/NodeBridge.swift`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Liveness {
-    Up,
-    Idle,
-    Down,
-}
-
-impl CapabilityHealth {
-    pub fn liveness(self) -> Liveness {
-        match (self.up, self.autostart) {
-            (true, _) => Liveness::Up,
-            (false, false) => Liveness::Idle,
-            (false, true) => Liveness::Down,
-        }
-    }
-}
-
-impl NodeHealth {
-    /// Kept-running capabilities that did not answer, by name.
-    pub fn down(&self) -> Vec<String> {
-        self.capabilities
-            .iter()
-            .filter(|(_, health)| health.liveness() == Liveness::Down)
-            .map(|(name, _)| name.clone())
-            .collect()
-    }
-}
-
-/// `GET /api/sjel-status/agent`.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct AgentView {
-    /// False until this machine holds an agent token: every mode below is then unused.
-    #[serde(default)]
-    pub enrolled: bool,
-    /// Every mode the policy admits: `off`, `read-only`, `ask`, `auto`.
-    #[serde(default)]
-    pub modes: Vec<String>,
-    /// The mode a capability with no entry runs at.
-    #[serde(default)]
-    pub default_mode: String,
-    /// One entry per capability that has started a gate on this machine.
-    #[serde(default)]
-    pub capabilities: Vec<AgentGate>,
-    #[serde(default)]
-    pub pending: Vec<Approval>,
-    /// Newest first, at most 50.
-    #[serde(default)]
-    pub calls: Vec<AgentCall>,
-}
-
-/// One capability's agent gate: the mode it runs at, and the routes that always ask.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct AgentGate {
-    pub capability: String,
-    /// `off` · `read-only` · `ask` · `auto`.
-    #[serde(default)]
-    pub mode: String,
-    /// Routes recorded as `METHOD /path` that always wait for the owner.
-    #[serde(default)]
-    pub confirm: Vec<String>,
-    /// Writes reachable over GET, recorded as `METHOD /path`.
-    #[serde(default, rename = "get_writes")]
-    pub get_writes: Vec<String>,
-}
-
-/// One agent write that waits for the owner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct Approval {
-    pub id: String,
-    pub capability: String,
-    pub method: String,
-    pub path: String,
-    pub preview: String,
-    /// Unix seconds.
-    #[serde(default)]
-    pub created_at: i64,
-    /// `pending`, `allowed`, `denied` or `used`.
-    #[serde(default)]
-    pub state: String,
-}
-
-/// One call an agent made through the gate (`AgentCall` in `libs/sjel-server/src/agent_policy.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct AgentCall {
-    /// Unix seconds.
-    pub at: i64,
-    pub capability: String,
-    pub method: String,
-    pub path: String,
-    pub status: u16,
-    /// `read` for a plain read; anything else is a write or a refusal.
-    pub decision: String,
-}
+pub use status_api::{
+    default_kept_running, AgentCall, AgentGate, AgentView, Approval, CapabilityHealth, Liveness,
+    NodeHealth, RegistryEntry, ROUTE_STATUS_AGENT, ROUTE_STATUS_AGENT_MODE, ROUTE_STATUS_BACKUPS,
+    ROUTE_STATUS_BACKUP_POLICY, ROUTE_STATUS_BACKUP_RUNS, ROUTE_STATUS_BACKUP_TARGETS,
+    ROUTE_STATUS_BACKUP_VERIFY, ROUTE_STATUS_CAPABILITIES, ROUTE_STATUS_CREDENTIALS,
+    ROUTE_STATUS_CV, ROUTE_STATUS_EVENTS, ROUTE_STATUS_HEALTH, ROUTE_STATUS_HOST_WATCH,
+    ROUTE_STATUS_LAN, ROUTE_STATUS_LINKS, ROUTE_STATUS_NOW, ROUTE_STATUS_PACKS, ROUTE_STATUS_REPOS,
+    ROUTE_STATUS_ROUTES, ROUTE_STATUS_RUNTIME, ROUTE_STATUS_SEARCH, ROUTE_STATUS_SELF,
+    ROUTE_STATUS_SETUP, ROUTE_STATUS_SETUP_APPLY, ROUTE_STATUS_SETUP_VERIFY, ROUTE_STATUS_STORAGE,
+    ROUTE_STATUS_STORAGE_HISTORY, ROUTE_STATUS_UPDATES, ROUTE_STATUS_UPDATES_APPLY,
+};
 
 /// `GET /calendar/api/entries` (`Entry` in `capabilities/calendar/src/store.rs`). Home's
 pub use calendar_api::{
@@ -193,51 +79,7 @@ struct ImportJobEnvelope {
 
 pub use software_api::{SoftwareApp, SoftwareApps};
 
-/// `GET /api/sjel-status/backups` (`backups_handler` in
-/// `capabilities/sjel-status/src/status/backup.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct Backups {
-    pub backups: Vec<BackupStatus>,
-    #[serde(default)]
-    pub attempt_error: Option<String>,
-}
-
-/// One capability with a backup contract.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct BackupStatus {
-    pub capability: String,
-    /// `ok`, `due`, `overdue`, `never` or `unknown` (`backup_state` in sjel-status).
-    pub state: String,
-    pub last_success: Option<String>,
-    pub age_seconds: Option<u64>,
-    pub bytes: Option<u64>,
-    #[serde(default)]
-    pub holds_service: bool,
-    #[serde(default)]
-    pub advise_days: Option<i64>,
-    #[serde(default)]
-    pub stale_days: Option<i64>,
-    /// The run this sjel-status process started, if any.
-    pub run: Option<BackupRun>,
-    #[serde(default)]
-    pub attempt: Option<crate::backup::BackupRunAttemptRecord>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct BackupRun {
-    /// `running`, `succeeded` or `failed`.
-    pub state: String,
-    #[serde(default)]
-    pub detail: String,
-}
-
-impl Backups {
-    pub fn running(&self) -> bool {
-        self.backups
-            .iter()
-            .any(|b| b.run.as_ref().is_some_and(|run| run.state == "running"))
-    }
-}
+pub use status_api::{BackupRun, BackupStatus, Backups};
 
 /// `GET /projects/api/projects` (`ProjectSummary` in `capabilities/projects/src/server.rs`).
 pub use projects_api::{
@@ -246,16 +88,7 @@ pub use projects_api::{
     ProjectMailProposal, ProjectMailTarget, ProjectRecord, ProjectSummary, RenamedRecord,
 };
 
-/// One server search result (`capabilities/sjel-status/src/status/search.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct ServerHit {
-    pub kind: String,
-    pub title: String,
-    #[serde(default)]
-    pub detail: String,
-    /// A `sjel://` deep link, opened through [`crate::route::parse_deep_link`].
-    pub link: String,
-}
+pub use status_api::ServerHit;
 
 /// One note across projects (`GET /projects/api/records`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

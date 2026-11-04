@@ -17,6 +17,7 @@ path = "src/main.rs"
 # (src/storage_history.rs). host-watch is a scheduled job with no port of its own (the
 # manifest schema refuses one), so the machine's always-on status surface publishes its
 # rows — the same shape /backups already has with tools/backup.sh's receipts.
+status-api = { path = "../status-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-credentials = { path = "../sjel-credentials" }
 sjel-runtime = { path = "../runtime" }

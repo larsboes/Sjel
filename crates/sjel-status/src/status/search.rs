@@ -23,14 +23,7 @@ const PER_SOURCE: usize = 5;
 /// Words per query. Every word is one `LIKE` per row, and nobody types more to find a thing.
 const MAX_WORDS: usize = 6;
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct SearchHit {
-    pub kind: &'static str,
-    pub title: String,
-    pub detail: String,
-    /// Where the app goes: `sjel://calendar`, `sjel://travel/<id>/overview`, ...
-    pub link: String,
-}
+pub use status_api::SearchHit;
 
 /// One searchable table. Every string here is a constant SQL fragment; only the words are bound.
 struct Source {
@@ -173,7 +166,7 @@ fn search_source(
     let rows = statement.query_map(rusqlite::params_from_iter(patterns.iter()), |row| {
         let id: String = row.get::<_, Option<String>>(0)?.unwrap_or_default();
         Ok(SearchHit {
-            kind: source.kind,
+            kind: source.kind.to_string(),
             title: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
             detail: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
             link: (source.link)(&id),
@@ -250,7 +243,7 @@ mod tests {
     fn every_word_must_match_and_each_hit_links_to_its_page() {
         let db = scratch_db("words");
         let hits = search(&db, "lisbon");
-        let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind).collect();
+        let kinds: Vec<&str> = hits.iter().map(|hit| hit.kind.as_str()).collect();
         assert_eq!(
             kinds,
             ["trip", "mail"],

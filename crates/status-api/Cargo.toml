@@ -1,0 +1,16 @@
+[package]
+name = "status-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure wire models, backup records, agent gates, health models, and route constants for Sjel status."
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+schemars = { version = "1.2", optional = true }
+
+[lints]
+workspace = true

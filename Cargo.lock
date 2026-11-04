@@ -4866,11 +4866,9 @@ version = "0.1.0"
 name = "sjel-containment"
 version = "0.1.0"
 dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "civil-date",
+ "sjel-inference",
  "tokio",
- "toml",
 ]
 
 [[package]]
@@ -5361,6 +5359,7 @@ dependencies = [
  "sjel-runtime",
  "sjel-server",
  "sjel-store",
+ "status-api",
  "tokio",
  "tower",
  "tower-http 0.7.1",
@@ -5604,6 +5603,15 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
+]
+
+[[package]]
+name = "status-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

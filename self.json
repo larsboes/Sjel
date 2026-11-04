@@ -536,6 +536,10 @@
       "kind": "lib"
     },
     {
+      "name": "status-api",
+      "kind": "lib"
+    },
+    {
       "name": "storage",
       "kind": "lib"
     },
@@ -1067,6 +1071,26 @@
       ],
       "evidence": [
         "crates/comms/Cargo.toml"
+      ]
+    },
+    {
+      "from": "containment",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/containment/Cargo.toml"
+      ]
+    },
+    {
+      "from": "containment",
+      "to": "inference",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/containment/Cargo.toml"
       ]
     },
     {
@@ -2412,6 +2436,16 @@
     {
       "from": "sjel-status",
       "to": "sjel-store",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-status/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-status",
+      "to": "status-api",
       "kinds": [
         "cargo-dep"
       ],

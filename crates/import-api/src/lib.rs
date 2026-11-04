@@ -3,8 +3,8 @@
 //! Client applications (e.g. `sjel-gpui-core`) and the server capability (`sjel-import`)
 //! share these definitions to eliminate wire model drift.
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 // ============================================================================
 // Route Constants

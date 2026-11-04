@@ -182,6 +182,9 @@ their open edits.
    Done for `entities`: `crates/entities-api` (`entities-api`) extracts pure wire models,
    entity records, fields, facts, duplicate pairs, vocabularies, and route constants
    shared with `sjel-entities` and `sjel-gpui-core`.
+   Done for `import`: `crates/import-api` (`import-api`) extracts pure wire models,
+   import plans, routes, skipped tallies, background jobs, status ledgers, and route constants
+   shared with `sjel-import` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

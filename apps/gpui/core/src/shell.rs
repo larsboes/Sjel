@@ -182,61 +182,13 @@ pub use entities_api::{
     DuplicatePair, DuplicateSide, EntityFact, EntityField, EntityRecord,
 };
 
-/// `GET /import/api/import/plan` (`capabilities/import/src/server.rs`).
-#[derive(Clone, Debug, Default, Deserialize)]
-pub struct ImportPlan {
-    pub folder: String,
-    pub files: usize,
-    pub routes: Vec<ImportRoute>,
-    pub skipped: Vec<ImportSkip>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ImportRoute {
-    /// `documents`, `media`, `finance`, `notes` or `skip`.
-    pub route: String,
-    pub files: usize,
-    pub bytes: u64,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ImportSkip {
-    pub reason: String,
-    pub files: usize,
-}
-
-/// `GET /import/api/import/runs/current`: the running or last finished run.
-#[derive(Clone, Debug, Default, Deserialize)]
-pub struct ImportJob {
-    pub folder: String,
-    pub total: usize,
-    pub done: usize,
-    pub unchanged: usize,
-    /// Files per outcome: `imported`, `present`, `pending`, `skipped`, `failed`.
-    pub outcomes: std::collections::BTreeMap<String, usize>,
-    pub finished: bool,
-    pub error: Option<String>,
-}
+pub use import_api::{
+    ImportJob, ImportPlan, ImportRoute, ImportSkip, ImportStatus, ImportStatusRow,
+};
 
 #[derive(Deserialize)]
 struct ImportJobEnvelope {
     job: Option<ImportJob>,
-}
-
-/// `GET /import/api/import/status`: the ledger for one folder.
-#[derive(Clone, Debug, Default, Deserialize)]
-pub struct ImportStatus {
-    pub folder: String,
-    pub rows: Vec<ImportStatusRow>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ImportStatusRow {
-    pub route: String,
-    pub outcome: String,
-    /// The reason for a skipped, pending or failed row.
-    pub detail: Option<String>,
-    pub files: usize,
 }
 
 /// `GET /software/api/apps` (`App` in `capabilities/software/src/store.rs`).

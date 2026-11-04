@@ -258,6 +258,10 @@
       }
     },
     {
+      "name": "import-api",
+      "kind": "lib"
+    },
+    {
       "name": "inference",
       "kind": "lib"
     },
@@ -1425,6 +1429,16 @@
       ],
       "evidence": [
         "crates/host-net/Cargo.toml"
+      ]
+    },
+    {
+      "from": "import",
+      "to": "import-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/import/Cargo.toml"
       ]
     },
     {

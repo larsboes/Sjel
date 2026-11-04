@@ -2,7 +2,6 @@
 //! background, and read the ledger. No agent-token admission: a plan reads any
 //! folder the caller names.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -14,7 +13,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{Ledger, Outcome};
@@ -35,27 +34,11 @@ const ROUTES: &[route_manifest::Route] = &[
     },
 ];
 
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct RunRequest {
-    folder: String,
-}
+pub use import_api::{ImportJob as Job, ImportRunRequest as RunRequest};
 
 #[derive(Deserialize)]
 struct FolderQuery {
     folder: String,
-}
-
-/// One import run as the page polls it.
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Job {
-    pub folder: String,
-    pub total: usize,
-    pub done: usize,
-    pub unchanged: usize,
-    pub outcomes: BTreeMap<&'static str, usize>,
-    pub finished: bool,
-    pub error: Option<String>,
 }
 
 struct AppState {
@@ -197,7 +180,11 @@ fn run_job(state: &AppState, root: &std::path::Path) -> crate::Fallible<()> {
         update(&|job| {
             job.done += 1;
             match outcome {
-                Some(outcome) => *job.outcomes.entry(Outcome::name(outcome)).or_default() += 1,
+                Some(outcome) => {
+                    *job.outcomes
+                        .entry(Outcome::name(outcome).to_string())
+                        .or_default() += 1
+                }
                 None => job.unchanged += 1,
             }
         });

@@ -314,6 +314,31 @@ impl PolicyFiles {
             .unwrap_or(Tier::Pseudonymized)
     }
 
+    /// The named token's data-class cap, `c0` to `c2`, or `None` for no cap.
+    pub fn cap_for(&self, agent: &str) -> Option<String> {
+        fs::read_to_string(self.policy_path())
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|value| value["caps"][agent].as_str().map(str::to_owned))
+    }
+
+    /// Sets or clears the named token's cap. Only `c0`, `c1` and `c2` are caps.
+    pub fn set_cap(&self, agent: &str, cap: Option<&str>) -> Result<(), String> {
+        if let Some(cap) = cap {
+            if !["c0", "c1", "c2"].contains(&cap) {
+                return Err(format!("{cap:?} is not a cap (c0, c1 or c2)"));
+            }
+        }
+        self.write_policy(|policy| match cap {
+            Some(cap) => policy["caps"][agent] = Value::from(cap),
+            None => {
+                if let Some(caps) = policy["caps"].as_object_mut() {
+                    caps.remove(agent);
+                }
+            }
+        })
+    }
+
     pub fn set_tier(&self, agent: &str, tier: Tier) -> Result<(), String> {
         let valid = !agent.is_empty()
             && agent.len() <= 40
@@ -344,7 +369,7 @@ impl PolicyFiles {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
             Err(e) => return Err(e.to_string()),
         };
-        for key in ["modes", "tiers"] {
+        for key in ["modes", "tiers", "caps"] {
             if !policy[key].is_object() {
                 policy[key] = json!({});
             }

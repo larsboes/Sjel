@@ -101,6 +101,29 @@ fn agent_tier(args: &[String]) -> ExitCode {
     }
 }
 
+/// Owner-only: the highest data class one named agent token reads, or `none`.
+/// Refused from an agent session, so an agent cannot raise its own cap.
+fn agent_cap(args: &[String]) -> ExitCode {
+    use sjel_server::agent_policy::PolicyFiles;
+    if capability::in_agent_session() {
+        return fail("sjel: agent caps are owner-only; run this in your own shell");
+    }
+    let [name, cap] = args else {
+        return fail("usage: sjel agent cap <name> <c0|c1|c2|none>");
+    };
+    let Some(files) = PolicyFiles::from_deployment() else {
+        return fail("sjel: no overlay is configured, so there is no agent policy");
+    };
+    let cap = (cap != "none").then_some(cap.as_str());
+    match files.set_cap(name, cap) {
+        Ok(()) => {
+            println!("agent '{name}' cap: {}", cap.unwrap_or("none"));
+            ExitCode::SUCCESS
+        }
+        Err(error) => fail(&format!("sjel: {error}")),
+    }
+}
+
 fn main() -> ExitCode {
     quiet_broken_pipe();
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -210,7 +233,8 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
                     .args(&rest[1..]),
             ),
             Some("tier") => agent_tier(&rest[1..]),
-            _ => fail("usage: sjel agent enroll [<name>] | sjel agent tier <name> <pseudonymized|zdr|trusted>"),
+            Some("cap") => agent_cap(&rest[1..]),
+            _ => fail("usage: sjel agent enroll [<name>] | sjel agent tier <name> <pseudonymized|zdr|trusted> | sjel agent cap <name> <c0|c1|c2|none>"),
         },
         "pack" => pack(root, rest),
         "worktree" => worktree::run(rest),

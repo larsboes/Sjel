@@ -45,7 +45,7 @@ use sha2::{Digest, Sha256};
 use crate::agent_policy::{
     write_digest, AgentCall, AgentRoutes, Consumed, Mode, PolicyFiles, Tier,
 };
-use sjel_pseudonymize::view::{agent_view_public, is_withheld, trusted_view};
+use sjel_pseudonymize::view::{agent_view_public, cap_view, is_withheld, trusted_view};
 use sjel_pseudonymize::{EntityRegistry, PseudonymizerSession};
 
 /// The header an agent may send to scope its tokens to one conversation.
@@ -138,6 +138,11 @@ impl AgentAccess {
             Some(files) => files.tier_for(agent),
             None => Tier::Pseudonymized,
         }
+    }
+
+    /// The named token's data-class cap. Without policy files there is none.
+    fn cap(&self, agent: &str) -> Option<String> {
+        self.files.as_ref().and_then(|files| files.cap_for(agent))
     }
 
     fn log(&self, agent: &str, method: &str, path: &str, status: u16, decision: &str) {
@@ -331,7 +336,8 @@ pub(crate) async fn admit_agent(
         name: agent.clone(),
         tier,
     });
-    let (response, decision) = decide_and_run(&access, tier, request, next).await;
+    let cap = access.cap(&agent);
+    let (response, decision) = decide_and_run(&access, tier, cap.as_deref(), request, next).await;
     access.log(&agent, &method, &path, response.status().as_u16(), decision);
     response
 }
@@ -339,6 +345,7 @@ pub(crate) async fn admit_agent(
 async fn decide_and_run(
     access: &Arc<AgentAccess>,
     tier: Tier,
+    cap: Option<&str>,
     mut request: Request,
     next: Next,
 ) -> (Response, &'static str) {
@@ -393,7 +400,7 @@ async fn decide_and_run(
 
     if !is_write {
         return (
-            pseudonymize_response(access, tier, &id, next.run(request).await, true).await,
+            pseudonymize_response(access, tier, cap, &id, next.run(request).await, true).await,
             "read",
         );
     }
@@ -506,7 +513,7 @@ async fn decide_and_run(
     parts.headers.remove(APPROVAL_HEADER);
     let request = Request::from_parts(parts, axum::body::Body::from(restored));
     (
-        pseudonymize_response(access, tier, &id, next.run(request).await, false).await,
+        pseudonymize_response(access, tier, cap, &id, next.run(request).await, false).await,
         decision,
     )
 }
@@ -589,6 +596,7 @@ fn unknown_token_refusal(token: &str) -> Response {
 async fn pseudonymize_response(
     access: &AgentAccess,
     tier: Tier,
+    cap: Option<&str>,
     id: &str,
     response: Response,
     read: bool,
@@ -631,6 +639,16 @@ async fn pseudonymize_response(
     if is_withheld(&value) {
         return refuse(StatusCode::FORBIDDEN, "withheld: this item is Secret (c3)");
     }
+    let above_cap = match cap.map(|cap| cap_view(&mut value, cap)) {
+        None => 0,
+        Some(Ok(removed)) => removed,
+        Some(Err(_)) => {
+            return refuse(
+                StatusCode::FORBIDDEN,
+                "withheld: this item is above the agent's data-class cap, or has no class",
+            )
+        }
+    };
     let declared = parts
         .headers
         .get(PUBLIC_FIELDS_HEADER)
@@ -662,9 +680,10 @@ async fn pseudonymize_response(
     if let Ok(v) = HeaderValue::from_str(&receipt) {
         parts.headers.insert(RECEIPT_HEADER, v);
     }
-    parts
-        .headers
-        .insert(WITHHELD_HEADER, HeaderValue::from(report.withheld_secret));
+    parts.headers.insert(
+        WITHHELD_HEADER,
+        HeaderValue::from(report.withheld_secret + above_cap),
+    );
     Response::from_parts(parts, axum::body::Body::from(out))
 }
 

@@ -86,11 +86,15 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
    loopback, and logs each refusal to stderr. Checked live: through the proxy
    `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.
-3. **Sjel data for `contained`.** Done when a contained run reads a capability only through the
-   agent gate, a c3 object is withheld, and a response above the provider's class is refused.
-   The gate exists (`crates/sjel-server/src/agent.rs`): named tokens select a tier, every
-   response is pseudonymized and c3 is withheld. Open decision before building: the
-   per-token data-class cap. See §6.
+3. **Sjel data for `contained`.** The gate applies a per-token data-class cap
+   (`sjel agent cap <name> <c0|c1|c2|none>`, `cap_view` in `crates/pseudonymize/src/view.rs`):
+   rows above the cap or without a class are removed and counted in `x-sjel-withheld`, and a
+   single item above the cap or without a class is refused. Checked by
+   `a_capped_token_reads_only_rows_at_or_below_its_cap`. Open: the launcher passes no agent
+   token yet. Owner steps: `sjel agent enroll contained-<provider>`, then
+   `sjel agent cap contained-<provider> <the provider's highest_data_class>`. Then the launcher
+   hands that token to the run. Done when a contained run reads a capability through the gate
+   with that token, and a c3 and an unclassified row are withheld.
 4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1.
 5. **`capabilities/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
@@ -137,7 +141,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | # | Question | State |
 |---|---|---|
 | C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. |
-| C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Open. The launcher reads a `ring` field today (`crates/containment/src/ring.rs`), and no entry sets it, so every provider runs contained. |
+| C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Decided 2026-11-04: an explicit `ring = "trusted"` field (`crates/containment/src/ring.rs`). Deriving it from `c2` would make every `c2` provider trusted without a separate review. No entry sets it yet, so every provider runs contained. |
 | C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
-| C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Open. |
+| C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Decided 2026-11-04: an unclassified row is withheld, rows above the cap are dropped, and a single item above the cap or without a class is refused. Built (§5 item 3). |

@@ -299,6 +299,80 @@ fn trusted_text(value: &str) -> String {
 }
 
 /// Whether the whole response is one c3 object and must not be sent at all.
+/// The rank of a data class, `c0` to `c3`. An unknown class has none.
+fn class_rank(class: &str) -> Option<u8> {
+    match class {
+        "c0" => Some(0),
+        "c1" => Some(1),
+        "c2" => Some(2),
+        "c3" => Some(3),
+        _ => None,
+    }
+}
+
+/// The response is refused whole: its top level is one item above the cap or without a class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AboveCap;
+
+/// Applies an agent token's data-class cap (docs/plans/containment.md, C5). A row is an
+/// object in an array. A row whose class, or its nearest enclosing class, is above `cap`,
+/// unknown or absent is removed and counted. The top level is a row too unless it is an
+/// envelope: an object without a class that holds at least one array. A capped token reads
+/// nothing unclassified.
+pub fn cap_view(value: &mut Value, cap: &str) -> Result<usize, AboveCap> {
+    let Some(cap) = class_rank(cap) else {
+        return Err(AboveCap);
+    };
+    let admitted = |class: Option<&str>| class.and_then(class_rank).is_some_and(|r| r <= cap);
+    let own = value
+        .get("data_class")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let own = own.as_deref();
+    let envelope = own.is_none()
+        && value
+            .as_object()
+            .is_some_and(|o| o.values().any(Value::is_array));
+    if value.is_object() && !envelope && !admitted(own) {
+        return Err(AboveCap);
+    }
+    let mut removed = 0;
+    cap_walk(value, own, &admitted, &mut removed);
+    Ok(removed)
+}
+
+fn cap_walk(
+    value: &mut Value,
+    class: Option<&str>,
+    admitted: &impl Fn(Option<&str>) -> bool,
+    removed: &mut usize,
+) {
+    match value {
+        Value::Array(items) => {
+            let before = items.len();
+            items.retain(|item| {
+                !item.is_object()
+                    || admitted(item.get("data_class").and_then(Value::as_str).or(class))
+            });
+            *removed += before - items.len();
+            for item in items {
+                cap_walk(item, class, admitted, removed);
+            }
+        }
+        Value::Object(map) => {
+            let own = map
+                .get("data_class")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let class = own.as_deref().or(class);
+            for child in map.values_mut() {
+                cap_walk(child, class, admitted, removed);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn is_withheld(value: &Value) -> bool {
     is_secret_object(value)
 }
@@ -575,5 +649,42 @@ mod tests {
         assert!(named.ends_with("/IMG_1234.jpeg"), "{named}");
         assert_eq!(s.rehydrate_text(named), "Reisen/Erika/IMG_1234.jpeg");
         assert_eq!(value["path"], "Waschmaschine/Assets/IMG_1234.jpeg");
+    }
+
+    #[test]
+    fn cap_view_removes_rows_above_the_cap_and_unclassified_rows() {
+        let mut value = json!({
+            "documents": [
+                {"data_class": "c0", "title": "public"},
+                {"data_class": "c1", "title": "internal"},
+                {"title": "unclassified"},
+                {"data_class": "c0", "pages": [{"n": 1}, {"data_class": "c2", "n": 2}]}
+            ]
+        });
+        assert_eq!(cap_view(&mut value, "c0"), Ok(3));
+        assert_eq!(
+            value,
+            json!({"documents": [
+                {"data_class": "c0", "title": "public"},
+                {"data_class": "c0", "pages": [{"n": 1}]}
+            ]})
+        );
+    }
+
+    #[test]
+    fn cap_view_refuses_a_single_item_above_the_cap_or_without_a_class() {
+        assert_eq!(
+            cap_view(&mut json!({"data_class": "c2", "x": 1}), "c1"),
+            Err(AboveCap)
+        );
+        assert_eq!(
+            cap_view(&mut json!({"title": "no class"}), "c2"),
+            Err(AboveCap)
+        );
+        assert_eq!(cap_view(&mut json!({"data_class": "c1"}), "c1"), Ok(0));
+        assert_eq!(
+            cap_view(&mut json!({"rows": []}), "nonsense"),
+            Err(AboveCap)
+        );
     }
 }

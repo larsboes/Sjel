@@ -572,6 +572,41 @@ mod http_tests {
         );
     }
 
+    /// A capped token gets only the rows at or below its cap (docs/plans/containment.md, C5).
+    #[tokio::test]
+    async fn a_capped_token_reads_only_rows_at_or_below_its_cap() {
+        let (access, files) = agent_access_in("cap", agent_policy::Mode::Auto);
+        let auth = InboundAuth::with_token(Some("full".into())).with_agent_access(access);
+        let base = serve_agent_router(auth).await;
+        let read = |base: String| async move {
+            let response = reqwest::Client::new()
+                .get(format!("{base}/triage"))
+                .bearer_auth("agent-token")
+                .send()
+                .await
+                .unwrap();
+            let withheld = response.headers()[agent::WITHHELD_HEADER]
+                .to_str()
+                .unwrap()
+                .to_owned();
+            (
+                response.json::<serde_json::Value>().await.unwrap(),
+                withheld,
+            )
+        };
+        files.set_cap("default", Some("c0")).unwrap();
+        let (rows, withheld) = read(base.clone()).await;
+        assert_eq!(rows, serde_json::json!([]));
+        assert_eq!(withheld, "2");
+        files.set_cap("default", Some("c1")).unwrap();
+        let (rows, _) = read(base.clone()).await;
+        assert_eq!(rows.as_array().unwrap().len(), 1, "{rows}");
+        assert_eq!(rows[0]["data_class"], "c1");
+        files.set_cap("default", None).unwrap();
+        assert_eq!(files.cap_for("default"), None);
+        assert!(files.set_cap("default", Some("c3")).is_err());
+    }
+
     /// The handler learns the tier from the gate, never from the client.
     #[tokio::test]
     async fn the_handler_sees_the_gate_tier_and_no_client_can_claim_one() {

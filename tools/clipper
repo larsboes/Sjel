@@ -2,7 +2,7 @@
 # tools/clipper — Build the Sjel Clipper and connect it to comms on this Mac.
 #
 # Commands:
-#   tools/clipper build      Build the Chrome extension into capabilities/comms/clipper/dist
+#   tools/clipper build      Build the Chrome extension into crates/comms/clipper/dist
 #   tools/clipper install    Build comms-clip-host and register it as Chrome's native messaging host
 #   tools/clipper check      Verify the registration and ping comms through the host
 #   tools/clipper uninstall  Remove the registration and the host wrapper

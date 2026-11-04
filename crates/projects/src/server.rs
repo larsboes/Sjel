@@ -138,8 +138,8 @@ pub use projects_api::{
     AddNoteRequest as AddNote, AddProjectRequest as AddProject, AddTaskRequest as AddTask,
     AttachFileRequest as AttachFile, InventoryLinkDecisionRequest as InventoryLinkDecision,
     MailDecisionRequest as MailDecision, RemoveRecordRequest as RemoveRecord,
-    RenameRecordRequest as RenameRecord, SaveRecordRequest as SaveRecord, SetDoneRequest as SetDone,
-    SetPropertyRequest as SetProperty,
+    RenameRecordRequest as RenameRecord, SaveRecordRequest as SaveRecord,
+    SetDoneRequest as SetDone, SetPropertyRequest as SetProperty,
 };
 
 #[derive(Deserialize)]

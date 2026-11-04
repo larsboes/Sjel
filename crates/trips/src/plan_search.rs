@@ -712,7 +712,7 @@ pub fn compose(
                 destination: candidate.destination.clone(),
                 place_id: candidate.place_id.clone(),
                 window: window.clone(),
-                mode: mode.clone(),
+                mode,
                 estimated_cost_cents: cost,
                 currency: request.currency.clone(),
                 cost_basis: if cost.is_some() {

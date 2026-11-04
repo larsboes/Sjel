@@ -1,7 +1,7 @@
+use crate::seatbelt::SeatbeltProfile;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use crate::seatbelt::SeatbeltProfile;
 
 /// Environment sanitation for contained executions.
 pub fn sanitize_environment(

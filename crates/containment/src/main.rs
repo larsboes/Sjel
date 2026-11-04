@@ -1,6 +1,6 @@
+use sjel_containment::{EgressPolicy, EgressProxy, ProvidersFile, Ring, SeatbeltProfile};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use sjel_containment::{EgressPolicy, EgressProxy, ProvidersFile, Ring, SeatbeltProfile};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -44,7 +44,10 @@ async fn main() -> ExitCode {
 
     let project_dir = PathBuf::from(&project);
     if !project_dir.exists() {
-        eprintln!("Error: project directory does not exist: {}", project_dir.display());
+        eprintln!(
+            "Error: project directory does not exist: {}",
+            project_dir.display()
+        );
         return ExitCode::from(2);
     }
 

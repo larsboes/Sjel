@@ -3,8 +3,6 @@
 //! A split assigns each page of a parent to exactly one child range. The document
 //! library stores the resulting PDFs as independent content-addressed blobs.
 
-
-
 /// Write a page-range PDF containing only the requested source pages.
 ///
 /// # Errors
@@ -131,8 +129,6 @@ fn explicit_page_one_marker(text: &str) -> Option<(&'static str, String)> {
     }
     None
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -23,10 +23,8 @@ pub const ROUTE_IMPORT_CANDIDATE_RECONCILE_TRANSFER: &str =
     "/api/import/candidates/{id}/reconcile-transfer";
 pub const ROUTE_IMPORT_CANDIDATES_RECLASSIFY_BATCH: &str =
     "/api/import/candidates/reclassify-batch";
-pub const ROUTE_IMPORT_CANDIDATE_ALLOCATION: &str =
-    "/api/import/candidates/{id}/allocation";
-pub const ROUTE_IMPORT_CANDIDATE_REIMBURSEMENT: &str =
-    "/api/import/candidates/{id}/reimbursement";
+pub const ROUTE_IMPORT_CANDIDATE_ALLOCATION: &str = "/api/import/candidates/{id}/allocation";
+pub const ROUTE_IMPORT_CANDIDATE_REIMBURSEMENT: &str = "/api/import/candidates/{id}/reimbursement";
 pub const ROUTE_BALANCE_SNAPSHOT: &str = "/api/balance-snapshot";
 pub const ROUTE_PORTFOLIO: &str = "/api/portfolio";
 pub const ROUTE_PRICES_STATUS: &str = "/api/prices/status";
@@ -57,7 +55,9 @@ pub enum CandidateState {
     Duplicate,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum BalanceCoverage {
     Complete,

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use sjel_containment::{
     sanitize_environment, ContainedCommand, EgressPolicy, EgressProxy, ProvidersFile, Ring,
     SeatbeltProfile,
 };
+use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -94,8 +94,16 @@ async fn egress_proxy_refuses_unauthorized_destination() {
     let resp_str = String::from_utf8_lossy(&response[..n]);
 
     assert!(resp_str.starts_with("HTTP/1.1 403 Forbidden"));
-    assert_eq!(audit.refused_count.load(std::sync::atomic::Ordering::SeqCst), 1);
-    assert_eq!(audit.refusals.read().await.as_slice(), &["forbidden-exfiltration.com"]);
+    assert_eq!(
+        audit
+            .refused_count
+            .load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
+    assert_eq!(
+        audit.refusals.read().await.as_slice(),
+        &["forbidden-exfiltration.com"]
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -112,7 +120,10 @@ fn macos_sandbox_exec_enforces_directory_and_file_boundaries() {
         .build_command();
 
     let output = cmd_allowed.output().expect("execute sandbox-exec");
-    assert!(output.status.success(), "writing inside project should succeed");
+    assert!(
+        output.status.success(),
+        "writing inside project should succeed"
+    );
     assert_eq!(std::fs::read_to_string(&project_file).unwrap().trim(), "ok");
 
     let denied_file = std::env::temp_dir()
@@ -125,7 +136,10 @@ fn macos_sandbox_exec_enforces_directory_and_file_boundaries() {
         .build_command();
 
     let output_denied = cmd_denied.output().expect("execute sandbox-exec");
-    assert!(!output_denied.status.success(), "writing outside project should fail");
+    assert!(
+        !output_denied.status.success(),
+        "writing outside project should fail"
+    );
     assert!(!denied_file.exists());
 
     let _ = std::fs::remove_dir_all(&tmp);

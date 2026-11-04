@@ -252,7 +252,9 @@ pub struct WishGroups {
     pub wish_groups: Vec<WishGroup>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 pub struct Budget {
     pub low_cents: i64,
     pub high_cents: i64,

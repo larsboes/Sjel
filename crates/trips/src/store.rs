@@ -1585,7 +1585,7 @@ fn preserve_stage_state(previous: &[TripStage], regenerated: Vec<TripStage>) -> 
             });
             if let Some((index, candidate)) = matched {
                 consumed[index] = true;
-                stage.status = candidate.status.clone();
+                stage.status = candidate.status;
                 stage.selected_option_id = candidate.selected_option_id.clone();
             }
             stage

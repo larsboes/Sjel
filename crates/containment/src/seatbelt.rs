@@ -23,7 +23,8 @@ impl SeatbeltProfile {
         if let Ok(canon) = std::fs::canonicalize(path.as_ref()) {
             self.additional_read_write_paths.push(canon);
         } else {
-            self.additional_read_write_paths.push(path.as_ref().to_path_buf());
+            self.additional_read_write_paths
+                .push(path.as_ref().to_path_buf());
         }
         self
     }
@@ -57,7 +58,7 @@ impl SeatbeltProfile {
                 path.display()
             ));
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Network: loopback only if requested
         if self.loopback_only {

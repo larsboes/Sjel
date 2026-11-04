@@ -1,8 +1,8 @@
 //! Persisted human decisions for duplicate-review candidates.
 
 pub use documents_api::{
-    CandidateKind, DecisionAction, DecisionError, DuplicateCandidate, DuplicateDecision,
-    PageRange, PartRelation, ReviewCandidate, SourceLocation,
+    CandidateKind, DecisionAction, DecisionError, DuplicateCandidate, DuplicateDecision, PageRange,
+    PartRelation, ReviewCandidate, SourceLocation,
 };
 
 #[cfg(test)]

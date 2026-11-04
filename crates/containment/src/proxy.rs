@@ -36,6 +36,12 @@ pub struct EgressPolicy {
     pub audit: ProxyAudit,
 }
 
+impl Default for EgressPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EgressPolicy {
     pub fn new() -> Self {
         let mut allowed = HashSet::new();
@@ -144,7 +150,9 @@ async fn handle_client(mut client: TcpStream, policy: EgressPolicy) -> Result<()
             }
         };
 
-        client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+        client
+            .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            .await?;
         let _ = tokio::io::copy_bidirectional(&mut client, &mut target_stream).await;
     } else {
         // Plain HTTP proxy request
@@ -157,7 +165,12 @@ async fn handle_client(mut client: TcpStream, policy: EgressPolicy) -> Result<()
 
         if !policy.is_host_allowed(target_host) {
             policy.audit.refused_count.fetch_add(1, Ordering::SeqCst);
-            policy.audit.refusals.write().await.push(target_host.to_string());
+            policy
+                .audit
+                .refusals
+                .write()
+                .await
+                .push(target_host.to_string());
             let response = b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nEgress denied by Sjel containment policy.\r\n";
             client.write_all(response).await?;
             return Ok(());

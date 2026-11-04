@@ -240,10 +240,10 @@ pub fn decode_item_ref(reference: &str) -> Result<String, &'static str> {
         }
     }
     let mut bytes = Vec::with_capacity(hex.len() / 2);
-    for chunk in hex.chunks_exact(2) {
+    for [hi, lo] in hex.as_chunks::<2>().0 {
         bytes.push(
-            digit(chunk[0]).ok_or("Inventory reference must use lowercase hex")? * 16
-                + digit(chunk[1]).ok_or("Inventory reference must use lowercase hex")?,
+            digit(*hi).ok_or("Inventory reference must use lowercase hex")? * 16
+                + digit(*lo).ok_or("Inventory reference must use lowercase hex")?,
         );
     }
     String::from_utf8(bytes).map_err(|_| "Inventory reference must encode UTF-8")

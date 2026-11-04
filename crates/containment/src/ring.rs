@@ -1,6 +1,6 @@
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
-use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ring {
@@ -25,9 +25,8 @@ pub struct ProvidersFile {
 impl ProvidersFile {
     pub fn load_from_file(path: &Path) -> Result<Self, std::io::Error> {
         let content = std::fs::read_to_string(path)?;
-        let parsed: ProvidersFile = toml::from_str(&content).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })?;
+        let parsed: ProvidersFile = toml::from_str(&content)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
         Ok(parsed)
     }
 

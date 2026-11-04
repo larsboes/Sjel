@@ -19,7 +19,8 @@ pub const ROUTE_DOCUMENT_DUPLICATES_REVIEW: &str = "/api/documents/duplicates/re
 pub const ROUTE_DOCUMENT_SPLIT: &str = "/api/documents/{id}/split";
 pub const ROUTE_DOCUMENT_PROPOSALS_REGENERATE: &str = "/api/documents/{id}/proposals/regenerate";
 pub const ROUTE_DOCUMENT_PROPOSALS_MODEL: &str = "/api/documents/{id}/proposals/model";
-pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str = "/api/documents/{id}/proposals/{proposal_id}/review";
+pub const ROUTE_DOCUMENT_PROPOSAL_REVIEW: &str =
+    "/api/documents/{id}/proposals/{proposal_id}/review";
 
 // ============================================================================
 // Core Document Models

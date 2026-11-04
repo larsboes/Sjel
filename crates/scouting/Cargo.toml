@@ -36,6 +36,7 @@ sjel-store = { path = "../sjel-store" }
 content-item = { path = "../content-item" }
 markdown-root = { path = "../markdown-root" }
 route-manifest = { path = "../route-manifest" }
+scouting-api = { path = "../scouting-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 reqwest = { workspace = true, features = ["json", "gzip", "blocking"] }

@@ -4,53 +4,13 @@
 //! it belongs. It is pure: no opportunity is dropped or promoted here, and no
 //! Trips or Calendar service is called.
 
-use serde::Serialize;
 use serde_json::Value;
 
 use crate::config::GeoPolicy;
 use crate::opportunity::{Opportunity, OpportunityType};
 use crate::store::RankedRow;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventRouteKind {
-    Local,
-    TravelCandidate,
-    Online,
-    Unresolved,
-}
-
-impl EventRouteKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Local => "local",
-            Self::TravelCandidate => "travel_candidate",
-            Self::Online => "online",
-            Self::Unresolved => "unresolved",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventRouteBasis {
-    SourceMetadata,
-    LocationText,
-    Coordinates,
-    Country,
-    Timezone,
-    OperatorOverride,
-    MissingPolicy,
-    MissingEvidence,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct EventRoute {
-    pub route: EventRouteKind,
-    pub basis: EventRouteBasis,
-    pub reason: String,
-    pub distance_km: Option<f64>,
-}
+pub use scouting_api::{EventRoute, EventRouteBasis, EventRouteKind};
 
 struct Evidence<'a> {
     location: Option<&'a str>,

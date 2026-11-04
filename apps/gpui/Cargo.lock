@@ -6737,6 +6737,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "scouting-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "scratch"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7138,6 +7147,7 @@ dependencies = [
  "projects-api",
  "qrcode",
  "reqwest 0.13.5",
+ "scouting-api",
  "serde",
  "serde_json",
  "sha2 0.11.1",

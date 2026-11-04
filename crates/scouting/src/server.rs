@@ -95,24 +95,7 @@ struct DiscoverParams {
     // "CLI-arg-only still"), so the sink was removed rather than validated.
 }
 
-#[derive(Debug, serde::Serialize)]
-struct ScoredResult {
-    id: String,
-    rank: usize,
-    score: f64,
-    source: String,
-    title: String,
-    date: Option<String>,
-    location: Option<String>,
-    city: Option<String>,
-    matched_focus: Option<String>,
-    rationale: String,
-    url: String,
-    opportunity_type: String,
-    status: String,
-    vault_link: Option<String>,
-    event_route: Option<EventRoute>,
-}
+use scouting_api::{DiscoverResponse, ScoredOpportunity as ScoredResult};
 
 #[derive(Debug, serde::Serialize)]
 struct ClassifiedOpportunity {
@@ -128,17 +111,6 @@ struct ClassifiedOpportunity {
     /// comes from `sources[].data_class` in `scouting.json` and from nowhere
     /// else; a row whose source declares nothing is `c1`, never `c0`.
     data_class: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct DiscoverResponse {
-    adapter: String,
-    opportunity_type: String,
-    total_scored: usize,
-    new_count: usize,
-    vault_links: usize,
-    store_total: i64,
-    results: Vec<ScoredResult>,
 }
 
 /// `GET /discover` crawls third-party sources and stores what it scores, so an agent's mode
@@ -268,7 +240,7 @@ async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
             total_scored: results.len(),
             new_count: report.new_count,
             vault_links: report.vault_links,
-            store_total: report.store_total,
+            store_total: report.store_total.max(0) as usize,
             results,
         })
     })

@@ -4013,7 +4013,13 @@ impl Shell {
     /// Configured Scouting sources. This includes source paths from the machine configuration;
     /// callers should use them only for source identity and labels, never display local paths.
     pub async fn scouting_sources(&self) -> ShellResult<crate::scouting::ScoutingSources> {
-        self.json(Method::GET, "/scouting/sources", None, 10).await
+        self.json(
+            Method::GET,
+            crate::scouting::PROXY_ROUTE_SCOUTING_SOURCES,
+            None,
+            10,
+        )
+        .await
     }
 
     /// Stored opportunities for the Discover queue, including decisions the operator made.
@@ -4021,7 +4027,7 @@ impl Shell {
         &self,
     ) -> ShellResult<crate::scouting::ScoutingOpportunities> {
         let path = with_query(
-            "/scouting/opportunities",
+            crate::scouting::PROXY_ROUTE_SCOUTING_OPPORTUNITIES,
             &[("limit", "500"), ("include_dismissed", "true")],
         );
         self.json(Method::GET, &path, None, 20).await
@@ -4048,7 +4054,7 @@ impl Shell {
         if let Some(query) = query.filter(|value| !value.trim().is_empty()) {
             pairs.push(("query", query));
         }
-        let path = with_query("/scouting/discover", &pairs);
+        let path = with_query(crate::scouting::PROXY_ROUTE_SCOUTING_DISCOVER, &pairs);
         let value: serde_json::Value = self.json(Method::GET, &path, None, 120).await?;
         if let Some(error) = value.get("error").and_then(serde_json::Value::as_str) {
             return Err(ShellError::Refused(502, Some(error.to_owned())));

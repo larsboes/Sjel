@@ -437,6 +437,10 @@
       }
     },
     {
+      "name": "scouting-api",
+      "kind": "lib"
+    },
+    {
       "name": "security",
       "kind": "pack"
     },
@@ -2084,6 +2088,16 @@
     {
       "from": "scouting",
       "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/scouting/Cargo.toml"
+      ]
+    },
+    {
+      "from": "scouting",
+      "to": "scouting-api",
       "kinds": [
         "cargo-dep"
       ],

@@ -201,6 +201,10 @@ their open edits.
    Done for `web-links`: `crates/web-links-api` (`web-links-api`) extracts pure wire models,
    saved destinations, site groups, review candidates, history scan bounds, decision requests,
    and route constants shared with `sjel-web-links` and `sjel-gpui-core`.
+   Done for `scouting`: `crates/scouting-api` (`scouting-api`) extracts pure wire models,
+   event route kinds, routing bases, sources, opportunities, scored results, discover responses,
+   calendar candidate and verdict contracts, and route constants shared with `sjel-scouting`
+   and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

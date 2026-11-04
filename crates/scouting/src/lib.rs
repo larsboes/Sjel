@@ -14,3 +14,5 @@ pub mod source;
 pub mod sources;
 pub mod store;
 pub mod vault_linker;
+
+pub use scouting_api::*;

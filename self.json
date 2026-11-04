@@ -128,6 +128,10 @@
       }
     },
     {
+      "name": "devices-api",
+      "kind": "lib"
+    },
+    {
       "name": "distribution-api",
       "kind": "lib"
     },
@@ -1144,6 +1148,16 @@
     {
       "from": "devices",
       "to": "device-auth",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/devices/Cargo.toml"
+      ]
+    },
+    {
+      "from": "devices",
+      "to": "devices-api",
       "kinds": [
         "cargo-dep"
       ],

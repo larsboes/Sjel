@@ -44,6 +44,7 @@ sjel-credentials = { path = "../../../crates/sjel-credentials" }
 assistant-api = { path = "../../../crates/assistant-api" }
 calendar-api = { path = "../../../crates/calendar-api" }
 documents-api = { path = "../../../crates/documents-api" }
+devices-api = { path = "../../../crates/devices-api" }
 distribution-api = { path = "../../../crates/distribution-api" }
 feed-api = { path = "../../../crates/feed-api" }
 entities-api = { path = "../../../crates/entities-api" }

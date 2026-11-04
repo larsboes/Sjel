@@ -3,7 +3,6 @@ use std::path::Path;
 
 use ring::signature::{UnparsedPublicKey, ED25519};
 use rusqlite::{params, OptionalExtension};
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::auth::{self, SignedRequest};
@@ -102,47 +101,7 @@ fn fingerprint(public_key: &str) -> Result<String, StoreError> {
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct PairingChallenge {
-    pub protocol_version: &'static str,
-    pub challenge_id: String,
-    pub code: String,
-    pub expires_at: i64,
-    pub qr_payload: String,
-}
-
-/// A phone's request to join, waiting for the owner to allow or deny it on the node.
-#[derive(Debug, Clone, Serialize)]
-pub struct PairingRequest {
-    pub id: String,
-    pub label: String,
-    pub platform: String,
-    /// Six digits derived from the requesting key (`key_code`). The phone shows the same digits,
-    /// so the owner can tell their phone's request from anyone else's.
-    pub key_code: String,
-    /// `pending`, `approved`, `denied` or `expired`.
-    pub status: String,
-    pub created_at: i64,
-    pub expires_at: i64,
-    /// The registered device, once the request is approved.
-    pub device: Option<Device>,
-}
-
-/// Six digits from the SHA-256 of a public key, shown as `482 913`. The phone computes the same
-/// value from its own key (`dashboard/src/lib/devices.ts`, `keyCode`). It tells requests apart; it
-/// is not a secret. The TLS pin the phone compares in the same step is what stops a relay.
-pub fn key_code(public_key: &str) -> String {
-    let digest = Sha256::digest(
-        format!(
-            "sjel-pairing-key/v1:{}",
-            public_key.trim().to_ascii_lowercase()
-        )
-        .as_bytes(),
-    );
-    let value = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]) % 1_000_000;
-    let digits = format!("{value:06}");
-    format!("{} {}", &digits[..3], &digits[3..])
-}
+pub use devices_api::{key_code, PairingChallenge, PairingRequest};
 
 /// Label, platform, algorithm and key as a claim and a request both check them. Returns the
 /// normalized key and its fingerprint.
@@ -265,19 +224,7 @@ fn insert_device(
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Device {
-    pub id: String,
-    pub label: String,
-    pub platform: String,
-    pub algorithm: String,
-    pub public_key: String,
-    pub fingerprint: String,
-    pub status: String,
-    pub created_at: i64,
-    pub last_seen_at: Option<i64>,
-    pub revoked_at: Option<i64>,
-}
+pub use devices_api::Device;
 
 /// label, platform, public_key, status, created_at, expires_at, device_id
 type RequestRow = (String, String, String, String, i64, i64, Option<String>);
@@ -338,7 +285,7 @@ impl DevicesStore {
         })
         .to_string();
         Ok(PairingChallenge {
-            protocol_version: "axon-pairing/v1",
+            protocol_version: devices_api::PROTOCOL_VERSION.to_string(),
             challenge_id,
             code,
             expires_at,
@@ -483,6 +430,7 @@ impl DevicesStore {
             created_at,
             expires_at,
             device: None,
+            public_key: None,
         })
     }
 
@@ -554,6 +502,7 @@ impl DevicesStore {
             created_at,
             expires_at,
             device,
+            public_key: None,
         })
     }
 

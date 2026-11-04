@@ -1651,6 +1651,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "devices-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7164,6 +7174,7 @@ dependencies = [
  "calendar-api",
  "chrono",
  "device-auth",
+ "devices-api",
  "distribution-api",
  "documents-api",
  "entities-api",

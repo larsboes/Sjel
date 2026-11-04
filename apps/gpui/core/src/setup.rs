@@ -136,72 +136,7 @@ pub struct SetupApplied {
     pub components: Vec<SetupComponentApplied>,
 }
 
-/// One paired device registered with the local node, as `GET /devices/api/devices` answers it
-/// (`Device` in `capabilities/devices/src/store.rs`).
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct PairedDevice {
-    pub id: String,
-    #[serde(default)]
-    pub label: String,
-    #[serde(default)]
-    pub platform: String,
-    #[serde(default)]
-    pub algorithm: String,
-    #[serde(default)]
-    pub public_key: String,
-    /// SHA-256 of the public key: what the phone pinned and what a person can compare.
-    #[serde(default)]
-    pub fingerprint: String,
-    /// `active` or `revoked`, decided at the node.
-    #[serde(default)]
-    pub status: String,
-    /// Epoch seconds. The capability records when the key was registered, not `paired_at`.
-    #[serde(default)]
-    pub created_at: i64,
-    #[serde(default)]
-    pub last_seen_at: Option<i64>,
-    #[serde(default)]
-    pub revoked_at: Option<i64>,
-}
-
-impl PairedDevice {
-    /// Whether this key still opens the node. A revoked key keeps a row here: the record of what
-    /// was once trusted is worth reading after it stops being trusted.
-    pub fn is_active(&self) -> bool {
-        self.status != "revoked" && self.revoked_at.is_none()
-    }
-
-    /// The name to draw: the label the person gave the phone, or its id when they gave none.
-    pub fn name(&self) -> &str {
-        if self.label.is_empty() {
-            &self.id
-        } else {
-            &self.label
-        }
-    }
-}
-
-/// Pending join request from a phone or companion device, as `GET /devices/api/pairing/requests`
-/// answers it (`PairingRequest` in `capabilities/devices/src/store.rs`).
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct SetupJoinRequest {
-    pub id: String,
-    #[serde(default)]
-    pub label: String,
-    #[serde(default)]
-    pub platform: String,
-    /// Six digits derived from the requesting key. The phone shows the same digits, so the owner
-    /// can tell their phone's request from anyone else's.
-    #[serde(default)]
-    pub key_code: String,
-    /// `pending`, `approved`, `denied` or `expired`.
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub created_at: i64,
-    #[serde(default)]
-    pub expires_at: i64,
-}
+pub use devices_api::{Device as PairedDevice, PairingRequest as SetupJoinRequest};
 
 /// The node's Same-Wi-Fi listener (`capabilities/sjel-status/src/lan.rs`). Nothing in it is secret:
 /// the fingerprint is advertised in the Bonjour TXT record, and it is what a phone pins.
@@ -250,20 +185,7 @@ impl LanStatus {
     }
 }
 
-/// A one-time code for one new device, minted with `POST /devices/api/pairing/challenges`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct PairingChallenge {
-    #[serde(default)]
-    pub protocol_version: String,
-    pub challenge_id: String,
-    /// Typed by hand when the camera cannot be used.
-    pub code: String,
-    /// Epoch seconds: ten minutes after it was minted.
-    pub expires_at: i64,
-    /// The `axon-pairing/v1` JSON the challenge carries, for a paste on the phone.
-    #[serde(default)]
-    pub qr_payload: String,
-}
+pub use devices_api::PairingChallenge;
 
 /// Full combined view model for the `/setup` native page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

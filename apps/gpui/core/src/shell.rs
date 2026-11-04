@@ -235,6 +235,8 @@ pub use distribution_api::{
     CATALOGUE_LIMIT, MAX_MANIFEST, MAX_PACKAGE, OFFICIAL_RELEASE_URL as RELEASE_URL,
 };
 
+pub use devices_api::{DevicesResp, JoinsResp};
+
 /// Reads the official latest release and checks its catalogue before exposing feature entries.
 pub async fn feature_catalogue() -> ShellResult<Vec<AvailableFeature>> {
     let client = reqwest::Client::builder()
@@ -1106,11 +1108,6 @@ impl Shell {
 
     /// List paired devices via `GET /devices/api/devices`.
     pub async fn setup_devices(&self) -> ShellResult<Vec<crate::setup::PairedDevice>> {
-        #[derive(serde::Deserialize)]
-        struct DevicesResp {
-            #[serde(default)]
-            devices: Vec<crate::setup::PairedDevice>,
-        }
         match self
             .json::<DevicesResp>(Method::GET, "/devices/api/devices", None, 10)
             .await
@@ -1147,11 +1144,6 @@ impl Shell {
 
     /// List pending join requests via `GET /devices/api/pairing/requests`.
     pub async fn setup_pending_joins(&self) -> ShellResult<Vec<crate::setup::SetupJoinRequest>> {
-        #[derive(serde::Deserialize)]
-        struct JoinsResp {
-            #[serde(default)]
-            requests: Vec<crate::setup::SetupJoinRequest>,
-        }
         match self
             .json::<JoinsResp>(Method::GET, "/devices/api/pairing/requests", None, 10)
             .await

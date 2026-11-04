@@ -18,6 +18,7 @@ name = "devices"
 path = "src/lib.rs"
 
 [dependencies]
+devices-api = { path = "../devices-api" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }

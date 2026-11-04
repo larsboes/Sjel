@@ -11,8 +11,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 use store::{Device, DevicesStore, StoreError};
@@ -83,25 +81,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
 ];
 
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ClaimRequest {
-    challenge_id: String,
-    code: String,
-    label: String,
-    platform: String,
-    algorithm: String,
-    /// Hex-encoded 32-byte Ed25519 public key. The private key never crosses this API.
-    public_key: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct JoinRequest {
-    label: String,
-    platform: String,
-    algorithm: String,
-    /// Hex-encoded 32-byte Ed25519 public key. The private key never crosses this API.
-    public_key: String,
-}
+use devices_api::{ClaimRequest, JoinRequest};
 
 struct AppState {
     store: DevicesStore,

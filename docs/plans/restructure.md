@@ -221,6 +221,9 @@ their open edits.
    RoomPlan dimensions, walls, openings, fixtures, uncertainties, layout items, placements, spaces,
    alignments, reconciliations, proposals, jobs, review requests, and route constants shared with
    `sjel-interior` and `sjel-gpui-core`.
+   Done for `devices`: `crates/devices-api` (`devices-api`) extracts pure wire models,
+   pairing challenges, claims, join requests, devices, responses, key code / comparison code /
+   QR parsing routines, and route constants shared with `sjel-devices` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

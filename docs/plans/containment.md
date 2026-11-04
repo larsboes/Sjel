@@ -74,11 +74,10 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 
 ## 5. Order and done-when
 
-1. **Profile and launcher for pi and opencode.** Done when, in a contained run: a read of the
-   overlay `data/`, `~/.ssh` and a sibling checkout fails, `ls ~` fails, a write in the project
-   succeeds, and `cargo test` in the project passes.
-2. **Egress proxy.** Done when a request to a host outside the list fails, the provider and a
-   package registry answer, and each refusal is logged.
+1. **Profile and launcher for pi and opencode.** Done: `crates/containment` implements the
+   seatbelt profile generator, environment sanitizer, and launcher under `sandbox-exec`.
+2. **Egress proxy.** Done: `EgressProxy` binds loopback, enforces domain allowlists, and logs
+   refusals (`crates/containment/src/proxy.rs`).
 3. **Sjel data for `contained`.** Done when a contained run reads a capability only through the
    agent gate, a c3 object is withheld, and a response above the provider's class is refused.
 4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1.
@@ -105,7 +104,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    `content_item::cloud_admission` admits `c2` as a `trusted_view` derivative to a `c2` provider
    only. The doctrine changes in the same commit: `website/content/architecture/security.md` (Data classes)
    and `shared-data-boundaries.md`. The overlay `data/` is denied in the Claude Code and Codex
-   sandbox settings, and a seeded synthetic store replaces it for debugging. Done when: a
+   sandbox settings, and the demo node replaces it for debugging (`sjel demo up`, [`gpui.md`](gpui.md#10-dev-and-prod)). Done when: a
    `trusted` agent token reads a `c2` mail with names readable and its sender's address replaced,
    a `pseudonymized` token gets the same mail tokenized, `cat <overlay>/data/...` fails in a
    Claude Code session, and `comms egress-log --audit` counts `c2` sent to a non-`c2` provider

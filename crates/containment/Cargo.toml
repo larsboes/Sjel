@@ -1,0 +1,26 @@
+[package]
+name = "sjel-containment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Agent containment by provider: macOS seatbelt profile generator and loopback egress proxy."
+publish = false
+
+[lib]
+name = "sjel_containment"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sjel-contain"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+toml = { workspace = true }
+
+[lints]
+workspace = true

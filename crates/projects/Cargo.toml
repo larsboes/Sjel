@@ -24,6 +24,7 @@ axum.workspace = true
 chrono.workspace = true
 content-item = { path = "../content-item" }
 markdown-root = { path = "../markdown-root" }
+projects-api = { path = "../projects-api" }
 route-manifest = { path = "../route-manifest" }
 reqwest.workspace = true
 schemars = "1.2.2"

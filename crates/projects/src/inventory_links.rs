@@ -1,49 +1,8 @@
 use std::{io::Read, time::Duration};
 
-use serde::Deserialize;
+pub use projects_api::{decode_item_ref, project_ref};
 
-pub fn decode_item_ref(reference: &str) -> Result<String, &'static str> {
-    let hex = reference
-        .strip_prefix("inv:")
-        .ok_or("invalid Inventory reference")?
-        .as_bytes();
-    if hex.is_empty() || hex.len() > 512 || hex.len() % 2 != 0 {
-        return Err("invalid Inventory reference length");
-    }
-    fn digit(b: u8) -> Option<u8> {
-        match b {
-            b'0'..=b'9' => Some(b - b'0'),
-            b'a'..=b'f' => Some(b - b'a' + 10),
-            _ => None,
-        }
-    }
-    let bytes: Option<Vec<u8>> = hex
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|pair| Some(digit(pair[0])? * 16 + digit(pair[1])?))
-        .collect();
-    String::from_utf8(bytes.ok_or("Inventory reference must use lowercase hex")?)
-        .map_err(|_| "Inventory reference must encode UTF-8")
-}
-
-pub fn project_ref(path: &str) -> String {
-    const HEX: &[u8] = b"0123456789abcdef";
-    let mut out = String::from("project:");
-    for b in path.bytes() {
-        out.push(HEX[(b >> 4) as usize] as char);
-        out.push(HEX[(b & 15) as usize] as char);
-    }
-    out
-}
-
-#[derive(Deserialize)]
-struct Identity {
-    typed_ref: String,
-    raw_id: String,
-    revision: i64,
-    state: Option<String>,
-}
+type Identity = projects_api::InventoryIdentity;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum VerifyError {

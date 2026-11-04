@@ -134,16 +134,13 @@ const ROUTES: &[route_manifest::Route] = &[
     },
 ];
 
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct InventoryLinkDecision {
-    project: String,
-    path: String,
-    base: String,
-    updated_at: String,
-    item_ref: String,
-    reviewed: bool,
-}
+pub use projects_api::{
+    AddNoteRequest as AddNote, AddProjectRequest as AddProject, AddTaskRequest as AddTask,
+    AttachFileRequest as AttachFile, InventoryLinkDecisionRequest as InventoryLinkDecision,
+    MailDecisionRequest as MailDecision, RemoveRecordRequest as RemoveRecord,
+    RenameRecordRequest as RenameRecord, SaveRecordRequest as SaveRecord, SetDoneRequest as SetDone,
+    SetPropertyRequest as SetProperty,
+};
 
 #[derive(Deserialize)]
 struct InventoryLinkQuery {
@@ -153,82 +150,6 @@ struct InventoryLinkQuery {
 #[derive(Deserialize)]
 struct LinksQuery {
     to: Option<String>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct MailDecision {
-    version: i64,
-    decision: String,
-    target_path: Option<String>,
-    base: Option<String>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AddTask {
-    project: String,
-    title: String,
-    #[serde(default)]
-    summary: String,
-    due: Option<String>,
-    priority: Option<u8>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct SetDone {
-    id: String,
-    done: bool,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AddProject {
-    name: String,
-    #[serde(default)]
-    summary: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct SaveRecord {
-    path: String,
-    content: String,
-    /// The content the edit started from. Absent creates the record, and is refused when the path
-    /// already exists, so a create can never overwrite.
-    #[serde(default)]
-    base: Option<String>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct SetProperty {
-    path: String,
-    key: String,
-    #[serde(default)]
-    value: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AddNote {
-    project: String,
-    title: String,
-    #[serde(default)]
-    summary: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct RemoveRecord {
-    path: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct RenameRecord {
-    path: String,
-    /// The record's new title, which becomes its file's name in the same folder.
-    title: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AttachFile {
-    path: String,
-    base64: String,
 }
 
 #[derive(Deserialize)]

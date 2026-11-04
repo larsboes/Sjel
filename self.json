@@ -373,6 +373,10 @@
       }
     },
     {
+      "name": "projects-api",
+      "kind": "lib"
+    },
+    {
       "name": "pseudonymize",
       "kind": "lib"
     },
@@ -1832,6 +1836,16 @@
     {
       "from": "projects",
       "to": "markdown-root",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/projects/Cargo.toml"
+      ]
+    },
+    {
+      "from": "projects",
+      "to": "projects-api",
       "kinds": [
         "cargo-dep"
       ],

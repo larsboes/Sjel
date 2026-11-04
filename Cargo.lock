@@ -3550,6 +3550,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "projects-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "proptest"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5172,6 +5181,7 @@ dependencies = [
  "chrono",
  "content-item",
  "markdown-root",
+ "projects-api",
  "reqwest",
  "route-manifest",
  "schemars",

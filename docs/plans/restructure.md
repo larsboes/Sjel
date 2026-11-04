@@ -176,6 +176,9 @@ their open edits.
    Done for `inventory`: `crates/inventory-api` (`inventory-api`) extracts pure wire models,
    wishlist items, wish groups, mail proposals, comparison models, and route constants
    shared with `sjel-inventory` and `sjel-gpui-core`.
+   Done for `projects`: `crates/projects-api` (`projects-api`) extracts pure wire models,
+   project summaries, records, tasks, mail proposals, inventory links, and route constants
+   shared with `sjel-projects` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

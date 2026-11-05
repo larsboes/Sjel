@@ -1,15 +1,19 @@
 use std::ops::Range;
 
-use gpui_kit::{canvas, fill, size, Bounds, EntityInputHandler, MouseMoveEvent, TextLayout};
+use gpui_kit::component::input::Textarea;
+use gpui_kit::{
+    canvas, fill, relative, size, Bounds, EntityInputHandler, MouseButton, MouseDownEvent,
+    MouseMoveEvent, StyledText, Subscription, TextLayout, UnderlineStyle,
+};
 
 use super::*;
 
-pub(super) struct LiveBlock {
+pub(crate) struct LiveBlock {
     pub input: Entity<TextareaState>,
     pub palette: Palette,
     pub readonly: bool,
     anchor: Option<usize>,
-    pub(super) layout: TextLayout,
+    pub(crate) layout: TextLayout,
     _observe: Subscription,
 }
 

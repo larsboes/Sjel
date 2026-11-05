@@ -6,187 +6,68 @@
 //! started from. The Mac sends it to the capability, which refuses an edit made elsewhere in the
 //! meantime; the phone writes its replica and queues the write for the Mac.
 
+mod block_view;
 mod preview;
+mod slash_menu;
+mod types;
 
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
-use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::input::{
-    Backspace, Escape, InputEvent, MoveDown, MoveUp, Textarea, TextareaState,
-};
+use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::notification::Notification;
-use gpui_kit::component::{ActiveTheme, Size, WindowExt};
+use gpui_kit::component::{ActiveTheme, WindowExt};
 use gpui_kit::{
-    actions, anchored, deferred, div, list as block_list, prelude::*, px, relative, rgb, rgba,
-    AnyElement, App, Context, Entity, EventEmitter, Focusable, FontStyle, FontWeight,
-    HighlightStyle, KeyBinding, ListAlignment, ListState, MouseButton, MouseDownEvent,
-    SharedString, StrikethroughStyle, StyledText, Subscription, UnderlineStyle, Window,
+    div, list as block_list, prelude::*, px, rgb, rgba, Context, Entity, EventEmitter, Focusable,
+    FontWeight, HighlightStyle, IntoElement, ListAlignment, ListState, Render, SharedString,
+    Window,
 };
 use sjel_gpui_core::blocks::{Block, Doc, Kind};
-use sjel_gpui_core::data::Repo;
-use sjel_gpui_core::inline::{Inline, Mark};
-use sjel_gpui_core::shell::{self, ProjectRecord, ShellError};
+use sjel_gpui_core::inline::Inline;
+use sjel_gpui_core::shell::{self, ProjectRecord};
 
-use crate::block_menu::{self, Choice};
+use crate::block_menu;
 use crate::theme::{tint, Palette};
 
-actions!(editor, [SaveNote, CloseNote, MoveBlockUp, MoveBlockDown]);
+pub use types::{
+    bind_keys, repo_saver, CloseNote, EditorEvent, MoveBlockDown, MoveBlockUp, Save, SaveError,
+    SaveNote, Saver,
+};
 
-/// The size every block's textarea has, which sets its editor's padding.
-const TEXTAREA: Size = Size::Medium;
-
-/// How long typing pauses before the note saves.
-const SAVE_AFTER: Duration = Duration::from_millis(700);
-
-/// One save: the note, its new markdown, and the content the editor started from.
-pub struct Save {
-    pub path: String,
-    pub content: String,
-    pub base: String,
-}
-
-/// Why a save did not land.
-pub enum SaveError {
-    /// The note changed elsewhere since the editor opened it. The editor turns read-only.
-    Conflict,
-    /// Anything else. The editor keeps the text and shows the sentence.
-    Failed(String),
-}
-
-/// Where an editor writes. It runs on the shell's runtime (`shell::run`), off the UI thread.
-pub type Saver =
-    Arc<dyn Fn(Save) -> Pin<Box<dyn Future<Output = Result<(), SaveError>> + Send>> + Send + Sync>;
-
-/// Saves through `Repo`. On the Mac the capability refuses (409) an edit made over a newer
-/// version; on the phone the replica takes it and the sync settles a conflict.
-pub fn repo_saver(repo: Repo) -> Saver {
-    Arc::new(move |save: Save| {
-        let repo = repo.clone();
-        Box::pin(async move {
-            match repo
-                .save_record(&save.path, &save.content, &save.base)
-                .await
-            {
-                Ok(()) => Ok(()),
-                Err(ShellError::Refused(409, _)) => Err(SaveError::Conflict),
-                Err(error) => Err(SaveError::Failed(error.to_string())),
-            }
-        })
-    })
-}
-
-/// What the editor asks of the page that holds it.
-pub enum EditorEvent {
-    /// `⌘[` or the back control: the page closes the note.
-    Close,
-    /// The note is saved and its title should become this. The page owns the rename, because it
-    /// is the one that moves bundles of records and links; the editor only settles its text.
-    Rename(SharedString),
-}
-
-pub fn bind_keys(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("cmd-s", SaveNote, Some("NoteEditor")),
-        KeyBinding::new("cmd-[", CloseNote, Some("NoteEditor")),
-        // On the textarea's own context, bound after gpui-kit's select-to-start/end, so these win.
-        KeyBinding::new("cmd-shift-up", MoveBlockUp, Some("NoteEditor > Input")),
-        KeyBinding::new("cmd-shift-down", MoveBlockDown, Some("NoteEditor > Input")),
-    ]);
-}
-
-struct Row {
-    input: Entity<TextareaState>,
-    _changes: Subscription,
-}
-
-/// A block as a reader sees it, kept between frames: its plain text, its marks, and the place
-/// every shown byte came from. A re-render then parses and shapes nothing; only the text element
-/// that draws it is built again.
-struct Shown {
-    /// The block text and palette this was built from. Either one moving rebuilds it.
-    text: String,
-    palette: Palette,
-    /// The block's text without its marks, which is what a reader sees.
-    label: SharedString,
-    /// Where each shown byte came from in the markdown, for a click.
-    inline: Arc<Inline>,
-    highlights: Vec<(std::ops::Range<usize>, HighlightStyle)>,
-}
-
-/// The kind menu under a block: from `/` in an empty paragraph, or from the block handle.
-struct Menu {
-    block: usize,
-    selected: usize,
-    /// The text after `/`. `None` when the handle opened it: the block keeps its text.
-    query: Option<String>,
-}
-
-impl Menu {
-    fn choices(&self) -> Vec<&'static Choice> {
-        block_menu::matching(self.query.as_deref().unwrap_or_default())
-    }
-}
-
-/// A block being dragged by its handle. It draws itself as the drag preview.
-#[derive(Clone)]
-struct DraggedBlock {
-    index: usize,
-    label: SharedString,
-    palette: Palette,
-}
-
-impl Render for DraggedBlock {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let palette = self.palette;
-        div()
-            .max_w(px(360.))
-            .truncate()
-            .px_3()
-            .py_1()
-            .rounded(px(6.))
-            .bg(rgba(palette.surface | 0xff))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .text_sm()
-            .child(self.label.clone())
-    }
-}
+pub(crate) use block_view::runs;
+pub(crate) use types::{Menu, Row, Shown, SAVE_AFTER, TEXTAREA};
 
 pub struct NoteEditor {
-    path: String,
+    pub(crate) path: String,
     pub title: SharedString,
-    doc: Doc,
+    pub(crate) doc: Doc,
     /// One per block, in the same order.
-    rows: Vec<Row>,
+    pub(crate) rows: Vec<Row>,
     /// The content the capability holds, as far as this editor knows.
-    base: String,
+    pub(crate) base: String,
     /// False when the note does not round-trip or changed elsewhere: nothing is saved.
-    editable: bool,
+    pub(crate) editable: bool,
     /// Why the note is read-only, or the last save error.
-    problem: Option<String>,
-    saving: bool,
+    pub(crate) problem: Option<String>,
+    pub(crate) saving: bool,
     /// False in the typing bench and under `SJEL_GPUI_NO_SAVE`: nothing is written.
     pub editable_saves: bool,
     /// Bumped on every change, so only the last pause saves.
-    revision: u64,
+    pub(crate) revision: u64,
     /// The revision the capability last confirmed.
-    saved_revision: u64,
+    pub(crate) saved_revision: u64,
     /// The block with the caret. It shows its markdown; every other block shows formatted text.
-    active: Option<usize>,
+    pub(crate) active: Option<usize>,
     /// Lays out only the blocks on screen, so a keystroke costs the same in a long note.
-    list: ListState,
-    menu: Option<Menu>,
-    saver: Saver,
+    pub(crate) list: ListState,
+    pub(crate) menu: Option<Menu>,
+    pub(crate) saver: Saver,
     /// The page's palette. `None` follows the window's appearance; the phone sets its own.
-    palette: Option<Palette>,
+    pub(crate) palette: Option<Palette>,
     /// A title waiting for the last keystroke to be saved before the page renames the note.
-    pending_rename: Option<SharedString>,
+    pub(crate) pending_rename: Option<SharedString>,
     /// One per block: the reader view built last time. `None` until a block is drawn.
-    shown: Vec<Option<Shown>>,
-    preview: Option<Entity<preview::LiveBlock>>,
+    pub(crate) shown: Vec<Option<Shown>>,
+    pub(crate) preview: Option<Entity<preview::LiveBlock>>,
 }
 
 impl EventEmitter<EditorEvent> for NoteEditor {}
@@ -348,7 +229,13 @@ impl NoteEditor {
 
     /// Turn block `index` into `kind`. From `/`, the command text goes; from the handle, the
     /// block keeps its text.
-    fn apply(&mut self, index: usize, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn apply(
+        &mut self,
+        index: usize,
+        kind: Kind,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let slash = self.menu.take().is_some_and(|menu| menu.query.is_some());
         let block = &mut self.doc.blocks[index];
         if slash {
@@ -369,7 +256,7 @@ impl NoteEditor {
     }
 
     /// Opens the kind menu for a block from its handle.
-    fn open_menu(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_menu(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if !self.editable {
             return;
         }
@@ -384,7 +271,7 @@ impl NoteEditor {
     }
 
     /// Moves the menu's selection; false when no menu is open on this block.
-    fn step_menu(&mut self, index: usize, step: isize, cx: &mut Context<Self>) -> bool {
+    pub(crate) fn step_menu(&mut self, index: usize, step: isize, cx: &mut Context<Self>) -> bool {
         let Some(menu) = self.menu.as_mut().filter(|menu| menu.block == index) else {
             return false;
         };
@@ -395,7 +282,13 @@ impl NoteEditor {
     }
 
     /// Moves block `from` to `to`, counted before the move.
-    fn move_block(&mut self, from: usize, to: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn move_block(
+        &mut self,
+        from: usize,
+        to: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let last = self.rows.len().saturating_sub(1);
         let to = to.min(last);
         if from == to || !self.editable || from > last {
@@ -462,7 +355,7 @@ impl NoteEditor {
         }
     }
 
-    fn palette(&self, window: &Window) -> Palette {
+    pub(crate) fn palette(&self, window: &Window) -> Palette {
         self.palette
             .unwrap_or_else(|| Palette::for_appearance(window.appearance()))
     }
@@ -519,7 +412,12 @@ impl NoteEditor {
 
     /// Backspace at the start of a block: a list item or heading becomes a paragraph first;
     /// a paragraph joins the block above. Anywhere else the textarea deletes as usual.
-    fn on_backspace(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    pub(crate) fn on_backspace(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let at_start = {
             let state = self.rows[index].input.read(cx);
             state.cursor() == 0 && state.selected_range().is_empty()
@@ -558,7 +456,7 @@ impl NoteEditor {
     }
 
     /// Up on a block's first visual line, or Down on its last, moves to the neighbour.
-    fn on_cross(
+    pub(crate) fn on_cross(
         &mut self,
         index: usize,
         up: bool,
@@ -622,7 +520,7 @@ impl NoteEditor {
         cx.notify();
     }
 
-    fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
+    pub(crate) fn toggle(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.editable {
             self.doc.blocks[index].toggle_done();
             self.changed(cx);
@@ -707,442 +605,6 @@ impl NoteEditor {
             (None, false) => ("Saved", false),
         }
     }
-}
-
-impl NoteEditor {
-    fn render_block(
-        &mut self,
-        index: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let Some(block) = self.doc.blocks.get(index) else {
-            return div().into_any_element();
-        };
-        // Read once, so the cache below may take `&mut self` without holding the block.
-        let (kind, text, prefix, gap) = (
-            block.kind,
-            block.text.clone(),
-            block.prefix.clone(),
-            block.gap,
-        );
-        let palette = self.palette(window);
-        let mono = cx.theme().mono_font_family.clone();
-        let indent = prefix.len() - prefix.trim_start().len();
-        self.settle_shown(index, &text, palette);
-        let Some(row) = self.rows.get(index) else {
-            return div().into_any_element();
-        };
-        let gutter: AnyElement = match kind {
-            Kind::Bullet => div()
-                .text_sm()
-                .text_color(rgb(palette.accent))
-                .child("•")
-                .into_any_element(),
-            Kind::Numbered => div()
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.muted))
-                .child(prefix.trim().to_owned())
-                .into_any_element(),
-            Kind::Todo(done) => {
-                let editor = cx.entity().downgrade();
-                Checkbox::new(("todo", index))
-                    .checked(done)
-                    .on_click(move |_, _, cx| {
-                        let _ = editor.update(cx, |editor, cx| editor.toggle(index, cx));
-                    })
-                    .into_any_element()
-            }
-            _ => div().into_any_element(),
-        };
-        // Code always shows its source; prose shows markdown only while the caret is in it.
-        let live = self
-            .preview
-            .as_ref()
-            .filter(|preview| preview.read(cx).input == row.input && kind == Kind::Paragraph);
-        let field = if let Some(live) = live.filter(|_| self.active == Some(index)) {
-            live.update(cx, |live, _| {
-                live.palette = palette;
-                live.readonly = !self.editable;
-            });
-            live.clone().into_any_element()
-        } else if self.active == Some(index) || kind == Kind::Code {
-            let field = Textarea::new(&row.input)
-                .appearance(false)
-                // Cancels the padding its editor gets from its size (`gpui-component`
-                // input.rs `set_editor_paddings`), so a block keeps its box when it gains the
-                // caret.
-                .mx(-TEXTAREA.input_px())
-                .my(-TEXTAREA.input_py())
-                .line_height(relative(1.3))
-                .readonly(!self.editable);
-            // The textarea sets its own text size, so a heading styles the textarea itself.
-            match kind {
-                Kind::Heading(1) => field.text_2xl().font_weight(FontWeight::BOLD),
-                Kind::Heading(2) => field.text_xl().font_weight(FontWeight::SEMIBOLD),
-                Kind::Heading(_) => field.text_lg().font_weight(FontWeight::SEMIBOLD),
-                _ => field,
-            }
-            .into_any_element()
-        } else {
-            self.formatted(index, cx)
-        };
-        let field = match kind {
-            Kind::Heading(1) => div()
-                .text_2xl()
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(palette.text))
-                .child(field),
-            Kind::Heading(2) => div()
-                .text_xl()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.text))
-                .child(field),
-            Kind::Heading(_) => div()
-                .text_lg()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.text))
-                .child(field),
-            Kind::Quote => div()
-                .border_l_3()
-                .border_color(rgb(palette.accent))
-                .rounded_r(px(8.))
-                .bg(rgba(tint(palette.accent, 0x0c)))
-                .px_3()
-                .py(px(4.))
-                .italic()
-                .text_color(rgb(palette.text))
-                .child(field),
-            Kind::Todo(true) => div()
-                .text_color(rgb(palette.muted))
-                .line_through()
-                .child(field),
-            Kind::Code => div()
-                .font_family(mono.clone())
-                .text_sm()
-                .rounded(px(8.))
-                .bg(rgba(palette.raised))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .overflow_hidden()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .px_3()
-                        .py(px(3.))
-                        .bg(rgba(palette.surface | 0x88))
-                        .border_b_1()
-                        .border_color(rgba(palette.border))
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child("code")
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(rgb(palette.muted))
-                                .opacity(0.6)
-                                .child("snippet"),
-                        ),
-                )
-                .child(div().p_3().child(field)),
-            _ => div().child(field),
-        };
-        let label = self
-            .shown
-            .get(index)
-            .and_then(Option::as_ref)
-            .map_or_else(SharedString::default, |shown| shown.label.clone());
-        let handle = div()
-            .id(("handle", index))
-            .absolute()
-            .left(px(-24.))
-            .top(px(if gap > 0 { 8. } else { 0. }))
-            .w(px(20.))
-            .h(px(20.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(4.))
-            .text_xs()
-            .text_color(rgb(palette.muted))
-            .cursor_grab()
-            .opacity(0.)
-            .group_hover("block", |style| style.opacity(1.))
-            .hover(move |style| style.bg(rgba(palette.raised)).text_color(rgb(palette.text)))
-            .child("⋮⋮")
-            .on_click(cx.listener(move |editor, _, window, cx| editor.open_menu(index, window, cx)))
-            .on_drag(
-                DraggedBlock {
-                    index,
-                    label,
-                    palette,
-                },
-                |dragged, _, _, cx| cx.new(|_| dragged.clone()),
-            );
-        let menu = self
-            .menu
-            .as_ref()
-            .filter(|menu| menu.block == index)
-            .map(|menu| self.render_menu(menu, palette, cx));
-        div()
-            .id(("block", index))
-            .group("block")
-            .relative()
-            .w_full()
-            .flex()
-            .items_start()
-            .gap_2()
-            .pl(px(indent as f32 * 8.))
-            .drag_over::<DraggedBlock>(move |style, _, _, _| style.bg(rgba(palette.raised)))
-            .on_drop(
-                cx.listener(move |editor, dragged: &DraggedBlock, window, cx| {
-                    editor.move_block(dragged.index, index, window, cx)
-                }),
-            )
-            .child(handle)
-            .pt(px(if gap > 0 { 10. } else { 2. }))
-            .capture_action(cx.listener(move |editor, _: &Backspace, window, cx| {
-                if editor.on_backspace(index, window, cx) {
-                    cx.stop_propagation();
-                }
-            }))
-            .capture_action(cx.listener(move |editor, _: &MoveUp, window, cx| {
-                if editor.step_menu(index, -1, cx) || editor.on_cross(index, true, window, cx) {
-                    cx.stop_propagation();
-                }
-            }))
-            .capture_action(cx.listener(move |editor, _: &MoveDown, window, cx| {
-                if editor.step_menu(index, 1, cx) || editor.on_cross(index, false, window, cx) {
-                    cx.stop_propagation();
-                }
-            }))
-            .capture_action(cx.listener(move |editor, _: &Escape, _, cx| {
-                if editor.menu.as_ref().is_some_and(|menu| menu.block == index) {
-                    editor.menu = None;
-                    cx.notify();
-                    cx.stop_propagation();
-                }
-            }))
-            .child(
-                div()
-                    .w(px(20.))
-                    .flex_none()
-                    .flex()
-                    .justify_end()
-                    // The text's line height, so the marker sits on the first line.
-                    .line_height(relative(1.3))
-                    .text_color(rgb(palette.muted))
-                    .child(gutter),
-            )
-            .child(div().flex_1().min_w_0().child(field).children(menu))
-            .into_any_element()
-    }
-
-    fn render_menu(&self, menu: &Menu, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let index = menu.block;
-        let items = menu.choices().into_iter().enumerate().map(|(at, choice)| {
-            let kind = choice.kind;
-            div()
-                .id(("choice", at))
-                .px_2()
-                .py(px(5.))
-                .rounded(px(6.))
-                .text_sm()
-                .cursor_pointer()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .when(at == menu.selected, |item| item.bg(rgba(palette.raised)))
-                .hover(move |style| style.bg(rgba(palette.raised)))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |editor, _, window, cx| {
-                        editor.apply(index, kind, window, cx);
-                        cx.stop_propagation();
-                    }),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            div()
-                                .w(px(24.))
-                                .h(px(20.))
-                                .rounded(px(4.))
-                                .bg(rgba(palette.surface))
-                                .border_1()
-                                .border_color(rgba(palette.border))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(rgb(palette.muted))
-                                .child(choice.icon),
-                        )
-                        .child(choice.label),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .opacity(0.7)
-                        .child(choice.shortcut),
-                )
-        });
-        let title = if menu.query.is_some() {
-            "Insert Block"
-        } else {
-            "Turn into"
-        };
-        deferred(
-            anchored().snap_to_window_with_margin(px(8.)).child(
-                div()
-                    .mt_1()
-                    .w(px(250.))
-                    .p_1()
-                    .flex()
-                    .flex_col()
-                    .rounded(px(10.))
-                    .bg(rgba(palette.surface | 0xff))
-                    .border_1()
-                    .border_color(rgba(palette.border))
-                    .shadow_lg()
-                    .child(
-                        div()
-                            .px_3()
-                            .py_1()
-                            .text_xs()
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(rgb(palette.muted))
-                            .child(title),
-                    )
-                    .children(items),
-            ),
-        )
-        .with_priority(1)
-        .into_any_element()
-    }
-}
-
-impl NoteEditor {
-    /// Builds a block's reader view when its text or the palette moved, and keeps it otherwise.
-    fn settle_shown(&mut self, index: usize, text: &str, palette: Palette) {
-        let current = self.shown.get(index).and_then(Option::as_ref);
-        if current.is_some_and(|shown| shown.text == text && shown.palette == palette) {
-            return;
-        }
-        let inline = Arc::new(Inline::parse(text));
-        // An empty block keeps one line's height.
-        let label: SharedString = if inline.text.is_empty() {
-            " ".into()
-        } else {
-            inline.text.clone().into()
-        };
-        let highlights = runs(&inline.marks, palette);
-        if self.shown.len() <= index {
-            self.shown.resize_with(index + 1, || None);
-        }
-        self.shown[index] = Some(Shown {
-            text: text.to_owned(),
-            palette,
-            label,
-            inline,
-            highlights,
-        });
-    }
-
-    /// A block as a reader sees it. A click puts the caret at the same place in the markdown.
-    fn formatted(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
-        let Some(shown) = self.shown.get(index).and_then(Option::as_ref) else {
-            return div().into_any_element();
-        };
-        let styled = StyledText::new(shown.label.clone()).with_highlights(shown.highlights.clone());
-        // An `Rc` handle: the layout fills in when the element is laid out, which this closure
-        // reads after that. Kept per frame, but the work behind it is not.
-        let layout = styled.layout().clone();
-        let inline = shown.inline.clone();
-        div()
-            .id(("formatted", index))
-            .debug_selector(move || format!("formatted-{index}"))
-            .w_full()
-            // The textarea's line height, so a block keeps its height when it gains the caret.
-            .line_height(relative(1.3))
-            .cursor_text()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |editor, event: &MouseDownEvent, window, cx| {
-                    let shown = layout
-                        .index_for_position(event.position)
-                        .unwrap_or_else(|nearest| nearest);
-                    editor.focus(index, inline.source_offset(shown), window, cx);
-                    cx.stop_propagation();
-                }),
-            )
-            .child(styled)
-            .into_any_element()
-    }
-}
-
-/// Marks as non-overlapping highlight runs; where marks nest, their styles combine.
-fn runs(
-    marks: &[(std::ops::Range<usize>, Mark)],
-    palette: Palette,
-) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
-    let style = |mark: Mark| match mark {
-        Mark::Bold => HighlightStyle {
-            font_weight: Some(FontWeight::BOLD),
-            ..Default::default()
-        },
-        Mark::Italic => HighlightStyle {
-            font_style: Some(FontStyle::Italic),
-            ..Default::default()
-        },
-        Mark::Code => HighlightStyle {
-            background_color: Some(rgba(palette.raised).into()),
-            ..Default::default()
-        },
-        Mark::Strike => HighlightStyle {
-            strikethrough: Some(StrikethroughStyle {
-                thickness: px(1.),
-                color: None,
-            }),
-            ..Default::default()
-        },
-        Mark::Link => HighlightStyle {
-            color: Some(rgb(palette.accent).into()),
-            underline: Some(UnderlineStyle {
-                thickness: px(1.),
-                color: None,
-                wavy: false,
-            }),
-            ..Default::default()
-        },
-        Mark::Highlight => HighlightStyle {
-            background_color: Some(rgba(tint(palette.amber, 0x30)).into()),
-            ..Default::default()
-        },
-    };
-    let mut cuts: Vec<usize> = marks.iter().flat_map(|(r, _)| [r.start, r.end]).collect();
-    cuts.sort_unstable();
-    cuts.dedup();
-    cuts.windows(2)
-        .filter_map(|pair| {
-            let range = pair[0]..pair[1];
-            marks
-                .iter()
-                .filter(|(r, _)| r.start <= range.start && range.end <= r.end)
-                .map(|(_, mark)| style(*mark))
-                .reduce(HighlightStyle::highlight)
-                .map(|style| (range, style))
-        })
-        .collect()
 }
 
 impl Render for NoteEditor {
@@ -1324,7 +786,9 @@ impl Render for NoteEditor {
         let editor = cx.entity().downgrade();
         let blocks = block_list(self.list.clone(), move |index, window, cx| {
             editor
-                .update(cx, |editor, cx| editor.render_block(index, window, cx))
+                .update(cx, |editor, cx| {
+                    block_view::render_block(editor, index, window, cx)
+                })
                 .unwrap_or_else(|_| div().into_any_element())
         })
         .flex_1()
@@ -1437,8 +901,9 @@ impl Render for NoteEditor {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{TestAppContext, VisualTestContext};
+    use gpui::{MouseButton, TestAppContext, VisualTestContext};
     use gpui_kit::Entity;
+    use sjel_gpui_core::inline::Mark;
     use std::sync::Arc;
 
     use super::*;

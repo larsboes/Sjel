@@ -323,7 +323,7 @@ impl SoundscapeSlideover {
         self.last_write = Some(Instant::now());
         let repo = self.repo.clone();
         let key = preset.key().to_string();
-        let params = defaults.map(SoundscapeParams::from);
+        let params = defaults;
         data::write(
             cx,
             window,
@@ -389,7 +389,7 @@ impl SoundscapeSlideover {
             state.layers.set(layer, value);
         }
         let layers = self.audio.control.layers();
-        self.write_soon(window, cx, Write::Layers(layers.into()));
+        self.write_soon(window, cx, Write::Layers(layers));
     }
 
     fn set_param(
@@ -404,7 +404,7 @@ impl SoundscapeSlideover {
             state.params.set(name, value);
         }
         let params = self.audio.control.params();
-        self.write_soon(window, cx, Write::Params(params.into()));
+        self.write_soon(window, cx, Write::Params(params));
     }
 
     /// A drag writes at most every [`WRITE_DEBOUNCE`]; the value under the cursor is applied to the

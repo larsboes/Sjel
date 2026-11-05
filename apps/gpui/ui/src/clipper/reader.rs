@@ -242,7 +242,7 @@ pub(super) fn render_citation_audit(text: &str, palette: Palette) -> AnyElement 
                         cx.spawn(async move |cx| {
                             let resolved =
                                 sjel_gpui_core::clipper::resolve_redirect_http(&clean_clone).await;
-                            let _ = cx.update(|cx| cx.open_url(&resolved));
+                            cx.update(|cx| cx.open_url(&resolved));
                         })
                         .detach();
                     } else {

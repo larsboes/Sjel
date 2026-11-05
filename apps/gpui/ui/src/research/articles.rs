@@ -21,7 +21,7 @@ impl ResearchPage {
 
         // Left rail: list of articles
         let article_buttons = articles.iter().map(|art| {
-            let active = selected_article.map_or(false, |a| a.slug == art.slug);
+            let active = selected_article.is_some_and(|a| a.slug == art.slug);
             let slug = art.slug.clone();
             div()
                 .flex()

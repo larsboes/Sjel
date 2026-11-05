@@ -78,7 +78,7 @@ pub(super) fn shortcuts(
     let matching: Vec<AnyElement> = groups
         .into_iter()
         .filter(|(_, title, rows)| {
-            !rows.is_empty() && selected_group.map_or(true, |selected| selected == *title)
+            !rows.is_empty() && selected_group.is_none_or(|selected| selected == *title)
         })
         .filter_map(|(_, title, rows)| {
             let rows = rows

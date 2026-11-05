@@ -235,6 +235,12 @@ impl Clips {
     }
 }
 
+impl Default for Clips {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Render for Clips {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self

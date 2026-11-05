@@ -637,8 +637,8 @@ impl InventoryPage {
         // The banner describes what the list shows. When a group or a search narrows it, the range
         // of the whole wishlist stays visible underneath instead of disappearing.
         // A group of alternatives is one purchase: only its cheapest member is in a total.
-        let budget = self.wishlist_derived.budget.clone();
-        let whole = self.wishlist_derived.whole.clone();
+        let budget = self.wishlist_derived.budget;
+        let whole = self.wishlist_derived.whole;
         let range = format!(
             "{} – {}",
             format_cents(Some(budget.low_cents)),

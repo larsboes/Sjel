@@ -365,7 +365,7 @@ impl Documents {
         self.set_zoom(Zoom::Page, cx);
     }
 
-    pub fn on_wheel_zoom(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut Context<Self>) {
+    pub fn on_wheel_zoom(&mut self, event: &gpui::ScrollEvent, cx: &mut Context<Self>) {
         let dy = match event.delta {
             gpui::ScrollDelta::Pixels(d) => f32::from(d.y),
             gpui::ScrollDelta::Lines(d) => d.y,

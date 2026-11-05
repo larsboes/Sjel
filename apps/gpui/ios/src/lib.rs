@@ -1886,7 +1886,7 @@ impl Capabilities {
             })
             .when_some(pending, |panel, pending| {
                 let is_block = pending.class.as_deref() == Some("block")
-                    || pending.rule.as_ref().map_or(false, |r| r.starts_with('B'));
+                    || pending.rule.as_ref().is_some_and(|r| r.starts_with('B'));
                 let preview = if pending.preview.is_empty() {
                     pending.name.clone()
                 } else {

@@ -12,7 +12,7 @@ use gpui::prelude::*;
 use gpui::{
     canvas, div, px, rgb, rgba, AnyElement, ClipboardItem, Context, EventEmitter, FocusHandle,
     FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, PinchEvent,
-    Pixels, Point, Render, ScrollDelta, ScrollWheelEvent, SharedString, TouchPhase, Window,
+    Pixels, Point, Render, ScrollDelta, ScrollEvent, SharedString, TouchPhase, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
@@ -671,7 +671,7 @@ impl Render for TerminalView {
                             view.pinch = 0.;
                         }
                     }))
-                    .on_scroll_wheel(cx.listener(|view, event: &ScrollWheelEvent, _window, cx| {
+                    .on_scroll(cx.listener(|view, event: &ScrollEvent, _window, cx| {
                         let steps = match event.delta {
                             ScrollDelta::Lines(delta) => delta.y,
                             ScrollDelta::Pixels(delta) => delta.y / px(12.),
@@ -851,7 +851,7 @@ mod tests {
         screen.feed(b"1\r\n2\r\n3\r\n4\r\n5");
         screen.scroll(2);
         let lines = screen.lines();
-        let shown: Vec<String> = lines.iter().map(|line| text_of(line)).collect();
+        let shown: Vec<String> = lines.iter().map(text_of).collect();
         assert_eq!(shown, ["1", "2", "3"]);
     }
 

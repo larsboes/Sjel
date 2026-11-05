@@ -901,7 +901,7 @@ impl Render for Calendar {
         let chips: Vec<AnyElement> = self
             .week
             .iter()
-            .zip(dotted.into_iter())
+            .zip(dotted)
             .map(|(&date, dot)| self.chip(date, dot, cx))
             .collect();
         let source_line = self.source_line();

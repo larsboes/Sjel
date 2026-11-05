@@ -363,7 +363,7 @@ impl LinksPage {
         }
     }
 
-    fn filtered<'a>(&self, link: &'a WebLink) -> bool {
+    fn filtered(&self, link: &WebLink) -> bool {
         let query = self.query.trim().to_lowercase();
         query.is_empty()
             || [

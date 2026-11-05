@@ -341,7 +341,7 @@ mod tests {
         // The capability records `created_at`; a page that asked for `paired_at` drew a blank date.
         assert_eq!(device.created_at, 1_761_300_000);
         assert!(device.is_active());
-        assert_eq!(stamp(Some(1_761_303_600)).is_empty(), false);
+        assert!(!stamp(Some(1_761_303_600)).is_empty());
         assert_eq!(stamp(None), "Never");
 
         let revoked = live_device("revoked");

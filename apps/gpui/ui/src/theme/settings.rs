@@ -523,7 +523,7 @@ impl NotifyPrefs {
 
     pub fn lead(&self) -> sjel_gpui_core::notify::Lead {
         sjel_gpui_core::notify::Lead::from_key(&self.lead)
-            .unwrap_or_else(sjel_gpui_core::notify::Lead::default)
+            .unwrap_or_default()
     }
 
     pub fn set_lead(&mut self, lead: sjel_gpui_core::notify::Lead) {

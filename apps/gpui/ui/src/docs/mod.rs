@@ -121,6 +121,12 @@ impl DocsPage {
     }
 }
 
+impl Default for DocsPage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Render for DocsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;

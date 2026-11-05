@@ -103,7 +103,7 @@ impl Item {
 
 /// Orders `stay` items for the candidate ranking board: ranked candidates ascending by rank,
 /// then unranked candidates ascending by price, then by title.
-pub fn sort_stay_candidates<'a>(stays: &mut [&'a Item]) {
+pub fn sort_stay_candidates(stays: &mut [&Item]) {
     stays.sort_by(|a, b| {
         let ra = a.stay_rank();
         let rb = b.stay_rank();

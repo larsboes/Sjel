@@ -16,7 +16,7 @@ use sjel_gpui_ui::theme::Palette;
 
 pub use nav::{nav, palette_hint, settings_row, soundscape};
 pub use status::{footer, status, storage};
-pub use types::{uptime, GLASS_INSET, WIDTH};
+pub use types::{GLASS_INSET, WIDTH};
 
 pub fn render(
     view: &Workspace,
@@ -60,6 +60,7 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::types::uptime;
     use crate::data::Remote;
     use crate::shell::{NodeHealth, ShellError};
     use gpui_kit::WindowAppearance;

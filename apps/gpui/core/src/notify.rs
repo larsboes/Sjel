@@ -381,7 +381,7 @@ mod tests {
             "2026-10-24T10:45:00",
             false,
         );
-        let hour = plan(&[early.clone()], &[], Lead::Hour, now);
+        let hour = plan(std::slice::from_ref(&early), &[], Lead::Hour, now);
         assert_eq!(hour.reminders[0].at, at("2026-10-24", 9, 0).timestamp());
         let start = plan(&[early], &[], Lead::AtStart, now);
         assert_eq!(start.reminders[0].at, at("2026-10-24", 10, 0).timestamp());

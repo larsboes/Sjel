@@ -410,7 +410,7 @@ impl RoomPlanHistory {
             .selected_layout_id
             .as_ref()
             .filter(|id| self.layout_preview_id.as_ref() == Some(id))
-            .and_then(|_| self.layout_preview.value.as_ref());
+            .and(self.layout_preview.value.as_ref());
         let pieces = if self.selected_layout_id.is_some() {
             preview
                 .map(|preview| {

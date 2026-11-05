@@ -249,6 +249,12 @@ impl ClipperSettings {
     }
 }
 
+impl Default for ClipperSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Render for ClipperSettings {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;

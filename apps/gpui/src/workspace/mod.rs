@@ -1732,7 +1732,7 @@ impl Render for Workspace {
         // fire while a palette query has focus.
         div()
             .id("workspace")
-            .on_scroll_wheel(cx.listener(|view, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|view, event: &gpui::ScrollEvent, _, cx| {
                 if let Some(frames) = &view.frames {
                     frames.input();
                 }

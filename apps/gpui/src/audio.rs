@@ -159,7 +159,7 @@ where
     let mut scratch: Vec<f32> = Vec::new();
     device
         .build_output_stream::<T, _, _>(
-            config.clone(),
+            *config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
                 if scratch.len() != output.len() {
                     scratch.resize(output.len(), 0.);

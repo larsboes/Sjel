@@ -127,7 +127,7 @@ impl ResearchPage {
                         .cases
                         .iter()
                         .find(|c| c.id == *case_id)
-                        .map_or(false, |c| c.expected == c.got);
+                        .is_some_and(|c| c.expected == c.got);
 
                     let (symbol, color) = if passed {
                         ("✓", palette.green)

@@ -571,7 +571,7 @@ impl Travel {
     ///
     /// GPUI's scroll delta comes straight from the platform event (`NSEvent.scrollingDeltaY`
     /// on macOS), which already applies the system's per-device scroll direction setting.
-    pub fn on_wheel(&mut self, event: &gpui::ScrollWheelEvent, cx: &mut Context<Self>) {
+    pub fn on_wheel(&mut self, event: &gpui::ScrollEvent, cx: &mut Context<Self>) {
         use gpui::ScrollDelta;
         let delta = match event.delta {
             ScrollDelta::Pixels(d) => f64::from(d.y) * 0.0035,
@@ -837,7 +837,7 @@ impl Travel {
                 .absolute()
                 .size_full(),
             )
-            .on_scroll_wheel(cx.listener(|view, event: &gpui::ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|view, event: &gpui::ScrollEvent, _, cx| {
                 // Zooming here is the point of the map; the page scrolls everywhere else.
                 cx.stop_propagation();
                 view.on_wheel(event, cx);
@@ -1542,7 +1542,7 @@ mod tests {
     use super::*;
     use crate::Density;
     use gpui::{
-        point, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+        point, Entity, Modifiers, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase,
         VisualTestContext,
     };
     use std::cell::RefCell;
@@ -1644,7 +1644,7 @@ mod tests {
         let under_pointer = ground_at(start_center, start, viewport, at);
 
         // A wheel notch down zooms out; the point under the pointer stays put.
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: cursor,
             delta: ScrollDelta::Lines(point(0., -1.)),
             modifiers: Modifiers::none(),
@@ -1661,7 +1661,7 @@ mod tests {
         assert!((still_under.longitude - under_pointer.longitude).abs() < 1e-4);
 
         // And back the other way, from the same pointer.
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: cursor,
             delta: ScrollDelta::Lines(point(0., 1.)),
             modifiers: Modifiers::none(),
@@ -1775,7 +1775,7 @@ mod tests {
         // The header above the map is part of the same window but not part of the map.
         let above = point(px(origin.0 + viewport.0 / 2.), px(origin.1 - 40.));
         cx.simulate_mouse_move(above, None, Modifiers::none());
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: above,
             delta: ScrollDelta::Lines(point(0., 1.)),
             modifiers: Modifiers::none(),

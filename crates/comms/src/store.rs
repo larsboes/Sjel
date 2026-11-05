@@ -1597,6 +1597,40 @@ pub(crate) mod db_tests {
     }
 
     #[test]
+    fn only_a_named_person_c2_lowers_and_only_with_the_registry_loaded() {
+        use crate::mail_authenticity::{Assessment, Source};
+        let store = open_test_store("triage_named_person_reread");
+        let headers = Assessment::from_findings(Source::Headers, Vec::new());
+        let raise = |id: &str, rationale: &str| {
+            store.upsert_triage(&mk_triage(id, "aktiv")).unwrap();
+            let class = content_item::DataClass::new(
+                "c2",
+                rationale,
+                content_item::METHOD_DETERMINISTIC,
+                content_item::MAIL_CLASSIFIER_VERSION,
+            );
+            assert!(store.refresh_triage_data_class(id, &class).unwrap());
+        };
+        let sweep = |id: &str, registry_loaded: bool| {
+            let fresh = mk_triage(id, "aktiv");
+            store
+                .upsert_triage_swept(
+                    &fresh,
+                    &verdict("aktiv", crate::rules::DecidedBy::Fallback),
+                    &headers,
+                    registry_loaded,
+                )
+                .unwrap();
+            store.get_triage(id).unwrap().unwrap().data_class
+        };
+        raise("thread:own-name", crate::intake::KNOWN_PERSON_RATIONALE);
+        assert_eq!(sweep("thread:own-name", false), "c2", "a blind sweep never lowers");
+        assert_eq!(sweep("thread:own-name", true), "c1", "re-read against the registry");
+        raise("thread:money", "Financial or insurance metadata is Others.");
+        assert_eq!(sweep("thread:money", true), "c2", "other reasons never lower");
+    }
+
+    #[test]
     fn authenticity_is_stored_with_the_swept_row_and_read_back_per_rung() {
         use crate::mail_authenticity::{Assessment, Finding, Source, Verdict};
         let store = open_test_store("triage_authenticity_roundtrip");
@@ -1615,6 +1649,7 @@ pub(crate) mod db_tests {
                 &item,
                 &verdict("aktiv", crate::rules::DecidedBy::Fallback),
                 &headers,
+                false,
             )
             .unwrap();
         let body = Assessment::from_findings(Source::Body, Vec::new());

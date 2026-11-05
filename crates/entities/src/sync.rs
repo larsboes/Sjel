@@ -197,9 +197,11 @@ pub fn apply(
             report.excluded += 1;
             continue;
         }
+        // The operator's own contact record matches `self`, not a new person.
         let people: Vec<(String, String)> = store
-            .list(Some("person"), None)?
+            .list(None, None)?
             .into_iter()
+            .filter(|e| e.kind == "person" || e.kind == "self")
             .map(|e| (e.id, e.name))
             .collect();
         let linked = store.external(system, &record.external_id)?;

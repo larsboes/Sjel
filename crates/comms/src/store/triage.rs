@@ -22,7 +22,7 @@ impl Store {
     /// itself calls [`Store::upsert_triage_with_rules`], which is the same
     /// transaction plus the `{prefix}_triage_rules` row.
     pub fn upsert_triage(&self, item: &TriageItem) -> Result<bool, Box<dyn std::error::Error>> {
-        self.upsert_triage_inner(item, None, None)
+        self.upsert_triage_inner(item, None, None, false)
     }
 
     /// [`Store::upsert_triage`] plus the deterministic verdict that produced
@@ -38,18 +38,23 @@ impl Store {
         item: &TriageItem,
         verdict: &crate::rules::Verdict,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        self.upsert_triage_inner(item, Some(verdict), None)
+        self.upsert_triage_inner(item, Some(verdict), None, false)
     }
 
     /// What both sweep paths call: the row, its rules verdict and its header
     /// authenticity, in one transaction.
+    ///
+    /// `registry_loaded`: the incoming class was derived with the people registry in hand. Only
+    /// then may a row the named-person rule raised to `c2` take a lower incoming class, because
+    /// the sweep read the full subject against the current names. A blind sweep never lowers.
     pub fn upsert_triage_swept(
         &self,
         item: &TriageItem,
         verdict: &crate::rules::Verdict,
         authenticity: &crate::mail_authenticity::Assessment,
+        registry_loaded: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        self.upsert_triage_inner(item, Some(verdict), Some(authenticity))
+        self.upsert_triage_inner(item, Some(verdict), Some(authenticity), registry_loaded)
     }
 
     /// One transaction, because two of the columns it writes are governed by a
@@ -62,6 +67,7 @@ impl Store {
         item: &TriageItem,
         verdict: Option<&crate::rules::Verdict>,
         authenticity: Option<&crate::mail_authenticity::Assessment>,
+        registry_loaded: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         // Gmail internalDate is epoch-ms; convert to fractional epoch-seconds so
         // the bound param is a plain double for the `unixepoch` modifier below.
@@ -76,12 +82,24 @@ impl Store {
         // syntax for: inside DO UPDATE it refers to the existing row by the
         // table's own name. So the predicate is built with the prefix.
         let table = format!("{}_triage_items", self.prefix);
+        // The one exception to "never lower": a `c2` the named-person rule alone decided, re-read
+        // with the registry loaded (see `upsert_triage_swept`). Twin: `class_after_upsert`.
+        let named_person_reread = if registry_loaded {
+            format!(
+                " AND NOT ({table}.data_classification_method = '{method}' AND \
+                 {table}.data_class = 'c2' AND {table}.data_class_rationale = '{rationale}')",
+                method = crate::content_item::METHOD_DETERMINISTIC,
+                rationale = crate::intake::KNOWN_PERSON_RATIONALE.replace('\'', "''"),
+            )
+        } else {
+            String::new()
+        };
         let preserve_class = format!(
             "{table}.data_classification_method = 'human' OR \
-             (CASE excluded.data_class WHEN 'c3' THEN 30 WHEN 'c2' THEN 20 WHEN 'c1' THEN 10 \
+             ((CASE excluded.data_class WHEN 'c3' THEN 30 WHEN 'c2' THEN 20 WHEN 'c1' THEN 10 \
               ELSE 0 END) < \
              (CASE {table}.data_class WHEN 'c3' THEN 30 WHEN 'c2' THEN 20 WHEN 'c1' THEN 10 \
-              ELSE 0 END)"
+              ELSE 0 END){named_person_reread})"
         );
         // The same shape for the CATEGORY axis, and it did not exist before the
         // model rung did. Four columns tested `= 'human'` as a bare literal, so
@@ -132,15 +150,21 @@ impl Store {
         // retry (`sjel_store::migrate_once`). Two sweeps and a dashboard write
         // reach this at once.
         let transaction = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let stored: Option<(String, String)> = transaction
+        let stored: Option<StoredClass> = transaction
             .query_row(
                 &format!(
-                    "SELECT data_class, data_classification_method
+                    "SELECT data_class, data_classification_method, data_class_rationale
                        FROM {}_triage_items WHERE id = ?1",
                     self.prefix
                 ),
                 params![&item.id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                |row| {
+                    Ok(StoredClass {
+                        class: row.get(0)?,
+                        method: row.get(1)?,
+                        rationale: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    })
+                },
             )
             .optional()?;
         let is_new = stored.is_none();
@@ -162,7 +186,7 @@ impl Store {
         // internal_date and stream keep advancing, so the row would show one
         // message's date beside an older message's subject, for the life of the
         // thread and with no path back short of a human de-escalation.
-        let winner = class_after_upsert(stored.as_ref(), &item.data_class);
+        let winner = class_after_upsert(stored.as_ref(), &item.data_class, registry_loaded);
         let remediation =
             crate::intake::remediate(winner, item.subject.as_deref(), item.snippet.as_deref());
         let (subject, snippet) = match &remediation {
@@ -1960,16 +1984,37 @@ fn write_authenticity(
 /// `class_rank` answers `None` for a value outside the vocabulary, and `None`
 /// sorts below every `Some` -- which is the `ELSE 0` arm of the SQL CASE, so an
 /// unknown class loses to a known one on either side, exactly as it does there.
-fn class_after_upsert<'a>(stored: Option<&'a (String, String)>, incoming: &'a str) -> &'a str {
+fn class_after_upsert<'a>(
+    stored: Option<&'a StoredClass>,
+    incoming: &'a str,
+    registry_loaded: bool,
+) -> &'a str {
     match stored {
-        Some((stored_class, stored_method))
-            if stored_method == crate::content_item::METHOD_HUMAN
-                || crate::content_item::class_rank(incoming)
-                    < crate::content_item::class_rank(stored_class) =>
+        Some(stored)
+            if stored.method == crate::content_item::METHOD_HUMAN
+                || (crate::content_item::class_rank(incoming)
+                    < crate::content_item::class_rank(&stored.class)
+                    && !(registry_loaded && stored.is_named_person_c2())) =>
         {
-            stored_class
+            &stored.class
         }
         _ => incoming,
+    }
+}
+
+/// The class columns a stored row holds when an upsert reads it.
+struct StoredClass {
+    class: String,
+    method: String,
+    rationale: String,
+}
+
+impl StoredClass {
+    /// Raised to `c2` by the named-person rule and nothing else.
+    fn is_named_person_c2(&self) -> bool {
+        self.class == "c2"
+            && self.method == crate::content_item::METHOD_DETERMINISTIC
+            && self.rationale == crate::intake::KNOWN_PERSON_RATIONALE
     }
 }
 

@@ -71,8 +71,9 @@ broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`
 **Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
 overlay defines one, else `summarization_light`. Decided 2026-11-05: the operator's own name
 does not raise a mail to `c2` (`self_tokens` in the people registry, read by
-`people_registry::is_known_other_person`). It takes effect once a `self` entity exists, and
-none does: the operator is a `person`, and merge refuses two kinds. Inventory items carry no
+`people_registry::is_known_other_person`). The operator's entity became `self` through
+`POST /api/entities/{id}/self`. A sweep with the registry loaded lowers a row that only this
+rule raised; a blind sweep and every other `c2` reason never lower. Inventory items carry no
 data class, so a `c2`
 delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
 a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
@@ -380,9 +381,9 @@ Open items that belong to one capability and to no priority yet.
   while a page is all new; `sjel capability mail backfill <YYYY/MM/DD>` sweeps from a day. A trip
   draft names the one existing plan to its place and dates (`suggested_plan_id`), and
   materializing with that `plan_id` writes one `event` item per entry.
-  Open: a backfill over labelled mail stages newsletter events as `possible` entries (11 from
-  500 threads, run stopped there). Done when the event scan skips a filed newsletter unless it
-  confirms attendance.
+  A mail sorted `feed`, `werbung` or `sonstiges` is an event candidate only when its subject
+  confirms attendance (`is_event_candidate`). Open: 11 `possible` entries a first backfill
+  staged from newsletters before that gate stay in Calendar.
 - **Mail classification labels.** The harness exported 121 fixtures with 0 labels
   (`<overlay>/config/comms-mail-stream-shadow.json`). Labels are hand judgements, written before
   any model output is read. The stream switch needs model agreement of at least control plus 10

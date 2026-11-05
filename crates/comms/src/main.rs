@@ -339,7 +339,15 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         redacted += usize::from(intake.redaction_count() > 0);
 
         if let Some(st) = &store {
-            match st.upsert_triage_swept(&intake.item, &intake.verdict(), &intake.authenticity) {
+            match st.upsert_triage_swept(
+                &intake.item,
+                &intake.verdict(),
+                &intake.authenticity,
+                matches!(
+                    comms::people_registry::state(),
+                    comms::people_registry::State::Loaded(_)
+                ),
+            ) {
                 Ok(true) => persisted_new += 1,
                 Ok(false) => {}
                 Err(e) => eprintln!("  warning: could not persist {id}: {e}"),

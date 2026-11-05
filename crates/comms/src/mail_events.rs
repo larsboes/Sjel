@@ -146,12 +146,50 @@ pub(crate) fn is_candidate_metadata(from: &str, subject: &str, snippet: &str) ->
     .any(|term| text.contains(term))
 }
 
+/// The metadata gate, and a stricter one for newsletters: a mail sorted as a feed, an advert or
+/// a notification is a candidate only when its subject confirms the reader attends. A newsletter
+/// that announces events otherwise became a calendar entry for an event nobody booked.
+pub(crate) fn is_event_candidate(stream: &str, from: &str, subject: &str, snippet: &str) -> bool {
+    is_candidate_metadata(from, subject, snippet)
+        && (!matches!(stream, "feed" | "werbung" | "sonstiges") || confirms_attendance(subject))
+}
+
 fn is_candidate(item: &TriageItem) -> bool {
-    is_candidate_metadata(
+    is_event_candidate(
+        &item.stream,
         item.from_addr.as_deref().unwrap_or_default(),
         item.subject.as_deref().unwrap_or_default(),
         item.snippet.as_deref().unwrap_or_default(),
     )
+}
+
+/// A subject that says the reader is booked, registered or invited, in English or German.
+fn confirms_attendance(subject: &str) -> bool {
+    let subject = subject.to_lowercase();
+    [
+        "you're registered",
+        "you are registered",
+        "registration confirmed",
+        "registration confirmation",
+        "your registration",
+        "your ticket",
+        "your tickets",
+        "booking confirmed",
+        "booking confirmation",
+        "reservation confirmed",
+        "invitation:",
+        "anmeldung bestätigt",
+        "anmeldebestätigung",
+        "ihre anmeldung",
+        "deine anmeldung",
+        "dein ticket",
+        "ihr ticket",
+        "buchungsbestätigung",
+        "reservierungsbestätigung",
+        "einladung:",
+    ]
+    .iter()
+    .any(|marker| subject.contains(marker))
 }
 
 fn prompt(document: &str) -> String {
@@ -965,6 +1003,19 @@ mod tests {
             first_seen: String::new(),
             last_seen: String::new(),
         }
+    }
+
+    #[test]
+    fn a_newsletter_is_a_candidate_only_when_it_confirms_attendance() {
+        let mut item = item();
+        item.stream = "feed".into();
+        item.subject = Some("New GDG Amsterdam event: Weekly Meeten en Drinken".into());
+        assert!(!is_candidate(&item));
+        item.subject = Some("You're registered for GDG DevFest".into());
+        assert!(is_candidate(&item));
+        item.stream = "aktiv".into();
+        item.subject = Some("New GDG Amsterdam event: Weekly Meeten en Drinken".into());
+        assert!(is_candidate(&item), "mail from a person or service keeps the old gate");
     }
 
     #[test]

@@ -120,6 +120,13 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
+        path: "/api/entities/{id}/self",
+        summary: "Mark this person as the operator (kind self). Values, facts and links stay. \
+                  Refused when another entity is already self. Body: {}. Returns the entity.",
+        request_schema: Some(route_manifest::schema_of::<MakeSelfRequest>),
+    },
+    route_manifest::Route {
+        method: "POST",
         path: "/api/resolve",
         summary: "Which person each of { names, emails } means. A name is exact, first, ambiguous \
                   or none, with candidates; only exact carries an entity_id. An email carries one \
@@ -140,6 +147,10 @@ const ROUTES: &[route_manifest::Route] = &[
          home_base fact that holds that day, or null. Away periods do not change it.",
     ),
 ];
+
+/// `POST /api/entities/{id}/self` takes no fields; the id is the whole request.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct MakeSelfRequest {}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct CreateRequest {
@@ -558,6 +569,12 @@ async fn merge_entity(
     .map(to_json)
 }
 
+async fn make_self(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Reply {
+    blocking(&state, move |s| s.store.make_self(&id))
+        .await
+        .map(to_json)
+}
+
 async fn located(State(state): State<Arc<AppState>>, Query(q): Query<DayQuery>) -> Reply {
     let day = q.day.unwrap_or_else(civil_date::today);
     if !entities::model::is_day(&day) {
@@ -634,6 +651,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/resolve", post(resolve))
         .route("/api/duplicates/distinct", post(mark_distinct))
         .route("/api/entities/{id}/merge", post(merge_entity))
+        .route("/api/entities/{id}/self", post(make_self))
         // Below every route: `layer` wraps only what is registered before it
         // (libs/sjel-server/src/origin.rs).
         .layer(middleware::from_fn_with_state(

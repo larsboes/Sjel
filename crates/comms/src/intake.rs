@@ -178,7 +178,8 @@ fn from_thread_against(
         meta.snippet.as_deref().unwrap_or_default(),
         is_known_person,
     );
-    let event_candidate = crate::mail_events::is_candidate_metadata(
+    let event_candidate = crate::mail_events::is_event_candidate(
+        &verdict.stream,
         &from,
         &subject,
         meta.snippet.as_deref().unwrap_or_default(),

@@ -164,6 +164,10 @@ pub(super) fn run_inbox_sweep(
     let page = google::list_sweep_threads_page(&token, limit, cursor, after)
         .map_err(|error| error.to_string())?;
     let (people_registry, people_registry_names) = people_registry_receipt();
+    let registry_loaded = matches!(
+        comms::people_registry::state(),
+        comms::people_registry::State::Loaded(_)
+    );
     // Read once, before the loop: a sender is new against what the store held
     // when this pass started.
     let known_orgs = store.known_sender_orgs(None).ok();
@@ -205,7 +209,12 @@ pub(super) fn run_inbox_sweep(
             outcome.event_candidate_ids.push(id.clone());
         }
         if store
-            .upsert_triage_swept(&intake.item, &intake.verdict(), &intake.authenticity)
+            .upsert_triage_swept(
+                &intake.item,
+                &intake.verdict(),
+                &intake.authenticity,
+                registry_loaded,
+            )
             .map_err(|error| error.to_string())?
         {
             outcome.new_count += 1;

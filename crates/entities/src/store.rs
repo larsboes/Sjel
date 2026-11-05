@@ -257,6 +257,9 @@ impl EntitiesStore {
     }
 
     fn field(&self, conn: &Connection, kind: &str, key: &str) -> Result<Option<FieldDef>> {
+        // The operator is a person: `self` carries the person fields, so a contact sync and a
+        // patch keep working after `make_self`.
+        let kind = if kind == "self" { "person" } else { kind };
         let p = &self.prefix;
         conn.query_row(
             &format!(
@@ -606,6 +609,54 @@ impl EntitiesStore {
             .map_err(db)?;
         tx.commit().map_err(db)?;
         Ok(deleted > 0)
+    }
+
+    /// Marks one person as the operator (`self`). Values, facts and external links stay. There
+    /// is at most one `self`; a second is refused, naming the first.
+    pub fn make_self(&self, id: &str) -> Result<Entity> {
+        let mut conn = self.conn()?;
+        let p = &self.prefix;
+        let tx = sjel_store::write_transaction(&mut conn).map_err(db)?;
+        let kind: Option<String> = tx
+            .query_row(
+                &format!("SELECT kind FROM {p}_entities WHERE id = ?1"),
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        match kind.as_deref() {
+            None => return Err(StoreError::NotFound(format!("no entity {id}"))),
+            Some("person") => {}
+            Some(other) => {
+                return Err(StoreError::Invalid(format!(
+                    "only a person can become self, {id} is a {other}"
+                )))
+            }
+        }
+        let existing: Option<String> = tx
+            .query_row(
+                &format!("SELECT id FROM {p}_entities WHERE kind = 'self'"),
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(db)?;
+        if let Some(existing) = existing {
+            return Err(StoreError::Invalid(format!("{existing} is already self")));
+        }
+        tx.execute(
+            &format!(
+                "UPDATE {p}_entities SET kind = 'self', revision = revision + 1, updated_at = ?2
+                 WHERE id = ?1"
+            ),
+            params![id, now()],
+        )
+        .map_err(db)?;
+        tx.commit().map_err(db)?;
+        drop(conn);
+        self.get(id)?
+            .ok_or_else(|| StoreError::NotFound(format!("no entity {id}")))
     }
 
     /// An entity's links to other systems: (system, external_id).
@@ -967,6 +1018,32 @@ mod tests {
             "operator",
         );
         assert!(matches!(refused, Err(StoreError::Invalid(m)) if m.contains("declare it first")));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn one_person_becomes_self_and_keeps_its_person_fields() {
+        let (store, dir) = scratch("self");
+        let me = store
+            .create("person", "Max", None, &values(&[("emails", json!(["max@example.org"]))]), "operator")
+            .unwrap();
+        let other = store.create("person", "Erika", None, &values(&[]), "operator").unwrap();
+        let me = store.make_self(&me.id).unwrap();
+        assert_eq!(me.kind, "self");
+        assert_eq!(me.values["emails"].value, json!(["max@example.org"]));
+        let patched = store.patch(
+            &me.id,
+            &Patch {
+                name: None,
+                note_ref: None,
+                values: values(&[("aliases", json!(["Maxi"]))]),
+                source: "operator".into(),
+                expected_revision: None,
+            },
+        );
+        assert!(patched.is_ok(), "a person field still validates: {patched:?}");
+        assert!(matches!(store.make_self(&other.id), Err(StoreError::Invalid(m)) if m.contains("already self")));
+        assert!(matches!(store.make_self("ent:none"), Err(StoreError::NotFound(_))));
         let _ = std::fs::remove_dir_all(dir);
     }
 

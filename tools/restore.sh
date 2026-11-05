@@ -49,8 +49,8 @@ esac
 # capability declares one. Pointing the check at a synthetic manifest keeps that feature
 # covered without inventing a contract in a real capability. Nothing in production sets it.
 
-MANIFEST="${SJEL_RESTORE_MANIFEST:-$SJEL_ROOT/capabilities/$CAP/service.toml}"
-[ -f "$MANIFEST" ] || { echo "restore.sh: no $MANIFEST" >&2; exit 1; }
+MANIFEST="${SJEL_RESTORE_MANIFEST:-$(sjel_manifest_for "$CAP" || true)}"
+[ -f "$MANIFEST" ] || { echo "restore.sh: no service.toml for $CAP" >&2; exit 1; }
 [ -f "$ARCHIVE" ] || { echo "restore.sh: archive not found: $ARCHIVE" >&2; exit 1; }
 ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd -P)/$(basename "$ARCHIVE")"
 

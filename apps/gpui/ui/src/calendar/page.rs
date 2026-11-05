@@ -18,7 +18,7 @@ use sjel_gpui_core::calendar::{
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(
     calendar,
@@ -863,7 +863,7 @@ impl CalendarPage {
                     .bg(if selected {
                         rgba(palette.raised)
                     } else if !in_current_month {
-                        rgba((palette.surface & 0xffffff) | 0x44000000)
+                        rgba(tint(palette.surface, 0x44))
                     } else {
                         rgba(palette.surface)
                     })
@@ -1139,7 +1139,7 @@ impl CalendarPage {
                         .bg(if chosen {
                             rgba(palette.raised)
                         } else {
-                            rgba((palette.surface & 0xffffff) | 0x88000000)
+                            rgba(tint(palette.surface, 0x88))
                         })
                         .cursor_pointer()
                         .on_click(cx.listener(move |page, _, _, cx| {
@@ -1164,7 +1164,7 @@ impl CalendarPage {
                                                 .px_1()
                                                 .py(px(1.))
                                                 .rounded(px(3.))
-                                                .bg(rgba((color & 0xffffff) | 0x2e000000))
+                                                .bg(rgba(tint(color, 0x2e)))
                                                 .text_xs()
                                                 .font_weight(FontWeight::SEMIBOLD)
                                                 .text_color(rgb(color))
@@ -1385,7 +1385,7 @@ fn chip(entry: &CalendarEntry, palette: Palette) -> gpui_kit::Div {
         .px_1()
         .py(px(1.5))
         .rounded(px(4.))
-        .bg(rgba((color & 0xffffff) | 0x22000000))
+        .bg(rgba(tint(color, 0x22)))
         .child(
             div()
                 .w(px(5.))

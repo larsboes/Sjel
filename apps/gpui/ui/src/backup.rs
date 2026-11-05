@@ -7,12 +7,12 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     actions, div, prelude::*, rgb, rgba, AnyElement, App, Context, FocusHandle, KeyBinding, Render,
-    Window, WindowAppearance,
+    Window,
 };
 
 use crate::data::{Remote, Repo};
 use crate::primitives::dot;
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::backup::{
     format_age_seconds, format_bytes, format_duration, run_outcome, BackupRunAttemptRecord,
     BackupTargetRecord, VerifyTargetResult,
@@ -1024,10 +1024,10 @@ impl BackupPage {
 }
 
 impl Render for BackupPage {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self
             .palette
-            .unwrap_or_else(|| Palette::for_appearance(WindowAppearance::Dark));
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
 
         div()
             .id("backup-page")

@@ -39,7 +39,7 @@ use sjel_gpui_core::shell::{
 use sjel_gpui_core::soundscape::{self, LayerName, ParamName, Preset, Visual};
 
 use crate::data;
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 use crate::viz::{self, Field};
 
 actions!(
@@ -573,7 +573,7 @@ impl Focusable for Soundscape {
 
 impl Render for Soundscape {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         self.adopt();
         self.animate(window, cx);
         if std::mem::take(&mut self.refocus) {
@@ -1111,7 +1111,7 @@ impl Soundscape {
                                     // made every bar read short of its own value.
                                     .w(gpui_kit::relative(value))
                                     .rounded_full()
-                                    .bg(rgba(tone)),
+                                    .bg(rgb(tone)),
                             ),
                     )
                     .on_mouse_down(
@@ -1228,16 +1228,12 @@ fn transport(playing: bool, palette: Palette, cx: &mut Context<Soundscape>) -> A
         .justify_center()
         .text_xs()
         .cursor_pointer()
-        .bg(rgba(if playing {
-            palette.accent
+        .bg(if playing {
+            rgb(palette.accent)
         } else {
-            palette.raised
-        }))
-        .text_color(rgb(if playing {
-            palette.surface
-        } else {
-            palette.text
-        }))
+            rgba(palette.raised)
+        })
+        .text_color(rgb(if playing { 0xffffff } else { palette.text }))
         .hover(move |style| style.text_color(rgb(palette.text)))
         .on_click(cx.listener(|view, _, window, cx| view.toggle(window, cx)))
         .child(if playing { "Pause" } else { "Play" })

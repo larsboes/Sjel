@@ -17,7 +17,7 @@ use crate::primitives::{
     row_for_density, section,
 };
 use crate::tasks::{self, TaskFilter};
-use crate::theme::{tint, Density, Palette};
+use crate::theme::{tint, Density, Palette, ThemeContext};
 use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
     self, GlobalNote, GlobalTask, ProjectInventoryLink, ProjectLinkRecord, ProjectMailProposal,
@@ -2620,7 +2620,7 @@ impl Render for Projects {
         let cols = self.columns();
         let palette = self
             .palette
-            .unwrap_or_else(|| Palette::for_appearance(window.appearance()));
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         // 1. Note editor open with NO project selected (e.g. opened from All Notes)
         if self.project.is_none() {
             if let Some(editor) = &self.editor {
@@ -2922,10 +2922,10 @@ impl Render for Projects {
                                     .px_4()
                                     .py_2()
                                     .rounded(px(6.))
-                                    .bg(rgba(palette.accent))
+                                    .bg(rgb(palette.accent))
                                     .text_sm()
                                     .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(palette.surface))
+                                    .text_color(rgb(0xffffff))
                                     .cursor_pointer()
                                     .hover(move |s| s.opacity(0.9))
                                     .on_click(cx.listener({

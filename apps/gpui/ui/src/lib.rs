@@ -52,13 +52,14 @@ pub mod web_links;
 pub use doc_view::{render_block, render_doc, render_markdown};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 pub use primitives::{
-    back_button, card, dot, due_badge, due_status, filter_pill, list, note, placeholder,
-    priority_pill, progress_bar, row, row_for_density, section, sync_status_badge, virtual_list,
-    DueStatus,
+    back_button, card, data_row, dot, due_badge, due_status, filter_pill, key_bar, list, mono_num,
+    note, page_scroll, placeholder, priority_pill, progress_bar, remote_state, row,
+    row_for_density, section, shortcut_hint, stat_card, stat_strip, sub_tabs, sync_status_badge,
+    table_header, tone_chip, virtual_list, DueStatus, RADIUS_LG, RADIUS_MD, RADIUS_SM,
 };
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{
     step_terminal_font_size, tint, AccentColor, AppearanceSettings, BackgroundTone, Density,
-    GlassStyle, NotifyPrefs, Palette, SidebarPrefs, SoundscapePrefs, TerminalFont, ThemeMode,
-    WindowOpacity, TERMINAL_FONT_SIZES,
+    GlassStyle, NotifyPrefs, Palette, SidebarPrefs, SoundscapePrefs, TerminalFont, ThemeContext,
+    ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
 };

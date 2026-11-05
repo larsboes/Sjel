@@ -5,8 +5,7 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::Entity;
 use gpui_kit::{
-    canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, PathBuilder, Render,
-    Window, WindowAppearance,
+    canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, PathBuilder, Render, Window,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -20,7 +19,7 @@ use sjel_gpui_core::inventory::{InteriorLayoutSummary, InventoryRow};
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 
 pub struct RoomPlanHistory {
     source: Option<RoomPlanSource>,
@@ -2865,10 +2864,10 @@ fn metric(label: &str, value: usize, palette: Palette) -> AnyElement {
 }
 
 impl Render for RoomPlanHistory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self
             .palette
-            .unwrap_or_else(|| Palette::for_appearance(WindowAppearance::Dark));
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         let count = self
             .revisions
             .value

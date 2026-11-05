@@ -806,7 +806,7 @@ impl NoteEditor {
                 .child(field),
             Kind::Quote => div()
                 .border_l_3()
-                .border_color(rgba(palette.accent))
+                .border_color(rgb(palette.accent))
                 .rounded_r(px(8.))
                 .bg(rgba(tint(palette.accent, 0x0c)))
                 .px_3()

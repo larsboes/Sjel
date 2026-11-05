@@ -11,7 +11,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::self_model::{
     incoming_couplings, isolated_units, outgoing_couplings, unit_degree, unit_liveness,
     SelfModelResponse, SelfUnit,
@@ -396,7 +396,7 @@ impl SelfPage {
 
 impl gpui::Render for SelfPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
 
         let Some(res) = self.self_model.value.clone() else {
             let body = match &self.self_model.error {

@@ -1291,7 +1291,7 @@ impl Travel {
                     .text_xs()
                     .cursor_pointer()
                     .when(self.selected_day_filter.is_none(), |el| {
-                        el.bg(rgba(palette.accent))
+                        el.bg(rgb(palette.accent))
                             .text_color(rgb(0xffffff))
                             .font_weight(gpui::FontWeight::MEDIUM)
                     })
@@ -1319,7 +1319,7 @@ impl Travel {
                     .text_xs()
                     .cursor_pointer()
                     .when(active, |el| {
-                        el.bg(rgba(palette.accent))
+                        el.bg(rgb(palette.accent))
                             .text_color(rgb(0xffffff))
                             .font_weight(gpui::FontWeight::MEDIUM)
                     })

@@ -13,7 +13,7 @@ use sjel_gpui_core::inline::{Inline, Mark};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use crate::theme::Palette;
+use crate::theme::{tint, Palette, ThemeContext};
 
 struct DocSource {
     slug: &'static str,
@@ -378,7 +378,7 @@ fn inline_highlights(
             ..Default::default()
         },
         Mark::Highlight => HighlightStyle {
-            background_color: Some(rgba(palette.amber).into()),
+            background_color: Some(rgba(tint(palette.amber, 0x30)).into()),
             ..Default::default()
         },
     };
@@ -677,7 +677,7 @@ fn render_doc_block(
 
 impl Render for DocsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let input = self.filter(window, cx);
         let query = self.query.to_lowercase();
         let matches = |doc: &&DocSource| {
@@ -717,9 +717,9 @@ impl Render for DocsPage {
                         .px_2()
                         .py(px(5.))
                         .rounded(px(5.))
-                        .when(selected, |row| row.bg(rgb(palette.raised)))
+                        .when(selected, |row| row.bg(rgba(palette.raised)))
                         .cursor_pointer()
-                        .hover(move |style| style.bg(rgb(palette.raised)))
+                        .hover(move |style| style.bg(rgba(palette.raised)))
                         .text_sm()
                         .text_color(rgb(if selected {
                             palette.text

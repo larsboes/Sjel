@@ -14,7 +14,7 @@ use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Theme, WindowExt};
 use gpui_kit::{
     actions, div, point, prelude::*, px, rgb, rgba, Action, App, Context, Entity, FocusHandle,
-    KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window, WindowAppearance,
+    KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window,
 };
 
 use crate::ask::Ask;
@@ -38,7 +38,7 @@ use crate::shell::{
     ShellError, Snapshot, SoundscapeState,
 };
 use crate::theme::{
-    step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, Palette,
+    step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, ThemeContext,
     DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES,
 };
 
@@ -2054,18 +2054,7 @@ impl Render for Workspace {
         if let Some(frames) = &self.frames {
             frames.render_started();
         }
-        let is_dark = self.appearance_settings.theme_mode.is_dark(matches!(
-            window.appearance(),
-            WindowAppearance::Dark | WindowAppearance::VibrantDark
-        ));
-        let base_palette = if is_dark {
-            Palette::dark()
-        } else {
-            Palette::light()
-        };
-        let palette = self
-            .appearance_settings
-            .apply_to_palette(base_palette, is_dark);
+        let palette = ThemeContext::sync(self.appearance_settings, window, cx);
         let tint = palette.window_tint;
         let sidebar_tint = palette.sidebar_surface;
         let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
@@ -2237,7 +2226,11 @@ impl Render for Workspace {
                     .update(cx, |p, cx| p.set_palette(palette, cx));
                 self.inventory_page.clone().into_any_element()
             }
-            Page::Projects => self.projects.clone().into_any_element(),
+            Page::Projects => {
+                self.projects
+                    .update(cx, |projects, cx| projects.set_palette(palette, cx));
+                self.projects.clone().into_any_element()
+            }
             Page::Travel => {
                 self.travel.update(cx, |travel, cx| {
                     travel.set_palette(palette, cx);

@@ -29,7 +29,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, list, note, placeholder, row, section};
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::shell::{AgentGate, AgentView, Approval};
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, clock_label, dated_absences, day_label, gigabytes,
@@ -1196,7 +1196,7 @@ impl SystemsPage {
 
 impl Render for SystemsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         // Read the whole page into locals first: each panel borrows `self` mutably for its
         // listeners, so they are built one at a time and only then assembled.
         let runtime = self.runtime_panel(palette, cx);

@@ -47,7 +47,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
             .bg(rgb(palette.amber))
             .text_xs()
             .font_weight(FontWeight::SEMIBOLD)
-            .text_color(rgb(palette.surface))
+            .text_color(rgb(0xffffff))
             .child("DEV NODE")
     });
     let shell_recovery = view.health.error.as_ref().map(|_| {

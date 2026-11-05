@@ -19,7 +19,7 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(
     context_page,
@@ -492,7 +492,7 @@ fn render_timeline_row(
         .px_2()
         .py(px(1.5))
         .rounded(px(6.))
-        .bg(rgba((kind_color & 0xffffff) | 0x22000000))
+        .bg(rgba(tint(kind_color, 0x22)))
         .text_xs()
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(rgb(kind_color))

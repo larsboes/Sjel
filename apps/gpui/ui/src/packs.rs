@@ -18,7 +18,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, list, note, placeholder, section};
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::packs::{
     all_packs, deployed_units, held_packs, installed_harnesses, matrix_rows, orphaned_harnesses,
     row_needs_attention, status_of, MatrixRow, PacksView,
@@ -537,7 +537,7 @@ impl PacksPage {
                     }
                     "drifted" => pill(palette.amber, "drifted".to_string()),
                     "not-deployed" => div()
-                        .text_color(rgb(palette.border))
+                        .text_color(rgb(palette.muted))
                         .child("-")
                         .into_any_element(),
                     other => pill(palette.red, other.to_string()),
@@ -656,7 +656,7 @@ impl PacksPage {
 
 impl gpui::Render for PacksPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         self.settle_derived();
 
         let Some(payload) = self.packs.value.clone() else {

@@ -26,7 +26,7 @@ use sjel_gpui_core::shell::{
 
 use crate::data::{Remote, Repo};
 use crate::primitives::{filter_pill, virtual_list};
-use crate::theme::{Density, Palette};
+use crate::theme::{tint, Density, Palette};
 
 /// Why a page could not be drawn. Every variant is shown to the reader rather than swallowed into
 /// an empty pane.
@@ -2778,7 +2778,7 @@ fn status_chip(status: &str, palette: Palette) -> AnyElement {
         .px_2()
         .py(px(2.))
         .rounded(px(4.))
-        .bg(rgba((color & 0xffffff) | 0x22000000))
+        .bg(rgba(tint(color, 0x22)))
         .text_color(rgb(color))
         .text_xs()
         .font_weight(FontWeight::MEDIUM)
@@ -3457,7 +3457,7 @@ fn detail_panel(detail: &DocumentDetail, palette: Palette) -> AnyElement {
                     .px_2()
                     .py(px(2.))
                     .rounded(px(4.))
-                    .bg(rgba((palette.amber & 0xffffff) | 0x18000000))
+                    .bg(rgba(tint(palette.amber, 0x18)))
                     .text_xs()
                     .text_color(rgb(palette.amber))
                     .child(format!("Suggested: {reason}")),

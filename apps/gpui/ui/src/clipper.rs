@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 
 use crate::doc_view::render_doc;
 use crate::primitives::{list, note, section};
-use crate::theme::{tint, Density, Palette};
+use crate::theme::{tint, Density, Palette, ThemeContext};
 
 type RichClipboardReader = fn() -> Option<(String, bool)>;
 
@@ -276,7 +276,7 @@ impl ClipperSettings {
 
 impl Render for ClipperSettings {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         if self.loaded.is_none() && !self.loading {
             self.refresh(cx);
         }
@@ -1176,7 +1176,7 @@ impl Clips {
                 .p_4()
                 .rounded_lg()
                 .border_1()
-                .border_color(rgb(palette.border))
+                .border_color(rgba(palette.border))
                 .bg(rgba(tint(palette.surface, 0x20)))
                 .child(
                     div()
@@ -1566,7 +1566,7 @@ fn render_citation_audit(text: &str, palette: Palette) -> AnyElement {
         .border_color(if unlinked_count > 0 {
             rgb(palette.amber)
         } else {
-            rgb(palette.border)
+            rgba(palette.border)
         })
         .child(
             div()
@@ -1587,7 +1587,7 @@ impl Render for Clips {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self
             .palette
-            .unwrap_or_else(|| Palette::for_appearance(window.appearance()));
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         if self.documents.is_none() && !self.loading {
             self.load(cx);
         }

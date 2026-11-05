@@ -6,13 +6,13 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Subscription,
-    Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, IntoElement, SharedString,
+    Subscription, Window,
 };
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::cv::{
     count_stale_pdfs, filter_applications, last_status_date, pdf_for_profile, slug_for,
     CvApplication, CvView, CvWriteRequest,
@@ -486,7 +486,7 @@ impl CvPage {
                     .justify_between()
                     .pt(px(6.0))
                     .border_t_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .flex()
@@ -542,7 +542,7 @@ impl CvPage {
                 div()
                     .p(px(8.0))
                     .rounded(px(4.0))
-                    .bg(rgb(palette.surface))
+                    .bg(rgba(palette.surface))
                     .text_size(px(11.0))
                     .text_color(rgb(palette.text))
                     .font_family(".AppleSystemUIFontMonospaced")
@@ -681,9 +681,9 @@ impl CvPage {
                         .p(px(8.0))
                         .rounded(px(6.0))
                         .bg(if idx % 2 == 0 {
-                            rgb(palette.surface)
+                            rgba(palette.surface)
                         } else {
-                            rgb(palette.window_tint)
+                            rgba(palette.window_tint)
                         })
                         .child(
                             div()
@@ -945,7 +945,7 @@ impl CvPage {
                 .justify_between()
                 .p(px(6.0))
                 .rounded(px(4.0))
-                .bg(rgb(palette.surface))
+                .bg(rgba(palette.surface))
                 .child(
                     div()
                         .flex()
@@ -1005,7 +1005,7 @@ impl CvPage {
 
 impl Render for CvPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
 
         let Some(view) = self.cv.value.clone() else {
             let body = match &self.cv.error {

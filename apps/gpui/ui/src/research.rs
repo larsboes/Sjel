@@ -7,12 +7,12 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, IntoElement, Subscription, Window,
 };
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::research::{
     group_upstreams, BenchmarkSuite, ResearchArticle, ResearchView, SystemRow, UpstreamRow,
 };
@@ -267,11 +267,11 @@ impl ResearchPage {
                 .rounded(px(6.0))
                 .cursor_pointer()
                 .when(active, |d| {
-                    d.bg(rgb(palette.surface))
+                    d.bg(rgba(palette.surface))
                         .border_l_2()
                         .border_color(rgb(palette.accent))
                 })
-                .when(!active, |d| d.hover(|h| h.bg(rgb(palette.raised))))
+                .when(!active, |d| d.hover(|h| h.bg(rgba(palette.raised))))
                 .child(
                     div()
                         .text_size(px(12.0))
@@ -310,7 +310,7 @@ impl ResearchPage {
             .gap(px(4.0))
             .pr(px(12.0))
             .border_r_1()
-            .border_color(rgb(palette.border))
+            .border_color(rgba(palette.border))
             .children(article_buttons);
 
         // Right pane: article content
@@ -326,7 +326,7 @@ impl ResearchPage {
                         .justify_between()
                         .items_center()
                         .border_b_1()
-                        .border_color(rgb(palette.border))
+                        .border_color(rgba(palette.border))
                         .pb(px(8.0))
                         .child(
                             div()
@@ -351,7 +351,7 @@ impl ResearchPage {
                             div()
                                 .px(px(6.0))
                                 .py(px(2.0))
-                                .bg(rgb(palette.surface))
+                                .bg(rgba(palette.surface))
                                 .rounded(px(4.0))
                                 .text_size(px(10.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -547,10 +547,10 @@ impl ResearchPage {
                 .flex_col()
                 .gap(px(4.0))
                 .p(px(10.0))
-                .bg(rgb(palette.surface))
+                .bg(rgba(palette.surface))
                 .rounded(px(6.0))
                 .border_1()
-                .border_color(rgb(palette.border))
+                .border_color(rgba(palette.border))
                 .child(
                     div()
                         .flex()
@@ -573,7 +573,7 @@ impl ResearchPage {
                                         div()
                                             .px(px(5.0))
                                             .py(px(1.0))
-                                            .bg(rgb(palette.raised))
+                                            .bg(rgba(palette.raised))
                                             .rounded(px(3.0))
                                             .text_size(px(9.0))
                                             .text_color(rgb(palette.muted))
@@ -585,7 +585,7 @@ impl ResearchPage {
                             div()
                                 .px(px(6.0))
                                 .py(px(2.0))
-                                .bg(rgb(palette.raised))
+                                .bg(rgba(palette.raised))
                                 .rounded(px(4.0))
                                 .text_size(px(10.0))
                                 .text_color(rgb(palette.accent))
@@ -656,10 +656,10 @@ impl ResearchPage {
                     .flex_col()
                     .gap(px(4.0))
                     .p(px(8.0))
-                    .bg(rgb(palette.surface))
+                    .bg(rgba(palette.surface))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .flex()
@@ -682,7 +682,7 @@ impl ResearchPage {
                                             div()
                                                 .px(px(4.0))
                                                 .py(px(1.0))
-                                                .bg(rgb(palette.raised))
+                                                .bg(rgba(palette.raised))
                                                 .rounded(px(3.0))
                                                 .text_size(px(9.0))
                                                 .text_color(rgb(palette.muted))
@@ -694,7 +694,7 @@ impl ResearchPage {
                                 div()
                                     .px(px(6.0))
                                     .py(px(2.0))
-                                    .bg(rgb(palette.raised))
+                                    .bg(rgba(palette.raised))
                                     .rounded(px(4.0))
                                     .text_size(px(10.0))
                                     .text_color(rgb(g_badge_color))
@@ -782,7 +782,7 @@ impl ResearchPage {
                     .py(px(6.0))
                     .px(px(8.0))
                     .border_b_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .w(px(180.0))
@@ -850,7 +850,7 @@ impl ResearchPage {
                 .py(px(4.0))
                 .px(px(8.0))
                 .border_b_1()
-                .border_color(rgb(palette.border))
+                .border_color(rgba(palette.border))
                 .text_size(px(10.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(rgb(palette.muted))
@@ -894,7 +894,7 @@ impl ResearchPage {
                     .py(px(4.0))
                     .px(px(8.0))
                     .border_b_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .w(px(220.0))
@@ -923,7 +923,7 @@ impl ResearchPage {
                 .py(px(4.0))
                 .px(px(8.0))
                 .border_b_1()
-                .border_color(rgb(palette.border))
+                .border_color(rgba(palette.border))
                 .child(
                     div()
                         .w(px(220.0))
@@ -968,10 +968,10 @@ impl ResearchPage {
                     div()
                         .flex()
                         .flex_col()
-                        .bg(rgb(palette.surface))
+                        .bg(rgba(palette.surface))
                         .rounded(px(6.0))
                         .border_1()
-                        .border_color(rgb(palette.border))
+                        .border_color(rgba(palette.border))
                         .child(runs_table_header)
                         .children(run_rows),
                 )
@@ -994,10 +994,10 @@ impl ResearchPage {
                             div()
                                 .flex()
                                 .flex_col()
-                                .bg(rgb(palette.surface))
+                                .bg(rgba(palette.surface))
                                 .rounded(px(6.0))
                                 .border_1()
-                                .border_color(rgb(palette.border))
+                                .border_color(rgba(palette.border))
                                 .child(matrix_header)
                                 .children(case_rows),
                         ),
@@ -1028,7 +1028,7 @@ fn render_markdown_prose(content: &str, palette: Palette) -> AnyElement {
                 code_lines.clear();
                 elements.push(
                     div()
-                        .bg(rgb(palette.surface))
+                        .bg(rgba(palette.surface))
                         .p(px(8.0))
                         .rounded(px(6.0))
                         .text_size(px(11.0))
@@ -1136,7 +1136,7 @@ fn render_markdown_prose(content: &str, palette: Palette) -> AnyElement {
 
 impl Render for ResearchPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
 
         let Some(view) = self.research.value.clone() else {
             let body = match &self.research.error {

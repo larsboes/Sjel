@@ -14,7 +14,7 @@ use gpui_kit::{
 use crate::backup::size;
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{dot, list, note, row, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::shell::{ImportJob, ImportPlan, ImportStatus};
 
 const RUN: &str = "import:run";
@@ -309,7 +309,7 @@ fn line(
 
 impl Render for ImportPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let folder: SharedString = self
             .folder
             .clone()

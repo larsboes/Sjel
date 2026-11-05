@@ -240,7 +240,7 @@ impl Soundscape {
                     .flex_1()
                     .h(px(height))
                     .rounded(px(1.))
-                    .bg(rgba(palette.accent)),
+                    .bg(rgb(palette.accent)),
             );
         }
         row.into_any_element()
@@ -269,7 +269,7 @@ impl Soundscape {
                         .text_xs()
                         .cursor_pointer()
                         .when(is_active, |chip| {
-                            chip.bg(rgba(palette.accent))
+                            chip.bg(rgb(palette.accent))
                                 .text_color(rgb(0xffffff))
                                 .font_weight(FontWeight::SEMIBOLD)
                         })

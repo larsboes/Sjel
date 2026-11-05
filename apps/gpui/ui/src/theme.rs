@@ -26,10 +26,80 @@ pub struct Palette {
     pub red: u32,
 }
 
-/// A palette tone at `alpha`, as `0xRRGGBBAA` for `rgba()`. The only way to give a tone an alpha:
-/// `tone | alpha << 24` puts the bytes in the wrong channels. A tone's own alpha is replaced.
+/// A palette tone or surface at `alpha`, as `0xRRGGBBAA` for `rgba()`.
+///
+/// Works on both 24-bit RGB tones (`0x00RRGGBB`, e.g. `palette.accent`) and 32-bit RGBA surfaces
+/// (`0xRRGGBBAA`, e.g. `palette.surface`, `palette.raised`, `palette.border`): any existing alpha
+/// channel on a 32-bit surface token is replaced rather than shifting the red channel off the top.
 pub const fn tint(tone: u32, alpha: u8) -> u32 {
-    (tone << 8) | alpha as u32
+    if tone > 0x00ff_ffff {
+        (tone & 0xffff_ff00) | alpha as u32
+    } else {
+        (tone << 8) | alpha as u32
+    }
+}
+
+/// Active theme and density context stored as a GPUI [`gpui::Global`] so every view can read the
+/// user-configured [`Palette`], [`Density`], and [`AppearanceSettings`] without manual prop-drilling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThemeContext {
+    pub palette: Palette,
+    pub density: Density,
+    pub appearance: AppearanceSettings,
+}
+
+impl gpui::Global for ThemeContext {}
+
+impl ThemeContext {
+    /// Reads the active [`ThemeContext`] from the GPUI app context, or falls back to the window's
+    /// system appearance when rendered inside an isolated unit test where no global was set.
+    pub fn of(window: &gpui::Window, cx: &gpui::App) -> Self {
+        if let Some(ctx) = cx.try_global::<Self>() {
+            *ctx
+        } else {
+            let appearance = AppearanceSettings::default();
+            let system_dark = matches!(
+                window.appearance(),
+                WindowAppearance::Dark | WindowAppearance::VibrantDark
+            );
+            let is_dark = appearance.theme_mode.is_dark(system_dark);
+            let base = if is_dark {
+                Palette::dark()
+            } else {
+                Palette::light()
+            };
+            Self {
+                palette: appearance.apply_to_palette(base, is_dark),
+                density: appearance.density,
+                appearance,
+            }
+        }
+    }
+
+    /// Synchronizes the global [`ThemeContext`] from [`AppearanceSettings`] and the current window.
+    pub fn sync(
+        appearance: AppearanceSettings,
+        window: &gpui::Window,
+        cx: &mut gpui::App,
+    ) -> Palette {
+        let system_dark = matches!(
+            window.appearance(),
+            WindowAppearance::Dark | WindowAppearance::VibrantDark
+        );
+        let is_dark = appearance.theme_mode.is_dark(system_dark);
+        let base = if is_dark {
+            Palette::dark()
+        } else {
+            Palette::light()
+        };
+        let palette = appearance.apply_to_palette(base, is_dark);
+        cx.set_global(Self {
+            palette,
+            density: appearance.density,
+            appearance,
+        });
+        palette
+    }
 }
 
 impl Palette {
@@ -1027,6 +1097,17 @@ mod tests {
             "the alpha must not steal a channel"
         );
         assert_eq!(painted.a, 0x22 as f32 / 255.0);
+
+        // 32-bit surface/raised/border tokens replace their existing alpha without shifting RGB.
+        let border = Palette::dark().border;
+        let border_tinted = gpui::rgba(tint(border, 0x40));
+        let border_base = gpui::rgba(border);
+        assert_eq!(
+            (border_tinted.r, border_tinted.g, border_tinted.b),
+            (border_base.r, border_base.g, border_base.b),
+            "32-bit surface tokens must keep their RGB channels when re-tinted"
+        );
+        assert_eq!(border_tinted.a, 0x40 as f32 / 255.0);
     }
 
     #[test]

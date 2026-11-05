@@ -19,7 +19,7 @@ use zeroize::Zeroizing;
 
 use crate::data::Repo;
 use crate::primitives::{list, note, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::accounts::CredentialRow;
 use sjel_gpui_core::shell;
 
@@ -550,7 +550,7 @@ impl Accounts {
 
 impl Render for Accounts {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let key_input = self.key_input(window, cx);
         if self.rows.is_none() && !self.loading {
             self.refresh(cx);

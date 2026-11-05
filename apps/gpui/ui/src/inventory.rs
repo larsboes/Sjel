@@ -8,12 +8,12 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    KeyBinding, Render, Subscription, Window, WindowAppearance,
+    KeyBinding, Render, Subscription, Window,
 };
 
 use crate::data::{Remote, Repo};
 use crate::interior::RoomPlanHistory;
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
     budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
@@ -3044,7 +3044,7 @@ impl Render for InventoryPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = self
             .palette
-            .unwrap_or_else(|| Palette::for_appearance(WindowAppearance::Dark));
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         self.roomplan_history
             .update(cx, |history, cx| history.set_palette(palette, cx));
 

@@ -48,7 +48,7 @@ use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
     mobile_tab_bar, step_terminal_font_size, tint, AccentColor, AppearanceSettings, BackgroundTone,
-    Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeMode,
+    Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeContext, ThemeMode,
     WindowOpacity, TERMINAL_FONT_SIZES,
 };
 
@@ -1778,7 +1778,7 @@ impl Capabilities {
                     .px_3()
                     .py_2()
                     .rounded(px(7.))
-                    .when(active, |row| row.bg(rgb(palette.raised)))
+                    .when(active, |row| row.bg(rgba(palette.raised)))
                     .text_color(rgb(palette.text))
                     .child(div().flex_1().truncate().child(label))
                     .child(
@@ -1864,7 +1864,7 @@ impl Capabilities {
                             .px_3()
                             .py_2()
                             .rounded(px(7.))
-                            .bg(rgb(palette.raised))
+                            .bg(rgba(palette.raised))
                             .text_color(rgb(palette.text))
                             .child(if busy {
                                 "Working…"
@@ -1918,20 +1918,19 @@ impl Capabilities {
                         None => format!("Approval · {}", pending.name),
                     }
                 };
-                let border_col = if is_block {
-                    palette.red
-                } else {
-                    palette.border
-                };
                 panel.child(
                     div()
                         .flex()
                         .flex_col()
                         .gap_2()
                         .rounded(px(8.))
-                        .bg(rgb(palette.raised))
+                        .bg(rgba(palette.raised))
                         .border_1()
-                        .border_color(rgba(border_col))
+                        .border_color(if is_block {
+                            rgb(palette.red)
+                        } else {
+                            rgba(palette.border)
+                        })
                         .p_3()
                         .text_color(rgb(palette.text))
                         .child(
@@ -2574,7 +2573,7 @@ fn agent_action_button(
         .px_3()
         .py_2()
         .rounded(px(7.))
-        .bg(rgb(palette.surface))
+        .bg(rgba(palette.surface))
         .text_color(rgb(palette.text))
         .child(label)
         .on_mouse_down(
@@ -2828,13 +2827,7 @@ impl Capabilities {
 
 impl Render for Capabilities {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_dark = self.appearance.theme_mode.is_dark(false);
-        let base_palette = if is_dark {
-            Palette::dark()
-        } else {
-            Palette::light()
-        };
-        let palette = self.appearance.apply_to_palette(base_palette, is_dark);
+        let palette = ThemeContext::sync(self.appearance, window, cx);
         let page_bg = palette.window_tint >> 8;
         let is_mac = self.active_tab == Tab::Settings;
         let is_today = self.active_tab == Tab::Today;
@@ -3360,7 +3353,7 @@ impl Render for Capabilities {
                         page.child(
                             div()
                                 .rounded(px(12.))
-                                .bg(rgb(palette.surface))
+                                .bg(rgba(palette.surface))
                                 .p_3()
                                 .flex()
                                 .items_center()

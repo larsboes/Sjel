@@ -13,7 +13,7 @@ use sjel_gpui_core::web_links::{WebLink, WebLinkCandidate, WebLinkHistoryReply, 
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, note, placeholder};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 
 const ADD: &str = "web-links:add";
 const SCAN: &str = "web-links:history-scan";
@@ -551,7 +551,7 @@ impl LinksPage {
 
 impl Render for LinksPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let query = self.ensure_query(window, cx);
         let links = self
             .links

@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, dot, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use chrono::Local;
 use sjel_gpui_core::setup::{
     has_apply_input, merge_verification_probes, minutes_left, pairing_payload, partition_devices,
@@ -499,7 +499,7 @@ impl SetupPage {
                 .flex_col()
                 .gap(px(4.0))
                 .p(px(8.0))
-                .bg(rgb(palette.surface))
+                .bg(rgba(palette.surface))
                 .rounded(px(6.0))
                 .border_1()
                 .border_color(rgb(palette.green))
@@ -535,10 +535,10 @@ impl SetupPage {
                     .items_start()
                     .gap(px(10.0))
                     .p(px(8.0))
-                    .bg(rgb(palette.surface))
+                    .bg(rgba(palette.surface))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .w(px(20.0))
@@ -569,7 +569,7 @@ impl SetupPage {
                                         div()
                                             .px(px(5.0))
                                             .py(px(1.0))
-                                            .bg(rgb(palette.raised))
+                                            .bg(rgba(palette.raised))
                                             .rounded(px(3.0))
                                             .text_size(px(9.0))
                                             .text_color(rgb(mark_color))
@@ -646,10 +646,10 @@ impl SetupPage {
                     .flex_col()
                     .gap(px(10.0))
                     .p(px(12.0))
-                    .bg(rgb(palette.surface))
+                    .bg(rgba(palette.surface))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(rgb(palette.border))
+                    .border_color(rgba(palette.border))
                     .child(
                         div()
                             .text_size(px(12.0))
@@ -753,7 +753,7 @@ impl SetupPage {
                         .justify_between()
                         .items_center()
                         .border_b_1()
-                        .border_color(rgb(palette.border))
+                        .border_color(rgba(palette.border))
                         .pb(px(8.0))
                         .child(
                             div()
@@ -778,7 +778,7 @@ impl SetupPage {
                             div()
                                 .px(px(6.0))
                                 .py(px(2.0))
-                                .bg(rgb(palette.surface))
+                                .bg(rgba(palette.surface))
                                 .rounded(px(4.0))
                                 .text_size(px(10.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
@@ -1209,10 +1209,10 @@ impl SetupPage {
             .justify_between()
             .items_center()
             .p(px(10.0))
-            .bg(rgb(palette.surface))
+            .bg(rgba(palette.surface))
             .rounded(px(6.0))
             .border_1()
-            .border_color(rgb(palette.border))
+            .border_color(rgba(palette.border))
             .child(
                 div()
                     .flex()
@@ -1325,7 +1325,7 @@ impl SetupPage {
             .gap(px(10.0))
             .py(px(6.0))
             .border_b_1()
-            .border_color(rgb(palette.border))
+            .border_color(rgba(palette.border))
             .child(
                 div()
                     .w(px(170.0))
@@ -1446,7 +1446,7 @@ fn device_header(palette: Palette) -> AnyElement {
         .gap(px(10.0))
         .pb(px(3.0))
         .border_b_1()
-        .border_color(rgb(palette.border))
+        .border_color(rgba(palette.border))
         .child(div().w(px(170.0)).child(column("DEVICE")))
         .child(div().w(px(150.0)).child(column("CERTIFICATE")))
         .child(div().w(px(150.0)).child(column("TRUSTED")))
@@ -1514,7 +1514,7 @@ fn qr_image(matrix: &QrMatrix) -> AnyElement {
 
 impl Render for SetupPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
 
         let Some(view) = self.setup.value.clone() else {
             let body = match &self.setup.error {

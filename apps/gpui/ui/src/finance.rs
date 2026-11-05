@@ -21,7 +21,7 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(
     finance_page,
@@ -2651,7 +2651,7 @@ impl FinancePage {
                                     .px_1()
                                     .py(px(1.))
                                     .rounded(px(3.))
-                                    .bg(rgba((status_color & 0xffffff) | 0x22000000))
+                                    .bg(rgba(tint(status_color, 0x22)))
                                     .text_xs()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(rgb(status_color))
@@ -2860,7 +2860,7 @@ fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyElement {
                         .px_2()
                         .py(px(2.))
                         .rounded(px(4.))
-                        .bg(rgba((amount_color & 0xffffff) | 0x22000000))
+                        .bg(rgba(tint(amount_color, 0x22)))
                         .text_xs()
                         .font_weight(FontWeight::BOLD)
                         .text_color(rgb(amount_color))

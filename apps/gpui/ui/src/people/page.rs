@@ -22,7 +22,7 @@ use sjel_gpui_core::people::{filter_people, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 actions!(
     people_page,
@@ -1084,9 +1084,9 @@ impl Render for PeoplePage {
                                 .w(px(32.))
                                 .h(px(32.))
                                 .rounded_full()
-                                .bg(rgba((palette.accent & 0xffffff) | 0x22000000))
+                                .bg(rgba(tint(palette.accent, 0x22)))
                                 .border_1()
-                                .border_color(rgba(palette.accent))
+                                .border_color(rgb(palette.accent))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -1259,7 +1259,7 @@ fn render_person_detail(
                 .w(px(52.))
                 .h(px(52.))
                 .rounded_full()
-                .bg(rgba((palette.accent & 0xffffff) | 0x22000000))
+                .bg(rgba(tint(palette.accent, 0x22)))
                 .border_2()
                 .border_color(rgb(palette.accent))
                 .flex()

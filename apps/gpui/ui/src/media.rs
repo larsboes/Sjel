@@ -4,11 +4,13 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
+use gpui_kit::{
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString, Window,
+};
 
 use crate::data::{self, Remote, Repo};
 use crate::primitives::{card, dot, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::media::{
     format_bytes, run_label, sort_run_items, total_volume_bytes, MediaIngestDetail,
     MediaIngestItem, MediaIngestRun, MediaStatus, MediaView, MediaVolume,
@@ -146,7 +148,7 @@ impl MediaPage {
                                     .child("unique digests"),
                             ),
                     )
-                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgb(palette.border)))
+                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgba(palette.border)))
                     .child(
                         div()
                             .flex()
@@ -166,7 +168,7 @@ impl MediaPage {
                                     .child("indexed paths"),
                             ),
                     )
-                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgb(palette.border)))
+                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgba(palette.border)))
                     .child(
                         div()
                             .flex()
@@ -213,9 +215,9 @@ impl MediaPage {
                         .p(px(8.0))
                         .rounded(px(6.0))
                         .bg(if idx % 2 == 0 {
-                            rgb(palette.surface)
+                            rgba(palette.surface)
                         } else {
-                            rgb(palette.window_tint)
+                            rgba(palette.window_tint)
                         })
                         .child(
                             div()
@@ -322,11 +324,11 @@ impl MediaPage {
                         .p(px(8.0))
                         .rounded(px(6.0))
                         .bg(if is_selected {
-                            rgb(palette.raised)
+                            rgba(palette.raised)
                         } else if idx % 2 == 0 {
-                            rgb(palette.surface)
+                            rgba(palette.surface)
                         } else {
-                            rgb(palette.window_tint)
+                            rgba(palette.window_tint)
                         })
                         .child(
                             div()
@@ -545,7 +547,7 @@ impl MediaPage {
                             .justify_between()
                             .p(px(6.0))
                             .rounded(px(4.0))
-                            .bg(rgb(palette.surface))
+                            .bg(rgba(palette.surface))
                             .child(
                                 div()
                                     .flex()
@@ -658,7 +660,7 @@ impl MediaPage {
 
 impl Render for MediaPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
 
         let Some(view) = self.media.value.clone() else {
             let body = match &self.media.error {

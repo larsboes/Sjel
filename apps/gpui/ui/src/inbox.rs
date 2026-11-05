@@ -269,7 +269,7 @@ impl Inbox {
                     .text_xs()
                     .cursor_pointer()
                     .when(active, |chip| {
-                        chip.bg(rgba(palette.accent))
+                        chip.bg(rgb(palette.accent))
                             .text_color(rgb(0xffffff))
                             .font_weight(FontWeight::SEMIBOLD)
                     })

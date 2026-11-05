@@ -6,7 +6,7 @@ use sjel_gpui_core::record::{self, Basis, View};
 
 use crate::data::{self, Remote, Repo};
 use crate::primitives::{card, note, placeholder, section};
-use crate::theme::Palette;
+use crate::theme::ThemeContext;
 
 pub struct RecordPage {
     repo: Repo,
@@ -43,8 +43,8 @@ impl RecordPage {
 }
 
 impl Render for RecordPage {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(_window.appearance());
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = ThemeContext::of(window, cx).palette;
         let Some(view) = self.detail.value.as_ref() else {
             let body = match (&self.detail.error, self.detail.loading) {
                 (Some(error), _) => note(error.to_string(), palette.red),

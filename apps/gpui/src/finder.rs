@@ -29,7 +29,7 @@ use crate::ask::{Ask, Model};
 use crate::data::Repo;
 use crate::route::Page;
 use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
-use crate::theme::{tint, Palette};
+use crate::theme::{tint, Palette, ThemeContext};
 
 actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
 
@@ -1378,7 +1378,7 @@ impl Render for Finder {
         if !self.open {
             return div().into_any_element();
         }
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let input = self.ensure_input(window, cx);
         let resolved = self.resolved();
         let typing = !self.query.trim().is_empty();

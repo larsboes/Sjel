@@ -216,7 +216,7 @@ where
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(palette.surface))
+                .text_color(rgb(0xffffff))
                 .text_xs()
                 .font_weight(FontWeight::BOLD)
                 .child(if done { "✓" } else { "" });

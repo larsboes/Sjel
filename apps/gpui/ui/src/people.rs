@@ -25,7 +25,7 @@ use sjel_gpui_core::mirror::{Mirror, PeopleCopy};
 use sjel_gpui_core::people::{self, Person};
 use sjel_gpui_core::places::{self, PersonLink, Place};
 
-use crate::{Density, Palette};
+use crate::{tint, Density, Palette};
 
 pub mod page;
 pub use page::*;
@@ -430,7 +430,7 @@ impl People {
             .flex_none()
             .size(px(30.))
             .rounded_full()
-            .bg(rgba((palette.accent & 0xffffff) | 0x22000000))
+            .bg(rgba(tint(palette.accent, 0x22)))
             .flex()
             .items_center()
             .justify_center()
@@ -973,6 +973,8 @@ mod tests {
             address: None,
             latitude: None,
             longitude: None,
+            source: String::new(),
+            external_ref: None,
         }
     }
 

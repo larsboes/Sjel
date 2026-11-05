@@ -12,7 +12,7 @@ use gpui_kit::{
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{dot, list, note, placeholder, row, section};
-use crate::theme::Palette;
+use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
 
 const SCAN: &str = "software:scan";
@@ -277,7 +277,7 @@ impl Software {
 
 impl Render for Software {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = Palette::for_appearance(window.appearance());
+        let palette = ThemeContext::of(window, cx).palette;
         let Some(apps) = self.apps.value.clone() else {
             let body = match &self.apps.error {
                 Some(error) => note(error.to_string(), palette.red),

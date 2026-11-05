@@ -107,7 +107,8 @@ fn start(control: Arc<Control>, visual: Arc<Visual>) -> Result<Device, String> {
         .default_output_device()
         .ok_or_else(|| "This Mac reports no audio output device.".to_string())?;
     let name = device
-        .name()
+        .description()
+        .map(|description| description.name().to_string())
         .unwrap_or_else(|_| "the default device".into());
     let supported = device
         .default_output_config()
@@ -119,7 +120,7 @@ fn start(control: Arc<Control>, visual: Arc<Visual>) -> Result<Device, String> {
     if let cpal::SupportedBufferSize::Range { min, max } = supported.buffer_size() {
         config.buffer_size = cpal::BufferSize::Fixed((*min).max(512).min(*max));
     }
-    let sample_rate = config.sample_rate.0 as f32;
+    let sample_rate = config.sample_rate as f32;
 
     let engine = Engine::new(sample_rate);
     let stream = match sample_format {
@@ -158,7 +159,7 @@ where
     let mut scratch: Vec<f32> = Vec::new();
     device
         .build_output_stream::<T, _, _>(
-            config,
+            config.clone(),
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
                 if scratch.len() != output.len() {
                     scratch.resize(output.len(), 0.);

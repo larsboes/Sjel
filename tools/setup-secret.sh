@@ -62,7 +62,7 @@ if [ "$REF_RC" -ne 0 ]; then
   exit 1
 fi
 
-MANIFEST="$SJEL_ROOT/capabilities/$CAP/service.toml"
+MANIFEST="$(sjel_manifest_for "$CAP" 2>/dev/null || true)"
 if [ -f "$MANIFEST" ]; then
   ENV_FILE_REL="$(toml_get env_file "$MANIFEST")"
 else

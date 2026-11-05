@@ -12,7 +12,7 @@
 
 use std::time::Duration;
 
-use gpui::{AnyWindowHandle, App, AppContext, Keystroke, Modifiers};
+use gpui::{AnyWindowHandle, App, AppContext, Keystroke, Modifiers, OperatingSystem};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Step {
@@ -21,7 +21,7 @@ enum Step {
 }
 
 /// The script's steps, or the first step it cannot read.
-fn parse(script: &str) -> Result<Vec<Step>, String> {
+fn parse(script: &str, os: OperatingSystem) -> Result<Vec<Step>, String> {
     let mut steps = Vec::new();
     for step in script.split(';').map(str::trim).filter(|s| !s.is_empty()) {
         let (verb, rest) = step.split_once(' ').unwrap_or((step, ""));
@@ -33,7 +33,10 @@ fn parse(script: &str) -> Result<Vec<Step>, String> {
             ),
             "keys" => Step::Keys(
                 rest.split_whitespace()
-                    .map(|k| Keystroke::parse(k).map_err(|_| format!("not a keystroke: {k:?}")))
+                    .map(|k| {
+                        Keystroke::parse_with_os(k, os)
+                            .map_err(|_| format!("not a keystroke: {k:?}"))
+                    })
                     .collect::<Result<_, _>>()?,
             ),
             "type" => Step::Keys(rest.chars().map(typed).collect()),
@@ -61,7 +64,7 @@ pub fn run_from_env(cx: &mut App) {
     let Ok(script) = std::env::var("SJEL_GPUI_KEYS") else {
         return;
     };
-    let steps = match parse(&script) {
+    let steps = match parse(&script, cx.platform_info().os) {
         Ok(steps) => steps,
         Err(error) => {
             eprintln!("SJEL_GPUI_KEYS: {error}");
@@ -101,7 +104,11 @@ mod tests {
 
     #[test]
     fn a_script_reads_as_waits_keys_and_text() {
-        let steps = parse("wait 500; keys cmd-k enter; type Kö l").unwrap();
+        let steps = parse(
+            "wait 500; keys cmd-k enter; type Kö l",
+            OperatingSystem::Mac,
+        )
+        .unwrap();
         assert_eq!(steps[0], Step::Wait(500));
         let Step::Keys(keys) = &steps[1] else {
             panic!()
@@ -117,7 +124,7 @@ mod tests {
             .collect();
         assert_eq!(chars, ["K", "ö", "", "l"]);
         assert_eq!(typed[2].key, "space");
-        assert!(parse("wait soon").is_err());
-        assert!(parse("click 3 4").is_err());
+        assert!(parse("wait soon", OperatingSystem::Mac).is_err());
+        assert!(parse("click 3 4", OperatingSystem::Mac).is_err());
     }
 }

@@ -308,8 +308,10 @@ pub fn bind_keys(cx: &mut App) {
     cx.bind_keys(
         Area::ALL
             .into_iter()
-            .zip(1..=9)
-            .map(|(area, n)| KeyBinding::new(&format!("cmd-{n}"), OpenArea(area), None)),
+            .zip([
+                "cmd-1", "cmd-2", "cmd-3", "cmd-4", "cmd-5", "cmd-6", "cmd-7", "cmd-8", "cmd-9",
+            ])
+            .map(|(area, keys)| KeyBinding::new(keys, OpenArea(area), None)),
     );
     cx.bind_keys([
         KeyBinding::new("shift-cmd-d", GoTo(Page::Documents), None),

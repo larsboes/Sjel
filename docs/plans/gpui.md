@@ -373,12 +373,11 @@ build was performed for this handoff.
 
 ## 6. One UI crate, every platform
 
-1. **gpui-kit 0.8.0.** The app pins `gpui-kit = "=0.7.3"` and `gpui-pre = "=0.3.9"` in
-   `apps/gpui/Cargo.toml`, and `gpui-mobile` at git rev `c24a1308e1` in `ios/Cargo.toml`. The
-   three move together: `gpui-kit` 0.8.0 requires `gpui-pre =0.3.9` and 0.9.0 requires `=0.3.11`,
-   while `gpui-mobile` HEAD requires `=0.3.10`. So 0.8.0 is the step that needs no mobile move, and
-   0.9.0 waits until `gpui-mobile` reaches 0.3.11. Move the pins in one commit of its own, with
-   `cargo test` on core and ui and `ios/run-sim` before and after.
+1. **GPUI pins.** Done: `gpui-kit =0.8.1`, `gpui-pre =0.3.10` (`apps/gpui/Cargo.toml`) and
+   `gpui-mobile` rev `7548ebc4b2` (`ios/Cargo.toml`), one matching set. Open: gpui-kit 0.9.0
+   requires `gpui-pre =0.3.11`, so it waits until `gpui-mobile` moves to 0.3.11. The three move
+   together by hand in one commit, with `cargo test` on core and ui and `ios/run-sim` before and
+   after. Dependabot ignores them (`.github/dependabot.yml`).
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,

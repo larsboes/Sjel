@@ -32,17 +32,9 @@
 # Optional upstream packages are installed by Pi and are not tested in this checkout.
 # ---- the [install] hold is deliberately NOT here ---------------------------------------------
 #
-# Bun reads bunfig.toml from the directory it is invoked in and does NOT walk up to a parent —
-# measured on 1.4.2 on 2026-09-22, an install run from dashboard/ ignores this file entirely.
-# This repository has no root package.json, so nothing installs from here, and an
-# `[install] minimumReleaseAge` written into this file would be a control that reads as present
-# and gates nothing: the shape CONTRIBUTING.md#patch-first describes as a hold guarding a door that was
-# already open.
-#
-# The npm-only 24h hold (Q109) therefore lives in the two trees that actually resolve
-# dependencies. dashboard/bunfig.toml carries the reasoning; capabilities/soundscape/ui/bunfig.toml
-# points at it; tools/check-bun-install-policy.sh derives the set from the committed lockfiles
-# rather than listing it, so a third tree cannot join without its own copy.
+# Bun reads configuration only from the directory where it runs. Install holds and security
+# scanners therefore live beside each package's lockfile; tools/check-bun-install-policy.sh
+# derives the checked set from those lockfiles.
 
 [test]
 pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**", "crates/comms/clipper/**", "capabilities/comms/clipper/**"]

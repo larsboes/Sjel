@@ -18,7 +18,7 @@ Avoid holding synchronous locks across `.await`. Keep channels bounded for long-
 
 ## Sjel service integration
 
-The GPUI app is a desktop client, not a replacement for the web dashboard, mobile client, service registry, or HTTP boundary. Prefer existing typed API contracts for capability data. Respect the auth mode of each endpoint: do not put bearer tokens in source, logs, command-line arguments, or ordinary view state. Do not read private overlay files to bypass an API boundary. If no authorized client contract exists, select a read-only slice that does not cross that boundary and record the limitation.
+The GPUI app is a client, not a replacement for the service registry or HTTP boundary. Prefer existing typed API contracts for capability data. Respect the auth mode of each endpoint: do not put bearer tokens in source, logs, command-line arguments, or ordinary view state. Do not read private overlay files to bypass an API boundary. If no authorized client contract exists, select a read-only slice that does not cross that boundary and record the limitation.
 
 The prototype's `GET /health` endpoint is public liveness only. Capability state currently comes from the local `sjel capability list` command, which owns registry/probe semantics. Review endpoint auth before replacing that path with HTTP.
 

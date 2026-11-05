@@ -25,12 +25,12 @@
     },
     {
       "id": 3,
-      "prompt": "Build a GPUI-inspired interactive panel in the Svelte dashboard.",
-      "expected_output": "Routes the request to the existing Svelte UI skills and does not apply the GPUI skill to browser-only UI.",
+      "prompt": "Add a browser-only panel to the Clipper extension.",
+      "expected_output": "Recognizes that the GPUI skill does not apply to a browser extension UI.",
       "files": [],
       "assertions": [
-        "Does not use GPUI as the implementation framework for a browser dashboard page",
-        "Identifies the Svelte skill as the appropriate framework guidance"
+        "Does not use GPUI as the implementation framework for a browser-only UI",
+        "Routes to the browser extension's existing framework and conventions"
       ]
     }
   ]

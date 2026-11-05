@@ -1,10 +1,7 @@
 // Tests for tools/lib/demo-endpoints.ts (#168).
 //
-// The property that matters here is that a browser path resolves to the SAME capability the
-// dashboard's dev-server proxy would send it to. Those are two implementations of one rule
-// (dashboard/vite.config.ts and this module), both reading tools/capability.sh registry, and
-// if they drift the demo records one capability's answer under another's path — which looks
-// like working software right up until somebody reads the page.
+// A demo path must resolve to the capability declared by the shared service registry. If
+// resolution drifts, the demo records one capability's answer under another path.
 
 import { describe, expect, test } from "bun:test";
 import { DEMO_OVERLAY, fixtureFile, loadManifest, localDate, registry, resolvePath, routes, type RegistryEntry } from "./demo-endpoints.ts";

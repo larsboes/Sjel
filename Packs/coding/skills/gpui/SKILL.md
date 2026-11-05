@@ -1,6 +1,6 @@
 ---
 name: gpui
-description: Guides native desktop UI development with Zed Industries' GPUI Rust framework, including Sjel's evaluation app. Use when creating or changing GPUI views, entities, events, actions, platform setup, or framework dependencies. Do not use for general Rust backend work, Svelte interfaces, browser-only UI, or product design decisions; use ui-craftsmanship for those.
+description: Guides native desktop UI development with Zed Industries' GPUI Rust framework, including Sjel's evaluation app. Use when creating or changing GPUI views, entities, events, actions, platform setup, or framework dependencies. Do not use for general Rust backend work, browser-only UI, or product design decisions; use ui-craftsmanship for those.
 ---
 
 # GPUI

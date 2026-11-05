@@ -1,5 +1,5 @@
 # The Sjel Clipper resolves its own dependencies, so the install hold and the scanner apply
-# here too: Bun does not inherit a parent bunfig.toml. The reasoning is in dashboard/bunfig.toml.
+# here too: Bun does not inherit a parent bunfig.toml. The reasoning is in the root bunfig.toml.
 [install]
 minimumReleaseAge = 86400
 

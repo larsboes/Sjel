@@ -11,8 +11,7 @@ the Pages site, the `sjel-status` static serve and `matches_dashboard_nav`. `dem
 seeded stack feeds `tools/demo-shots`. Open:
 
 - Done: Prose describing the retired dashboard swept across tracked READMEs and architecture docs.
-- Svelte skills and tooling that only the dashboard uses (`svelte-*` skills, `bun` checks over
-  `dashboard/`). Check every consumer before removing one.
+- Done: dashboard-only Svelte tooling was removed or updated after checking its remaining consumers.
 
 ## 2. Sweep
 
@@ -55,7 +54,7 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
   `toolchain.toml` 25 of 319, `systems.toml` 12 of 126, `Cargo.toml` 3 of 102, `upstreams.toml`
   29 comment lines, `osv-scanner-installed.toml` 6 of 246, and 51 of 455 across all `service.toml`
   files.
-- "Axon" appears 804 times in 299 files.
+- "Axon" appeared 804 times in 299 files at the rename baseline.
 - 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
   "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
 - Over 800 lines: `capabilities/comms/README.md`, `capabilities/calendar/README.md`.
@@ -128,7 +127,7 @@ Cargo.toml          virtual manifest, members = ["crates/*"]
 crates/             every Rust crate: capabilities, their -api crates, libs, the GPUI app,
                     Rust tools
 services/           third-party software and scripts Sjel supervises (manifests only)
-apps/ios/           the Xcode host project for the iPhone app
+apps/gpui/ios/host/ the Xcode host project for the GPUI iPhone app
 Packs/ schemas/ docs/ research/ tools/ (scripts only)
 ```
 

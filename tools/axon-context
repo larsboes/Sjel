@@ -77,7 +77,7 @@ capability_facts() {
   echo "log=/tmp/sjel-$name.log"
   if command -v rg >/dev/null; then
     rg -l --fixed-strings "\"/$name/" "$SJEL_ROOT/apps/gpui/core/src" "$SJEL_ROOT/apps/gpui/ui/src" \
-      "$SJEL_ROOT/apps/gpui/src" "$SJEL_ROOT/dashboard/src/lib" "$SJEL_ROOT/tools/sjel-cli/src" 2>/dev/null |
+      "$SJEL_ROOT/apps/gpui/src" "$SJEL_ROOT/tools/sjel-cli/src" 2>/dev/null |
       sed "s|^$SJEL_ROOT/|client=|" | sort | head -12
   fi
 }
@@ -85,7 +85,7 @@ capability_facts() {
 unit_from_target() {
   case "$1" in
     crates/*|services/*|capabilities/*|libs/*|Packs/*) printf '%s\n' "$1" | cut -d/ -f2 ;;
-    dashboard/*|tools/*|schemas/*) printf '%s\n' "$1" | cut -d/ -f1 ;;
+    tools/*|schemas/*) printf '%s\n' "$1" | cut -d/ -f1 ;;
     *) echo "$1" ;;
   esac
 }

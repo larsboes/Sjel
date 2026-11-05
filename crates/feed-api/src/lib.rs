@@ -50,7 +50,7 @@ pub struct FeedEntry {
 }
 
 impl FeedEntry {
-    /// The order the dashboard ranks the inbox by: the evaluator's score, else the relevance score, else nothing.
+    /// The order the Feed view ranks the inbox by: the evaluator's score, else the relevance score, else nothing.
     pub fn score(&self) -> f64 {
         self.evaluation
             .as_ref()

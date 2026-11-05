@@ -2,6 +2,9 @@
 
 Native macOS menu bar companion and end-to-end encrypted CloudKit relay for Sjel, built in Swift.
 
+The menu bar companion remains a small OS integration beside the GPUI app. The CloudKit relay is
+implemented and tested but dormant: no current app or capability syncs through it.
+
 ## Architecture
 
 Per Sjel / Sjel doctrine and **Product Rule 4**:

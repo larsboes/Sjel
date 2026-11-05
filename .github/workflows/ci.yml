@@ -181,15 +181,8 @@ jobs:
             exit 1
           fi
 
-  # Svelte type checks, local-only until 2026-07 and dashboard-only until now: a type
-  # regression could land on main unseen (Sjel#41), and a capability that grows its own UI
-  # was unchecked from the day it landed (Sjel#139 — the knowledge-graph UI carried six
-  # errors while this workflow reported green).
-  #
-  # The set is discovered, never listed: `tools/discover-ui-packages` reads committed
-  # package metadata, so a capability that grows a UI tomorrow enters this job without
-  # anyone editing this file. A hand-list of capability names would close today's instance
-  # and reopen the class.
+  # UI checks are discovered from committed package metadata. Every checkable package enters
+  # this job without a manually maintained list.
   ui-check:
     name: bun run check (every discovered UI)
     runs-on: ubuntu-latest
@@ -209,18 +202,8 @@ jobs:
         with:
           bun-version: latest
 
-      # vitePreprocess() resolves the package's Vite config to run the style preprocessors,
-      # and a UI that derives its dev proxy table from `tools/capability.sh registry`
-      # hard-fails without <overlay>/config/machine.toml. Every <style> block then
-      # reports that failure, so the first run of this job came back with 31 errors in 31
-      # files — one per file, none of them type errors.
-      #
-      # A runner IS a machine, and Sjel's contract is that a machine has an overlay, so the
-      # honest fix is to give it the minimal one rather than to make the config tolerate its
-      # absence. No sjel.local.toml is written: with none present, paths.sh falls back to
-      # sjel.toml's shipped default (~/.axon-overlay), which is what this creates.
-      # `capabilities = []` is deliberate — the registry then returns just the spine, which
-      # is all a type check needs. Shape: schemas/machine.toml.example.
+      # Package discovery and UI checks invoke sjel-cli, which reads the local capability
+      # registry. Give the runner the standard overlay shape with no capabilities enabled.
       - name: Minimal overlay for the config read
         run: |
           mkdir -p "$HOME/.axon-overlay/config"

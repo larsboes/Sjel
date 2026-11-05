@@ -133,10 +133,9 @@ capabilities = ["home-assistant", "vaultwarden"]
 # that logs; a credential belongs in the capability's env_file, which comes from Vaultwarden
 # (CONTRIBUTING.md#secrets).
 #
-# [capability.dashboard]
-# env = ["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=this-host.example.ts.net"]
-#   # Vite rejects a request whose Host header it does not know, and a tailnet name is exactly
-#   # such a host — machine-local by nature, so it cannot live in the tracked service.toml.
+# [capability.example]
+# env = ["SJEL_EXAMPLE_OPTION=value"]
+#   # Machine-local overrides belong in this file, not in the tracked service manifest.
 
 # --- unit holds (optional) ----------------------------------------------
 # Pack units held back from a harness on THIS machine only, with the same shape as

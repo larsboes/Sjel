@@ -36,7 +36,7 @@ describe("addWatch", () => {
     const row = await addWatch({ url: "https://github.com/Contrastive-LM/CLM", summary: 'A "quoted" line' }, opts(dir));
     expect(row).toEqual({ name: "clm", url: "https://github.com/Contrastive-LM/CLM", verdict: "watch", license: "MIT", summary: 'A "quoted" line' });
     const table = Bun.TOML.parse(readFileSync(join(dir, "upstreams.toml"), "utf8")) as Record<string, Record<string, string>>;
-    expect(table.clm.why).toBe("noted 2026-09-30 from the dashboard's Projects page. Not audited.");
+    expect(table.clm.why).toBe("noted 2026-09-30 from the GPUI Research page. Not audited.");
     expect(table.clm.summary).toBe('A "quoted" line');
     expect(table.gpui.verdict).toBe("watch");
   });

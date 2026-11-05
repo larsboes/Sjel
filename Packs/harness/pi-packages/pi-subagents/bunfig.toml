@@ -1,7 +1,5 @@
-# bunfig.toml — the vendored pi-subagents. Same two settings as dashboard/bunfig.toml, and for the
-# same reason: Bun reads bunfig.toml only from the directory it runs in, and CI's UI step runs
-# `bun install` here. Without the scanner setting that install fails with "no security scanner
-# configured"; the scanner itself is a devDependency (package.json).
+# This package needs local install policy because Bun reads configuration only from the directory
+# where it runs. CI installs the package here, and the scanner is a devDependency (package.json).
 [install]
 minimumReleaseAge = 86400
 

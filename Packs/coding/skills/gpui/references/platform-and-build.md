@@ -59,6 +59,6 @@ Do not use `cargo check --workspace` for the standalone prototype: its manifest 
 
 ## Packaging and runtime evaluation
 
-Treat compiling, launching, window behavior, keyboard/mouse interaction, text rendering, and packaging as separate checks. GPUI does not make a native desktop surface available inside the web dashboard; web and mobile surfaces remain separate clients. Capture platform and packaging limitations in evaluation notes rather than generalizing from a single successful build.
+Treat compiling, launching, window behavior, keyboard/mouse interaction, text rendering, and packaging as separate checks. GPUI provides native surfaces, not a browser client; capture platform and packaging limitations in evaluation notes rather than generalizing from a single successful build.
 
 Upstream navigation: [GPUI README](https://github.com/zed-industries/zed/blob/main/crates/gpui/README.md), [platform crate](https://github.com/zed-industries/zed/tree/main/crates/gpui_platform), [GPUI source](https://github.com/zed-industries/zed/tree/main/crates/gpui).

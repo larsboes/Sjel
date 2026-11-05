@@ -15,7 +15,7 @@
 #                       `name` and the `backup_*` fields apply; every lifecycle verb
 #                       refuses it by name. See the "Data kind" section at the bottom.
 #
-# A spine component (today only dashboard/, CONTRIBUTING.md#three-architectural-nouns) may carry a service.toml
+# A spine component (CONTRIBUTING.md#three-architectural-nouns) may carry a service.toml
 # at the repo root instead of under capabilities/ — same schema, always in the
 # registry because the spine exists on every machine by definition.
 
@@ -130,15 +130,8 @@ backup_stale_days  = "7"                  # past this age the last backup counts
                                           # different answers, and a capability whose data changes hourly and
                                           # one that changes monthly do not share either. Read from the receipt
                                           # backup.sh writes (overlay backup/receipts/<cap>.json) to decide what
-                                          # a surface shows. Declared ahead of any consumer on purpose, and
-                                          # that is still half true: the dashboard has no backup trigger yet.
-                                          # The scheduler this comment once called nonexistent now exists —
-                                          # see `schedule` below — so a capability wanting an unattended
-                                          # backup run declares it there, and these two fields stay what they
-                                          # always were: what timely MEANS, not what runs. No default — a
-                                          # capability that
-                                          # declares a backup but no cadence is only ever reported as "last run
-                                          # <age>", never as overdue, because nothing said what timely means.
+                                          # a surface shows. A capability without a cadence is reported as
+                                          # "last run <age>", never as overdue. Schedule controls execution.
 
 freshness_advise_hours = "12"             # how often data SHOULD reach this capability.
 freshness_stale_hours  = "24"             # past this age nothing is arriving, and that is a fault.
@@ -225,12 +218,12 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # touching that thing. sjel-status judges availability on
 #                                           # this where it exists and falls back to health_path
 #                                           # where it does not, so adding one changes what the
-#                                           # dashboard reports and omitting one changes nothing.
+#                                           # status surface reports and omitting one changes nothing.
 #                                           # Not polled by the runner at startup: a capability that
 #                                           # starts before its database is still a successful start.
 # autostart   = "true"                      # optional. `service-runner.sh up` starts it; without it
-#                                           # the capability is on-demand — dashboard starts it when
-#                                           # you open its surface. Default: on-demand.
+#                                           # the service starts only when requested.
+#                                           # Default: on-demand.
 # full_disk_access = "true"                 # optional, macOS only. The launchd job (scheduled run
 #                                           # or watchdog) starts through the signed
 #                                           # sjel-fda-launcher, which holds Full Disk Access, and
@@ -264,20 +257,20 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #                                           # carry the declaration switched off while a homeserver
 #                                           # runs it.
 #
-# Dashboard wiring (read by dashboard/vite.config.ts through the registry, so a port
+# Shell routing (read from the capability registry, so a port
 # literal lives in exactly one file):
-# proxy_extra = ["/api"]                    # optional. Extra browser-facing prefixes proxied to this
+# proxy_extra = ["/api"]                    # optional. Extra path prefixes routed to this
 #                                           # capability UNSTRIPPED, for surfaces whose paths predate
 #                                           # the uniform rule. Every process capability always gets
 #                                           # /<name> proxied with the prefix stripped — that one is
 #                                           # convention, not configuration, and needs no field.
 # routes_absent = "upstream binary"         # optional, a reason. A process with a port serves
 #                                           # GET /routes (libs/route-manifest), or says
-#                                           # here why it cannot: an upstream binary, a UI with no
+#                                           # here why it cannot: an upstream binary or a process with no
 #                                           # API of its own. tools/check-service-tomls.sh refuses a
 #                                           # port with neither.
-# proxy_api_only = "true"                   # optional. When the dashboard owns /<name> as a page,
-#                                           # proxy only /<name>/api and still strip /<name>.
+# proxy_api_only = "true"                   # optional. Mount only /<name>/api and strip /<name>.
+
 
 # ── Data kind ──────────────────────────────────────────────────────────────
 # Everything below applies ONLY to kind = "data". The manifest declares state and

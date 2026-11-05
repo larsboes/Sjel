@@ -33,22 +33,11 @@ and asset-loading contract first; native and iframe mode are different renderers
 A static SVG or PNG is an optional export for print, sharing or a client without the plugin.
 It does not replace the interactive note embed by default.
 
-## Sjel: embed a registered figure in the note
+## Sjel notes
 
-Project notes use the existing figure registry in `dashboard/src/lib/figures/index.ts`.
-The washing-machine figures demonstrate the contract:
-
-```markdown
-![[figure:miele-w961-filter]]
-![[figure:miele-w961-machine|Whole-machine schematic]]
-```
-
-`dashboard/src/lib/projects/database.ts` parses these into figure segments, and
-`ProjectsBoard.svelte` mounts the registered Svelte component inside the note body. Inspect the
-Miele wrappers and their controller modules before adding another figure. Reuse the registry;
-do not replace the embed with a separate page or introduce React. Dispose animation and event
-handlers on component teardown, support several instances, and retain keyboard and reduced-motion
-behavior. Keep the model separate from presentation; the capability owns domain values.
+The GPUI note editor does not currently resolve interactive figure embeds or maintain a figure
+registry. Keep interactive figure assets in Obsidian notes through this plugin; do not treat the
+retired Svelte dashboard's embed syntax as a Sjel contract.
 
 ## Placement and verification
 

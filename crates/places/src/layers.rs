@@ -2,7 +2,7 @@
 //! `trips_*` and `transit_*`. One database with a namespace per capability was
 //! chosen exactly for these joins; PRD Q45 (2026-08-27) made that namespace a
 //! table prefix instead of a schema, and the joins are the same joins.
-//! The wire shapes here are the dashboard map's contract; every collection is
+//! The wire shapes here are the map view's contract; every collection is
 //! GeoJSON with `[longitude, latitude]` coordinate order.
 
 use rusqlite::{params, OptionalExtension};
@@ -560,7 +560,7 @@ pub fn travel_layer_in(
     }))
 }
 
-/// `GET /api/unplaced` (the dashboard's review contract): expense-kind EUR
+/// `GET /api/unplaced` (the map review contract): expense-kind EUR
 /// projection rows with no `transaction_places` link, grouped by exact
 /// description, ranked by total spend, capped at 200 groups. Cents are
 /// integers, EUR implied — the same units as the spend layer.
@@ -651,11 +651,8 @@ pub fn assign_unplaced(
     let Some(place) = place else {
         return Ok(None);
     };
-    // The server-side twin of the dashboard's pickPrecision rule
-    // (dashboard/src/routes/map/+page.svelte): a city-kind place is linked at
-    // city precision whatever was requested — a city bubble never pretends to
-    // be a venue (README D1). Enforced here too because the API is a caller
-    // surface of its own, not only the dashboard's backend.
+    // A city-kind place is always linked at city precision. Enforce it here so
+    // every client respects README D1; a city bubble never claims venue precision.
     let precision = if place.kind == "city" {
         "city"
     } else {

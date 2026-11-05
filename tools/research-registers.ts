@@ -1,14 +1,12 @@
 #!/usr/bin/env bun
-// The two project registers, as the dashboard's /research/projects page reads them.
+// The two project registers used by the GPUI Research page.
 //
 //   bun tools/research-registers.ts     print {upstreams, systems} as JSON on stdout
 //   bun tools/research-registers.ts watch --url <url> --summary <text> [--name <id>]
 //                                       append a `watch` row to upstreams.toml, print it as JSON
 //
-// Bun parses the TOML because Vite runs under Node, which has no TOML parser, and adding one
-// to the dashboard would be a dependency for two files. dashboard/vite/research.ts runs this
-// at build time. `why` is not exported for upstreams: its median is about 590 characters, it
-// is the audit, and `summary` is the line written for a reader (upstreams.toml header).
+// Bun parses TOML without adding a parser dependency. `why` is not exported for upstreams:
+// it is the audit, and `summary` is the line written for a reader (upstreams.toml header).
 
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -138,7 +136,7 @@ export async function addWatch(
   const license = await (opts.license ?? lookupLicense)(request.url);
   const today = opts.today ?? new Date().toISOString().slice(0, 10);
   const row: UpstreamRow = { name, url: request.url, verdict: "watch", license, summary };
-  const why = `noted ${today} from the dashboard's Projects page. Not audited.`;
+  const why = `noted ${today} from the GPUI Research page. Not audited.`;
   const text = readFileSync(file, "utf8");
   appendFileSync(
     file,

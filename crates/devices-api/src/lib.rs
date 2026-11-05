@@ -168,7 +168,7 @@ pub struct JoinsResp {
     pub requests: Vec<PairingRequest>,
 }
 
-/// What the Mac's pairing QR code carries (`pairingQrPayload` in `dashboard/src/lib/devices.ts`).
+/// What the GPUI app's pairing QR code carries.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct PairingQr {
     pub host: String,
@@ -192,8 +192,7 @@ pub fn pairing_qr_payload(qr: &PairingQr) -> String {
     .to_string()
 }
 
-/// Reads a scanned code. The retired dashboard's `parsePairingQr` refuses a dotted host; this
-/// parser accepts one, so a code can carry the Mac's tailnet address.
+/// Reads a scanned code. A code may carry a dotted hostname, including the Mac's tailnet address.
 pub fn parse_pairing_qr(content: &str) -> Result<PairingQr, String> {
     #[derive(Deserialize)]
     struct Raw {
@@ -269,7 +268,7 @@ pub fn parse_join_target(text: &str) -> Result<(String, String), String> {
 }
 
 /// The certificate half of the code both screens show while a join waits: the first 16 hex
-/// characters in four groups (`comparisonCode` in `dashboard/src/lib/connection/transports.ts`).
+/// characters in four groups shown by the GPUI app.
 pub fn comparison_code(fingerprint: &str) -> String {
     let head = fingerprint
         .get(..16)
@@ -283,7 +282,7 @@ pub fn comparison_code(fingerprint: &str) -> String {
 }
 
 /// Six digits from the SHA-256 of a public key, shown as `482 913`. The phone computes the same
-/// value from its own key (`dashboard/src/lib/devices.ts`, `keyCode`). It tells requests apart; it
+/// value from its own key. It tells requests apart; it
 /// is not a secret. The TLS pin the phone compares in the same step is what stops a relay.
 pub fn key_code(public_key: &str) -> String {
     let digest = Sha256::digest(

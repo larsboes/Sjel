@@ -872,9 +872,8 @@ impl PlacesStore {
     /// The radius is [`PRESENCE_RADIUS_KM`] and is NOT a caller parameter. How
     /// precisely places will answer about a person's location is places'
     /// disclosure policy, not a travel-matching rule — which is also why it
-    /// does not collide with `DESTINATION_MATCH_RADIUS_KM = 75` in
-    /// `dashboard/src/lib/travel/travel-candidates.ts`, a different question
-    /// with its own single home.
+    /// does not collide with `DESTINATION_MATCH_RADIUS_KM = 75`, which is for
+    /// travel-candidate matching.
     ///
     /// Confirmed rows only. A proposal is an inference nobody has agreed with,
     /// so it is not evidence that anyone is anywhere.

@@ -47,14 +47,12 @@ origin = "http://127.0.0.1:8099"
 # operator's Obsidian vault, and `vault` reads a directory rather than a store a seeder
 # could POST into. Seeding a fictional vault would mean shipping fictional markdown notes
 # with the demo, which is a corpus this manifest deliberately does not own — every seeder
-# below writes through an API the dashboard also calls, and the vault has no write API by
+# below writes through an API the GPUI app also calls, and the vault has no write API by
 # ruling. So the published demo's decision ladder shows no task band.
 
 [capability.calendar]
 writes = "calendar"
-# The month/agenda views ask for an explicit window. Recorded around the anchor rather
-# than "now", and the shim matches on the exact query string, so these are the windows
-# the demo can show — the dashboard's own default range is derived from the anchor too.
+# Recorded query windows are anchored to the demo date so fixtures remain reproducible.
 paths = [
   "/calendar/api/entries?from=2026-02-01&to=2026-05-01",
   "/calendar/api/proposals?from=2026-02-01&to=2026-05-01",
@@ -62,7 +60,7 @@ paths = [
   "/calendar/api/rhythms",
   "/calendar/api/windows?from=2026-03-16&to=2026-05-01",
   "/calendar/api/trip-drafts?from=2026-03-16&to=2026-05-01&max_gap_days=5",
-  # Home's window: the anchor to four months after it (routes/+page.svelte, horizonEndKey).
+  # Home's window: the anchor to four months after it.
   "/calendar/api/entries?from=2026-03-16&to=2026-07-16",
   "/calendar/api/contexts?from=2026-03-16&to=2026-07-16",
 ]
@@ -127,7 +125,7 @@ writes = "finance"
 # Seeded the way a person actually onboards: a synthetic bank CSV through
 # /import/csv/preview → /import/csv → confirm-batch, then holdings and manual balances.
 # That is why the demo's Import Review screen has something in it rather than being the
-# one empty page in an otherwise full dashboard.
+# one empty page in an otherwise complete demo.
 paths = [
   "/finance/api/dashboard",
   "/finance/api/subscriptions",
@@ -142,7 +140,7 @@ paths = [
 
 [capability.comms]
 writes = "comms"
-# Seeded through POST /ingest — the same public write route the dashboard's "add this link"
+# Seeded through POST /ingest — the same public write route the GPUI Inbox's "add this link"
 # path uses. The seeder posts URLs; Comms fetches, extracts and normalises them itself, so
 # what is recorded here is its extractor's output rather than a fixture's.
 paths = [
@@ -150,7 +148,7 @@ paths = [
   "/comms/feed/origins",
   "/comms/sources",
   "/comms/triage",
-  # Home's own reads (routes/+page.svelte, lib/home/kinds): the shim matches the exact query.
+  # Home's own reads: the shim matches the exact query.
   "/comms/triage?status=proposed",
   "/comms/feed?days=30",
   # mail-llm-rung: counts only, and empty until a pass has run. An empty state
@@ -188,8 +186,8 @@ paths = [
 # `reliability` and `delay_risk_score` come back null: punctuality is not in this demo, and
 # absence degrades rather than being invented. See [absent.punctuality].
 #
-# `/api` rather than `/transit/api`: transit's service.toml proxies /api through unstripped,
-# which is how the dashboard's client has always called it.
+# Transit exposes these compatibility paths at `/api`; its service manifest routes that prefix
+# without stripping it.
 paths = [
   "/api/suggest?q=Central",
   "/api/search?from=9900001&to=9900002&time=2026-03-16T09:00:00",
@@ -232,9 +230,7 @@ the capability that measures them is not running. That is the designed behaviour
 degrades, it never fails — and the demo shows it rather than inventing a number.\
 """
 
-# Added 2026-09-27. The dashboard called these seven and demo.toml named none of them, so the
-# shim treated their paths as static assets and GitHub Pages answered with its own 404 page,
-# which the People page printed whole. Each is absent for the reason below until a seeder exists.
+# These capabilities are not seeded. Each is absent for the reason below until a seeder exists.
 
 [absent.devices]
 reason = """

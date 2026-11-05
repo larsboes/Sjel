@@ -1,5 +1,5 @@
 # Bun reads bunfig.toml only from the directory it runs in, and CI installs here, so the adoption
-# hold and the malicious-publish scanner are set per tree. The reasoning is in dashboard/bunfig.toml.
+# hold and the malicious-publish scanner are set per tree. The reasoning is in the root bunfig.toml.
 [install]
 minimumReleaseAge = 86400
 

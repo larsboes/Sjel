@@ -1,5 +1,5 @@
 {
-  "name": "axon-packs",
+  "name": "sjel-packs",
   "description": "Togglable agent-skill bundles mirrored from Sjel's harness-neutral Packs (Packs/<name>/pack.toml).",
   "owner": {
     "name": "Lars Boes",

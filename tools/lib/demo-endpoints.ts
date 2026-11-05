@@ -3,13 +3,9 @@
 // Shared by tools/demo-seed and tools/demo-origin so they agree on which capability a path
 // belongs to.
 //
-// The resolution rule is not invented here. dashboard/vite.config.ts already proxies
-// `/<capability>` to that capability's port with the prefix stripped, reading ports from
-// `tools/capability.sh registry` — which reads them from each service.toml. This mirrors
-// that rule against the same registry, so the demo reaches a capability at the same address
-// the dashboard does, and adding a capability stays a service.toml edit. Writing a port in
-// here would make this the second place a port lives, which is the one thing the manifest
-// contract exists to prevent.
+// The demo resolves paths through `tools/capability.sh registry`, using the same service
+// declarations as Sjel's local shell routing. Keeping the lookup here avoids duplicating ports
+// and routes, which belong in service manifests.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -153,7 +149,7 @@ interface Route {
   strip: boolean;
 }
 
-/** The proxy table, in the same shape and from the same source as the dev server's. */
+/** The proxy table, built from the capability registry used by Sjel's local shell. */
 export function routes(entries = registry()): Route[] {
   const table: Route[] = [];
   for (const svc of entries) {
@@ -170,7 +166,7 @@ export function routes(entries = registry()): Route[] {
     }
   }
   // Longest prefix first: `/finance/api` must win over a hypothetical `/finance`, the same
-  // way Vite's own middleware orders its table.
+  // way the local shell proxy orders its table.
   return table.sort((a, b) => b.prefix.length - a.prefix.length);
 }
 

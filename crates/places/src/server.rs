@@ -638,9 +638,8 @@ async fn geocode(
                 json!({
                     "place_id": place.id,
                     "name": place.name,
-                    // The registry kind, so a client can refuse venue
-                    // precision for a city-kind result (README D1) — the
-                    // dashboard's "Pin venue" guard reads exactly this.
+                    // The registry kind lets the map's "Pin venue" guard refuse city-kind
+                    // results (README D1).
                     "kind": place.kind,
                     "latitude": place.latitude,
                     "longitude": place.longitude,
@@ -1094,7 +1093,7 @@ fn is_day(value: &str) -> bool {
 /// Added 2026-09-25 (PRD Q116): the register had no way in except backfills, and "where
 /// is someone right now" is the fact a trip needs most. The operator is the source, so the
 /// row carries full confidence, but it is still written `proposed`: README D4 keeps the confirm
-/// route the one writer of `confirmed`, and the dashboard calls it in the same action.
+/// route the one writer of `confirmed`, and the client calls it in the same action.
 /// Only the city text reaches the geocoder, never the person's name (README D3).
 async fn state_person_place(
     State(state): State<AppState>,

@@ -178,11 +178,7 @@ fn build_router(state: AppState) -> Router {
         .route("/routes", get(routes))
         .route("/health", get(health))
         .route("/ready", get(ready))
-        // Permissive CORS, matching every other capability the dashboard reads
-        // directly. This server serves no control surface and no secret, and the
-        // bind is loopback. Until 2026-10-20 it also served `/api/people` and
-        // `/api/journal-health`, which named real people; both folders left the
-        // vault that day (capabilities/entities/src/journal.rs).
+        // The origin guard above decides who may ask; CORS controls browser access.
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
@@ -288,7 +284,7 @@ mod origin_tests {
     /// this server is broken: the callers that legitimately reach it still do.
     /// 503 is the absent vault, which is a handler answering.
     #[tokio::test]
-    async fn the_dashboard_and_a_non_browser_caller_still_reach_the_handler() {
+    async fn a_local_client_and_a_non_browser_caller_reach_the_handler() {
         for origin in [
             None,
             Some("http://localhost:47117"),

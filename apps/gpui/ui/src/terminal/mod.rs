@@ -1,655 +1,58 @@
 //! A terminal on the Mac, drawn as the grid the program printed.
 //!
-//! The wire is `sjel_gpui_core::terminal`; this file is the other half. The pty's bytes are fed to
+//! The wire is `sjel_gpui_core::terminal`; this module is the other half. The pty's bytes are fed to
 //! `alacritty_terminal`'s parser, which keeps the grid, the colours and the cursor, and GPUI draws
 //! what it holds. The parser is a dependency for the same reason the pty is a dependency: a VT
 //! emulator is years of escape sequences, and a wrong one shows as a screen that is almost right.
-//!
-//! Three decisions are worth naming.
-//!
-//! **Rows of runs, not a cell per element.** A row is split into runs of cells that share a
-//! foreground, a background and a weight, and each run is one text element. A cell-per-element grid
-//! would be a thousand elements for a shell prompt; one element per row would lose the colour that
-//! `LS_COLORS` and a compiler's red are for.
-//!
-//! **Keys are bytes.** The pty wants what a keyboard sends, so a keystroke becomes bytes here
-//! ([`key_bytes`]). That is what lets the Mac's keyboard and the phone's key row share one path into
-//! the terminal.
-//!
-//! **The grid is the client's.** The Mac keeps a ring so a reattached window catches up, and the
-//! parser keeps history for scrolling back, but a client that drew history would have to agree with
-//! the Mac about offsets. This draws the visible screen, which both screens can always agree on.
+
+use std::time::Duration;
 
 use futures::StreamExt;
 use gpui::prelude::*;
 use gpui::{
-    actions, canvas, div, fill, font, point, px, rgb, rgba, AnyElement, Bounds, ClipboardItem,
-    ContentMask, Context, EventEmitter, FocusHandle, Font, FontWeight, KeyBinding, KeyDownEvent,
-    Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, PinchEvent, Pixels, Point, Render,
-    ScrollDelta, ScrollWheelEvent, SharedString, TextAlign, TextRun, TouchPhase, Window,
+    canvas, div, px, rgb, rgba, AnyElement, ClipboardItem, Context, EventEmitter, FocusHandle,
+    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, PinchEvent,
+    Pixels, Point, Render, ScrollDelta, ScrollWheelEvent, SharedString, TouchPhase, Window,
 };
 use gpui_kit::component::ActiveTheme;
 
-use alacritty_terminal::event::EventListener;
-use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
-use alacritty_terminal::selection::{Selection, SelectionType};
-use alacritty_terminal::term::cell::Flags;
-use alacritty_terminal::term::{Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
+use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::index::{Point as GridPoint, Side};
+use alacritty_terminal::selection::SelectionType;
 
 use sjel_gpui_core::shell;
 use sjel_gpui_core::terminal::{Host, Position, Terminal as Peer, Update, MAX_INPUT_BYTES};
 
-use crate::theme::{Palette, TerminalFont, TerminalScheme, MONOKAI};
+use crate::theme::{Palette, TerminalFont, MONOKAI};
 
 mod deck;
+mod grid;
+mod keys;
+mod screen;
 
 pub use deck::TerminalDeck;
+pub use grid::Metrics;
+pub use keys::{key_bytes, keys, Copy, NewTerminal, NextTab, Paste, PrevTab, SelectAll};
+pub use screen::tone_of;
 
-actions!(
-    terminal,
-    [
-        /// Copy the selection.
-        Copy,
-        /// Paste into the terminal.
-        Paste,
-        /// Select the whole scrollback.
-        SelectAll,
-        /// Start a new terminal: choose the program and the folder.
-        NewTerminal,
-        /// Show the next terminal tab.
-        NextTab,
-        /// Show the previous terminal tab.
-        PrevTab,
-    ]
-);
+pub(crate) use grid::paint_grid;
+pub(crate) use keys::{paste_bytes, TOUCH_KEYS};
+pub(crate) use screen::{spans, Screen, Span};
+#[cfg(test)]
+pub(crate) use screen::{ansi_256, ScreenLine};
 
-/// The keys the terminal takes from the window while its grid has focus. `Terminal` is deeper than
-/// any page context, so these win over a binding of the same keys further out.
-pub fn keys() -> [KeyBinding; 8] {
-    [
-        KeyBinding::new("cmd-c", Copy, Some("Terminal")),
-        KeyBinding::new("cmd-v", Paste, Some("Terminal")),
-        KeyBinding::new("cmd-a", SelectAll, Some("Terminal")),
-        KeyBinding::new("cmd-t", NewTerminal, Some("Terminal")),
-        // The keys that step a window's tabs in Safari and Terminal step the terminal's here.
-        KeyBinding::new("shift-cmd-]", NextTab, Some("Terminal")),
-        KeyBinding::new("shift-cmd-[", PrevTab, Some("Terminal")),
-        KeyBinding::new("ctrl-tab", NextTab, Some("Terminal")),
-        KeyBinding::new("ctrl-shift-tab", PrevTab, Some("Terminal")),
-    ]
-}
-
-/// The history the parser keeps, for the scroll-back the wheel already moves through.
-const HISTORY: usize = 10_000;
 /// A monospace cell at this size is about 7 by 15 points at the default UI font.
 const LINE_HEIGHT: f32 = 1.4;
 /// The size a view draws at before its host hands it the Appearance setting.
 const DEFAULT_FONT_SIZE: f32 = 13.0;
 /// How far one notch of the wheel scrolls.
 const WHEEL_LINES: i32 = 3;
-/// What a phone's key row offers, and the bytes each key sends. `Ctrl-C` is here rather than a
-/// modifier chip because interrupting is the one control a shell cannot be used without.
-const TOUCH_KEYS: [(&str, &[u8]); 11] = [
-    ("esc", b"\x1b"),
-    ("tab", b"\t"),
-    ("\u{2190}", b"\x1b[D"),
-    ("\u{2191}", b"\x1b[A"),
-    ("\u{2193}", b"\x1b[B"),
-    ("\u{2192}", b"\x1b[C"),
-    ("|", b"|"),
-    ("~", b"~"),
-    ("/", b"/"),
-    ("\u{23ce}", b"\r"),
-    ("ctrl-c", &[0x03]),
-];
-
-/// What the parser reports to. A title, a colour query and a bell are events this client does not
-/// act on yet, and an unhandled event is not an error.
-struct Quiet;
-
-impl EventListener for Quiet {}
-
-/// The visible size, as the parser wants it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Size {
-    cols: usize,
-    rows: usize,
-}
-
-impl Dimensions for Size {
-    fn total_lines(&self) -> usize {
-        self.rows
-    }
-
-    fn screen_lines(&self) -> usize {
-        self.rows
-    }
-
-    fn columns(&self) -> usize {
-        self.cols
-    }
-}
-
-/// The grid: the parser, the size the view asked for, and where the reader has scrolled to.
-struct Screen {
-    term: Term<Quiet>,
-    parser: Processor,
-    size: Size,
-}
-
-impl Screen {
-    fn new(cols: usize, rows: usize) -> Self {
-        let size = Size {
-            cols: cols.max(1),
-            rows: rows.max(1),
-        };
-        let config = Config {
-            scrolling_history: HISTORY,
-            ..Config::default()
-        };
-        Self {
-            term: Term::new(config, &size, Quiet),
-            parser: Processor::new(),
-            size,
-        }
-    }
-
-    /// Feed what the Mac printed. Escape sequences arrive split across frames, which is why the
-    /// parser is kept rather than restarted per frame.
-    fn feed(&mut self, bytes: &[u8]) {
-        self.parser.advance(&mut self.term, bytes);
-    }
-
-    fn resize(&mut self, cols: usize, rows: usize) {
-        let size = Size {
-            cols: cols.max(1),
-            rows: rows.max(1),
-        };
-        if size == self.size {
-            return;
-        }
-        self.term.resize(size);
-        self.size = size;
-    }
-
-    fn cols(&self) -> usize {
-        self.size.cols
-    }
-
-    fn rows(&self) -> usize {
-        self.size.rows
-    }
-
-    /// How many lines above the live screen the reader has scrolled.
-    fn scrolled(&self) -> usize {
-        self.term.grid().display_offset()
-    }
-
-    fn scroll(&mut self, lines: i32) {
-        // The parser owns the offset: it clamps at both ends and repaints what it exposes.
-        self.term.scroll_display(Scroll::Delta(lines));
-    }
-
-    /// The grid cell at a visible `col` and `row`, in the parser's coordinates, which count
-    /// history lines as negative.
-    fn point_at(&self, col: usize, row: usize) -> GridPoint {
-        let row = row.min(self.size.rows - 1) as i32;
-        GridPoint::new(
-            Line(row - self.scrolled() as i32),
-            Column(col.min(self.size.cols - 1)),
-        )
-    }
-
-    fn select(&mut self, kind: SelectionType, at: GridPoint, side: Side) {
-        self.term.selection = Some(Selection::new(kind, at, side));
-    }
-
-    fn extend_selection(&mut self, at: GridPoint, side: Side) {
-        if let Some(selection) = self.term.selection.as_mut() {
-            selection.update(at, side);
-        }
-    }
-
-    /// Every line the parser still holds, history included.
-    fn select_all(&mut self) {
-        let top = GridPoint::new(Line(-(self.term.grid().history_size() as i32)), Column(0));
-        let bottom = GridPoint::new(Line(self.size.rows as i32 - 1), Column(self.size.cols - 1));
-        let mut selection = Selection::new(SelectionType::Lines, top, Side::Left);
-        selection.update(bottom, Side::Right);
-        self.term.selection = Some(selection);
-    }
-
-    /// A click without a drag selects nothing, so it leaves no highlight behind.
-    fn drop_empty_selection(&mut self) {
-        if self
-            .term
-            .selection
-            .as_ref()
-            .is_some_and(Selection::is_empty)
-        {
-            self.term.selection = None;
-        }
-    }
-
-    fn clear_selection(&mut self) {
-        self.term.selection = None;
-    }
-
-    fn selected_text(&self) -> Option<String> {
-        self.term
-            .selection_to_string()
-            .filter(|text| !text.is_empty())
-    }
-
-    fn bracketed_paste(&self) -> bool {
-        self.term.mode().contains(TermMode::BRACKETED_PASTE)
-    }
-
-    /// The screen as the view draws it: one entry per line, each a run per shared look.
-    fn lines(&self) -> Vec<ScreenLine> {
-        let content = self.term.renderable_content();
-        let cursor = content.cursor;
-        let selection = content.selection;
-        // The iterator counts history lines as negative; the view's rows start at the top of what
-        // is on screen, so the scroll offset moves one into the other.
-        let offset = content.display_offset as i32;
-        let show_cursor = content.mode.contains(TermMode::SHOW_CURSOR) && self.scrolled() == 0;
-        let mut lines: Vec<ScreenLine> = Vec::with_capacity(self.size.rows);
-        for _ in 0..self.size.rows {
-            lines.push(ScreenLine {
-                runs: Vec::new(),
-                cursor: None,
-            });
-        }
-        for indexed in content.display_iter {
-            let Ok(row) = usize::try_from(indexed.point.line.0 + offset) else {
-                continue;
-            };
-            let cell = indexed.cell;
-            let Some(line) = lines.get_mut(row) else {
-                continue;
-            };
-            let style = Style {
-                fg: cell.fg,
-                bg: cell.bg,
-                bold: cell.flags.contains(Flags::BOLD),
-                reverse: cell.flags.contains(Flags::INVERSE),
-                selected: selection.is_some_and(|range| range.contains(indexed.point)),
-            };
-            match line.runs.last_mut() {
-                Some(run) if run.style == style => run.text.push(cell.c),
-                _ => line.runs.push(Run {
-                    style,
-                    text: cell.c.to_string(),
-                }),
-            }
-        }
-        // A screen is full of cells a program never wrote, and a run of them is a text element
-        // that draws nothing. Blank cells with the terminal's own background are dropped; a
-        // painted background is kept, because that is a bar or a highlight on screen.
-        for line in &mut lines {
-            while let Some(last) = line.runs.last() {
-                let blank = last.text.trim_end().is_empty()
-                    && last.style.bg == Color::Named(NamedColor::Background)
-                    && !last.style.reverse
-                    && !last.style.selected;
-                if !blank {
-                    break;
-                }
-                line.runs.pop();
-            }
-            if let Some(last) = line.runs.last_mut() {
-                if last.style.bg == Color::Named(NamedColor::Background)
-                    && !last.style.reverse
-                    && !last.style.selected
-                {
-                    let trimmed = last.text.trim_end().len();
-                    last.text.truncate(trimmed);
-                }
-            }
-            line.runs.retain(|run| !run.text.is_empty());
-        }
-        if show_cursor {
-            let row = (cursor.point.line.0 + offset).max(0) as usize;
-            if let Some(line) = lines.get_mut(row) {
-                line.cursor = Some(cursor.point.column.0);
-            }
-        }
-        lines
-    }
-}
-
-/// One drawn line.
-struct ScreenLine {
-    runs: Vec<Run>,
-    /// The column the cursor sits at, when it sits on this line.
-    cursor: Option<usize>,
-}
-
-/// Cells that share a look. A wide character's second cell is a space in the run, so every
-/// character is one cell and the run's length is its width.
-struct Run {
-    style: Style,
-    text: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Style {
-    fg: Color,
-    bg: Color,
-    bold: bool,
-    /// Foreground and background swapped: a program's reverse video.
-    reverse: bool,
-    selected: bool,
-}
-
-impl Style {
-    /// The background (absent means the grid's own) and foreground, as `0xRRGGBB`.
-    fn tones(&self, scheme: &TerminalScheme) -> (Option<u32>, u32) {
-        let bg = tone_of(self.bg, scheme);
-        let fg = tone_of(self.fg, scheme).unwrap_or(scheme.foreground);
-        let (bg, fg) = if self.reverse {
-            (Some(fg), bg.unwrap_or(scheme.background))
-        } else {
-            (bg, fg)
-        };
-        if self.selected {
-            (Some(scheme.selection), fg)
-        } else {
-            (bg, fg)
-        }
-    }
-}
-
-/// A colour as `0xRRGGBB`, or `None` for the terminal's own background, which the grid draws.
-fn tone_of(colour: Color, scheme: &TerminalScheme) -> Option<u32> {
-    match colour {
-        Color::Spec(rgb) => Some(hex(rgb.r, rgb.g, rgb.b)),
-        Color::Indexed(index) => Some(ansi_256(index, scheme)),
-        Color::Named(NamedColor::Background) => None,
-        Color::Named(NamedColor::Cursor) => Some(scheme.cursor),
-        Color::Named(
-            NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground,
-        ) => Some(scheme.foreground),
-        Color::Named(named) => Some(scheme.ansi[named_index(named) as usize]),
-    }
-}
-
-fn hex(r: u8, g: u8, b: u8) -> u32 {
-    (r as u32) << 16 | (g as u32) << 8 | b as u32
-}
-
-/// The xterm 256-colour palette: the scheme's sixteen tones, then a 6×6×6 cube, then 24 greys.
-fn ansi_256(index: u8, scheme: &TerminalScheme) -> u32 {
-    match index {
-        0..=15 => scheme.ansi[index as usize],
-        16..=231 => {
-            let cube = index - 16;
-            let level = |value: u8| if value == 0 { 0 } else { 55 + value * 40 };
-            hex(level(cube / 36), level((cube % 36) / 6), level(cube % 6))
-        }
-        _ => {
-            let grey = 8 + (index - 232) * 10;
-            hex(grey, grey, grey)
-        }
-    }
-}
-
-/// The ANSI slot a named colour has.
-fn named_index(named: NamedColor) -> u8 {
-    match named {
-        NamedColor::Black => 0,
-        NamedColor::Red => 1,
-        NamedColor::Green => 2,
-        NamedColor::Yellow => 3,
-        NamedColor::Blue => 4,
-        NamedColor::Magenta => 5,
-        NamedColor::Cyan => 6,
-        NamedColor::White => 7,
-        NamedColor::BrightBlack | NamedColor::DimBlack => 8,
-        NamedColor::BrightRed | NamedColor::DimRed => 9,
-        NamedColor::BrightGreen | NamedColor::DimGreen => 10,
-        NamedColor::BrightYellow | NamedColor::DimYellow => 11,
-        NamedColor::BrightBlue | NamedColor::DimBlue => 12,
-        NamedColor::BrightMagenta | NamedColor::DimMagenta => 13,
-        NamedColor::BrightCyan | NamedColor::DimCyan => 14,
-        NamedColor::BrightWhite | NamedColor::DimWhite => 15,
-        _ => 7,
-    }
-}
-
-/// One stretch of a line in one look, at the column it starts: what the grid paints.
-#[derive(Debug, PartialEq, Eq)]
-struct Span {
-    column: usize,
-    text: String,
-    bg: Option<u32>,
-    fg: u32,
-    bold: bool,
-}
-
-/// A line as spans. The cursor splits the run it sits in and draws its cell inverted, which is
-/// what every terminal does; a cursor past the end of the text gets a cell of its own.
-fn spans(line: ScreenLine, scheme: &TerminalScheme) -> Vec<Span> {
-    let mut spans = Vec::new();
-    let mut column = 0;
-    let cursor = line.cursor;
-    for run in line.runs {
-        let (bg, fg) = run.style.tones(scheme);
-        let characters: Vec<char> = run.text.chars().collect();
-        let end = column + characters.len();
-        let mut push = |from: usize, to: usize, bg: Option<u32>, fg: u32| {
-            if from < to {
-                spans.push(Span {
-                    column: column + from,
-                    text: characters[from..to].iter().collect(),
-                    bg,
-                    fg,
-                    bold: run.style.bold,
-                });
-            }
-        };
-        match cursor {
-            Some(at) if at >= column && at < end => {
-                let offset = at - column;
-                push(0, offset, bg, fg);
-                push(
-                    offset,
-                    offset + 1,
-                    Some(scheme.cursor),
-                    bg.unwrap_or(scheme.background),
-                );
-                push(offset + 1, characters.len(), bg, fg);
-            }
-            _ => push(0, characters.len(), bg, fg),
-        }
-        column = end;
-    }
-    if let Some(at) = cursor.filter(|at| *at >= column) {
-        spans.push(Span {
-            column: at,
-            text: " ".to_owned(),
-            bg: Some(scheme.cursor),
-            fg: scheme.background,
-            bold: false,
-        });
-    }
-    spans
-}
-
-/// The font the grid draws in, and the cell it measures.
-#[derive(Clone)]
-struct Metrics {
-    family: SharedString,
-    size: Pixels,
-    line: Pixels,
-}
-
-/// Paints the grid: one quad per painted background and one shaped line per row. The text system
-/// places every glyph on the cell's advance (`force_width`), so an icon from a fallback font or a
-/// wide character keeps the columns after it where they belong.
-fn paint_grid(
-    bounds: Bounds<Pixels>,
-    rows: Vec<Vec<Span>>,
-    metrics: &Metrics,
-    cell: Pixels,
-    window: &mut Window,
-    cx: &mut gpui::App,
-) {
-    let regular = font(metrics.family.clone());
-    let bold = Font {
-        weight: FontWeight::BOLD,
-        ..regular.clone()
-    };
-    window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        for (row, spans) in rows.into_iter().enumerate() {
-            let y = bounds.origin.y + metrics.line * row as f32;
-            let mut text = String::new();
-            let mut runs = Vec::with_capacity(spans.len());
-            let mut column = 0;
-            for span in &spans {
-                let width = span.text.chars().count();
-                if let Some(bg) = span.bg {
-                    let origin = point(bounds.origin.x + cell * span.column as f32, y);
-                    let size = gpui::size(cell * width as f32, metrics.line);
-                    window.paint_quad(fill(Bounds::new(origin, size), rgb(bg)));
-                }
-                // Spans are contiguous from column 0 except the cursor's own cell past the end,
-                // which the gap before it is padded to.
-                if span.column > column {
-                    let gap = " ".repeat(span.column - column);
-                    runs.push(text_run(gap.len(), &regular, span.fg));
-                    text.push_str(&gap);
-                }
-                runs.push(text_run(
-                    span.text.len(),
-                    if span.bold { &bold } else { &regular },
-                    span.fg,
-                ));
-                text.push_str(&span.text);
-                column = span.column + width;
-            }
-            if text.trim().is_empty() {
-                continue;
-            }
-            let shaped = window.text_system().shape_line(
-                SharedString::from(text),
-                metrics.size,
-                &runs,
-                Some(cell),
-            );
-            let _ = shaped.paint(
-                point(bounds.origin.x, y),
-                metrics.line,
-                TextAlign::Left,
-                None,
-                window,
-                cx,
-            );
-        }
-    });
-}
-
-fn text_run(len: usize, font: &Font, fg: u32) -> TextRun {
-    TextRun {
-        len,
-        font: font.clone(),
-        color: rgb(fg).into(),
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-    }
-}
-
-/// What a paste sends. Line breaks become Return, which is what a typed newline is. A program that
-/// turned on bracketed paste gets the text between the markers, minus any end marker inside it, so
-/// pasted text cannot end the paste early and run as typed commands.
-fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
-    let text = text.replace("\r\n", "\r").replace('\n', "\r");
-    if bracketed {
-        let inner = text.replace("\x1b[201~", "");
-        format!("\x1b[200~{inner}\x1b[201~").into_bytes()
-    } else {
-        text.into_bytes()
-    }
-}
-
-/// The bytes a keystroke sends to a pty.
-///
-/// `None` means the view keeps the key: a `⌘`-combination belongs to the window (copy, close), and
-/// a terminal that swallowed it would make the app unusable around it.
-pub fn key_bytes(keystroke: &Keystroke) -> Option<Vec<u8>> {
-    let key = keystroke.key.as_str();
-    if keystroke.modifiers.platform {
-        return None;
-    }
-    if keystroke.modifiers.control {
-        if let Some(bytes) = control_bytes(key) {
-            return Some(bytes);
-        }
-    }
-    if keystroke.modifiers.alt {
-        // Option is Meta: ESC then the character, which is how readline binds a word.
-        let mut bytes = vec![0x1b];
-        bytes.extend_from_slice(&plain_bytes(key, keystroke.key_char.as_deref())?);
-        return Some(bytes);
-    }
-    match key {
-        "enter" => Some(b"\r".to_vec()),
-        "tab" => Some(b"\t".to_vec()),
-        "backspace" => Some(vec![0x7f]),
-        "escape" => Some(vec![0x1b]),
-        "delete" => Some(b"\x1b[3~".to_vec()),
-        "up" => Some(b"\x1b[A".to_vec()),
-        "down" => Some(b"\x1b[B".to_vec()),
-        "right" => Some(b"\x1b[C".to_vec()),
-        "left" => Some(b"\x1b[D".to_vec()),
-        "home" => Some(b"\x1b[H".to_vec()),
-        "end" => Some(b"\x1b[F".to_vec()),
-        "pageup" => Some(b"\x1b[5~".to_vec()),
-        "pagedown" => Some(b"\x1b[6~".to_vec()),
-        "insert" => Some(b"\x1b[2~".to_vec()),
-        "space" => Some(b" ".to_vec()),
-        _ => plain_bytes(key, keystroke.key_char.as_deref()),
-    }
-}
-
-/// The character a key typed, or the key's own name when the layout has no character for it.
-fn plain_bytes(key: &str, key_char: Option<&str>) -> Option<Vec<u8>> {
-    let typed = key_char
-        .filter(|character| !character.is_empty())
-        .unwrap_or(key);
-    if typed.is_empty() || typed.chars().count() > 1 {
-        return None;
-    }
-    Some(typed.as_bytes().to_vec())
-}
-
-/// `Ctrl` plus a key, as the single byte a shell receives for it.
-fn control_bytes(key: &str) -> Option<Vec<u8>> {
-    if key.len() == 1 {
-        let byte = key.as_bytes()[0];
-        if byte.is_ascii_lowercase() {
-            return Some(vec![byte - b'a' + 1]);
-        }
-        if byte.is_ascii_uppercase() {
-            return Some(vec![byte - b'A' + 1]);
-        }
-    }
-    let byte = match key {
-        "@" | "space" => 0x00,
-        "[" => 0x1b,
-        "\\" => 0x1c,
-        "]" => 0x1d,
-        "^" => 0x1e,
-        "_" => 0x1f,
-        "?" => 0x7f,
-        _ => return None,
-    };
-    Some(vec![byte])
-}
+/// How long the grid's size holds still before the pty is told it.
+const RESIZE_SETTLE: Duration = Duration::from_millis(150);
+/// How far a trackpad pinch travels before it steps the font size once.
+const PINCH_STEP: f32 = 0.15;
+/// What a request says when the runtime dropped it before the Mac answered.
+pub const UNANSWERED: &str = "The Mac did not answer.";
 
 /// What the view tells its owner. A tap on the grid of a touch view asks for the software
 /// keyboard, which belongs to the platform and not to this crate.
@@ -659,15 +62,6 @@ pub enum TerminalEvent {
     /// Appearance setting, so the host applies and saves it.
     Zoom(i32),
 }
-
-/// How long the grid's size holds still before the pty is told it.
-const RESIZE_SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
-
-/// How far a trackpad pinch travels before it steps the font size once.
-const PINCH_STEP: f32 = 0.15;
-
-/// What a request says when the runtime dropped it before the Mac answered.
-const UNANSWERED: &str = "The Mac did not answer.";
 
 /// One terminal: the peer's row, the grid it is drawn from, and where the reader has read to.
 pub struct TerminalView {
@@ -738,11 +132,11 @@ impl TerminalView {
                 px(DEFAULT_FONT_SIZE * 0.6),
                 px(DEFAULT_FONT_SIZE * LINE_HEIGHT),
             ),
-            metrics: Metrics {
-                family: SharedString::from("Menlo"),
-                size: px(DEFAULT_FONT_SIZE),
-                line: px(DEFAULT_FONT_SIZE * LINE_HEIGHT),
-            },
+            metrics: Metrics::new(
+                SharedString::from("Menlo"),
+                px(DEFAULT_FONT_SIZE),
+                px(DEFAULT_FONT_SIZE * LINE_HEIGHT),
+            ),
             font_choice: None,
             selecting: false,
             pinch: 0.,
@@ -763,11 +157,11 @@ impl TerminalView {
         let families = TerminalFont::families(cx);
         let theme_mono = cx.theme().mono_font_family.clone();
         let size = px(size as f32);
-        self.metrics = Metrics {
-            family: font.resolve(families, &theme_mono).into(),
+        self.metrics = Metrics::new(
+            font.resolve(families, &theme_mono).into(),
             size,
-            line: size * LINE_HEIGHT,
-        };
+            size * LINE_HEIGHT,
+        );
     }
 
     /// The same view for a touch screen.
@@ -1304,7 +698,7 @@ impl Render for TerminalView {
                                     // the glyphs do. The pty is resized to what fits.
                                     let font_id = window
                                         .text_system()
-                                        .resolve_font(&font(metrics.family.clone()));
+                                        .resolve_font(&gpui::font(metrics.family.clone()));
                                     let cell = window
                                         .text_system()
                                         .advance(font_id, metrics.size, 'm')
@@ -1339,6 +733,8 @@ impl Render for TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alacritty_terminal::grid::Dimensions;
+    use alacritty_terminal::vte::ansi::{Color, NamedColor};
     use gpui::Modifiers;
 
     fn typed(key: &str, key_char: Option<&str>) -> Option<Vec<u8>> {

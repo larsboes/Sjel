@@ -33,6 +33,7 @@ sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }
+punctuality-api = { path = "../punctuality-api" }
 route-manifest = { path = "../route-manifest" }
 # arrow-rs (upstreams.toml [arrow-rs]) -- the parquet reader. Pure Rust, which is the
 # reason it is here rather than an embedded database: see

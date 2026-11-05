@@ -14,85 +14,28 @@ use crate::travel::{
     ArrivalPunctuality, Journey, JourneyReliability, Leg, SplitResult, Station,
     TransferReliability, UnscoredLeg,
 };
-use serde::{Deserialize, Serialize};
+pub use punctuality_api::{LookupBody, StopQuery, StopStats, DEFAULT_PUNCTUALITY_PORT};
+use serde::Deserialize;
 
 /// Where punctuality-server listens.
-///
-/// The literal mirrors `capabilities/punctuality/service.toml`'s `port`, which is one
-/// duplication more than CONTRIBUTING.md#dynamic-paths-and-current-facts likes. It is here rather than hidden because the honest
-/// fix is a spine mechanism — service-runner.sh exporting a declared `requires =`
-/// sibling's port the way it already exports `SJEL_PORT` for the capability itself — and
-/// building that for a single consumer would be inventing a convention from one example.
-/// The second capability that needs a sibling's URL is when that gets built.
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:8085";
 
 pub fn base_url() -> String {
     sjel_config::env_var("SJEL_PUNCTUALITY_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct StopQuery {
-    eva: String,
-    train_type: String,
-    hour: u8,
-    weekend: bool,
-    /// The exceedance threshold to answer at. Omitted, the reply carries the
-    /// six-minute figure it always did; set, it answers the question this
-    /// particular transfer actually poses.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    at_least_minutes: Option<i32>,
-}
-
-#[derive(Debug, Serialize)]
-struct LookupBody {
-    stops: Vec<StopQuery>,
-}
-
-/// Punctuality's cell, in full.
-///
-/// This used to declare `share_late_6` alone, so six of the seven fields the
-/// endpoint returns were discarded at deserialization -- `n` among them, which is
-/// what tells a measurement over four thousand observations from one over thirty-one.
-#[derive(Debug, Deserialize)]
-struct StopStats {
-    station_name: Option<String>,
-    train_type: String,
-    hour: i16,
-    #[serde(default)]
-    weekend: bool,
-    n: i64,
-    mean_delay: f32,
-    p50: i16,
-    p90: i16,
-    /// Share of this train type's stops at this station in this hour that were at least
-    /// six minutes off schedule. Six is DB's own punctuality threshold.
-    share_late_6: f32,
-    cancel_rate: f32,
-    /// The exceedance at the threshold this query asked for.
-    ///
-    /// Punctuality's three states survive the round trip and mean different
-    /// things. Absent: nobody asked. Explicit `null`: asked, and the row predates
-    /// the stored histogram, so it cannot be answered. A number: answered.
-    /// Flattening the middle case into absence would let a caller read silence as
-    /// zero risk, which is the whole failure the endpoint's own comment names.
-    #[serde(default)]
-    share_delay_at_least: Option<Option<f64>>,
-}
-
-impl From<StopStats> for ArrivalPunctuality {
-    fn from(s: StopStats) -> Self {
-        Self {
-            station_name: s.station_name,
-            train_type: s.train_type,
-            hour: s.hour,
-            weekend: s.weekend,
-            n: s.n,
-            mean_delay: s.mean_delay,
-            p50: s.p50,
-            p90: s.p90,
-            share_late_6: s.share_late_6,
-            cancel_rate: s.cancel_rate,
-        }
+fn to_arrival_punctuality(s: StopStats) -> ArrivalPunctuality {
+    ArrivalPunctuality {
+        station_name: s.station_name,
+        train_type: s.train_type,
+        hour: s.hour,
+        weekend: s.weekend,
+        n: s.n,
+        mean_delay: s.mean_delay,
+        p50: s.p50,
+        p90: s.p90,
+        share_late_6: s.share_late_6,
+        cancel_rate: s.cancel_rate,
     }
 }
 
@@ -425,7 +368,7 @@ pub fn enrich(journeys: &mut [Journey]) {
                 // reads, and the cell it came from for the ones that want the sample
                 // size with it.
                 journeys[i].delay_risk_score = Some(stat.share_late_6 as f64);
-                journeys[i].arrival_punctuality = Some(stat.into());
+                journeys[i].arrival_punctuality = Some(to_arrival_punctuality(stat));
             }
             Want::LegArrival { journey, leg } => {
                 if let Some(l) = journeys[journey].legs.get_mut(leg) {

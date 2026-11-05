@@ -16,7 +16,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tower_http::cors::CorsLayer;
 
@@ -56,98 +56,35 @@ async fn routes() -> Json<Value> {
     Json(route_manifest::manifest("punctuality", ROUTES))
 }
 
-#[derive(Debug, Deserialize)]
-struct StopQuery {
-    eva: String,
-    train_type: String,
-    hour: u8,
-    #[serde(default)]
-    weekend: bool,
-    /// Ask for the share of trains at least this many minutes late. Optional:
-    /// omitted, the reply carries the six-minute figure it always did.
-    ///
-    /// Six minutes was never a considered threshold, it was the one that got its
-    /// own column. A transfer with a four-minute buffer and one with a twelve-
-    /// minute buffer are different questions, and until now neither could be
-    /// asked.
-    at_least_minutes: Option<i32>,
-}
+pub use punctuality_api::{LookupBody, StopQuery, StopStats, MIN_SAMPLE};
 
-#[derive(Debug, Deserialize)]
-struct LookupBody {
-    stops: Vec<StopQuery>,
-}
-
-/// What one stop's history says. `null` in the response array where nothing is known —
-/// distinct from a zero-risk answer, which is why this is an Option at the array level
-/// and not a row of zeroes.
-#[derive(Debug, Serialize)]
-struct StopStats {
-    eva: String,
-    station_name: Option<String>,
-    train_type: String,
-    hour: i16,
-    weekend: bool,
-    n: i64,
-    mean_delay: f32,
-    p50: i16,
-    p90: i16,
-    share_late_6: f32,
-    cancel_rate: f32,
-    /// The exceedance at the requested threshold.
-    ///
-    /// Three states, and they are different answers. Absent: nobody asked.
-    /// Explicit `null`: asked, and this row predates the stored histogram, so the
-    /// question cannot be answered from it. A number: answered. Collapsing the
-    /// middle case into absence would let a caller that asked read the silence as
-    /// zero risk, which is the failure this endpoint exists to avoid.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    share_delay_at_least: Option<Option<f64>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    at_least_minutes: Option<i32>,
-}
-
-impl From<StatRow> for StopStats {
-    fn from(r: StatRow) -> Self {
-        Self {
-            eva: r.eva,
-            station_name: r.station_name,
-            train_type: r.train_type,
-            hour: r.hour,
-            weekend: r.weekend,
-            n: r.n,
-            mean_delay: r.mean_delay,
-            p50: r.p50,
-            p90: r.p90,
-            share_late_6: r.share_late_6,
-            cancel_rate: r.cancel_rate,
-            share_delay_at_least: None,
-            at_least_minutes: None,
-        }
+fn from_stat_row(r: &StatRow) -> StopStats {
+    StopStats {
+        eva: r.eva.clone(),
+        station_name: r.station_name.clone(),
+        train_type: r.train_type.clone(),
+        hour: r.hour,
+        weekend: r.weekend,
+        n: r.n,
+        mean_delay: r.mean_delay,
+        p50: r.p50,
+        p90: r.p90,
+        share_late_6: r.share_late_6,
+        cancel_rate: r.cancel_rate,
+        share_delay_at_least: None,
+        at_least_minutes: None,
     }
 }
 
-impl StopStats {
-    /// Answers the caller's own threshold from the stored histogram.
-    fn with_threshold(mut self, row: &StatRow, minutes: Option<i32>) -> Self {
-        let Some(minutes) = minutes else { return self };
-        self.at_least_minutes = Some(minutes);
-        // Still an inner option, and still the same three wire states. Whether a
-        // histogram can answer an arbitrary threshold is
-        // `share_at_least_from_counts`'s verdict -- it refuses an array of the wrong
-        // length -- rather than a nullable column's.
-        self.share_delay_at_least = Some(punctuality::stats::Cell::share_at_least_from_counts(
-            &row.counts,
-            minutes,
-        ));
-        self
-    }
+fn with_threshold(mut stats: StopStats, row: &StatRow, minutes: Option<i32>) -> StopStats {
+    let Some(minutes) = minutes else { return stats };
+    stats.at_least_minutes = Some(minutes);
+    stats.share_delay_at_least = Some(punctuality::stats::Cell::share_at_least_from_counts(
+        &row.counts,
+        minutes,
+    ));
+    stats
 }
-
-/// Cells thinner than this are reported as unknown rather than as a statistic. A 100%
-/// late rate over four observations is noise wearing a percentage sign, and a consumer
-/// cannot tell the difference once it is a float in a JSON field.
-const MIN_SAMPLE: i64 = 30;
 
 #[derive(Clone)]
 struct AppState {
@@ -208,7 +145,7 @@ async fn handle_lookup(State(state): State<AppState>, Json(body): Json<LookupBod
                     .stop_stats(&s.eva, &s.train_type, s.hour as i16, s.weekend, MIN_SAMPLE)
                     .map(|opt| {
                         opt.map(|row| {
-                            StopStats::from(row.clone()).with_threshold(&row, s.at_least_minutes)
+                            with_threshold(from_stat_row(&row), &row, s.at_least_minutes)
                         })
                     })
                     .map_err(|e| e.to_string())
@@ -244,8 +181,8 @@ async fn handle_station(State(state): State<AppState>, Query(p): Query<StationQu
             .station_stats(&eva, p.train_type.as_deref(), MIN_SAMPLE)
             .map_err(|e| e.to_string())?;
         Ok(json!(rows
-            .into_iter()
-            .map(StopStats::from)
+            .iter()
+            .map(from_stat_row)
             .collect::<Vec<_>>()))
     })
     .await

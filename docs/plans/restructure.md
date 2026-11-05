@@ -236,6 +236,9 @@ their open edits.
    Done for `traveler`: `crates/traveler-api` (`traveler-api`) extracts pure wire models,
    profile constraints, ranking weights, paces, anchors, derived baseline projections,
    TELOS proposals, and route constants shared with `sjel-traveler` and `sjel-trips`.
+   Done for `punctuality`: `crates/punctuality-api` (`punctuality-api`) extracts pure wire models,
+   lookup queries, batch requests/responses, stop statistics, station results, coverage info,
+   normalization routines, and route constants shared with `sjel-punctuality` and `sjel-transit`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

@@ -1,0 +1,16 @@
+[package]
+name = "punctuality-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure wire models, stop queries, delay histograms, and contracts for Sjel rail punctuality."
+publish = false
+
+[dependencies]
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

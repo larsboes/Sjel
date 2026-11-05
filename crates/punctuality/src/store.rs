@@ -53,14 +53,7 @@ pub struct IngestedMonth {
 const STAT_COLUMNS: &str = "s.eva, st.station_name, s.train_type, s.hour, s.weekend, s.n, \
      s.canceled, s.mean_delay, s.p50, s.p90, s.share_late_6, s.cancel_rate, s.sum_delay, s.counts";
 
-/// The dataset writes EVA numbers zero-padded to eight digits (`08000044`); HAFAS, and
-/// therefore `capabilities/transit`, returns them unpadded (`8000044`). Joining the two
-/// without this returns zero rows and looks exactly like "we have no data for that
-/// station" — which is how it presented the first time.
-pub fn normalize_eva(eva: &str) -> String {
-    let digits = eva.trim_start_matches('0');
-    format!("{digits:0>8}")
-}
+pub use punctuality_api::normalize_eva;
 
 #[derive(Debug, Clone)]
 pub struct StatRow {

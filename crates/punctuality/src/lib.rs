@@ -17,3 +17,5 @@ pub mod ingest;
 pub mod ride;
 pub mod stats;
 pub mod store;
+
+pub use punctuality_api::*;

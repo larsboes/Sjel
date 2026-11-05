@@ -33,6 +33,7 @@ path = "src/server.rs"
 # connection pool are decided there, not at each call site (libs/sjel-http).
 sjel-http = { path = "../sjel-http" }
 transit-api = { path = "../transit-api" }
+punctuality-api = { path = "../punctuality-api" }
 sjel-config = { path = "../sjel-config" }
 # The shared shape of "what a reader got out of a file"
 # (CONTRIBUTING.md#schemas-and-dependency-direction). This capability is the second

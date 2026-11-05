@@ -426,6 +426,10 @@
       }
     },
     {
+      "name": "punctuality-api",
+      "kind": "lib"
+    },
+    {
       "name": "punctuality-ingest",
       "kind": "capability",
       "service": {
@@ -2083,6 +2087,16 @@
     },
     {
       "from": "punctuality",
+      "to": "punctuality-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/punctuality/Cargo.toml"
+      ]
+    },
+    {
+      "from": "punctuality",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -2743,6 +2757,16 @@
     },
     {
       "from": "transit",
+      "to": "punctuality-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/transit/Cargo.toml"
+      ]
+    },
+    {
+      "from": "transit",
       "to": "route-manifest",
       "kinds": [
         "cargo-dep"
@@ -2869,6 +2893,16 @@
       ],
       "evidence": [
         "crates/traveler/Cargo.toml"
+      ]
+    },
+    {
+      "from": "traveler-api",
+      "to": "transit-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/traveler-api/Cargo.toml"
       ]
     },
     {

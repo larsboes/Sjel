@@ -1,0 +1,132 @@
+#!/bin/bash
+# Unmount this machine's external volume, but only once no process holds a handle under it.
+#
+# Game libraries and app data reached through symlinks onto the volume keep handles open after
+# their app quits (a wineserver, a steamwebhelper). Pulling the volume then corrupts an install,
+# so the eject is gated on an empty holder list, and `diskutil eject` still decides.
+#
+# The volume name is a machine fact: [external_volume] name in machine.toml
+# (schemas/machine.toml.example).
+#
+# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+
+set -u
+
+usage() {
+  cat <<'EOF'
+eject — unmount the external volume, but only once nothing holds it
+
+usage: tools/eject [volume] [--check] [--quit] [--help]
+
+  volume    Volume name under /Volumes. Defaults to [external_volume] name
+            in this machine's machine.toml.
+  --check   Report holders and stop. Never unmounts.
+  --quit    Ask holding processes to terminate (SIGTERM), wait, then proceed.
+            Never escalates to SIGKILL: a killed game client writes a broken manifest.
+
+exit codes: 0 unmounted (or --check found nothing) · 1 holders remain · 2 misconfigured
+EOF
+}
+
+# Resolve a ~/.local/bin symlink to this file, so tools/lib is found from any caller.
+_self="$0"
+while [ -L "$_self" ]; do
+  _link="$(readlink "$_self")"
+  case "$_link" in
+    /*) _self="$_link" ;;
+    *) _self="$(dirname "$_self")/$_link" ;;
+  esac
+done
+_eject_lib="$(cd "$(dirname "$_self")/lib" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_eject_lib/paths.sh" || exit 2
+
+VOLUME_NAME=""
+MODE="eject"
+for arg in "$@"; do
+  case "$arg" in
+    --check) MODE="check" ;;
+    --quit) MODE="quit" ;;
+    --help | -h) usage; exit 0 ;;
+    -*) echo "eject: unknown flag '$arg'" >&2; usage >&2; exit 2 ;;
+    *) VOLUME_NAME="$arg" ;;
+  esac
+done
+
+if [ -z "$VOLUME_NAME" ]; then
+  VOLUME_NAME="$(toml_get_in external_volume name "${SJEL_MACHINE_TOML:-}")"
+fi
+if [ -z "$VOLUME_NAME" ]; then
+  echo "eject: no volume given and no [external_volume] name in ${SJEL_MACHINE_TOML:-machine.toml}" >&2
+  exit 2
+fi
+
+MOUNT="/Volumes/$VOLUME_NAME"
+if [ ! -d "$MOUNT" ]; then
+  echo "eject: $MOUNT is not mounted, nothing to do"
+  exit 0
+fi
+
+# Open handles under the mount as "<pid> <command>" lines, without this script's own pid.
+# `lsof +D` finds processes that hold a file; a `ps` scan for the path finds the wrong ones.
+holders() {
+  lsof -Fpc +D "$MOUNT" 2>/dev/null | awk -v self="$$" '
+    /^p/ { pid = substr($0, 2); next }
+    /^c/ { if (pid != self) print pid, substr($0, 2) }
+  ' | sort -u
+}
+
+report_holders() {
+  local found="$1"
+  if [ -z "$found" ]; then
+    echo "  no open handles"
+    return
+  fi
+  echo "$found" | awk '{print $2}' | sort | uniq -c | sort -rn |
+    while read -r n name; do printf "    %-24s %s process(es)\n" "$name" "$n"; done
+}
+
+FOUND="$(holders)"
+echo "eject: $MOUNT"
+report_holders "$FOUND"
+
+if [ "$MODE" = "quit" ] && [ -n "$FOUND" ]; then
+  echo "  asking them to quit (SIGTERM, no SIGKILL)"
+  echo "$FOUND" | awk '{print $1}' | sort -u | while read -r pid; do kill -TERM "$pid" 2>/dev/null; done
+  n=0
+  while [ "$n" -lt 15 ]; do
+    [ -z "$(holders)" ] && break
+    sleep 1
+    n=$((n + 1))
+  done
+  FOUND="$(holders)"
+  if [ -n "$FOUND" ]; then
+    echo "  still holding after ${n}s:"
+    report_holders "$FOUND"
+  else
+    echo "  all released"
+  fi
+fi
+
+if [ "$MODE" = "check" ]; then
+  [ -z "$FOUND" ] && { echo "  clear, safe to eject"; exit 0; }
+  exit 1
+fi
+
+if [ -n "$FOUND" ]; then
+  echo "eject: refusing to eject while processes hold $MOUNT" >&2
+  echo "  quit them, or re-run with --quit" >&2
+  exit 1
+fi
+
+# Never force: a forced unmount discards pending writes.
+if diskutil eject "$MOUNT" 2>&1; then
+  echo "eject: $VOLUME_NAME ejected, safe to unplug"
+  exit 0
+fi
+
+echo "eject: the holder check was clear but diskutil refused. Something opened a handle in" >&2
+echo "  between, or holds one lsof does not attribute. Re-checking:" >&2
+report_holders "$(holders)" >&2
+echo "  no force-unmount here: it discards pending writes." >&2
+exit 1

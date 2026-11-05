@@ -1,0 +1,6 @@
+# Scheduled `sjel-storage reclaim --scheduled` for crates/storage.
+kind     = "process"
+name     = "storage-reclaim"
+command  = ["target/release/sjel-storage", "reclaim", "--scheduled"]
+build    = ["cargo", "build", "--locked", "--release", "-p", "sjel-storage"]
+schedule = "6h"

@@ -94,8 +94,10 @@ install_git_hooks() {
 # replace an unrelated command: an existing non-symlink requires an explicit operator decision
 # instead of silently changing their PATH behavior.
 SJEL_BIN_DIR="$HOME/.local/bin"
-for cli in sjel; do
-  SJEL_BIN="$SJEL_BIN_DIR/$cli"
+# Each entry is <path in this checkout>:<command name>.
+for entry in sjel:sjel tools/eject:sjel-eject; do
+  cli="${entry%%:*}"
+  SJEL_BIN="$SJEL_BIN_DIR/${entry##*:}"
   if [ -L "$SJEL_BIN" ] && [ "$(readlink "$SJEL_BIN")" = "$SJEL_ROOT/$cli" ]; then
     echo "Sjel CLI: $SJEL_BIN already points at this checkout."
   elif [ -e "$SJEL_BIN" ] || [ -L "$SJEL_BIN" ]; then

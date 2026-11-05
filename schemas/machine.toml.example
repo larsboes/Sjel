@@ -160,6 +160,12 @@ capabilities = ["home-assistant", "vaultwarden"]
 # description = "Coding agents plus this machine's work Packs"
 # packs = ["coding", "harness", "security", "writing", "gitlab-pipeline"]
 
+# --- external volume (optional) ------------------------------------------
+# The removable volume `tools/eject` unmounts once no process holds a handle under it.
+#
+# [external_volume]
+# name = "Extreme"
+
 # --- state mounts (optional, repeatable) ---------------------------------
 # Where a tool on this machine actually persists data. Sjel records the tool's own default
 # location, it never relocates it (CONTRIBUTING.md#state-mounts-record-reality).

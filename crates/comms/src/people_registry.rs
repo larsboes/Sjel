@@ -67,6 +67,8 @@ struct Registry {
     all: Vec<String>,
     /// The operator's own single-word names (`self_tokens`), lowercase. Also in `single`.
     own: BTreeSet<String>,
+    /// Other people's full names (`full_names`), as [`phrase_text`] words.
+    full: Vec<String>,
     state: State,
 }
 
@@ -102,6 +104,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
             own: BTreeSet::new(),
+            full: Vec::new(),
             state: State::Absent,
         };
     };
@@ -110,6 +113,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
             own: BTreeSet::new(),
+            full: Vec::new(),
             state: State::Absent,
         };
     };
@@ -118,6 +122,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
             own: BTreeSet::new(),
+            full: Vec::new(),
             state: State::Unreadable,
         };
     };
@@ -126,6 +131,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
             own: BTreeSet::new(),
+            full: Vec::new(),
             state: State::Unreadable,
         };
     };
@@ -155,11 +161,21 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         .filter(|t| !t.contains(' '))
         .map(|t| t.to_ascii_lowercase())
         .collect();
+    let full: Vec<String> = value
+        .get("full_names")
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| t.as_str())
+        .map(phrase_text)
+        .filter(|name| name.contains(' '))
+        .collect();
     let n = single.len();
     Registry {
         single,
         all,
         own,
+        full,
         state: State::Loaded(n),
     }
 }
@@ -211,6 +227,29 @@ pub fn is_known_other_person(token: &str) -> bool {
     is_known_person(token) && !registry().own.contains(&normalized(token))
 }
 
+/// Whether a long text names another person by full name. A body is checked this way rather
+/// than word by word: one first name in a body also matches a street or a company's address.
+pub fn names_known_person_in_body(text: &str) -> bool {
+    names_in(&registry().full, text)
+}
+
+fn names_in(full: &[String], text: &str) -> bool {
+    if full.is_empty() {
+        return false;
+    }
+    let text = format!(" {} ", phrase_text(text));
+    full.iter().any(|name| text.contains(&format!(" {name} ")))
+}
+
+/// Lowercase words separated by one space; every other character is a separator.
+fn phrase_text(text: &str) -> String {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn normalized(token: &str) -> String {
     token
         .trim_matches(|c: char| !c.is_alphanumeric())
@@ -232,6 +271,18 @@ mod tests {
     }
 
     #[test]
+    fn a_body_names_someone_only_by_full_name() {
+        let r = load_json(
+            "full",
+            r#"{"tokens":["John","Miller"],"full_names":["John Miller","Solo"]}"#,
+        );
+        assert_eq!(r.full, ["john miller"], "a one-word entry is no full name");
+        assert!(!names_in(&r.full, "38 avenue John F. Kennedy, L-1855 Luxemburg"));
+        assert!(names_in(&r.full, "Ein Paket für\nJOHN  Miller, Bonn"));
+        assert!(!names_in(&r.full, "Johnny Millerson"));
+    }
+
+    #[test]
     fn the_operator_s_own_names_are_loaded_apart_and_stay_known() {
         let r = load_json(
             "self",
@@ -239,7 +290,9 @@ mod tests {
         );
         assert!(r.single.contains("max"), "redaction still matches it");
         assert_eq!(r.own.iter().collect::<Vec<_>>(), ["max", "muster"]);
-        assert!(load_json("no-self", r#"{"tokens":["Erika"]}"#).own.is_empty());
+        assert!(load_json("no-self", r#"{"tokens":["Erika"]}"#)
+            .own
+            .is_empty());
     }
 
     #[test]

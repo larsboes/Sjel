@@ -52,6 +52,21 @@ pub fn classify_mail(stream: &str, from: &str, subject: &str, snippet: &str) -> 
     )
 }
 
+/// [`classify_mail`] for a mail body: the same keyword rules, and the named-person rule by full
+/// name only (`people_registry::names_known_person_in_body`).
+pub fn classify_mail_body(stream: &str, from: &str, body: &str) -> DataClass {
+    let classification = DataClass::classify_mail(stream, from, body);
+    if classification.value != "c1" || !people_registry::names_known_person_in_body(body) {
+        return classification;
+    }
+    DataClass::new(
+        "c2",
+        KNOWN_PERSON_RATIONALE,
+        content_item::METHOD_DETERMINISTIC,
+        content_item::MAIL_CLASSIFIER_VERSION,
+    )
+}
+
 /// The registry is a parameter here because it is process-wide state loaded
 /// from the overlay: a test that wanted to pin this rule would otherwise be
 /// pinning whichever names the machine happens to hold.

@@ -151,9 +151,10 @@ fn message_class(
         .snippet
         .as_deref()
         .filter(|s| !s.trim().is_empty())?;
-    // Body text can name a person or carry a credential the metadata does not show.
+    // Body text can name a person or carry a credential the metadata does not show. A person
+    // counts by full name here; a first name alone also matches boilerplate.
     // The whole body is classified: a truncated prefix would hide a credential further down.
-    let body_classification = intake::classify_mail(stream, from, &message.text, "");
+    let body_classification = intake::classify_mail_body(stream, from, &message.text);
     let classification = intake::classify_mail(stream, from, subject, snippet);
     let rank = rank(thread_class)?
         .max(rank(&classification.value)?)

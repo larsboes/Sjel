@@ -64,6 +64,11 @@ pub struct Registry {
     /// another person.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub self_tokens: Vec<String>,
+    /// Each person's name of two words or more as written, before a qualifier or a bracket,
+    /// less the operator's. A long mail body matches these as phrases: one first name in a
+    /// body also matches a street or a company's legal address.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub full_names: Vec<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -92,6 +97,7 @@ pub fn build(people: &[(String, Vec<String>)]) -> Registry {
 pub fn build_with_places(people: &[(String, Vec<String>)], places: &BTreeSet<String>) -> Registry {
     let mut tokens = BTreeSet::new();
     let mut withheld = BTreeSet::new();
+    let mut full_names = BTreeSet::new();
     let mut registry = Registry::default();
     for (name, aliases) in people {
         if let Err(reason) = looks_like_a_person(name) {
@@ -118,6 +124,15 @@ pub fn build_with_places(people: &[(String, Vec<String>)], places: &BTreeSet<Str
             qualified |= QUALIFIERS.iter().any(|q| q.eq_ignore_ascii_case(word));
             in_brackets &= !word.ends_with(')');
         }
+        let full: Vec<&str> = name_tokens
+            .iter()
+            .filter(|w| !QUALIFIERS.iter().any(|q| q.eq_ignore_ascii_case(w)))
+            .map(|w| w.trim_matches(|ch: char| !ch.is_alphanumeric()))
+            .filter(|w| !w.is_empty())
+            .collect();
+        if full.len() >= 2 {
+            full_names.insert(full.join(" "));
+        }
         let candidates = name_tokens.into_iter().chain(aliases.iter().cloned());
         for candidate in candidates {
             let c = candidate
@@ -137,6 +152,7 @@ pub fn build_with_places(people: &[(String, Vec<String>)], places: &BTreeSet<Str
     }
     registry.tokens = tokens.into_iter().collect();
     registry.withheld = withheld.into_iter().collect();
+    registry.full_names = full_names.into_iter().collect();
     registry
 }
 
@@ -175,7 +191,11 @@ pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
         }
     }
     let mut registry = build_with_places(&people, &places);
-    registry.self_tokens = build_with_places(&own, &places).tokens;
+    let own = build_with_places(&own, &places);
+    registry.self_tokens = own.tokens;
+    registry
+        .full_names
+        .retain(|name| !own.full_names.contains(name));
     Ok(registry)
 }
 
@@ -199,6 +219,7 @@ mod tests {
             r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string())
         );
         assert!(!r.tokens.iter().any(|t| t == "Bonn"), "{:?}", r.tokens);
+        assert_eq!(r.full_names, ["Events Team Hamburg"], "a qualifier ends the name");
         assert!(r.withheld.contains(&"Bonn".to_string()));
         // A real name typed in lowercase still redacts: a leak costs more than a wrong match.
         assert!(r.tokens.contains(&"eliah".to_string()));
@@ -233,6 +254,7 @@ mod tests {
         store.create("person", "Erika Beispiel", None, &none, "operator").unwrap();
         let registry = from_store(&store).unwrap();
         assert_eq!(registry.self_tokens, ["Max", "Muster"]);
+        assert_eq!(registry.full_names, ["Erika Beispiel"], "the operator's is left out");
         assert!(registry.tokens.iter().any(|t| t == "Max"), "redaction keeps it");
         assert!(registry.tokens.iter().any(|t| t == "Erika"));
         let _ = std::fs::remove_dir_all(dir);

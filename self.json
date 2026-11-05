@@ -2725,6 +2725,16 @@
     },
     {
       "from": "status-api",
+      "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/status-api/Cargo.toml"
+      ]
+    },
+    {
+      "from": "status-api",
       "to": "setup-api",
       "kinds": [
         "cargo-dep"

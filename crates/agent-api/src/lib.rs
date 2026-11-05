@@ -310,7 +310,7 @@ pub struct Event {
 impl Event {
     /// Why a run stopped, when it stopped for a reason the operator has to read.
     pub fn failure(&self) -> Option<&str> {
-        (self.kind == "error").then(|| self.message.as_str())
+        (self.kind == "error").then_some(self.message.as_str())
     }
 
     /// True for the events that end a run's stream.
@@ -320,7 +320,8 @@ impl Event {
 
     /// A tool call the operator has to answer before it runs.
     pub fn needs_approval(&self) -> Option<&str> {
-        (self.kind == "needs_approval" && !self.approval.is_empty()).then(|| self.approval.as_str())
+        (self.kind == "needs_approval" && !self.approval.is_empty())
+            .then_some(self.approval.as_str())
     }
 }
 

@@ -1913,7 +1913,7 @@ pub fn coupled_names(model: &SelfModel) -> HashSet<String> {
     names
 }
 
-pub fn isolated_units<'a>(model: &'a SelfModel) -> Vec<&'a SelfUnit> {
+pub fn isolated_units(model: &SelfModel) -> Vec<&SelfUnit> {
     let coupled = coupled_names(model);
     model
         .units
@@ -1922,7 +1922,7 @@ pub fn isolated_units<'a>(model: &'a SelfModel) -> Vec<&'a SelfUnit> {
         .collect()
 }
 
-pub fn coupled_units<'a>(model: &'a SelfModel) -> Vec<&'a SelfUnit> {
+pub fn coupled_units(model: &SelfModel) -> Vec<&SelfUnit> {
     let coupled = coupled_names(model);
     model
         .units

@@ -134,7 +134,8 @@ pub fn from_thread(
     config_rules: &[rules::Rule],
     known: &mail_authenticity::KnownOrgs,
 ) -> Intake {
-    from_thread_against(meta, config_rules, known, people_registry::is_known_person)
+    // The same check `classify_mail` uses, so a sweep and a refresh land on one class.
+    from_thread_against(meta, config_rules, known, people_registry::is_known_other_person)
 }
 
 /// `from_thread` with the registry as a parameter, for the same reason

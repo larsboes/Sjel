@@ -9,6 +9,8 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
 
 use crate::shell::CalendarEntry;
 
+pub mod timeline;
+
 pub const DAY: &str = "%Y-%m-%d";
 const TIME: &str = "%Y-%m-%dT%H:%M:%S";
 

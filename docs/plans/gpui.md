@@ -104,13 +104,31 @@ action taken offline applies once on reconnect, and an attachment opens in the r
 
 ### Calendar
 
-1. A day view with a 24-hour time grid and a now line. The week view stays as it is.
+1. Day focus and week views use a 24-hour time axis, duration-sized events, overlap columns,
+   a now line, and a separate all-day strip. Shared placement rules live in `apps/gpui/core`.
 2. Long-press and drag moves an event in 15-minute steps. The write goes through the replica, the
    same path as the New form.
 3. A status mark shows the last successful Google and iCloud sync, and an error if one failed.
+4. Direct time editing includes resize, a keyboard-accessible edit action, and Undo. A selected
+   empty slot prefills its time. Compact agenda rows disclose location, notes and source on
+   selection; Mac details use an inspector and phone details use a sheet.
+5. Availability mode shows free gaps between commitments, with explicit tentative styling.
+   A gap can create an entry or start travel planning. Month overflow opens a day agenda, and
+   multi-day trips render as continuous spans. Decided 2026-11-05.
 
 Done when a moved event shows the new time on the Mac after the next sync, and the mark matches
-the Mac's last sync time.
+the Mac's last sync time. Calendar UX is done when overlap, overnight, all-day, dense-month,
+keyboard, drag, resize and Undo scenarios pass; Day focus and availability work on Mac and phone;
+and rendered views have been checked in both themes. Implemented, awaiting native acceptance:
+Day and Week placement, quarter-hour move and resize, time editing and Undo, compact details,
+availability-to-entry and desktop travel drafts, month overflow and all-day spans. Verified:
+13 core calendar tests, 7 calendar UI tests, desktop and iOS simulator type checks. The UI tests
+cover desktop drag and keyboard editing and a 375-point phone layout; replica tests cover queued
+move, resize and restoration. Open: sync-status mark, native gesture and sync acceptance, both
+themes, and scroll-cost measurement. The offscreen PNG example
+(`cargo run --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui --example calendar-preview -- /tmp/calendar.png week light`)
+compiled, but sandboxed AppKit pasteboard access failed before rendering. Native visual and
+device checks have not passed.
 
 ### Travel
 

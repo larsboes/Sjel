@@ -369,6 +369,7 @@ pub struct Workspace {
     music_page: Option<(Entity<Music>, Subscription)>,
     _inbox_events: Subscription,
     pub calendar_page: Option<Entity<CalendarPage>>,
+    _calendar_events: Subscription,
     pub context_page: Entity<ContextPage>,
     _context_events: Subscription,
     pub finance_page: Option<Entity<FinancePage>>,
@@ -463,6 +464,20 @@ impl Workspace {
         let inbox_events = cx.subscribe_in(&inbox, window, Self::on_inbox);
         let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
         let context_events = cx.subscribe_in(&context_page, window, Self::on_context);
+        let calendar_page = cx.new(|cx| CalendarPage::new(repo.clone(), cx));
+        let calendar_events = cx.subscribe_in(
+            &calendar_page,
+            window,
+            |workspace, _, intent: &sjel_gpui_ui::calendar::CalendarIntent, window, cx| match intent
+            {
+                sjel_gpui_ui::calendar::CalendarIntent::PlanTravel { day } => {
+                    workspace.go(Page::Travel, cx);
+                    workspace
+                        .travel
+                        .update(cx, |travel, cx| travel.plan_calendar_day(*day, window, cx));
+                }
+            },
+        );
         let appearance_settings = AppearanceSettings::load();
         let finder = {
             let (repo, ask) = (repo.clone(), ask.clone());
@@ -555,7 +570,8 @@ impl Workspace {
             inbox,
             music_page: None,
             _inbox_events: inbox_events,
-            calendar_page: None,
+            calendar_page: Some(calendar_page),
+            _calendar_events: calendar_events,
             context_page,
             _context_events: context_events,
             finance_page: None,

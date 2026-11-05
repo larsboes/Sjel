@@ -3,20 +3,21 @@ use chrono::{Duration, Local, Months, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FocusHandle, FontWeight, ScrollHandle,
     SharedString, Window,
 };
 use sjel_gpui_core::calendar::{
-    self, entries_on, kind_color, kind_label, time_label, Draft, COMMITMENTS, KINDS,
+    self, entries_on, kind_color, kind_label, time_label, COMMITMENTS, KINDS,
 };
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
 use crate::data::{Remote, Repo};
 use crate::primitives::{key_bar, tone_chip};
-use crate::theme::{tint, Density, Palette, ThemeContext};
+use crate::theme::{Density, Palette, ThemeContext};
 
+use super::types::CalendarIntent;
 use super::types::{muted, Form, View};
 
 pub use super::actions::bind_keys;
@@ -26,6 +27,10 @@ pub struct CalendarPage {
     palette: Option<Palette>,
     density: Density,
     pub view: View,
+    pub(super) show_availability: bool,
+    pub(super) changing_time: bool,
+    pub(super) drop_time: Option<(NaiveDate, u16)>,
+    pub(super) undo_time: Option<(CalendarEntry, CalendarEntry)>,
     /// The selected day; the grid shows its month or week.
     pub day: NaiveDate,
     pub entries: Remote<Vec<CalendarEntry>>,
@@ -41,9 +46,13 @@ pub struct CalendarPage {
     pub(super) form: Option<Form>,
     pub write_error: Option<ShellError>,
     side_scroll: ScrollHandle,
+    pub(super) timeline_scroll: ScrollHandle,
     focus: FocusHandle,
     focus_next: bool,
+    clock: Option<gpui::Task<()>>,
 }
+
+impl gpui::EventEmitter<CalendarIntent> for CalendarPage {}
 
 impl CalendarPage {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
@@ -51,11 +60,17 @@ impl CalendarPage {
     }
 
     pub fn with_density(repo: Repo, density: Density, cx: &mut Context<Self>) -> Self {
+        let timeline_scroll = ScrollHandle::new();
+        timeline_scroll.set_offset(gpui::point(px(0.), px(-8. * 48.)));
         Self {
             repo,
             palette: None,
             density,
             view: View::Month,
+            show_availability: false,
+            changing_time: false,
+            drop_time: None,
+            undo_time: None,
             day: Local::now().date_naive(),
             entries: Remote::default(),
             loaded: None,
@@ -69,8 +84,10 @@ impl CalendarPage {
             form: None,
             write_error: None,
             side_scroll: ScrollHandle::new(),
+            timeline_scroll,
             focus: cx.focus_handle(),
             focus_next: true,
+            clock: None,
         }
     }
 
@@ -109,6 +126,7 @@ impl CalendarPage {
 
     pub(super) fn dates(&self) -> Vec<NaiveDate> {
         match self.view {
+            View::Day => vec![self.day],
             View::Month => calendar::month_dates(self.day),
             View::Week => calendar::week_dates(self.day),
         }
@@ -168,6 +186,8 @@ impl CalendarPage {
 
     pub(super) fn shift_page(&mut self, forward: bool, cx: &mut Context<Self>) {
         let day = match (self.view, forward) {
+            (View::Day, true) => self.day.succ_opt(),
+            (View::Day, false) => self.day.pred_opt(),
             (View::Month, true) => self.day.checked_add_months(Months::new(1)),
             (View::Month, false) => self.day.checked_sub_months(Months::new(1)),
             (View::Week, true) => Some(self.day + Duration::days(7)),
@@ -192,9 +212,103 @@ impl CalendarPage {
             .unwrap_or_default()
     }
 
+    pub(super) fn change_time(
+        &mut self,
+        id: &str,
+        day: NaiveDate,
+        minute: u16,
+        resize: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(before) = self
+            .entries
+            .value
+            .as_ref()
+            .and_then(|entries| entries.iter().find(|entry| entry.id == id))
+            .cloned()
+        else {
+            return;
+        };
+        match calendar::timeline::reschedule(&before, day, minute, resize) {
+            Ok(after) => self.write_time(before, after, false, cx),
+            Err(error) => {
+                self.write_error = Some(ShellError::Refused(400, Some(error.into())));
+                cx.notify();
+            }
+        }
+    }
+
+    fn write_time(
+        &mut self,
+        before: CalendarEntry,
+        after: CalendarEntry,
+        undo: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.changing_time {
+            return;
+        }
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.write_error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
+        self.changing_time = true;
+        self.write_error = None;
+        let id = after.id.clone();
+        let body = serde_json::json!({"starts_at": after.starts_at, "ends_at": after.ends_at});
+        let expected = before.clone();
+        let work = shell::run(async move {
+            let current = shell.calendar_entry(&id).await?.entry;
+            if current.starts_at != expected.starts_at || current.ends_at != expected.ends_at {
+                return Err(ShellError::Refused(
+                    409,
+                    Some("This event's time changed. Refresh before editing it.".into()),
+                ));
+            }
+            shell.update_calendar_entry(&id, body).await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.changing_time = false;
+                match result {
+                    Ok(saved) => {
+                        page.undo_time = if undo {
+                            None
+                        } else {
+                            Some((before, saved.clone()))
+                        };
+                        if let Some(entries) = &mut page.entries.value {
+                            if let Some(entry) =
+                                entries.iter_mut().find(|entry| entry.id == saved.id)
+                            {
+                                *entry = saved;
+                            }
+                        }
+                        page.refresh(cx);
+                    }
+                    Err(error) => page.write_error = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+
+    pub(super) fn undo_time(&mut self, cx: &mut Context<Self>) {
+        if let Some((before, after)) = self.undo_time.clone() {
+            self.write_time(after, before, true, cx);
+        }
+    }
+
     pub(super) fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let field = |placeholder: &'static str,
-                     value: &'static str,
+                     value: &str,
                      window: &mut Window,
                      cx: &mut Context<Self>| {
             cx.new(|cx| {
@@ -206,7 +320,10 @@ impl CalendarPage {
         let title = field("Title", "", window, cx);
         let start = field("09:00", "09:00", window, cx);
         let end = field("10:00", "10:00", window, cx);
-        let subscriptions = [&title, &start, &end]
+        let date = self.day.format("%Y-%m-%d").to_string();
+        let start_date = field("Start date", &date, window, cx);
+        let end_date = field("End date", &date, window, cx);
+        let subscriptions = [&title, &start, &end, &start_date, &end_date]
             .into_iter()
             .map(|input| {
                 cx.subscribe_in(input, window, |view, _, event, _, cx| {
@@ -218,16 +335,93 @@ impl CalendarPage {
             .collect();
         title.update(cx, |input, cx| input.focus(window, cx));
         self.form = Some(Form {
+            editing: None,
             title,
+            start_date,
+            end_date,
             start,
             end,
             all_day: false,
-            kind: "event",
-            commitment: "planned",
+            kind: "event".into(),
+            commitment: "planned".into(),
             error: None,
             _subscriptions: subscriptions,
         });
         cx.notify();
+    }
+
+    pub(super) fn edit_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(entry) = self
+            .day_entries()
+            .into_iter()
+            .find(|entry| Some(&entry.id) == self.selected_entry.as_ref())
+        else {
+            return;
+        };
+        self.open_form(window, cx);
+        if let Some(form) = &mut self.form {
+            let end_date = calendar::parse_day(&entry.ends_at).and_then(|day| {
+                if entry.all_day {
+                    day.pred_opt()
+                } else {
+                    Some(day)
+                }
+            });
+            let fields = [
+                (&form.title, entry.title.clone()),
+                (
+                    &form.start_date,
+                    entry.starts_at.get(..10).unwrap_or("").to_owned(),
+                ),
+                (
+                    &form.end_date,
+                    end_date
+                        .map(|day| day.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default(),
+                ),
+                (
+                    &form.start,
+                    entry.starts_at.get(11..16).unwrap_or("09:00").to_owned(),
+                ),
+                (
+                    &form.end,
+                    entry.ends_at.get(11..16).unwrap_or("10:00").to_owned(),
+                ),
+            ];
+            for (input, value) in fields {
+                input.update(cx, |input, cx| input.set_value(value, window, cx));
+            }
+            form.kind = entry.kind.clone();
+            form.commitment = entry.commitment.clone();
+            form.all_day = entry.all_day;
+            form.editing = Some(entry);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn open_form_at(
+        &mut self,
+        minute: u32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_form(window, cx);
+        if let Some(form) = &self.form {
+            let start = format!("{:02}:{:02}", minute / 60, minute % 60);
+            let end = (minute + 60) % 1440;
+            let end = format!("{:02}:{:02}", end / 60, end % 60);
+            form.start
+                .update(cx, |input, cx| input.set_value(start, window, cx));
+            form.end
+                .update(cx, |input, cx| input.set_value(end, window, cx));
+            if minute >= 1380 {
+                let next = (self.day + Duration::days(1))
+                    .format("%Y-%m-%d")
+                    .to_string();
+                form.end_date
+                    .update(cx, |input, cx| input.set_value(next, window, cx));
+            }
+        }
     }
 
     pub(super) fn close_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -237,19 +431,32 @@ impl CalendarPage {
     }
 
     pub(super) fn save(&mut self, cx: &mut Context<Self>) {
+        if self.changing_time {
+            return;
+        }
         let Some(form) = self.form.as_mut() else {
             return;
         };
-        let draft = Draft {
-            title: form.title.read(cx).value().to_string(),
-            day: self.day,
-            start: form.start.read(cx).value().to_string(),
-            end: form.end.read(cx).value().to_string(),
+        let original = form.editing.clone();
+        let draft = calendar::EntryEdit {
+            title: &form.title.read(cx).value(),
+            start_date: &form.start_date.read(cx).value(),
+            end_date: &form.end_date.read(cx).value(),
+            start_time: &form.start.read(cx).value(),
+            end_time: &form.end.read(cx).value(),
             all_day: form.all_day,
-            kind: form.kind.to_owned(),
-            commitment: form.commitment.to_owned(),
+            kind: &form.kind,
+            commitment: &form.commitment,
+            location: original
+                .as_ref()
+                .and_then(|entry| entry.location.as_deref())
+                .unwrap_or(""),
+            notes: original
+                .as_ref()
+                .and_then(|entry| entry.notes.as_deref())
+                .unwrap_or(""),
         };
-        let body = match draft.body() {
+        let body = match calendar::entry_edit_patch(&draft) {
             Ok(body) => body,
             Err(reason) => {
                 form.error = Some(reason);
@@ -257,14 +464,32 @@ impl CalendarPage {
                 return;
             }
         };
-        let Ok(shell) = self.repo.shell() else { return };
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.write_error = Some(error);
+                cx.notify();
+                return;
+            }
+        };
         self.write_error = None;
-        let work = shell::run(async move { shell.create_calendar_entry(body).await });
+        self.changing_time = true;
+        let previous = original.clone();
+        let work = shell::run(async move {
+            match original {
+                Some(entry) => shell.update_calendar_entry(&entry.id, body).await,
+                None => shell.create_calendar_entry(body).await,
+            }
+        });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
+                view.changing_time = false;
                 match result {
                     Ok(entry) => {
+                        if let Some(before) = previous {
+                            view.undo_time = Some((before, entry.clone()));
+                        }
                         view.form = None;
                         view.focus_next = true;
                         view.selected_entry = Some(entry.id);
@@ -304,6 +529,7 @@ impl CalendarPage {
         let is_today = self.day == Local::now().date_naive();
         let header = div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
             .child(
@@ -341,6 +567,44 @@ impl CalendarPage {
             );
 
         let mut panel = div().flex().flex_col().gap_3().child(header);
+        if self.selected_entry.is_some() {
+            panel = panel.child(
+                Button::new("calendar-edit-selected")
+                    .small()
+                    .ghost()
+                    .label("Edit entry · Enter")
+                    .disabled(self.changing_time)
+                    .on_click(cx.listener(|page, _, window, cx| page.edit_selected(window, cx))),
+            );
+        }
+        if self.view == View::Day && self.entries.error.is_none() && !self.entries.loading {
+            let all = self.entries.value.as_deref().unwrap_or_default();
+            let now = Local::now();
+            let next = calendar::timeline::blocks(all, self.day)
+                .into_iter()
+                .find(|block| {
+                    !is_today
+                        || block.end as u32
+                            > chrono::Timelike::hour(&now) * 60 + chrono::Timelike::minute(&now)
+                });
+            if let Some(block) = next {
+                panel = panel.child(div().text_sm().child(format!(
+                    "{} · {}",
+                    if is_today {
+                        "Up next / now"
+                    } else {
+                        "First event"
+                    },
+                    all[block.entry_index].title
+                )));
+            }
+            panel = panel.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("Free time shows gaps from 08:00–20:00; planned events reserve time."),
+            );
+        }
 
         if self.entries.loading && self.entries.value.is_none() {
             panel = panel.child(muted("Loading…", palette));
@@ -387,10 +651,10 @@ impl CalendarPage {
                         .id(("calendar-entry", i))
                         .flex()
                         .flex_col()
-                        .gap_2()
-                        .p_3()
-                        .rounded(px(6.))
-                        .border_1()
+                        .gap_1()
+                        .py_2()
+                        .px_1()
+                        .border_b_1()
                         .border_color(if chosen {
                             rgb(palette.accent)
                         } else {
@@ -399,7 +663,7 @@ impl CalendarPage {
                         .bg(if chosen {
                             rgba(palette.raised)
                         } else {
-                            rgba(tint(palette.surface, 0x88))
+                            rgba(0x00000000)
                         })
                         .cursor_pointer()
                         .on_click(cx.listener(move |page, _, _, cx| {
@@ -418,7 +682,7 @@ impl CalendarPage {
                                         .flex()
                                         .items_center()
                                         .gap_1()
-                                        .child(tone_chip(kind_str, color))
+                                        .when(chosen, |el| el.child(tone_chip(kind_str, color)))
                                         .when(
                                             entry.commitment == "tentative"
                                                 || entry.commitment == "possible",
@@ -452,33 +716,37 @@ impl CalendarPage {
                                 .text_color(rgb(palette.text))
                                 .child(entry.title.clone()),
                         )
-                        .when_some(entry.location.clone().filter(|l| !l.is_empty()), |el, l| {
-                            el.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("◎ {l}")),
-                            )
-                        })
-                        .when_some(entry.notes.clone().filter(|n| !n.is_empty()), |el, n| {
-                            el.child(
-                                div()
-                                    .p_2()
-                                    .rounded(px(4.))
-                                    .bg(rgba(palette.surface))
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(n),
-                            )
-                        })
-                        .when(!entry.source.is_empty() && entry.source != "manual", |el| {
-                            el.child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("From {}", entry.source)),
-                            )
-                        })
+                        .when_some(
+                            entry.location.clone().filter(|l| chosen && !l.is_empty()),
+                            |el, l| {
+                                el.child(div().text_xs().text_color(rgb(palette.muted)).child(l))
+                            },
+                        )
+                        .when_some(
+                            entry.notes.clone().filter(|n| chosen && !n.is_empty()),
+                            |el, n| {
+                                el.child(
+                                    div()
+                                        .p_2()
+                                        .rounded(px(4.))
+                                        .bg(rgba(palette.surface))
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(n),
+                                )
+                            },
+                        )
+                        .when(
+                            chosen && !entry.source.is_empty() && entry.source != "manual",
+                            |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(format!("From {}", entry.source)),
+                                )
+                            },
+                        )
                         .when(confirming, |el| {
                             let from = match entry.source.as_str() {
                                 "" | "manual" => String::new(),
@@ -523,7 +791,7 @@ impl CalendarPage {
                         .when(!on, |b| b.ghost())
                         .on_click(cx.listener(move |page, _, _, cx| {
                             if let Some(form) = page.form.as_mut() {
-                                form.kind = key;
+                                form.kind = (*key).into();
                             }
                             cx.notify();
                         }))
@@ -540,7 +808,7 @@ impl CalendarPage {
                     .when(!on, |b| b.ghost())
                     .on_click(cx.listener(move |page, _, _, cx| {
                         if let Some(form) = page.form.as_mut() {
-                            form.commitment = key;
+                            form.commitment = (*key).into();
                         }
                         cx.notify();
                     }))
@@ -550,13 +818,33 @@ impl CalendarPage {
             .flex()
             .flex_col()
             .gap_2()
+            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(
+                if form.editing.is_some() {
+                    "Edit entry"
+                } else {
+                    "New entry"
+                },
+            ))
+            .child(Input::new(&form.title))
+            .when(self.show_availability && form.editing.is_none(), |panel| {
+                panel.child(
+                    Button::new("calendar-gap-travel")
+                        .small()
+                        .ghost()
+                        .label("Plan travel on this day")
+                        .on_click(cx.listener(|page, _, _, cx| {
+                            cx.emit(CalendarIntent::PlanTravel { day: page.day })
+                        })),
+                )
+            })
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(format!("New entry · {}", self.day.format("%a %b %-d"))),
+                    .flex()
+                    .gap_2()
+                    .child(div().flex_1().child(Input::new(&form.start_date).small()))
+                    .child(muted("to", palette))
+                    .child(div().flex_1().child(Input::new(&form.end_date).small())),
             )
-            .child(Input::new(&form.title))
             .child(
                 Button::new("calendar-all-day")
                     .xsmall()
@@ -601,7 +889,12 @@ impl CalendarPage {
                         Button::new("calendar-save")
                             .small()
                             .primary()
-                            .label("Save · ↩")
+                            .label(if self.changing_time {
+                                "Saving…"
+                            } else {
+                                "Save · ↩"
+                            })
+                            .disabled(self.changing_time)
                             .on_click(cx.listener(|page, _, _, cx| page.save(cx))),
                     )
                     .child(
@@ -620,6 +913,9 @@ impl CalendarPage {
 
 impl Render for CalendarPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.clock.is_none() {
+            self.clock = Some(super::minute_clock(cx));
+        }
         if std::mem::take(&mut self.focus_next) && self.form.is_none() {
             window.focus(&self.focus, cx);
         }
@@ -630,6 +926,7 @@ impl Render for CalendarPage {
         let today = Local::now().date_naive();
         let dates = self.dates();
         let label = match self.view {
+            View::Day => self.day.format("%A, %b %-d, %Y").to_string(),
             View::Month => self.day.format("%B %Y").to_string(),
             View::Week => format!(
                 "{} – {}",
@@ -660,7 +957,7 @@ impl Render for CalendarPage {
                 Button::new("calendar-prev")
                     .small()
                     .ghost()
-                    .label("‹")
+                    .label("Previous")
                     .on_click(cx.listener(|page, _, _, cx| page.shift_page(false, cx))),
             )
             .child(
@@ -676,12 +973,37 @@ impl Render for CalendarPage {
                 Button::new("calendar-next")
                     .small()
                     .ghost()
-                    .label("›")
+                    .label("Next")
                     .on_click(cx.listener(|page, _, _, cx| page.shift_page(true, cx))),
             )
             .child(div().flex_1())
+            .child(view_button("Day", View::Day, cx))
             .child(view_button("Month", View::Month, cx))
             .child(view_button("Week", View::Week, cx))
+            .when(self.undo_time.is_some(), |header| {
+                header.child(
+                    Button::new("calendar-undo-time")
+                        .small()
+                        .ghost()
+                        .label("Undo time change")
+                        .disabled(self.changing_time)
+                        .on_click(cx.listener(|page, _, _, cx| page.undo_time(cx))),
+                )
+            })
+            .child(
+                Button::new("calendar-availability")
+                    .small()
+                    .label("Free time")
+                    .when(self.show_availability, |button| button.primary())
+                    .when(!self.show_availability, |button| button.ghost())
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        page.show_availability = !page.show_availability;
+                        if page.show_availability && page.view == View::Month {
+                            page.set_view(View::Week, cx);
+                        }
+                        cx.notify();
+                    })),
+            )
             .child(
                 Button::new("calendar-proposal-review")
                     .small()
@@ -690,7 +1012,7 @@ impl Render for CalendarPage {
                         "Back to calendar".to_owned()
                     } else {
                         format!(
-                            "Review detected events · {}",
+                            "Review · {}",
                             self.proposals.value.as_ref().map_or(0, Vec::len)
                         )
                     })
@@ -708,8 +1030,9 @@ impl Render for CalendarPage {
         } else {
             let entries = self.entries.value.clone().unwrap_or_default();
             let grid = match self.view {
+                View::Day => self.time_grid(&dates, &entries, today, palette, cx),
                 View::Month => self.month(&dates, &entries, today, palette, cx),
-                View::Week => self.week(&dates, &entries, today, palette, cx),
+                View::Week => self.time_grid(&dates, &entries, today, palette, cx),
             };
             let side = match self.form.is_some() {
                 true => self.form_panel(palette, cx),
@@ -750,6 +1073,7 @@ impl Render for CalendarPage {
             .on_action(cx.listener(Self::on_next_page))
             .on_action(cx.listener(Self::on_today))
             .on_action(cx.listener(Self::on_month_view))
+            .on_action(cx.listener(Self::on_day_view))
             .on_action(cx.listener(Self::on_week_view))
             .on_action(cx.listener(Self::on_next_entry))
             .on_action(cx.listener(Self::on_new_entry))
@@ -785,7 +1109,7 @@ impl Render for CalendarPage {
                         ("↑↓", "week"),
                         ("[ ]", "page"),
                         ("t", "today"),
-                        ("m/w", "view"),
+                        ("d/m/w", "view"),
                         ("e", "entry"),
                         ("n", "new"),
                         ("⌫", "delete"),
@@ -820,6 +1144,67 @@ mod tests {
             page.shift_page(true, cx);
             assert_eq!(page.day, day("2026-02-04"));
             assert!(page.entries.error.is_some());
+            page.set_view(View::Day, cx);
+            page.shift_page(true, cx);
+            assert_eq!(page.day, day("2026-02-05"));
+            assert_eq!(page.dates(), [day("2026-02-05")]);
+        });
+    }
+
+    #[gpui::test]
+    fn day_timeline_sizes_a_ninety_minute_event_and_edits_it_by_keyboard(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        cx.update(bind_keys);
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = day("2026-11-05");
+            page.view = View::Day;
+            page.entries.value = Some(vec![CalendarEntry {
+                id: "calendar:fixture".into(),
+                title: "Review".into(),
+                starts_at: "2026-11-05T09:00:00".into(),
+                ends_at: "2026-11-05T10:30:00".into(),
+                kind: "event".into(),
+                commitment: "planned".into(),
+                ..Default::default()
+            }]);
+            page.selected_entry = Some("calendar:fixture".into());
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.run_until_parked();
+        let block = cx
+            .debug_bounds("calendar-time-block")
+            .expect("timed block rendered");
+        assert_eq!(block.size.height, px(72.));
+        let scroll = cx
+            .debug_bounds("calendar-time-scroll")
+            .expect("scroll viewport rendered");
+        assert!(scroll.size.height > px(0.));
+        let start = block.origin + gpui::point(px(12.), px(12.));
+        let target = start + gpui::point(px(0.), px(60.));
+        cx.simulate_mouse_down(start, gpui::MouseButton::Left, gpui::Modifiers::none());
+        cx.simulate_mouse_move(
+            start + gpui::point(px(0.), px(6.)),
+            gpui::MouseButton::Left,
+            gpui::Modifiers::none(),
+        );
+        cx.simulate_mouse_move(target, gpui::MouseButton::Left, gpui::Modifiers::none());
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.drop_time, Some((day("2026-11-05"), 630)));
+        });
+        cx.simulate_mouse_up(target, gpui::MouseButton::Left, gpui::Modifiers::none());
+        page.read_with(cx, |page, _| {
+            assert!(matches!(page.write_error, Some(ShellError::NotSetUp)));
+        });
+        cx.simulate_keystrokes("enter");
+        page.read_with(cx, |page, cx| {
+            let form = page.form.as_ref().expect("Enter opens edit");
+            assert_eq!(form.start.read(cx).value().as_str(), "09:00");
+            assert_eq!(form.end.read(cx).value().as_str(), "10:30");
+            assert!(form.editing.is_some());
         });
     }
 }

@@ -7,7 +7,10 @@ use gpui::{
     SharedString, Window,
 };
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{
+    button::{Button, ButtonVariants},
+    Disableable, Sizable,
+};
 use sjel_gpui_core::calendar::{self, Draft};
 use sjel_gpui_core::mirror::Mirror;
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
@@ -16,7 +19,8 @@ use crate::data::{self, Press, Repo};
 use crate::theme::ThemeContext;
 use crate::{Density, Palette};
 
-use super::types::{parse_time, CalendarEvent, Composer, DayViewMode, Origin};
+use super::grid::CalendarDrag;
+use super::types::{CalendarEvent, Composer, DayViewMode, Origin};
 
 /// The page's own state: which day, what answered it, and why nothing did.
 pub struct Calendar {
@@ -50,6 +54,12 @@ pub struct Calendar {
     pub(crate) palette_override: Option<Palette>,
     pub(crate) density: Density,
     pub view_mode: DayViewMode,
+    selected: Option<String>,
+    undo_time: Option<(CalendarEntry, CalendarEntry)>,
+    show_availability: bool,
+    drop_minute: Option<u16>,
+    clock: Option<gpui::Task<()>>,
+    timeline_scroll: gpui::ScrollHandle,
     /// Bumped per read, so a slow answer for a week the person has left cannot replace the week
     /// they are looking at.
     pub(crate) generation: u64,
@@ -65,6 +75,8 @@ impl Calendar {
     /// The page opened on `day` rather than today. A screenshot or a touch check of a day that is
     /// not today needs this; `ios/run-sim` sets it from `SJEL_DAY`.
     pub fn at(day: NaiveDate, density: Density) -> Self {
+        let timeline_scroll = gpui::ScrollHandle::new();
+        timeline_scroll.set_offset(gpui::point(px(0.), px(-8. * 52.)));
         Self {
             store: None,
             copy: None,
@@ -85,6 +97,12 @@ impl Calendar {
             palette_override: None,
             density,
             view_mode: DayViewMode::default(),
+            selected: None,
+            undo_time: None,
+            show_availability: false,
+            drop_minute: None,
+            clock: None,
+            timeline_scroll,
             generation: 0,
         }
     }
@@ -206,6 +224,7 @@ impl Calendar {
 
     pub fn open_day(&mut self, day: NaiveDate, cx: &mut Context<Self>) {
         let current_week = self.week.clone();
+        self.selected = None;
         self.day = day;
         self.week = calendar::week_dates(day);
         if self.week != current_week {
@@ -264,7 +283,7 @@ impl Calendar {
         });
         input.update(cx, |input, cx| input.focus(window, cx));
         let start = format!("{hour:02}:00");
-        let end = format!("{:02}:00", (hour + 1).min(23));
+        let end = format!("{:02}:00", (hour + 1) % 24);
         self.composer = Some(Composer {
             input,
             all_day: false,
@@ -381,10 +400,16 @@ impl Calendar {
         let commitment = calendar::COMMITMENTS
             .iter()
             .find(|(key, _)| *key == entry.commitment)
-            .map_or("Possible", |(_, label)| *label);
+            .map_or(entry.commitment.as_str(), |(_, label)| *label);
         let dimmed = entry.commitment == "possible";
         let height = if self.density.is_mobile() { 56. } else { 44. };
+        let id = entry.id.clone();
         div()
+            .id(SharedString::from(format!("calendar-row-{id}")))
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.selected = Some(id.clone());
+                cx.notify();
+            }))
             .flex()
             .items_center()
             .gap_3()
@@ -464,10 +489,168 @@ impl Calendar {
                     }))
                     .child(commitment.to_owned()),
             )
-            .when(self.writable(), |row| {
-                row.child(self.row_actions(entry, cx))
-            })
             .into_any_element()
+    }
+
+    fn change_time(
+        &mut self,
+        id: &str,
+        day: NaiveDate,
+        minute: u16,
+        resize: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(before) = self.entries.iter().find(|entry| entry.id == id).cloned() else {
+            return;
+        };
+        match calendar::timeline::reschedule(&before, day, minute, resize) {
+            Ok(after) => self.write_time(before, after, false, window, cx),
+            Err(error) => {
+                self.error = Some(error.into());
+                cx.notify();
+            }
+        }
+    }
+
+    fn write_time(
+        &mut self,
+        before: CalendarEntry,
+        after: CalendarEntry,
+        undo: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.saving || !self.writable() {
+            return;
+        }
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        self.saving = true;
+        data::write_repo(
+            cx,
+            window,
+            self,
+            &store,
+            Press::quiet(""),
+            move |repo| async move {
+                let saved = repo.save_calendar_entry(after).await?;
+                Ok((before, saved, undo))
+            },
+            |view, result, cx| {
+                view.saving = false;
+                if let Some((before, saved, undo)) = result {
+                    if let Some(entry) = view.entries.iter_mut().find(|entry| entry.id == saved.id)
+                    {
+                        *entry = saved.clone();
+                    }
+                    view.undo_time = if undo { None } else { Some((before, saved)) };
+                    cx.emit(CalendarEvent::Wrote);
+                }
+                cx.notify();
+            },
+        );
+    }
+
+    fn detail_sheet(&self, cx: &mut Context<Self>) -> AnyElement {
+        let palette = self.palette;
+        let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| Some(&entry.id) == self.selected.as_ref())
+        else {
+            return div().into_any_element();
+        };
+        let mut sheet = div()
+            .id("calendar-event-sheet")
+            .debug_selector(|| "calendar-event-sheet".into())
+            .max_h(px(320.))
+            .overflow_y_scroll()
+            .absolute()
+            .bottom_0()
+            .left_0()
+            .right_0()
+            .p_4()
+            .bg(rgba(palette.surface))
+            .border_t_1()
+            .border_color(rgba(palette.border))
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .child(entry.title.clone())
+                    .child(
+                        Button::new("calendar-sheet-close")
+                            .small()
+                            .ghost()
+                            .label("Done")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.selected = None;
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(calendar::time_label(entry, self.day))
+            .child(format!(
+                "{} · {}",
+                calendar::kind_label(&entry.kind),
+                entry.commitment
+            ));
+        for text in [&entry.location, &entry.notes].into_iter().flatten() {
+            sheet = sheet.child(text.clone());
+        }
+        sheet = sheet.child(
+            div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(format!("From {}", entry.source)),
+        );
+        if self.writable() {
+            sheet = sheet.child(self.row_actions(entry, cx));
+        }
+        if !entry.all_day && self.writable() {
+            let mut actions = div().flex().flex_wrap().gap_2();
+            for (label, delta, resize) in [
+                ("15 min earlier", -15, false),
+                ("15 min later", 15, false),
+                ("Shorten 15 min", -15, true),
+                ("Extend 15 min", 15, true),
+            ] {
+                let id = entry.id.clone();
+                let time = if resize {
+                    &entry.ends_at
+                } else {
+                    &entry.starts_at
+                };
+                if let Ok(time) = chrono::NaiveDateTime::parse_from_str(time, "%Y-%m-%dT%H:%M:%S") {
+                    if let Some(target) = time.checked_add_signed(Duration::minutes(delta)) {
+                        actions = actions.child(
+                            Button::new(SharedString::from(format!("calendar-sheet-{label}")))
+                                .small()
+                                .ghost()
+                                .label(label)
+                                .disabled(self.saving)
+                                .on_click(cx.listener(move |view, _, window, cx| {
+                                    view.change_time(
+                                        &id,
+                                        target.date(),
+                                        (target.hour() * 60 + target.minute()) as u16,
+                                        resize,
+                                        window,
+                                        cx,
+                                    )
+                                })),
+                        );
+                    }
+                }
+            }
+            sheet = sheet.child(actions);
+        }
+        sheet.into_any_element()
     }
 
     /// What can be done to one row: the ask, and the second tap that deletes.
@@ -765,126 +948,155 @@ impl Calendar {
             .into_any_element()
     }
 
-    fn render_time_grid(&self, day: NaiveDate, cx: &mut Context<Self>) -> AnyElement {
+    fn render_timeline(&self, day: NaiveDate, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
-        let today = Local::now().date_naive();
-        let is_today = day == today;
-        let now = Local::now().time();
-        let now_minutes = now.hour() * 60 + now.minute();
-        let entries = self.entries_of_day();
-        let hour_height = 44.0;
-
-        let mut grid = div()
+        let hour_height = 52.;
+        let all_day = self
+            .entries_of_day()
+            .into_iter()
+            .filter(|entry| entry.all_day)
+            .map(|entry| self.row(entry, day, cx))
+            .collect::<Vec<_>>();
+        let mut timeline = div()
+            .id("mobile-calendar-timeline")
+            .debug_selector(|| "mobile-calendar-timeline".into())
             .relative()
-            .flex()
-            .flex_col()
-            .rounded(px(12.))
-            .bg(rgba(palette.surface))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .overflow_hidden();
-
-        for hour in 0..24 {
-            let hour_start = hour * 60;
-            let hour_end = (hour + 1) * 60;
-            let hour_entries: Vec<&CalendarEntry> = entries
-                .iter()
-                .filter(|e| {
-                    if e.all_day {
-                        return false;
-                    }
-                    if let Some((start_h, start_m)) = parse_time(&e.starts_at) {
-                        let mins = start_h * 60 + start_m;
-                        mins >= hour_start && mins < hour_end
-                    } else {
-                        false
-                    }
-                })
-                .copied()
-                .collect();
-
-            let writable = self.writable();
-            let mut slot = div()
-                .flex()
-                .items_start()
-                .min_h(px(hour_height))
-                .border_t_1()
-                .border_color(rgba(palette.border))
-                .when(writable, |slot| {
-                    slot.cursor_pointer().on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |view, _, window, cx| {
-                            view.open_composer_at(hour, window, cx);
-                        }),
-                    )
-                })
-                .child(
-                    div()
-                        .w(px(52.))
-                        .flex_none()
-                        .px_2()
-                        .py_1()
-                        .text_xs()
-                        .font_weight(gpui::FontWeight::MEDIUM)
-                        .text_color(rgb(palette.muted))
-                        .child(format!("{hour:02}:00")),
-                );
-
-            let mut events_col = div().flex_1().flex().flex_col().gap_1().py_1().pr_2();
-            for entry in hour_entries {
-                let rail = calendar::kind_color(&entry.kind);
-                let time = calendar::time_label(entry, day);
-                events_col = events_col.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .p_1()
-                        .rounded(px(4.))
-                        .bg(rgba(palette.raised))
-                        .child(div().w(px(3.)).h(px(18.)).rounded_full().bg(rgb(rail)))
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(rgb(palette.text))
-                                .child(entry.title.clone()),
-                        )
-                        .child(div().text_xs().text_color(rgb(palette.muted)).child(time)),
-                );
-            }
-            slot = slot.child(events_col);
-            grid = grid.child(slot);
-        }
-
-        if is_today {
-            let now_offset = (now_minutes as f32 / 60.0) * hour_height;
-            grid = grid.child(
+            .h(px(24. * hour_height))
+            .on_drag_move(cx.listener(
+                move |view, event: &gpui::DragMoveEvent<CalendarDrag>, _, cx| {
+                    let y = f32::from(event.event.position.y - event.bounds.origin.y);
+                    view.drop_minute =
+                        Some(((y / hour_height * 60.).clamp(0., 1439.) as u16) / 15 * 15);
+                    cx.notify();
+                },
+            ))
+            .on_drop(cx.listener(move |view, drag: &CalendarDrag, window, cx| {
+                if let Some(minute) = view.drop_minute.take() {
+                    view.change_time(&drag.id, day, minute, drag.resize, window, cx);
+                }
+            }));
+        for quarter in 0..96 {
+            let minute = quarter * 15;
+            timeline = timeline.child(
                 div()
+                    .id(("mobile-calendar-slot", quarter))
                     .absolute()
-                    .top(px(now_offset))
-                    .left(px(52.))
+                    .top(px(minute as f32 / 60. * hour_height))
+                    .left_0()
                     .right_0()
-                    .h(px(2.))
-                    .bg(rgb(palette.red))
-                    .child(
-                        div()
-                            .absolute()
-                            .left(px(-4.))
-                            .top(px(-3.))
-                            .size(px(8.))
-                            .rounded_full()
-                            .bg(rgb(palette.red)),
-                    ),
+                    .h(px(hour_height / 4.))
+                    .when(quarter % 4 == 0, |slot| slot.border_t_1())
+                    .border_color(rgba(palette.border))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .when(quarter % 4 == 0, |slot| {
+                        slot.child(format!("{:02}:00", minute / 60))
+                    })
+                    .when(self.writable(), |slot| {
+                        slot.on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |view, _, window, cx| {
+                                view.open_composer_at(minute / 60, window, cx);
+                                if let Some(composer) = &mut view.composer {
+                                    composer.start =
+                                        format!("{:02}:{:02}", minute / 60, minute % 60);
+                                    let end = (minute + 60) % 1440;
+                                    composer.end = format!("{:02}:{:02}", end / 60, end % 60);
+                                }
+                            }),
+                        )
+                    }),
             );
         }
-
-        grid.into_any_element()
+        let mut events = div().absolute().left(px(48.)).right_0().top_0().h_full();
+        for block in calendar::timeline::blocks(&self.entries, day) {
+            let entry = &self.entries[block.entry_index];
+            let id = entry.id.clone();
+            let color = calendar::kind_color(&entry.kind);
+            events = events.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "mobile-calendar-block-{}",
+                        entry.id
+                    )))
+                    .absolute()
+                    .top(px(block.start as f32 / 60. * hour_height))
+                    .left(gpui::relative(block.column as f32 / block.columns as f32))
+                    .w(gpui::relative(1. / block.columns as f32))
+                    .h(px((block.end - block.start) as f32 / 60. * hour_height))
+                    .overflow_hidden()
+                    .border_l_2()
+                    .border_color(rgb(color))
+                    .px_1()
+                    .bg(rgba(crate::theme::tint(color, 0x28)))
+                    .text_xs()
+                    .text_color(rgb(palette.text))
+                    .child(entry.title.clone())
+                    .child(calendar::time_label(entry, day))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.selected = Some(id.clone());
+                        cx.notify();
+                    }))
+                    .when(self.writable(), |block| {
+                        block
+                            .on_drag(
+                                CalendarDrag {
+                                    id: entry.id.clone(),
+                                    resize: false,
+                                },
+                                |drag, _, _, cx| cx.new(|_| drag.clone()),
+                            )
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("mobile-resize-{}", entry.id)))
+                                    .absolute()
+                                    .bottom_0()
+                                    .left_0()
+                                    .right_0()
+                                    .h(px(12.))
+                                    .on_drag(
+                                        CalendarDrag {
+                                            id: entry.id.clone(),
+                                            resize: true,
+                                        },
+                                        |drag, _, _, cx| {
+                                            cx.stop_propagation();
+                                            cx.new(|_| drag.clone())
+                                        },
+                                    ),
+                            )
+                    }),
+            );
+        }
+        timeline = timeline.child(events);
+        if day == Local::now().date_naive() {
+            let now = Local::now().time();
+            timeline = timeline.child(
+                div()
+                    .absolute()
+                    .left(px(48.))
+                    .right_0()
+                    .top(px(
+                        (now.hour() * 60 + now.minute()) as f32 / 60. * hour_height
+                    ))
+                    .h(px(2.))
+                    .bg(rgb(palette.red)),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .children(all_day)
+            .child(timeline)
+            .into_any_element()
     }
 }
 
 impl Render for Calendar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.clock.is_none() {
+            self.clock = Some(super::minute_clock(cx));
+        }
         if self.palette_override.is_none() {
             self.palette = ThemeContext::of(window, cx).palette;
         }
@@ -917,6 +1129,37 @@ impl Render for Calendar {
             _ => None,
         };
         let refresh = self.refresh_button(cx);
+        let detail = self.detail_sheet(cx);
+        let mut availability = div().flex().flex_wrap().gap_2();
+        if self.show_availability && self.loaded && !self.loading && self.error.is_none() {
+            for gap in calendar::timeline::gaps(
+                &self.entries,
+                day,
+                calendar::timeline::Interval {
+                    start: 480,
+                    end: 1200,
+                },
+            ) {
+                let start = format!("{:02}:{:02}", gap.start / 60, gap.start % 60);
+                let end = format!("{:02}:{:02}", gap.end / 60, gap.end % 60);
+                availability = availability.child(
+                    Button::new(SharedString::from(format!("mobile-gap-{}", gap.start)))
+                        .small()
+                        .ghost()
+                        .label(format!("{start}–{end} free"))
+                        .disabled(!self.writable())
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.open_composer_at(u32::from(gap.start / 60), window, cx);
+                            if let Some(composer) = &mut view.composer {
+                                composer.start =
+                                    format!("{:02}:{:02}", gap.start / 60, gap.start % 60);
+                                let end = gap.end.min(gap.start + 60);
+                                composer.end = format!("{:02}:{:02}", end / 60, end % 60);
+                            }
+                        })),
+                );
+            }
+        }
 
         let mode_toggle = div()
             .id("calendar-mode-toggle")
@@ -947,6 +1190,7 @@ impl Render for Calendar {
 
         div()
             .id("calendar")
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -959,6 +1203,7 @@ impl Render for Calendar {
                     .items_baseline()
                     .justify_between()
                     .gap_2()
+                    .when(self.density.is_mobile(), |header| header.flex_col().items_start())
                     .child(
                         div()
                             .flex()
@@ -979,6 +1224,7 @@ impl Render for Calendar {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap_2()
                             .when(self.writable(), |actions| {
@@ -1003,6 +1249,29 @@ impl Render for Calendar {
                                 )
                             })
                             .child(mode_toggle)
+                            .when(self.undo_time.is_some(), |actions| {
+                                actions.child(
+                                    Button::new("mobile-calendar-undo")
+                                        .small()
+                                        .ghost()
+                                        .label("Undo")
+                                        .disabled(self.saving)
+                                        .on_click(cx.listener(|view, _, window, cx| {
+                                            if let Some((before, after)) = view.undo_time.clone() {
+                                                if let Some(mut current) = view.entries.iter().find(|entry| entry.id == after.id).cloned() {
+                                                    if current.starts_at == after.starts_at && current.ends_at == after.ends_at {
+                                                        current.starts_at = before.starts_at;
+                                                        current.ends_at = before.ends_at;
+                                                        view.write_time(after, current, true, window, cx);
+                                                    } else {
+                                                        view.error = Some("This event's time changed. Refresh before undoing.".into());
+                                                        cx.notify();
+                                                    }
+                                                }
+                                            }
+                                        })),
+                                )
+                            })
                             .child(refresh),
                     ),
             )
@@ -1029,6 +1298,21 @@ impl Render for Calendar {
                     )),
             )
             .when(composing, |page| page.child(composer))
+            .child(
+                Button::new("mobile-calendar-availability")
+                    .small()
+                    .ghost()
+                    .label(if self.show_availability {
+                        "Hide free time"
+                    } else {
+                        "Show free time"
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.show_availability = !view.show_availability;
+                        cx.notify();
+                    })),
+            )
+            .when(self.show_availability, |page| page.child(availability))
             .when(day != today, |page| {
                 page.child(
                     div()
@@ -1099,8 +1383,17 @@ impl Render for Calendar {
                 })
             })
             .when(self.view_mode == DayViewMode::Grid, |page| {
-                page.child(self.render_time_grid(day, cx))
+                page.child(
+                    div()
+                        .id("mobile-calendar-grid-scroll")
+                        .flex_1()
+                        .min_h_0()
+                        .track_scroll(&self.timeline_scroll)
+                        .overflow_y_scroll()
+                        .child(self.render_timeline(day, cx)),
+                )
             })
+            .when(self.selected.is_some(), |page| page.child(detail))
     }
 }
 
@@ -1207,5 +1500,41 @@ mod tests {
         page.entries = vec![odd];
         let row = format!("{:?}", page.entries_of_day());
         assert!(row.contains("unheard-of"), "{row}");
+    }
+
+    #[gpui::test]
+    fn phone_grid_and_detail_sheet_fit_a_narrow_window(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|_| {
+                let day = calendar::parse_day("2026-11-05").unwrap();
+                let mut page = Calendar::at(day, Density::Mobile);
+                let mut event = entry(
+                    "A long event title that opens in full",
+                    "2026-11-05T09:00:00",
+                    "2026-11-05T10:00:00",
+                    false,
+                );
+                event.id = "calendar:fixture".into();
+                page.entries = vec![event];
+                page.selected = Some("calendar:fixture".into());
+                page.loaded = true;
+                page.view_mode = DayViewMode::Grid;
+                page
+            });
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.simulate_resize(gpui::size(px(375.), px(812.)));
+        cx.run_until_parked();
+        let grid = cx
+            .debug_bounds("mobile-calendar-timeline")
+            .expect("grid rendered");
+        assert!(grid.size.width <= px(351.));
+        assert_eq!(grid.size.height, px(1248.));
+        let sheet = cx
+            .debug_bounds("calendar-event-sheet")
+            .expect("detail rendered");
+        assert!(sheet.size.width <= px(375.));
+        assert!(sheet.size.height <= px(320.));
     }
 }

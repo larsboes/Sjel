@@ -24,6 +24,8 @@ actions!(
         Today,
         /// Show the month grid.
         MonthView,
+        /// Focus one day's timeline.
+        DayView,
         /// Show the week.
         WeekView,
         /// Select the next entry of the day.
@@ -53,6 +55,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("]", NextPage, Some("CalendarGrid")),
         KeyBinding::new("t", Today, Some("CalendarGrid")),
         KeyBinding::new("m", MonthView, Some("CalendarGrid")),
+        KeyBinding::new("d", DayView, Some("CalendarGrid")),
         KeyBinding::new("w", WeekView, Some("CalendarGrid")),
         KeyBinding::new("e", NextEntry, Some("CalendarGrid")),
         KeyBinding::new("n", NewEntry, Some("CalendarGrid")),
@@ -64,6 +67,10 @@ pub fn bind_keys(cx: &mut App) {
 }
 
 impl CalendarPage {
+    pub(super) fn on_day_view(&mut self, _: &DayView, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_view(View::Day, cx);
+    }
+
     pub(super) fn on_previous_day(
         &mut self,
         _: &PreviousDay,
@@ -148,9 +155,11 @@ impl CalendarPage {
         cx.notify();
     }
 
-    pub(super) fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.confirm_delete.take() {
             self.delete(id, cx);
+        } else if self.selected_entry.is_some() {
+            self.edit_selected(window, cx);
         }
     }
 

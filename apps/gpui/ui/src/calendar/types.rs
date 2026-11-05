@@ -19,6 +19,12 @@ pub enum CalendarEvent {
     Editing(bool),
 }
 
+/// A calendar action handled by the application that owns navigation.
+#[derive(Clone, Debug)]
+pub enum CalendarIntent {
+    PlanTravel { day: chrono::NaiveDate },
+}
+
 /// Where the week on screen was read from, which is also what the page may do with it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Origin {
@@ -39,6 +45,7 @@ pub enum DayViewMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
+    Day,
     Month,
     Week,
 }
@@ -56,26 +63,17 @@ pub(crate) struct Composer {
 
 /// The desktop new-entry form's fields. The text fields are inputs; the rest are buttons.
 pub(crate) struct Form {
+    pub(crate) editing: Option<CalendarEntry>,
     pub(crate) title: Entity<InputState>,
+    pub(crate) start_date: Entity<InputState>,
+    pub(crate) end_date: Entity<InputState>,
     pub(crate) start: Entity<InputState>,
     pub(crate) end: Entity<InputState>,
     pub(crate) all_day: bool,
-    pub(crate) kind: &'static str,
-    pub(crate) commitment: &'static str,
+    pub(crate) kind: String,
+    pub(crate) commitment: String,
     pub(crate) error: Option<&'static str>,
     pub(crate) _subscriptions: Vec<Subscription>,
-}
-
-/// Parses "HH:MM" into hour (0-23) and minute (0-59).
-pub(crate) fn parse_time(text: &str) -> Option<(u32, u32)> {
-    let mut parts = text.split(':');
-    let h: u32 = parts.next()?.trim().parse().ok()?;
-    let m: u32 = parts.next()?.trim().parse().ok()?;
-    if h < 24 && m < 60 {
-        Some((h, m))
-    } else {
-        None
-    }
 }
 
 /// One entry as a coloured badge pill and its title.
@@ -110,6 +108,14 @@ pub(crate) fn chip(entry: &CalendarEntry, palette: Palette) -> gpui_kit::Div {
                 }))
                 .child(entry.title.clone()),
         )
+        .when(entry.commitment != "committed", |chip| {
+            chip.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(entry.commitment.clone()),
+            )
+        })
 }
 
 pub(crate) fn muted(text: &str, palette: Palette) -> gpui_kit::Div {

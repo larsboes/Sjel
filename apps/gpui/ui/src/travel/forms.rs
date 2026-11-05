@@ -58,6 +58,26 @@ enum Saved {
 }
 
 impl Travel {
+    /// Open a reviewed trip draft on the day selected in Calendar.
+    pub fn plan_calendar_day(
+        &mut self,
+        day: chrono::NaiveDate,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_route(TravelRoute::Trips, cx);
+        self.open_form(FormKind::Trip(None), window, cx);
+        if let Some(form) = &self.form {
+            let day = day.format("%Y-%m-%d").to_string();
+            for index in [3, 4] {
+                form.fields[index]
+                    .1
+                    .update(cx, |input, cx| input.set_value(day.clone(), window, cx));
+            }
+        }
+        cx.notify();
+    }
+
     /// The shell, when this page reads from the Mac. Writes are offered only then.
     pub(super) fn writer(&self) -> Option<Arc<Shell>> {
         match &self.source {

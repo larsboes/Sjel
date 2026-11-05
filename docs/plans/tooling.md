@@ -10,6 +10,17 @@ covers it.
 
 ## Open
 
+- **Sandboxed GPUI build target.** Cargo could not write the configured shared target or a
+  target below the checkout. Workaround: pass `--target-dir /private/tmp/sjel-calendar-target`
+  to native Cargo checks and tests. Smallest change: let the build tooling select and report
+  a writable target directory for sandboxed agent sessions.
+
+- **Scoped commits with a shared index.** Calendar changes shared plan files with unrelated
+  edits while another session had staged a file. Workaround: build a temporary Git index from
+  HEAD, stage the owned paths and plan hunks, commit it, then refresh only those paths in the
+  primary index. Smallest change: a scoped commit command that preserves unrelated staged
+  files and rejects a changed HEAD.
+
 - **Harness intake review, live.** `tools/intake review --reviewer claude` passed only against a
   fake `claude` in `tools/skills.test.sh`. A real `claude -p` run has not happened. Unverified:
   the CLI accepts `--setting-sources project` together with `--json-schema`, and the field that

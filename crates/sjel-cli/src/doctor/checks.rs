@@ -2257,7 +2257,7 @@ fn binding_lines(
     vec![(
         Level::Bad,
         format!(
-            "{} deployed outside profile '{}', which profiles.toml [harness_profile] binds to {} — run: tools/harnesses apply --harness {}",
+            "{} deployed outside profile '{}', which [harness_profile] binds to {} — run: tools/harnesses apply --harness {}",
             outside.join(", "),
             profile.name,
             harness.id,

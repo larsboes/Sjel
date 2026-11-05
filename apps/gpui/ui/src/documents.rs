@@ -1470,6 +1470,16 @@ impl Documents {
         field.update(cx, |input, cx| input.focus(window, cx));
     }
 
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        let rows = self.order.len();
+        let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+        self.list.scroll_to(gpui::ListOffset {
+            item_ix,
+            offset_in_item: px(0.),
+        });
+        cx.notify();
+    }
+
     fn set_zoom(&mut self, zoom: Zoom, cx: &mut Context<Self>) {
         if self.reader.zoom != zoom {
             self.reader.zoom = zoom;

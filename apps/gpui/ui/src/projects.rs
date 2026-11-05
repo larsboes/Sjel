@@ -4,10 +4,11 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable, WindowExt};
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FontWeight, SharedString,
-    Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FontWeight, ScrollHandle,
+    SharedString, Subscription, Window,
 };
 
 use crate::data::{self, Remote, Repo};
@@ -199,6 +200,7 @@ pub struct Projects {
     /// The writes the Mac refused, with its reasons. Their content is still here and still queued:
     /// the band these draw is the only place that says so.
     blocked: Vec<Blocked>,
+    scroll: ScrollHandle,
 }
 
 impl gpui_kit::EventEmitter<ProjectsEvent> for Projects {}
@@ -249,7 +251,12 @@ impl Projects {
             new_note: None,
             adding_note: false,
             blocked: Vec::new(),
+            scroll: ScrollHandle::new(),
         }
+    }
+
+    pub fn scroll_handle(&self) -> ScrollHandle {
+        self.scroll.clone()
     }
 
     /// The records the Mac refused, handed in by the app after a sync read them back.
@@ -3194,7 +3201,9 @@ impl Render for Projects {
             return div()
                 .id("records")
                 .size_full()
+                .track_scroll(&self.scroll)
                 .overflow_y_scroll()
+                .vertical_scrollbar(&self.scroll)
                 .flex()
                 .flex_col()
                 .gap_3()
@@ -3293,7 +3302,9 @@ impl Render for Projects {
             return div()
                 .id("all-notes")
                 .size_full()
+                .track_scroll(&self.scroll)
                 .overflow_y_scroll()
+                .vertical_scrollbar(&self.scroll)
                 .child(tab_bar)
                 .child(section("Cross-Project Notes", body, palette))
                 .into_any_element();
@@ -3309,7 +3320,9 @@ impl Render for Projects {
             return div()
                 .id("all-tasks")
                 .size_full()
+                .track_scroll(&self.scroll)
                 .overflow_y_scroll()
+                .vertical_scrollbar(&self.scroll)
                 .child(tab_bar)
                 .child(section("Cross-Project Tasks", body, palette))
                 .into_any_element();
@@ -3474,7 +3487,9 @@ impl Render for Projects {
         div()
             .id("projects")
             .size_full()
+            .track_scroll(&self.scroll)
             .overflow_y_scroll()
+            .vertical_scrollbar(&self.scroll)
             .child(tab_bar)
             .child(toolbar)
             .when(self.adding_project, |p| {

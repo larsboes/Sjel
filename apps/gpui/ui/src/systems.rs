@@ -20,6 +20,9 @@
 //! update report asks three registries, so this page runs its own clocks while it is visible and
 //! stops them when it is not.
 
+use std::collections::BTreeMap;
+use std::time::Instant;
+
 use chrono::{Local, TimeZone};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
@@ -28,14 +31,15 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, dot, list, note, placeholder, row, section};
+use crate::primitives::{card, dot, list, note, placeholder, row, section, sub_tabs};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::shell::{AgentGate, AgentView, Approval};
 use sjel_gpui_core::systems::{
     apply_summary, audit_needs_attention, clock_label, dated_absences, day_label, gigabytes,
     percent, storage_bytes, temperature, version_label, watts, Finding, MacmonSample,
-    RuntimeStatus, Severity, StorageHistory, StorageReport, Temperature, UpdateStatus,
-    UpdateSurface, UpdatesReport, RUNTIME_CATEGORIES, RUNTIME_SELECTIONS,
+    RuntimeStatus, Severity, StorageHistory, StorageReport, StorageTrend, StorageView, Temperature,
+    UpdateStatus, UpdateSurface, UpdatesReport, UpdatesView, RUNTIME_CATEGORIES,
+    RUNTIME_SELECTIONS,
 };
 
 /// The live sample's beat. The page exists for temperature and power, and macmon samples the
@@ -57,8 +61,27 @@ const APPLY_BEATS: usize = 900;
 
 const MACMON_START: &str = "macmon:start";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SystemsTab {
+    Overview,
+    Storage,
+    Agent,
+}
+
+#[derive(Default)]
+struct SystemsDerived {
+    storage_at: Option<Instant>,
+    storage_view: Option<StorageView>,
+    history_at: Option<Instant>,
+    storage_trend: Option<StorageTrend>,
+    class_deltas: BTreeMap<String, String>,
+    updates_at: Option<Instant>,
+    updates_view: Option<UpdatesView>,
+}
+
 pub struct SystemsPage {
     repo: Repo,
+    tab: SystemsTab,
     macmon: Remote<MacmonSample>,
     storage: Remote<StorageReport>,
     history: Remote<StorageHistory>,
@@ -66,6 +89,7 @@ pub struct SystemsPage {
     findings: Remote<Vec<Finding>>,
     agent: Remote<AgentView>,
     runtime: Remote<RuntimeStatus>,
+    derived: SystemsDerived,
     busy: Busy,
     /// Bumped on every activation. A loop that sees a different generation stops, which is how
     /// leaving the page stops three clocks without a handle to cancel.
@@ -76,6 +100,7 @@ impl SystemsPage {
     pub fn new(repo: Repo) -> Self {
         Self {
             repo,
+            tab: SystemsTab::Overview,
             macmon: Remote::default(),
             storage: Remote::default(),
             history: Remote::default(),
@@ -83,8 +108,38 @@ impl SystemsPage {
             findings: Remote::default(),
             agent: Remote::default(),
             runtime: Remote::default(),
+            derived: SystemsDerived::default(),
             busy: Busy::default(),
             generation: 0,
+        }
+    }
+
+    pub fn set_tab(&mut self, tab: SystemsTab, cx: &mut Context<Self>) {
+        if self.tab != tab {
+            self.tab = tab;
+            cx.notify();
+        }
+    }
+
+    fn settle_derived(&mut self) {
+        if self.derived.storage_at != self.storage.loaded_at {
+            self.derived.storage_at = self.storage.loaded_at;
+            self.derived.storage_view = self.storage.value.as_ref().map(StorageReport::view);
+        }
+        if self.derived.history_at != self.history.loaded_at {
+            self.derived.history_at = self.history.loaded_at;
+            self.derived.storage_trend =
+                self.history.value.as_ref().and_then(StorageHistory::trend);
+            self.derived.class_deltas = self
+                .history
+                .value
+                .as_ref()
+                .map(StorageHistory::class_deltas)
+                .unwrap_or_default();
+        }
+        if self.derived.updates_at != self.updates.loaded_at {
+            self.derived.updates_at = self.updates.loaded_at;
+            self.derived.updates_view = self.updates.value.as_ref().map(UpdatesReport::view);
         }
     }
 
@@ -703,7 +758,8 @@ impl SystemsPage {
     }
 
     fn storage_panel(&mut self, palette: Palette) -> AnyElement {
-        let body = match self.storage.value.as_ref().map(StorageReport::view) {
+        self.settle_derived();
+        let body = match self.derived.storage_view.as_ref() {
             None => match &self.storage.error {
                 // The report comes from sjel-status rather than macmon, so it answers even when
                 // macmon is down — which is the state a full disk is hardest to see in anyway.
@@ -758,7 +814,11 @@ impl SystemsPage {
                         .into_any_element(),
                 );
 
-                rows.push(trend_row(self.history.value.as_ref(), palette));
+                rows.push(trend_row(
+                    self.derived.storage_trend.as_ref(),
+                    self.history.value.as_ref().map_or(0, |h| h.retention_days),
+                    palette,
+                ));
 
                 if view.classes.is_empty() {
                     rows.push(
@@ -769,12 +829,7 @@ impl SystemsPage {
                             .into_any_element(),
                     );
                 } else {
-                    let deltas = self
-                        .history
-                        .value
-                        .as_ref()
-                        .map(StorageHistory::class_deltas)
-                        .unwrap_or_default();
+                    let deltas = &self.derived.class_deltas;
                     let largest = view.scale_bytes;
                     rows.push(heading("Reclaimable by class", palette));
                     let class_rows: Vec<AnyElement> = view
@@ -993,13 +1048,15 @@ impl SystemsPage {
     }
 
     fn updates_panel(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let body = match self.updates.value.as_ref().map(UpdatesReport::view) {
+        self.settle_derived();
+        let view = self.derived.updates_view.clone();
+        let body = match &view {
             None => match &self.updates.error {
                 Some(error) => note(error.to_string(), palette.red),
                 None => note("Asking three registries…", palette.muted),
             },
             Some(view) => {
-                let summary = apply_summary(&view, Local::now());
+                let summary = apply_summary(view, Local::now());
                 let mut rows: Vec<AnyElement> = Vec::new();
                 if !summary.is_empty() {
                     let attention = audit_needs_attention(
@@ -1197,25 +1254,72 @@ impl SystemsPage {
 impl Render for SystemsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
-        // Read the whole page into locals first: each panel borrows `self` mutably for its
-        // listeners, so they are built one at a time and only then assembled.
-        let runtime = self.runtime_panel(palette, cx);
-        let mac = self.mac_panel(palette, cx);
-        let agent = self.agent_panel(palette, cx);
-        let storage = self.storage_panel(palette);
-        let updates = self.updates_panel(palette, cx);
-        let findings = self.findings_panel(palette);
-        div()
-            .flex()
-            .flex_col()
-            .gap_6()
-            .child(runtime)
-            .child(mac)
-            .child(agent)
-            .child(storage)
-            .child(updates)
-            .child(findings)
-            .into_any_element()
+        self.settle_derived();
+
+        let pending_approvals = self
+            .agent
+            .value
+            .as_ref()
+            .map_or(0, |agent| agent.pending.len());
+        let stale_updates = self
+            .derived
+            .updates_view
+            .as_ref()
+            .map_or(0, |view| view.stale);
+        let findings_count = self.findings.value.as_ref().map_or(0, Vec::len);
+
+        let entity = cx.entity().clone();
+        let tabs = sub_tabs(
+            "systems",
+            vec![
+                (
+                    "Overview",
+                    (findings_count > 0).then_some(findings_count),
+                    self.tab == SystemsTab::Overview,
+                ),
+                (
+                    "Storage & Updates",
+                    (stale_updates > 0).then_some(stale_updates),
+                    self.tab == SystemsTab::Storage,
+                ),
+                (
+                    "Agent Gate",
+                    (pending_approvals > 0).then_some(pending_approvals),
+                    self.tab == SystemsTab::Agent,
+                ),
+            ],
+            palette,
+            move |idx, _, app| {
+                entity.update(app, |page, cx| {
+                    let tab = match idx {
+                        0 => SystemsTab::Overview,
+                        1 => SystemsTab::Storage,
+                        _ => SystemsTab::Agent,
+                    };
+                    page.set_tab(tab, cx);
+                });
+            },
+        );
+
+        let mut root = div().flex().flex_col().gap_6().child(tabs);
+        match self.tab {
+            SystemsTab::Overview => {
+                let runtime = self.runtime_panel(palette, cx);
+                let mac = self.mac_panel(palette, cx);
+                let findings = self.findings_panel(palette);
+                root = root.child(runtime).child(mac).child(findings);
+            }
+            SystemsTab::Storage => {
+                let storage = self.storage_panel(palette);
+                let updates = self.updates_panel(palette, cx);
+                root = root.child(storage).child(updates);
+            }
+            SystemsTab::Agent => {
+                let agent = self.agent_panel(palette, cx);
+                root = root.child(agent);
+            }
+        }
+        root.into_any_element()
     }
 }
 
@@ -1378,12 +1482,11 @@ fn bar(ratio: f32, tone: u32, palette: Palette) -> AnyElement {
 ///
 /// Bars rather than a line because a native polyline is a paint hook, and the shape that matters
 /// here is "is it still filling" — which a row of bars answers without one.
-fn trend_row(history: Option<&StorageHistory>, palette: Palette) -> AnyElement {
-    let Some(trend) = history.and_then(StorageHistory::trend) else {
+fn trend_row(trend: Option<&StorageTrend>, days: u32, palette: Palette) -> AnyElement {
+    let Some(trend) = trend else {
         return div().into_any_element();
     };
     if !trend.enough {
-        let days = history.map_or(0, |history| history.retention_days);
         return div()
             .text_xs()
             .text_color(rgb(palette.muted))

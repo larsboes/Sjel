@@ -1,12 +1,16 @@
 //! Native Finance page (`/finance`): personal ledger, transaction search,
 //! account breakdowns, and recurring subscription tracking.
 
+use std::time::Instant;
+
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, Context, Entity,
-    FocusHandle, FontWeight, KeyBinding, PathPromptOptions, SharedString, Subscription, Window,
+    FocusHandle, FontWeight, KeyBinding, PathPromptOptions, ScrollHandle, SharedString,
+    Subscription, Window,
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{
@@ -21,7 +25,8 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::theme::{tint, Palette};
+use crate::primitives::virtual_list;
+use crate::theme::{tint, Palette, ThemeContext};
 
 actions!(
     finance_page,
@@ -72,6 +77,29 @@ struct CsvMappingField {
     _subscription: Subscription,
 }
 
+#[derive(Default)]
+struct TxDerived {
+    key: Option<(Option<Instant>, u64)>,
+    indices: Vec<usize>,
+}
+
+#[derive(Default)]
+struct SubsDerived {
+    key: Option<Option<Instant>>,
+    monthly_burn: i64,
+    active_count: usize,
+    summaries: Vec<SubscriptionSummary>,
+}
+
+#[derive(Default)]
+struct ImportDerived {
+    key: Option<(Option<Instant>, Option<Instant>, Option<Instant>, u64)>,
+    pending_indices: Vec<usize>,
+    uncategorized: Vec<FinanceCandidate>,
+    review_queue: Vec<ExpenseReview>,
+    inflows: Vec<FinanceCandidate>,
+}
+
 pub struct FinancePage {
     repo: Repo,
     palette: Option<Palette>,
@@ -113,6 +141,15 @@ pub struct FinancePage {
     balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
+    filter_rev: u64,
+    review_rev: u64,
+    tx_derived: TxDerived,
+    tx_list: gpui::ListState,
+    subs_derived: SubsDerived,
+    import_derived: ImportDerived,
+    pub overview_scroll: ScrollHandle,
+    pub subscriptions_scroll: ScrollHandle,
+    pub import_scroll: ScrollHandle,
     search_input: Option<(Entity<InputState>, Subscription)>,
     focus: FocusHandle,
     focus_next: bool,
@@ -161,10 +198,166 @@ impl FinancePage {
             balance_fields: Vec::new(),
             search_query: String::new(),
             selected_category: None,
+            filter_rev: 0,
+            review_rev: 0,
+            tx_derived: TxDerived::default(),
+            tx_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
+            subs_derived: SubsDerived::default(),
+            import_derived: ImportDerived::default(),
+            overview_scroll: ScrollHandle::new(),
+            subscriptions_scroll: ScrollHandle::new(),
+            import_scroll: ScrollHandle::new(),
             search_input: None,
             focus: cx.focus_handle(),
             focus_next: true,
         }
+    }
+
+    pub fn active_scroll(&self) -> Option<&ScrollHandle> {
+        match self.view {
+            View::Overview => Some(&self.overview_scroll),
+            View::Transactions => None,
+            View::Subscriptions => Some(&self.subscriptions_scroll),
+            View::ImportReview => Some(&self.import_scroll),
+        }
+    }
+
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if self.view == View::Transactions {
+            self.sync_tx_derived();
+            let rows = self.tx_derived.indices.len();
+            let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+            self.tx_list.scroll_to(gpui::ListOffset {
+                item_ix,
+                offset_in_item: px(0.),
+            });
+        } else if let Some(scroll) = self.active_scroll() {
+            let max = scroll.max_offset().y;
+            scroll.set_offset(gpui_kit::point(px(0.), -max * fraction));
+        }
+        cx.notify();
+    }
+
+    fn sync_tx_derived(&mut self) {
+        let key = (self.dashboard.loaded_at, self.filter_rev);
+        if self.tx_derived.key == Some(key) {
+            return;
+        }
+        let mut indices = Vec::new();
+        if let Some(projection) = self.dashboard.value.as_ref() {
+            let filter = TransactionFilter {
+                query: self.search_query.clone(),
+                category: self.selected_category.clone(),
+            };
+            let filtered = filter_transactions(&projection.transactions, &filter);
+            let base = projection.transactions.as_ptr() as usize;
+            let stride = std::mem::size_of::<FinanceTransaction>();
+            if stride > 0 {
+                indices = filtered
+                    .into_iter()
+                    .map(|tx| ((tx as *const FinanceTransaction as usize) - base) / stride)
+                    .collect();
+            }
+        }
+        self.tx_list.reset(indices.len());
+        self.tx_derived = TxDerived {
+            key: Some(key),
+            indices,
+        };
+    }
+
+    fn sync_subs_derived(&mut self) {
+        let key = self.subscriptions.loaded_at;
+        if self.subs_derived.key == Some(key) {
+            return;
+        }
+        let records = self.subscriptions.value.as_deref().unwrap_or_default();
+        let monthly_burn = calculate_monthly_burn(records);
+        let summaries: Vec<_> = records
+            .iter()
+            .map(SubscriptionSummary::from_record)
+            .collect();
+        let active_count = summaries
+            .iter()
+            .filter(|s| s.status == "active" || s.status == "trial")
+            .count();
+        self.subs_derived = SubsDerived {
+            key: Some(key),
+            monthly_burn,
+            active_count,
+            summaries,
+        };
+    }
+
+    fn sync_import_derived(&mut self) {
+        let key = (
+            self.candidates.loaded_at,
+            self.dashboard.loaded_at,
+            self.trip_plans.loaded_at,
+            self.review_rev,
+        );
+        if self.import_derived.key == Some(key) {
+            return;
+        }
+        let candidates = self.candidates.value.as_deref().unwrap_or_default();
+        let pending_indices: Vec<usize> = candidates
+            .iter()
+            .enumerate()
+            .filter_map(|(ix, c)| (c.state == "pending").then_some(ix))
+            .collect();
+        let uncategorized: Vec<_> = candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.state == "confirmed"
+                    && candidate.amount_cents < 0
+                    && candidate
+                        .proposed_account
+                        .split(':')
+                        .any(|part| part == "uncategorized")
+            })
+            .cloned()
+            .collect();
+        let transactions = self
+            .dashboard
+            .value
+            .as_ref()
+            .map_or(&[][..], |d| d.transactions.as_slice());
+        let eligible = reviewable_expenses(
+            candidates,
+            transactions,
+            &ReviewScope {
+                start: String::new(),
+                end: "9999-12-31".into(),
+                account: String::new(),
+                category: String::new(),
+            },
+        );
+        let focused_plan = self
+            .trip_plans
+            .value
+            .as_ref()
+            .and_then(|plans| plans.iter().find(|plan| plan.id == self.review_trip_id));
+        let review_queue = prioritized_expense_queue(
+            &eligible,
+            self.queue_mode,
+            focused_plan.map(|plan| (plan.date_start.as_str(), plan.date_end.as_str())),
+        );
+        let inflows: Vec<_> = candidates
+            .iter()
+            .filter(|candidate| {
+                candidate.state == "confirmed"
+                    && candidate.amount_cents > 0
+                    && candidate.proposed_account != "assets:receivable:shared"
+            })
+            .cloned()
+            .collect();
+        self.import_derived = ImportDerived {
+            key: Some(key),
+            pending_indices,
+            uncategorized,
+            review_queue,
+            inflows,
+        };
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -278,6 +471,7 @@ impl FinancePage {
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
             if matches!(event, InputEvent::Change) {
                 view.search_query = input.read(cx).value().trim().to_lowercase();
+                view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
         });
@@ -970,9 +1164,9 @@ impl Render for FinancePage {
             window.focus(&self.focus, cx);
         }
 
-        let palette = self.palette.unwrap_or_else(Palette::dark);
-        let projection = self.dashboard.value.clone();
-        let subs_records = self.subscriptions.value.clone().unwrap_or_default();
+        let palette = self
+            .palette
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
 
         let view_btn = |label: &'static str, target: View, cx: &mut Context<Self>| {
             Button::new(SharedString::from(format!("fin-view-{label}")))
@@ -1022,11 +1216,9 @@ impl Render for FinancePage {
 
         // Body per Tab
         let content = match self.view {
-            View::Overview => self.render_overview(projection.as_ref(), &subs_records, palette, cx),
-            View::Transactions => {
-                self.render_transactions(projection.as_ref(), window, palette, cx)
-            }
-            View::Subscriptions => self.render_subscriptions(&subs_records, palette),
+            View::Overview => self.render_overview(palette, cx),
+            View::Transactions => self.render_transactions(window, palette, cx),
+            View::Subscriptions => self.render_subscriptions(palette),
             View::ImportReview => self.render_import_review(palette, window, cx),
         };
 
@@ -1075,22 +1267,18 @@ impl FinancePage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let candidates = self
-            .candidates
-            .value
-            .as_deref()
-            .unwrap_or_default()
-            .to_vec();
-        let pending_count = candidates
+        self.sync_import_derived();
+        let candidates = self.candidates.value.as_deref().unwrap_or_default();
+        let pending_count = self.import_derived.pending_indices.len();
+        let pending: Vec<FinanceCandidate> = self
+            .import_derived
+            .pending_indices
             .iter()
-            .filter(|candidate| candidate.state == "pending")
-            .count();
-        let pending = candidates
-            .iter()
-            .filter(|candidate| candidate.state == "pending")
-            .take(self.pending_limit);
+            .take(self.pending_limit)
+            .filter_map(|&ix| candidates.get(ix).cloned())
+            .collect();
         let mut queue = div().flex().flex_col().gap_2();
-        for candidate in pending {
+        for candidate in &pending {
             let id = candidate.id.clone();
             let reject_id = id.clone();
             let exact_transfer = candidate.transfer_match_ids.len() == 1;
@@ -1211,20 +1399,16 @@ impl FinancePage {
             );
         }
 
-        let uncategorized: Vec<_> = candidates
+        let uncategorized_len = self.import_derived.uncategorized.len();
+        let uncategorized_slice: Vec<FinanceCandidate> = self
+            .import_derived
+            .uncategorized
             .iter()
-            .filter(|candidate| {
-                candidate.state == "confirmed"
-                    && candidate.amount_cents < 0
-                    && candidate
-                        .proposed_account
-                        .split(':')
-                        .any(|part| part == "uncategorized")
-            })
+            .take(self.category_limit)
             .cloned()
             .collect();
         let mut category_rows = div().flex().flex_col().gap_1();
-        for candidate in uncategorized.iter().take(self.category_limit) {
+        for candidate in &uncategorized_slice {
             let candidate_id = candidate.id.clone();
             category_rows = category_rows.child(
                 div()
@@ -1291,7 +1475,7 @@ impl FinancePage {
                     .text_color(rgb(palette.muted))
                     .child(format!(
                         "{} confirmed expenses need a category",
-                        uncategorized.len()
+                        uncategorized_len
                     )),
             )
             .child(category_rows)
@@ -1314,7 +1498,7 @@ impl FinancePage {
                             .on_click(cx.listener(|page, _, _, cx| page.reclassify_selected(cx))),
                     ),
             );
-        let categorize_panel = if uncategorized.len() > self.category_limit {
+        let categorize_panel = if uncategorized_len > self.category_limit {
             categorize_panel.child(
                 Button::new("finance-category-more")
                     .small()
@@ -1329,34 +1513,16 @@ impl FinancePage {
             categorize_panel
         };
 
-        let transactions = self
-            .dashboard
-            .value
-            .as_ref()
-            .map(|dashboard| dashboard.transactions.clone())
-            .unwrap_or_default();
-        let eligible = reviewable_expenses(
-            &candidates,
-            &transactions,
-            &ReviewScope {
-                start: String::new(),
-                end: "9999-12-31".into(),
-                account: String::new(),
-                category: String::new(),
-            },
-        );
-        let focused_plan = self
-            .trip_plans
-            .value
-            .as_ref()
-            .and_then(|plans| plans.iter().find(|plan| plan.id == self.review_trip_id));
-        let review_queue = prioritized_expense_queue(
-            &eligible,
-            self.queue_mode,
-            focused_plan.map(|plan| (plan.date_start.as_str(), plan.date_end.as_str())),
-        );
+        let review_queue_len = self.import_derived.review_queue.len();
+        let review_slice: Vec<ExpenseReview> = self
+            .import_derived
+            .review_queue
+            .iter()
+            .take(self.expense_limit)
+            .cloned()
+            .collect();
         let mut expense_rows = div().flex().flex_col().gap_1();
-        for entry in review_queue.iter().take(self.expense_limit) {
+        for entry in &review_slice {
             let selected = self.selected_expense.as_deref() == Some(&entry.candidate.id);
             let selected_entry = entry.clone();
             expense_rows = expense_rows.child(
@@ -1382,7 +1548,14 @@ impl FinancePage {
         let share_is_valid = self
             .selected_expense
             .as_ref()
-            .and_then(|id| candidates.iter().find(|candidate| &candidate.id == id))
+            .and_then(|id| {
+                self.candidates
+                    .value
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .find(|candidate| &candidate.id == id)
+            })
             .and_then(|candidate| {
                 parse_personal_cents(&self.personal_amount)
                     .map(|cents| cents <= candidate.amount_cents.saturating_abs())
@@ -1421,6 +1594,7 @@ impl FinancePage {
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::Unreviewed;
+                                page.review_rev = page.review_rev.wrapping_add(1);
                                 cx.notify();
                             })),
                     )
@@ -1436,6 +1610,7 @@ impl FinancePage {
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::Shared;
+                                page.review_rev = page.review_rev.wrapping_add(1);
                                 cx.notify();
                             })),
                     )
@@ -1451,6 +1626,7 @@ impl FinancePage {
                             })
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.queue_mode = ReviewQueueMode::All;
+                                page.review_rev = page.review_rev.wrapping_add(1);
                                 cx.notify();
                             })),
                     ),
@@ -1465,6 +1641,7 @@ impl FinancePage {
                 .when(!self.review_trip_id.is_empty(), |button| button.ghost())
                 .on_click(cx.listener(|page, _, _, cx| {
                     page.review_trip_id.clear();
+                    page.review_rev = page.review_rev.wrapping_add(1);
                     cx.notify();
                 })),
         );
@@ -1481,12 +1658,13 @@ impl FinancePage {
                 .when(self.review_trip_id != plan.id, |button| button.ghost())
                 .on_click(cx.listener(move |page, _, _, cx| {
                     page.review_trip_id = id.clone();
+                    page.review_rev = page.review_rev.wrapping_add(1);
                     cx.notify();
                 })),
             );
         }
         allocation = allocation.child(trip_focus);
-        if review_queue.len() > self.expense_limit {
+        if review_queue_len > self.expense_limit {
             allocation = allocation.child(
                 Button::new("finance-expenses-more")
                     .small()
@@ -1633,13 +1811,12 @@ impl FinancePage {
                     .collect()
             })
             .unwrap_or_default();
-        let inflows: Vec<_> = candidates
+        let inflows_len = self.import_derived.inflows.len();
+        let inflows_slice: Vec<FinanceCandidate> = self
+            .import_derived
+            .inflows
             .iter()
-            .filter(|candidate| {
-                candidate.state == "confirmed"
-                    && candidate.amount_cents > 0
-                    && candidate.proposed_account != "assets:receivable:shared"
-            })
+            .take(self.inflow_limit)
             .cloned()
             .collect();
         let mut reimbursement = div()
@@ -1658,7 +1835,7 @@ impl FinancePage {
                     .text_color(rgb(palette.text))
                     .child("Link a repayment"),
             );
-        for inflow in inflows.iter().take(self.inflow_limit) {
+        for inflow in &inflows_slice {
             let id = inflow.id.clone();
             reimbursement = reimbursement.child(
                 Button::new(SharedString::from(format!("finance-inflow-{}", inflow.id)))
@@ -1682,7 +1859,7 @@ impl FinancePage {
                     })),
             );
         }
-        if inflows.len() > self.inflow_limit {
+        if inflows_len > self.inflow_limit {
             reimbursement = reimbursement.child(
                 Button::new("finance-inflows-more")
                     .small()
@@ -1998,6 +2175,8 @@ impl FinancePage {
             .flex_col()
             .gap_3()
             .overflow_y_scroll()
+            .track_scroll(&self.import_scroll)
+            .vertical_scrollbar(&self.import_scroll)
             .pb_6()
             .child(
                 div()
@@ -2015,13 +2194,7 @@ impl FinancePage {
                         div()
                             .text_sm()
                             .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{} pending candidates",
-                                candidates
-                                    .iter()
-                                    .filter(|candidate| candidate.state == "pending")
-                                    .count()
-                            )),
+                            .child(format!("{pending_count} pending candidates")),
                     ),
             )
             .child(import_card)
@@ -2043,48 +2216,40 @@ impl FinancePage {
         view.into_any_element()
     }
 
-    fn render_overview(
-        &mut self,
-        projection: Option<&FinanceDashboardProjection>,
-        subs_records: &[SubscriptionRecord],
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn render_overview(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        self.sync_subs_derived();
+        let monthly_burn = self.subs_derived.monthly_burn;
+        let active_subs = self.subs_derived.active_count;
+        let projection = self.dashboard.value.as_ref();
         let (income, spend, curr) = match projection {
             Some(p) => (
                 p.summary.income_cents,
                 p.summary.personal_spending_cents,
-                p.summary.currency.as_str(),
+                p.summary.currency.clone(),
             ),
-            None => (0, 0, "EUR"),
+            None => (0, 0, "EUR".to_owned()),
         };
 
         let net = income - spend;
-        let monthly_burn = calculate_monthly_burn(subs_records);
-        let active_subs = subs_records
-            .iter()
-            .map(SubscriptionSummary::from_record)
-            .filter(|s| s.status == "active" || s.status == "trial")
-            .count();
 
         let stat_cards = div()
             .flex()
             .gap_4()
             .child(stat_card(
                 "MONTHLY SPENDING",
-                format_money(-spend, curr),
+                format_money(-spend, &curr),
                 "Personal expenses",
                 palette,
             ))
             .child(stat_card(
                 "MONTHLY INCOME",
-                format_money(income, curr),
+                format_money(income, &curr),
                 "Inflows & earnings",
                 palette,
             ))
             .child(stat_card(
                 "NET SAVINGS",
-                format_money(net, curr),
+                format_money(net, &curr),
                 if net >= 0 {
                     "Positive net"
                 } else {
@@ -2094,12 +2259,20 @@ impl FinancePage {
             ))
             .child(stat_card(
                 "RECURRING BURN",
-                format_money(-monthly_burn, curr),
+                format_money(-monthly_burn, &curr),
                 format!("{active_subs} active subscriptions"),
                 palette,
             ));
 
-        let txs = projection.map(|p| p.transactions.as_slice()).unwrap_or(&[]);
+        let recent_rows: Vec<AnyElement> = projection
+            .map(|p| {
+                p.transactions
+                    .iter()
+                    .take(8)
+                    .map(|tx| render_tx_row(tx, palette))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let recent_preview = div()
             .flex()
@@ -2127,7 +2300,7 @@ impl FinancePage {
                             })),
                     ),
             )
-            .child(if txs.is_empty() {
+            .child(if recent_rows.is_empty() {
                 div()
                     .p_6()
                     .rounded(px(8.))
@@ -2139,133 +2312,131 @@ impl FinancePage {
                     .child("No transactions recorded.")
                     .into_any_element()
             } else {
-                let mut list = div().flex().flex_col().gap_1();
-                for tx in txs.iter().take(8) {
-                    list = list.child(render_tx_row(tx, palette));
-                }
-                list.into_any_element()
-            });
-
-        let balance_panel =
-            if let Some(snapshot) = projection.and_then(|value| value.balance_snapshot.as_ref()) {
-                let mut balances = div().flex().flex_col().gap_1();
-                for balance in &snapshot.balances {
-                    let sign = if balance.kind == shell::BalanceKind::Liability {
-                        -1
-                    } else {
-                        1
-                    };
-                    balances = balances.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .text_sm()
-                            .child(balance.label.clone())
-                            .child(format_money(
-                                balance.amount_cents * sign,
-                                &snapshot.currency,
-                            )),
-                    );
-                }
                 div()
                     .flex()
                     .flex_col()
-                    .gap_2()
-                    .p_4()
-                    .rounded(px(8.))
-                    .border_1()
-                    .border_color(rgba(palette.border))
-                    .bg(rgba(palette.surface))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(rgb(palette.muted))
-                                    .child("MANUAL BALANCES"),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!(
-                                        "As of {} · {}",
-                                        snapshot.as_of,
-                                        match snapshot.coverage {
-                                            shell::BalanceCoverage::Complete => "complete",
-                                            shell::BalanceCoverage::Partial => "partial",
-                                        }
-                                    )),
-                            ),
-                    )
-                    .child(balances)
-                    .child(
-                        if let Some(net_worth) =
-                            projection.and_then(|value| value.tracked_net_worth.as_ref())
-                        {
+                    .gap_1()
+                    .children(recent_rows)
+                    .into_any_element()
+            });
+
+        let balance_snapshot = projection.and_then(|value| value.balance_snapshot.clone());
+        let tracked_net_worth = projection.and_then(|value| value.tracked_net_worth.clone());
+        let balance_panel = if let Some(snapshot) = balance_snapshot.as_ref() {
+            let mut balances = div().flex().flex_col().gap_1();
+            for balance in &snapshot.balances {
+                let sign = if balance.kind == shell::BalanceKind::Liability {
+                    -1
+                } else {
+                    1
+                };
+                balances = balances.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .text_sm()
+                        .child(balance.label.clone())
+                        .child(format_money(
+                            balance.amount_cents * sign,
+                            &snapshot.currency,
+                        )),
+                );
+            }
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .p_4()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(rgb(palette.muted))
+                                .child("MANUAL BALANCES"),
+                        )
+                        .child(
                             div()
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
                                 .child(format!(
-                                    "Tracked net worth {} · {} · portfolio {}",
-                                    format_exact_money(
-                                        &net_worth.value.mantissa,
-                                        net_worth.value.scale,
-                                        &net_worth.currency
-                                    )
-                                    .unwrap_or_else(|| "—".into()),
-                                    if net_worth.complete {
-                                        "complete"
-                                    } else {
-                                        "incomplete"
-                                    },
-                                    if net_worth.portfolio_included {
-                                        "included"
-                                    } else {
-                                        "not included"
-                                    },
-                                ))
-                                .into_any_element()
-                        } else {
-                            div().into_any_element()
-                        },
-                    )
-                    .child(
-                        Button::new("finance-edit-balances")
-                            .small()
-                            .ghost()
-                            .label("Edit balances")
-                            .on_click(cx.listener(|page, _, window, cx| {
-                                page.open_balance_editor(window, cx)
-                            })),
-                    )
-                    .into_any_element()
-            } else {
-                div()
-                    .p_4()
-                    .rounded(px(8.))
-                    .border_1()
-                    .border_color(rgba(palette.border))
-                    .bg(rgba(palette.surface))
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child("No manual balance snapshot configured.")
-                    .child(
-                        Button::new("finance-add-balances")
-                            .small()
-                            .ghost()
-                            .label("Add balances")
-                            .on_click(cx.listener(|page, _, window, cx| {
-                                page.open_balance_editor(window, cx)
-                            })),
-                    )
-                    .into_any_element()
-            };
+                                    "As of {} · {}",
+                                    snapshot.as_of,
+                                    match snapshot.coverage {
+                                        shell::BalanceCoverage::Complete => "complete",
+                                        shell::BalanceCoverage::Partial => "partial",
+                                    }
+                                )),
+                        ),
+                )
+                .child(balances)
+                .child(if let Some(net_worth) = tracked_net_worth.as_ref() {
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!(
+                            "Tracked net worth {} · {} · portfolio {}",
+                            format_exact_money(
+                                &net_worth.value.mantissa,
+                                net_worth.value.scale,
+                                &net_worth.currency
+                            )
+                            .unwrap_or_else(|| "—".into()),
+                            if net_worth.complete {
+                                "complete"
+                            } else {
+                                "incomplete"
+                            },
+                            if net_worth.portfolio_included {
+                                "included"
+                            } else {
+                                "not included"
+                            },
+                        ))
+                        .into_any_element()
+                } else {
+                    div().into_any_element()
+                })
+                .child(
+                    Button::new("finance-edit-balances")
+                        .small()
+                        .ghost()
+                        .label("Edit balances")
+                        .on_click(
+                            cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
+                        ),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .p_4()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .text_sm()
+                .text_color(rgb(palette.muted))
+                .child("No manual balance snapshot configured.")
+                .child(
+                    Button::new("finance-add-balances")
+                        .small()
+                        .ghost()
+                        .label("Add balances")
+                        .on_click(
+                            cx.listener(|page, _, window, cx| page.open_balance_editor(window, cx)),
+                        ),
+                )
+                .into_any_element()
+        };
 
         let balance_editor = if self.balance_editor_open {
             self.render_balance_editor(palette, cx)
@@ -2282,6 +2453,8 @@ impl FinancePage {
             .flex_col()
             .gap_4()
             .overflow_y_scroll()
+            .track_scroll(&self.overview_scroll)
+            .vertical_scrollbar(&self.overview_scroll)
             .pb_6()
             .child(stat_cards)
             .child(balance_panel)
@@ -2466,19 +2639,12 @@ impl FinancePage {
 
     fn render_transactions(
         &mut self,
-        projection: Option<&FinanceDashboardProjection>,
         window: &mut Window,
         palette: Palette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let all_txs = projection.map(|p| p.transactions.as_slice()).unwrap_or(&[]);
-
-        let filter = TransactionFilter {
-            query: self.search_query.clone(),
-            category: self.selected_category.clone(),
-        };
-
-        let filtered = filter_transactions(all_txs, &filter);
+        self.sync_tx_derived();
+        let is_empty = self.tx_derived.indices.is_empty();
 
         let search_box = div()
             .w(px(280.))
@@ -2505,6 +2671,7 @@ impl FinancePage {
                             .when(self.selected_category.is_some(), |b| b.ghost())
                             .on_click(cx.listener(|page, _, _, cx| {
                                 page.selected_category = None;
+                                page.filter_rev = page.filter_rev.wrapping_add(1);
                                 cx.notify();
                             })),
                     )
@@ -2518,12 +2685,13 @@ impl FinancePage {
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.selected_category =
                                     if active { None } else { Some(cat.to_string()) };
+                                page.filter_rev = page.filter_rev.wrapping_add(1);
                                 cx.notify();
                             }))
                     })),
             );
 
-        let table_body = if filtered.is_empty() {
+        let table_body = if is_empty {
             div()
                 .flex()
                 .flex_col()
@@ -2539,11 +2707,30 @@ impl FinancePage {
                 .child("No transactions match the current filter.")
                 .into_any_element()
         } else {
-            let mut list = div().flex().flex_col().gap_1();
-            for tx in filtered {
-                list = list.child(render_tx_row(tx, palette));
-            }
-            list.into_any_element()
+            let entity = cx.entity();
+            virtual_list(
+                "finance-transactions-list",
+                &self.tx_list,
+                move |ix, _window, cx| {
+                    entity.update(cx, |page, _cx| {
+                        let Some(&tx_ix) = page.tx_derived.indices.get(ix) else {
+                            return div().into_any_element();
+                        };
+                        let Some(tx) = page
+                            .dashboard
+                            .value
+                            .as_ref()
+                            .and_then(|d| d.transactions.get(tx_ix))
+                        else {
+                            return div().into_any_element();
+                        };
+                        div()
+                            .pb_1()
+                            .child(render_tx_row(tx, palette))
+                            .into_any_element()
+                    })
+                },
+            )
         };
 
         div()
@@ -2555,25 +2742,20 @@ impl FinancePage {
             .child(
                 div()
                     .id("finance-transactions-scroll")
+                    .flex()
+                    .flex_col()
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
                     .pb_6()
                     .child(table_body),
             )
             .into_any_element()
     }
 
-    fn render_subscriptions(
-        &self,
-        subs_records: &[SubscriptionRecord],
-        palette: Palette,
-    ) -> AnyElement {
-        let monthly_burn = calculate_monthly_burn(subs_records);
-        let summaries: Vec<_> = subs_records
-            .iter()
-            .map(SubscriptionSummary::from_record)
-            .collect();
+    fn render_subscriptions(&mut self, palette: Palette) -> AnyElement {
+        self.sync_subs_derived();
+        let monthly_burn = self.subs_derived.monthly_burn;
+        let summaries = &self.subs_derived.summaries;
 
         let header_stat = div()
             .flex()
@@ -2667,7 +2849,7 @@ impl FinancePage {
                                             .text_sm()
                                             .font_weight(FontWeight::MEDIUM)
                                             .text_color(rgb(palette.text))
-                                            .child(sub.name),
+                                            .child(sub.name.clone()),
                                     )
                                     .child(
                                         div()
@@ -2720,6 +2902,8 @@ impl FinancePage {
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
+                    .track_scroll(&self.subscriptions_scroll)
+                    .vertical_scrollbar(&self.subscriptions_scroll)
                     .pb_6()
                     .child(cards_grid),
             )

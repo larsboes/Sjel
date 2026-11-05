@@ -379,7 +379,9 @@ pub fn render(
                 .flex_1()
                 .min_w_0()
                 .h_full()
+                .track_scroll(&view.selection.scroll)
                 .overflow_y_scroll()
+                .vertical_scrollbar(&view.selection.scroll)
                 .child(
                     div()
                         .flex()

@@ -5,6 +5,7 @@
 //! never offers a key the capability would refuse.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -22,7 +23,8 @@ use sjel_gpui_core::people::{filter_people, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::theme::{tint, Palette};
+use crate::primitives::virtual_list;
+use crate::theme::{tint, Palette, ThemeContext};
 
 actions!(
     people_page,
@@ -129,6 +131,14 @@ enum Saved {
     Pair,
 }
 
+#[derive(Default)]
+struct PeopleDerived {
+    people_at: Option<Option<Instant>>,
+    parsed: Vec<Person>,
+    filter_key: Option<(Option<Instant>, u64)>,
+    filtered_indices: Vec<usize>,
+}
+
 pub struct PeoplePage {
     repo: Repo,
     palette: Option<Palette>,
@@ -146,8 +156,10 @@ pub struct PeoplePage {
     write_error: Option<SharedString>,
     pub selected_id: Option<String>,
     pub search_query: String,
+    filter_rev: u64,
+    derived: PeopleDerived,
+    people_list: gpui::ListState,
     search_input: Option<(Entity<InputState>, Subscription)>,
-    people_scroll: ScrollHandle,
     form_scroll: ScrollHandle,
     detail_scroll: ScrollHandle,
     focus: FocusHandle,
@@ -168,12 +180,60 @@ impl PeoplePage {
             write_error: None,
             selected_id: None,
             search_query: String::new(),
+            filter_rev: 0,
+            derived: PeopleDerived::default(),
+            people_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             search_input: None,
-            people_scroll: ScrollHandle::new(),
             form_scroll: ScrollHandle::new(),
             detail_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             focus_next: true,
+        }
+    }
+
+    pub fn detail_scroll(&self) -> &ScrollHandle {
+        &self.detail_scroll
+    }
+
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        self.sync_derived();
+        let rows = self.derived.filtered_indices.len();
+        let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+        self.people_list.scroll_to(gpui::ListOffset {
+            item_ix,
+            offset_in_item: px(0.),
+        });
+        cx.notify();
+    }
+
+    fn sync_derived(&mut self) {
+        if self.derived.people_at != Some(self.people.loaded_at) {
+            self.derived.people_at = Some(self.people.loaded_at);
+            self.derived.parsed = self
+                .people
+                .value
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(Person::from_record)
+                .collect();
+        }
+        let filter_key = (self.people.loaded_at, self.filter_rev);
+        if self.derived.filter_key != Some(filter_key) {
+            self.derived.filter_key = Some(filter_key);
+            let filtered = filter_people(&self.derived.parsed, &self.search_query);
+            let base = self.derived.parsed.as_ptr() as usize;
+            let stride = std::mem::size_of::<Person>();
+            let indices: Vec<usize> = if stride > 0 {
+                filtered
+                    .into_iter()
+                    .map(|p| ((p as *const Person as usize) - base) / stride)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            self.people_list.reset(indices.len());
+            self.derived.filtered_indices = indices;
         }
     }
 
@@ -257,14 +317,13 @@ impl PeoplePage {
         self.repo.shell().ok()
     }
 
-    fn person(&self, id: &str) -> Option<Person> {
-        self.people
-            .value
-            .as_deref()
-            .unwrap_or(&[])
+    fn person(&mut self, id: &str) -> Option<Person> {
+        self.sync_derived();
+        self.derived
+            .parsed
             .iter()
-            .map(Person::from_record)
             .find(|person| person.id == id)
+            .cloned()
     }
 
     fn open_form(&mut self, kind: FormKind, window: &mut Window, cx: &mut Context<Self>) {
@@ -411,11 +470,25 @@ impl PeoplePage {
         if form.saving {
             return;
         }
+        let kind = form.kind.clone();
+        let choice = form.choice.clone();
+        let place = form.value("place", cx);
+        let from = form.value("from", cx);
+        let to = form.value("to", cx);
+        let note = form.value("note", cx);
+        let field_key = form.value("key", cx);
+        let field_label = form.value("label", cx);
+        let field_options = form.value("options", cx);
         let name = form
             .name
             .as_ref()
             .map(|input| input.read(cx).value().to_string())
             .unwrap_or_default();
+        let field_values: Vec<(String, String)> = form
+            .fields
+            .iter()
+            .map(|(key, _, input)| (key.clone(), input.read(cx).value().to_string()))
+            .collect();
         let types = self
             .fields
             .value
@@ -424,56 +497,44 @@ impl PeoplePage {
             .iter()
             .map(|field| (field.key.clone(), field.field_type.clone()))
             .collect::<std::collections::BTreeMap<_, _>>();
-        let work: Result<_, String> = match form.kind.clone() {
-            FormKind::New => {
-                let values = form
-                    .fields
-                    .iter()
-                    .map(|(key, _, input)| (key.clone(), input.read(cx).value().to_string()))
-                    .collect();
-                NewPersonDraft {
-                    name,
-                    values,
-                    types,
-                }
-                .body()
-                .map(Work::Create)
+        let work: Result<_, String> = match kind {
+            FormKind::New => NewPersonDraft {
+                name,
+                values: field_values,
+                types,
             }
+            .body()
+            .map(Work::Create),
             FormKind::Edit(id) => {
                 let Some(person) = self.person(&id) else {
                     return;
                 };
-                let after = form
-                    .fields
-                    .iter()
-                    .map(|(key, _, input)| (key.clone(), input.read(cx).value().to_string()))
-                    .collect();
                 PersonEdit {
                     id: id.clone(),
                     name,
                     original_name: person.name.clone(),
                     revision: person.revision,
                     before: person.values.clone(),
-                    after,
+                    after: field_values.into_iter().collect(),
                     types,
                 }
                 .body()
                 .map(|body| Work::Update(id, body))
             }
             FormKind::Fact(id) => FactDraft {
-                predicate: form.choice.clone(),
-                place: form.value("place", cx),
-                from: form.value("from", cx),
-                to: form.value("to", cx),
-                note: form.value("note", cx),
+                predicate: choice,
+                place,
+                from,
+                to,
+                note,
             }
             .body()
             .map(|body| Work::AddFact(id, body)),
             FormKind::Field => FieldDecl {
-                key: form.value("key", cx),
-                label: form.value("label", cx),
-                field_type: form.choice.clone(),
-                options: form.value("options", cx),
+                key: field_key,
+                label: field_label,
+                field_type: choice,
+                options: field_options,
             }
             .body()
             .map(Work::DeclareField),
@@ -589,6 +650,7 @@ impl PeoplePage {
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
             if matches!(event, InputEvent::Change) {
                 view.search_query = input.read(cx).value().trim().to_lowercase();
+                view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
         });
@@ -597,57 +659,51 @@ impl PeoplePage {
     }
 
     fn on_next(&mut self, _: &Next, _: &mut Window, cx: &mut Context<Self>) {
-        let people: Vec<_> = self
-            .people
-            .value
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(Person::from_record)
-            .collect();
-        let filtered = filter_people(&people, &self.search_query);
-        if filtered.is_empty() {
+        self.sync_derived();
+        if self.derived.filtered_indices.is_empty() {
             return;
         }
-
-        let at = self
-            .selected_id
-            .as_ref()
-            .and_then(|id| filtered.iter().position(|p| &p.id == id));
-
+        let at = self.selected_id.as_ref().and_then(|id| {
+            self.derived
+                .filtered_indices
+                .iter()
+                .position(|&ix| self.derived.parsed.get(ix).is_some_and(|p| &p.id == id))
+        });
         let next_idx = match at {
-            Some(i) if i + 1 < filtered.len() => i + 1,
+            Some(i) if i + 1 < self.derived.filtered_indices.len() => i + 1,
             _ => 0,
         };
-        self.selected_id = Some(filtered[next_idx].id.clone());
-        cx.notify();
+        if let Some(&person_ix) = self.derived.filtered_indices.get(next_idx) {
+            if let Some(person) = self.derived.parsed.get(person_ix) {
+                self.selected_id = Some(person.id.clone());
+                self.people_list.scroll_to_reveal_item(next_idx);
+                cx.notify();
+            }
+        }
     }
 
     fn on_previous(&mut self, _: &Previous, _: &mut Window, cx: &mut Context<Self>) {
-        let people: Vec<_> = self
-            .people
-            .value
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(Person::from_record)
-            .collect();
-        let filtered = filter_people(&people, &self.search_query);
-        if filtered.is_empty() {
+        self.sync_derived();
+        if self.derived.filtered_indices.is_empty() {
             return;
         }
-
-        let at = self
-            .selected_id
-            .as_ref()
-            .and_then(|id| filtered.iter().position(|p| &p.id == id));
-
+        let at = self.selected_id.as_ref().and_then(|id| {
+            self.derived
+                .filtered_indices
+                .iter()
+                .position(|&ix| self.derived.parsed.get(ix).is_some_and(|p| &p.id == id))
+        });
         let prev_idx = match at {
             Some(i) if i > 0 => i - 1,
-            _ => filtered.len().saturating_sub(1),
+            _ => self.derived.filtered_indices.len().saturating_sub(1),
         };
-        self.selected_id = Some(filtered[prev_idx].id.clone());
-        cx.notify();
+        if let Some(&person_ix) = self.derived.filtered_indices.get(prev_idx) {
+            if let Some(person) = self.derived.parsed.get(person_ix) {
+                self.selected_id = Some(person.id.clone());
+                self.people_list.scroll_to_reveal_item(prev_idx);
+                cx.notify();
+            }
+        }
     }
 
     pub fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -925,15 +981,17 @@ impl Render for PeoplePage {
             window.focus(&self.focus, cx);
         }
 
-        let palette = self.palette.unwrap_or_else(Palette::dark);
-        let records = self.people.value.clone().unwrap_or_default();
-        let parsed_people: Vec<Person> = records.iter().map(Person::from_record).collect();
-        let filtered = filter_people(&parsed_people, &self.search_query);
+        let palette = self
+            .palette
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
+        self.sync_derived();
+        let total_contacts = self.derived.parsed.len();
+        let is_empty = self.derived.filtered_indices.is_empty();
 
         let selected_person = self
             .selected_id
             .as_ref()
-            .and_then(|id| parsed_people.iter().find(|p| &p.id == id))
+            .and_then(|id| self.derived.parsed.iter().find(|p| &p.id == id))
             .cloned();
 
         let header = div()
@@ -957,7 +1015,7 @@ impl Render for PeoplePage {
                         div()
                             .text_sm()
                             .text_color(rgb(palette.muted))
-                            .child(format!("{} contacts", parsed_people.len())),
+                            .child(format!("{total_contacts} contacts")),
                     ),
             )
             .child(
@@ -1026,7 +1084,7 @@ impl Render for PeoplePage {
             .gap_2()
             .child(search_box);
 
-        if filtered.is_empty() {
+        if is_empty {
             list_pane = list_pane.child(
                 div()
                     .p_6()
@@ -1039,101 +1097,105 @@ impl Render for PeoplePage {
                     .child("No contacts found."),
             );
         } else {
-            let mut items_list = div().flex().flex_col().gap_1().flex_none().w_full();
-            for person in filtered {
-                let chosen = self.selected_id.as_deref() == Some(&person.id);
-                let pid = person.id.clone();
+            let entity = cx.entity();
+            list_pane = list_pane.child(virtual_list(
+                "people-list-scroll",
+                &self.people_list,
+                move |ix, _window, cx| {
+                    entity.update(cx, |page, cx| {
+                        let Some(&person_ix) = page.derived.filtered_indices.get(ix) else {
+                            return div().into_any_element();
+                        };
+                        let Some(person) = page.derived.parsed.get(person_ix) else {
+                            return div().into_any_element();
+                        };
+                        let chosen = page.selected_id.as_deref() == Some(person.id.as_str());
+                        let pid = person.id.clone();
+                        let initials = person.initials.clone();
+                        let name = person.name.clone();
+                        let subtitle = [person.company.as_deref(), person.role.as_deref()]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>()
+                            .join(" · ");
 
-                let subtitle = [person.company.as_deref(), person.role.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" · ");
-
-                items_list = items_list.child(
-                    div()
-                        .id(SharedString::from(format!("person-item-{}", person.id)))
-                        .flex_none()
-                        .w_full()
-                        .flex()
-                        .items_center()
-                        .gap_3()
-                        .p_2p5()
-                        .rounded(px(6.))
-                        .border_1()
-                        .border_color(if chosen {
-                            rgb(palette.accent)
-                        } else {
-                            rgba(palette.border)
-                        })
-                        .bg(if chosen {
-                            rgba(palette.raised)
-                        } else {
-                            rgba(palette.surface)
-                        })
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.selected_id = Some(pid.clone());
-                            page.form = None;
-                            page.confirm_remove = None;
-                            page.detail_scroll.set_offset(point(px(0.), px(0.)));
-                            cx.notify();
-                        }))
-                        .child(
-                            div()
-                                .w(px(32.))
-                                .h(px(32.))
-                                .rounded_full()
-                                .bg(rgba(tint(palette.accent, 0x22)))
-                                .border_1()
-                                .border_color(rgb(palette.accent))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(rgb(palette.accent))
-                                .child(person.initials.clone()),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .gap_0p5()
-                                .child(
-                                    div()
-                                        .truncate()
-                                        .text_sm()
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(palette.text))
-                                        .child(person.name.clone()),
-                                )
-                                .when(!subtitle.is_empty(), |el| {
-                                    el.child(
+                        div()
+                            .pb_1()
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("person-item-{pid}")))
+                                    .flex_none()
+                                    .w_full()
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .p_2p5()
+                                    .rounded(px(6.))
+                                    .border_1()
+                                    .border_color(if chosen {
+                                        rgb(palette.accent)
+                                    } else {
+                                        rgba(palette.border)
+                                    })
+                                    .bg(if chosen {
+                                        rgba(palette.raised)
+                                    } else {
+                                        rgba(palette.surface)
+                                    })
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(move |page, _, _, cx| {
+                                        page.selected_id = Some(pid.clone());
+                                        page.form = None;
+                                        page.confirm_remove = None;
+                                        page.detail_scroll.set_offset(point(px(0.), px(0.)));
+                                        cx.notify();
+                                    }))
+                                    .child(
                                         div()
-                                            .truncate()
+                                            .w(px(32.))
+                                            .h(px(32.))
+                                            .rounded_full()
+                                            .bg(rgba(tint(palette.accent, 0x22)))
+                                            .border_1()
+                                            .border_color(rgb(palette.accent))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
                                             .text_xs()
-                                            .text_color(rgb(palette.muted))
-                                            .child(subtitle),
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(rgb(palette.accent))
+                                            .child(initials),
                                     )
-                                }),
-                        ),
-                );
-            }
-            list_pane = list_pane.child(
-                div()
-                    .id("people-list-scroll")
-                    .flex_1()
-                    .min_h_0()
-                    .min_w_0()
-                    .w_full()
-                    .overflow_y_scroll()
-                    .track_scroll(&self.people_scroll)
-                    .vertical_scrollbar(&self.people_scroll)
-                    .child(items_list),
-            );
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .flex()
+                                            .flex_col()
+                                            .gap_0p5()
+                                            .child(
+                                                div()
+                                                    .truncate()
+                                                    .text_sm()
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb(palette.text))
+                                                    .child(name),
+                                            )
+                                            .when(!subtitle.is_empty(), |el| {
+                                                el.child(
+                                                    div()
+                                                        .truncate()
+                                                        .text_xs()
+                                                        .text_color(rgb(palette.muted))
+                                                        .child(subtitle),
+                                                )
+                                            }),
+                                    ),
+                            )
+                            .into_any_element()
+                    })
+                },
+            ));
         }
 
         // Right Detail Pane

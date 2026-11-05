@@ -1,23 +1,25 @@
 //! Household inventory, asset catalog, wishlist budget, and interior spatial layout.
 
 use std::collections::BTreeSet;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    KeyBinding, Render, Subscription, Window,
+    KeyBinding, Render, ScrollHandle, Subscription, Window,
 };
 
 use crate::data::{Remote, Repo};
 use crate::interior::RoomPlanHistory;
+use crate::primitives::virtual_list;
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
     budget_of, counted, filter_inventory, format_cents, format_dimensions, group_of, months_to_pay,
-    wishlist_view, InteriorItemImpact, InteriorLayoutSummary, InventoryItem, InventoryRow,
+    wishlist_view, Budget, InteriorItemImpact, InteriorLayoutSummary, InventoryItem, InventoryRow,
     InventoryState, InventoryStateHistoryEntry, InventoryWishlist, MailMatchSnapshot, MailProposal,
     NewInventoryItem, WishGroup,
 };
@@ -202,6 +204,23 @@ impl InventoryEditForm {
     }
 }
 
+#[derive(Default)]
+struct OwnedDerived {
+    key: Option<(Option<Instant>, u64)>,
+    owned_count: usize,
+    total_cents: i64,
+    categories: Vec<String>,
+    filtered: Vec<InventoryRow>,
+}
+
+#[derive(Default)]
+struct WishlistDerived {
+    key: Option<(Option<Instant>, Option<Instant>, u64)>,
+    shown: Vec<InventoryItem>,
+    budget: Budget,
+    whole: Budget,
+}
+
 pub struct InventoryPage {
     repo: Repo,
     palette: Option<Palette>,
@@ -223,6 +242,11 @@ pub struct InventoryPage {
     pub selected_category: Option<String>,
     /// The wish group the wishlist is narrowed to, by id. None shows every open wish.
     pub selected_group: Option<String>,
+    filter_rev: u64,
+    owned_derived: OwnedDerived,
+    owned_list: gpui::ListState,
+    wishlist_derived: WishlistDerived,
+    pub scroll: ScrollHandle,
     search_input: Option<(Entity<InputState>, Subscription)>,
     wish_form: Option<WishForm>,
     group_form: Option<GroupForm>,
@@ -267,6 +291,11 @@ impl InventoryPage {
             search_query: String::new(),
             selected_category: None,
             selected_group: None,
+            filter_rev: 0,
+            owned_derived: OwnedDerived::default(),
+            owned_list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
+            wishlist_derived: WishlistDerived::default(),
+            scroll: ScrollHandle::new(),
             search_input: None,
             wish_form: None,
             group_form: None,
@@ -280,6 +309,98 @@ impl InventoryPage {
             confirm_remove_wish: None,
             focus: cx.focus_handle(),
         }
+    }
+
+    pub fn scroll(&self) -> &ScrollHandle {
+        &self.scroll
+    }
+
+    pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if self.tab == InventoryTab::Owned {
+            self.sync_owned_derived();
+            let rows = self.owned_derived.filtered.len();
+            let item_ix = (rows.saturating_sub(1) as f32 * fraction).round() as usize;
+            self.owned_list.scroll_to(gpui::ListOffset {
+                item_ix,
+                offset_in_item: px(0.),
+            });
+        } else {
+            let max = self.scroll.max_offset().y;
+            self.scroll
+                .set_offset(gpui_kit::point(px(0.), -max * fraction));
+        }
+        cx.notify();
+    }
+
+    fn sync_owned_derived(&mut self) {
+        let key = (self.rows.loaded_at, self.filter_rev);
+        if self.owned_derived.key == Some(key) {
+            return;
+        }
+        let mut owned_count = 0;
+        let mut total_cents = 0i64;
+        let mut categories = BTreeSet::new();
+        let mut filtered = Vec::new();
+        if let Some(all_rows) = self.rows.value.as_ref() {
+            let owned_rows: Vec<_> = all_rows
+                .iter()
+                .filter(|r| r.state.as_deref() == Some("owned"))
+                .cloned()
+                .collect();
+            owned_count = owned_rows.len();
+            for r in &owned_rows {
+                categories.insert(group_of(&r.item));
+                if let Some(cents) = r.item.price_cents {
+                    total_cents += cents;
+                }
+            }
+            filtered = filter_inventory(
+                &owned_rows,
+                &self.search_query,
+                self.selected_category.as_deref(),
+                Some("owned"),
+            );
+        }
+        self.owned_list.reset(filtered.len());
+        self.owned_derived = OwnedDerived {
+            key: Some(key),
+            owned_count,
+            total_cents,
+            categories: categories.into_iter().collect(),
+            filtered,
+        };
+    }
+
+    fn sync_wishlist_derived(&mut self) {
+        let key = (
+            self.wishlist.loaded_at,
+            self.wish_groups.loaded_at,
+            self.filter_rev,
+        );
+        if self.wishlist_derived.key == Some(key) {
+            return;
+        }
+        let mut shown = Vec::new();
+        let mut budget = Budget::default();
+        let mut whole = Budget::default();
+        if let Some(wishlist) = self.wishlist.value.as_ref() {
+            let groups = self.wish_groups.value.as_deref().unwrap_or_default();
+            let group = self
+                .selected_group
+                .as_deref()
+                .and_then(|id| groups.iter().find(|g| g.id == id));
+            let refs = wishlist_view(&wishlist.items, group, &self.search_query);
+            budget = budget_of(counted(&refs, groups));
+            let every: Vec<&InventoryItem> = wishlist.items.iter().collect();
+            whole = budget_of(counted(&every, groups));
+            shown = refs.into_iter().cloned().collect();
+        }
+        self.wishlist_derived = WishlistDerived {
+            key: Some(key),
+            shown,
+            budget,
+            whole,
+        };
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -366,6 +487,7 @@ impl InventoryPage {
                 });
                 if !known {
                     page.selected_group = None;
+                    page.filter_rev = page.filter_rev.wrapping_add(1);
                 }
                 cx.notify();
             });
@@ -766,6 +888,7 @@ impl InventoryPage {
         let subscription = cx.subscribe_in(&input, window, |view, input, event, _, cx| {
             if matches!(event, InputEvent::Change) {
                 view.search_query = input.read(cx).value().trim().to_lowercase();
+                view.filter_rev = view.filter_rev.wrapping_add(1);
                 cx.notify();
             }
         });
@@ -862,6 +985,7 @@ impl InventoryPage {
                     Ok(()) => {
                         page.group_form = None;
                         page.selected_group = Some(id.clone());
+                        page.filter_rev = page.filter_rev.wrapping_add(1);
                         page.wish_notice = Some(format!("Group \"{title}\" created."));
                         page.load(cx);
                     }
@@ -944,6 +1068,7 @@ impl InventoryPage {
                     Ok(()) => {
                         if page.selected_group.as_deref() == Some(id.as_str()) {
                             page.selected_group = None;
+                            page.filter_rev = page.filter_rev.wrapping_add(1);
                         }
                         page.wish_notice =
                             Some("Group removed. Its wishes stay on the list.".to_owned());
@@ -1463,17 +1588,9 @@ impl InventoryPage {
         cx.notify();
     }
 
-    fn render_header_bar(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let owned_count = self
-            .rows
-            .value
-            .as_ref()
-            .map(|r| {
-                r.iter()
-                    .filter(|row| row.state.as_deref() == Some("owned"))
-                    .count()
-            })
-            .unwrap_or(0);
+    fn render_header_bar(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+        self.sync_owned_derived();
+        let owned_count = self.owned_derived.owned_count;
         let wishlist_count = self
             .wishlist
             .value
@@ -1582,43 +1699,27 @@ impl InventoryPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(all_rows) = self.rows.value.clone() else {
+        if self.rows.value.is_none() {
             return div()
                 .p_6()
                 .text_sm()
                 .text_color(rgb(palette.muted))
                 .child("Loading inventory…")
                 .into_any_element();
-        };
-
-        let owned_rows: Vec<_> = all_rows
-            .iter()
-            .filter(|r| r.state.as_deref() == Some("owned"))
-            .cloned()
-            .collect();
-
-        // Compute categories
-        let mut categories = BTreeSet::new();
-        let mut total_cents: i64 = 0;
-        for r in &owned_rows {
-            categories.insert(group_of(&r.item));
-            if let Some(cents) = r.item.price_cents {
-                total_cents += cents;
-            }
         }
-
-        let filtered = filter_inventory(
-            &owned_rows,
-            &self.search_query,
-            self.selected_category.as_deref(),
-            Some("owned"),
-        );
+        self.sync_owned_derived();
+        let owned_count = self.owned_derived.owned_count;
+        let total_cents = self.owned_derived.total_cents;
+        let categories = self.owned_derived.categories.clone();
+        let is_empty = self.owned_derived.filtered.is_empty();
 
         let search_field = self.search_field(window, cx);
 
         let mut content = div()
             .flex()
             .flex_col()
+            .flex_1()
+            .min_h_0()
             .gap_4()
             .child(
                 div()
@@ -1652,11 +1753,7 @@ impl InventoryPage {
                     .flex()
                     .items_center()
                     .gap_3()
-                    .child(self.render_stat_card(
-                        "Owned Assets",
-                        &owned_rows.len().to_string(),
-                        palette,
-                    ))
+                    .child(self.render_stat_card("Owned Assets", &owned_count.to_string(), palette))
                     .child(self.render_stat_card(
                         "Estimated Value",
                         &format_cents(Some(total_cents)),
@@ -1689,6 +1786,7 @@ impl InventoryPage {
                                     .when(self.selected_category.is_some(), |b| b.ghost())
                                     .on_click(cx.listener(|page, _, _, cx| {
                                         page.selected_category = None;
+                                        page.filter_rev = page.filter_rev.wrapping_add(1);
                                         cx.notify();
                                     })),
                             )
@@ -1703,6 +1801,7 @@ impl InventoryPage {
                                     .on_click(cx.listener(move |page, _, _, cx| {
                                         page.selected_category =
                                             if active { None } else { Some(cat_name.clone()) };
+                                        page.filter_rev = page.filter_rev.wrapping_add(1);
                                         cx.notify();
                                     }))
                             })),
@@ -1723,7 +1822,7 @@ impl InventoryPage {
             );
         }
         content
-            .child(if filtered.is_empty() {
+            .child(if is_empty {
                 div()
                     .p_8()
                     .text_center()
@@ -1732,16 +1831,23 @@ impl InventoryPage {
                     .child("No inventory items match the current filters.")
                     .into_any_element()
             } else {
-                let mut cards = Vec::new();
-                for r in &filtered {
-                    cards.push(self.render_item_card(&r.item, palette, cx));
-                }
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2p5()
-                    .children(cards)
-                    .into_any_element()
+                let entity = cx.entity();
+                virtual_list(
+                    "inventory-owned-list",
+                    &self.owned_list,
+                    move |ix, _window, cx| {
+                        entity.update(cx, |page, cx| {
+                            let Some(row) = page.owned_derived.filtered.get(ix) else {
+                                return div().into_any_element();
+                            };
+                            let item = row.item.clone();
+                            div()
+                                .pb_2p5()
+                                .child(page.render_item_card(&item, palette, cx))
+                                .into_any_element()
+                        })
+                    },
+                )
             })
             .into_any_element()
     }
@@ -2032,14 +2138,20 @@ impl InventoryPage {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(wishlist) = self.wishlist.value.clone() else {
+        if self.wishlist.value.is_none() {
             return div()
                 .p_6()
                 .text_sm()
                 .text_color(rgb(palette.muted))
                 .child("Loading wishlist budget…")
                 .into_any_element();
-        };
+        }
+        self.sync_wishlist_derived();
+        let (total_items, monthly_balance) = self
+            .wishlist
+            .value
+            .as_ref()
+            .map_or((0, None), |w| (w.items.len(), w.monthly_balance.clone()));
 
         let groups = self.wish_groups.value.clone().unwrap_or_default();
         // A group that has just been deleted would narrow the list to nothing, so the selection is
@@ -2049,15 +2161,14 @@ impl InventoryPage {
             .as_deref()
             .and_then(|id| groups.iter().find(|group| group.id == id))
             .cloned();
-        let shown = wishlist_view(&wishlist.items, group.as_ref(), &self.search_query);
+        let shown = self.wishlist_derived.shown.clone();
         let filtered = group.is_some() || !self.search_query.trim().is_empty();
 
         // The banner describes what the list shows. When a group or a search narrows it, the range
         // of the whole wishlist stays visible underneath instead of disappearing.
         // A group of alternatives is one purchase: only its cheapest member is in a total.
-        let budget = budget_of(counted(&shown, &groups));
-        let every: Vec<&InventoryItem> = wishlist.items.iter().collect();
-        let whole = budget_of(counted(&every, &groups));
+        let budget = self.wishlist_derived.budget.clone();
+        let whole = self.wishlist_derived.whole.clone();
         let range = format!(
             "{} – {}",
             format_cents(Some(budget.low_cents)),
@@ -2070,23 +2181,18 @@ impl InventoryPage {
                 shown.len()
             ),
             Some(group) => format!("{} · {} open", group.title, shown.len()),
-            None if filtered => format!(
-                "Matching wishes · {} of {}",
-                shown.len(),
-                wishlist.items.len()
-            ),
+            None if filtered => format!("Matching wishes · {} of {}", shown.len(), total_items),
             None => "Estimated Total Budget Range".to_owned(),
         };
         let whole_line = filtered.then(|| {
             format!(
                 "All {} open: {} – {}",
-                wishlist.items.len(),
+                total_items,
                 format_cents(Some(whole.low_cents)),
                 format_cents(Some(whole.high_cents))
             )
         });
-        let months = wishlist
-            .monthly_balance
+        let months = monthly_balance
             .as_ref()
             .and_then(|balance| months_to_pay(budget.low_cents, balance));
         let search_field = self.search_field(window, cx);
@@ -2157,11 +2263,12 @@ impl InventoryPage {
                             .child(
                                 Button::new("group-all")
                                     .small()
-                                    .label(format!("All ({})", wishlist.items.len()))
+                                    .label(format!("All ({total_items})"))
                                     .when(group.is_none(), |b| b.primary())
                                     .when(group.is_some(), |b| b.ghost())
                                     .on_click(cx.listener(|page, _, _, cx| {
                                         page.selected_group = None;
+                                        page.filter_rev = page.filter_rev.wrapping_add(1);
                                         cx.notify();
                                     })),
                             )
@@ -2180,6 +2287,7 @@ impl InventoryPage {
                                     .on_click(cx.listener(move |page, _, _, cx| {
                                         page.selected_group =
                                             if active { None } else { Some(id.clone()) };
+                                        page.filter_rev = page.filter_rev.wrapping_add(1);
                                         cx.notify();
                                     }))
                             })),
@@ -2310,7 +2418,7 @@ impl InventoryPage {
                                     .child(line)
                             })),
                     )
-                    .children(wishlist.monthly_balance.as_ref().map(|b| {
+                    .children(monthly_balance.as_ref().map(|b| {
                         div()
                             .flex()
                             .flex_col()
@@ -2342,7 +2450,7 @@ impl InventoryPage {
                     .text_sm()
                     .text_color(rgb(palette.muted))
                     .child(match (&group, filtered) {
-                        (Some(group), _) if wishlist.items.is_empty() => {
+                        (Some(_), _) if total_items == 0 => {
                             "No open wishlist items.".to_owned()
                         }
                         (Some(group), _) => format!(
@@ -3077,19 +3185,31 @@ impl Render for InventoryPage {
             .size_full()
             .gap_4()
             .child(self.render_header_bar(palette, cx))
-            .child(
+            .child(if self.tab == InventoryTab::Owned {
+                div()
+                    .id("inventory-content")
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .child(self.render_owned_view(palette, window, cx))
+                    .into_any_element()
+            } else {
                 div()
                     .id("inventory-content")
                     .flex_1()
                     .min_h_0()
                     .overflow_y_scroll()
+                    .track_scroll(&self.scroll)
+                    .vertical_scrollbar(&self.scroll)
                     .child(match self.tab {
-                        InventoryTab::Owned => self.render_owned_view(palette, window, cx),
+                        InventoryTab::Owned => unreachable!(),
                         InventoryTab::Wishlist => self.render_wishlist_view(palette, window, cx),
                         InventoryTab::Interior => self.render_interior_view(palette),
                         InventoryTab::MailReview => self.render_mail_review(palette, cx),
-                    }),
-            )
+                    })
+                    .into_any_element()
+            })
     }
 }
 

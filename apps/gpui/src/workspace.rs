@@ -344,29 +344,29 @@ pub struct Workspace {
     pub accounts: Entity<crate::accounts::Accounts>,
     pub clipper_settings: Entity<crate::clipper::ClipperSettings>,
     pub travel: Entity<sjel_gpui_ui::travel::Travel>,
-    pub documents: Entity<Documents>,
-    pub feed: Entity<Feed>,
+    pub documents: Option<Entity<Documents>>,
+    pub feed: Option<Entity<Feed>>,
     pub inbox: Entity<Inbox>,
     music_page: Option<(Entity<Music>, Subscription)>,
     _inbox_events: Subscription,
-    pub calendar_page: Entity<CalendarPage>,
+    pub calendar_page: Option<Entity<CalendarPage>>,
     pub context_page: Entity<ContextPage>,
-    pub finance_page: Entity<FinancePage>,
-    pub people_page: Entity<PeoplePage>,
-    pub backup_page: Entity<BackupPage>,
-    pub inventory_page: Entity<InventoryPage>,
-    pub software: Entity<crate::software::Software>,
-    pub links_page: Entity<crate::links::LinksPage>,
-    pub docs_page: Entity<crate::docs::DocsPage>,
-    pub record_page: Entity<crate::record::RecordPage>,
-    pub import: Entity<crate::import::ImportPage>,
-    pub systems: Entity<crate::systems::SystemsPage>,
-    pub packs: Entity<crate::packs_view::PacksPage>,
-    pub self_page: Entity<crate::self_view::SelfPage>,
-    pub cv_page: Entity<crate::cv_view::CvPage>,
-    pub media_page: Entity<crate::media_view::MediaPage>,
-    pub research_page: Entity<crate::research_view::ResearchPage>,
-    pub setup_page: Entity<crate::setup_view::SetupPage>,
+    pub finance_page: Option<Entity<FinancePage>>,
+    pub people_page: Option<Entity<PeoplePage>>,
+    pub backup_page: Option<Entity<BackupPage>>,
+    pub inventory_page: Option<Entity<InventoryPage>>,
+    pub software: Option<Entity<crate::software::Software>>,
+    pub links_page: Option<Entity<crate::links::LinksPage>>,
+    pub docs_page: Option<Entity<crate::docs::DocsPage>>,
+    pub record_page: Option<Entity<crate::record::RecordPage>>,
+    pub import: Option<Entity<crate::import::ImportPage>>,
+    pub systems: Option<Entity<crate::systems::SystemsPage>>,
+    pub packs: Option<Entity<crate::packs_view::PacksPage>>,
+    pub self_page: Option<Entity<crate::self_view::SelfPage>>,
+    pub cv_page: Option<Entity<crate::cv_view::CvPage>>,
+    pub media_page: Option<Entity<crate::media_view::MediaPage>>,
+    pub research_page: Option<Entity<crate::research_view::ResearchPage>>,
+    pub setup_page: Option<Entity<crate::setup_view::SetupPage>>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
@@ -440,28 +440,9 @@ impl Workspace {
                 cx,
             )
         });
-        let documents = cx.new(|_| Documents::new(repo.clone()));
-        let feed = cx.new(|cx| Feed::new(repo.clone(), cx));
         let inbox = cx.new(|cx| Inbox::new(repo.clone(), cx));
         let inbox_events = cx.subscribe_in(&inbox, window, Self::on_inbox);
-        let calendar_page = cx.new(|cx| CalendarPage::new(repo.clone(), cx));
         let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
-        let finance_page = cx.new(|cx| FinancePage::new(repo.clone(), cx));
-        let people_page = cx.new(|cx| PeoplePage::new(repo.clone(), cx));
-        let backup_page = cx.new(|cx| BackupPage::new(repo.clone(), cx));
-        let inventory_page = cx.new(|cx| InventoryPage::new(repo.clone(), cx));
-        let software = cx.new(|_| crate::software::Software::new(repo.clone()));
-        let links_page = cx.new(|_| crate::links::LinksPage::new(repo.clone()));
-        let docs_page = cx.new(|_| crate::docs::DocsPage::new());
-        let record_page = cx.new(|_| crate::record::RecordPage::new(repo.clone()));
-        let import = cx.new(|_| crate::import::ImportPage::new(repo.clone()));
-        let systems = cx.new(|_| crate::systems::SystemsPage::new(repo.clone()));
-        let packs = cx.new(|_| crate::packs_view::PacksPage::new(repo.clone()));
-        let self_page = cx.new(|_| crate::self_view::SelfPage::new(repo.clone()));
-        let cv_page = cx.new(|_| crate::cv_view::CvPage::new(repo.clone()));
-        let media_page = cx.new(|_| crate::media_view::MediaPage::new(repo.clone()));
-        let research_page = cx.new(|_| crate::research_view::ResearchPage::new(repo.clone()));
-        let setup_page = cx.new(|_| crate::setup_view::SetupPage::new(repo.clone()));
         let appearance_settings = AppearanceSettings::load();
         let finder = {
             let (repo, ask) = (repo.clone(), ask.clone());
@@ -549,29 +530,29 @@ impl Workspace {
             accounts,
             clipper_settings,
             travel,
-            documents,
-            feed,
+            documents: None,
+            feed: None,
             inbox,
             music_page: None,
             _inbox_events: inbox_events,
-            calendar_page,
+            calendar_page: None,
             context_page,
-            finance_page,
-            people_page,
-            backup_page,
-            inventory_page,
-            software,
-            links_page,
-            docs_page,
-            record_page,
-            import,
-            systems,
-            packs,
-            self_page,
-            cv_page,
-            media_page,
-            research_page,
-            setup_page,
+            finance_page: None,
+            people_page: None,
+            backup_page: None,
+            inventory_page: None,
+            software: None,
+            links_page: None,
+            docs_page: None,
+            record_page: None,
+            import: None,
+            systems: None,
+            packs: None,
+            self_page: None,
+            cv_page: None,
+            media_page: None,
+            research_page: None,
+            setup_page: None,
             busy: Busy::default(),
             selection: Selection::default(),
             streaming: false,
@@ -643,6 +624,147 @@ impl Workspace {
         self.repo.has_direct_db()
     }
 
+    fn ensure_documents(&mut self, cx: &mut Context<Self>) -> Entity<Documents> {
+        let repo = self.repo.clone();
+        self.documents
+            .get_or_insert_with(|| cx.new(|_| Documents::new(repo)))
+            .clone()
+    }
+
+    fn ensure_feed(&mut self, cx: &mut Context<Self>) -> Entity<Feed> {
+        let repo = self.repo.clone();
+        self.feed
+            .get_or_insert_with(|| cx.new(|cx| Feed::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_calendar_page(&mut self, cx: &mut Context<Self>) -> Entity<CalendarPage> {
+        let repo = self.repo.clone();
+        self.calendar_page
+            .get_or_insert_with(|| cx.new(|cx| CalendarPage::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_finance_page(&mut self, cx: &mut Context<Self>) -> Entity<FinancePage> {
+        let repo = self.repo.clone();
+        self.finance_page
+            .get_or_insert_with(|| cx.new(|cx| FinancePage::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_people_page(&mut self, cx: &mut Context<Self>) -> Entity<PeoplePage> {
+        let repo = self.repo.clone();
+        self.people_page
+            .get_or_insert_with(|| cx.new(|cx| PeoplePage::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_backup_page(&mut self, cx: &mut Context<Self>) -> Entity<BackupPage> {
+        let repo = self.repo.clone();
+        self.backup_page
+            .get_or_insert_with(|| cx.new(|cx| BackupPage::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_inventory_page(&mut self, cx: &mut Context<Self>) -> Entity<InventoryPage> {
+        let repo = self.repo.clone();
+        self.inventory_page
+            .get_or_insert_with(|| cx.new(|cx| InventoryPage::new(repo, cx)))
+            .clone()
+    }
+
+    fn ensure_software(&mut self, cx: &mut Context<Self>) -> Entity<crate::software::Software> {
+        let repo = self.repo.clone();
+        self.software
+            .get_or_insert_with(|| cx.new(|_| crate::software::Software::new(repo)))
+            .clone()
+    }
+
+    fn ensure_links_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::links::LinksPage> {
+        let repo = self.repo.clone();
+        self.links_page
+            .get_or_insert_with(|| cx.new(|_| crate::links::LinksPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_docs_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::docs::DocsPage> {
+        self.docs_page
+            .get_or_insert_with(|| cx.new(|_| crate::docs::DocsPage::new()))
+            .clone()
+    }
+
+    fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::record::RecordPage> {
+        let repo = self.repo.clone();
+        self.record_page
+            .get_or_insert_with(|| cx.new(|_| crate::record::RecordPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_import(&mut self, cx: &mut Context<Self>) -> Entity<crate::import::ImportPage> {
+        let repo = self.repo.clone();
+        self.import
+            .get_or_insert_with(|| cx.new(|_| crate::import::ImportPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<crate::systems::SystemsPage> {
+        let repo = self.repo.clone();
+        self.systems
+            .get_or_insert_with(|| cx.new(|_| crate::systems::SystemsPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_packs(&mut self, cx: &mut Context<Self>) -> Entity<crate::packs_view::PacksPage> {
+        let repo = self.repo.clone();
+        self.packs
+            .get_or_insert_with(|| cx.new(|_| crate::packs_view::PacksPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_self_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::self_view::SelfPage> {
+        let repo = self.repo.clone();
+        self.self_page
+            .get_or_insert_with(|| cx.new(|_| crate::self_view::SelfPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_cv_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::cv_view::CvPage> {
+        let repo = self.repo.clone();
+        self.cv_page
+            .get_or_insert_with(|| cx.new(|_| crate::cv_view::CvPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_media_page(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Entity<crate::media_view::MediaPage> {
+        let repo = self.repo.clone();
+        self.media_page
+            .get_or_insert_with(|| cx.new(|_| crate::media_view::MediaPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_research_page(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Entity<crate::research_view::ResearchPage> {
+        let repo = self.repo.clone();
+        self.research_page
+            .get_or_insert_with(|| cx.new(|_| crate::research_view::ResearchPage::new(repo)))
+            .clone()
+    }
+
+    fn ensure_setup_page(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Entity<crate::setup_view::SetupPage> {
+        let repo = self.repo.clone();
+        self.setup_page
+            .get_or_insert_with(|| cx.new(|_| crate::setup_view::SetupPage::new(repo)))
+            .clone()
+    }
+
     pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
         // Today was its own page and is part of Home now; its old shortcuts and links land here.
         let page = area::canonical(page);
@@ -663,8 +785,9 @@ impl Workspace {
             // Leaving Systems stops its clocks: three beats that ask the machine a question are
             // worth nothing while the page is not drawn.
             if previous == Page::Systems {
-                self.systems
-                    .update(cx, |systems, cx| systems.deactivate(cx));
+                if let Some(systems) = &self.systems {
+                    systems.update(cx, |systems, cx| systems.deactivate(cx));
+                }
             }
             self.page = page;
             self.refocus = true;
@@ -675,51 +798,57 @@ impl Workspace {
             } else if page == Page::Travel {
                 self.travel.update(cx, |travel, cx| travel.activate(cx));
             } else if page == Page::Backup {
-                self.backup_page.update(cx, |b, cx| b.activate(cx));
+                self.ensure_backup_page(cx)
+                    .update(cx, |b, cx| b.activate(cx));
             } else if page == Page::Software {
-                self.software.update(cx, |software, cx| software.load(cx));
+                self.ensure_software(cx)
+                    .update(cx, |software, cx| software.load(cx));
             } else if page == Page::Links {
-                self.links_page.update(cx, |links, cx| {
+                self.ensure_links_page(cx).update(cx, |links, cx| {
                     links.load(cx);
                     links.load_candidates(cx);
                 });
             } else if page == Page::Import {
-                self.import.update(cx, |import, cx| import.load(cx));
+                self.ensure_import(cx)
+                    .update(cx, |import, cx| import.load(cx));
             } else if page == Page::Systems {
-                self.systems.update(cx, |systems, cx| systems.activate(cx));
+                self.ensure_systems(cx)
+                    .update(cx, |systems, cx| systems.activate(cx));
             } else if page == Page::Packs {
-                self.packs.update(cx, |packs, cx| packs.load(cx));
+                self.ensure_packs(cx).update(cx, |packs, cx| packs.load(cx));
             } else if page == Page::SelfModel {
-                self.self_page.update(cx, |s, cx| s.load(cx));
+                self.ensure_self_page(cx).update(cx, |s, cx| s.load(cx));
             } else if page == Page::Cv {
-                self.cv_page.update(cx, |cv, cx| cv.load(cx));
+                self.ensure_cv_page(cx).update(cx, |cv, cx| cv.load(cx));
             } else if page == Page::Media {
-                self.media_page.update(cx, |m, cx| m.load(cx));
+                self.ensure_media_page(cx).update(cx, |m, cx| m.load(cx));
             } else if page == Page::Research {
-                self.research_page.update(cx, |r, cx| r.load(cx));
+                self.ensure_research_page(cx).update(cx, |r, cx| r.load(cx));
             } else if page == Page::Setup {
-                self.setup_page.update(cx, |s, cx| s.load(cx));
+                self.ensure_setup_page(cx).update(cx, |s, cx| s.load(cx));
             } else if page == Page::Documents {
-                self.documents
+                self.ensure_documents(cx)
                     .update(cx, |documents, cx| documents.load(cx));
             } else if page == Page::Feed {
-                self.feed.update(cx, |feed, cx| feed.activate(cx));
+                self.ensure_feed(cx)
+                    .update(cx, |feed, cx| feed.activate(cx));
             } else if page == Page::Inbox {
                 self.inbox.update(cx, |inbox, cx| inbox.activate(cx));
             } else if page == Page::Calendar {
-                self.calendar_page
+                self.ensure_calendar_page(cx)
                     .update(cx, |calendar, cx| calendar.activate(cx));
             } else if page == Page::Home {
                 self.context_page
                     .update(cx, |context, cx| context.activate(cx));
             } else if page == Page::Finance {
-                self.finance_page
+                self.ensure_finance_page(cx)
                     .update(cx, |finance, cx| finance.activate(cx));
             } else if page == Page::People {
-                self.people_page
+                self.ensure_people_page(cx)
                     .update(cx, |people, cx| people.activate(cx));
             } else if page == Page::Inventory {
-                self.inventory_page.update(cx, |p, cx| p.activate(cx));
+                self.ensure_inventory_page(cx)
+                    .update(cx, |p, cx| p.activate(cx));
             }
         }
         cx.notify();
@@ -1193,29 +1322,33 @@ impl Workspace {
             }
             Target::Feed(tab) => {
                 self.go(Page::Feed, cx);
-                self.feed.update(cx, |feed, cx| feed.set_tab(tab, cx));
+                self.ensure_feed(cx)
+                    .update(cx, |feed, cx| feed.set_tab(tab, cx));
             }
             Target::FeedEntry(id) => {
                 self.go(Page::Feed, cx);
-                self.feed.update(cx, |feed, cx| feed.open_entry(id, cx));
+                self.ensure_feed(cx)
+                    .update(cx, |feed, cx| feed.open_entry(id, cx));
             }
             Target::MailEntry(id) => {
                 self.go(Page::Feed, cx);
-                self.feed
+                self.ensure_feed(cx)
                     .update(cx, |feed, cx| feed.open_mail_entry(id, cx));
             }
             Target::CalendarEntry(id) => {
                 self.go(Page::Feed, cx);
-                self.feed
+                self.ensure_feed(cx)
                     .update(cx, |feed, cx| feed.open_calendar_entry(id, cx));
             }
             Target::Docs(slug) => {
                 self.go(Page::Docs, cx);
-                self.docs_page.update(cx, |docs, cx| docs.open(slug, cx));
+                self.ensure_docs_page(cx)
+                    .update(cx, |docs, cx| docs.open(slug, cx));
             }
             Target::Record(id) => {
                 self.go(Page::Record, cx);
-                self.record_page.update(cx, |page, cx| page.open(id, cx));
+                self.ensure_record_page(cx)
+                    .update(cx, |page, cx| page.open(id, cx));
             }
             Target::Ask(question) => self
                 .finder
@@ -1380,15 +1513,42 @@ impl Workspace {
     /// A page that draws a virtual list owns the scroll, so the bench asks the page rather than
     /// reading the workspace's handle.
     pub fn bench_scroll(&mut self, fraction: f32, cx: &mut Context<Self>) {
-        if self.page == Page::Feed {
-            self.feed
-                .update(cx, |feed, cx| feed.bench_scroll(fraction, cx));
-            return;
+        match self.page {
+            Page::Feed => {
+                self.ensure_feed(cx)
+                    .update(cx, |feed, cx| feed.bench_scroll(fraction, cx));
+                return;
+            }
+            Page::Documents => {
+                self.ensure_documents(cx)
+                    .update(cx, |docs, cx| docs.bench_scroll(fraction, cx));
+                return;
+            }
+            Page::Inventory => {
+                self.ensure_inventory_page(cx)
+                    .update(cx, |inv, cx| inv.bench_scroll(fraction, cx));
+                return;
+            }
+            Page::Finance => {
+                self.ensure_finance_page(cx)
+                    .update(cx, |fin, cx| fin.bench_scroll(fraction, cx));
+                return;
+            }
+            Page::People => {
+                self.ensure_people_page(cx)
+                    .update(cx, |people, cx| people.bench_scroll(fraction, cx));
+                return;
+            }
+            _ => {}
         }
-        let scroll = if self.page == Page::Travel {
-            self.travel.read(cx).scroll_handle()
-        } else {
-            self.selection.scroll.clone()
+        let scroll = match self.page {
+            Page::Travel => self.travel.read(cx).scroll_handle(),
+            Page::Projects => self.projects.read(cx).scroll_handle(),
+            Page::Docs => self.ensure_docs_page(cx).read(cx).scroll_handle(),
+            Page::Backup => self.ensure_backup_page(cx).read(cx).scroll_handle(),
+            Page::Calendar => self.ensure_calendar_page(cx).read(cx).scroll_handle(),
+            Page::Packs => self.ensure_packs(cx).read(cx).scroll_handle(),
+            _ => self.selection.scroll.clone(),
         };
         let max = scroll.max_offset().y;
         scroll.set_offset(point(px(0.), -max * fraction));
@@ -1401,48 +1561,52 @@ impl Workspace {
             self.projects
                 .update(cx, |projects, cx| projects.load_projects(cx));
         } else if self.page == Page::Links {
-            self.links_page.update(cx, |links, cx| {
+            self.ensure_links_page(cx).update(cx, |links, cx| {
                 links.load(cx);
                 links.load_candidates(cx);
             });
         } else if self.page == Page::Travel {
             self.travel.update(cx, |travel, cx| travel.refresh(cx));
         } else if self.page == Page::Documents {
-            self.documents
+            self.ensure_documents(cx)
                 .update(cx, |documents, cx| documents.load(cx));
         } else if self.page == Page::Feed {
-            self.feed.update(cx, |feed, cx| feed.refresh(cx));
+            self.ensure_feed(cx).update(cx, |feed, cx| feed.refresh(cx));
         } else if self.page == Page::Inbox {
             self.inbox.update(cx, |inbox, cx| inbox.load(cx));
         } else if self.page == Page::Calendar {
-            self.calendar_page
+            self.ensure_calendar_page(cx)
                 .update(cx, |calendar, cx| calendar.refresh(cx));
         } else if matches!(self.page, Page::Home | Page::Context) {
             self.context_page
                 .update(cx, |context, cx| context.refresh(cx));
         } else if self.page == Page::Finance {
-            self.finance_page
+            self.ensure_finance_page(cx)
                 .update(cx, |finance, cx| finance.refresh(cx));
         } else if self.page == Page::People {
-            self.people_page.update(cx, |people, cx| people.refresh(cx));
+            self.ensure_people_page(cx)
+                .update(cx, |people, cx| people.refresh(cx));
         } else if self.page == Page::Backup {
-            self.backup_page.update(cx, |b, cx| b.refresh(cx));
+            self.ensure_backup_page(cx)
+                .update(cx, |b, cx| b.refresh(cx));
         } else if self.page == Page::Inventory {
-            self.inventory_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_inventory_page(cx)
+                .update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Systems {
-            self.systems.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_systems(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Packs {
-            self.packs.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_packs(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::SelfModel {
-            self.self_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_self_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Cv {
-            self.cv_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_cv_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Media {
-            self.media_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_media_page(cx).update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Research {
-            self.research_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_research_page(cx)
+                .update(cx, |p, cx| p.refresh(cx));
         } else if self.page == Page::Setup {
-            self.setup_page.update(cx, |p, cx| p.refresh(cx));
+            self.ensure_setup_page(cx).update(cx, |p, cx| p.refresh(cx));
         }
     }
 
@@ -1749,7 +1913,7 @@ impl Workspace {
 
     fn on_select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
         if self.page == Page::Documents {
-            self.documents
+            self.ensure_documents(cx)
                 .update(cx, |docs, cx| docs.select_relative(1, cx));
         } else {
             self.selection.step(1, self.items().len());
@@ -1759,7 +1923,7 @@ impl Workspace {
 
     fn on_select_previous(&mut self, _: &SelectPrevious, _: &mut Window, cx: &mut Context<Self>) {
         if self.page == Page::Documents {
-            self.documents
+            self.ensure_documents(cx)
                 .update(cx, |docs, cx| docs.select_relative(-1, cx));
         } else {
             self.selection.step(-1, self.items().len());
@@ -1769,20 +1933,22 @@ impl Workspace {
 
     fn on_doc_prev_page(&mut self, _: &DocPrevPage, _: &mut Window, cx: &mut Context<Self>) {
         if self.page == Page::Documents {
-            self.documents
+            self.ensure_documents(cx)
                 .update(cx, |docs, cx| docs.go_to_page(-1, cx));
         }
     }
 
     fn on_doc_next_page(&mut self, _: &DocNextPage, _: &mut Window, cx: &mut Context<Self>) {
         if self.page == Page::Documents {
-            self.documents.update(cx, |docs, cx| docs.go_to_page(1, cx));
+            self.ensure_documents(cx)
+                .update(cx, |docs, cx| docs.go_to_page(1, cx));
         }
     }
 
     fn on_doc_toggle_zoom(&mut self, _: &DocToggleZoom, _: &mut Window, cx: &mut Context<Self>) {
         if self.page == Page::Documents {
-            self.documents.update(cx, |docs, cx| docs.toggle_zoom(cx));
+            self.ensure_documents(cx)
+                .update(cx, |docs, cx| docs.toggle_zoom(cx));
         }
     }
 
@@ -1793,7 +1959,8 @@ impl Workspace {
                     .update(cx, |travel, cx| travel.zoom_by(1., None, cx));
             }
             Page::Documents => {
-                self.documents.update(cx, |docs, cx| docs.zoom_in(cx));
+                self.ensure_documents(cx)
+                    .update(cx, |docs, cx| docs.zoom_in(cx));
             }
             _ => self.step_terminal_zoom(1, cx),
         }
@@ -1806,7 +1973,8 @@ impl Workspace {
                     .update(cx, |travel, cx| travel.zoom_by(-1., None, cx));
             }
             Page::Documents => {
-                self.documents.update(cx, |docs, cx| docs.zoom_out(cx));
+                self.ensure_documents(cx)
+                    .update(cx, |docs, cx| docs.zoom_out(cx));
             }
             _ => self.step_terminal_zoom(-1, cx),
         }
@@ -1819,7 +1987,8 @@ impl Workspace {
             return;
         }
         if self.page == Page::Documents {
-            self.documents.update(cx, |docs, cx| docs.zoom_in(cx));
+            self.ensure_documents(cx)
+                .update(cx, |docs, cx| docs.zoom_in(cx));
             return;
         }
         self.step_ui_zoom(1, cx);
@@ -1832,7 +2001,8 @@ impl Workspace {
             return;
         }
         if self.page == Page::Documents {
-            self.documents.update(cx, |docs, cx| docs.zoom_out(cx));
+            self.ensure_documents(cx)
+                .update(cx, |docs, cx| docs.zoom_out(cx));
             return;
         }
         self.step_ui_zoom(-1, cx);
@@ -1919,23 +2089,23 @@ impl Workspace {
     fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
         match self.page {
             Page::Documents => {
-                self.documents
+                self.ensure_documents(cx)
                     .update(cx, |docs, cx| docs.focus_search(window, cx));
             }
             Page::Docs => {
-                self.docs_page
+                self.ensure_docs_page(cx)
                     .update(cx, |docs, cx| docs.focus_search(window, cx));
             }
             Page::Finance => {
-                self.finance_page
+                self.ensure_finance_page(cx)
                     .update(cx, |fin, cx| fin.focus_search(window, cx));
             }
             Page::People => {
-                self.people_page
+                self.ensure_people_page(cx)
                     .update(cx, |people, cx| people.focus_search(window, cx));
             }
             Page::Inventory => {
-                self.inventory_page
+                self.ensure_inventory_page(cx)
                     .update(cx, |inv, cx| inv.focus_search(window, cx));
             }
             _ => {
@@ -1977,7 +2147,8 @@ impl Workspace {
         }
         self.selection.clear();
         if self.page == Page::Documents {
-            self.documents.update(cx, |docs, cx| docs.close(cx));
+            self.ensure_documents(cx)
+                .update(cx, |docs, cx| docs.close(cx));
         }
         cx.notify();
     }
@@ -2169,31 +2340,31 @@ impl Render for Workspace {
             )
             .into_any_element(),
             Page::Backup => {
-                self.backup_page
-                    .update(cx, |backup, cx| backup.set_palette(palette, cx));
-                self.backup_page.clone().into_any_element()
+                let page = self.ensure_backup_page(cx);
+                page.update(cx, |backup, cx| backup.set_palette(palette, cx));
+                page.into_any_element()
             }
-            Page::Software => self.software.clone().into_any_element(),
-            Page::Links => self.links_page.clone().into_any_element(),
-            Page::Docs => self.docs_page.clone().into_any_element(),
-            Page::Record => self.record_page.clone().into_any_element(),
-            Page::Import => self.import.clone().into_any_element(),
-            Page::Systems => self.systems.clone().into_any_element(),
-            Page::Packs => self.packs.clone().into_any_element(),
-            Page::SelfModel => self.self_page.clone().into_any_element(),
-            Page::Cv => self.cv_page.clone().into_any_element(),
-            Page::Media => self.media_page.clone().into_any_element(),
-            Page::Research => self.research_page.clone().into_any_element(),
-            Page::Setup => self.setup_page.clone().into_any_element(),
+            Page::Software => self.ensure_software(cx).into_any_element(),
+            Page::Links => self.ensure_links_page(cx).into_any_element(),
+            Page::Docs => self.ensure_docs_page(cx).into_any_element(),
+            Page::Record => self.ensure_record_page(cx).into_any_element(),
+            Page::Import => self.ensure_import(cx).into_any_element(),
+            Page::Systems => self.ensure_systems(cx).into_any_element(),
+            Page::Packs => self.ensure_packs(cx).into_any_element(),
+            Page::SelfModel => self.ensure_self_page(cx).into_any_element(),
+            Page::Cv => self.ensure_cv_page(cx).into_any_element(),
+            Page::Media => self.ensure_media_page(cx).into_any_element(),
+            Page::Research => self.ensure_research_page(cx).into_any_element(),
+            Page::Setup => self.ensure_setup_page(cx).into_any_element(),
             Page::Documents => {
-                self.documents
-                    .update(cx, |documents, cx| documents.set_palette(palette, cx));
-                self.documents.clone().into_any_element()
+                let page = self.ensure_documents(cx);
+                page.update(cx, |documents, cx| documents.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::Feed => {
-                self.feed
-                    .update(cx, |feed, cx| feed.set_palette(palette, cx));
-                self.feed.clone().into_any_element()
+                let page = self.ensure_feed(cx);
+                page.update(cx, |feed, cx| feed.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::Inbox => {
                 if let Some((music, _)) = &self.music_page {
@@ -2206,25 +2377,25 @@ impl Render for Workspace {
                 }
             }
             Page::Calendar => {
-                self.calendar_page
-                    .update(cx, |calendar, cx| calendar.set_palette(palette, cx));
-                self.calendar_page.clone().into_any_element()
+                let page = self.ensure_calendar_page(cx);
+                page.update(cx, |calendar, cx| calendar.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::Context => unreachable!("`/context` opens Home (`core::area::canonical`)"),
             Page::Finance => {
-                self.finance_page
-                    .update(cx, |finance, cx| finance.set_palette(palette, cx));
-                self.finance_page.clone().into_any_element()
+                let page = self.ensure_finance_page(cx);
+                page.update(cx, |finance, cx| finance.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::People => {
-                self.people_page
-                    .update(cx, |people, cx| people.set_palette(palette, cx));
-                self.people_page.clone().into_any_element()
+                let page = self.ensure_people_page(cx);
+                page.update(cx, |people, cx| people.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::Inventory => {
-                self.inventory_page
-                    .update(cx, |p, cx| p.set_palette(palette, cx));
-                self.inventory_page.clone().into_any_element()
+                let page = self.ensure_inventory_page(cx);
+                page.update(cx, |p, cx| p.set_palette(palette, cx));
+                page.into_any_element()
             }
             Page::Projects => {
                 self.projects
@@ -2267,7 +2438,7 @@ impl Render for Workspace {
                         }
                         Page::Documents => {
                             cx.stop_propagation();
-                            view.documents
+                            view.ensure_documents(cx)
                                 .update(cx, |docs, cx| docs.on_wheel_zoom(event, cx));
                         }
                         _ if view.right_panel.is_open()
@@ -2417,6 +2588,7 @@ impl Render for Workspace {
                                     Page::Projects
                                         | Page::Settings
                                         | Page::Documents
+                                        | Page::Docs
                                         | Page::Calendar
                                         | Page::Finance
                                         | Page::People
@@ -2425,7 +2597,7 @@ impl Render for Workspace {
                                         | Page::Feed
                                         | Page::Packs
                                 ) {
-                                    // Projects, Settings, Documents, Calendar, Finance, People,
+                                    // Projects, Settings, Documents, Docs, Calendar, Finance, People,
                                     // Pages that scroll themselves get the full width.
                                     div().id("page").flex_1().min_h_0().px_8().pb_8().child(
                                         div()
@@ -2434,6 +2606,7 @@ impl Render for Workspace {
                                                 !matches!(
                                                     self.page,
                                                     Page::Documents
+                                                        | Page::Docs
                                                         | Page::Calendar
                                                         | Page::Finance
                                                         | Page::People

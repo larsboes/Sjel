@@ -4,10 +4,11 @@
 use std::collections::HashMap;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     actions, div, prelude::*, rgb, rgba, AnyElement, App, Context, FocusHandle, KeyBinding, Render,
-    Window,
+    ScrollHandle, Window,
 };
 
 use crate::data::{Remote, Repo};
@@ -55,6 +56,7 @@ pub struct BackupPage {
     pub confirming_cold_copy: Option<String>,
     pub selected_target_override: HashMap<String, String>,
     pub action_in_flight: HashMap<String, bool>,
+    scroll: ScrollHandle,
     focus: FocusHandle,
 }
 
@@ -72,8 +74,13 @@ impl BackupPage {
             confirming_cold_copy: None,
             selected_target_override: HashMap::new(),
             action_in_flight: HashMap::new(),
+            scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
         }
+    }
+
+    pub fn scroll_handle(&self) -> ScrollHandle {
+        self.scroll.clone()
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -1055,7 +1062,9 @@ impl Render for BackupPage {
                     .id("backup-content")
                     .flex_1()
                     .min_h_0()
+                    .track_scroll(&self.scroll)
                     .overflow_y_scroll()
+                    .vertical_scrollbar(&self.scroll)
                     .child(match self.tab {
                         BackupTab::Contracts => self.render_contracts_view(palette, cx),
                         BackupTab::Targets => self.render_targets_view(palette, cx),

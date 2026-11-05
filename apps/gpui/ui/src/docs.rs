@@ -60,6 +60,7 @@ pub struct DocsPage {
     query: String,
     filter: Option<(Entity<InputState>, Subscription)>,
     scroll: ScrollHandle,
+    nav_scroll: ScrollHandle,
     pending_anchor: Option<String>,
 }
 
@@ -70,8 +71,13 @@ impl DocsPage {
             query: String::new(),
             filter: None,
             scroll: ScrollHandle::new(),
+            nav_scroll: ScrollHandle::new(),
             pending_anchor: None,
         }
+    }
+
+    pub fn scroll_handle(&self) -> ScrollHandle {
+        self.scroll.clone()
     }
 
     pub fn open(&mut self, slug: String, cx: &mut Context<Self>) {
@@ -802,9 +808,12 @@ impl Render for DocsPage {
                     .child(Input::new(&input))
                     .child(
                         div()
+                            .id("docs-nav")
                             .flex_1()
                             .min_h_0()
-                            .overflow_y_scrollbar()
+                            .track_scroll(&self.nav_scroll)
+                            .overflow_y_scroll()
+                            .vertical_scrollbar(&self.nav_scroll)
                             .flex()
                             .flex_col()
                             .gap(px(3.))

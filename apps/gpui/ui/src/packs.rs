@@ -130,6 +130,10 @@ impl PacksPage {
         self.load(cx);
     }
 
+    pub fn scroll_handle(&self) -> ScrollHandle {
+        self.scroll.clone()
+    }
+
     fn write(
         &mut self,
         action: &'static str,

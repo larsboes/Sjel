@@ -7,10 +7,11 @@
 use chrono::{Datelike, Duration, Local, Months, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, Entity, FocusHandle,
-    FontWeight, KeyBinding, SharedString, Subscription, Window,
+    FontWeight, KeyBinding, ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::calendar::{
     self, entries_on, kind_color, kind_label, time_label, Draft, COMMITMENTS, KINDS,
@@ -114,6 +115,7 @@ pub struct CalendarPage {
     confirm_delete: Option<String>,
     form: Option<Form>,
     pub write_error: Option<ShellError>,
+    side_scroll: ScrollHandle,
     focus: FocusHandle,
     focus_next: bool,
 }
@@ -136,9 +138,14 @@ impl CalendarPage {
             confirm_delete: None,
             form: None,
             write_error: None,
+            side_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             focus_next: true,
         }
+    }
+
+    pub fn scroll_handle(&self) -> ScrollHandle {
+        self.side_scroll.clone()
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -753,7 +760,9 @@ impl Render for CalendarPage {
                         .bg(rgba(palette.surface))
                         .border_1()
                         .border_color(rgba(palette.border))
+                        .track_scroll(&self.side_scroll)
                         .overflow_y_scroll()
+                        .vertical_scrollbar(&self.side_scroll)
                         .child(side),
                 )
                 .into_any_element()

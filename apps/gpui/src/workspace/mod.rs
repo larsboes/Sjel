@@ -25,14 +25,12 @@ use crate::shell::{
     self, AgentView, AvailableFeature, Backups, GlobalTask, InstalledFeature, NodeHealth,
     ShellError, Snapshot, SoundscapeState,
 };
-use crate::{header, home, sidebar};
-use sjel_gpui_core::area::{self, Area, Tabs};
-use sjel_gpui_core::terminal::Host;
+use crate::{header, sidebar};
+use sjel_gpui_core::area::{Area, Tabs};
 use sjel_gpui_ui::accounts::Accounts;
 use sjel_gpui_ui::ask::Ask;
 use sjel_gpui_ui::backup::{self, BackupPage};
 use sjel_gpui_ui::calendar::page::CalendarPage;
-use sjel_gpui_ui::capabilities;
 use sjel_gpui_ui::clipper::ClipperSettings;
 use sjel_gpui_ui::context::{ContextEvent, ContextPage};
 use sjel_gpui_ui::cv::CvPage;
@@ -41,26 +39,30 @@ use sjel_gpui_ui::documents::Documents;
 use sjel_gpui_ui::feed::Feed;
 use sjel_gpui_ui::finance::FinancePage;
 use sjel_gpui_ui::import::ImportPage;
-use sjel_gpui_ui::inbox::triage::{self as inbox, Inbox, InboxEvent};
+use sjel_gpui_ui::inbox::triage::{Inbox, InboxEvent};
 use sjel_gpui_ui::inventory::InventoryPage;
 use sjel_gpui_ui::media::MediaPage;
 use sjel_gpui_ui::music::{Music, MusicEvent};
 use sjel_gpui_ui::packs::PacksPage;
 use sjel_gpui_ui::people::page::PeoplePage;
-use sjel_gpui_ui::projects::{Projects, ProjectsTab};
+use sjel_gpui_ui::projects::Projects;
 use sjel_gpui_ui::record::RecordPage;
 use sjel_gpui_ui::research::ResearchPage;
 use sjel_gpui_ui::self_view::SelfPage;
 use sjel_gpui_ui::setup::SetupPage;
-use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
+use sjel_gpui_ui::sidebar::{Seat, Sidebar};
 use sjel_gpui_ui::software::Software;
 use sjel_gpui_ui::systems::SystemsPage;
-use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
+use sjel_gpui_ui::terminal::TerminalDeck;
 use sjel_gpui_ui::theme::{
     step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, ThemeContext,
     DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES,
 };
 use sjel_gpui_ui::web_links::LinksPage;
+
+mod features;
+mod panels;
+mod routing;
 
 /// Pinch travel per app zoom step (0.1 is a 10% pinch).
 const UI_PINCH_STEP: f32 = 0.15;
@@ -642,227 +644,6 @@ impl Workspace {
         self.repo.has_direct_db()
     }
 
-    fn ensure_documents(&mut self, cx: &mut Context<Self>) -> Entity<Documents> {
-        let repo = self.repo.clone();
-        self.documents
-            .get_or_insert_with(|| cx.new(|_| Documents::new(repo)))
-            .clone()
-    }
-
-    fn ensure_feed(&mut self, cx: &mut Context<Self>) -> Entity<Feed> {
-        let repo = self.repo.clone();
-        self.feed
-            .get_or_insert_with(|| cx.new(|cx| Feed::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_calendar_page(&mut self, cx: &mut Context<Self>) -> Entity<CalendarPage> {
-        let repo = self.repo.clone();
-        self.calendar_page
-            .get_or_insert_with(|| cx.new(|cx| CalendarPage::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_finance_page(&mut self, cx: &mut Context<Self>) -> Entity<FinancePage> {
-        let repo = self.repo.clone();
-        self.finance_page
-            .get_or_insert_with(|| cx.new(|cx| FinancePage::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_people_page(&mut self, cx: &mut Context<Self>) -> Entity<PeoplePage> {
-        let repo = self.repo.clone();
-        self.people_page
-            .get_or_insert_with(|| cx.new(|cx| PeoplePage::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_backup_page(&mut self, cx: &mut Context<Self>) -> Entity<BackupPage> {
-        let repo = self.repo.clone();
-        self.backup_page
-            .get_or_insert_with(|| cx.new(|cx| BackupPage::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_inventory_page(&mut self, cx: &mut Context<Self>) -> Entity<InventoryPage> {
-        let repo = self.repo.clone();
-        self.inventory_page
-            .get_or_insert_with(|| cx.new(|cx| InventoryPage::new(repo, cx)))
-            .clone()
-    }
-
-    fn ensure_software(&mut self, cx: &mut Context<Self>) -> Entity<Software> {
-        let repo = self.repo.clone();
-        self.software
-            .get_or_insert_with(|| cx.new(|_| Software::new(repo)))
-            .clone()
-    }
-
-    fn ensure_links_page(&mut self, cx: &mut Context<Self>) -> Entity<LinksPage> {
-        let repo = self.repo.clone();
-        self.links_page
-            .get_or_insert_with(|| cx.new(|_| LinksPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_docs_page(&mut self, cx: &mut Context<Self>) -> Entity<DocsPage> {
-        self.docs_page
-            .get_or_insert_with(|| cx.new(|_| DocsPage::new()))
-            .clone()
-    }
-
-    fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<RecordPage> {
-        let repo = self.repo.clone();
-        self.record_page
-            .get_or_insert_with(|| cx.new(|_| RecordPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_import(&mut self, cx: &mut Context<Self>) -> Entity<ImportPage> {
-        let repo = self.repo.clone();
-        self.import
-            .get_or_insert_with(|| cx.new(|_| ImportPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<SystemsPage> {
-        let repo = self.repo.clone();
-        self.systems
-            .get_or_insert_with(|| cx.new(|_| SystemsPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_packs(&mut self, cx: &mut Context<Self>) -> Entity<PacksPage> {
-        let repo = self.repo.clone();
-        self.packs
-            .get_or_insert_with(|| cx.new(|_| PacksPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_self_page(&mut self, cx: &mut Context<Self>) -> Entity<SelfPage> {
-        let repo = self.repo.clone();
-        self.self_page
-            .get_or_insert_with(|| cx.new(|_| SelfPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_cv_page(&mut self, cx: &mut Context<Self>) -> Entity<CvPage> {
-        let repo = self.repo.clone();
-        self.cv_page
-            .get_or_insert_with(|| cx.new(|_| CvPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_media_page(&mut self, cx: &mut Context<Self>) -> Entity<MediaPage> {
-        let repo = self.repo.clone();
-        self.media_page
-            .get_or_insert_with(|| cx.new(|_| MediaPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_research_page(&mut self, cx: &mut Context<Self>) -> Entity<ResearchPage> {
-        let repo = self.repo.clone();
-        self.research_page
-            .get_or_insert_with(|| cx.new(|_| ResearchPage::new(repo)))
-            .clone()
-    }
-
-    fn ensure_setup_page(&mut self, cx: &mut Context<Self>) -> Entity<SetupPage> {
-        let repo = self.repo.clone();
-        self.setup_page
-            .get_or_insert_with(|| cx.new(|_| SetupPage::new(repo)))
-            .clone()
-    }
-
-    pub fn go(&mut self, page: Page, cx: &mut Context<Self>) {
-        // Today was its own page and is part of Home now; its old shortcuts and links land here.
-        let page = area::canonical(page);
-        if page != Page::Settings {
-            self.feature_install_confirmation = None;
-            self.feature_uninstall_confirmation = None;
-        }
-        self.tabs.visit(page);
-        // Going somewhere is what the finder was for, whichever key did it.
-        if self.finder.read(cx).is_open() {
-            self.finder.update(cx, |finder, cx| finder.close(cx));
-        }
-        if self.page != page {
-            let previous = self.page;
-            if previous == Page::Travel {
-                self.travel.update(cx, |travel, _| travel.deactivate());
-            }
-            // Leaving Systems stops its clocks: three beats that ask the machine a question are
-            // worth nothing while the page is not drawn.
-            if previous == Page::Systems {
-                if let Some(systems) = &self.systems {
-                    systems.update(cx, |systems, cx| systems.deactivate(cx));
-                }
-            }
-            self.page = page;
-            self.refocus = true;
-            self.selection.reset();
-            if page == Page::Projects {
-                self.projects
-                    .update(cx, |projects, cx| projects.load_projects(cx));
-            } else if page == Page::Travel {
-                self.travel.update(cx, |travel, cx| travel.activate(cx));
-            } else if page == Page::Backup {
-                self.ensure_backup_page(cx)
-                    .update(cx, |b, cx| b.activate(cx));
-            } else if page == Page::Software {
-                self.ensure_software(cx)
-                    .update(cx, |software, cx| software.load(cx));
-            } else if page == Page::Links {
-                self.ensure_links_page(cx).update(cx, |links, cx| {
-                    links.load(cx);
-                    links.load_candidates(cx);
-                });
-            } else if page == Page::Import {
-                self.ensure_import(cx)
-                    .update(cx, |import, cx| import.load(cx));
-            } else if page == Page::Systems {
-                self.ensure_systems(cx)
-                    .update(cx, |systems, cx| systems.activate(cx));
-            } else if page == Page::Packs {
-                self.ensure_packs(cx).update(cx, |packs, cx| packs.load(cx));
-            } else if page == Page::SelfModel {
-                self.ensure_self_page(cx).update(cx, |s, cx| s.load(cx));
-            } else if page == Page::Cv {
-                self.ensure_cv_page(cx).update(cx, |cv, cx| cv.load(cx));
-            } else if page == Page::Media {
-                self.ensure_media_page(cx).update(cx, |m, cx| m.load(cx));
-            } else if page == Page::Research {
-                self.ensure_research_page(cx).update(cx, |r, cx| r.load(cx));
-            } else if page == Page::Setup {
-                self.ensure_setup_page(cx).update(cx, |s, cx| s.load(cx));
-            } else if page == Page::Documents {
-                self.ensure_documents(cx)
-                    .update(cx, |documents, cx| documents.load(cx));
-            } else if page == Page::Feed {
-                self.ensure_feed(cx)
-                    .update(cx, |feed, cx| feed.activate(cx));
-            } else if page == Page::Inbox {
-                self.inbox.update(cx, |inbox, cx| inbox.activate(cx));
-            } else if page == Page::Calendar {
-                self.ensure_calendar_page(cx)
-                    .update(cx, |calendar, cx| calendar.activate(cx));
-            } else if page == Page::Home {
-                self.context_page
-                    .update(cx, |context, cx| context.activate(cx));
-            } else if page == Page::Finance {
-                self.ensure_finance_page(cx)
-                    .update(cx, |finance, cx| finance.activate(cx));
-            } else if page == Page::People {
-                self.ensure_people_page(cx)
-                    .update(cx, |people, cx| people.activate(cx));
-            } else if page == Page::Inventory {
-                self.ensure_inventory_page(cx)
-                    .update(cx, |p, cx| p.activate(cx));
-            }
-        }
-        cx.notify();
-    }
-
     /// Follows the shell's change stream. Until a frame arrives the timer keeps reading health
     /// and agent, and it keeps reading them when this shell has no stream to send.
     fn follow(&mut self, cx: &mut Context<Self>) {
@@ -1044,67 +825,6 @@ impl Workspace {
         .detach();
     }
 
-    /// The panel, created on first use. Separate from [`Self::open_soundscape`] because the sidebar
-    /// and the palette both want it without asking for it to appear.
-    fn soundscape_panel(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Entity<crate::soundscape::Soundscape> {
-        if let Some(panel) = &self.soundscape_panel {
-            return panel.clone();
-        }
-        let repo = self.repo.clone();
-        let panel = cx.new(|cx| crate::soundscape::new(repo, cx));
-        // It is a panel over this window, so it paints in this window's frame and follows its
-        // appearance; nothing here has to move it.
-        let _ = window;
-        cx.notify();
-        self.soundscape_panel = Some(panel.clone());
-        panel
-    }
-
-    /// Slide the player in. The panel owns whether it is open, so this is idempotent: asking for a
-    /// panel that is already showing does not restart the slide.
-    pub fn open_soundscape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let panel = self.soundscape_panel(window, cx);
-        panel.update(cx, |panel, cx| panel.set_open(true, cx));
-    }
-
-    /// The transport, written through the panel: it is the one writer of play and preset, so its
-    /// guard against a stale poll covers the sidebar and the global keys as well.
-    pub fn toggle_soundscape(
-        &mut self,
-        playing: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(state) = self.soundscape.value.as_mut() {
-            state.playing = playing;
-        }
-        let panel = self.soundscape_panel(window, cx);
-        panel.update(cx, |panel, cx| panel.set_playing(playing, window, cx));
-        cx.notify();
-    }
-
-    pub fn cycle_soundscape_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        use sjel_gpui_core::soundscape::{music::PRESETS, Preset};
-        let current = self
-            .soundscape
-            .value
-            .as_ref()
-            .and_then(|state| Preset::from_key(&state.preset))
-            .unwrap_or(Preset::Edm);
-        let next =
-            Preset::from_key(PRESETS[(current.index() + 1) % PRESETS.len()]).unwrap_or(Preset::Edm);
-        if let Some(state) = self.soundscape.value.as_mut() {
-            state.preset = next.key().to_owned();
-        }
-        let panel = self.soundscape_panel(window, cx);
-        panel.update(cx, |panel, cx| panel.choose_preset(next, window, cx));
-        cx.notify();
-    }
-
     pub fn toggle_task(
         &mut self,
         path: String,
@@ -1171,17 +891,6 @@ impl Workspace {
                 cx.notify();
             },
         );
-    }
-
-    pub fn go_to_project(&mut self, name: String, cx: &mut Context<Self>) {
-        // Through `go`, so the frame takes back the focus the page that sent us here was holding.
-        self.go(Page::Projects, cx);
-        self.projects.update(cx, |projects, cx| {
-            projects.open_project(name, cx);
-            projects.tab = ProjectsTab::Hubs;
-            cx.notify();
-        });
-        cx.notify();
     }
 
     pub fn decide(&mut self, id: String, allow: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -1383,46 +1092,6 @@ impl Workspace {
         }
     }
 
-    /// Open a terminal in the right edge: the newest one still running, or a new login shell.
-    ///
-    /// The seat is opened first, so a Mac that is slow to answer shows the frame it will fill
-    /// rather than nothing. The view is built once and kept: closing the drawer leaves the stream
-    /// attached, and reopening it draws the live screen instead of replaying a scrollback the Mac
-    /// may since have dropped.
-    fn open_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.right_panel.open_on(Seat::Terminal);
-        cx.notify();
-        if let Some(deck) = &self.terminal {
-            window.focus(&gpui::Focusable::focus_handle(deck, cx), cx);
-            return;
-        }
-        let Ok(shell) = self.repo.shell() else {
-            self.terminal_note = Some("Sjel is not running on this Mac.".into());
-            return;
-        };
-        let deck = cx.new(|cx| {
-            TerminalDeck::new(Host::Shell(shell), false, TERMINAL_COLS, TERMINAL_ROWS, cx)
-        });
-        // A pinch on the grid changes the font size, which is an Appearance setting.
-        cx.subscribe(&deck, |workspace, _, event: &TerminalEvent, cx| {
-            if let TerminalEvent::Zoom(steps) = event {
-                let settings = workspace.appearance_settings;
-                let terminal_font_size =
-                    step_terminal_font_size(settings.terminal_font_size, *steps);
-                workspace.set_appearance(
-                    AppearanceSettings {
-                        terminal_font_size,
-                        ..settings
-                    },
-                    cx,
-                );
-            }
-        })
-        .detach();
-        deck.update(cx, |deck, cx| deck.load(cx));
-        self.terminal = Some(deck);
-    }
-
     fn open_palette(&mut self, _: &OpenPalette, _: &mut Window, cx: &mut Context<Self>) {
         self.finder.update(cx, |finder, cx| finder.toggle(cx));
     }
@@ -1595,61 +1264,6 @@ impl Workspace {
         cx.notify();
     }
 
-    pub fn refresh_current_page(&mut self, cx: &mut Context<Self>) {
-        self.refresh(cx);
-        if self.page == Page::Projects {
-            self.projects
-                .update(cx, |projects, cx| projects.load_projects(cx));
-        } else if self.page == Page::Links {
-            self.ensure_links_page(cx).update(cx, |links, cx| {
-                links.load(cx);
-                links.load_candidates(cx);
-            });
-        } else if self.page == Page::Travel {
-            self.travel.update(cx, |travel, cx| travel.refresh(cx));
-        } else if self.page == Page::Documents {
-            self.ensure_documents(cx)
-                .update(cx, |documents, cx| documents.load(cx));
-        } else if self.page == Page::Feed {
-            self.ensure_feed(cx).update(cx, |feed, cx| feed.refresh(cx));
-        } else if self.page == Page::Inbox {
-            self.inbox.update(cx, |inbox, cx| inbox.load(cx));
-        } else if self.page == Page::Calendar {
-            self.ensure_calendar_page(cx)
-                .update(cx, |calendar, cx| calendar.refresh(cx));
-        } else if matches!(self.page, Page::Home | Page::Context) {
-            self.context_page
-                .update(cx, |context, cx| context.refresh(cx));
-        } else if self.page == Page::Finance {
-            self.ensure_finance_page(cx)
-                .update(cx, |finance, cx| finance.refresh(cx));
-        } else if self.page == Page::People {
-            self.ensure_people_page(cx)
-                .update(cx, |people, cx| people.refresh(cx));
-        } else if self.page == Page::Backup {
-            self.ensure_backup_page(cx)
-                .update(cx, |b, cx| b.refresh(cx));
-        } else if self.page == Page::Inventory {
-            self.ensure_inventory_page(cx)
-                .update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Systems {
-            self.ensure_systems(cx).update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Packs {
-            self.ensure_packs(cx).update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::SelfModel {
-            self.ensure_self_page(cx).update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Cv {
-            self.ensure_cv_page(cx).update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Media {
-            self.ensure_media_page(cx).update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Research {
-            self.ensure_research_page(cx)
-                .update(cx, |p, cx| p.refresh(cx));
-        } else if self.page == Page::Setup {
-            self.ensure_setup_page(cx).update(cx, |p, cx| p.refresh(cx));
-        }
-    }
-
     fn on_open_terminal(&mut self, _: &OpenTerminal, window: &mut Window, cx: &mut Context<Self>) {
         self.open_terminal(window, cx);
     }
@@ -1713,181 +1327,6 @@ impl Workspace {
             self.refresh_installed_features(cx);
         }
         self.go(Page::Settings, cx);
-    }
-
-    pub fn refresh_installed_features(&mut self, cx: &mut Context<Self>) {
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.installed_features.settle(Err(error));
-                cx.notify();
-                return;
-            }
-        };
-        if !self.installed_features.begin() {
-            return;
-        }
-        cx.notify();
-        let work = shell::run(async move { shell.installed_features().await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.installed_features.settle(result);
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    pub fn refresh_feature_catalogue(&mut self, cx: &mut Context<Self>) {
-        if !self.available_features.begin() {
-            return;
-        }
-        cx.notify();
-        let work = shell::run(async { sjel_gpui_core::shell::feature_catalogue().await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.available_features.settle(result);
-                let catalogue_has_match =
-                    view.available_features
-                        .value
-                        .as_ref()
-                        .is_some_and(|packages| {
-                            crate::settings::catalogue_matches(packages, &view.settings_query)
-                        });
-                if let Some(section) =
-                    crate::settings::search_section(&view.settings_query, catalogue_has_match)
-                {
-                    view.settings_section = section;
-                    if section == crate::settings::Section::Features {
-                        if let Some(feature_view) =
-                            crate::settings::feature_view_for_search(&view.settings_query)
-                        {
-                            view.settings_feature_view = feature_view;
-                        } else if catalogue_has_match {
-                            view.settings_feature_view = crate::settings::FeatureView::Explore;
-                        }
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    pub fn request_feature_uninstall(&mut self, name: String, cx: &mut Context<Self>) {
-        self.feature_uninstall_confirmation = Some(name);
-        self.feature_manager_message = None;
-        cx.notify();
-    }
-
-    pub fn dismiss_feature_recommendation(
-        &mut self,
-        feature: String,
-        topic: String,
-        cx: &mut Context<Self>,
-    ) {
-        let key = format!("{feature}::{topic}");
-        self.dismissed_feature_recommendations.insert(key);
-        self.feature_manager_message = None;
-        if let Err(error) =
-            crate::settings::save_recommendation_dismissals(&self.dismissed_feature_recommendations)
-        {
-            self.feature_manager_message = Some(format!("Could not save this preference: {error}"));
-        }
-        cx.notify();
-    }
-
-    pub fn request_feature_install(&mut self, name: String, cx: &mut Context<Self>) {
-        self.feature_install_confirmation = Some(name);
-        self.feature_manager_message = None;
-        cx.notify();
-    }
-
-    pub fn cancel_feature_install(&mut self, cx: &mut Context<Self>) {
-        self.feature_install_confirmation = None;
-        cx.notify();
-    }
-
-    pub fn install_feature(
-        &mut self,
-        name: String,
-        version: String,
-        sha256: String,
-        cx: &mut Context<Self>,
-    ) {
-        let key = format!("package-install:{name}");
-        if !self.busy.start(&key) {
-            return;
-        }
-        self.feature_install_confirmation = None;
-        self.feature_manager_message = None;
-        cx.notify();
-        let work = shell::run(async move {
-            sjel_gpui_core::shell::install_feature(&name, &version, &sha256).await
-        });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.busy.finish(&key);
-                match result {
-                    Ok(()) => {
-                        view.feature_manager_message = Some(
-                            "Feature installed. It is ready to enable in Capabilities.".into(),
-                        );
-                        view.installed_features = Remote::default();
-                        view.refresh_installed_features(cx);
-                        view.available_features = Remote::default();
-                        view.refresh_feature_catalogue(cx);
-                    }
-                    Err(error) => view.feature_manager_message = Some(error.to_string()),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    pub fn cancel_feature_uninstall(&mut self, cx: &mut Context<Self>) {
-        self.feature_uninstall_confirmation = None;
-        cx.notify();
-    }
-
-    pub fn uninstall_feature(&mut self, name: String, cx: &mut Context<Self>) {
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.feature_manager_message = Some(error.to_string());
-                cx.notify();
-                return;
-            }
-        };
-        let key = format!("package-uninstall:{name}");
-        if !self.busy.start(&key) {
-            return;
-        }
-        self.feature_uninstall_confirmation = None;
-        self.feature_manager_message = None;
-        cx.notify();
-        let work = shell::run(async move { shell.uninstall_feature(&name).await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.busy.finish(&key);
-                match result {
-                    Ok(()) => {
-                        view.feature_manager_message =
-                            Some("Feature removed. Its capability data was retained.".into());
-                        view.installed_features = Remote::default();
-                        view.refresh_installed_features(cx);
-                    }
-                    Err(error) => view.feature_manager_message = Some(error.to_string()),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
     }
 
     /// Saves `next` and applies it. A theme mode is forced on the window, so the native glass and
@@ -2270,209 +1709,13 @@ impl Render for Workspace {
         let sidebar_tint = palette.sidebar_surface;
         let glass_requested = self.appearance_settings.glass == GlassStyle::LiquidGlass;
         let glass = self.attach_glass(window, sidebar_tint, glass_requested);
-        let right_panel = if self.right_panel.is_open() {
-            let seat = self.right_panel.seat();
-            let body = match seat {
-                Seat::Agent => self
-                    .finder
-                    .update(cx, |finder, cx| finder.agent_panel_body(palette, cx)),
-                Seat::Soundscape => div()
-                    .p_4()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child("Soundscape controls remain available with ⌘0")
-                    .into_any_element(),
-                Seat::Activity => div()
-                    .p_4()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child("Phone activity is shown on the paired iPhone.")
-                    .into_any_element(),
-                Seat::Terminal => match &self.terminal {
-                    Some(deck) => {
-                        let settings = self.appearance_settings;
-                        deck.update(cx, |deck, _| {
-                            deck.set_style(
-                                palette,
-                                settings.terminal_font,
-                                settings.terminal_font_size,
-                            )
-                        });
-                        deck.clone().into_any_element()
-                    }
-                    None => div()
-                        .p_4()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child(self.terminal_note.clone().unwrap_or_else(|| {
-                            SharedString::from(
-                                "A terminal opens here from ⌘K › Terminal or sjel://terminal.",
-                            )
-                        }))
-                        .into_any_element(),
-                },
-            };
-            let entity = cx.entity().clone();
-            let on_seat = {
-                let entity = entity.clone();
-                move |seat: Seat, _: &mut Window, app: &mut App| {
-                    entity.update(app, |view, cx| {
-                        view.right_panel.choose(seat);
-                        cx.notify();
-                    });
-                }
-            };
-            let on_close = move |_: &mut Window, app: &mut App| {
-                entity.update(app, |view, cx| {
-                    view.right_panel.close();
-                    cx.notify();
-                });
-            };
-            Some(
-                div()
-                    .relative()
-                    .w(px(self.right_panel.width()))
-                    .flex_none()
-                    .h_full()
-                    .border_l_1()
-                    .border_color(rgba(palette.border))
-                    .child(sidebar_frame(palette, seat, body, on_seat, on_close))
-                    .child(
-                        // The left border is the handle: dragging it moves the edge.
-                        div()
-                            .id("edge-resize")
-                            .absolute()
-                            .top_0()
-                            .left(px(-3.))
-                            .w(px(6.))
-                            .h_full()
-                            .cursor_col_resize()
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(|view, _, _, cx| {
-                                    view.resizing_edge = true;
-                                    cx.stop_propagation();
-                                }),
-                            ),
-                    ),
-            )
-        } else {
-            None
-        };
+        let right_panel = self.render_right_panel(palette, cx);
         // An open finder holds the keys: a page change behind it must not take them back, or the
         // finder opened right after a navigation could not be closed with escape.
         if std::mem::take(&mut self.refocus) && !self.finder.read(cx).is_open() {
             window.focus(&self.focus, cx);
         }
-        let page = match self.page {
-            Page::Home => home::render(self, palette, window, cx).into_any_element(),
-            Page::Capabilities => capabilities::render(
-                capabilities::State {
-                    health: &self.health,
-                    agent: &self.agent,
-                    busy: &self.busy,
-                    selected: self.selected(),
-                    selection: &self.selection,
-                },
-                palette,
-                cx,
-                |view, name, start, window, cx| view.set_running(name, start, window, cx),
-                |view, name, _, cx| {
-                    let page = match name.as_str() {
-                        "finance" => Page::Finance,
-                        "calendar" => Page::Calendar,
-                        "trips" | "transit" | "places" => Page::Travel,
-                        "inventory" | "interior" => Page::Inventory,
-                        "projects" => Page::Projects,
-                        "documents" => Page::Documents,
-                        "media" => Page::Media,
-                        "backup" => Page::Backup,
-                        "import" => Page::Import,
-                        "software" => Page::Software,
-                        "web-links" | "links" => Page::Links,
-                        "feed" | "comms" => Page::Feed,
-                        "systems" => Page::Systems,
-                        "packs" => Page::Packs,
-                        "self" => Page::SelfModel,
-                        "setup" => Page::Setup,
-                        _ => Page::SelfModel,
-                    };
-                    view.go(page, cx);
-                },
-            )
-            .into_any_element(),
-            Page::Backup => {
-                let page = self.ensure_backup_page(cx);
-                page.update(cx, |backup, cx| backup.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Software => self.ensure_software(cx).into_any_element(),
-            Page::Links => self.ensure_links_page(cx).into_any_element(),
-            Page::Docs => self.ensure_docs_page(cx).into_any_element(),
-            Page::Record => self.ensure_record_page(cx).into_any_element(),
-            Page::Import => self.ensure_import(cx).into_any_element(),
-            Page::Systems => self.ensure_systems(cx).into_any_element(),
-            Page::Packs => self.ensure_packs(cx).into_any_element(),
-            Page::SelfModel => self.ensure_self_page(cx).into_any_element(),
-            Page::Cv => self.ensure_cv_page(cx).into_any_element(),
-            Page::Media => self.ensure_media_page(cx).into_any_element(),
-            Page::Research => self.ensure_research_page(cx).into_any_element(),
-            Page::Setup => self.ensure_setup_page(cx).into_any_element(),
-            Page::Documents => {
-                let page = self.ensure_documents(cx);
-                page.update(cx, |documents, cx| documents.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Feed => {
-                let page = self.ensure_feed(cx);
-                page.update(cx, |feed, cx| feed.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Inbox => {
-                if let Some((music, _)) = &self.music_page {
-                    music.update(cx, |view, cx| view.set_palette(palette, cx));
-                    music.clone().into_any_element()
-                } else {
-                    self.inbox
-                        .update(cx, |inbox, cx| inbox.set_palette(palette, cx));
-                    self.inbox.clone().into_any_element()
-                }
-            }
-            Page::Calendar => {
-                let page = self.ensure_calendar_page(cx);
-                page.update(cx, |calendar, cx| calendar.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Context => unreachable!("`/context` opens Home (`core::area::canonical`)"),
-            Page::Finance => {
-                let page = self.ensure_finance_page(cx);
-                page.update(cx, |finance, cx| finance.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::People => {
-                let page = self.ensure_people_page(cx);
-                page.update(cx, |people, cx| people.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Inventory => {
-                let page = self.ensure_inventory_page(cx);
-                page.update(cx, |p, cx| p.set_palette(palette, cx));
-                page.into_any_element()
-            }
-            Page::Projects => {
-                self.projects
-                    .update(cx, |projects, cx| projects.set_palette(palette, cx));
-                self.projects.clone().into_any_element()
-            }
-            Page::Travel => {
-                self.travel.update(cx, |travel, cx| {
-                    travel.set_palette(palette, cx);
-                    travel.set_compact_map(false);
-                });
-                self.travel.clone().into_any_element()
-            }
-            Page::Settings => crate::settings::render(self, palette, window, cx).into_any_element(),
-        };
+        let page = self.render_current_page(palette, window, cx);
 
         if let Some(frames) = &self.frames {
             frames.render_finished();
@@ -2727,6 +1970,8 @@ mod tests {
 
     use gpui::{Entity, TestAppContext, VisualTestContext};
     use gpui_kit::component::Root;
+    use sjel_gpui_core::terminal::Host;
+    use sjel_gpui_ui::inbox::triage as inbox;
 
     use super::*;
 

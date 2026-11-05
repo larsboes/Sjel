@@ -17,40 +17,55 @@ use gpui_kit::{
     KeyBinding, MouseButton, MouseMoveEvent, SharedString, Subscription, Window,
 };
 
-use crate::ask::Ask;
-use crate::backup::{self, BackupPage};
-use crate::calendar_view::CalendarPage;
-use crate::context_view::ContextPage;
 use crate::data::{self, Busy, Remote, Repo};
-use crate::documents::Documents;
-use crate::feed::Feed;
-use crate::finance_view::FinancePage;
 use crate::finder::{Finder, FinderEvent, Hit, Open};
-use crate::inbox::{Inbox, InboxEvent};
-use crate::inventory_view::InventoryPage;
-use crate::music::{Music, MusicEvent};
-use crate::people_view::PeoplePage;
-use crate::projects::Projects;
 use crate::route::{self, Page, Target};
 use crate::selection::{Item, Selection};
 use crate::shell::{
     self, AgentView, AvailableFeature, Backups, GlobalTask, InstalledFeature, NodeHealth,
     ShellError, Snapshot, SoundscapeState,
 };
-use crate::theme::{
+use crate::{header, home, sidebar};
+use sjel_gpui_core::area::{self, Area, Tabs};
+use sjel_gpui_core::terminal::Host;
+use sjel_gpui_ui::accounts::Accounts;
+use sjel_gpui_ui::ask::Ask;
+use sjel_gpui_ui::backup::{self, BackupPage};
+use sjel_gpui_ui::calendar::page::CalendarPage;
+use sjel_gpui_ui::capabilities;
+use sjel_gpui_ui::clipper::ClipperSettings;
+use sjel_gpui_ui::context::ContextPage;
+use sjel_gpui_ui::cv::CvPage;
+use sjel_gpui_ui::docs::DocsPage;
+use sjel_gpui_ui::documents::Documents;
+use sjel_gpui_ui::feed::Feed;
+use sjel_gpui_ui::finance::FinancePage;
+use sjel_gpui_ui::import::ImportPage;
+use sjel_gpui_ui::inbox::triage::{self as inbox, Inbox, InboxEvent};
+use sjel_gpui_ui::inventory::InventoryPage;
+use sjel_gpui_ui::media::MediaPage;
+use sjel_gpui_ui::music::{Music, MusicEvent};
+use sjel_gpui_ui::packs::PacksPage;
+use sjel_gpui_ui::people::page::PeoplePage;
+use sjel_gpui_ui::projects::{Projects, ProjectsTab};
+use sjel_gpui_ui::record::RecordPage;
+use sjel_gpui_ui::research::ResearchPage;
+use sjel_gpui_ui::self_view::SelfPage;
+use sjel_gpui_ui::setup::SetupPage;
+use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
+use sjel_gpui_ui::software::Software;
+use sjel_gpui_ui::systems::SystemsPage;
+use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
+use sjel_gpui_ui::theme::{
     step_font_size, step_terminal_font_size, AppearanceSettings, GlassStyle, ThemeContext,
     DEFAULT_UI_FONT_SIZE, UI_FONT_SIZES,
 };
+use sjel_gpui_ui::web_links::LinksPage;
 
 /// Pinch travel per app zoom step (0.1 is a 10% pinch).
 const UI_PINCH_STEP: f32 = 0.15;
 /// Trackpad scroll travel per app zoom step.
 const UI_SCROLL_PIXELS_PER_STEP: f32 = 40.;
-use crate::{capabilities, header, home, sidebar};
-use sjel_gpui_core::area::{self, Area, Tabs};
-use sjel_gpui_core::terminal::Host;
-use sjel_gpui_ui::sidebar::{sidebar_frame, Seat, Sidebar};
-use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 
 actions!(
     sjel,
@@ -341,8 +356,8 @@ pub struct Workspace {
     pub backups: Remote<Backups>,
     pub projects: Entity<Projects>,
     pub ask: Entity<Ask>,
-    pub accounts: Entity<crate::accounts::Accounts>,
-    pub clipper_settings: Entity<crate::clipper::ClipperSettings>,
+    pub accounts: Entity<Accounts>,
+    pub clipper_settings: Entity<ClipperSettings>,
     pub travel: Entity<sjel_gpui_ui::travel::Travel>,
     pub documents: Option<Entity<Documents>>,
     pub feed: Option<Entity<Feed>>,
@@ -355,18 +370,18 @@ pub struct Workspace {
     pub people_page: Option<Entity<PeoplePage>>,
     pub backup_page: Option<Entity<BackupPage>>,
     pub inventory_page: Option<Entity<InventoryPage>>,
-    pub software: Option<Entity<crate::software::Software>>,
-    pub links_page: Option<Entity<crate::links::LinksPage>>,
-    pub docs_page: Option<Entity<crate::docs::DocsPage>>,
-    pub record_page: Option<Entity<crate::record::RecordPage>>,
-    pub import: Option<Entity<crate::import::ImportPage>>,
-    pub systems: Option<Entity<crate::systems::SystemsPage>>,
-    pub packs: Option<Entity<crate::packs_view::PacksPage>>,
-    pub self_page: Option<Entity<crate::self_view::SelfPage>>,
-    pub cv_page: Option<Entity<crate::cv_view::CvPage>>,
-    pub media_page: Option<Entity<crate::media_view::MediaPage>>,
-    pub research_page: Option<Entity<crate::research_view::ResearchPage>>,
-    pub setup_page: Option<Entity<crate::setup_view::SetupPage>>,
+    pub software: Option<Entity<Software>>,
+    pub links_page: Option<Entity<LinksPage>>,
+    pub docs_page: Option<Entity<DocsPage>>,
+    pub record_page: Option<Entity<RecordPage>>,
+    pub import: Option<Entity<ImportPage>>,
+    pub systems: Option<Entity<SystemsPage>>,
+    pub packs: Option<Entity<PacksPage>>,
+    pub self_page: Option<Entity<SelfPage>>,
+    pub cv_page: Option<Entity<CvPage>>,
+    pub media_page: Option<Entity<MediaPage>>,
+    pub research_page: Option<Entity<ResearchPage>>,
+    pub setup_page: Option<Entity<SetupPage>>,
     /// Approval ids and capability names with a request in flight.
     pub busy: Busy,
     pub selection: Selection,
@@ -431,8 +446,8 @@ impl Workspace {
         let repo = Repo::new(shell::Shell::new(endpoint).map(std::sync::Arc::new));
         let projects = cx.new(|_| Projects::new(repo.clone()));
         let ask = cx.new(|_| Ask::new(repo.clone()));
-        let accounts = cx.new(|_| crate::accounts::Accounts::new(repo.clone()));
-        let clipper_settings = cx.new(|_| crate::clipper::ClipperSettings::new());
+        let accounts = cx.new(|_| Accounts::new(repo.clone()));
+        let clipper_settings = cx.new(|_| ClipperSettings::new());
         let travel = cx.new(|cx| {
             sjel_gpui_ui::travel::Travel::new(
                 repo.shell().ok().map(sjel_gpui_core::travel::Source::Shell),
@@ -673,95 +688,86 @@ impl Workspace {
             .clone()
     }
 
-    fn ensure_software(&mut self, cx: &mut Context<Self>) -> Entity<crate::software::Software> {
+    fn ensure_software(&mut self, cx: &mut Context<Self>) -> Entity<Software> {
         let repo = self.repo.clone();
         self.software
-            .get_or_insert_with(|| cx.new(|_| crate::software::Software::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| Software::new(repo)))
             .clone()
     }
 
-    fn ensure_links_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::links::LinksPage> {
+    fn ensure_links_page(&mut self, cx: &mut Context<Self>) -> Entity<LinksPage> {
         let repo = self.repo.clone();
         self.links_page
-            .get_or_insert_with(|| cx.new(|_| crate::links::LinksPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| LinksPage::new(repo)))
             .clone()
     }
 
-    fn ensure_docs_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::docs::DocsPage> {
+    fn ensure_docs_page(&mut self, cx: &mut Context<Self>) -> Entity<DocsPage> {
         self.docs_page
-            .get_or_insert_with(|| cx.new(|_| crate::docs::DocsPage::new()))
+            .get_or_insert_with(|| cx.new(|_| DocsPage::new()))
             .clone()
     }
 
-    fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::record::RecordPage> {
+    fn ensure_record_page(&mut self, cx: &mut Context<Self>) -> Entity<RecordPage> {
         let repo = self.repo.clone();
         self.record_page
-            .get_or_insert_with(|| cx.new(|_| crate::record::RecordPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| RecordPage::new(repo)))
             .clone()
     }
 
-    fn ensure_import(&mut self, cx: &mut Context<Self>) -> Entity<crate::import::ImportPage> {
+    fn ensure_import(&mut self, cx: &mut Context<Self>) -> Entity<ImportPage> {
         let repo = self.repo.clone();
         self.import
-            .get_or_insert_with(|| cx.new(|_| crate::import::ImportPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| ImportPage::new(repo)))
             .clone()
     }
 
-    fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<crate::systems::SystemsPage> {
+    fn ensure_systems(&mut self, cx: &mut Context<Self>) -> Entity<SystemsPage> {
         let repo = self.repo.clone();
         self.systems
-            .get_or_insert_with(|| cx.new(|_| crate::systems::SystemsPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| SystemsPage::new(repo)))
             .clone()
     }
 
-    fn ensure_packs(&mut self, cx: &mut Context<Self>) -> Entity<crate::packs_view::PacksPage> {
+    fn ensure_packs(&mut self, cx: &mut Context<Self>) -> Entity<PacksPage> {
         let repo = self.repo.clone();
         self.packs
-            .get_or_insert_with(|| cx.new(|_| crate::packs_view::PacksPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| PacksPage::new(repo)))
             .clone()
     }
 
-    fn ensure_self_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::self_view::SelfPage> {
+    fn ensure_self_page(&mut self, cx: &mut Context<Self>) -> Entity<SelfPage> {
         let repo = self.repo.clone();
         self.self_page
-            .get_or_insert_with(|| cx.new(|_| crate::self_view::SelfPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| SelfPage::new(repo)))
             .clone()
     }
 
-    fn ensure_cv_page(&mut self, cx: &mut Context<Self>) -> Entity<crate::cv_view::CvPage> {
+    fn ensure_cv_page(&mut self, cx: &mut Context<Self>) -> Entity<CvPage> {
         let repo = self.repo.clone();
         self.cv_page
-            .get_or_insert_with(|| cx.new(|_| crate::cv_view::CvPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| CvPage::new(repo)))
             .clone()
     }
 
-    fn ensure_media_page(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Entity<crate::media_view::MediaPage> {
+    fn ensure_media_page(&mut self, cx: &mut Context<Self>) -> Entity<MediaPage> {
         let repo = self.repo.clone();
         self.media_page
-            .get_or_insert_with(|| cx.new(|_| crate::media_view::MediaPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| MediaPage::new(repo)))
             .clone()
     }
 
-    fn ensure_research_page(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Entity<crate::research_view::ResearchPage> {
+    fn ensure_research_page(&mut self, cx: &mut Context<Self>) -> Entity<ResearchPage> {
         let repo = self.repo.clone();
         self.research_page
-            .get_or_insert_with(|| cx.new(|_| crate::research_view::ResearchPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| ResearchPage::new(repo)))
             .clone()
     }
 
-    fn ensure_setup_page(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Entity<crate::setup_view::SetupPage> {
+    fn ensure_setup_page(&mut self, cx: &mut Context<Self>) -> Entity<SetupPage> {
         let repo = self.repo.clone();
         self.setup_page
-            .get_or_insert_with(|| cx.new(|_| crate::setup_view::SetupPage::new(repo)))
+            .get_or_insert_with(|| cx.new(|_| SetupPage::new(repo)))
             .clone()
     }
 
@@ -1169,7 +1175,7 @@ impl Workspace {
         self.go(Page::Projects, cx);
         self.projects.update(cx, |projects, cx| {
             projects.open_project(name, cx);
-            projects.tab = crate::projects::ProjectsTab::Hubs;
+            projects.tab = ProjectsTab::Hubs;
             cx.notify();
         });
         cx.notify();
@@ -2848,7 +2854,7 @@ mod tests {
     #[gpui::test]
     fn typing_in_a_capture_edit_does_not_triage(cx: &mut TestAppContext) {
         let (view, cx) = open(cx);
-        cx.update(|_, cx| crate::inbox::bind_keys(cx));
+        cx.update(|_, cx| inbox::bind_keys(cx));
         let inbox = view.update(cx, |view, cx| {
             view.go(Page::Inbox, cx);
             view.inbox.clone()

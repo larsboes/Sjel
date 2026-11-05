@@ -19,13 +19,13 @@ use gpui_kit::{
 };
 
 use crate::route::Page;
-use crate::theme::{
+use crate::update::{RebuildState, BUILD_TIME, RUNNING_COMMIT};
+use crate::workspace::{page_title, GoTo, OpenArea, Workspace};
+use sjel_gpui_ui::primitives::{list, note, placeholder, section};
+use sjel_gpui_ui::theme::{
     tint, AccentColor, AppearanceSettings, BackgroundTone, GlassStyle, Palette, TerminalFont,
     ThemeMode, WindowOpacity, TERMINAL_FONT_SIZES,
 };
-use crate::ui::{list, note, section};
-use crate::update::{RebuildState, BUILD_TIME, RUNNING_COMMIT};
-use crate::workspace::{page_title, GoTo, OpenArea, Workspace};
 
 fn recommendation_dismissals_path() -> Option<std::path::PathBuf> {
     AppearanceSettings::config_path()
@@ -1051,7 +1051,7 @@ fn installed_features(
             }
         }
         Some(_) => note("No optional feature packages are installed.", palette.muted),
-        None if view.installed_features.loading => crate::ui::placeholder(72.),
+        None if view.installed_features.loading => placeholder(72.),
         None => note(
             view.installed_features.error.as_ref().map_or_else(
                 || "Package inventory is not available in this runtime.".to_owned(),
@@ -1451,7 +1451,7 @@ fn explore_features(view: &Workspace, palette: Palette, cx: &mut Context<Workspa
                 list(cards, palette)
             }
         }
-        None if view.available_features.loading => crate::ui::placeholder(96.),
+        None if view.available_features.loading => placeholder(96.),
         None => note(
             view.available_features.error.as_ref().map_or_else(
                 || "Official feature catalog has not been loaded.".to_owned(),

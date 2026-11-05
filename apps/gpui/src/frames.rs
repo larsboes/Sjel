@@ -121,7 +121,7 @@ pub fn drive_scroll_bench(
 pub fn drive_type_bench(
     probe: FrameProbe,
     path: String,
-    projects: gpui_kit::Entity<crate::projects::Projects>,
+    projects: gpui_kit::Entity<sjel_gpui_ui::projects::Projects>,
     window: &mut gpui_kit::Window,
     cx: &mut gpui_kit::Context<crate::workspace::Workspace>,
 ) {
@@ -169,7 +169,7 @@ pub fn drive_type_bench(
 pub fn drive_click_bench(
     probe: FrameProbe,
     path: String,
-    projects: gpui_kit::Entity<crate::projects::Projects>,
+    projects: gpui_kit::Entity<sjel_gpui_ui::projects::Projects>,
     window: &mut gpui_kit::Window,
     cx: &mut gpui_kit::Context<crate::workspace::Workspace>,
 ) {

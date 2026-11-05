@@ -24,12 +24,12 @@ use gpui_kit::{
 };
 use sjel_gpui_core::search::{self, Mode};
 
-use crate::agent_run::{AgentRun, Pending, Row};
-use crate::ask::{Ask, Model};
 use crate::data::Repo;
 use crate::route::Page;
 use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
-use crate::theme::{tint, Palette, ThemeContext};
+use sjel_gpui_core::agent::{AgentRun, Pending, Row};
+use sjel_gpui_ui::ask::{Ask, Model};
+use sjel_gpui_ui::theme::{tint, Palette, ThemeContext};
 
 actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
 
@@ -1089,12 +1089,9 @@ impl Finder {
                                         .px_2()
                                         .py(px(1.5))
                                         .rounded(px(4.))
-                                        .bg(rgba(crate::theme::tint(palette.accent, 0x18)))
+                                        .bg(rgba(tint(palette.accent, 0x18)))
                                         .border_1()
-                                        .border_color(rgba(crate::theme::tint(
-                                            palette.accent,
-                                            0x35,
-                                        )))
+                                        .border_color(rgba(tint(palette.accent, 0x35)))
                                         .text_color(rgb(palette.accent))
                                         .child(format!("tier: {tier}")),
                                 )
@@ -1220,9 +1217,9 @@ fn tier_chip(
 ) -> gpui::AnyElement {
     let (bg, text_color, border_color) = if active {
         (
-            rgba(crate::theme::tint(palette.accent, 0x24)),
+            rgba(tint(palette.accent, 0x24)),
             rgb(palette.accent),
-            rgba(crate::theme::tint(palette.accent, 0x50)),
+            rgba(tint(palette.accent, 0x50)),
         )
     } else {
         (

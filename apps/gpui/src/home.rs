@@ -12,9 +12,11 @@ use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString
 use crate::route::Page;
 use crate::selection::Item;
 use crate::shell::{Approval, ShellError};
-use crate::theme::{tint, Palette};
-use crate::ui::{dot, due_badge, list, note, placeholder, priority_pill, row, section};
 use crate::workspace::Workspace;
+use sjel_gpui_ui::primitives::{
+    dot, due_badge, list, note, placeholder, priority_pill, row, section,
+};
+use sjel_gpui_ui::theme::{tint, Palette};
 
 pub fn render(
     view: &Workspace,

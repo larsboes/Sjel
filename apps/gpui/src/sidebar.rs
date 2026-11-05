@@ -12,8 +12,8 @@ use sjel_gpui_core::area::Area;
 use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
-use crate::theme::{tint, Palette};
 use crate::workspace::{OpenPalette, OpenSettings, ToggleSoundscapePanel, Workspace};
+use sjel_gpui_ui::theme::{tint, Palette};
 
 /// The column the sidebar occupies, and the gap the glass panel leaves to the window edge.
 pub const WIDTH: f32 = 208.;

@@ -6,57 +6,22 @@ use gpui_kit::{
     WindowHandle, WindowKind, WindowOptions,
 };
 
-mod accounts;
-mod agent_run;
-mod ask;
 mod audio;
-mod backup;
-mod calendar_view;
-mod capabilities;
 pub mod clipboard;
-mod clipper;
-mod context_view;
-mod cv_view;
 mod data;
-mod docs;
-mod documents;
-mod editor;
-mod feed;
-mod finance_view;
 mod finder;
 mod frames;
 mod header;
 mod home;
-mod import;
-mod inbox;
-mod inventory_view;
-mod links;
 #[cfg(target_os = "macos")]
 mod macos_glass;
-mod mail;
-mod media_view;
-mod music;
-mod packs_view;
-mod pdf_kit;
-mod people_view;
 mod permissions;
-mod projects;
-mod record;
-mod research_view;
-mod scout;
 mod script;
 mod selection;
-mod self_view;
 mod settings;
-mod setup_view;
 mod sidebar;
-mod software;
 mod soundscape;
-mod systems;
-mod theme;
-mod ui;
 pub mod update;
-mod viz;
 mod workspace;
 
 use sjel_gpui_core::area::Area;
@@ -78,7 +43,7 @@ struct MainWindow {
 impl Global for MainWindow {}
 
 fn main() {
-    sjel_gpui_ui::documents::set_default_pdf_renderer(pdf_kit::default_renderer);
+    sjel_gpui_ui::documents::set_default_pdf_renderer(sjel_gpui_ui::pdf_kit::default_renderer);
     sjel_gpui_ui::clipper::set_rich_clipboard_reader(clipboard::read_rich_clipboard);
     let (url_tx, mut url_rx) = futures::channel::mpsc::unbounded::<String>();
     let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets::new(""));
@@ -96,7 +61,7 @@ fn main() {
         let forced = match std::env::var("SJEL_GPUI_APPEARANCE").as_deref() {
             Ok("light") => Some(WindowAppearance::Light),
             Ok("dark") => Some(WindowAppearance::Dark),
-            _ => theme::AppearanceSettings::load()
+            _ => sjel_gpui_ui::theme::AppearanceSettings::load()
                 .theme_mode
                 .forced_appearance(),
         };
@@ -104,16 +69,16 @@ fn main() {
             cx.set_window_appearance(forced);
         }
         workspace::bind_keys(cx);
-        editor::bind_keys(cx);
-        feed::bind_keys(cx);
-        inbox::bind_keys(cx);
-        mail::bind_keys(cx);
-        calendar_view::bind_keys(cx);
-        context_view::bind_keys(cx);
-        finance_view::bind_keys(cx);
-        people_view::bind_keys(cx);
-        backup::bind_keys(cx);
-        inventory_view::bind_keys(cx);
+        sjel_gpui_ui::editor::bind_keys(cx);
+        sjel_gpui_ui::feed::bind_keys(cx);
+        sjel_gpui_ui::inbox::triage::bind_keys(cx);
+        sjel_gpui_ui::mail::bind_keys(cx);
+        sjel_gpui_ui::calendar::page::bind_keys(cx);
+        sjel_gpui_ui::context::bind_keys(cx);
+        sjel_gpui_ui::finance::bind_keys(cx);
+        sjel_gpui_ui::people::page::bind_keys(cx);
+        sjel_gpui_ui::backup::bind_keys(cx);
+        sjel_gpui_ui::inventory::bind_keys(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-w", CloseWindow, None),
             KeyBinding::new("cmd-q", Quit, None),

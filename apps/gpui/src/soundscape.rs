@@ -6,9 +6,7 @@ use gpui_kit::{App, Context};
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::shell;
 
-pub use sjel_gpui_ui::soundscape::{
-    CloseDrawer, NextPreset, SoundscapeSlideover as Soundscape, ToggleMix, ToggleTransport, WIDTH,
-};
+pub use sjel_gpui_ui::soundscape::SoundscapeSlideover as Soundscape;
 
 pub fn new(repo: Repo, cx: &mut Context<Soundscape>) -> Soundscape {
     let audio = crate::audio::audio(cx);

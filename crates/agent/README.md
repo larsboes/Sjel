@@ -144,8 +144,8 @@ says which role is missing.
 ## What is built
 
 The capability, its routes, the sessions, the stream with resume, the approval gate and the plugin
-set. `apps/gpui` drives it: `core/src/agent.rs` is the desktop client, `src/agent_run.rs` holds the
-run state, and the finder's fourth mode (`Auto | Ask | Search | Agent`) draws the transcript and
+set. `apps/gpui` drives it: `core/src/agent.rs` is the desktop client and holds the run state,
+and the finder's fourth mode (`Auto | Ask | Search | Agent`) draws the transcript and
 approval card, including `write` and `edit` diffs. The docked desktop seat keeps the run visible
 after the finder closes. The paired iPhone can create or select sessions, prompt or steer, follow
 and resume streams, inspect and answer approvals, and stop runs through its signed device client.

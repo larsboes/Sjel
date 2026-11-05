@@ -15,7 +15,7 @@ use gpui_kit::{div, prelude::*, px, rgb, Anchor, Entity, FontWeight};
 use crate::settings::Section;
 use crate::workspace::Workspace;
 
-use crate::theme::Palette;
+use sjel_gpui_ui::theme::Palette;
 
 pub const RUNNING_COMMIT: &str = env!("SJEL_BUILD_COMMIT");
 pub const BUILD_TIME: &str = env!("SJEL_BUILD_TIME");

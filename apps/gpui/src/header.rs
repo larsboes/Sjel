@@ -11,8 +11,8 @@ use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight, Shared
 use sjel_gpui_core::area::Area;
 
 use crate::route::Page;
-use crate::theme::Palette;
 use crate::workspace::Workspace;
+use sjel_gpui_ui::theme::Palette;
 
 pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     let checked = view

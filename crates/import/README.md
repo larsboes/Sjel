@@ -12,7 +12,7 @@ sjel-import status /Volumes/Extreme/archive        # what the ledger holds for t
 sjel-import serve                                  # the operator API (service.toml)
 ```
 
-The Sjel app's Import page (`g u`, `apps/gpui/src/import.rs`) drives the same steps through the
+The Sjel app's Import page (`g u`, `apps/gpui/ui/src/import.rs`) drives the same steps through the
 API: choose a folder, see the plan, start a run, watch it, and read the ledger. The API admits
 the deployment credential only, never an agent token, because a plan reads any folder the
 caller names. One run is active at a time.

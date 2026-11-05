@@ -47,7 +47,7 @@ use sjel_gpui_ui::soundscape::Soundscape;
 use sjel_gpui_ui::terminal::{TerminalDeck, TerminalEvent};
 use sjel_gpui_ui::today::{Today, TodayEvent};
 use sjel_gpui_ui::{
-    mobile_tab_bar, step_terminal_font_size, tint, AccentColor, AppearanceSettings, BackgroundTone,
+    mobile_tab_bar, step_terminal_font_size, AccentColor, AppearanceSettings, BackgroundTone,
     Density, NavItem, NotifyPrefs, Palette, SoundscapePrefs, TerminalFont, ThemeContext, ThemeMode,
     WindowOpacity, TERMINAL_FONT_SIZES,
 };
@@ -2863,7 +2863,7 @@ impl Render for Capabilities {
                         // another address, such as the Mac's tailnet one.
                         .child({
                             let paired = !self.rows.is_empty();
-                            (div()
+                            div()
                                 .rounded(px(12.))
                                 .bg(rgb(0xffffff))
                                 .px_4()
@@ -2924,7 +2924,7 @@ impl Render for Capabilities {
                                                 cx.notify();
                                             }),
                                         ),
-                                ))
+                                )
                         })
                         .when(!self.found.is_empty() && self.rows.is_empty(), |sub| {
                             sub.child(

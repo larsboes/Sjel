@@ -10,19 +10,19 @@ description = "Shared GPUI design system, tokens, and primitives for Sjel deskto
 native-maps = ["dep:maplibre_native", "dep:metal"]
 
 [dependencies]
-sjel-gpui-core = { path = "../core" }
-gpui-kit = { version = "=0.7.3", default-features = false, features = ["component"] }
-gpui = { package = "gpui-pre", version = "=0.3.9", default-features = false }
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-futures = "0.3"
-tokio = { version = "1", features = ["sync"] }
+sjel-gpui-core.workspace = true
+gpui-kit.workspace = true
+gpui.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 # The VT parser and grid model behind ui/src/terminal.rs. See its upstreams.toml row.
 alacritty_terminal = "0.26"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 mermaid-rs-renderer = { version = "=0.3.1", default-features = false }
-zeroize = "=1.9.1"
+zeroize.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFCGTypes", "CFData"] }
@@ -38,9 +38,9 @@ required-features = ["native-maps"]
 
 [dev-dependencies]
 # Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
-gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+gpui = { workspace = true, features = ["test-support"] }
 # Keeps `Repo` off this machine's real axon.db in the Projects window tests (core's Cargo.toml).
-sjel-gpui-core = { path = "../core", features = ["test-support"] }
+sjel-gpui-core = { workspace = true, features = ["test-support"] }
 
-[lints.rust]
-unsafe_code = "deny"
+[lints]
+workspace = true

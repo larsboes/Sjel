@@ -224,6 +224,9 @@ their open edits.
    Done for `devices`: `crates/devices-api` (`devices-api`) extracts pure wire models,
    pairing challenges, claims, join requests, devices, responses, key code / comparison code /
    QR parsing routines, and route constants shared with `sjel-devices` and `sjel-gpui-core`.
+   Done for `setup`: `crates/setup-api` (`setup-api`) extracts pure wire models,
+   probe marks, setup probes, steps, plans, verification and apply envelopes, LAN status,
+   and route constants shared with `sjel-status`, `sjel-cli`, and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

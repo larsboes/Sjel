@@ -4603,6 +4603,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "setup-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4860,6 +4869,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "setup-api",
  "sha2 0.11.1",
  "signal-hook",
  "sjel-agent",
@@ -5673,6 +5683,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "setup-api",
 ]
 
 [[package]]

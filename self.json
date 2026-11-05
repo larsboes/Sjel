@@ -461,6 +461,10 @@
       "kind": "pack"
     },
     {
+      "name": "setup-api",
+      "kind": "lib"
+    },
+    {
       "name": "sjel-agent",
       "kind": "lib"
     },
@@ -2317,6 +2321,16 @@
     },
     {
       "from": "sjel-cli",
+      "to": "setup-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-cli/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-cli",
       "to": "sjel-agent",
       "kinds": [
         "cargo-dep"
@@ -2623,6 +2637,16 @@
       ],
       "evidence": [
         "crates/soundscape/Cargo.toml"
+      ]
+    },
+    {
+      "from": "status-api",
+      "to": "setup-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/status-api/Cargo.toml"
       ]
     },
     {

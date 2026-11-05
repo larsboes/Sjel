@@ -76,83 +76,9 @@ rather than kept for a case nothing produces: every step in a plan is a write th
 there is nothing here to copy into a shell. It edits no Cargo.toml — the replica engine is a
 default feature — and installs no capability.";
 
-/// How a probe came out. Ordered by how much attention it asks for when a list is sorted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum Mark {
-    /// True right now.
-    Ok,
-    /// Absent, and the plan has a step for it.
-    Missing,
-    /// True, but not the way the plan wants it.
-    Warn,
-    /// Cannot be satisfied by this tool: a human or a source change is needed.
-    Blocked,
-}
-
-impl Mark {
-    fn glyph(self) -> char {
-        match self {
-            Mark::Ok => '✓',
-            Mark::Missing => '✗',
-            Mark::Warn => '!',
-            Mark::Blocked => '·',
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct Probe {
-    id: &'static str,
-    label: String,
-    mark: Mark,
-    detail: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct Step {
-    label: String,
-    detail: String,
-    /// True when the probes say this is already done, so `apply` skips it.
-    done: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct Plan {
-    component: &'static str,
-    purpose: &'static str,
-    probes: Vec<Probe>,
-    steps: Vec<Step>,
-}
-
-/// The JSON a verb prints, so a UI reads one document per request instead of concatenated ones.
-#[derive(Debug, Serialize)]
-struct PlansJson {
-    components: Vec<Plan>,
-}
-
-#[derive(Debug, Serialize)]
-struct VerifiesJson {
-    components: Vec<VerifyJson>,
-}
-
-#[derive(Debug, Serialize)]
-struct VerifyJson {
-    component: &'static str,
-    probes: Vec<Probe>,
-}
-
-#[derive(Debug, Serialize)]
-struct AppliesJson {
-    components: Vec<ApplyJson>,
-}
-
-#[derive(Debug, Serialize)]
-struct ApplyJson {
-    component: &'static str,
-    applied: Vec<String>,
-    verify: Vec<Probe>,
-}
+pub use setup_api::{
+    AppliesJson, ApplyJson, Mark, Plan, PlansJson, Probe, Step, VerifiesJson, VerifyJson,
+};
 
 /// The overlay's deployment-wide settings file, which this tool owns.
 ///
@@ -398,7 +324,7 @@ pub fn run(rest: &[String]) -> ExitCode {
                         }
                         failed |= probes.iter().any(|p| p.mark != Mark::Ok);
                         applies.push(ApplyJson {
-                            component: c.name,
+                            component: c.name.to_string(),
                             applied: summary.lines,
                             verify: probes,
                         });
@@ -435,7 +361,7 @@ pub fn run(rest: &[String]) -> ExitCode {
                 }
                 bad |= probes.iter().any(|p| p.mark != Mark::Ok);
                 components.push(VerifyJson {
-                    component: c.name,
+                    component: c.name.to_string(),
                     probes,
                 });
             }

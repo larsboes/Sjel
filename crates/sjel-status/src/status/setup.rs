@@ -37,17 +37,7 @@ const COMPONENT: &str = "turso";
 /// margin covers a launcher that has to build `sjel-cli` on a machine that has not run it yet.
 const SETUP_TIMEOUT: Duration = Duration::from_secs(120);
 
-#[derive(serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
-pub(crate) struct SetupApplyRequest {
-    /// Defaults to `turso`, which is the only component today.
-    #[serde(default)]
-    component: Option<String>,
-    url: Option<String>,
-    interval_secs: Option<u64>,
-    /// The primary's credential. Write-only: it is piped to the tool's stdin and never returned.
-    #[serde(default, skip_serializing)]
-    token: Option<String>,
-}
+pub(crate) use status_api::SetupApplyRequest;
 
 /// The plan and the verification, in one answer.
 ///

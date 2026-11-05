@@ -8,20 +8,10 @@
 
 use std::sync::{Arc, OnceLock};
 
-use serde::Serialize;
 use sjel_server::lan::{self, LanIdentity};
 use sjel_server::DeviceVerifier;
 
-#[derive(Clone, Serialize)]
-pub(crate) struct LanInfo {
-    pub port: u16,
-    pub host: String,
-    pub fingerprint: String,
-    pub service: &'static str,
-    /// This Mac's tailnet IPv4 address, read per request because Tailscale can start or stop
-    /// while the listener runs. The certificate is pinned, so the address needs no SAN.
-    pub tailnet: Option<String>,
-}
+pub(crate) use status_api::LanInfo;
 
 static LAN: OnceLock<LanInfo> = OnceLock::new();
 
@@ -71,7 +61,7 @@ pub(crate) fn start(router: axum::Router, verifier: Arc<dyn DeviceVerifier>) {
         port,
         host: host.clone(),
         fingerprint: identity.fingerprint.clone(),
-        service: lan::SERVICE_TYPE,
+        service: lan::SERVICE_TYPE.to_string(),
         tailnet: None,
     });
     advertise(port, &host, &identity.fingerprint);

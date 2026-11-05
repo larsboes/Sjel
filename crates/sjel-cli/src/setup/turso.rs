@@ -208,7 +208,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     let mut steps = Vec::new();
 
     probes.push(Probe {
-        id: "record",
+        id: "record".into(),
         label: "deployment record".to_owned(),
         mark: if paths.overlay_root.is_some() {
             Mark::Ok
@@ -222,7 +222,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     });
 
     probes.push(Probe {
-        id: "url",
+        id: "url".into(),
         label: URL_KEY.to_owned(),
         mark: if url.is_some() {
             Mark::Ok
@@ -243,7 +243,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     });
 
     probes.push(Probe {
-        id: "token",
+        id: "token".into(),
         label: TOKEN_KEY.to_owned(),
         mark: if token.is_some() {
             Mark::Ok
@@ -261,7 +261,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     });
 
     probes.push(Probe {
-        id: "interval",
+        id: "interval".into(),
         label: INTERVAL_KEY.to_owned(),
         mark: Mark::Ok,
         detail: format!(
@@ -272,7 +272,7 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
 
     let enabled: Vec<&Consumer> = consumers.iter().filter(|c| c.enabled).collect();
     probes.push(Probe {
-        id: "consumers",
+        id: "consumers".into(),
         label: "followers".to_owned(),
         mark: match (consumers.is_empty(), enabled.is_empty()) {
             (true, _) => Mark::Warn,
@@ -343,8 +343,8 @@ pub(super) fn plan(paths: &Paths, env: &EnvFile) -> Plan {
     }
 
     Plan {
-        component: "turso",
-        purpose: PURPOSE,
+        component: "turso".to_string(),
+        purpose: PURPOSE.to_string(),
         probes,
         steps,
     }
@@ -692,7 +692,7 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
     let token = token(env);
 
     probes.push(Probe {
-        id: "record",
+        id: "record".into(),
         label: "deployment record".to_owned(),
         mark: match (url.as_ref(), token.as_ref()) {
             (Some(_), Some(_)) => Mark::Ok,
@@ -715,13 +715,13 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
     let primary = match (url.as_deref(), token.as_deref()) {
         (Some(url), Some(token)) => probe_primary(url, token),
         (Some(_), None) => Probe {
-            id: "primary",
+            id: "primary".into(),
             label: "primary".to_owned(),
             mark: Mark::Missing,
             detail: "not probed: no credential to present".to_owned(),
         },
         _ => Probe {
-            id: "primary",
+            id: "primary".into(),
             label: "primary".to_owned(),
             mark: Mark::Missing,
             detail: "not probed: no primary named".to_owned(),
@@ -731,7 +731,7 @@ pub(super) fn verify(paths: &Paths, env: &EnvFile) -> Vec<Probe> {
 
     let enabled: Vec<Consumer> = consumers(paths).into_iter().filter(|c| c.enabled).collect();
     probes.push(Probe {
-        id: "wiring",
+        id: "wiring".into(),
         label: "followers".to_owned(),
         mark: match enabled.is_empty() {
             true => Mark::Warn,
@@ -780,7 +780,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
         Ok(client) => client,
         Err(e) => {
             return Probe {
-                id: "primary",
+                id: "primary".into(),
                 label: "primary".to_owned(),
                 mark: Mark::Warn,
                 detail: format!("cannot build an HTTP client: {e}"),
@@ -799,7 +799,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
     {
         Ok(response) if response.status().is_success() => {
             return Probe {
-                id: "primary",
+                id: "primary".into(),
                 label: "primary".to_owned(),
                 mark: Mark::Ok,
                 detail: format!(
@@ -811,7 +811,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
         }
         Ok(response) if refused(response.status()) => {
             return Probe {
-                id: "primary",
+                id: "primary".into(),
                 label: "primary".to_owned(),
                 mark: Mark::Blocked,
                 detail: format!(
@@ -831,7 +831,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
         let status = response.status();
         if status.is_success() {
             return Probe {
-                id: "primary",
+                id: "primary".into(),
                 label: "primary".to_owned(),
                 mark: Mark::Ok,
                 detail: format!("{info} answered {status} — the primary offers the sync protocol"),
@@ -839,7 +839,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
         }
         if refused(status) {
             return Probe {
-                id: "primary",
+                id: "primary".into(),
                 label: "primary".to_owned(),
                 mark: Mark::Blocked,
                 detail: format!("{info} answered {status} — it was refused; submit a fresh one"),
@@ -851,7 +851,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
     let health = format!("{endpoint}/health");
     match http.get(&health).send() {
         Ok(response) if response.status().is_success() => Probe {
-            id: "primary",
+            id: "primary".into(),
             label: "primary".to_owned(),
             mark: Mark::Warn,
             detail: format!(
@@ -862,7 +862,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
             ),
         },
         Ok(response) => Probe {
-            id: "primary",
+            id: "primary".into(),
             label: "primary".to_owned(),
             mark: Mark::Warn,
             detail: format!(
@@ -871,7 +871,7 @@ fn probe_primary(url: &str, token: &str) -> Probe {
             ),
         },
         Err(e) => Probe {
-            id: "primary",
+            id: "primary".into(),
             label: "primary".to_owned(),
             mark: Mark::Warn,
             detail: format!("{health} did not answer: {e}"),

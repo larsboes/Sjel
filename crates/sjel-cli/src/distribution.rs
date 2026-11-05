@@ -696,6 +696,7 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use distribution_api::{host_platform as platform, MAX_PACKAGE};
 
     fn package() -> Package {
         Package {

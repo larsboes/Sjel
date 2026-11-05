@@ -5,13 +5,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub use setup_api::*;
+
 // --- Route Constants ---
 
 pub const ROUTE_STATUS_HEALTH: &str = "/api/sjel-status/health";
 pub const ROUTE_STATUS_ROUTES: &str = "/api/sjel-status/routes";
 pub const ROUTE_STATUS_NOW: &str = "/api/sjel-status/now";
 pub const ROUTE_STATUS_SEARCH: &str = "/api/sjel-status/search";
-pub const ROUTE_STATUS_LAN: &str = "/api/sjel-status/lan";
 pub const ROUTE_STATUS_CAPABILITIES: &str = "/api/sjel-status/capabilities";
 pub const ROUTE_STATUS_SELF: &str = "/api/sjel-status/self";
 pub const ROUTE_STATUS_LINKS: &str = "/api/sjel-status/links";
@@ -32,9 +33,6 @@ pub const ROUTE_STATUS_HOST_WATCH: &str = "/api/sjel-status/host-watch";
 pub const ROUTE_STATUS_RUNTIME: &str = "/api/sjel-status/runtime";
 pub const ROUTE_STATUS_PACKS: &str = "/api/sjel-status/packs";
 pub const ROUTE_STATUS_CV: &str = "/api/sjel-status/cv";
-pub const ROUTE_STATUS_SETUP: &str = "/api/sjel-status/setup";
-pub const ROUTE_STATUS_SETUP_VERIFY: &str = "/api/sjel-status/setup/verify";
-pub const ROUTE_STATUS_SETUP_APPLY: &str = "/api/sjel-status/setup/apply";
 pub const ROUTE_STATUS_CREDENTIALS: &str = "/api/sjel-status/credentials";
 
 // --- Node & Capability Health ---

@@ -54,6 +54,7 @@ interior-api = { path = "../../../crates/interior-api" }
 inventory-api = { path = "../../../crates/inventory-api" }
 projects-api = { path = "../../../crates/projects-api" }
 scouting-api = { path = "../../../crates/scouting-api" }
+setup-api = { path = "../../../crates/setup-api" }
 software-api = { path = "../../../crates/software-api" }
 soundscape-api = { path = "../../../crates/soundscape-api" }
 status-api = { path = "../../../crates/status-api" }

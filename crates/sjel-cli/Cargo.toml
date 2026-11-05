@@ -38,6 +38,7 @@ regex.workspace = true
 sha2.workspace = true
 civil-date = { path = "../civil-date" }
 distribution-api = { path = "../distribution-api" }
+setup-api = { path = "../setup-api" }
 zeroize.workspace = true
 signal-hook = "=0.4.6"
 # host-watch writes its findings into the one shared SQLite file, so it opens it the way every

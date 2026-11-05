@@ -36,7 +36,13 @@ pub fn render<V: 'static>(
         .flex()
         .flex_col()
         .gap_8()
-        .child(capabilities(&state, palette, cx, on_toggle, on_open.clone()))
+        .child(capabilities(
+            &state,
+            palette,
+            cx,
+            on_toggle,
+            on_open.clone(),
+        ))
         .child(agent_writes(&state, palette, cx, on_open))
 }
 

@@ -25,7 +25,9 @@ mod overview;
 mod storage;
 mod types;
 
-use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, Render, SharedString, Window};
+use gpui_kit::{
+    div, prelude::*, rgb, AnyElement, Context, IntoElement, Render, SharedString, Window,
+};
 
 use crate::data::{Busy, Remote, Repo};
 use crate::primitives::sub_tabs;

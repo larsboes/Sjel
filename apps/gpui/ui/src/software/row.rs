@@ -3,9 +3,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::shell::SoftwareApp;
 
 use super::types::{decision_look, last_used, size, uninstall_label, DECISIONS};
@@ -93,7 +91,9 @@ pub fn render_app_row(
             .loading(busy)
             .on_click(cx.listener(move |view, _, window, cx| view.decide(decision, window, cx)))
     });
-    let uninstalling = software.busy.contains(&format!("uninstall:{}", app.bundle_id));
+    let uninstalling = software
+        .busy
+        .contains(&format!("uninstall:{}", app.bundle_id));
     let target = app.bundle_id.clone();
     let uninstall = (app.decision.as_deref() == Some("remove")).then(|| {
         Button::new("software-uninstall")
@@ -101,9 +101,9 @@ pub fn render_app_row(
             .danger()
             .label(uninstall_label(app))
             .loading(uninstalling)
-            .on_click(cx.listener(move |view, _, window, cx| {
-                view.uninstall(target.clone(), window, cx)
-            }))
+            .on_click(
+                cx.listener(move |view, _, window, cx| view.uninstall(target.clone(), window, cx)),
+            )
     });
     let input = software.note.clone();
     div()

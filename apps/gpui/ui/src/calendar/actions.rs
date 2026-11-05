@@ -64,7 +64,12 @@ pub fn bind_keys(cx: &mut App) {
 }
 
 impl CalendarPage {
-    pub(super) fn on_previous_day(&mut self, _: &PreviousDay, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_previous_day(
+        &mut self,
+        _: &PreviousDay,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.select(self.day - Duration::days(1), cx);
     }
 
@@ -72,7 +77,12 @@ impl CalendarPage {
         self.select(self.day + Duration::days(1), cx);
     }
 
-    pub(super) fn on_previous_week(&mut self, _: &PreviousWeek, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_previous_week(
+        &mut self,
+        _: &PreviousWeek,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.select(self.day - Duration::days(7), cx);
     }
 
@@ -80,7 +90,12 @@ impl CalendarPage {
         self.select(self.day + Duration::days(7), cx);
     }
 
-    pub(super) fn on_previous_page(&mut self, _: &PreviousPage, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_previous_page(
+        &mut self,
+        _: &PreviousPage,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.shift_page(false, cx);
     }
 
@@ -114,11 +129,21 @@ impl CalendarPage {
         cx.notify();
     }
 
-    pub(super) fn on_new_entry(&mut self, _: &NewEntry, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_new_entry(
+        &mut self,
+        _: &NewEntry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.open_form(window, cx);
     }
 
-    pub(super) fn on_delete_entry(&mut self, _: &DeleteEntry, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_delete_entry(
+        &mut self,
+        _: &DeleteEntry,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.confirm_delete = self.selected_entry.clone();
         cx.notify();
     }

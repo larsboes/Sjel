@@ -4,9 +4,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::prelude::*;
 use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, SharedString};
-use sjel_gpui_core::packs::{
-    deployed_units, held_packs, orphaned_harnesses, PacksView,
-};
+use sjel_gpui_core::packs::{deployed_units, held_packs, orphaned_harnesses, PacksView};
 
 use super::PacksPage;
 use crate::primitives::{card, dot, list};
@@ -110,15 +108,14 @@ pub(crate) fn render_harness_cards(
                     .child(if installed { "installed" } else { "absent" }),
             );
 
-        let meta =
-            div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(if model == "registry" {
-                    "reads the Pack source in place"
-                } else {
-                    "copies, and can drift"
-                });
+        let meta = div()
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child(if model == "registry" {
+                "reads the Pack source in place"
+            } else {
+                "copies, and can drift"
+            });
 
         let counts = div().text_xs().text_color(rgb(palette.text)).child(format!(
             "{} deployed{}",

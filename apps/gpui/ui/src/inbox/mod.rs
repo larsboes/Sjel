@@ -41,7 +41,10 @@ pub struct Inbox {
     /// The phone's replica, which is where a capture goes before the Mac hears anything.
     pub(crate) store: Option<Arc<TursoStore>>,
     /// The field, built once so its text survives a reload.
-    pub(crate) input: Option<(gpui::Entity<gpui_kit::component::input::InputState>, gpui::Subscription)>,
+    pub(crate) input: Option<(
+        gpui::Entity<gpui_kit::component::input::InputState>,
+        gpui::Subscription,
+    )>,
     /// The chip the person pressed, or none for "let the rules decide".
     pub(crate) tag: Option<&'static str>,
     /// Why the field would not keep what was typed.

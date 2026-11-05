@@ -1,9 +1,7 @@
 //! Action bar for mail triage bulk operations and confirmations.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgba, AnyElement, Context, FontWeight, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::mail::{MailAction, CATEGORIES};
 
 use crate::theme::Palette;

@@ -7,9 +7,7 @@ pub mod builder;
 pub mod form;
 
 use gpui_kit::component::input::InputState;
-use gpui_kit::{
-    div, prelude::*, px, Context, Entity, IntoElement, Render, Subscription, Window,
-};
+use gpui_kit::{div, prelude::*, px, Context, Entity, IntoElement, Render, Subscription, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{note, placeholder, section};
@@ -72,7 +70,12 @@ impl CvPage {
         self.load(cx);
     }
 
-    pub(crate) fn run_action(&mut self, req: CvWriteRequest, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn run_action(
+        &mut self,
+        req: CvWriteRequest,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let key = format!("cv:{}:{}", req.action, req.slug);
         let repo = self.repo.clone();
         let req_clone = req.clone();

@@ -27,8 +27,8 @@ mod duplicates;
 mod proposals;
 pub mod viewer;
 
-pub use viewer::{register_renderer, set_default_pdf_renderer, PdfError, PdfRenderer};
 use proposals::{proposal_panel, workflow_panel};
+pub use viewer::{register_renderer, set_default_pdf_renderer, PdfError, PdfRenderer};
 use viewer::{Reader, Zoom, DEFAULT_RENDERER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -746,7 +746,6 @@ impl Documents {
         )
         .into_any_element()
     }
-
 }
 
 impl Render for Documents {

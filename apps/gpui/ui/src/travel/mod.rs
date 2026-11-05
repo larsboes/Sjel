@@ -571,20 +571,44 @@ impl Travel {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         // 1. Check for any stay or destination happening today across plans
-        for plan in self.plans.iter().filter(|p| p.date_start <= today && p.date_end >= today && p.status != "cancelled") {
-            if let Some(details) = self.details.get(&plan.id).and_then(|slot| slot.value.as_ref()) {
+        for plan in self
+            .plans
+            .iter()
+            .filter(|p| p.date_start <= today && p.date_end >= today && p.status != "cancelled")
+        {
+            if let Some(details) = self
+                .details
+                .get(&plan.id)
+                .and_then(|slot| slot.value.as_ref())
+            {
                 for item in &details.details.items {
                     if item.item_type != "stay" {
                         continue;
                     }
-                    let day = item.payload.get("check_in").and_then(serde_json::Value::as_str).or(item.day.as_deref()).unwrap_or(&plan.date_start);
-                    let to = item.payload.get("check_out").and_then(serde_json::Value::as_str).unwrap_or(day);
+                    let day = item
+                        .payload
+                        .get("check_in")
+                        .and_then(serde_json::Value::as_str)
+                        .or(item.day.as_deref())
+                        .unwrap_or(&plan.date_start);
+                    let to = item
+                        .payload
+                        .get("check_out")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(day);
                     if today.as_str() >= day && today.as_str() <= to {
                         if let (Some(lat), Some(lng)) = (
-                            item.payload.get("latitude").and_then(serde_json::Value::as_f64),
-                            item.payload.get("longitude").and_then(serde_json::Value::as_f64),
+                            item.payload
+                                .get("latitude")
+                                .and_then(serde_json::Value::as_f64),
+                            item.payload
+                                .get("longitude")
+                                .and_then(serde_json::Value::as_f64),
                         ) {
-                            return Some(Coordinate { latitude: lat, longitude: lng });
+                            return Some(Coordinate {
+                                latitude: lat,
+                                longitude: lng,
+                            });
                         }
                     }
                 }
@@ -600,9 +624,7 @@ impl Travel {
             .filter(|p| p.status != "cancelled")
             .min_by(|a, b| a.date_start.cmp(&b.date_start))
             .and_then(|p| p.origin.coordinate())
-            .or_else(|| {
-                self.plans.first().and_then(|p| p.origin.coordinate())
-            })
+            .or_else(|| self.plans.first().and_then(|p| p.origin.coordinate()))
     }
 
     pub(super) fn materialize_trip_draft(&mut self, draft: TripDraft, cx: &mut Context<Self>) {

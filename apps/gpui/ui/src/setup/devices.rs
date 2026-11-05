@@ -3,12 +3,10 @@ use chrono::Local;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Disableable;
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, Window,
-};
+use gpui_kit::{div, point, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, Window};
 use sjel_gpui_core::setup::{
-    minutes_left, pairing_payload, partition_devices, qr_matrix, short_pin, stamp,
-    waiting_joins, LanInfo, PairedDevice, QrMatrix, SetupJoinRequest, SetupView,
+    minutes_left, pairing_payload, partition_devices, qr_matrix, short_pin, stamp, waiting_joins,
+    LanInfo, PairedDevice, QrMatrix, SetupJoinRequest, SetupView,
 };
 
 use crate::data;
@@ -115,7 +113,12 @@ impl SetupPage {
     }
 
     /// Revokes one device's key at the node. The record stays: what was trusted, and until when.
-    pub(super) fn revoke_device(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn revoke_device(
+        &mut self,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let repo = self.repo.clone();
         let key = format!("setup:revoke:{}", id);
 

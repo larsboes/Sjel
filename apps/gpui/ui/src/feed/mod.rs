@@ -19,9 +19,8 @@ use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, AnyElement, Context, Entity, FocusHandle,
-    FontWeight, ListAlignment, ListOffset, ListState, ScrollHandle, SharedString,
-    Subscription, Window,
+    div, point, prelude::*, px, rgb, AnyElement, Context, Entity, FocusHandle, FontWeight,
+    ListAlignment, ListOffset, ListState, ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::shell::{
     self, CalendarGoogleExportOptIn, CalendarGoogleExportReport, CloudDerivativePreview,
@@ -321,7 +320,11 @@ impl Feed {
         .detach();
     }
 
-    pub(crate) fn library_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    pub(crate) fn library_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
         if let Some((input, _)) = &self.library_input {
             return input.clone();
         }
@@ -631,9 +634,9 @@ impl gpui_kit::Render for Feed {
 mod tests {
     use gpui::TestAppContext;
 
-    use super::*;
     use self::library::{in_library, kinds};
     use self::review::flagged;
+    use super::*;
 
     fn entry(id: char, day: &str, status: &str, score: f64) -> FeedEntry {
         FeedEntry {

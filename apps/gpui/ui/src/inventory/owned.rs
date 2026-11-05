@@ -10,8 +10,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{
-    filter_inventory, format_cents, format_dimensions, group_of, InteriorItemImpact,
-    InventoryItem, InventoryRow, InventoryState, InventoryStateHistoryEntry,
+    filter_inventory, format_cents, format_dimensions, group_of, InteriorItemImpact, InventoryItem,
+    InventoryRow, InventoryState, InventoryStateHistoryEntry,
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
@@ -31,7 +31,6 @@ pub(crate) struct InventoryEditForm {
     pub(super) saving: bool,
     pub(super) _subscriptions: Vec<Subscription>,
 }
-
 
 impl InventoryEditForm {
     pub(super) fn value(&self, key: &str, cx: &App) -> String {
@@ -92,8 +91,12 @@ impl InventoryPage {
         };
     }
 
-
-    pub(super) fn open_item_edit(&mut self, item: InventoryItem, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_item_edit(
+        &mut self,
+        item: InventoryItem,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.wish_form = None;
         let definitions = [
             ("label", "Name", item.label.clone(), "Item name".to_owned()),
@@ -426,7 +429,6 @@ impl InventoryPage {
         cx.notify();
     }
 
-
     pub(super) fn render_owned_view(
         &mut self,
         palette: Palette,
@@ -676,7 +678,6 @@ impl InventoryPage {
             )
             .into_any_element()
     }
-
 
     pub(super) fn render_inventory_edit_form(
         &self,
@@ -930,5 +931,4 @@ impl InventoryPage {
                 .into_any_element(),
         )
     }
-
 }

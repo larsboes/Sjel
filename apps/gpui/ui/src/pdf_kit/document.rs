@@ -1,8 +1,10 @@
 #![allow(unsafe_code)]
 
-use crate::documents::PdfError;
 use super::types::PageImage;
+use crate::documents::PdfError;
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use super::types::{rotated_size, target_pixels};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use objc2_core_foundation::{CFData, CFRetained, CGPoint, CGRect, CGSize};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -11,8 +13,6 @@ use objc2_core_graphics::{
     CGBitmapContextGetHeight, CGBitmapInfo, CGColorSpace, CGContext, CGDataProvider,
     CGImageAlphaInfo, CGImageByteOrderInfo, CGPDFBox, CGPDFDocument, CGPDFPage,
 };
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-use super::types::{rotated_size, target_pixels};
 
 /// An opened PDF, bound to the thread that opened it.
 #[cfg(any(target_os = "macos", target_os = "ios"))]

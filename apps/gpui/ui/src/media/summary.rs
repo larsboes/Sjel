@@ -2,12 +2,8 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
-use sjel_gpui_core::media::{
-    format_bytes, total_volume_bytes, MediaStatus, MediaVolume,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use sjel_gpui_core::media::{format_bytes, total_volume_bytes, MediaStatus, MediaVolume};
 
 use super::MediaPage;
 use crate::primitives::{card, dot, mono_num, stat_card, stat_strip};

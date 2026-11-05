@@ -81,10 +81,10 @@ pub use status_api::{BackupRun, BackupStatus, Backups};
 
 /// `GET /projects/api/projects` (`ProjectSummary` in `capabilities/projects/src/server.rs`).
 pub use projects_api::{
-    decode_item_ref, inventory_reference, project_ref, GlobalTask, InventoryIdentity,
-    ProjectInventoryLink, ProjectKind, ProjectLinkRecord, ProjectMailDecision, ProjectMailPage,
-    ProjectMailProposal, ProjectMailTarget, ProjectRecord, ProjectSummary, RenamedRecord,
-    status_closes, TASK_STATUSES,
+    decode_item_ref, inventory_reference, project_ref, status_closes, GlobalTask,
+    InventoryIdentity, ProjectInventoryLink, ProjectKind, ProjectLinkRecord, ProjectMailDecision,
+    ProjectMailPage, ProjectMailProposal, ProjectMailTarget, ProjectRecord, ProjectSummary,
+    RenamedRecord, TASK_STATUSES,
 };
 
 pub use status_api::ServerHit;

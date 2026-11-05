@@ -1,9 +1,7 @@
 //! Keyboard actions, key bindings, and entity mutation workflows for People.
 use std::sync::Arc;
 
-use gpui_kit::{
-    actions, App, Context, KeyBinding, Window,
-};
+use gpui_kit::{actions, App, Context, KeyBinding, Window};
 use sjel_gpui_core::shell::{self, Shell, ShellError};
 
 use crate::data::Remote;
@@ -79,7 +77,13 @@ impl PeoplePage {
         self.write(shell, Work::RemoveFact(id, fact.to_owned()), window, cx);
     }
 
-    pub(super) fn write(&mut self, shell: Arc<Shell>, work: Work, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn write(
+        &mut self,
+        shell: Arc<Shell>,
+        work: Work,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let task = shell::run(async move {
             match work {
                 Work::Create(body) => shell
@@ -197,7 +201,12 @@ impl PeoplePage {
         field.update(cx, |input, cx| input.focus(window, cx));
     }
 
-    pub(super) fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_focus_search(
+        &mut self,
+        _: &FocusSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.focus_search(window, cx);
     }
 

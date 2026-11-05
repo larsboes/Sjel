@@ -6,7 +6,7 @@ use gpui_kit::{
     FontWeight, ListState, SharedString, Window,
 };
 
-use super::tokens::{RADIUS_MD};
+use super::tokens::RADIUS_MD;
 use crate::theme::{tint, Density, Palette};
 
 pub fn section(title: &'static str, body: AnyElement, palette: Palette) -> impl IntoElement {

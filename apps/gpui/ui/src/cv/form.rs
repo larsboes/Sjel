@@ -2,10 +2,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, Entity, SharedString,
-    Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, Entity, SharedString, Window};
 use sjel_gpui_core::cv::{slug_for, CvView, CvWriteRequest};
 
 use crate::primitives::card;

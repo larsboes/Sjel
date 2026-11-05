@@ -3,9 +3,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, Window};
 use sjel_gpui_core::blocks::Doc;
-use sjel_gpui_core::clipper::{
-    audit_citations, markdown_to_turns, CitationStatus, ClipDocument,
-};
+use sjel_gpui_core::clipper::{audit_citations, markdown_to_turns, CitationStatus, ClipDocument};
 
 use crate::doc_view::render_doc;
 use crate::primitives::note;

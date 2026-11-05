@@ -2,11 +2,11 @@
 
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{div, prelude::*, AnyElement, App, AsKeystroke, IntoElement, Keystroke};
-use sjel_gpui_ui::theme::Palette;
 use sjel_gpui_ui::primitives::note;
+use sjel_gpui_ui::theme::Palette;
 
-use crate::workspace::{page_title, GoTo, OpenArea};
 use super::{group, row};
+use crate::workspace::{page_title, GoTo, OpenArea};
 
 /// One row of the shortcuts list: the action's label and the strokes bound to it.
 type ShortcutRow = (String, Vec<Keystroke>);

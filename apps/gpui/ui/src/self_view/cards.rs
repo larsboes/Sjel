@@ -1,11 +1,7 @@
 //! Metrics summary and architectural unit cards.
 
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
-use sjel_gpui_core::self_model::{
-    unit_degree, unit_liveness, SelfModelResponse, SelfUnit,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use sjel_gpui_core::self_model::{unit_degree, unit_liveness, SelfModelResponse, SelfUnit};
 
 use super::SelfPage;
 use crate::primitives::{dot, stat_card, stat_strip};

@@ -1,7 +1,6 @@
 //! Entry rows, task rows, project rows, and section layout cards.
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton,
-    SharedString,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton, SharedString,
 };
 use gpui_kit::component::checkbox::Checkbox;
 use sjel_gpui_core::calendar;
@@ -141,7 +140,12 @@ impl Today {
             .into_any_element()
     }
 
-    pub(super) fn project_row(&self, project: &Project, index: usize, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn project_row(
+        &self,
+        project: &Project,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let palette = self.palette;
         let name = project.name.clone();
         div()

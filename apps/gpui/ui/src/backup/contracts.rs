@@ -1,9 +1,7 @@
 //! Capability backup contracts cards and views.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, rgb, rgba, AnyElement, Context,
-};
+use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::backup::{format_age_seconds, format_bytes};
 use sjel_gpui_core::shell::BackupStatus;
 
@@ -12,7 +10,11 @@ use crate::theme::{tint, Palette};
 use super::BackupPage;
 
 impl BackupPage {
-    pub(super) fn render_contracts_view(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_contracts_view(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(backups) = &self.backups.value else {
             return div()
                 .p_6()

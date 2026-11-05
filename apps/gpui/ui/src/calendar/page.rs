@@ -5,8 +5,8 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FocusHandle, FontWeight,
-    ScrollHandle, SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FocusHandle, FontWeight, ScrollHandle,
+    SharedString, Window,
 };
 use sjel_gpui_core::calendar::{
     self, entries_on, kind_color, kind_label, time_label, Draft, COMMITMENTS, KINDS,

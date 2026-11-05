@@ -4,8 +4,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity,
-    PathBuilder, Window,
+    canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, PathBuilder, Window,
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
@@ -36,9 +35,12 @@ pub(super) struct PlanPiece {
     size: Option<[i32; 2]>,
 }
 
-
 impl RoomPlanHistory {
-    pub(super) fn assign_selected_to_space(&mut self, space_id: Option<String>, cx: &mut Context<Self>) {
+    pub(super) fn assign_selected_to_space(
+        &mut self,
+        space_id: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(source) = self.source.clone() else {
             return;
         };
@@ -344,8 +346,11 @@ impl RoomPlanHistory {
         .detach();
     }
 
-
-    pub(super) fn render_measured_plan(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_measured_plan(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         if self.source.is_none() {
             return div()
                 .p_4()
@@ -740,5 +745,4 @@ impl RoomPlanHistory {
             )
             .into_any_element()
     }
-
 }

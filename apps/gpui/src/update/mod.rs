@@ -4,20 +4,20 @@
 //! fetches recent commits, and can execute `apps/gpui/install` in the background to rebuild
 //! and install the updated release bundle into `~/Applications/Sjel Desktop.app`.
 
-pub mod types;
 pub mod diagnostics;
 pub mod git;
-pub mod rebuild;
 pub mod pill;
+pub mod rebuild;
+pub mod types;
 
-pub use types::{
-    BuildFailure, BuildOutput, CommitSummary, Diagnostic, RebuildState, UpdateInfo,
-    BUILD_TIME, RUNNING_COMMIT,
-};
 pub use diagnostics::read_cargo_output;
 pub use git::{check_git_updates, find_repo_root};
-pub use rebuild::{execute_rebuild, launch_other_node, restart_local_shell};
 pub use pill::header_pill;
+pub use rebuild::{execute_rebuild, launch_other_node, restart_local_shell};
+pub use types::{
+    BuildFailure, BuildOutput, CommitSummary, Diagnostic, RebuildState, UpdateInfo, BUILD_TIME,
+    RUNNING_COMMIT,
+};
 
 #[cfg(test)]
 mod tests {

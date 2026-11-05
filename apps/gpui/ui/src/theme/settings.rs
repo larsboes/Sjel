@@ -3,9 +3,7 @@ use gpui_kit::WindowAppearance;
 
 use super::density::Density;
 use super::palette::{tint, with_alpha, Palette};
-use super::terminal::{
-    default_terminal_font_size, default_ui_font_size, TerminalFont, MONOKAI,
-};
+use super::terminal::{default_terminal_font_size, default_ui_font_size, TerminalFont, MONOKAI};
 
 /// Window background opacity level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

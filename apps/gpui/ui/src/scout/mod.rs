@@ -206,7 +206,12 @@ impl ScoutingPage {
         input
     }
 
-    pub(crate) fn set_status(&mut self, id: String, status: OpportunityStatus, cx: &mut Context<Self>) {
+    pub(crate) fn set_status(
+        &mut self,
+        id: String,
+        status: OpportunityStatus,
+        cx: &mut Context<Self>,
+    ) {
         if self.busy.is_some() {
             return;
         }

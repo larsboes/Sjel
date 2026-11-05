@@ -2,8 +2,8 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, App, FontWeight, MouseButton, SharedString, Window,
 };
 
-use crate::Palette;
 use super::types::Seat;
+use crate::Palette;
 
 /// The width of the overlay edge on a phone: an edge panel, not a full-screen sheet, so the page it
 /// slid over stays visible enough to know where you are.

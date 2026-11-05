@@ -13,9 +13,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gpui_kit::component::input::InputState;
-use gpui_kit::{
-    div, prelude::*, AnyElement, Context, Entity, Subscription, Window,
-};
+use gpui_kit::{div, prelude::*, AnyElement, Context, Entity, Subscription, Window};
 
 use crate::data::{self, Remote, Repo};
 use crate::primitives::{list, note, section};

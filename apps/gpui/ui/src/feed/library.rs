@@ -113,7 +113,12 @@ impl Feed {
     }
 
     /// One Library row, drawn from its place in the archive.
-    pub(crate) fn library_row_at(&self, ix: usize, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn library_row_at(
+        &self,
+        ix: usize,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(rows) = self.library.value.as_ref() else {
             return div().into_any_element();
         };

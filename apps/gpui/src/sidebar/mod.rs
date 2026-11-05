@@ -5,18 +5,18 @@
 //! the sidebar decides layout and wording only, and its geometry lives here so the glass panel
 //! that AppKit paints under it cannot drift from the column GPUI reserves.
 
-pub mod types;
-pub mod status;
 pub mod nav;
+pub mod status;
+pub mod types;
 
 use gpui_kit::{div, prelude::*, px, rgba, Context, IntoElement, Window};
 
 use crate::workspace::Workspace;
 use sjel_gpui_ui::theme::Palette;
 
-pub use types::{uptime, GLASS_INSET, WIDTH};
-pub use status::{footer, status, storage};
 pub use nav::{nav, palette_hint, settings_row, soundscape};
+pub use status::{footer, status, storage};
+pub use types::{uptime, GLASS_INSET, WIDTH};
 
 pub fn render(
     view: &Workspace,

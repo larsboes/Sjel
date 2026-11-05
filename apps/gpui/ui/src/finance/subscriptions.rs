@@ -44,7 +44,6 @@ impl FinancePage {
         };
     }
 
-
     pub(super) fn render_subscriptions(&mut self, palette: Palette) -> AnyElement {
         self.sync_subs_derived();
         let monthly_burn = self.subs_derived.monthly_burn;

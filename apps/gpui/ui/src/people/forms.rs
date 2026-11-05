@@ -4,8 +4,8 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight,
-    SharedString, Subscription, Window,
+    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
+    Subscription, Window,
 };
 use serde_json::Value;
 use sjel_gpui_core::people::edit::{
@@ -92,7 +92,12 @@ pub(super) fn label_placeholder(label: &str) -> String {
 }
 
 impl PeoplePage {
-    pub(super) fn open_form(&mut self, kind: FormKind, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_form(
+        &mut self,
+        kind: FormKind,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(_) = self.writer() else {
             return;
         };

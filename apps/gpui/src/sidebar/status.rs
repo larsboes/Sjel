@@ -1,11 +1,11 @@
 use gpui_kit::{div, prelude::*, px, rgb, Context, IntoElement, SharedString};
 
+use super::types::uptime;
 use crate::data::Remote;
 use crate::route::Page;
 use crate::shell::NodeHealth;
 use crate::workspace::Workspace;
 use sjel_gpui_ui::theme::Palette;
-use super::types::uptime;
 
 /// The shell's own health, then the path the app reads it through.
 pub fn footer(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {

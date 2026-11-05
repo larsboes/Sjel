@@ -1,5 +1,5 @@
-use crate::theme::SidebarPrefs;
 use super::types::Seat;
+use crate::theme::SidebarPrefs;
 
 /// Which seat the right edge is on, and whether it is showing at all.
 ///

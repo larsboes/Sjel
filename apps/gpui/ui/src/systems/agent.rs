@@ -2,9 +2,7 @@
 use chrono::{Local, TimeZone};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy};
 use crate::primitives::{dot, note, placeholder, row, section};

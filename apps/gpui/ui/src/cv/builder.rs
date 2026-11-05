@@ -1,12 +1,8 @@
 //! CV Master header, profile builder controls, output card, and built PDF list.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
-use sjel_gpui_core::cv::{
-    count_stale_pdfs, pdf_for_profile, CvView, CvWriteRequest,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use sjel_gpui_core::cv::{count_stale_pdfs, pdf_for_profile, CvView, CvWriteRequest};
 
 use crate::primitives::{card, dot};
 use crate::theme::Palette;
@@ -352,7 +348,11 @@ impl CvPage {
         card(content.into_any_element(), palette)
     }
 
-    pub(super) fn render_output_card(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_output_card(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let output = self.output.as_ref()?;
         let dismiss_btn = Button::new("btn-dismiss-output")
             .small()

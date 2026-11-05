@@ -324,7 +324,6 @@ impl RoomPlanHistory {
         })
         .detach();
     }
-
 }
 
 impl Render for RoomPlanHistory {

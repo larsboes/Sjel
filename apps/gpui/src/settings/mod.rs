@@ -1,6 +1,8 @@
-//! Settings (⌘,): appearance, the connection to the shell, accounts, app updates, and shortcuts.
+//! Settings (⌘,): version and updates, appearance, shortcuts, accounts, the connection to the
+//! shell, permissions, and features.
 //!
-//! A section rail styled like the sidebar's nav, then grouped rows on the same cards Home uses:
+//! A rail with the search field on top and the sections under two headings, then grouped rows on
+//! the same cards Home uses:
 //! the label and one line about it on the left, the control on the right, as in macOS System
 //! Settings. Controls write through `Workspace`; the view keeps no independent setting values.
 
@@ -11,9 +13,7 @@ use gpui_kit::component::button::{Button, ButtonGroup, ButtonVariants};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Selectable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString, Window};
 
 pub(super) use crate::update::{BUILD_TIME, RUNNING_COMMIT};
 use crate::workspace::Workspace;
@@ -63,14 +63,14 @@ pub(super) fn recommendation_dismissal_key(feature: &str, topic: &str) -> String
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Section {
     #[default]
+    General,
     Appearance,
-    Connection,
-    Accounts,
-    Clipper,
-    Features,
-    Permissions,
-    Updates,
     Shortcuts,
+    Accounts,
+    Connection,
+    Permissions,
+    Features,
+    Clipper,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -109,26 +109,35 @@ const SHORTCUT_GROUPS: [&str; 12] = [
 ];
 
 impl Section {
+    /// Rail order: the options every install has, then the features and their settings.
     const ALL: [Self; 8] = [
+        Self::General,
         Self::Appearance,
-        Self::Connection,
-        Self::Accounts,
-        Self::Clipper,
-        Self::Features,
-        Self::Permissions,
-        Self::Updates,
         Self::Shortcuts,
+        Self::Accounts,
+        Self::Connection,
+        Self::Permissions,
+        Self::Features,
+        Self::Clipper,
     ];
+
+    /// The rail heading the section stands under.
+    fn heading(self) -> &'static str {
+        match self {
+            Self::Features | Self::Clipper => "Features",
+            _ => "Options",
+        }
+    }
 
     fn title(self) -> &'static str {
         match self {
+            Self::General => "General",
             Self::Appearance => "Appearance",
             Self::Connection => "Connection & Sync",
             Self::Accounts => "Accounts & keys",
             Self::Clipper => "Clipper",
             Self::Features => "Features",
             Self::Permissions => "macOS permissions",
-            Self::Updates => "Updates",
             Self::Shortcuts => "Shortcuts",
         }
     }
@@ -144,7 +153,7 @@ impl Section {
             Self::Permissions => {
                 "Grants only you can give in System Settings, and why Sjel needs them"
             }
-            Self::Updates => "Sjel Desktop builds from your checkout of the Sjel repository",
+            Self::General => "Version and updates of Sjel Desktop, built from your checkout",
             Self::Shortcuts => "Read from the key bindings this build registers",
         }
     }
@@ -199,8 +208,8 @@ pub(crate) fn search_section(query: &str, catalogue_has_match: bool) -> Option<S
         Some(Section::Permissions)
     } else if matches(&["connection", "sync", "phone", "endpoint"]) {
         Some(Section::Connection)
-    } else if matches(&["update", "build", "version"]) {
-        Some(Section::Updates)
+    } else if matches(&["general", "update", "build", "version", "rebuild"]) {
+        Some(Section::General)
     } else if matches(&[
         "shortcut",
         "key binding",
@@ -350,7 +359,7 @@ pub fn render(
         Section::Accounts => vec![view.accounts.clone().into_any_element()],
         Section::Clipper => vec![view.clipper_settings.clone().into_any_element()],
         Section::Permissions => system::permissions(palette),
-        Section::Updates => system::updates(view, palette, cx),
+        Section::General => system::updates(view, palette, cx),
         Section::Shortcuts => shortcuts::shortcuts(
             palette,
             cx,
@@ -360,20 +369,23 @@ pub fn render(
         Section::Features => vec![features::features(view, palette, cx)],
     };
     let recommendation_count = recommendation_count(view, cx);
+    let search = view
+        .settings_search
+        .as_ref()
+        .map(|(input, _)| Input::new(input).into_any_element());
     div()
         .size_full()
         .flex()
         .gap_8()
-        .when(view.settings_toc_visible, |layout| {
-            layout.child(rail(
-                view.settings_section,
-                &view.settings_query,
-                view.settings_shortcut_group,
-                recommendation_count,
-                palette,
-                cx,
-            ))
-        })
+        .child(rail(
+            view.settings_section,
+            &view.settings_query,
+            view.settings_shortcut_group,
+            recommendation_count,
+            search,
+            palette,
+            cx,
+        ))
         .child(
             div()
                 .id("settings-body")
@@ -383,59 +395,6 @@ pub fn render(
                 .track_scroll(&view.selection.scroll)
                 .overflow_y_scroll()
                 .vertical_scrollbar(&view.selection.scroll)
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .pb_2()
-                        .child(if let Some((input, _)) = &view.settings_search {
-                            Input::new(input).into_any_element()
-                        } else {
-                            div().into_any_element()
-                        })
-                        .child(
-                            Button::new("settings-toc-toggle")
-                                .ghost()
-                                .small()
-                                .label(if view.settings_toc_visible {
-                                    "Hide contents"
-                                } else {
-                                    "Show contents"
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.settings_toc_visible = !view.settings_toc_visible;
-                                    cx.notify();
-                                })),
-                        ),
-                )
-                .child(
-                    // Interactive sub-menu pills for fast section jumping
-                    div()
-                        .flex()
-                        .items_center()
-                        .flex_wrap()
-                        .gap_1()
-                        .pb_3()
-                        .children(Section::ALL.iter().map(|&sec| {
-                            let is_active = view.settings_section == sec;
-                            let label = match sec {
-                                Section::Features if recommendation_count > 0 => {
-                                    format!("Features ({recommendation_count})")
-                                }
-                                _ => sec.title().to_string(),
-                            };
-                            Button::new(SharedString::from(format!("settings-pill-{}", sec.title())))
-                                .small()
-                                .label(label)
-                                .when(is_active, |b| b.primary())
-                                .when(!is_active, |b| b.ghost())
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.settings_section = sec;
-                                    cx.notify();
-                                }))
-                        })),
-                )
                 .child(div().flex().flex_col().gap_6().pb_8().children(body)),
         )
 }
@@ -445,15 +404,21 @@ fn rail(
     query: &str,
     selected_shortcut_group: Option<&'static str>,
     recommendation_count: usize,
+    search: Option<AnyElement>,
     palette: Palette,
     cx: &mut Context<Workspace>,
 ) -> impl IntoElement {
+    let mut last_heading = None;
     div()
+        .id("settings-rail")
         .flex_none()
-        .w(px(152.))
+        .w(px(200.))
+        .h_full()
+        .overflow_y_scroll()
         .flex()
         .flex_col()
         .gap_1()
+        .children(search.map(|search| div().pb_2().child(search)))
         .children(
             Section::ALL
                 .into_iter()
@@ -470,50 +435,61 @@ fn rail(
                             .to_lowercase()
                             .contains(&query.to_lowercase())
                 })
-                .map(|section| {
+                .flat_map(|section| {
+                    let heading = (last_heading != Some(section.heading())).then(|| {
+                        last_heading = Some(section.heading());
+                        div()
+                            .px_3()
+                            .pt_3()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(section.heading())
+                            .into_any_element()
+                    });
                     let selected = section == current;
-                    div()
-                        .id(section.title())
-                        .px_3()
-                        .py(px(6.))
-                        .rounded(px(7.))
-                        .text_sm()
-                        .when(selected, |row| row.bg(rgba(palette.raised)))
-                        .text_color(rgb(if selected {
-                            palette.text
-                        } else {
-                            palette.muted
-                        }))
-                        .cursor_pointer()
-                        .hover(move |style| {
-                            style.bg(rgba(palette.raised)).text_color(rgb(palette.text))
-                        })
-                        .on_click(
-                            cx.listener(move |view, _, _, cx| {
+                    let item =
+                        div()
+                            .id(section.title())
+                            .px_3()
+                            .py(px(6.))
+                            .rounded(px(7.))
+                            .text_sm()
+                            .when(selected, |row| row.bg(rgba(palette.raised)))
+                            .text_color(rgb(if selected {
+                                palette.text
+                            } else {
+                                palette.muted
+                            }))
+                            .cursor_pointer()
+                            .hover(move |style| {
+                                style.bg(rgba(palette.raised)).text_color(rgb(palette.text))
+                            })
+                            .on_click(cx.listener(move |view, _, _, cx| {
                                 view.open_settings(Some(section), cx)
-                            }),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .child(section.title())
-                                .when(
-                                    section == Section::Features && recommendation_count > 0,
-                                    |row| {
-                                        row.child(
-                                            div()
-                                                .px_1()
-                                                .rounded(px(4.))
-                                                .bg(rgba(palette.raised))
-                                                .text_xs()
-                                                .text_color(rgb(palette.accent))
-                                                .child(recommendation_count.to_string()),
-                                        )
-                                    },
-                                ),
-                        )
+                            }))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(section.title())
+                                    .when(
+                                        section == Section::Features && recommendation_count > 0,
+                                        |row| {
+                                            row.child(
+                                                div()
+                                                    .px_1()
+                                                    .rounded(px(4.))
+                                                    .bg(rgba(palette.raised))
+                                                    .text_xs()
+                                                    .text_color(rgb(palette.accent))
+                                                    .child(recommendation_count.to_string()),
+                                            )
+                                        },
+                                    ),
+                            );
+                    heading.into_iter().chain([item.into_any_element()])
                 }),
         )
         .when(current == Section::Shortcuts, |rail| {
@@ -626,7 +602,6 @@ pub(super) fn group(title: &'static str, rows: Vec<AnyElement>, palette: Palette
     section(title, list(rows, palette), palette).into_any_element()
 }
 
-
 pub(super) fn value(text: SharedString, color: u32) -> impl IntoElement {
     div().text_sm().text_color(rgb(color)).child(text)
 }
@@ -673,7 +648,10 @@ pub(super) fn segmented<L: Into<SharedString>>(
 }
 
 /// One dot per accent, the current one ringed.
-pub(super) fn accent_swatches(settings: AppearanceSettings, cx: &mut Context<Workspace>) -> impl IntoElement {
+pub(super) fn accent_swatches(
+    settings: AppearanceSettings,
+    cx: &mut Context<Workspace>,
+) -> impl IntoElement {
     div()
         .flex()
         .items_center()

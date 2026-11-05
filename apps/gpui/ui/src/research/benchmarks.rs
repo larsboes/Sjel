@@ -1,7 +1,5 @@
 //! Benchmark suites and model evaluation metrics tab.
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement};
 use sjel_gpui_core::research::BenchmarkSuite;
 
 use crate::primitives::{card, dot, note};
@@ -10,7 +8,11 @@ use crate::theme::Palette;
 use super::ResearchPage;
 
 impl ResearchPage {
-    pub(super) fn render_benchmarks_tab(&self, suites: &[BenchmarkSuite], palette: Palette) -> AnyElement {
+    pub(super) fn render_benchmarks_tab(
+        &self,
+        suites: &[BenchmarkSuite],
+        palette: Palette,
+    ) -> AnyElement {
         if suites.is_empty() {
             return note("No benchmark suites recorded.", palette.muted);
         }

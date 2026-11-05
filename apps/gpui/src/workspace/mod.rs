@@ -400,7 +400,6 @@ pub struct Workspace {
     pub settings_query: String,
     /// A shortcut group selected from the Settings contents rail.
     pub settings_shortcut_group: Option<&'static str>,
-    pub settings_toc_visible: bool,
     pub settings_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
     pub update_info: Option<crate::update::UpdateInfo>,
     /// When the last `git` check started, so the poll can skip the ones it does not need.
@@ -584,7 +583,6 @@ impl Workspace {
             settings_feature_view: crate::settings::FeatureView::default(),
             settings_query: String::new(),
             settings_shortcut_group: None,
-            settings_toc_visible: true,
             settings_search: Some((settings_search, settings_search_events)),
             update_info: None,
             update_checked_at: None,
@@ -1313,7 +1311,9 @@ impl Workspace {
                 self.settings_shortcut_group = None;
             }
         }
-        if section == Some(crate::settings::Section::Updates) && self.update_info.is_none() {
+        if section.unwrap_or(self.settings_section) == crate::settings::Section::General
+            && self.update_info.is_none()
+        {
             self.check_updates(cx);
         }
         if section == Some(crate::settings::Section::Accounts) {
@@ -1380,7 +1380,7 @@ impl Workspace {
                 .await;
             let _ = this.update(cx, |view, cx| {
                 view.update_info = info.clone();
-                view.open_settings(Some(crate::settings::Section::Updates), cx);
+                view.open_settings(Some(crate::settings::Section::General), cx);
             });
         })
         .detach();

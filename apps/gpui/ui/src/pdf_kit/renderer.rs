@@ -1,9 +1,9 @@
-use std::sync::{mpsc, Arc};
-use futures::channel::oneshot;
-use gpui::RenderImage;
-use crate::documents::{PdfError, PdfRenderer};
 use super::document::Pdf;
 use super::types::{Job, Request};
+use crate::documents::{PdfError, PdfRenderer};
+use futures::channel::oneshot;
+use gpui::RenderImage;
+use std::sync::{mpsc, Arc};
 
 /// Draws pages on one private thread.
 pub struct PageRenderer {

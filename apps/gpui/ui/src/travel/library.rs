@@ -129,17 +129,15 @@ impl Travel {
                             .child("Interactive Location Map"),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                self.button("open-location-map")
-                                    .small()
-                                    .ghost()
-                                    .label("Full Map View →")
-                                    .on_click(cx.listener(|view, _, _, cx| view.open_route(TravelRoute::Map, cx))),
-                            ),
+                        div().flex().items_center().gap_1().child(
+                            self.button("open-location-map")
+                                .small()
+                                .ghost()
+                                .label("Full Map View →")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.open_route(TravelRoute::Map, cx)
+                                })),
+                        ),
                     ),
             )
             .child(self.map(cx));
@@ -209,77 +207,75 @@ impl Travel {
                         .into_any_element()
                 };
 
-                let row = div()
-                    .id(gpui::SharedString::from(format!("trip-row-{}", plan.id)))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_3()
-                    .p_3()
-                    .rounded(px(8.))
-                    .bg(if chosen {
-                        rgba(palette.surface)
-                    } else {
-                        rgba(palette.raised)
-                    })
-                    .border_1()
-                    .border_color(if chosen {
-                        rgba(palette.accent)
-                    } else {
-                        rgba(palette.border)
-                    })
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.open_route(
-                            TravelRoute::Trip {
-                                id: id.clone(),
-                                section: sjel_gpui_core::travel::TripSection::Overview,
-                            },
-                            cx,
-                        );
-                    }))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_base()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
-                                    .child(plan.title.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!(
+                let row =
+                    div()
+                        .id(gpui::SharedString::from(format!("trip-row-{}", plan.id)))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_3()
+                        .p_3()
+                        .rounded(px(8.))
+                        .bg(if chosen {
+                            rgba(palette.surface)
+                        } else {
+                            rgba(palette.raised)
+                        })
+                        .border_1()
+                        .border_color(if chosen {
+                            rgba(palette.accent)
+                        } else {
+                            rgba(palette.border)
+                        })
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.open_route(
+                                TravelRoute::Trip {
+                                    id: id.clone(),
+                                    section: sjel_gpui_core::travel::TripSection::Overview,
+                                },
+                                cx,
+                            );
+                        }))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_base()
+                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                        .child(plan.title.clone()),
+                                )
+                                .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                                    format!(
                                         "{} – {} · {} stages",
                                         plan.date_start,
                                         plan.date_end,
                                         plan.stages.len()
-                                    )),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(offline_indicator)
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .bg(rgba(palette.surface))
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(plan.status.replace('_', " ")),
-                            ),
-                    );
+                                    ),
+                                )),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(offline_indicator)
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .py(px(2.))
+                                        .rounded(px(4.))
+                                        .bg(rgba(palette.surface))
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child(plan.status.replace('_', " ")),
+                                ),
+                        );
                 list = list.child(row);
             }
         }
@@ -341,17 +337,14 @@ impl Travel {
                                         .font_weight(gpui::FontWeight::MEDIUM)
                                         .child(plan.title.clone()),
                                 )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child(format!(
-                                            "{} – {} · {} stages",
-                                            plan.date_start,
-                                            plan.date_end,
-                                            plan.stages.len()
-                                        )),
-                                ),
+                                .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                                    format!(
+                                        "{} – {} · {} stages",
+                                        plan.date_start,
+                                        plan.date_end,
+                                        plan.stages.len()
+                                    ),
+                                )),
                         )
                         .child(
                             div()

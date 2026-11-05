@@ -4,8 +4,8 @@
 //! here rather than a window of its own. What needs you costs no height when nothing does.
 
 pub mod cards;
-pub mod needs_you;
 pub mod focus_tasks;
+pub mod needs_you;
 
 use gpui_kit::{div, prelude::*, px, Context, IntoElement, Window};
 
@@ -13,8 +13,8 @@ use crate::workspace::Workspace;
 use sjel_gpui_ui::theme::Palette;
 
 pub use cards::{prompt_outbox, today, travel_card};
-pub use needs_you::needs_you;
 pub use focus_tasks::focus_tasks;
+pub use needs_you::needs_you;
 
 pub fn render(
     view: &Workspace,

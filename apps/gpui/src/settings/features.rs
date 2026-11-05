@@ -6,11 +6,9 @@ use gpui_kit::{div, prelude::*, AnyElement, Context, IntoElement, SharedString};
 use sjel_gpui_ui::primitives::{list, note, placeholder, section};
 use sjel_gpui_ui::theme::Palette;
 
+use super::{feature_content_query, group, recommendation_dismissal_key, row, value, FeatureView};
 use crate::route::Page;
 use crate::workspace::Workspace;
-use super::{
-    feature_content_query, group, recommendation_dismissal_key, row, value, FeatureView,
-};
 
 pub(super) fn features(
     view: &Workspace,
@@ -145,9 +143,9 @@ pub(super) fn installed_features(
                                 .small()
                                 .label("Cancel")
                                 .disabled(busy)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.cancel_feature_uninstall(cx)
-                                })),
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.cancel_feature_uninstall(cx)),
+                                ),
                             )
                     } else {
                         div().child(

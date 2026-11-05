@@ -3,9 +3,7 @@
 use chrono::{Duration, Local, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, FontWeight,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight};
 use sjel_gpui_core::context::{
     format_day_header, format_money, needs_attention, ContextDay, TimelineKind,
 };
@@ -72,9 +70,11 @@ pub fn render_day_header(
                         .small()
                         .ghost()
                         .label("Today")
-                        .on_click(cx.listener(|page, _, _, cx| {
-                            page.select(Local::now().date_naive(), cx)
-                        })),
+                        .on_click(
+                            cx.listener(|page, _, _, cx| {
+                                page.select(Local::now().date_naive(), cx)
+                            }),
+                        ),
                 )
                 .child(
                     Button::new("context-next")

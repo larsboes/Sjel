@@ -231,7 +231,12 @@ impl Feed {
         self.open_content_entry(id, "calendar", cx);
     }
 
-    pub(crate) fn open_content_entry(&mut self, id: String, source: &'static str, cx: &mut Context<Self>) {
+    pub(crate) fn open_content_entry(
+        &mut self,
+        id: String,
+        source: &'static str,
+        cx: &mut Context<Self>,
+    ) {
         let Ok(shell) = self.repo.shell() else { return };
         self.tab = Tab::Reading;
         self.content_source = Some(source);
@@ -366,13 +371,23 @@ impl Feed {
         }
     }
 
-    pub(crate) fn on_open_original(&mut self, _: &OpenOriginal, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_open_original(
+        &mut self,
+        _: &OpenOriginal,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(url) = self.target().and_then(|id| self.url_of(&id)) {
             cx.open_url(&url);
         }
     }
 
-    pub(crate) fn set_calendar_export(&mut self, id: String, opted_in: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_calendar_export(
+        &mut self,
+        id: String,
+        opted_in: bool,
+        cx: &mut Context<Self>,
+    ) {
         if self.calendar_export_busy || self.content_source != Some("calendar") {
             return;
         }

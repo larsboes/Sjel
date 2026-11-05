@@ -3,9 +3,7 @@
 use chrono::NaiveDate;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::context::{format_money, TimelineItem, TimelineKind};
 
 use super::types::ContextEvent;

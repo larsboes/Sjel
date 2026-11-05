@@ -56,9 +56,9 @@ pub(crate) fn render_link_row(
             Button::new(SharedString::from(format!("open-{}", link.id)))
                 .small()
                 .label("Open")
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.open(&saved_for_open, window, cx)
-                })),
+                .on_click(
+                    cx.listener(move |view, _, window, cx| view.open(&saved_for_open, window, cx)),
+                ),
         )
         .child(
             Button::new(SharedString::from(format!("pin-{}", link.id)))

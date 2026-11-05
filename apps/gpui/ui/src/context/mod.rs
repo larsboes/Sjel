@@ -8,16 +8,13 @@ pub mod cards;
 pub mod timeline;
 pub mod types;
 
-pub use types::{
-    bind_keys, ContextEvent, NextDay, PreviousDay, Refresh, Today,
-};
+pub use types::{bind_keys, ContextEvent, NextDay, PreviousDay, Refresh, Today};
 
 use chrono::{Duration, Local, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, rgb, AnyElement, Context, EventEmitter, FocusHandle,
-    FontWeight, Window,
+    div, prelude::*, rgb, AnyElement, Context, EventEmitter, FocusHandle, FontWeight, Window,
 };
 use sjel_gpui_core::context::{ContextDay, TimelineItem, TimelineKind};
 use sjel_gpui_core::shell::{
@@ -237,14 +234,7 @@ impl ContextPage {
         let context = ContextDay::build(self.day, entries, tasks, finance_txs);
 
         let header = render_day_header(self.day, is_today, palette, cx);
-        let cards = render_metric_cards(
-            &context,
-            tasks,
-            is_today,
-            self.filter_kind,
-            palette,
-            cx,
-        );
+        let cards = render_metric_cards(&context, tasks, is_today, self.filter_kind, palette, cx);
 
         let filtered_timeline: Vec<TimelineItem> = context
             .timeline
@@ -302,7 +292,7 @@ impl ContextPage {
                                             page.filter_kind = None;
                                             cx.notify();
                                         })),
-                                 )
+                                )
                             }),
                     )
                     .children(filter_action),

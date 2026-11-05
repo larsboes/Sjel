@@ -37,9 +37,9 @@ pub use screen::tone_of;
 
 pub(crate) use grid::paint_grid;
 pub(crate) use keys::{paste_bytes, TOUCH_KEYS};
-pub(crate) use screen::{spans, Screen, Span};
 #[cfg(test)]
 pub(crate) use screen::{ansi_256, ScreenLine};
+pub(crate) use screen::{spans, Screen, Span};
 
 /// A monospace cell at this size is about 7 by 15 points at the default UI font.
 const LINE_HEIGHT: f32 = 1.4;

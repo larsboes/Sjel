@@ -1,7 +1,5 @@
 //! Today header view, source indicator line, quick capture bar, and device pairing banner.
-use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton,
-};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton};
 use gpui_kit::component::{Icon, IconName, Sizable};
 use sjel_gpui_core::today::Today as View;
 

@@ -3,8 +3,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
-    Window,
+    div, point, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString, Window,
 };
 use sjel_gpui_core::scouting::{
     calendar_entry_body, calendar_start_input, default_calendar_end, OpportunityStatus,
@@ -150,7 +149,11 @@ impl ScoutingPage {
         cx.notify();
     }
 
-    pub(super) fn render_promotion(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_promotion(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let form = self.promotion.as_ref()?;
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, label, input) in &form.fields {

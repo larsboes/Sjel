@@ -276,7 +276,12 @@ impl Finder {
     }
 
     /// A message while a run is active steers it instead of starting a second one.
-    pub(super) fn agent_steer(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn agent_steer(
+        &mut self,
+        text: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(id) = self.agent.id().map(str::to_owned) else {
             return;
         };
@@ -460,7 +465,11 @@ impl Finder {
     }
 
     /// The call the run is waiting on: what it is, what it changes, and the three answers.
-    pub(super) fn agent_card(pending: Pending, palette: Palette, cx: &mut Context<Self>) -> gpui::AnyElement {
+    pub(super) fn agent_card(
+        pending: Pending,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let mono = ".AppleSystemUIFontMonospaced";
         let diff = pending.diff.clone().map(|text| {
             div()

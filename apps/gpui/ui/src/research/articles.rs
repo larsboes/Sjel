@@ -1,7 +1,5 @@
 //! Research articles reading view and markdown rendering.
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::research::ResearchArticle;
 
 use crate::primitives::{card, dot, note};

@@ -12,8 +12,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, AnyElement, Context, Entity, IntoElement,
-    Subscription, Window,
+    div, prelude::*, px, AnyElement, Context, Entity, IntoElement, Subscription, Window,
 };
 use sjel_gpui_core::setup::{PairingChallenge, QrMatrix, SetupView};
 

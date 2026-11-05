@@ -1,8 +1,6 @@
 //! Mail-detected event proposal review panel and actions.
 use chrono::{Duration, Local};
-use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
-};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{self, ShellError};

@@ -160,7 +160,9 @@ impl Feed {
 }
 
 /// The queue's rows grouped by entry, in the order comms returned the entries.
-pub(crate) fn flagged<'a>(flags: impl Iterator<Item = &'a FeedQualityFlag>) -> Vec<Vec<&'a FeedQualityFlag>> {
+pub(crate) fn flagged<'a>(
+    flags: impl Iterator<Item = &'a FeedQualityFlag>,
+) -> Vec<Vec<&'a FeedQualityFlag>> {
     let mut items: Vec<Vec<&FeedQualityFlag>> = Vec::new();
     for flag in flags {
         match items

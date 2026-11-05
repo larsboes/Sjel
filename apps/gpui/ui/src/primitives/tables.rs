@@ -4,8 +4,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId,
-    FontWeight, MouseButton, Pixels, ScrollHandle, SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, ElementId, FontWeight,
+    MouseButton, Pixels, ScrollHandle, SharedString, Window,
 };
 
 use super::cards::row_for_density;

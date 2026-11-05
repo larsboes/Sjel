@@ -1,8 +1,8 @@
 //! Capture input field, quick tag chips, and save dispatch.
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton,
-    SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton, SharedString,
+    Window,
 };
 use gpui_kit::component::input::{InputEvent, InputState};
 use sjel_gpui_core::capture::{Draft, TAGS};
@@ -77,7 +77,11 @@ impl Inbox {
     }
 
     /// The field, created once. Enter keeps the capture, and the keyboard follows the focus.
-    pub(crate) fn field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Entity<InputState> {
+    pub(crate) fn field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Entity<InputState> {
         if let Some((input, _)) = &self.input {
             return input.clone();
         }

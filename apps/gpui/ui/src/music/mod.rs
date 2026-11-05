@@ -14,8 +14,8 @@ use sjel_gpui_core::shell::{self, MusicBuild, MusicJob, ShellError};
 use crate::data::Repo;
 use crate::theme::Palette;
 
-pub use types::MusicEvent;
 use types::Mode;
+pub use types::MusicEvent;
 
 use self::forms::{render_album_inputs, render_job_card, render_song_inputs};
 

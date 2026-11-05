@@ -2,16 +2,15 @@
 //! would go, start the import, and read what the ledger holds for that folder afterwards.
 //! Source files are only read; the capability moves and removes nothing.
 
-pub mod types;
 pub mod rows;
+pub mod types;
 
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, rgb, AnyElement, Context, IntoElement, PathPromptOptions, SharedString,
-    Window,
+    div, prelude::*, rgb, AnyElement, Context, IntoElement, PathPromptOptions, SharedString, Window,
 };
 
 use crate::data::{self, Busy, Remote, Repo};
@@ -19,8 +18,8 @@ use crate::primitives::{list, note, section};
 use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::shell::{ImportJob, ImportPlan, ImportStatus};
 
-pub use types::RUN;
 pub use rows::{line, plan_rows, status_rows};
+pub use types::RUN;
 
 pub struct ImportPage {
     repo: Repo,

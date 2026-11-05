@@ -6,8 +6,8 @@ pub mod tables;
 pub mod tokens;
 
 pub use badges::{
-    due_badge, due_status, filter_pill, mono_num, priority_pill, status_pill,
-    sync_status_badge, tone_chip, DueStatus,
+    due_badge, due_status, filter_pill, mono_num, priority_pill, status_pill, sync_status_badge,
+    tone_chip, DueStatus,
 };
 pub use cards::{
     back_button, card, list, progress_bar, row, row_for_density, section, stat_card,

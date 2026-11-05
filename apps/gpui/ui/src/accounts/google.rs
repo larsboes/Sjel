@@ -3,9 +3,7 @@
 use gpui::ExternalPaths;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::accounts::CredentialRow;
 
 use super::Accounts;
@@ -101,7 +99,12 @@ impl Accounts {
         .detach();
     }
 
-    pub(crate) fn card(&self, row: &CredentialRow, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn card(
+        &self,
+        row: &CredentialRow,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         if let Some(error) = &row.error {
             return div()
                 .px_4()

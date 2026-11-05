@@ -161,7 +161,12 @@ impl LinksPage {
         }
     }
 
-    pub(crate) fn begin_edit(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn begin_edit(
+        &mut self,
+        link: &WebLink,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.edit_id.as_deref() == Some(link.id.as_str()) {
             self.edit_id = None;
             return;
@@ -241,7 +246,12 @@ impl LinksPage {
         }
     }
 
-    pub(crate) fn toggle_pin(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_pin(
+        &mut self,
+        link: &WebLink,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let id = link.id.clone();
         let pinned = !link.pinned;
         let repo = self.repo.clone();

@@ -1,8 +1,7 @@
 //! Soundscape drawer UI controls: transport card, animated meter, preset chips, and 10-step level sliders.
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton,
-    SharedString,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, MouseButton, SharedString,
 };
 use sjel_gpui_core::soundscape::{self, LayerName, Preset};
 

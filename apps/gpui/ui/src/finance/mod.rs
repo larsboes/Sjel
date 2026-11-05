@@ -396,21 +396,16 @@ impl Render for FinancePage {
         };
 
         // Header with clean sub-tabs (overview/transactions/subscriptions/import)
-        let header = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_4()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(view_btn("Overview", View::Overview, cx))
-                    .child(view_btn("Transactions", View::Transactions, cx))
-                    .child(view_btn("Subscriptions", View::Subscriptions, cx))
-                    .child(view_btn("Import & Review", View::ImportReview, cx)),
-            );
+        let header = div().flex().items_center().justify_between().gap_4().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(view_btn("Overview", View::Overview, cx))
+                .child(view_btn("Transactions", View::Transactions, cx))
+                .child(view_btn("Subscriptions", View::Subscriptions, cx))
+                .child(view_btn("Import & Review", View::ImportReview, cx)),
+        );
 
         // Body per Tab
         let content = match self.view {

@@ -10,9 +10,7 @@ pub mod slideover;
 
 use std::sync::Arc;
 
-use gpui::{
-    div, prelude::*, px, rgb, rgba, Context, FontWeight, Render, SharedString, Window,
-};
+use gpui::{div, prelude::*, px, rgb, rgba, Context, FontWeight, Render, SharedString, Window};
 use sjel_gpui_core::soundscape::{Control, LayerName, Playback, Preset, Visual};
 
 use crate::theme::{SoundscapePrefs, ThemeContext};

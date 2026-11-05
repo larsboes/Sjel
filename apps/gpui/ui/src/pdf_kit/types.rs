@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use super::document::Pdf;
+use crate::documents::PdfError;
 use futures::channel::oneshot;
 use gpui::RenderImage;
-use crate::documents::PdfError;
-use super::document::Pdf;
+use std::sync::Arc;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub const MAX_PAGE_PIXELS: u64 = 64 * 1024 * 1024;
@@ -17,7 +17,11 @@ pub struct PageImage {
 
 impl PageImage {
     pub fn new(width: u32, height: u32, bgra: Vec<u8>) -> Self {
-        Self { width, height, bgra }
+        Self {
+            width,
+            height,
+            bgra,
+        }
     }
 
     /// The image `gpui::img` draws.
@@ -83,7 +87,11 @@ pub fn rotated_size(width: f64, height: f64, rotation: i32) -> (f64, f64) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub fn target_pixels(points_wide: f64, points_tall: f64, width: u32) -> Result<(u32, u32), PdfError> {
+pub fn target_pixels(
+    points_wide: f64,
+    points_tall: f64,
+    width: u32,
+) -> Result<(u32, u32), PdfError> {
     if !(points_wide.is_finite() && points_tall.is_finite())
         || points_wide <= 0.0
         || points_tall <= 0.0

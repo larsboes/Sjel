@@ -1,8 +1,6 @@
 //! Design tokens and atomic micro-primitives.
 
-use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, IntoElement, Pixels, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, AnyElement, IntoElement, Pixels, SharedString};
 
 /// Small corner radius (`4px`): badges, chips, kbd hints, inline pills.
 pub const RADIUS_SM: Pixels = px(4.);

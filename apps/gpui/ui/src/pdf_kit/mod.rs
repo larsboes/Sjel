@@ -9,14 +9,14 @@
 //! A [`Pdf`] is not `Send`: a Core Graphics document belongs to the thread that opened it. The
 //! worker behind [`PageRenderer`] opens, draws and drops its document on one thread for that reason.
 
-pub mod types;
 pub mod document;
 pub mod renderer;
+pub mod types;
 
 pub use crate::documents::{PdfError, PdfRenderer};
-pub use types::PageImage;
 pub use document::Pdf;
 pub use renderer::{default_renderer, PageRenderer};
+pub use types::PageImage;
 
 #[cfg(all(test, target_os = "macos"))]
 mod tests {

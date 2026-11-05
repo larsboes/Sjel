@@ -9,7 +9,11 @@ use super::Finder;
 actions!(finder, [SelectUp, SelectDown, NextMode, Close]);
 
 impl Finder {
-    pub(super) fn ensure_input(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    pub(super) fn ensure_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
         let input = match &self.input {
             Some((input, _)) => input.clone(),
             None => {

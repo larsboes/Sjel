@@ -23,7 +23,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
     let tabs = area
         .filter(|area| area.has_tabs())
         .map(|area| tab_strip(area, view.page, palette, cx));
-    // Settings › Updates says the same at length, so the pill stays out of Settings.
+    // Settings › General says the same at length, so the pill stays out of Settings.
     let update_pill = view
         .update_info
         .as_ref()
@@ -140,7 +140,12 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
 
 /// The area's tabs, one segment each, the open one selected. A click switches pages in memory:
 /// nothing in an area is read again to show that its neighbour exists.
-fn tab_strip(area: Area, current: Page, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
+fn tab_strip(
+    area: Area,
+    current: Page,
+    palette: Palette,
+    cx: &mut Context<Workspace>,
+) -> AnyElement {
     let pages = area.pages();
     if area == Area::Sjel {
         // Area::Sjel has 9 tabs: group them into 3 intuitive sub-menus to keep the header clean.
@@ -159,14 +164,18 @@ fn tab_strip(area: Area, current: Page, palette: Palette, cx: &mut Context<Works
             }
             fn pages(&self) -> &'static [Page] {
                 match self {
-                    Self::Runtime => &[Page::Capabilities, Page::Systems, Page::Backup, Page::Setup],
+                    Self::Runtime => {
+                        &[Page::Capabilities, Page::Systems, Page::Backup, Page::Setup]
+                    }
                     Self::Architecture => &[Page::SelfModel, Page::Packs, Page::Research],
                     Self::Catalog => &[Page::Software, Page::Links],
                 }
             }
             fn of(page: Page) -> Self {
                 match page {
-                    Page::Capabilities | Page::Systems | Page::Backup | Page::Setup => Self::Runtime,
+                    Page::Capabilities | Page::Systems | Page::Backup | Page::Setup => {
+                        Self::Runtime
+                    }
                     Page::SelfModel | Page::Packs | Page::Research => Self::Architecture,
                     Page::Software | Page::Links => Self::Catalog,
                     _ => Self::Runtime,
@@ -175,7 +184,11 @@ fn tab_strip(area: Area, current: Page, palette: Palette, cx: &mut Context<Works
         }
 
         let current_group = SjelGroup::of(current);
-        let groups = [SjelGroup::Runtime, SjelGroup::Architecture, SjelGroup::Catalog];
+        let groups = [
+            SjelGroup::Runtime,
+            SjelGroup::Architecture,
+            SjelGroup::Catalog,
+        ];
         let sub_pages = current_group.pages();
 
         return div()
@@ -203,12 +216,7 @@ fn tab_strip(area: Area, current: Page, palette: Palette, cx: &mut Context<Works
                         }
                     })),
             )
-            .child(
-                div()
-                    .w(px(1.))
-                    .h(px(16.))
-                    .bg(rgb(palette.border)),
-            )
+            .child(div().w(px(1.)).h(px(16.)).bg(rgb(palette.border)))
             .child(
                 ButtonGroup::new("sjel-sub-tabs")
                     .outline()

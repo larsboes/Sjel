@@ -9,16 +9,12 @@ pub mod inspector;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window,
-};
+use gpui_kit::{div, prelude::*, rgb, AnyElement, Context, IntoElement, SharedString, Window};
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, note, placeholder, section};
 use crate::theme::ThemeContext;
-use sjel_gpui_core::self_model::{
-    isolated_units, SelfModelResponse, SelfUnit,
-};
+use sjel_gpui_core::self_model::{isolated_units, SelfModelResponse, SelfUnit};
 
 use self::cards::{stats_summary, unit_card};
 use self::constants::KINDS;

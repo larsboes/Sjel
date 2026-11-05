@@ -1,8 +1,7 @@
 //! Status badges, pills, and indicator chips.
 
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, FontWeight,
-    SharedString, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, App, ClickEvent, FontWeight, SharedString, Window,
 };
 
 use super::tokens::{dot, RADIUS_SM};

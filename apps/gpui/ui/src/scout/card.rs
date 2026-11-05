@@ -2,9 +2,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
-use sjel_gpui_core::scouting::{
-    can_promote_to_calendar, OpportunityStatus, ScoutingOpportunity,
-};
+use sjel_gpui_core::scouting::{can_promote_to_calendar, OpportunityStatus, ScoutingOpportunity};
 
 use crate::theme::Palette;
 
@@ -56,16 +54,19 @@ impl ScoutingPage {
                             .flex()
                             .flex_col()
                             .gap_1()
-                            .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                                format!(
-                                    "{} · {}{}",
-                                    type_label(&opportunity.opportunity_type),
-                                    opportunity.source,
-                                    route.map_or(String::new(), |route| {
-                                        format!(" · {}", route.route.label())
-                                    })
-                                ),
-                            ))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!(
+                                        "{} · {}{}",
+                                        type_label(&opportunity.opportunity_type),
+                                        opportunity.source,
+                                        route.map_or(String::new(), |route| {
+                                            format!(" · {}", route.route.label())
+                                        })
+                                    )),
+                            )
                             .child(
                                 div()
                                     .text_base()
@@ -149,9 +150,7 @@ impl ScoutingPage {
                             .when(status == OpportunityStatus::Saved, |button| {
                                 button.primary()
                             })
-                            .when(status != OpportunityStatus::Saved, |button| {
-                                button.ghost()
-                            })
+                            .when(status != OpportunityStatus::Saved, |button| button.ghost())
                             .label(if busy {
                                 "Saving…"
                             } else if status == OpportunityStatus::Saved {

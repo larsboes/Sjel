@@ -135,11 +135,7 @@ impl Workspace {
                 Some(deck) => {
                     let settings = self.appearance_settings;
                     deck.update(cx, |deck, _| {
-                        deck.set_style(
-                            palette,
-                            settings.terminal_font,
-                            settings.terminal_font_size,
-                        )
+                        deck.set_style(palette, settings.terminal_font, settings.terminal_font_size)
                     });
                     deck.clone().into_any_element()
                 }

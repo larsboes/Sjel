@@ -1,9 +1,7 @@
 //! Individual mail row rendering and mobile drawer actions.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::mail::{category_label, MailAction, MailProposal, CATEGORIES};
 
 use crate::theme::Palette;

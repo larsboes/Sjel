@@ -8,8 +8,8 @@ use sjel_gpui_ui::theme::{
     TERMINAL_FONT_SIZES,
 };
 
-use crate::workspace::Workspace;
 use super::{accent_swatches, group, row, segmented};
+use crate::workspace::Workspace;
 
 pub(super) fn appearance(
     settings: AppearanceSettings,

@@ -10,8 +10,7 @@ use gpui_kit::{
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{
-    filter_transactions, parse_personal_cents, preset_share_cents, ExpenseReview,
-    TransactionFilter,
+    filter_transactions, parse_personal_cents, preset_share_cents, ExpenseReview, TransactionFilter,
 };
 use sjel_gpui_core::shell::{self, FinanceTransaction, ShellError};
 
@@ -95,7 +94,6 @@ pub(crate) fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyEle
         .into_any_element()
 }
 
-
 impl FinancePage {
     pub(super) fn sync_tx_derived(&mut self) {
         let key = (self.dashboard.loaded_at, self.filter_rev);
@@ -125,8 +123,11 @@ impl FinancePage {
         };
     }
 
-
-    pub(super) fn reclass_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    pub(super) fn reclass_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
         if let Some((input, _)) = &self.reclass_input {
             return input.clone();
         }
@@ -250,7 +251,12 @@ impl FinancePage {
         cx.notify();
     }
 
-    pub(super) fn set_personal_share(&mut self, percent: u32, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_personal_share(
+        &mut self,
+        percent: u32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(id) = self.selected_expense.as_deref() else {
             return;
         };
@@ -369,7 +375,6 @@ impl FinancePage {
         .detach();
     }
 
-
     pub(super) fn render_transactions(
         &mut self,
         window: &mut Window,
@@ -484,5 +489,4 @@ impl FinancePage {
             )
             .into_any_element()
     }
-
 }

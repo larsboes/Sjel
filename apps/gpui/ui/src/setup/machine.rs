@@ -2,9 +2,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window};
 use sjel_gpui_core::setup::{
     has_apply_input, merge_verification_probes, ProbeMark, SetupApplyRequest, SetupPlan,
 };
@@ -116,7 +114,12 @@ impl SetupPage {
         );
     }
 
-    pub(super) fn apply_setup(&mut self, component: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn apply_setup(
+        &mut self,
+        component: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let url_field = self.ensure_url_input(window, cx);
         let cred_field = self.ensure_credential_input(window, cx);
         let int_field = self.ensure_interval_input(window, cx);
@@ -535,7 +538,7 @@ impl SetupPage {
                                         .text_size(px(12.0))
                                         .text_color(rgb(palette.muted))
                                         .child(plan.purpose.clone()),
-                                )
+                                ),
                         )
                         .child(
                             div()

@@ -37,7 +37,6 @@ pub(crate) struct ImportDerived {
     pub(super) inflows: Vec<FinanceCandidate>,
 }
 
-
 pub(crate) fn default_csv_mapping() -> serde_json::Value {
     serde_json::json!({
         "delimiter": ";",
@@ -61,7 +60,6 @@ pub(crate) fn default_csv_mapping() -> serde_json::Value {
         "location_columns": null,
     })
 }
-
 
 impl FinancePage {
     pub(super) fn sync_import_derived(&mut self) {
@@ -135,7 +133,6 @@ impl FinancePage {
         };
     }
 
-
     pub(super) fn active_csv_mapping(&self) -> serde_json::Value {
         let profiles = self
             .csv_mappings
@@ -149,7 +146,11 @@ impl FinancePage {
             .unwrap_or_else(|| self.manual_csv_mapping.clone())
     }
 
-    pub(super) fn ensure_csv_mapping_fields(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn ensure_csv_mapping_fields(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.csv_mapping_fields.is_some() {
             return;
         }
@@ -249,7 +250,12 @@ impl FinancePage {
         .detach();
     }
 
-    pub(super) fn reconcile_candidate(&mut self, id: String, counterpart: String, cx: &mut Context<Self>) {
+    pub(super) fn reconcile_candidate(
+        &mut self,
+        id: String,
+        counterpart: String,
+        cx: &mut Context<Self>,
+    ) {
         let Ok(shell) = self.repo.shell() else {
             return;
         };
@@ -367,7 +373,6 @@ impl FinancePage {
 }
 
 impl FinancePage {
-
     pub(super) fn render_import_review(
         &mut self,
         palette: Palette,
@@ -1322,5 +1327,4 @@ impl FinancePage {
         }
         view.into_any_element()
     }
-
 }

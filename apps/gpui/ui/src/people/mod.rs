@@ -16,8 +16,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight,
-    IntoElement, Render, ScrollHandle, SharedString, Subscription, Window,
+    div, point, prelude::*, px, rgb, rgba, Context, Entity, FocusHandle, FontWeight, IntoElement,
+    Render, ScrollHandle, SharedString, Subscription, Window,
 };
 use sjel_gpui_core::people::{filter_people, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
@@ -239,7 +239,11 @@ impl PeoplePage {
             .cloned()
     }
 
-    pub(super) fn search_field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    pub(super) fn search_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
         if let Some((input, _)) = &self.search_input {
             return input.clone();
         }

@@ -3,8 +3,8 @@
 use gpui_kit::Context;
 use sjel_gpui_core::shell::{self, ShellError};
 
-use crate::data::Remote;
 use super::Workspace;
+use crate::data::Remote;
 
 impl Workspace {
     pub fn refresh_installed_features(&mut self, cx: &mut Context<Self>) {

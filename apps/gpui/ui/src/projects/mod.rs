@@ -547,7 +547,6 @@ impl Projects {
         .detach();
     }
 
-
     fn create_project_note(
         &mut self,
         project: String,
@@ -754,7 +753,13 @@ impl Projects {
         .detach();
     }
 
-    pub(super) fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_note(
+        &mut self,
+        path: String,
+        save: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(record) = self.repo.notes().get(&path) {
             self.opening = None;
             self.show_note(record, save, window, cx);
@@ -922,7 +927,12 @@ impl Projects {
         self.toggle_task(path, done, window, cx);
     }
 
-    pub(super) fn remove_record(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn remove_record(
+        &mut self,
+        path: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.repo.notes().forget(&path);
         let repo = self.repo.clone();
         data::write_repo(
@@ -1228,7 +1238,6 @@ impl Projects {
         cx.notify();
     }
 }
-
 
 impl Render for Projects {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1926,7 +1935,10 @@ impl Render for Projects {
                 (Some(tasks), None) => {
                     let table = self.all_tasks_table(tasks, &search_input, palette, cx);
                     let selected = self.task_panel.as_ref().and_then(|panel| {
-                        tasks.iter().find(|t| t.id == panel.path).map(|task| (panel, task))
+                        tasks
+                            .iter()
+                            .find(|t| t.id == panel.path)
+                            .map(|task| (panel, task))
                     });
                     match selected {
                         // A phone has no room beside the table: the panel takes its place.
@@ -2400,7 +2412,9 @@ mod tests {
         cx.run_until_parked();
         let projects = slot.take().unwrap();
         cx.update(|window, cx| {
-            projects.update(cx, |projects, cx| projects.select_task(&blocked, window, cx))
+            projects.update(cx, |projects, cx| {
+                projects.select_task(&blocked, window, cx)
+            })
         });
         cx.run_until_parked();
         projects.read_with(cx, |projects, cx| {
@@ -2419,7 +2433,9 @@ mod tests {
             assert_eq!(shown, ["blocked"]);
         });
         cx.update(|window, cx| {
-            projects.update(cx, |projects, cx| projects.select_task(&blocked, window, cx))
+            projects.update(cx, |projects, cx| {
+                projects.select_task(&blocked, window, cx)
+            })
         });
         projects.read_with(cx, |projects, _| assert!(projects.task_panel.is_none()));
     }

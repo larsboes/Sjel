@@ -1,8 +1,6 @@
 //! Month and Week grid layout views for CalendarPage.
 use chrono::{Datelike, NaiveDate};
-use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString,
-};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::calendar::{entries_on, time_label};
 use sjel_gpui_core::shell::CalendarEntry;
 

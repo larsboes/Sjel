@@ -19,7 +19,6 @@ pub(crate) struct MailReviewForm {
     pub(super) _subscriptions: Vec<Subscription>,
 }
 
-
 impl InventoryPage {
     pub(super) fn load_mail(&mut self, cx: &mut Context<Self>) {
         if self.mail_proposals.loading {
@@ -46,7 +45,12 @@ impl InventoryPage {
         cx.notify();
     }
 
-    pub(super) fn open_mail(&mut self, proposal: MailProposal, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_mail(
+        &mut self,
+        proposal: MailProposal,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let title = cx.new(|cx| {
             let mut input = InputState::new(window, cx).placeholder("Item title");
             input.set_value(&proposal.title, window, cx);
@@ -214,7 +218,11 @@ impl InventoryPage {
         cx.notify();
     }
 
-    pub(super) fn render_mail_review(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_mail_review(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut content = div()
             .flex()
             .flex_col()
@@ -378,5 +386,4 @@ impl InventoryPage {
         }
         content.into_any_element()
     }
-
 }

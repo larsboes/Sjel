@@ -7,7 +7,7 @@ pub mod row;
 pub mod types;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{InputState};
+use gpui_kit::component::input::InputState;
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Window,
@@ -18,8 +18,8 @@ use crate::primitives::{list, note, placeholder, section};
 use crate::theme::ThemeContext;
 use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
 
-pub use types::{shows, Filter, FILTERS, SCAN};
 use types::size;
+pub use types::{shows, Filter, FILTERS, SCAN};
 
 use self::row::render_app_row;
 
@@ -69,7 +69,12 @@ impl Software {
         );
     }
 
-    pub(crate) fn toggle(&mut self, app: &SoftwareApp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle(
+        &mut self,
+        app: &SoftwareApp,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.open.as_deref() == Some(app.bundle_id.as_str()) {
             self.open = None;
         } else {
@@ -85,7 +90,12 @@ impl Software {
         cx.notify();
     }
 
-    pub(crate) fn decide(&mut self, decision: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn decide(
+        &mut self,
+        decision: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(bundle_id) = self.open.clone() else {
             return;
         };
@@ -112,7 +122,12 @@ impl Software {
         );
     }
 
-    pub(crate) fn uninstall(&mut self, bundle_id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn uninstall(
+        &mut self,
+        bundle_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let repo = self.repo.clone();
         let key = format!("uninstall:{bundle_id}");
         data::write(

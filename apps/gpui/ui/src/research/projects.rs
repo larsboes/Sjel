@@ -2,9 +2,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, Window};
 use sjel_gpui_core::research::{group_upstreams, SystemRow, UpstreamRow};
 
 use crate::data;

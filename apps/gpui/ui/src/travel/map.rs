@@ -1044,21 +1044,26 @@ impl Travel {
                 let mut all_markers = self.location_markers();
                 // When on home map or user location is available, also ensure user's current location pin is represented
                 if let Some(user_coord) = self.current_user_location() {
-                    let has_user_pin = all_markers.iter().any(|m| m.place.coordinate() == Some(user_coord));
+                    let has_user_pin = all_markers
+                        .iter()
+                        .any(|m| m.place.coordinate() == Some(user_coord));
                     if !has_user_pin {
-                        all_markers.insert(0, LocationMarker {
-                            plan_id: String::new(),
-                            place: travel::Place {
-                                name: "Current Location".into(),
-                                address: None,
-                                latitude: Some(user_coord.latitude),
-                                longitude: Some(user_coord.longitude),
+                        all_markers.insert(
+                            0,
+                            LocationMarker {
+                                plan_id: String::new(),
+                                place: travel::Place {
+                                    name: "Current Location".into(),
+                                    address: None,
+                                    latitude: Some(user_coord.latitude),
+                                    longitude: Some(user_coord.longitude),
+                                },
+                                from: String::new(),
+                                to: String::new(),
+                                label: "Current Location".into(),
+                                category: PlaceCategory::Place,
                             },
-                            from: String::new(),
-                            to: String::new(),
-                            label: "Current Location".into(),
-                            category: PlaceCategory::Place,
-                        });
+                        );
                     }
                 }
                 all_markers

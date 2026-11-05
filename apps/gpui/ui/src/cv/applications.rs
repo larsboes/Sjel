@@ -1,9 +1,7 @@
 //! CV Application ledger, status filtering, and career pipeline table.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
 use sjel_gpui_core::cv::{
     filter_applications, last_status_date, CvApplication, CvView, CvWriteRequest,
 };
@@ -164,7 +162,7 @@ impl CvPage {
                                         .text_size(px(11.0))
                                         .text_color(rgb(palette.muted))
                                         .child(role),
-                                )
+                                ),
                         )
                         .child(
                             div()

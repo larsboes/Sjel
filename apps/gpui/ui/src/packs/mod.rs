@@ -225,7 +225,13 @@ impl gpui::Render for PacksPage {
         }
 
         // Harness summary cards
-        panels.push(render_harness_cards(self, view, &derived.pack_names, palette, cx));
+        panels.push(render_harness_cards(
+            self,
+            view,
+            &derived.pack_names,
+            palette,
+            cx,
+        ));
 
         // Filter bar + Matrix
         let filter_button = Button::new("toggle-attention-filter")
@@ -254,7 +260,8 @@ impl gpui::Render for PacksPage {
             )
             .child(filter_button);
 
-        let matrix = render_matrix_table(self, view, &derived.rows, &self.matrix_scroll, palette, cx);
+        let matrix =
+            render_matrix_table(self, view, &derived.rows, &self.matrix_scroll, palette, cx);
         panels.push(
             div()
                 .flex()

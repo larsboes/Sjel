@@ -101,7 +101,11 @@ impl Documents {
         cx.notify();
     }
 
-    pub(super) fn set_duplicate_kind(&mut self, kind: Option<DuplicateCandidateKind>, cx: &mut Context<Self>) {
+    pub(super) fn set_duplicate_kind(
+        &mut self,
+        kind: Option<DuplicateCandidateKind>,
+        cx: &mut Context<Self>,
+    ) {
         self.duplicate_kind = kind;
         self.duplicate_offset = 0;
         self.duplicate_page = Remote::default();
@@ -110,7 +114,11 @@ impl Documents {
         self.load_duplicate_candidates(cx);
     }
 
-    pub(super) fn open_duplicate_candidate(&mut self, candidate: DuplicateCandidate, cx: &mut Context<Self>) {
+    pub(super) fn open_duplicate_candidate(
+        &mut self,
+        candidate: DuplicateCandidate,
+        cx: &mut Context<Self>,
+    ) {
         self.preferred_id = candidate
             .member_ids
             .first()
@@ -130,7 +138,12 @@ impl Documents {
         cx.notify();
     }
 
-    pub(super) fn load_compare_original(&mut self, side: usize, id: String, cx: &mut Context<Self>) {
+    pub(super) fn load_compare_original(
+        &mut self,
+        side: usize,
+        id: String,
+        cx: &mut Context<Self>,
+    ) {
         let Ok(shell) = self.repo.shell() else { return };
         let key = self
             .duplicate_selection
@@ -264,7 +277,11 @@ impl Documents {
         }
     }
 
-    pub(super) fn duplicate_workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn duplicate_workspace(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let palette = self.palette.unwrap_or_else(Palette::dark);
         let rows = self.rows.value.clone().unwrap_or_default();
         let mut body = div().flex_1().min_h_0().flex().flex_col().gap_3();

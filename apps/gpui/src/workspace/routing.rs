@@ -26,9 +26,9 @@ use sjel_gpui_ui::systems::SystemsPage;
 use sjel_gpui_ui::theme::Palette;
 use sjel_gpui_ui::web_links::LinksPage;
 
+use super::Workspace;
 use crate::home;
 use crate::route::Page;
-use super::Workspace;
 
 impl Workspace {
     pub(super) fn ensure_documents(&mut self, cx: &mut Context<Self>) -> Entity<Documents> {
@@ -73,7 +73,10 @@ impl Workspace {
             .clone()
     }
 
-    pub(super) fn ensure_inventory_page(&mut self, cx: &mut Context<Self>) -> Entity<InventoryPage> {
+    pub(super) fn ensure_inventory_page(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Entity<InventoryPage> {
         let repo = self.repo.clone();
         self.inventory_page
             .get_or_insert_with(|| cx.new(|cx| InventoryPage::new(repo, cx)))

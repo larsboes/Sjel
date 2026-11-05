@@ -4,13 +4,13 @@
 //! record's new frontmatter (`POST /api/tasks/done`, `POST /api/record/property`). The table
 //! draws that answer, so nothing here rewrites a note.
 
-pub mod types;
 pub mod parser;
 pub mod sorting;
+pub mod types;
 
-pub use types::{status_closes, status_label, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
 pub use parser::{parse_smart_task_input, parse_subtask_progress, valid_due};
 pub use sorting::{group_by_project, ordered, sort_tasks};
+pub use types::{status_closes, status_label, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
 
 #[allow(unused_imports)]
 pub use crate::{due_status, DueStatus};

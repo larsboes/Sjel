@@ -14,7 +14,6 @@ use crate::theme::{tint, Palette};
 
 use super::RoomPlanHistory;
 
-
 impl RoomPlanHistory {
     pub(super) fn contains_revision(&self, id: &str) -> bool {
         self.revisions
@@ -199,7 +198,6 @@ impl RoomPlanHistory {
             .max_by(|left, right| left.created_at.cmp(&right.created_at))
     }
 
-
     pub(super) fn render_timeline(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
         let mut drafts = Vec::new();
         if let Some(remote) = &self.revisions.value {
@@ -310,7 +308,6 @@ impl RoomPlanHistory {
             .children(rows)
             .into_any_element()
     }
-
 
     pub(super) fn render_selected(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
         let Some(draft) = self.selected_draft() else {

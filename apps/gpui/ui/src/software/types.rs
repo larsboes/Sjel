@@ -1,7 +1,7 @@
 //! Filtering, labels, formatters, and decision constants for software inventory.
 
-use sjel_gpui_core::shell::SoftwareApp;
 use crate::theme::Palette;
+use sjel_gpui_core::shell::SoftwareApp;
 
 pub const SCAN: &str = "software:scan";
 

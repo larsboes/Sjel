@@ -1,5 +1,5 @@
-use sjel_gpui_core::shell::{GlobalTask, ProjectRecord, TASK_STATUSES};
 use super::types::TaskSort;
+use sjel_gpui_core::shell::{GlobalTask, ProjectRecord, TASK_STATUSES};
 
 /// Open tasks first, then by due date with undated last, then by priority.
 pub fn ordered(records: &[ProjectRecord]) -> Vec<&ProjectRecord> {

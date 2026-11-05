@@ -2,9 +2,7 @@
 
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::self_model::{
     incoming_couplings, outgoing_couplings, unit_liveness, SelfModelResponse,
 };

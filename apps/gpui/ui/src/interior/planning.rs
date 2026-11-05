@@ -331,7 +331,6 @@ fn add_planning_analysis(candidate: &mut PlanningCandidate, review: &serde_json:
     );
 }
 
-
 impl RoomPlanHistory {
     pub(super) fn load_layout_preview(&mut self, id: String, cx: &mut Context<Self>) {
         let Some(source) = self.source.clone() else {
@@ -611,8 +610,11 @@ impl RoomPlanHistory {
         .detach();
     }
 
-
-    pub(super) fn render_layout_choices(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_layout_choices(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut choices = vec![Button::new("roomplan-current-layout")
             .small()
             .ghost()
@@ -821,5 +823,4 @@ impl RoomPlanHistory {
             .children(candidates)
             .into_any_element()
     }
-
 }

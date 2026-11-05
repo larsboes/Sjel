@@ -1,8 +1,6 @@
 //! Capture tag pills, rows, delivery state indicators, and routing previews.
 
-use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, FontWeight,
-};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, FontWeight};
 use sjel_gpui_core::capture::{self, Draft};
 use sjel_gpui_core::store::LocalCapture;
 
@@ -91,34 +89,30 @@ pub fn render_capture_row(
                 .child(capture.label()),
         )
         .children(url_line)
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(tag_pill)
-                .when(refusal.is_none(), |line| {
-                    let (state, colour) = state_of(capture, palette);
-                    line.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .px_1p5()
-                            .py(px(0.5))
-                            .rounded_full()
-                            .bg(rgba(tint(colour, 0x18)))
-                            .child(div().size(px(5.)).rounded_full().bg(rgb(colour)))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(colour))
-                                    .child(state),
-                            ),
-                    )
-                }),
-        );
+        .child(div().flex().items_center().gap_2().child(tag_pill).when(
+            refusal.is_none(),
+            |line| {
+                let (state, colour) = state_of(capture, palette);
+                line.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .px_1p5()
+                        .py(px(0.5))
+                        .rounded_full()
+                        .bg(rgba(tint(colour, 0x18)))
+                        .child(div().size(px(5.)).rounded_full().bg(rgb(colour)))
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(colour))
+                                .child(state),
+                        ),
+                )
+            },
+        ));
 
     if let Some(reason) = refusal {
         column = column.child(

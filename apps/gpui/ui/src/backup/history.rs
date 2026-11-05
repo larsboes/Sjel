@@ -1,15 +1,17 @@
 //! Attempt history ledger and individual run display.
 use gpui_kit::{div, prelude::*, rgb, rgba, AnyElement, Context};
-use sjel_gpui_core::backup::{
-    format_bytes, format_duration, run_outcome, BackupRunAttemptRecord,
-};
+use sjel_gpui_core::backup::{format_bytes, format_duration, run_outcome, BackupRunAttemptRecord};
 
 use crate::theme::{tint, Palette};
 
 use super::BackupPage;
 
 impl BackupPage {
-    pub(super) fn render_history_view(&self, palette: Palette, _cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_history_view(
+        &self,
+        palette: Palette,
+        _cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some((runs, _running)) = &self.runs.value else {
             return div()
                 .p_6()
@@ -41,7 +43,11 @@ impl BackupPage {
             .into_any_element()
     }
 
-    pub(super) fn render_run_row(&self, r: &BackupRunAttemptRecord, palette: Palette) -> AnyElement {
+    pub(super) fn render_run_row(
+        &self,
+        r: &BackupRunAttemptRecord,
+        palette: Palette,
+    ) -> AnyElement {
         let outcome = run_outcome(r.exit_code, r.finished_epoch);
         let (outcome_bg, outcome_fg, outcome_label) = match outcome {
             "ok" => (rgba(tint(palette.green, 0x20)), palette.green, "exit 0"),

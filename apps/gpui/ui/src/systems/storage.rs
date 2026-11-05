@@ -10,8 +10,8 @@ use crate::data;
 use crate::primitives::{list, note, row, section};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::systems::{
-    apply_summary, audit_needs_attention, dated_absences, storage_bytes, version_label,
-    Severity, StorageTrend, UpdateStatus, UpdateSurface,
+    apply_summary, audit_needs_attention, dated_absences, storage_bytes, version_label, Severity,
+    StorageTrend, UpdateStatus, UpdateSurface,
 };
 
 use super::overview::bar;
@@ -52,7 +52,12 @@ impl SystemsPage {
         );
     }
 
-    pub(super) fn apply_updates(&mut self, class: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn apply_updates(
+        &mut self,
+        class: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let repo = self.repo.clone();
         let key = format!("updates:apply:{class}");
         let sent = class.clone();

@@ -6,8 +6,8 @@ use gpui_kit::{div, prelude::*, px, rgb, Anchor, Entity, FontWeight, IntoElement
 use crate::settings::Section;
 use crate::workspace::Workspace;
 
-use sjel_gpui_ui::theme::Palette;
 use super::types::UpdateInfo;
+use sjel_gpui_ui::theme::Palette;
 
 /// The header's update control: a small pill that opens a popover with the newest commits,
 /// Rebuild, and a link to Settings › General. The caller shows it only when commits are waiting.

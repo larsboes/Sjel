@@ -9,7 +9,9 @@ use gpui_kit::{
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{format_exact_money, parse_personal_cents};
-use sjel_gpui_core::shell::{self, BalanceCoverage, BalanceKind, ManualBalance, ManualBalanceUpdate, ShellError};
+use sjel_gpui_core::shell::{
+    self, BalanceCoverage, BalanceKind, ManualBalance, ManualBalanceUpdate, ShellError,
+};
 
 use crate::primitives::{stat_card, stat_strip};
 use crate::theme::Palette;
@@ -23,7 +25,6 @@ pub(crate) struct BalanceDraft {
     pub(super) amount: Entity<InputState>,
     pub(super) kind: BalanceKind,
 }
-
 
 impl FinancePage {
     pub(super) fn balance_draft(
@@ -187,8 +188,11 @@ impl FinancePage {
         .detach();
     }
 
-
-    pub(super) fn render_overview(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_overview(
+        &mut self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         self.sync_subs_derived();
         let monthly_burn = self.subs_derived.monthly_burn;
         let active_subs = self.subs_derived.active_count;
@@ -438,7 +442,11 @@ impl FinancePage {
             .into_any_element()
     }
 
-    pub(super) fn render_balance_editor(&mut self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_balance_editor(
+        &mut self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut rows = div().flex().flex_col().gap_2();
         for draft in &self.balance_fields {
             let id = draft.id.clone();
@@ -611,5 +619,4 @@ impl FinancePage {
             )
             .into_any_element()
     }
-
 }

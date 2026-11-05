@@ -13,13 +13,13 @@
 //!
 //! The shared seats are soundscape and activity; the desktop adds the agent run as a third seat.
 
-pub mod types;
-pub mod seats;
 pub mod frame;
+pub mod seats;
+pub mod types;
 
-pub use types::Seat;
-pub use seats::Sidebar;
 pub use frame::{sidebar_frame, sidebar_scrim, OVERLAY_WIDTH};
+pub use seats::Sidebar;
+pub use types::Seat;
 
 #[cfg(test)]
 mod tests {

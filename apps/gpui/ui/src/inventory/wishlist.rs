@@ -9,8 +9,8 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::inventory::{
-    budget_of, counted, format_cents, format_dimensions, months_to_pay, Budget,
-    InventoryItem, InventoryState, NewInventoryItem, WishGroup, wishlist_view,
+    budget_of, counted, format_cents, format_dimensions, months_to_pay, wishlist_view, Budget,
+    InventoryItem, InventoryState, NewInventoryItem, WishGroup,
 };
 use sjel_gpui_core::shell::{self, ShellError};
 
@@ -36,7 +36,6 @@ impl WishForm {
     }
 }
 
-
 /// The two fields a wish group is made of. Its members are chosen on the wishes themselves.
 pub(crate) struct GroupForm {
     pub(super) fields: Vec<(String, String, Entity<InputState>)>,
@@ -54,7 +53,6 @@ impl GroupForm {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct WishlistDerived {
     pub(super) key: Option<(Option<Instant>, Option<Instant>, u64)>,
@@ -62,7 +60,6 @@ pub(crate) struct WishlistDerived {
     pub(super) budget: Budget,
     pub(super) whole: Budget,
 }
-
 
 impl InventoryPage {
     pub(super) fn sync_wishlist_derived(&mut self) {
@@ -96,7 +93,6 @@ impl InventoryPage {
             whole,
         };
     }
-
 
     pub(super) fn open_group_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.group_form.is_some() {
@@ -198,7 +194,12 @@ impl InventoryPage {
 
     /// Adds a wish to a group, or takes it out again. The capability replaces the whole membership,
     /// so the list is rebuilt from the group as it was last read.
-    pub(super) fn toggle_group_member(&mut self, group: WishGroup, item_id: String, cx: &mut Context<Self>) {
+    pub(super) fn toggle_group_member(
+        &mut self,
+        group: WishGroup,
+        item_id: String,
+        cx: &mut Context<Self>,
+    ) {
         let Ok(shell) = self.repo.shell() else {
             return;
         };
@@ -404,7 +405,12 @@ impl InventoryPage {
         cx.notify();
     }
 
-    pub(super) fn set_wish_state(&mut self, id: String, state: InventoryState, cx: &mut Context<Self>) {
+    pub(super) fn set_wish_state(
+        &mut self,
+        id: String,
+        state: InventoryState,
+        cx: &mut Context<Self>,
+    ) {
         if self.wish_busy.is_some() {
             return;
         }
@@ -448,8 +454,11 @@ impl InventoryPage {
         cx.notify();
     }
 
-
-    pub(super) fn render_wish_form(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_wish_form(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let form = self.wish_form.as_ref()?;
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, input) in &form.fields {
@@ -937,7 +946,11 @@ impl InventoryPage {
             .into_any_element()
     }
 
-    pub(super) fn render_group_form(&self, palette: Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_group_form(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let form = self.group_form.as_ref()?;
         let mut fields = div().flex().flex_col().gap_2().flex_none().w_full();
         for (key, label, input) in &form.fields {
@@ -1003,7 +1016,6 @@ impl InventoryPage {
                 .into_any_element(),
         )
     }
-
 
     pub(super) fn render_wish_item(
         &self,
@@ -1237,5 +1249,4 @@ impl InventoryPage {
             }))
             .into_any_element()
     }
-
 }

@@ -204,7 +204,13 @@ impl Today {
     }
 
     /// Ticks a task off in the replica, where the next sync carries it to the Mac.
-    pub(crate) fn toggle(&mut self, path: String, done: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle(
+        &mut self,
+        path: String,
+        done: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(repo) = self.store.clone() else {
             return;
         };

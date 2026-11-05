@@ -4,9 +4,7 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::prelude::*;
-use gpui_kit::{
-    div, px, rgb, rgba, AnyElement, Context, IntoElement, ScrollHandle, SharedString,
-};
+use gpui_kit::{div, px, rgb, rgba, AnyElement, Context, IntoElement, ScrollHandle, SharedString};
 use sjel_gpui_core::packs::{
     installed_harnesses, row_needs_attention, status_of, MatrixRow, PacksView,
 };

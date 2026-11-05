@@ -137,7 +137,12 @@ impl Clips {
         }
     }
 
-    pub(super) fn paste_into_prompt(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn paste_into_prompt(
+        &mut self,
+        idx: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some((content, _)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {
@@ -153,7 +158,12 @@ impl Clips {
         }
     }
 
-    pub(super) fn paste_into_thoughts(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn paste_into_thoughts(
+        &mut self,
+        idx: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some((content, _)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get_mut(idx) {
@@ -180,7 +190,12 @@ impl Clips {
         }
     }
 
-    pub(super) fn paste_rich_turn(&mut self, idx: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn paste_rich_turn(
+        &mut self,
+        idx: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let Some((content, is_html)) = read_rich_clipboard() {
             if let Some(composer) = &mut self.composer {
                 if let Some(turn) = composer.turns.get(idx) {

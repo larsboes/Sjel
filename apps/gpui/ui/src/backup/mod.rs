@@ -22,9 +22,7 @@ use gpui_kit::{
 use crate::data::{Remote, Repo};
 use crate::primitives::{dot, key_bar, sub_tabs};
 use crate::theme::{tint, Palette, ThemeContext};
-use sjel_gpui_core::backup::{
-    BackupRunAttemptRecord, BackupTargetRecord, VerifyTargetResult,
-};
+use sjel_gpui_core::backup::{BackupRunAttemptRecord, BackupTargetRecord, VerifyTargetResult};
 use sjel_gpui_core::shell::{self, Backups, ShellError};
 
 pub struct BackupPage {

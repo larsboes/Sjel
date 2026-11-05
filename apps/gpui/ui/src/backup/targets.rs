@@ -9,7 +9,11 @@ use crate::theme::{tint, Palette};
 use super::BackupPage;
 
 impl BackupPage {
-    pub(super) fn render_targets_view(&self, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_targets_view(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(targets) = &self.targets.value else {
             return div()
                 .p_6()
@@ -118,7 +122,7 @@ impl BackupPage {
                                                 other => other.to_string(),
                                             }),
                                     ),
-                                    )
+                            )
                             .child(
                                 div()
                                     .text_xs()

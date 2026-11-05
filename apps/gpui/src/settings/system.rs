@@ -3,15 +3,13 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, IconName, Sizable};
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, IntoElement,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, IntoElement};
 use sjel_gpui_ui::theme::{tint, Palette};
 
+use super::{dot_value, group, row, value, BUILD_TIME, RUNNING_COMMIT};
 use crate::route::Page;
 use crate::update::RebuildState;
 use crate::workspace::Workspace;
-use super::{dot_value, group, row, value, BUILD_TIME, RUNNING_COMMIT};
 
 pub(super) fn connection(
     view: &Workspace,
@@ -188,31 +186,52 @@ pub(super) fn updates(
         RebuildState::Failed(failure) => Some((failure.headline(), palette.red)),
     };
 
+    let behind = view
+        .update_info
+        .as_ref()
+        .is_some_and(|info| info.commits_behind > 0);
+    let version_action = if behind {
+        Button::new("update-now")
+            .primary()
+            .label("Update")
+            .loading(building)
+            .disabled(building)
+            .tooltip("Builds, installs, and restarts Sjel Desktop")
+            .on_click(cx.listener(|view, _, window, cx| view.trigger_rebuild(window, cx)))
+    } else {
+        Button::new("check-updates")
+            .outline()
+            .label("Check for updates")
+            .loading(view.update_info.is_none())
+            .on_click(cx.listener(|view, _, _, cx| view.check_updates(cx)))
+    };
     let mut rows = vec![
-        row(
-            "This build",
-            Some(BUILD_TIME),
-            value(RUNNING_COMMIT.into(), palette.text),
-            palette,
-        ),
-        row(
-            "Repository",
-            None,
-            div()
-                .flex()
-                .items_center()
-                .gap_1()
-                .child(value(repo.into(), repo_color))
-                .child(
-                    Button::new("check-updates")
-                        .ghost()
-                        .small()
-                        .icon(IconName::RotateCw)
-                        .tooltip("Check now")
-                        .on_click(cx.listener(|view, _, _, cx| view.check_updates(cx))),
-                ),
-            palette,
-        ),
+        div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_x_6()
+            .gap_y_2()
+            .px_4()
+            .py_4()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(200.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(div().child(format!("Version {RUNNING_COMMIT}")))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!("Built {BUILD_TIME}")),
+                    )
+                    .child(div().text_xs().text_color(rgb(repo_color)).child(repo)),
+            )
+            .child(div().flex_none().ml_auto().child(version_action))
+            .into_any_element(),
         row(
             "Rebuild & install",
             Some("Runs apps/gpui/install, then restarts Sjel on the new build."),

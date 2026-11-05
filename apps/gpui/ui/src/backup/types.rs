@@ -1,7 +1,7 @@
 //! Common types, tab enums, and formatting utilities for Backup views.
-use sjel_gpui_core::backup::format_bytes;
 #[cfg(test)]
 use sjel_gpui_core::backup::format_age_seconds;
+use sjel_gpui_core::backup::format_bytes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum BackupTab {

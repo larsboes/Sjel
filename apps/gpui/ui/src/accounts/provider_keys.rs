@@ -3,9 +3,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, AnyElement, Context, Entity, Window,
-};
+use gpui_kit::{div, prelude::*, AnyElement, Context, Entity, Window};
 use sjel_gpui_core::shell;
 use zeroize::Zeroizing;
 
@@ -36,7 +34,11 @@ impl Accounts {
         cx.notify();
     }
 
-    pub(crate) fn key_input(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
+    pub(crate) fn key_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
         if let Some((input, _)) = &self.key_input {
             return input.clone();
         }
@@ -204,7 +206,7 @@ impl Accounts {
                                         .on_click(
                                             cx.listener(|view, _, _, cx| view.remove_key(cx)),
                                         ),
-                                 )
+                                )
                                 .child(
                                     Button::new("settings-key-remove-cancel")
                                         .small()

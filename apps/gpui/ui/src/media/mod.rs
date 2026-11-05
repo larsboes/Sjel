@@ -6,12 +6,8 @@ pub mod inspector;
 pub mod runs;
 pub mod summary;
 
-use gpui_kit::{
-    div, prelude::*, px, Context, IntoElement, Window,
-};
-use sjel_gpui_core::media::{
-    MediaIngestDetail, MediaView,
-};
+use gpui_kit::{div, prelude::*, px, Context, IntoElement, Window};
+use sjel_gpui_core::media::{MediaIngestDetail, MediaView};
 
 use crate::data::{self, Remote, Repo};
 use crate::primitives::{note, placeholder, section};
@@ -106,7 +102,12 @@ impl Render for MediaPage {
 
         panels.push(render_index_summary(&view.status, palette, cx));
         panels.push(render_volumes_table(&view.status.volumes, palette));
-        panels.push(render_ingest_runs_table(&view.runs, self.selected_run_id, palette, cx));
+        panels.push(render_ingest_runs_table(
+            &view.runs,
+            self.selected_run_id,
+            palette,
+            cx,
+        ));
 
         if let Some(inspector) = render_run_detail_card(self, palette, cx) {
             panels.push(inspector);

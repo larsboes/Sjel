@@ -2,12 +2,8 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString,
-};
-use sjel_gpui_core::media::{
-    format_bytes, run_label, sort_run_items, MediaIngestItem,
-};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, SharedString};
+use sjel_gpui_core::media::{format_bytes, run_label, sort_run_items, MediaIngestItem};
 
 use super::MediaPage;
 use crate::data::Remote;
@@ -206,10 +202,7 @@ pub fn render_run_detail_card(
                                     .text_size(px(13.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .text_color(rgb(palette.text))
-                                    .child(format!(
-                                        "Ingest Run Inspection: {}",
-                                        run_label(run)
-                                    )),
+                                    .child(format!("Ingest Run Inspection: {}", run_label(run))),
                             )
                             .child(
                                 div()

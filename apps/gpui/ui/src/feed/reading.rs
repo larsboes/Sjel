@@ -96,7 +96,12 @@ impl Feed {
     }
 
     /// One Reading row: the day header when the row opens a day, then the entry itself.
-    pub(crate) fn reading_row(&self, ix: usize, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn reading_row(
+        &self,
+        ix: usize,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(rows) = self.rows.value.as_ref() else {
             return div().into_any_element();
         };
@@ -246,7 +251,12 @@ impl Feed {
         item.child(row).into_any_element()
     }
 
-    pub(crate) fn reader(&self, palette: Palette, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn reader(
+        &self,
+        palette: Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         if let Some(source) = self.content_source {
             return self.source_reader(source, palette, window, cx);
         }
@@ -1244,7 +1254,11 @@ impl Feed {
                             Button::new("calendar-edit-save")
                                 .small()
                                 .primary()
-                                .label(if form.saving { "Saving…" } else { "Save changes" })
+                                .label(if form.saving {
+                                    "Saving…"
+                                } else {
+                                    "Save changes"
+                                })
                                 .disabled(form.saving)
                                 .on_click(
                                     cx.listener(|view, _, _, cx| view.save_calendar_edit(cx)),

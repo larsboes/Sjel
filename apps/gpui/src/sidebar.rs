@@ -55,7 +55,7 @@ pub fn render(
         .child(soundscape(view, palette, window, cx))
         .child(palette_hint(palette, window))
         .child(settings_row(view, palette, window, cx))
-        .child(footer(view, palette))
+        .child(footer(view, palette, cx))
 }
 
 /// One row per area and, when it is away from its default tab, the tab it will return to.
@@ -304,7 +304,7 @@ fn settings_row(
 }
 
 /// The shell's own health, then the path the app reads it through.
-fn footer(view: &Workspace, palette: Palette) -> impl IntoElement {
+fn footer(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -> impl IntoElement {
     let (color, label) = status(&view.health, palette);
     let (backend, backend_color) = storage(view.has_direct_db(), palette);
     div()
@@ -317,19 +317,27 @@ fn footer(view: &Workspace, palette: Palette) -> impl IntoElement {
         .text_color(rgb(palette.muted))
         .child(
             div()
+                .id("sidebar-footer-health")
                 .flex()
                 .items_center()
                 .gap_2()
                 .min_w_0()
+                .cursor_pointer()
+                .hover(move |s| s.text_color(rgb(palette.text)))
+                .on_click(cx.listener(|view, _, _, cx| view.go(Page::Capabilities, cx)))
                 .child(div().flex_none().size(px(7.)).rounded_full().bg(rgb(color)))
                 .child(div().truncate().child(label)),
         )
         .child(
             div()
+                .id("sidebar-footer-storage")
                 .flex()
                 .items_center()
                 .gap_1()
                 .flex_none()
+                .cursor_pointer()
+                .hover(move |s| s.text_color(rgb(palette.text)))
+                .on_click(cx.listener(|view, _, _, cx| view.go(Page::Setup, cx)))
                 .child(div().size(px(6.)).rounded_full().bg(rgb(backend_color)))
                 .child(div().text_xs().child(backend)),
         )

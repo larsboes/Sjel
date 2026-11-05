@@ -1186,7 +1186,7 @@ impl Render for FinancePage {
                 .on_click(cx.listener(move |page, _, _, cx| page.set_view(target, cx)))
         };
 
-        // Header with Tabs
+        // Header with clean sub-tabs (overview/transactions/subscriptions/import)
         let header = div()
             .flex()
             .items_center()
@@ -1196,31 +1196,11 @@ impl Render for FinancePage {
                 div()
                     .flex()
                     .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .text_2xl()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(palette.text))
-                            .child("Finance"),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(view_btn("Overview", View::Overview, cx))
-                            .child(view_btn("Transactions", View::Transactions, cx))
-                            .child(view_btn("Subscriptions", View::Subscriptions, cx))
-                            .child(view_btn("Import & Review", View::ImportReview, cx)),
-                    ),
-            )
-            .child(
-                Button::new("finance-refresh")
-                    .small()
-                    .ghost()
-                    .label("↻ Refresh")
-                    .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
+                    .gap_1()
+                    .child(view_btn("Overview", View::Overview, cx))
+                    .child(view_btn("Transactions", View::Transactions, cx))
+                    .child(view_btn("Subscriptions", View::Subscriptions, cx))
+                    .child(view_btn("Import & Review", View::ImportReview, cx)),
             );
 
         // Body per Tab

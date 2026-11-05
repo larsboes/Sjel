@@ -22,7 +22,7 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
     let area = Area::of(view.page);
     let tabs = area
         .filter(|area| area.has_tabs())
-        .map(|area| tab_strip(area, view.page, cx));
+        .map(|area| tab_strip(area, view.page, palette, cx));
     // Settings › Updates says the same at length, so the pill stays out of Settings.
     let update_pill = view
         .update_info
@@ -140,8 +140,93 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
 
 /// The area's tabs, one segment each, the open one selected. A click switches pages in memory:
 /// nothing in an area is read again to show that its neighbour exists.
-fn tab_strip(area: Area, current: Page, cx: &mut Context<Workspace>) -> AnyElement {
+fn tab_strip(area: Area, current: Page, palette: Palette, cx: &mut Context<Workspace>) -> AnyElement {
     let pages = area.pages();
+    if area == Area::Sjel {
+        // Area::Sjel has 9 tabs: group them into 3 intuitive sub-menus to keep the header clean.
+        enum SjelGroup {
+            Runtime,
+            Architecture,
+            Catalog,
+        }
+        impl SjelGroup {
+            fn label(&self) -> &'static str {
+                match self {
+                    Self::Runtime => "Runtime",
+                    Self::Architecture => "Architecture",
+                    Self::Catalog => "Catalog",
+                }
+            }
+            fn pages(&self) -> &'static [Page] {
+                match self {
+                    Self::Runtime => &[Page::Capabilities, Page::Systems, Page::Backup, Page::Setup],
+                    Self::Architecture => &[Page::SelfModel, Page::Packs, Page::Research],
+                    Self::Catalog => &[Page::Software, Page::Links],
+                }
+            }
+            fn of(page: Page) -> Self {
+                match page {
+                    Page::Capabilities | Page::Systems | Page::Backup | Page::Setup => Self::Runtime,
+                    Page::SelfModel | Page::Packs | Page::Research => Self::Architecture,
+                    Page::Software | Page::Links => Self::Catalog,
+                    _ => Self::Runtime,
+                }
+            }
+        }
+
+        let current_group = SjelGroup::of(current);
+        let groups = [SjelGroup::Runtime, SjelGroup::Architecture, SjelGroup::Catalog];
+        let sub_pages = current_group.pages();
+
+        return div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .child(
+                ButtonGroup::new("sjel-category-tabs")
+                    .outline()
+                    .small()
+                    .children(groups.iter().enumerate().map(|(ix, group)| {
+                        Button::new(("sjel-group-tab", ix))
+                            .label(group.label())
+                            .selected(group.label() == current_group.label())
+                    }))
+                    .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
+                        if let Some(ix) = picked.first() {
+                            let target_page = match ix {
+                                0 => Page::Capabilities,
+                                1 => Page::SelfModel,
+                                2 => Page::Software,
+                                _ => Page::Capabilities,
+                            };
+                            view.go(target_page, cx);
+                        }
+                    })),
+            )
+            .child(
+                div()
+                    .w(px(1.))
+                    .h(px(16.))
+                    .bg(rgb(palette.border)),
+            )
+            .child(
+                ButtonGroup::new("sjel-sub-tabs")
+                    .outline()
+                    .small()
+                    .children(sub_pages.iter().enumerate().map(|(ix, page)| {
+                        Button::new(("sjel-sub-tab", ix))
+                            .label(page.label())
+                            .selected(*page == current)
+                    }))
+                    .on_click(cx.listener(move |view, picked: &Vec<usize>, _, cx| {
+                        if let Some(page) = picked.first().and_then(|ix| sub_pages.get(*ix)) {
+                            view.go(*page, cx);
+                        }
+                    })),
+            )
+            .into_any_element();
+    }
+
     ButtonGroup::new("area-tabs")
         .outline()
         .small()

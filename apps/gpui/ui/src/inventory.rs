@@ -1650,11 +1650,18 @@ impl InventoryPage {
             ))
             .child(
                 div().flex().items_center().gap_3().child(
-                    Button::new("refresh-inventory")
+                    Button::new("inventory-header-new-entry")
                         .small()
-                        .ghost()
-                        .label("Refresh")
-                        .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
+                        .primary()
+                        .label(if self.wish_form.is_some() {
+                            "Cancel"
+                        } else {
+                            "+ New entry"
+                        })
+                        .disabled(self.wish_busy.as_deref() == Some("new"))
+                        .on_click(
+                            cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
+                        ),
                 ),
             )
             .into_any_element()
@@ -1688,32 +1695,6 @@ impl InventoryPage {
             .flex_1()
             .min_h_0()
             .gap_4()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_lg()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Inventory"),
-                    )
-                    .child(
-                        Button::new("inventory-new-entry")
-                            .small()
-                            .primary()
-                            .label(if self.wish_form.is_some() {
-                                "Cancel"
-                            } else {
-                                "+ New entry"
-                            })
-                            .disabled(self.wish_busy.as_deref() == Some("new"))
-                            .on_click(
-                                cx.listener(|page, _, window, cx| page.open_wish_form(window, cx)),
-                            ),
-                    ),
-            )
             .child(stat_strip(vec![
                 stat_card(
                     "OWNED ASSETS",

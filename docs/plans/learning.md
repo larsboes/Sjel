@@ -92,7 +92,7 @@ maintain. Choices, decided 2026-11-05:
 Pi Durable (`@earendil-works/pi-durable` 1.5.0) is not used: the vault is the durable store.
 Reconsider it for stage 2, where a phone would be a second client of one sitting.
 
-Shipped (uncommitted at the time of writing): the plugin with model and thinking pickers per
+Shipped in `23d774c8`: the plugin with model and thinking pickers per
 sitting kind, the context and cost meter, the Plan graph and the note-following context; the
 `questions.ts` host protocol and `quiz` `purpose`; the schema in the vault contract and `teach`;
 the Method, Craft and figure-build rules in `teach`; the migrated Data Pipeline path; and

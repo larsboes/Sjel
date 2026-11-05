@@ -22,6 +22,17 @@ const MAX_SOURCE_ITEMS: usize = 30;
 pub struct Discovered {
     pub url: String,
     pub label: Option<String>,
+    /// The item's content as the source delivered it, for a source whose items cannot be
+    /// fetched one by one. `None` means `media::fetch` builds the item from the URL.
+    pub content: Option<Delivered>,
+}
+
+/// Title, author and body (HTML or text) a source delivered with a URL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Delivered {
+    pub title: String,
+    pub author: Option<String>,
+    pub body: String,
 }
 
 impl Discovered {
@@ -29,6 +40,7 @@ impl Discovered {
         Self {
             url: url.into(),
             label: Some(label.into()),
+            content: None,
         }
     }
 }
@@ -37,6 +49,7 @@ pub fn fetch(source: &FeedSourceConfig) -> Result<Vec<Discovered>> {
     match source.adapter.as_str() {
         "github-trending" => fetch_github_trending(source),
         "arxiv" => fetch_arxiv_query(source),
+        "reddit-rss" => fetch_reddit_rss(source),
         other => Err(CommsError::Config(format!(
             "unknown Feed source adapter '{other}'"
         ))),
@@ -62,6 +75,7 @@ pub fn item_kind(adapter: &str) -> Option<&'static str> {
     match adapter {
         "github-trending" => Some("github"),
         "arxiv" => Some("arxiv"),
+        "reddit-rss" => Some("reddit"),
         _ => None,
     }
 }
@@ -79,6 +93,15 @@ pub fn source_url(source: &FeedSourceConfig) -> String {
             format!("https://github.com/trending{language}?since={since}")
         }
         "arxiv" => "https://export.arxiv.org/api/query".into(),
+        "reddit-rss" => format!(
+            "https://www.reddit.com/r/{}/top/.rss?t={}",
+            source.query.as_deref().unwrap_or_default().trim(),
+            match source.since.as_deref() {
+                Some("day") => "day",
+                Some("month") => "month",
+                _ => "week",
+            }
+        ),
         _ => String::new(),
     }
 }
@@ -168,6 +191,88 @@ fn parse_arxiv_entries(body: &str, limit: usize) -> Vec<Discovered> {
         .collect()
 }
 
+/// A subreddit's top posts from its public Atom feed. Reddit refuses the per-post JSON to an
+/// unauthenticated caller (403) and rate-limits the per-post feed (429), so each entry's own
+/// title, author and HTML body are delivered with its URL instead of fetched again.
+fn fetch_reddit_rss(source: &FeedSourceConfig) -> Result<Vec<Discovered>> {
+    let subreddit = source
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| {
+            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+        .ok_or_else(|| {
+            CommsError::Config(format!(
+                "reddit-rss source '{}' needs a subreddit name in query",
+                source.id
+            ))
+        })?;
+    let body = http_client()?
+        .get(source_url(source))
+        .send()?
+        .error_for_status()?
+        .text()?;
+    Ok(parse_reddit_rss(
+        &body,
+        subreddit,
+        &source.title_tokens,
+        bounded_limit(source.limit),
+    ))
+}
+
+fn parse_reddit_rss(
+    body: &str,
+    subreddit: &str,
+    title_tokens: &[String],
+    limit: usize,
+) -> Vec<Discovered> {
+    let prefix = format!("https://www.reddit.com/r/{subreddit}/comments/");
+    let wanted: Vec<String> = title_tokens
+        .iter()
+        .map(|token| token.to_lowercase())
+        .collect();
+    body.split("<entry>")
+        .skip(1)
+        .filter_map(|chunk| chunk.split_once("</entry>").map(|(entry, _)| entry))
+        .filter_map(|entry| {
+            let url = entry
+                .split("<link ")
+                .skip(1)
+                .find_map(|link| attribute(link, "href"))
+                .filter(|href| href.starts_with(&prefix))?;
+            let title = xml_field(entry, "title")?;
+            let words: Vec<String> = title
+                .to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .map(str::to_string)
+                .collect();
+            if !wanted.is_empty() && !wanted.iter().any(|token| words.contains(token)) {
+                return None;
+            }
+            let author = entry
+                .split_once("<author>")
+                .and_then(|(_, rest)| xml_field(rest, "name"));
+            let body = entry
+                .split_once("<content")
+                .and_then(|(_, rest)| rest.split_once('>'))
+                .and_then(|(_, rest)| rest.split_once("</content>"))
+                .map(|(content, _)| decode_entities(content))
+                .unwrap_or_default();
+            Some(Discovered {
+                url,
+                label: Some(format!("r/{subreddit}")),
+                content: Some(Delivered {
+                    title,
+                    author,
+                    body,
+                }),
+            })
+        })
+        .take(limit)
+        .collect()
+}
+
 fn http_client() -> Result<reqwest::blocking::Client> {
     Ok(sjel_http::client(
         sjel_http::Purpose::new("comms-sources"),
@@ -213,6 +318,42 @@ use crate::extraction::decode_basic_entities as decode_entities;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const REDDIT_ATOM: &str = r#"<feed><title>top</title>
+      <entry><author><name>/u/synthetic</name></author>
+        <content type="html">&lt;div class="md"&gt;&lt;p&gt;Margins look &amp;amp; feel strong.&lt;/p&gt;&lt;/div&gt;</content>
+        <link href="https://www.reddit.com/r/synthsub/comments/abc123/dd_synthex/" />
+        <title>[DD] Synthex: why the order book matters</title></entry>
+      <entry><author><name>/u/other</name></author>
+        <content type="html">&lt;p&gt;meme&lt;/p&gt;</content>
+        <link href="https://www.reddit.com/r/synthsub/comments/def456/oddly/" />
+        <title>Oddly satisfying chart</title></entry>
+      <entry><link href="https://example.org/elsewhere" /><title>DD offsite</title></entry>
+    </feed>"#;
+
+    #[test]
+    fn a_reddit_feed_delivers_its_posts_and_keeps_only_titled_tokens() {
+        let all = parse_reddit_rss(REDDIT_ATOM, "synthsub", &[], 30);
+        assert_eq!(
+            all.len(),
+            2,
+            "the offsite link is not a post of the subreddit"
+        );
+        let first = &all[0];
+        assert_eq!(
+            first.url,
+            "https://www.reddit.com/r/synthsub/comments/abc123/dd_synthex/"
+        );
+        let content = first.content.as_ref().expect("delivered");
+        assert_eq!(content.title, "[DD] Synthex: why the order book matters");
+        assert_eq!(content.author.as_deref(), Some("/u/synthetic"));
+        assert!(content
+            .body
+            .contains("<p>Margins look &amp; feel strong.</p>"));
+
+        let dd = parse_reddit_rss(REDDIT_ATOM, "synthsub", &["DD".into()], 30);
+        assert_eq!(dd.len(), 1, "\"oddly\" holds dd only inside a word");
+    }
 
     #[test]
     fn a_collector_yields_urls_and_provenance_but_no_content() {

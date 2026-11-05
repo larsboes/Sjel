@@ -180,20 +180,25 @@ pub struct FeedSourceConfig {
     /// Stable provenance id shown in the Feed.
     #[serde(default)]
     pub id: String,
-    /// `github-trending` or `arxiv`.
+    /// `github-trending`, `arxiv` or `reddit-rss`.
     #[serde(default)]
     pub adapter: String,
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    /// arXiv search_query. Empty for GitHub Trending.
+    /// arXiv search_query, or the subreddit name for `reddit-rss`. Empty for GitHub Trending.
     #[serde(default)]
     pub query: Option<String>,
     /// Optional GitHub Trending language slug, for example `rust`.
     #[serde(default)]
     pub language: Option<String>,
-    /// GitHub Trending window: daily, weekly or monthly.
+    /// GitHub Trending window: daily, weekly or monthly. For `reddit-rss`, the top-posts
+    /// window: day, week (default) or month.
     #[serde(default)]
     pub since: Option<String>,
+    /// `reddit-rss` only: keep a post when its title holds one of these as a whole word,
+    /// case-insensitive. Empty keeps every post.
+    #[serde(default)]
+    pub title_tokens: Vec<String>,
     /// Hard per-run bound. Clamped again by the adapter.
     #[serde(default = "default_source_limit")]
     pub limit: usize,
@@ -220,6 +225,7 @@ impl Default for FeedSourceConfig {
             query: None,
             language: None,
             since: None,
+            title_tokens: Vec::new(),
             limit: default_source_limit(),
             // Serde no longer reaches this, but a programmatic caller does, and
             // it must fail closed the same way an omission in the file does.
@@ -237,6 +243,7 @@ fn default_feed_sources() -> Vec<FeedSourceConfig> {
             query: None,
             language: None,
             since: Some("daily".into()),
+            title_tokens: Vec::new(),
             limit: 12,
             // The Trending page is world-readable and fetched anonymously; no
             // session of the operator's is involved in what it returns.
@@ -249,6 +256,7 @@ fn default_feed_sources() -> Vec<FeedSourceConfig> {
             query: Some("cat:cs.AI OR cat:cs.LG OR cat:cs.CL".into()),
             language: None,
             since: None,
+            title_tokens: Vec::new(),
             limit: 12,
             // Published preprints. The query itself can be the operator's,
             // which is why a saved private query belongs in the overlay and can

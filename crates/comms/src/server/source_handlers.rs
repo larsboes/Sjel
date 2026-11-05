@@ -167,7 +167,17 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
             );
 
             for discovered in &found {
-                let mut item = match media::fetch(&discovered.url) {
+                let fetched = match &discovered.content {
+                    Some(content) => media::fetch_with_content(
+                        &discovered.url,
+                        Some(&content.body),
+                        Some(&content.title),
+                        content.author.as_deref(),
+                        None,
+                    ),
+                    None => media::fetch(&discovered.url),
+                };
+                let mut item = match fetched {
                     Ok(item) => item,
                     Err(error) => {
                         eprintln!("source {}: {} -> {error}", source.id, discovered.url);

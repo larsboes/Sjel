@@ -68,12 +68,19 @@ research depends on a finance source (section 4).
 
 ### 4. Mauerstrassenwetten source
 
-A `comms` source kind for a subreddit RSS feed that reuses the Atom parsing in
-`crates/comms/src/sources.rs`. It keeps posts whose title or flair marks a DD. Later: a Reddit
-app with OAuth (the token in the keychain, provisioned by the operator) adds comments and scores
-for posts that match an idea, through the adapter in `crates/comms/src/media/reddit.rs`.
+Built: the comms adapter `reddit-rss` (`crates/comms/src/sources.rs`) reads a subreddit's top
+posts from its public Atom feed (`query` = subreddit, `since` = day, week or month) and delivers
+each entry's title, author and HTML body with its URL, because Reddit answers 403 to the
+per-post JSON and 429 to the per-post feed. An optional `title_tokens` keeps only posts whose
+title holds one of the words. The overlay declares `reddit-mauerstrassenwetten` (week, 25 posts,
+`c0`) in `comms.json`. Measured 2026-11-05: one scan stored 19 posts, and the Rheinmetall idea
+listed one of them as research.
 
-Done when: one weekly fetch lands DD posts in the feed and a non-DD post is dropped.
+Limits: the feed carries no flair, so "DD only" is a title filter; the subreddit search feed
+answered with 0 to 1 entries for `flair:DD` and `DD`. No comments and no scores without OAuth.
+
+Open: a Reddit app with OAuth (the operator registers it and stores the token in the keychain)
+for comments and scores on posts that match an idea.
 
 ### 5. Model digest and proposals
 

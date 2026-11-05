@@ -432,6 +432,22 @@ impl InboundAuth {
         request
     }
 
+    /// [`Self::with_loopback_auth`] for a capability that has its own token: `own` first, then
+    /// the deployment's, in the order that capability's gate resolves them ([`Self::resolve`]).
+    /// comms is the one such capability today (`comms_config_token`).
+    pub fn with_capability_loopback_auth(
+        request: reqwest::blocking::RequestBuilder,
+        url: &str,
+        own: Option<String>,
+    ) -> reqwest::blocking::RequestBuilder {
+        if is_loopback_destination(url) {
+            if let Some(bearer) = Self::resolve(own).bearer_header() {
+                return request.header(reqwest::header::AUTHORIZATION, bearer);
+            }
+        }
+        request
+    }
+
     /// Whether this gate rejects anything at all. A gate with no token and no
     /// refusal is not layered onto the router, so an unconfigured deployment
     /// pays nothing per request.

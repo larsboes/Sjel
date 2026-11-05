@@ -2731,15 +2731,28 @@ fn read_feed(base_url: &str, days: Option<u32>) -> Vec<(finance::decision::FeedE
     if let Some(days) = days {
         url.push_str(&format!("?days={days}"));
     }
-    let mut request = client.get(url);
-    if let Some(header) = sjel_server::InboundAuth::from_deployment().bearer_header() {
-        request = request.header("Authorization", header);
-    }
-    let Ok(body) = request.send().and_then(reqwest::blocking::Response::text) else {
-        return Vec::new();
+    let request = sjel_server::InboundAuth::with_capability_loopback_auth(
+        client.get(&url),
+        &url,
+        sjel_server::comms_config_token(),
+    );
+    let body = match request
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .and_then(reqwest::blocking::Response::text)
+    {
+        Ok(body) => body,
+        Err(error) => {
+            eprintln!("finance: comms feed read failed: {error}");
+            return Vec::new();
+        }
     };
-    let Ok(items) = serde_json::from_str::<Vec<Value>>(&body) else {
-        return Vec::new();
+    let items = match serde_json::from_str::<Vec<Value>>(&body) {
+        Ok(items) => items,
+        Err(error) => {
+            eprintln!("finance: comms feed is not a JSON list: {error}");
+            return Vec::new();
+        }
     };
     items
         .iter()

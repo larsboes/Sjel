@@ -4,7 +4,8 @@
 //! record's new frontmatter (`POST /api/tasks/done`, `POST /api/record/property`). The table
 //! draws that answer, so nothing here rewrites a note.
 
-use sjel_gpui_core::shell::ProjectRecord;
+pub use sjel_gpui_core::shell::{status_closes, TASK_STATUSES};
+use sjel_gpui_core::shell::{GlobalTask, ProjectRecord};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskFilter {
@@ -112,6 +113,102 @@ pub fn ordered(records: &[ProjectRecord]) -> Vec<&ProjectRecord> {
     tasks
 }
 
+/// Which statuses the cross-project table shows. `Active` hides closed tasks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusFilter {
+    Active,
+    All,
+    Is(&'static str),
+}
+
+impl StatusFilter {
+    pub fn matches(self, status: &str) -> bool {
+        match self {
+            Self::Active => !status_closes(status),
+            Self::All => true,
+            Self::Is(wanted) => wanted == status,
+        }
+    }
+}
+
+/// The label a status gets on screen. The stored value stays the frontmatter word.
+pub fn status_label(status: &str) -> &'static str {
+    match status {
+        "doing" => "In progress",
+        "waiting" => "Waiting",
+        "blocked" => "Blocked",
+        "done" => "Done",
+        "cancelled" => "Cancelled",
+        _ => "Open",
+    }
+}
+
+/// A column the cross-project table sorts by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskSort {
+    /// Open first, then by due date with undated last, then by priority: the capability's order.
+    Default,
+    Title,
+    Project,
+    Status,
+    Due,
+    Priority,
+}
+
+/// Sorts tasks by `sort`, reversed when `ascending` is false. Ties keep the default order.
+pub fn sort_tasks(tasks: &mut [&GlobalTask], sort: TaskSort, ascending: bool) {
+    let rank = |t: &GlobalTask| {
+        TASK_STATUSES
+            .iter()
+            .position(|s| *s == t.status())
+            .unwrap_or(0)
+    };
+    let due = |t: &GlobalTask| t.due.clone().filter(|d| !d.is_empty());
+    let default = |a: &GlobalTask, b: &GlobalTask| {
+        (a.done, due(a).is_none(), due(a), a.priority, &a.title).cmp(&(
+            b.done,
+            due(b).is_none(),
+            due(b),
+            b.priority,
+            &b.title,
+        ))
+    };
+    tasks.sort_by(|a, b| {
+        let primary = match sort {
+            TaskSort::Default => std::cmp::Ordering::Equal,
+            TaskSort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            TaskSort::Project => a.project.cmp(&b.project),
+            TaskSort::Status => rank(a).cmp(&rank(b)),
+            // Undated tasks stay last in both directions.
+            TaskSort::Due => match (due(a), due(b)) {
+                (Some(x), Some(y)) => x.cmp(&y),
+                (Some(_), None) => return std::cmp::Ordering::Less,
+                (None, Some(_)) => return std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            },
+            TaskSort::Priority => a.priority.cmp(&b.priority),
+        };
+        let primary = if ascending {
+            primary
+        } else {
+            primary.reverse()
+        };
+        primary.then_with(|| default(a, b))
+    });
+}
+
+/// Consecutive runs of tasks per project, in first-seen order, for the grouped table.
+pub fn group_by_project<'a>(tasks: &[&'a GlobalTask]) -> Vec<(String, Vec<&'a GlobalTask>)> {
+    let mut groups: Vec<(String, Vec<&'a GlobalTask>)> = Vec::new();
+    for task in tasks {
+        match groups.iter_mut().find(|(name, _)| *name == task.project) {
+            Some((_, list)) => list.push(task),
+            None => groups.push((task.project.clone(), vec![task])),
+        }
+    }
+    groups
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +291,75 @@ mod tests {
         assert_eq!(title2, "Review draft");
         assert_eq!(due2, Some("2026-10-29".into()));
         assert_eq!(p2, Some(2));
+    }
+
+    fn global(
+        title: &str,
+        project: &str,
+        status: &str,
+        due: Option<&str>,
+        priority: u8,
+    ) -> GlobalTask {
+        GlobalTask {
+            id: format!("{project}/Tasks/{title}.md"),
+            kind: "task".into(),
+            title: title.into(),
+            done: status_closes(status),
+            due: due.map(str::to_owned),
+            priority,
+            summary: None,
+            project: project.into(),
+            fields: [("status".to_owned(), status.to_owned())].into(),
+        }
+    }
+
+    #[test]
+    fn active_hides_closed_statuses() {
+        let statuses: Vec<&str> = TASK_STATUSES
+            .iter()
+            .copied()
+            .filter(|s| StatusFilter::Active.matches(s))
+            .collect();
+        assert_eq!(statuses, ["open", "doing", "waiting", "blocked"]);
+        assert!(StatusFilter::Is("cancelled").matches("cancelled"));
+        assert!(!StatusFilter::Is("cancelled").matches("done"));
+        assert!(StatusFilter::All.matches("cancelled"));
+    }
+
+    #[test]
+    fn status_falls_back_to_done_when_frontmatter_disagrees() {
+        let mut task = global("x", "P", "waiting", None, 2);
+        task.done = true;
+        assert_eq!(task.status(), "done");
+        task.fields.clear();
+        task.done = false;
+        assert_eq!(task.status(), "open");
+    }
+
+    #[test]
+    fn sorts_by_column_and_keeps_undated_last() {
+        let a = global("a", "Zeta", "blocked", Some("2026-12-01"), 3);
+        let b = global("b", "Alpha", "open", None, 1);
+        let c = global("c", "Mid", "doing", Some("2026-11-10"), 2);
+        let titles = |sort, asc| {
+            let mut list = vec![&a, &b, &c];
+            sort_tasks(&mut list, sort, asc);
+            list.iter().map(|t| t.title.as_str()).collect::<Vec<_>>()
+        };
+        assert_eq!(titles(TaskSort::Project, true), ["b", "c", "a"]);
+        assert_eq!(titles(TaskSort::Priority, false), ["a", "c", "b"]);
+        assert_eq!(titles(TaskSort::Status, true), ["b", "c", "a"]);
+        assert_eq!(titles(TaskSort::Due, true), ["c", "a", "b"]);
+        assert_eq!(titles(TaskSort::Due, false), ["a", "c", "b"]);
+    }
+
+    #[test]
+    fn groups_keep_first_seen_project_order() {
+        let a = global("a", "Home", "open", None, 1);
+        let b = global("b", "Work", "open", None, 1);
+        let c = global("c", "Home", "open", None, 1);
+        let groups = group_by_project(&[&a, &b, &c]);
+        let shape: Vec<(&str, usize)> = groups.iter().map(|(n, l)| (n.as_str(), l.len())).collect();
+        assert_eq!(shape, [("Home", 2), ("Work", 1)]);
     }
 }

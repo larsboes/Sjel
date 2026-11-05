@@ -333,6 +333,7 @@ mod tests {
 
     fn task(title: &str, due: &str, done: bool) -> GlobalTask {
         GlobalTask {
+            fields: Default::default(),
             id: format!("Projects/Home/{title}.md"),
             kind: "task".to_owned(),
             title: title.to_owned(),
@@ -404,6 +405,7 @@ mod tests {
                 task("Steuer", "2026-10-26", false),
                 task("Wäsche", "2026-10-26", true),
                 GlobalTask {
+                    fields: Default::default(),
                     due: None,
                     ..task("Irgendwann", "2026-10-26", false)
                 },

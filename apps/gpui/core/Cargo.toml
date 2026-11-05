@@ -53,6 +53,7 @@ finance-api = { path = "../../../crates/finance-api" }
 import-api = { path = "../../../crates/import-api" }
 interior-api = { path = "../../../crates/interior-api" }
 inventory-api = { path = "../../../crates/inventory-api" }
+markdown-root = { path = "../../../crates/markdown-root" }
 media-api = { path = "../../../crates/media-api" }
 operator-profile-api = { path = "../../../crates/operator-profile-api" }
 places-api = { path = "../../../crates/places-api" }

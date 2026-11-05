@@ -4410,6 +4410,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "markdown-root"
+version = "0.1.0"
+
+[[package]]
 name = "markup5ever"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7245,6 +7249,7 @@ dependencies = [
  "interior-api",
  "inventory-api",
  "libsql",
+ "markdown-root",
  "media-api",
  "operator-profile-api",
  "places-api",

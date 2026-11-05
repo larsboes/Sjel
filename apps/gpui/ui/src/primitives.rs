@@ -217,6 +217,30 @@ pub fn priority_pill(priority: u8, palette: Palette) -> AnyElement {
         .into_any_element()
 }
 
+/// A task status as a pill: the label `tasks::status_label` gives it, coloured by how it stands.
+pub fn status_pill(status: &str, palette: Palette) -> AnyElement {
+    let color = match status {
+        "doing" => palette.accent,
+        "waiting" => palette.amber,
+        "blocked" => palette.red,
+        "done" => palette.green,
+        _ => palette.muted,
+    };
+    div()
+        .px_2()
+        .py(px(1.5))
+        .rounded(px(8.))
+        .bg(rgba(tint(color, 0x18)))
+        .border_1()
+        .border_color(rgba(tint(color, 0x35)))
+        .text_color(rgb(color))
+        .text_xs()
+        .font_weight(FontWeight::MEDIUM)
+        .when(status == "cancelled", |pill| pill.line_through())
+        .child(crate::tasks::status_label(status))
+        .into_any_element()
+}
+
 pub fn due_badge(due: Option<&str>, done: bool, today: &str, palette: Palette) -> AnyElement {
     match due_status(due, done, today) {
         DueStatus::Today => div()

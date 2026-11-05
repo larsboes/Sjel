@@ -2301,6 +2301,7 @@ mod tests {
             view.health.value = None;
             view.focus_tasks.value = Some(vec![
                 GlobalTask {
+                    fields: Default::default(),
                     id: "Atlas/Projects/Test/Tasks/Task1.md".into(),
                     kind: "task".into(),
                     title: "Focus on LibSQL".into(),
@@ -2311,6 +2312,7 @@ mod tests {
                     project: "Test".into(),
                 },
                 GlobalTask {
+                    fields: Default::default(),
                     id: "Atlas/Projects/Test/Tasks/Task2.md".into(),
                     kind: "task".into(),
                     title: "Fix bug".into(),

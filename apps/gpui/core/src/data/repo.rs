@@ -60,8 +60,17 @@ impl Replica {
             due: record.due,
             priority: record.priority,
             summary: None,
+            fields: task_fields(&record.content),
         })
     }
+}
+
+/// A task's frontmatter keys, in the shape `GET /api/tasks` answers them.
+fn task_fields(content: &str) -> std::collections::BTreeMap<String, String> {
+    markdown_root::frontmatter(content)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
 }
 
 fn store_error(error: StoreError) -> ShellError {
@@ -334,7 +343,7 @@ impl Repo {
                 _ => "",
             };
             let query = format!(
-                "SELECT path, kind, title, done, due, priority, project \
+                "SELECT path, kind, title, done, due, priority, project, content \
                  FROM projects_records WHERE kind = 'task'{filter} \
                  ORDER BY done ASC, priority DESC, due ASC"
             );
@@ -348,7 +357,9 @@ impl Repo {
                     let due: Option<String> = row.get(4).ok();
                     let priority_int: i64 = row.get(5).unwrap_or(2);
                     let project: String = row.get(6).unwrap_or_default();
+                    let content: String = row.get(7).unwrap_or_default();
                     list.push(GlobalTask {
+                        fields: task_fields(&content),
                         id,
                         kind,
                         title,

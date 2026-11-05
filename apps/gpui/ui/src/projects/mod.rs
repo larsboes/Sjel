@@ -15,7 +15,7 @@ use crate::editor::{self, EditorEvent, NoteEditor};
 use crate::primitives::{
     back_button, list, note, placeholder, progress_bar, row_for_density, section,
 };
-use crate::tasks::{self, TaskFilter};
+use crate::tasks::{self, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
 use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
@@ -26,6 +26,9 @@ use sjel_gpui_core::shell::{
 mod links;
 mod mail;
 mod tables;
+mod task_panel;
+
+pub(super) use task_panel::TaskPanel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectsTab {
@@ -57,6 +60,7 @@ pub(super) struct Columns {
     pub(super) due: f32,
     pub(super) priority: f32,
     pub(super) project: Option<f32>,
+    pub(super) status: Option<f32>,
     pub(super) kind: Option<f32>,
     pub(super) search: Option<f32>,
     /// The page's side padding.
@@ -72,6 +76,7 @@ impl Columns {
                 due: 76.,
                 priority: 40.,
                 project: None,
+                status: None,
                 kind: None,
                 search: None,
                 pad: 12.,
@@ -81,6 +86,7 @@ impl Columns {
                 due: 120.,
                 priority: 64.,
                 project: Some(140.),
+                status: Some(100.),
                 kind: Some(80.),
                 search: Some(220.),
                 pad: 32.,
@@ -157,7 +163,17 @@ pub struct Projects {
     pub tab: ProjectsTab,
     pub project_section: ProjectSection,
     pub task_filter: TaskFilter,
-    pub global_task_filter: TaskFilter,
+    /// The statuses the cross-project table shows.
+    pub global_status: StatusFilter,
+    /// The cross-project table's sort column, and whether it ascends.
+    pub task_sort: (TaskSort, bool),
+    pub group_by_project: bool,
+    /// The projects whose group the cross-project table folds away.
+    pub(super) collapsed_groups: std::collections::HashSet<String>,
+    /// The task the side panel shows, with its text fields.
+    pub(super) task_panel: Option<TaskPanel>,
+    /// The task whose status chips stand open in its row.
+    pub(super) status_edit: Option<String>,
     pub note_kind_filter: NoteKindFilter,
     pub show_archived: bool,
     pub search_query: String,
@@ -191,8 +207,8 @@ pub struct Projects {
     pub(super) failed: Option<String>,
     /// The "New task" field under the task table.
     pub(super) new_task: Option<(Entity<InputState>, Subscription)>,
-    /// The task whose due date is being typed, and its field.
-    pub(super) due_edit: Option<(ProjectRecord, Entity<InputState>, Subscription)>,
+    /// The task whose due date is being typed (its path), and its field.
+    pub(super) due_edit: Option<(String, Entity<InputState>, Subscription)>,
     /// The "New project" field.
     pub(super) new_project: Option<(Entity<InputState>, Subscription)>,
     pub adding_project: bool,
@@ -219,7 +235,12 @@ impl Projects {
             tab: ProjectsTab::Hubs,
             project_section: ProjectSection::Note,
             task_filter: TaskFilter::Open,
-            global_task_filter: TaskFilter::Open,
+            global_status: StatusFilter::Active,
+            task_sort: (TaskSort::Default, true),
+            group_by_project: false,
+            collapsed_groups: Default::default(),
+            task_panel: None,
+            status_edit: None,
             note_kind_filter: NoteKindFilter::All,
             show_archived: false,
             search_query: String::new(),
@@ -858,6 +879,7 @@ impl Projects {
                 row.done = task.done;
                 row.due = task.due;
                 row.priority = task.priority;
+                row.fields = task.fields;
             }
         }
         self.load_projects(cx);
@@ -927,7 +949,18 @@ impl Projects {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let path = record.path.clone();
+        self.set_task_property(record.path.clone(), key, value, window, cx);
+    }
+
+    /// Writes one frontmatter field of the task at `path`. An empty value clears the field.
+    pub(super) fn set_task_property(
+        &mut self,
+        path: String,
+        key: &'static str,
+        value: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // The write changes the record's frontmatter: the next open must read it, not remember it.
         self.repo.notes().forget(&path);
         let repo = self.repo.clone();
@@ -946,8 +979,14 @@ impl Projects {
         );
     }
 
-    pub(super) fn edit_due(&mut self, record: ProjectRecord, window: &mut Window, cx: &mut Context<Self>) {
-        let due = record.due.clone().unwrap_or_default();
+    pub(super) fn edit_due(
+        &mut self,
+        path: String,
+        due: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let due = due.unwrap_or_default();
         let input = cx.new(|cx| {
             let mut state = InputState::new(window, cx).placeholder("YYYY-MM-DD");
             state.set_value(due, window, cx);
@@ -958,11 +997,11 @@ impl Projects {
             match event {
                 InputEvent::PressEnter { .. } => {
                     let due = input.read(cx).value().trim().to_owned();
-                    let Some((record, _, _)) = view.due_edit.take() else {
+                    let Some((path, _, _)) = view.due_edit.take() else {
                         return;
                     };
                     if tasks::valid_due(&due) {
-                        view.set_task_field(&record, "due", due, window, cx);
+                        view.set_task_property(path, "due", due, window, cx);
                     } else {
                         window.push_notification(
                             Notification::error("A due date is YYYY-MM-DD, or empty for none."),
@@ -979,7 +1018,7 @@ impl Projects {
                 _ => {}
             }
         });
-        self.due_edit = Some((record, input, subscription));
+        self.due_edit = Some((path, input, subscription));
         cx.notify();
     }
 
@@ -1884,7 +1923,26 @@ impl Render for Projects {
             let body = match (&self.all_tasks.value, &self.all_tasks.error) {
                 (_, Some(error)) => note(error.to_string(), palette.red),
                 (None, None) => placeholder(320.),
-                (Some(tasks), None) => self.all_tasks_table(tasks, &search_input, palette, cx),
+                (Some(tasks), None) => {
+                    let table = self.all_tasks_table(tasks, &search_input, palette, cx);
+                    let selected = self.task_panel.as_ref().and_then(|panel| {
+                        tasks.iter().find(|t| t.id == panel.path).map(|task| (panel, task))
+                    });
+                    match selected {
+                        // A phone has no room beside the table: the panel takes its place.
+                        Some((panel, task)) if self.density == Density::Mobile => {
+                            self.task_panel_view(panel, task, palette, cx)
+                        }
+                        Some((panel, task)) => div()
+                            .flex()
+                            .items_start()
+                            .gap_3()
+                            .child(div().flex_1().min_w_0().child(table))
+                            .child(self.task_panel_view(panel, task, palette, cx))
+                            .into_any_element(),
+                        None => table,
+                    }
+                }
             };
             return div()
                 .id("all-tasks")
@@ -2266,6 +2324,7 @@ mod tests {
                 projects.all_tasks = Remote {
                     value: Some(vec![
                         GlobalTask {
+                            fields: Default::default(),
                             id: "P/1.md".into(),
                             kind: "task".into(),
                             title: "Book train to Berlin".into(),
@@ -2276,6 +2335,7 @@ mod tests {
                             project: "Travel".into(),
                         },
                         GlobalTask {
+                            fields: Default::default(),
                             id: "P/2.md".into(),
                             kind: "task".into(),
                             title: "Update resume".into(),
@@ -2299,6 +2359,69 @@ mod tests {
             assert_eq!(projects.tab, ProjectsTab::AllTasks);
             assert_eq!(projects.search_query, "berlin");
         });
+    }
+
+    #[gpui::test]
+    fn all_tasks_panel_opens_on_a_task_and_draws_beside_the_table(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let task = |id: &str, status: &str| GlobalTask {
+            id: format!("P/Tasks/{id}.md"),
+            kind: "task".into(),
+            title: id.into(),
+            done: tasks::status_closes(status),
+            due: None,
+            priority: 2,
+            summary: None,
+            project: "P".into(),
+            fields: [
+                ("status".to_owned(), status.to_owned()),
+                ("context".to_owned(), "Werkstatt".to_owned()),
+            ]
+            .into(),
+        };
+        let blocked = task("blocked", "blocked");
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let rows = vec![blocked.clone(), task("cancelled", "cancelled")];
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+                projects.tab = ProjectsTab::AllTasks;
+                projects.group_by_project = true;
+                projects.all_tasks = Remote {
+                    value: Some(rows),
+                    ..Remote::default()
+                };
+                projects
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let projects = slot.take().unwrap();
+        cx.update(|window, cx| {
+            projects.update(cx, |projects, cx| projects.select_task(&blocked, window, cx))
+        });
+        cx.run_until_parked();
+        projects.read_with(cx, |projects, cx| {
+            let panel = projects.task_panel.as_ref().expect("the panel opened");
+            assert_eq!(panel.path, "P/Tasks/blocked.md");
+            let context = panel.input("context").expect("a context field");
+            assert_eq!(context.read(cx).value().to_string(), "Werkstatt");
+            let shown: Vec<&str> = projects
+                .all_tasks
+                .value
+                .iter()
+                .flatten()
+                .filter(|t| projects.global_status.matches(t.status()))
+                .map(|t| t.title.as_str())
+                .collect();
+            assert_eq!(shown, ["blocked"]);
+        });
+        cx.update(|window, cx| {
+            projects.update(cx, |projects, cx| projects.select_task(&blocked, window, cx))
+        });
+        projects.read_with(cx, |projects, _| assert!(projects.task_panel.is_none()));
     }
 
     #[gpui::test]

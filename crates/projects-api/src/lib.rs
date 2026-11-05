@@ -31,6 +31,14 @@ pub const ROUTE_INVENTORY_LINKS_REMOVE: &str = "/api/inventory-links/remove";
 // Core Enums and Models
 // ============================================================================
 
+/// The states a task can be in, in the order a picker shows them. `done:` follows `status:`.
+pub const TASK_STATUSES: [&str; 6] = ["open", "doing", "waiting", "blocked", "done", "cancelled"];
+
+/// A status that closes the task, so `done:` is `true`. A cancelled task is closed but not done.
+pub fn status_closes(status: &str) -> bool {
+    matches!(status, "done" | "cancelled")
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectKind {
@@ -109,6 +117,25 @@ pub struct GlobalTask {
     pub summary: Option<String>,
     #[serde(default)]
     pub project: String,
+    /// Every frontmatter key, lists flattened to `a, b`.
+    #[serde(default)]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+impl GlobalTask {
+    /// The task's status: its `status:` key when that is one of [`TASK_STATUSES`] and agrees with
+    /// `done:`, else what `done:` implies.
+    pub fn status(&self) -> &str {
+        match self.fields.get("status").map(String::as_str) {
+            Some(status)
+                if TASK_STATUSES.contains(&status) && status_closes(status) == self.done =>
+            {
+                status
+            }
+            _ if self.done => "done",
+            _ => "open",
+        }
+    }
 }
 
 // ============================================================================

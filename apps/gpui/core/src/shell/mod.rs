@@ -84,6 +84,7 @@ pub use projects_api::{
     decode_item_ref, inventory_reference, project_ref, GlobalTask, InventoryIdentity,
     ProjectInventoryLink, ProjectKind, ProjectLinkRecord, ProjectMailDecision, ProjectMailPage,
     ProjectMailProposal, ProjectMailTarget, ProjectRecord, ProjectSummary, RenamedRecord,
+    status_closes, TASK_STATUSES,
 };
 
 pub use status_api::ServerHit;

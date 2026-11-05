@@ -255,6 +255,7 @@ mod tests {
     #[test]
     fn attention_is_open_and_either_p1_or_due_by_today() {
         let task = |id: &str, due: Option<&str>, priority: u8, done: bool| GlobalTask {
+            fields: Default::default(),
             id: id.to_owned(),
             kind: "task".to_owned(),
             title: id.to_owned(),

@@ -212,8 +212,7 @@ pub async fn set_done(projects: &Projects, id: &str, done: bool) -> Fallible<Rec
     Ok(record)
 }
 
-/// The states a task can be in. `done:` follows `status:`, never the other way round.
-pub const TASK_STATUSES: [&str; 4] = ["open", "doing", "waiting", "done"];
+pub use projects_api::{status_closes, TASK_STATUSES};
 /// The states a project can be in, as the vault's `Projects.base` reads them. An archived project
 /// is a folder move, not a status.
 pub const PROJECT_STATUSES: [&str; 3] = ["active", "done", "cancelled"];
@@ -266,11 +265,11 @@ pub async fn set_property(
     }
     let content = if key == "status" && current.kind == Kind::Task {
         // `set_done` only when done-ness flips, so a move between open states keeps `completed:`.
-        let flipped = if current.done == (value == "done") {
+        let flipped = if current.done == status_closes(value) {
             current.content.clone()
         } else {
             let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-            record::set_done(&current.content, value == "done", &today)?
+            record::set_done(&current.content, status_closes(value), &today)?
         };
         record::set_field(&flipped, "status", Some(value))?
     } else {
@@ -291,8 +290,8 @@ pub struct Normalized {
 /// Bring every task onto the schema `set_property` enforces.
 ///
 /// `done:` decides the status, since it is what the store, the vault reader and band 620 read:
-/// a done task gets `status: done`, an open one keeps `doing` or `waiting` and otherwise gets
-/// `open`. `done_date:` becomes `completed:`. A priority outside 1 to 3 moves to the nearest end.
+/// a done task gets `status: done` unless it is `cancelled`, an open one keeps `doing`, `waiting`
+/// or `blocked` and otherwise gets `open`. `done_date:` becomes `completed:`. A priority outside 1 to 3 moves to the nearest end.
 /// Without `apply` nothing is written.
 pub async fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normalized>> {
     let mut report = Vec::new();
@@ -304,8 +303,9 @@ pub async fn normalize(projects: &Projects, apply: bool) -> Fallible<Vec<Normali
 
         let status = old("status");
         let target = match (current.done, status.as_str()) {
+            (true, "cancelled") => "cancelled",
             (true, _) => "done",
-            (false, "doing" | "waiting") => status.as_str(),
+            (false, "doing" | "waiting" | "blocked") => status.as_str(),
             (false, _) => "open",
         };
         if status != target {
@@ -997,6 +997,16 @@ mod tests {
             .unwrap();
         assert!(!r.done && !r.fields().contains_key("completed"));
         assert_eq!(r.fields()["status"], "waiting");
+        let r = set_property(&projects, &path, "status", "cancelled")
+            .await
+            .unwrap();
+        assert!(r.done && r.fields().contains_key("completed"));
+        assert_eq!(r.fields()["status"], "cancelled");
+        let r = set_property(&projects, &path, "status", "blocked")
+            .await
+            .unwrap();
+        assert!(!r.done && !r.fields().contains_key("completed"));
+        assert_eq!(r.fields()["status"], "blocked");
         let r = set_property(&projects, &path, "due", "").await.unwrap();
         assert_eq!(r.due, None);
         assert!(set_property(&projects, "W/W.md", "status", "open")

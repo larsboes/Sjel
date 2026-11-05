@@ -474,10 +474,14 @@ pub fn scan(
             report.fail(id, "mail_auth");
             continue;
         };
-        let messages = match google::thread_message_bodies(token, id) {
+        let messages = match read_bodies(token, id) {
             Ok(Some(messages)) if !messages.is_empty() => messages,
-            _ => {
-                report.fail(id, "mail_body");
+            Ok(_) => {
+                report.fail(id, "mail_missing");
+                continue;
+            }
+            Err(error) => {
+                report.fail(id, body_failure_stage(&error.to_string()));
                 continue;
             }
         };
@@ -601,9 +605,61 @@ pub fn scan(
     report
 }
 
+/// Pauses before the second and third read of a thread whose read failed for a reason
+/// other than a bounded limit. A sweep running at the same time shares the Gmail quota.
+const BODY_RETRY_PAUSES: [std::time::Duration; 2] = [
+    std::time::Duration::from_secs(2),
+    std::time::Duration::from_secs(8),
+];
+
+/// [`google::thread_message_bodies`], read again after a pause when the failure was not a limit.
+fn read_bodies(
+    token: &str,
+    id: &str,
+) -> crate::Result<Option<Vec<google::ThreadMessageBody>>> {
+    let mut result = google::thread_message_bodies(token, id);
+    for pause in BODY_RETRY_PAUSES {
+        match &result {
+            Err(error) if body_failure_stage(&error.to_string()) == "mail_body" => {
+                std::thread::sleep(pause);
+                result = google::thread_message_bodies(token, id);
+            }
+            _ => break,
+        }
+    }
+    result
+}
+
+/// Which bounded limit a body read hit, from `google::thread_message_bodies`'s fixed messages.
+/// The message never carries mail text, so it is safe to classify.
+fn body_failure_stage(error: &str) -> &'static str {
+    if error.contains("exceeds text limit") {
+        "mail_body_too_long"
+    } else if error.contains("no readable text") {
+        "mail_body_unreadable"
+    } else if error.contains("exceeds message limit") {
+        "mail_thread_too_long"
+    } else {
+        "mail_body"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_failure_that_is_not_a_limit_is_retried() {
+        assert_eq!(body_failure_stage("thread body failed with HTTP 429"), "mail_body");
+        assert_eq!(
+            body_failure_stage("thread message exceeds text limit"),
+            "mail_body_too_long"
+        );
+        assert_eq!(
+            body_failure_stage("thread message has no readable text"),
+            "mail_body_unreadable"
+        );
+    }
     #[test]
     fn loopback_origins_only() {
         assert!(local_base("http://127.0.0.1:8101").is_some());

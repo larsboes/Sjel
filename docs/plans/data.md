@@ -68,6 +68,12 @@ both owners. The two Miele mails (questions to the manufacturer) and a sign-in n
 proposal. `summarization_light` (`apple-foundationmodel`, 4096 tokens) staged nothing: its rows
 broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`.
 
+**Second real-mail run** (2026-11-05, after the own-name rule): 12 `c1` order and delivery
+threads (Amazon, eBay, Dreame, Telekom, Rituals, Phantasialand). All 12 completed; 5 inventory
+and 2 project proposals staged. 9 first failed at the body read while a backfill shared the
+Gmail quota and passed on a rerun; a body read is now retried twice, and a limit failure names
+its stage (`mail_body_too_long`, `mail_body_unreadable`, `mail_thread_too_long`).
+
 **Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
 overlay defines one, else `summarization_light`. Decided 2026-11-05: the operator's own name
 does not raise a mail to `c2` (`self_tokens` in the people registry, read by

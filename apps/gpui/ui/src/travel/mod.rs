@@ -103,6 +103,7 @@ pub struct Travel {
     presence_again: bool,
     compact_map: bool,
     home_zoom_out: bool,
+    home_framed: bool,
     map_expanded: bool,
     selected_day_filter: Option<String>,
     pub(super) offline_downloading: std::collections::HashSet<String>,
@@ -249,6 +250,7 @@ impl Travel {
             presence_again: false,
             compact_map: false,
             home_zoom_out: false,
+            home_framed: false,
             map_expanded: false,
             selected_day_filter: None,
             offline_downloading: std::collections::HashSet::new(),
@@ -542,23 +544,30 @@ impl Travel {
         if self.route != TravelRoute::Map {
             self.open_route(TravelRoute::Map, cx);
         }
+        if !self.compact_map {
+            self.home_framed = false;
+        }
         self.compact_map = true;
         if !self.loaded && !self.loading {
             self.refresh(cx);
         }
         self.load_people_presence(cx, false);
 
-        if !self.home_zoom_out {
-            if let Some(user_loc) = self.current_user_location() {
+        // Frame once; after that the wheel, pinch and drag own the view.
+        if !self.home_framed {
+            let here = (!self.home_zoom_out)
+                .then(|| self.current_user_location())
+                .flatten();
+            if let Some(user_loc) = here {
                 self.center = Some(user_loc);
                 self.zoom = 13.;
                 self.fit_pending = false;
                 self.load_map(cx);
+                self.home_framed = true;
             } else {
                 self.fit_pending = true;
+                self.home_framed = self.loaded;
             }
-        } else {
-            self.fit_pending = true;
         }
 
         self.map(cx)

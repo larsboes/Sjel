@@ -1608,6 +1608,27 @@ mod tests {
     }
 
     #[gpui::test]
+    fn the_home_map_keeps_a_zoom_across_renders(cx: &mut TestAppContext) {
+        let (view, cx) = map_view(cx);
+        let zoom = view.update(cx, |view, cx| {
+            // The plans are already in hand: no load is due, and the first frame is the fit.
+            view.loaded = true;
+            view.home_zoom_out = true;
+            let _ = view.home_map(crate::Palette::light(), cx);
+            view.fit_pending = false;
+            view.zoom = 4.25;
+            let _ = view.home_map(crate::Palette::light(), cx);
+            (view.zoom, view.fit_pending)
+        });
+        assert_eq!(
+            zoom,
+            (4.25, false),
+            "a later home render left the view alone"
+        );
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
     fn the_wheel_zooms_about_the_pointer(cx: &mut TestAppContext) {
         let (view, cx) = map_view(cx);
         let (origin, viewport) = view.read_with(cx, |view, _| (view.origin, view.viewport));

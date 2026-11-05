@@ -43,7 +43,7 @@ sjel_cli_prebuilt
 
 SCRATCH="$(mktemp -d "/tmp/persistence.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
-ROOT="$SCRATCH/axon"
+ROOT="$SCRATCH/sjel"
 OVERLAY="$SCRATCH/overlay"
 FAKE_HOME="$SCRATCH/home"
 

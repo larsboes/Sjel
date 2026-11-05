@@ -41,7 +41,7 @@ echo "posture"
 check "input policy is drop"   "1" "$(printf '%s' "$OUT" | grep -c 'hook input priority filter; policy drop')"
 check "forward policy is drop" "1" "$(printf '%s' "$OUT" | grep -c 'hook forward priority filter; policy drop')"
 check "output is accept, deliberately" "1" "$(printf '%s' "$OUT" | grep -c 'hook output  priority filter; policy accept')"
-check "one inet table, so v4 and v6 cannot drift apart" "1" "$(printf '%s' "$OUT" | grep -c '^table inet axon_filter {')"
+check "one inet table, so v4 and v6 cannot drift apart" "1" "$(printf '%s' "$OUT" | grep -c '^table inet sjel_filter {')"
 
 echo
 echo "the rules that must exist"

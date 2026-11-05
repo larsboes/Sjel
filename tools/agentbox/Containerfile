@@ -50,11 +50,11 @@ RUN echo "${ARCHIVE_SHA256}  /tmp/agent.tar.gz" | sha256sum -c - \
  && ln -s "/opt/agent/${BIN_PATH}" /usr/local/bin/agent
 
 LABEL org.opencontainers.image.title="agentbox/${AGENT_NAME}"
-LABEL dev.axon.agent="${AGENT_NAME}"
+LABEL dev.sjel.agent="${AGENT_NAME}"
 # Which release these bytes are. The profile records no version since Q77 (2026-09-02),
 # so the image carries it and `agentbox doctor` reads it back from here.
-LABEL dev.axon.agent-version="${AGENT_VERSION}"
-LABEL dev.axon.archive-sha256="${ARCHIVE_SHA256}"
+LABEL dev.sjel.agent-version="${AGENT_VERSION}"
+LABEL dev.sjel.archive-sha256="${ARCHIVE_SHA256}"
 
 USER agent
 WORKDIR /workspace

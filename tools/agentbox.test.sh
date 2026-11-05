@@ -24,7 +24,7 @@ done
 
 SCRATCH="$(mktemp -d "/tmp/agentbox.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
-ROOT="$SCRATCH/axon"
+ROOT="$SCRATCH/sjel"
 OVERLAY="$SCRATCH/overlay"
 
 # An operator's exported SJEL_OVERLAY_ROOT / SJEL_MACHINE_TOML wins over the scratch sjel.toml,

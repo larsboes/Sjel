@@ -29,7 +29,7 @@ HAVE_BUN=1
 command -v bun >/dev/null 2>&1 || HAVE_BUN=0
 
 SCRATCH="$(mktemp -d "/tmp/service-runner.XXXXXX")"
-ROOT="$SCRATCH/axon"
+ROOT="$SCRATCH/sjel"
 OVERLAY="$SCRATCH/overlay"
 LISTENER_PID=""
 cleanup() {
@@ -415,7 +415,7 @@ esac
 # capability, or the whole-machine fan-out calling `stop` on it and turning `down`'s exit
 # status into noise. Both are asserted here, on a root where the data unit is the only thing
 # enabled — so a fan-out that did not skip it could not hide behind another capability.
-DATA_ROOT="$SCRATCH/data-axon"
+DATA_ROOT="$SCRATCH/data-sjel"
 DATA_OVERLAY="$SCRATCH/data-overlay"
 mkdir -p "$DATA_ROOT/tools/lib" "$DATA_OVERLAY/config" "$DATA_ROOT/capabilities/filehog"
 cp "$SRC_TOOLS/service-runner.sh" "$SRC_TOOLS/capability.sh" "$DATA_ROOT/tools/"

@@ -567,7 +567,8 @@ cmd_doctor() {
     # The version is read off the image's own label, which is the only place it exists now:
     # the profile holds none, and asking GitHub for the latest would answer a different
     # question (what could be built) than the one doctor asks (what was).
-    built="$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "dev.axon.agent-version"}}' 2>/dev/null)"
+    # Images built before the rename carry the label under its old name.
+    built="$(docker image inspect "$IMAGE" --format '{{with index .Config.Labels "dev.sjel.agent-version"}}{{.}}{{else}}{{index .Config.Labels "dev.axon.agent-version"}}{{end}}' 2>/dev/null)"
     ok "image: $IMAGE${built:+ — built from $AGENT $built}"
   else
     bad "image: $IMAGE missing — 'agentbox build'"

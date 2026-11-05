@@ -9,7 +9,7 @@ let oldGeneric: string | undefined;
 let oldLegacy: string | undefined;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "axon-overlay-test-"));
+  root = mkdtempSync(join(tmpdir(), "sjel-overlay-test-"));
   oldGeneric = process.env.SJEL_OVERLAY_ROOT;
   oldLegacy = process.env.SJEL_PERSONAL_ROOT;
   delete process.env.SJEL_OVERLAY_ROOT;

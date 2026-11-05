@@ -45,7 +45,7 @@ const ok = {
 };
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "axon-skill-eval-test-"));
+  root = mkdtempSync(join(tmpdir(), "sjel-skill-eval-test-"));
   plantSkill();
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));

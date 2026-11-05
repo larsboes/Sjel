@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn skips_non_event_types() {
-        let dir = std::env::temp_dir().join("axon_obsidian_test_skip");
+        let dir = std::env::temp_dir().join("sjel_obsidian_test_skip");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn reads_event_files() {
-        let dir = std::env::temp_dir().join("axon_obsidian_test_read");
+        let dir = std::env::temp_dir().join("sjel_obsidian_test_read");
         fs::create_dir_all(&dir).unwrap();
 
         write_test_event(&dir, "2026-07-berlin-ai-hack.md",
@@ -463,7 +463,7 @@ mod tests {
     fn extracts_about_section() {
         let md = "---\nsummary: Test\n---\n\n## About\nThis is the description.\nMore lines.\n\n## Other\nNot included.";
 
-        let dir = std::env::temp_dir().join("axon_obsidian_test_about");
+        let dir = std::env::temp_dir().join("sjel_obsidian_test_about");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(&dir, "test.md", md);
 
@@ -488,7 +488,7 @@ mod tests {
 
     #[test]
     fn scholarship_requires_completed_hard_filter_review() {
-        let dir = std::env::temp_dir().join("axon_obsidian_test_scholarship");
+        let dir = std::env::temp_dir().join("sjel_obsidian_test_scholarship");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn supports_one_exact_markdown_file() {
-        let dir = std::env::temp_dir().join("axon_obsidian_test_exact_file");
+        let dir = std::env::temp_dir().join("sjel_obsidian_test_exact_file");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,

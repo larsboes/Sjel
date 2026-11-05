@@ -303,7 +303,7 @@ mod tests {
     use crate::model::Provenance;
 
     fn scratch(name: &str) -> (TravelerStore, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("axon-traveler-test-{name}"));
+        let dir = std::env::temp_dir().join(format!("sjel-traveler-test-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("axon.db");

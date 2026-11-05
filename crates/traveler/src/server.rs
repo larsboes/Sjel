@@ -318,7 +318,7 @@ mod http_tests {
     use traveler::model::ProfileInput;
 
     async fn scratch_server(name: &str) -> (String, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("axon-traveler-http-{name}"));
+        let dir = std::env::temp_dir().join(format!("sjel-traveler-http-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = TravelerStore::open(&dir.join("axon.db")).unwrap();

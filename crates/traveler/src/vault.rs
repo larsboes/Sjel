@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn admissible_sections_propose_with_exact_quotes_and_current_state_is_skipped() {
-        let dir = std::env::temp_dir().join(format!("axon-traveler-vault-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-traveler-vault-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 

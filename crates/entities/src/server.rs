@@ -802,7 +802,7 @@ mod http_tests {
 
     async fn scratch_server(name: &str) -> (String, std::path::PathBuf) {
         let dir =
-            std::env::temp_dir().join(format!("axon-entities-http-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-entities-http-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = EntitiesStore::open(&dir.join("axon.db")).unwrap();

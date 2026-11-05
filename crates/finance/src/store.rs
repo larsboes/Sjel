@@ -2251,7 +2251,7 @@ mod tests {
     #[test]
     fn stage_candidates_persists_and_coalesces_location_mcc() {
         let path =
-            std::env::temp_dir().join(format!("axon-finance-store-mcc-{}.db", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-finance-store-mcc-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let store = FinanceStore::open(&path).unwrap();
         let mut candidate = TransactionCandidate {

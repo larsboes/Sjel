@@ -187,7 +187,7 @@ mod tests {
     use super::*;
 
     fn temp_file(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("axon-embed-test-{name}.json"))
+        std::env::temp_dir().join(format!("sjel-embed-test-{name}.json"))
     }
 
     fn profile() -> TelosProfile {

@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn parses_cached_fixture() {
-        let dir = std::env::temp_dir().join("axon_scouting_test_cache");
+        let dir = std::env::temp_dir().join("sjel_scouting_test_cache");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("upcoming.json");
         let mut f = fs::File::create(&path).unwrap();
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn filters_by_location() {
-        let dir = std::env::temp_dir().join("axon_scouting_test_loc");
+        let dir = std::env::temp_dir().join("sjel_scouting_test_loc");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("upcoming.json");
         let mut f = fs::File::create(&path).unwrap();

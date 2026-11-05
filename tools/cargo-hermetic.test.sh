@@ -105,11 +105,11 @@ if printf '%s' "$out" | grep -qF "inside the checkout at $REPO."; then
   note_fail "a sibling path sharing a prefix with the checkout was treated as inside it"
 fi
 
-SCRATCH_TARGET="${TMPDIR:-/tmp}/axon-cargo-hermetic-test/target"
+SCRATCH_TARGET="${TMPDIR:-/tmp}/sjel-cargo-hermetic-test/target"
 out=$(CARGO_TARGET_DIR="$SCRATCH_TARGET" "$TOOL" --print-env 2>&1); status=$?
 expect_ok "a scratch target dir outside every checkout is honoured"
 expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CARGO_TARGET_DIR \
-  "axon-cargo-hermetic-test/target/hermetic-$(printf %s "$(cd "$REPO" && pwd -P)" | shasum | cut -c1-12)"
+  "sjel-cargo-hermetic-test/target/hermetic-$(printf %s "$(cd "$REPO" && pwd -P)" | shasum | cut -c1-12)"
 
 # --- the environment the run inherits --------------------------------------
 #
@@ -118,11 +118,11 @@ expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CA
 # only the database rewrote thirteen real notes. Every variable that can point at a vault is
 # poisoned here with a path that must not survive.
 
-POISON="/nowhere/axon-poison/Knowledge-Base"
-out=$(SJEL_PERSONAL_ROOT="/nowhere/axon-poison/overlay" \
-      SJEL_OVERLAY_ROOT="/nowhere/axon-poison/overlay" \
-      SJEL_DB_PATH="/nowhere/axon-poison/overlay/data/axon/axon.db" \
-      SJEL_COMMS_CONFIG="/nowhere/axon-poison/overlay/config/comms.json" \
+POISON="/nowhere/sjel-poison/Knowledge-Base"
+out=$(SJEL_PERSONAL_ROOT="/nowhere/sjel-poison/overlay" \
+      SJEL_OVERLAY_ROOT="/nowhere/sjel-poison/overlay" \
+      SJEL_DB_PATH="/nowhere/sjel-poison/overlay/data/axon/axon.db" \
+      SJEL_COMMS_CONFIG="/nowhere/sjel-poison/overlay/config/comms.json" \
       SJEL_TRIPS_EXPORT_ROOT="$POISON" \
       SJEL_FINANCE_DECISIONS_ROOT="$POISON" \
       "$TOOL" --print-env 2>&1); status=$?
@@ -130,7 +130,7 @@ expect_ok "--print-env answers under a poisoned environment"
 for var in SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
            SJEL_TRIPS_EXPORT_ROOT \
            SJEL_FINANCE_DECISIONS_ROOT; do
-  expect_not_under "an inherited $var does not survive" "$var" "/nowhere/axon-poison"
+  expect_not_under "an inherited $var does not survive" "$var" "/nowhere/sjel-poison"
 done
 expect_ends_with "the comms config is a file, not a directory" SJEL_COMMS_CONFIG ".json"
 expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/overlay/data/axon/axon.db"

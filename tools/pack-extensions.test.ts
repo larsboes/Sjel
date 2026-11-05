@@ -214,7 +214,7 @@ function fixture(): string {
   // Realpath, because macOS resolves /var to /private/var when a process is spawned:
   // the compiler then prints diagnostics relative to a cwd that does not share a prefix
   // with the path in the tsconfig, which turns every line into ../../../../../../ noise.
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "axon-pack-extensions-")));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "sjel-pack-extensions-")));
   const modules = join(dir, "node_modules");
   mkdirSync(join(modules, "@earendil-works"), { recursive: true });
   mkdirSync(join(modules, "@types"), { recursive: true });

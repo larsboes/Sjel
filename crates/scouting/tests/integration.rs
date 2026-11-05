@@ -33,7 +33,7 @@ static ISOLATE: Once = Once::new();
 /// second setter would be writing what is already there.
 fn isolate_from_the_operators_overlay() {
     ISOLATE.call_once(|| {
-        let empty = std::env::temp_dir().join("axon-scouting-it-no-overlay");
+        let empty = std::env::temp_dir().join("sjel-scouting-it-no-overlay");
         std::fs::create_dir_all(&empty).expect("empty overlay root");
         std::env::set_var("SJEL_PERSONAL_ROOT", &empty);
     });
@@ -45,7 +45,7 @@ struct Tree(PathBuf);
 impl Tree {
     fn new(name: &str) -> Self {
         isolate_from_the_operators_overlay();
-        let dir = std::env::temp_dir().join(format!("axon-scouting-it-{name}"));
+        let dir = std::env::temp_dir().join(format!("sjel-scouting-it-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp tree");
         Tree(dir)
@@ -377,7 +377,7 @@ fn a_glob_that_escapes_the_root_fails_the_run_instead_of_finding_nothing() {
 #[test]
 fn a_source_root_that_is_gone_refuses_to_build_an_adapter() {
     isolate_from_the_operators_overlay();
-    let missing = std::env::temp_dir().join("axon-scouting-it-gone-7a6b5c");
+    let missing = std::env::temp_dir().join("sjel-scouting-it-gone-7a6b5c");
     let _ = std::fs::remove_dir_all(&missing);
 
     let source = manifest(serde_json::json!({

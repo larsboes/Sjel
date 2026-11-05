@@ -197,7 +197,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         "claude" => {
             exec(Command::new(tool("tools/claude-code-config/claude-code-config")).args(rest))
         }
-        "context" => exec(Command::new(tool("tools/axon-context")).args(rest)),
+        "context" => exec(Command::new(tool("tools/sjel-context")).args(rest)),
         // Each launcher owns its overlay resolution and lazy build, so there is one
         // implementation of both.
         "storage" => exec(Command::new(tool("tools/storage/storage")).args(rest)),

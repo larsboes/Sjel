@@ -601,7 +601,7 @@ mod tests {
 
     impl Tree {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("axon-markdown-root-{name}"));
+            let dir = std::env::temp_dir().join(format!("sjel-markdown-root-{name}"));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("temp tree");
             Tree(dir)
@@ -631,7 +631,7 @@ mod tests {
 
     #[test]
     fn a_root_that_does_not_exist_is_named_rather_than_treated_as_empty() {
-        let missing = std::env::temp_dir().join("axon-markdown-root-nope-1a2b3c");
+        let missing = std::env::temp_dir().join("sjel-markdown-root-nope-1a2b3c");
         let _ = std::fs::remove_dir_all(&missing);
         assert_eq!(
             MarkdownRoot::declare(&missing),

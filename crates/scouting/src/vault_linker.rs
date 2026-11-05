@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn matches_by_title_subset() {
-        let dir = std::env::temp_dir().join("axon_scouting_linker_test");
+        let dir = std::env::temp_dir().join("sjel_scouting_linker_test");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("Community Meetup Night.md"), "").unwrap();
         fs::write(dir.join("Agent Olympics.md"), "").unwrap();
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn matches_by_city_token_overlap() {
-        let dir = std::env::temp_dir().join("axon_scouting_linker_test2");
+        let dir = std::env::temp_dir().join("sjel_scouting_linker_test2");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("2026-02 Munich Security & Hiking.md"), "").unwrap();
 
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn no_match_returns_none() {
-        let dir = std::env::temp_dir().join("axon_scouting_linker_test3");
+        let dir = std::env::temp_dir().join("sjel_scouting_linker_test3");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("Completely Unrelated Event.md"), "").unwrap();
 

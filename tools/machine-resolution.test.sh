@@ -12,7 +12,7 @@ set -uo pipefail
 SCRATCH="$(mktemp -d "/tmp/machine-resolution.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-ROOT="$SCRATCH/axon"
+ROOT="$SCRATCH/sjel"
 OVERLAY="$SCRATCH/overlay"
 
 _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"

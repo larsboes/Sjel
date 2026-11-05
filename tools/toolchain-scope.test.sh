@@ -36,7 +36,7 @@ isolate_sjel_env
 
 SCRATCH="$(mktemp -d "/tmp/toolchain-scope.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
-ROOT="$SCRATCH/axon"; OVERLAY="$SCRATCH/overlay"; STUB_BIN="$SCRATCH/bin"
+ROOT="$SCRATCH/sjel"; OVERLAY="$SCRATCH/overlay"; STUB_BIN="$SCRATCH/bin"
 mkdir -p "$ROOT/tools/lib" "$OVERLAY/config" "$STUB_BIN" "$ROOT/capabilities"
 cp "$SRC_TOOLS/toolchain-check" "$ROOT/tools/"
 cp "$SRC_TOOLS"/lib/*.sh "$ROOT/tools/lib/"

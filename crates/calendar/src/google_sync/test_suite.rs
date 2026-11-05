@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn a_missing_credential_file_names_the_path_and_the_keys() {
-        let missing = std::env::temp_dir().join("axon-calendar-does-not-exist.env");
+        let missing = std::env::temp_dir().join("sjel-calendar-does-not-exist.env");
         let error = read_env_key(&missing, "GOOGLE_CLIENT_ID").unwrap_err();
         assert!(
             error.contains("axon-calendar-does-not-exist.env"),
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn an_empty_value_is_missing_not_present() {
-        let dir = std::env::temp_dir().join(format!("axon-calendar-env-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-calendar-env-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("calendar.env");
         std::fs::write(

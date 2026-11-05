@@ -11,7 +11,7 @@ set -uo pipefail
 SCRATCH="$(mktemp -d "/tmp/manifest-resolution.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-ROOT="$SCRATCH/axon"
+ROOT="$SCRATCH/sjel"
 OVERLAY="$SCRATCH/overlay"
 
 # The real lib under test, copied so paths.sh self-locates into the scratch root.

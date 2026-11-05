@@ -64,7 +64,7 @@ describe("the generated demo finance config", () => {
 
 describe("activeOverlay", () => {
   test("reads a paths.sh whose directory name is a shell command", () => {
-    const root = mkdtempSync(join(tmpdir(), "axon-demo-seed-"));
+    const root = mkdtempSync(join(tmpdir(), "sjel-demo-seed-"));
     try {
       const marker = join(root, "INJECTED");
       // Every metacharacter that mattered, in one directory name: command substitution,
@@ -84,7 +84,7 @@ describe("activeOverlay", () => {
   });
 
   test("fails loudly when paths.sh is not there, rather than reporting no overlay", () => {
-    expect(() => activeOverlay(join(tmpdir(), "axon-demo-seed-absent", "paths.sh"))).toThrow();
+    expect(() => activeOverlay(join(tmpdir(), "sjel-demo-seed-absent", "paths.sh"))).toThrow();
   });
 });
 

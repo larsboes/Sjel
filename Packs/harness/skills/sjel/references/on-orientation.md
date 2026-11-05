@@ -5,7 +5,7 @@ Run this sequence before planning, reviewing, or editing:
 1. Run `git status --short --branch`. Preserve unrelated changes and identify the active branch.
 2. Run `tools/doctor`. Treat its findings independently and keep unrelated failures outside the
    change scope.
-3. Run `tools/axon-context on [unit-or-path]`.
+3. Run `tools/sjel-context on [unit-or-path]`.
 4. Read only the paths it returns plus the reference selected in `SKILL.md`.
 
 Use `sjel search <words>` to find the file that owns a concept: every word must appear in the

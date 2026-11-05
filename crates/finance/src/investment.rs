@@ -1104,7 +1104,7 @@ mod tests {
             reviewed_snapshot(&preview, &mapping, "2026-08-09", HoldingsCoverage::Complete)
                 .unwrap();
         let directory =
-            std::env::temp_dir().join(format!("axon-finance-holdings-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sjel-finance-holdings-test-{}", std::process::id()));
         let path = directory.join("holdings.json");
         let _ = std::fs::remove_dir_all(&directory);
 

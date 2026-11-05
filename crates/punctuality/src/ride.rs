@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn a_pruned_month_is_reported_as_unavailable_not_as_no_train() {
-        let empty = std::env::temp_dir().join(format!("axon-ride-test-{}", std::process::id()));
+        let empty = std::env::temp_dir().join(format!("sjel-ride-test-{}", std::process::id()));
         std::fs::create_dir_all(&empty).unwrap();
         let answer = find(&empty, "ICE", "611", "2026-03-14", None).unwrap();
         assert!(answer.stops.is_empty());
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn cached_months_reads_the_window_off_disk() {
-        let dir = std::env::temp_dir().join(format!("axon-ride-months-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-ride-months-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         for month in ["2026-02", "2026-01"] {
             std::fs::write(dir.join(format!("data-{month}.parquet")), b"x").unwrap();

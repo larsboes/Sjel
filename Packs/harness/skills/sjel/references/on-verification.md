@@ -5,7 +5,7 @@ Select checks from the changed ownership boundary. Never claim broader validatio
 1. Run the nearest unit tests, type checks, or shell syntax checks for changed code.
 2. Run repository gates whose declared inputs include the changed files.
 3. Check generated artifacts when their source manifests changed.
-4. Re-run `tools/axon-context on <target>` or the relevant API read to verify observable state.
+4. Re-run `tools/sjel-context on <target>` or the relevant API read to verify observable state.
 5. Inspect `git diff --check`, the focused diff, and `git status --short` before committing.
 
 Common gates include `tools/self check`, `tools/audit`, and the

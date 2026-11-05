@@ -598,7 +598,7 @@ mod tests {
 
     impl Tree {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("axon-calendar-md-{name}"));
+            let dir = std::env::temp_dir().join(format!("sjel-calendar-md-{name}"));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("temp tree");
             Tree(dir)

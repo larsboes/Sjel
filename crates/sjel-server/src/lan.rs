@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn the_identity_is_made_once_and_kept() {
-        let dir = std::env::temp_dir().join(format!("axon-lan-identity-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-lan-identity-{}", std::process::id()));
         let first = LanIdentity::load_or_create(&dir, "test-mac").unwrap();
         let second = LanIdentity::load_or_create(&dir, "test-mac").unwrap();
         assert_eq!(
@@ -226,7 +226,7 @@ mod tests {
     #[tokio::test]
     async fn the_lan_listener_admits_paired_devices_and_the_pairing_claim_only() {
         use axum::routing::{get, post};
-        let dir = std::env::temp_dir().join(format!("axon-lan-serve-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sjel-lan-serve-{}", std::process::id()));
         let identity = LanIdentity::load_or_create(&dir, "test-mac").unwrap();
         let router = axum::Router::new()
             .route(

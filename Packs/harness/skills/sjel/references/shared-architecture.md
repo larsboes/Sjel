@@ -1,7 +1,7 @@
 # Architecture and ownership
 
 Use this reference only for Sjel-wide structure or ownership decisions. Derive the current unit
-inventory and wiring with `tools/axon-context on [target]` and `tools/self`; do not copy those
+inventory and wiring with `tools/sjel-context on [target]` and `tools/self`; do not copy those
 facts here.
 
 ## Stable model

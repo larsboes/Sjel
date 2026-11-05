@@ -13,8 +13,8 @@ substitute a remembered port, inventory, issue state, service status, or graph c
 Run one bounded context command before reading broadly:
 
 ```bash
-tools/axon-context with [capability]
-tools/axon-context on [unit-or-path]
+tools/sjel-context with [capability]
+tools/sjel-context on [unit-or-path]
 ```
 
 The path is repository-relative: run it from the Sjel checkout. The installed `sjel` CLI

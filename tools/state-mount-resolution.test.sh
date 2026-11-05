@@ -45,7 +45,7 @@ fails=0
 # leaked into every case after it — which the suite caught by failing four of them.
 plant() {
   local base; base="$(mktemp -d "$SCRATCH/case.XXXXXX")"
-  local root="$base/axon" overlay="$base/overlay"
+  local root="$base/sjel" overlay="$base/overlay"
   mkdir -p "$root/tools/lib" "$overlay/config/machines"
   cp "$LIB_DIR/paths.sh" "$LIB_DIR/toml.sh" "$root/tools/lib/"
   printf 'overlay = "%s"\n' "$overlay" > "$root/sjel.toml"

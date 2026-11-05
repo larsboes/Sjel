@@ -848,7 +848,7 @@ mod tests {
 
     impl Tree {
         fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("axon-scouting-profile-{name}"));
+            let dir = std::env::temp_dir().join(format!("sjel-scouting-profile-{name}"));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("temp tree");
             Tree(dir)
@@ -962,7 +962,7 @@ mod tests {
 
     #[test]
     fn a_profile_root_that_is_not_there_says_so_rather_than_scoring_blind() {
-        let missing = std::env::temp_dir().join("axon-scouting-profile-gone-9f8e7d");
+        let missing = std::env::temp_dir().join("sjel-scouting-profile-gone-9f8e7d");
         let _ = std::fs::remove_dir_all(&missing);
         let vault = Tree::new("missing-profile-root");
 

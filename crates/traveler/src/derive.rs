@@ -523,7 +523,7 @@ mod tests {
     }
 
     fn scratch_with_trips(name: &str) -> (TravelerStore, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("axon-traveler-derive-{name}"));
+        let dir = std::env::temp_dir().join(format!("sjel-traveler-derive-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = TravelerStore::open(&dir.join("axon.db")).unwrap();
@@ -813,7 +813,7 @@ mod tests {
     fn a_machine_where_trips_has_never_run_reads_as_empty_rather_than_failing() {
         // No trips tables at all: the shape of a fresh install. The route must
         // answer, not 500 — a dashboard reads a 500 as an outage.
-        let dir = std::env::temp_dir().join("axon-traveler-derive-notrips");
+        let dir = std::env::temp_dir().join("sjel-traveler-derive-notrips");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = TravelerStore::open(&dir.join("axon.db")).unwrap();

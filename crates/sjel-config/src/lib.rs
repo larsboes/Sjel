@@ -72,7 +72,7 @@ pub fn database_path() -> PathBuf {
         return expand_tilde(&explicit);
     }
     overlay_data_dir("axon")
-        .unwrap_or_else(|| std::env::temp_dir().join("axon-no-overlay"))
+        .unwrap_or_else(|| std::env::temp_dir().join("sjel-no-overlay"))
         .join("axon.db")
 }
 

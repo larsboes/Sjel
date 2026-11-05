@@ -15,7 +15,7 @@ contains() { case "$1" in *"$2"*) ;; *) fail "expected '$2' in: $1" ;; esac; }
 # Pack) until 2026-08-25. #137 gave the Sjel Pack a dedicated deployer and put the
 # manifest back, and this line should have gone with it. It did not, and the assertion
 # stayed green for two months because the sh_test declared only `sjel` and
-# `tools/axon-context` as data: the sandbox never materialized the file the test was
+# `tools/sjel-context` as data: the sandbox never materialized the file the test was
 # looking for, so `[ ! -e ... ]` was true about the sandbox and false about the repo.
 # PRD Q44 (2026-08-25) retired Bazel, this test started reading the real checkout, and
 # it went red on the first run. Dropped rather than inverted — the CLI contract below

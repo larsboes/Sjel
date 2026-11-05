@@ -3,7 +3,7 @@ use super::forms::{FormKind, Remove};
 use super::{trip_draft_key, urlencode, Travel};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, SharedString};
 use gpui_kit::component::button::ButtonVariants;
-use gpui_kit::component::Disableable;
+use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
     shell::CalendarEntry,
     travel::{Item, Place, TravelRoute, TripSection},
@@ -372,15 +372,43 @@ impl Travel {
     fn trip_library(&self, cx: &mut Context<Self>) -> AnyElement {
         let palette = self.palette;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+        let top_map = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("Interactive Location Map"),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                self.button("open-location-map")
+                                    .small()
+                                    .ghost()
+                                    .label("Full Map View →")
+                                    .on_click(cx.listener(|view, _, _, cx| view.open_route(TravelRoute::Map, cx))),
+                            ),
+                    ),
+            )
+            .child(self.map(cx));
+
         let mut list = div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(
-                self.button("open-location-map")
-                    .label("Explore locations on map")
-                    .on_click(cx.listener(|view, _, _, cx| view.open_route(TravelRoute::Map, cx))),
-            )
+            .child(top_map)
             .child(self.trip_suggestions(cx))
             .child(
                 div().child(

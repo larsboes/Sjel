@@ -776,23 +776,30 @@ impl Travel {
         let no_locations = self
             .current()
             .is_some_and(|plan| plan.places().all(|place| place.coordinate().is_none()));
+        let map_height = if self.compact_map {
+            260.
+        } else if self.map_expanded {
+            if self.density.is_mobile() {
+                560.
+            } else {
+                760.
+            }
+        } else if matches!(self.route, TravelRoute::Map) {
+            if self.density.is_mobile() {
+                480.
+            } else {
+                640.
+            }
+        } else if self.density.is_mobile() {
+            360.
+        } else {
+            500.
+        };
         let mut map = div()
             .id("trip-map")
             .relative()
             .w_full()
-            .h(px(if self.compact_map {
-                260.
-            } else if matches!(self.route, TravelRoute::Map) {
-                if self.density.is_mobile() {
-                    440.
-                } else {
-                    600.
-                }
-            } else if self.density.is_mobile() {
-                320.
-            } else {
-                440.
-            }))
+            .h(px(map_height))
             .flex_none()
             .overflow_hidden()
             .rounded(px(16.))
@@ -1292,6 +1299,7 @@ impl Travel {
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
                 )
         } else {
+            let is_expanded = self.map_expanded;
             div()
                 .absolute()
                 .top(px(8.))
@@ -1305,21 +1313,62 @@ impl Travel {
                 .bg(rgba(palette.surface))
                 .child(
                     self.button("fit-trip")
-                        .label("Fit trip")
+                        .small()
+                        .label("Fit map")
                         .primary()
+                        .tooltip("Fit all locations in view")
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.selected_stop = None;
                             view.fit_trip(cx);
                         })),
                 )
                 .child(
+                    self.button("home-here-btn")
+                        .small()
+                        .label("📍 Here")
+                        .ghost()
+                        .tooltip("Focus on your current location")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.selected_stop = None;
+                            if let Some(user_loc) = view.current_user_location() {
+                                view.center = Some(user_loc);
+                                view.zoom = 13.;
+                                view.fit_pending = false;
+                                view.load_map(cx);
+                            }
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    self.button("map-toggle-size")
+                        .small()
+                        .label(if is_expanded { "Compress" } else { "Expand" })
+                        .ghost()
+                        .tooltip(if is_expanded {
+                            "Restore standard map height"
+                        } else {
+                            "Expand map to full height"
+                        })
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.map_expanded = !view.map_expanded;
+                            view.fit_pending = true;
+                            cx.notify();
+                        })),
+                )
+                .child(
                     self.button("zoom-in")
-                        .label("Zoom in")
+                        .small()
+                        .label("+")
+                        .ghost()
+                        .tooltip("Zoom in")
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
                 )
                 .child(
                     self.button("zoom-out")
-                        .label("Zoom out")
+                        .small()
+                        .label("−")
+                        .ghost()
+                        .tooltip("Zoom out")
                         .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
                 )
         };

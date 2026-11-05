@@ -367,6 +367,10 @@
       }
     },
     {
+      "name": "operator-profile-api",
+      "kind": "lib"
+    },
+    {
       "name": "packs",
       "kind": "capability",
       "service": {
@@ -1843,6 +1847,16 @@
       ],
       "evidence": [
         "crates/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "operator-profile",
+      "to": "operator-profile-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/operator-profile/Cargo.toml"
       ]
     },
     {

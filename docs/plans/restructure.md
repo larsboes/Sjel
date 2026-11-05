@@ -239,6 +239,9 @@ their open edits.
    Done for `punctuality`: `crates/punctuality-api` (`punctuality-api`) extracts pure wire models,
    lookup queries, batch requests/responses, stop statistics, station results, coverage info,
    normalization routines, and route constants shared with `sjel-punctuality` and `sjel-transit`.
+   Done for `operator-profile`: `crates/operator-profile-api` (`operator-profile-api`) extracts pure wire models,
+   profile entries, statement inputs, field values, harness targets, classifications, requests, validation routines,
+   and route constants shared with `sjel-operator-profile`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

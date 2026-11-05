@@ -8,54 +8,41 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 use operator_profile::{
     config::Config,
-    model::{Harness, ProfileInput},
+    model::{
+        ExportProfileRequest, PutProfileRequest, ROUTE_HEALTH, ROUTE_PROFILE, ROUTE_PROFILE_EXPORT,
+        ROUTE_READY, ROUTE_ROUTES,
+    },
     render::{self, SectionChange},
     store::profile_json,
     OperatorProfileStore, PutOutcome,
 };
 
 const ROUTES: &[route_manifest::Route] = &[
-    route_manifest::get("GET", "/health", "Liveness."),
-    route_manifest::get("GET", "/ready", "Liveness plus database readiness."),
-    route_manifest::get("GET", "/routes", "This manifest."),
+    route_manifest::get("GET", ROUTE_HEALTH, "Liveness."),
+    route_manifest::get("GET", ROUTE_READY, "Liveness plus database readiness."),
+    route_manifest::get("GET", ROUTE_ROUTES, "This manifest."),
     route_manifest::get(
         "GET",
-        "/api/profile",
+        ROUTE_PROFILE,
         "Read the canonical operator profile. The response contains only profile fields and revision metadata.",
     ),
     route_manifest::Route {
         method: "PUT",
-        path: "/api/profile",
+        path: ROUTE_PROFILE,
         summary: "Replace the canonical operator profile. Requires expected_revision; stale writes return 409 and write nothing.",
         request_schema: Some(route_manifest::schema_of::<PutProfileRequest>),
     },
     route_manifest::Route {
         method: "POST",
-        path: "/api/profile/export",
+        path: ROUTE_PROFILE_EXPORT,
         summary: "Preview or apply the managed operator-profile section for a verified harness target (claude, codex, pi, opencode). When apply is true, expected_revision is required and must match the stored revision.",
         request_schema: Some(route_manifest::schema_of::<ExportProfileRequest>),
     },
 ];
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct PutProfileRequest {
-    profile: ProfileInput,
-    expected_revision: u64,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct ExportProfileRequest {
-    harness: Harness,
-    #[serde(default)]
-    apply: bool,
-    #[serde(default)]
-    expected_revision: Option<u64>,
-}
 
 struct ApiError {
     status: StatusCode,
@@ -198,11 +185,11 @@ async fn export_profile(
 
 fn router(store: Arc<OperatorProfileStore>) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/ready", get(ready))
-        .route("/routes", get(routes))
-        .route("/api/profile", get(get_profile).put(put_profile))
-        .route("/api/profile/export", post(export_profile))
+        .route(ROUTE_HEALTH, get(health))
+        .route(ROUTE_READY, get(ready))
+        .route(ROUTE_ROUTES, get(routes))
+        .route(ROUTE_PROFILE, get(get_profile).put(put_profile))
+        .route(ROUTE_PROFILE_EXPORT, post(export_profile))
         .layer(middleware::from_fn_with_state(
             "operator-profile",
             sjel_server::origin::refuse_foreign_origins,
@@ -231,6 +218,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use operator_profile::model::ProfileInput;
     use tower::util::ServiceExt;
 
     #[test]

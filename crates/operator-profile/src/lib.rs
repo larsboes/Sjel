@@ -5,8 +5,5 @@ pub mod model;
 pub mod render;
 pub mod store;
 
-pub use model::{
-    Classification, FieldInput, FieldValue, Harness, Profile, ProfileCategory, ProfileInput,
-    ProfileStatement, StatementInput, StoredProfile, MAX_ENTRIES, MAX_TEXT_CHARS,
-};
+pub use operator_profile_api::*;
 pub use store::{OperatorProfileStore, PutOutcome};

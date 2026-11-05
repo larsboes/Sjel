@@ -1,11 +1,10 @@
 //! The Projects page: pick a project, view tasks and notes, edit them in place.
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::{Disableable, Sizable, WindowExt};
+use gpui_kit::component::{Sizable, WindowExt};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FontWeight, ScrollHandle,
     SharedString, Subscription, Window,
@@ -14,8 +13,7 @@ use gpui_kit::{
 use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
 use crate::primitives::{
-    back_button, due_badge, filter_pill, list, note, placeholder, priority_pill, progress_bar,
-    row_for_density, section,
+    back_button, list, note, placeholder, progress_bar, row_for_density, section,
 };
 use crate::tasks::{self, TaskFilter};
 use crate::theme::{tint, Density, Palette, ThemeContext};
@@ -24,6 +22,10 @@ use sjel_gpui_core::shell::{
     self, GlobalNote, GlobalTask, ProjectInventoryLink, ProjectLinkRecord, ProjectMailProposal,
     ProjectMailTarget, ProjectRecord, ProjectSummary, ShellError,
 };
+
+mod links;
+mod mail;
+mod tables;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectsTab {
@@ -41,30 +43,30 @@ pub enum ProjectSection {
     InventoryLinks,
 }
 
-struct LinkReview {
-    record: ProjectLinkRecord,
-    item_ref: String,
-    item_label: String,
-    remove: bool,
+pub(super) struct LinkReview {
+    pub(super) record: ProjectLinkRecord,
+    pub(super) item_ref: String,
+    pub(super) item_label: String,
+    pub(super) remove: bool,
 }
 
 /// The widths the record tables give their columns. `None` drops the column: a phone is too
 /// narrow for the project and type columns, and its search field fills the row.
 #[derive(Clone, Copy)]
-struct Columns {
-    due: f32,
-    priority: f32,
-    project: Option<f32>,
-    kind: Option<f32>,
-    search: Option<f32>,
+pub(super) struct Columns {
+    pub(super) due: f32,
+    pub(super) priority: f32,
+    pub(super) project: Option<f32>,
+    pub(super) kind: Option<f32>,
+    pub(super) search: Option<f32>,
     /// The page's side padding.
-    pad: f32,
+    pub(super) pad: f32,
     /// The height and touch target a table row gets.
-    density: Density,
+    pub(super) density: Density,
 }
 
 impl Columns {
-    fn for_density(density: Density) -> Self {
+    pub(super) fn for_density(density: Density) -> Self {
         match density {
             Density::Mobile => Self {
                 due: 76.,
@@ -89,7 +91,7 @@ impl Columns {
 }
 
 /// A table cell of `width`, or nothing when the density drops the column.
-fn column(width: Option<f32>) -> Div {
+pub(super) fn column(width: Option<f32>) -> Div {
     match width {
         Some(width) => div().w(px(width)),
         None => div().hidden(),
@@ -97,7 +99,7 @@ fn column(width: Option<f32>) -> Div {
 }
 
 /// The search field's box: a fixed width on the Mac, the rest of the row on a phone.
-fn search_box(width: Option<f32>) -> Div {
+pub(super) fn search_box(width: Option<f32>) -> Div {
     match width {
         Some(width) => div().w(px(width)),
         None => div().flex_1(),
@@ -145,10 +147,10 @@ pub enum NoteKindFilter {
 }
 
 pub struct Projects {
-    repo: Repo,
-    density: Density,
+    pub(super) repo: Repo,
+    pub(super) density: Density,
     /// The page's palette. `None` follows the window's appearance; the phone sets its own.
-    palette: Option<Palette>,
+    pub(super) palette: Option<Palette>,
     pub projects: Remote<Vec<ProjectSummary>>,
     pub all_tasks: Remote<Vec<GlobalTask>>,
     pub all_notes: Remote<Vec<GlobalNote>>,
@@ -159,48 +161,48 @@ pub struct Projects {
     pub note_kind_filter: NoteKindFilter,
     pub show_archived: bool,
     pub search_query: String,
-    search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
     pub notes_search_query: String,
-    notes_search_input: Option<(Entity<InputState>, Subscription)>,
+    pub(super) notes_search_input: Option<(Entity<InputState>, Subscription)>,
     /// The open project and its records. The records carry no content: the editor reads one.
-    project: Option<(String, Remote<Vec<ProjectRecord>>)>,
-    mail: Remote<Vec<ProjectMailProposal>>,
-    mail_cursor: Option<i64>,
-    mail_more: bool,
-    mail_selected: Option<ProjectMailProposal>,
-    mail_target: Option<ProjectMailTarget>,
-    mail_target_loading: bool,
-    mail_busy: bool,
-    mail_message: Option<String>,
-    link_path: Option<String>,
-    links: Remote<Vec<ProjectInventoryLink>>,
-    link_items: Remote<Vec<sjel_gpui_core::inventory::InventoryRow>>,
-    link_review: Option<LinkReview>,
-    link_busy: bool,
-    link_message: Option<String>,
-    link_generation: u64,
-    editor: Option<Entity<NoteEditor>>,
+    pub(super) project: Option<(String, Remote<Vec<ProjectRecord>>)>,
+    pub(super) mail: Remote<Vec<ProjectMailProposal>>,
+    pub(super) mail_cursor: Option<i64>,
+    pub(super) mail_more: bool,
+    pub(super) mail_selected: Option<ProjectMailProposal>,
+    pub(super) mail_target: Option<ProjectMailTarget>,
+    pub(super) mail_target_loading: bool,
+    pub(super) mail_busy: bool,
+    pub(super) mail_message: Option<String>,
+    pub(super) link_path: Option<String>,
+    pub(super) links: Remote<Vec<ProjectInventoryLink>>,
+    pub(super) link_items: Remote<Vec<sjel_gpui_core::inventory::InventoryRow>>,
+    pub(super) link_review: Option<LinkReview>,
+    pub(super) link_busy: bool,
+    pub(super) link_message: Option<String>,
+    pub(super) link_generation: u64,
+    pub(super) editor: Option<Entity<NoteEditor>>,
     /// The note being read before its editor can open.
-    opening: Option<String>,
+    pub(super) opening: Option<String>,
     /// The note whose title is being typed: its path, the title it had, the field and its events.
-    title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
+    pub(super) title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
     /// The note whose last read failed. The hub opens itself only once, so a failing read is not
     /// retried on every frame.
-    failed: Option<String>,
+    pub(super) failed: Option<String>,
     /// The "New task" field under the task table.
-    new_task: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_task: Option<(Entity<InputState>, Subscription)>,
     /// The task whose due date is being typed, and its field.
-    due_edit: Option<(ProjectRecord, Entity<InputState>, Subscription)>,
+    pub(super) due_edit: Option<(ProjectRecord, Entity<InputState>, Subscription)>,
     /// The "New project" field.
-    new_project: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_project: Option<(Entity<InputState>, Subscription)>,
     pub adding_project: bool,
     /// The "New note" field inside project view.
-    new_note: Option<(Entity<InputState>, Subscription)>,
+    pub(super) new_note: Option<(Entity<InputState>, Subscription)>,
     pub adding_note: bool,
     /// The writes the Mac refused, with its reasons. Their content is still here and still queued:
     /// the band these draw is the only place that says so.
-    blocked: Vec<Blocked>,
-    scroll: ScrollHandle,
+    pub(super) blocked: Vec<Blocked>,
+    pub(super) scroll: ScrollHandle,
 }
 
 impl gpui_kit::EventEmitter<ProjectsEvent> for Projects {}
@@ -418,7 +420,7 @@ impl Projects {
         )
     }
 
-    fn columns(&self) -> Columns {
+    pub(super) fn columns(&self) -> Columns {
         Columns::for_density(self.density)
     }
 
@@ -524,731 +526,6 @@ impl Projects {
         .detach();
     }
 
-    fn load_project_mail(&mut self, more: bool, cx: &mut Context<Self>) {
-        if self.mail.loading || self.mail_busy {
-            return;
-        }
-        let Some((project, _)) = &self.project else {
-            return;
-        };
-        let project = project.clone();
-        let before = if more { self.mail_cursor } else { None };
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                let error = if self.repo.is_replica() {
-                    ShellError::Store("Mail review needs an owner-authenticated local shell, which is unavailable on this device.".into())
-                } else {
-                    error
-                };
-                self.mail.settle(Err(error));
-                cx.notify();
-                return;
-            }
-        };
-        self.mail.loading = true;
-        self.mail.error = None;
-        if !more {
-            self.mail.value = None;
-            self.mail_cursor = None;
-            self.mail_more = false;
-        }
-        let work = shell::run(async move { shell.project_mail_proposals(before).await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str()) {
-                    return;
-                }
-                match result {
-                    Ok(page) => {
-                        view.mail_more = page.limit > 0 && page.proposals.len() == page.limit;
-                        view.mail_cursor = page.proposals.last().map(|p| p.id);
-                        let mut proposals = if more {
-                            view.mail.value.take().unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
-                        proposals.extend(
-                            page.proposals
-                                .into_iter()
-                                .filter(|p| p.project == project && p.status == "pending"),
-                        );
-                        view.mail.settle(Ok(proposals));
-                    }
-                    Err(error) => view.mail.settle(Err(error)),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-        cx.notify();
-    }
-
-    fn select_mail_target(&mut self, path: String, cx: &mut Context<Self>) {
-        if self.mail_busy || self.mail_target_loading {
-            return;
-        }
-        let Some(proposal) = &self.mail_selected else {
-            return;
-        };
-        let proposal_id = proposal.id;
-        let project = proposal.project.clone();
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.mail_message = Some(error.to_string());
-                cx.notify();
-                return;
-            }
-        };
-        self.mail_target = None;
-        self.mail_target_loading = true;
-        self.mail_message = None;
-        let work = shell::run(async move { shell.project_mail_target(&path).await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.mail_target_loading = false;
-                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str())
-                    || view.mail_selected.as_ref().map(|p| p.id) != Some(proposal_id)
-                {
-                    cx.notify();
-                    return;
-                }
-                match result {
-                    Ok(target) => view.mail_target = Some(target),
-                    Err(error) => {
-                        view.mail_message = Some(format!("Could not read target: {error}"))
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-        cx.notify();
-    }
-
-    fn decide_project_mail(&mut self, approve: bool, cx: &mut Context<Self>) {
-        if self.mail_busy
-            || self.mail.loading
-            || self.mail_target_loading
-            || self.mail.error.is_some()
-        {
-            return;
-        }
-        let Some(proposal) = &self.mail_selected else {
-            return;
-        };
-        let body = if approve {
-            let Some(target) = &self.mail_target else {
-                self.mail_message = Some("Select and review an existing target first.".into());
-                cx.notify();
-                return;
-            };
-            serde_json::json!({"version": proposal.version, "decision": "approve", "target_path": target.path, "base": target.content})
-        } else {
-            serde_json::json!({"version": proposal.version, "decision": "reject"})
-        };
-        let project = proposal.project.clone();
-        let id = proposal.id;
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.mail_message = Some(error.to_string());
-                cx.notify();
-                return;
-            }
-        };
-        self.mail_busy = true;
-        self.mail_message = None;
-        let work = shell::run(async move { shell.project_mail_decision(id, body).await });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                view.mail_busy = false;
-                if let Ok(outcome) = &result {
-                    if let Some(path) = &outcome.target_path { view.repo.notes().forget(path); }
-                }
-                if view.project.as_ref().map(|p| p.0.as_str()) != Some(project.as_str()) { cx.notify(); return; }
-                match result {
-                    Ok(outcome) => {
-                        view.mail_selected = None;
-                        view.mail_target = None;
-                        view.mail_message = Some(if outcome.applied && !outcome.rendered {
-                            format!("Evidence was saved, but rendering failed: {}", outcome.render_error.as_deref().unwrap_or("unknown rendering error"))
-                        } else if outcome.applied { "Evidence approved and saved. The suggested task was not created.".into() }
-                        else if !approve { "Proposal rejected.".into() }
-                        else { "The server did not report an applied approval. Refresh before reviewing again.".into() });
-                        view.refresh_records(cx);
-                        view.load_project_mail(false, cx);
-                    }
-                    Err(error @ ShellError::Refused(409, _)) => {
-                        view.mail_selected = None;
-                        view.mail_target = None;
-                        view.mail_message = Some(format!("Decision refused: {error}. Refresh and review the proposal and target again."));
-                        view.load_project_mail(false, cx);
-                    }
-                    Err(error) => {
-                        view.mail_selected = None;
-                        view.mail_target = None;
-                        view.mail_message = Some(format!("Decision result unavailable: {error}. The server may have applied it; refresh before retrying."));
-                        view.load_project_mail(false, cx);
-                    },
-                }
-                cx.notify();
-            });
-        }).detach();
-        cx.notify();
-    }
-
-    fn render_project_mail(
-        &self,
-        records: &Remote<Vec<ProjectRecord>>,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut body = div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .p_3()
-            .child(div().text_lg().child("Mail review"));
-        if self.mail.loading {
-            body = body.child("Loading mail proposals…");
-        }
-        if let Some(error) = &self.mail.error {
-            body = body
-                .child(
-                    div()
-                        .text_color(rgb(palette.red))
-                        .child(format!("Could not load mail proposals: {error}")),
-                )
-                .child(
-                    Button::new("project-mail-retry")
-                        .small()
-                        .label("Retry")
-                        .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(false, cx))),
-                );
-        }
-        if let Some(message) = &self.mail_message {
-            body = body.child(div().text_sm().child(message.clone()));
-        }
-        if let Some(proposal) = &self.mail_selected {
-            let mut detail = div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .p_3()
-                .border_1()
-                .border_color(rgba(palette.border))
-                .child(
-                    div()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(proposal.title.clone()),
-                )
-                .child(format!(
-                    "Classification: {} · Version: {}",
-                    proposal.data_class, proposal.version
-                ))
-                .child(format!("Source: {}", proposal.source_id))
-                .child("Evidence (exact)")
-                .child(proposal.evidence.clone())
-                .child(format!(
-                    "Task suggestion (not applied): {}",
-                    proposal.task_suggestion.as_deref().unwrap_or("none")
-                ));
-            if let Some(url) = proposal.gmail_url() {
-                detail = detail.child(
-                    Button::new("project-mail-source")
-                        .small()
-                        .label("Open source in Gmail")
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                );
-            }
-            detail = detail.child("Select an existing project record:");
-            if records.loading {
-                detail = detail.child("Loading project records…");
-            }
-            if let Some(error) = &records.error {
-                detail = detail.child(format!("Could not load records: {error}"));
-            }
-            if let Some(rows) = &records.value {
-                for record in rows {
-                    let path = record.path.clone();
-                    detail = detail.child(
-                        Button::new(format!("mail-target-{path}"))
-                            .small()
-                            .label(format!("{} · {}", record.title, record.path))
-                            .disabled(self.mail_busy || self.mail_target_loading)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.select_mail_target(path.clone(), cx)
-                            })),
-                    );
-                }
-                if rows.is_empty() {
-                    detail = detail.child("No existing records are available.");
-                }
-            }
-            if self.mail_target_loading {
-                detail = detail.child("Loading the target's exact content…");
-            }
-            if let Some(target) = &self.mail_target {
-                detail = detail
-                    .child(format!(
-                        "Selected target: {} · {}",
-                        target.title, target.path
-                    ))
-                    .child("Exact current content (approval requires this unchanged):")
-                    .child(target.content.clone())
-                    .child(
-                        Button::new("project-mail-approve")
-                            .small()
-                            .primary()
-                            .label("Confirm approval and append evidence")
-                            .disabled(
-                                self.mail_busy || self.mail.loading || self.mail.error.is_some(),
-                            )
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.decide_project_mail(true, cx)),
-                            ),
-                    );
-            }
-            detail = detail
-                .child(
-                    Button::new("project-mail-reject")
-                        .small()
-                        .label("Reject proposal")
-                        .disabled(self.mail_busy || self.mail.loading || self.mail.error.is_some())
-                        .on_click(
-                            cx.listener(|view, _, _, cx| view.decide_project_mail(false, cx)),
-                        ),
-                )
-                .child(
-                    Button::new("project-mail-close")
-                        .small()
-                        .ghost()
-                        .label("Close review")
-                        .disabled(self.mail_busy || self.mail_target_loading)
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.mail_selected = None;
-                            view.mail_target = None;
-                            cx.notify();
-                        })),
-                );
-            body = body.child(detail);
-        }
-        if let Some(proposals) = &self.mail.value {
-            if proposals.is_empty() {
-                body = body.child(if self.mail_more {
-                    "No proposals for this project on the pages loaded so far."
-                } else {
-                    "No mail proposals need review."
-                });
-            }
-            for proposal in proposals {
-                let selected = proposal.clone();
-                body = body.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(format!("{} · {}", proposal.title, proposal.data_class))
-                        .child(
-                            Button::new(format!("project-mail-review-{}", proposal.id))
-                                .small()
-                                .label("Review")
-                                .disabled(self.mail_busy || self.mail_target_loading)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.mail_selected = Some(selected.clone());
-                                    view.mail_target = None;
-                                    view.mail_message = None;
-                                    cx.notify();
-                                })),
-                        ),
-                );
-            }
-            if self.mail_more {
-                body = body.child(
-                    Button::new("project-mail-more")
-                        .small()
-                        .label("Load older proposals")
-                        .disabled(self.mail.loading || self.mail_busy)
-                        .on_click(cx.listener(|view, _, _, cx| view.load_project_mail(true, cx))),
-                );
-            }
-        }
-        div()
-            .id("project-mail-scroll")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .child(body)
-            .into_any_element()
-    }
-
-    fn select_link_record(&mut self, path: String, cx: &mut Context<Self>) {
-        if self.link_busy {
-            return;
-        }
-        self.link_generation = self.link_generation.wrapping_add(1);
-        let generation = self.link_generation;
-        self.link_path = Some(path.clone());
-        self.link_review = None;
-        self.link_message = None;
-        self.links = Remote::new_loading();
-        self.link_items = Remote::new_loading();
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                let error = if self.repo.is_replica() {
-                    ShellError::Store("Inventory linking needs an owner-authenticated local shell, unavailable on this device.".into())
-                } else {
-                    error
-                };
-                self.links.settle(Err(error.clone()));
-                self.link_items.settle(Err(error));
-                cx.notify();
-                return;
-            }
-        };
-        let work = shell::run(async move {
-            let (links, items) =
-                futures::join!(shell.project_inventory_links(&path), shell.inventory_rows());
-            (links, items)
-        });
-        cx.spawn(async move |this, cx| {
-            let result = work.await;
-            let _ = this.update(cx, |view, cx| {
-                if view.link_generation != generation {
-                    return;
-                }
-                let (links, items) =
-                    result.unwrap_or((Err(ShellError::Unreachable), Err(ShellError::Unreachable)));
-                view.links.settle(links);
-                view.link_items.settle(items);
-                cx.notify();
-            });
-        })
-        .detach();
-        cx.notify();
-    }
-
-    fn review_inventory_link(
-        &mut self,
-        item_ref: String,
-        label: String,
-        raw_id: Option<String>,
-        remove: bool,
-        cx: &mut Context<Self>,
-    ) {
-        if self.link_busy {
-            return;
-        }
-        let Some(path) = self.link_path.clone() else {
-            return;
-        };
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.link_message = Some(error.to_string());
-                cx.notify();
-                return;
-            }
-        };
-        self.link_generation = self.link_generation.wrapping_add(1);
-        let generation = self.link_generation;
-        self.link_busy = true;
-        self.link_review = None;
-        self.link_message = None;
-        let request_ref = item_ref.clone();
-        let work = shell::run(async move {
-            let record = shell.project_link_record(&path).await?;
-            if record.path != path
-                || record.kind != "project"
-                || record.archived
-                || record.updated_at.is_empty()
-            {
-                return Err(ShellError::Refused(
-                    409,
-                    Some("The project record is not a live project or has no revision.".into()),
-                ));
-            }
-            if !remove {
-                let identity = shell.inventory_identity(&request_ref).await?;
-                if identity.typed_ref != request_ref
-                    || Some(identity.raw_id) != raw_id
-                    || identity.revision < 1
-                {
-                    return Err(ShellError::Refused(
-                        409,
-                        Some("Inventory identity did not match the selected item.".into()),
-                    ));
-                }
-                if identity.state.as_deref() != Some("owned") {
-                    return Err(ShellError::Refused(
-                        409,
-                        Some("The selected Inventory item is not owned.".into()),
-                    ));
-                }
-            }
-            Ok(record)
-        });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                if view.link_generation != generation {
-                    return;
-                }
-                view.link_busy = false;
-                match result {
-                    Ok(record) => {
-                        view.link_review = Some(LinkReview {
-                            record,
-                            item_ref,
-                            item_label: label,
-                            remove,
-                        })
-                    }
-                    Err(error) => {
-                        view.link_message = Some(format!("Could not prepare review: {error}"))
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-        cx.notify();
-    }
-
-    fn confirm_inventory_link(&mut self, cx: &mut Context<Self>) {
-        if self.link_busy {
-            return;
-        }
-        let (Some((project, _)), Some(review)) = (&self.project, &self.link_review) else {
-            return;
-        };
-        let shell = match self.repo.shell() {
-            Ok(shell) => shell,
-            Err(error) => {
-                self.link_message = Some(error.to_string());
-                cx.notify();
-                return;
-            }
-        };
-        let project = project.clone();
-        let record = review.record.clone();
-        let path = record.path.clone();
-        let item_ref = review.item_ref.clone();
-        let remove = review.remove;
-        let generation = self.link_generation;
-        self.link_busy = true;
-        self.link_message = None;
-        let work = shell::run(async move {
-            shell
-                .project_inventory_link_decision(remove, &project, &record, &item_ref)
-                .await
-        });
-        cx.spawn(async move |this, cx| {
-            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
-            let _ = this.update(cx, |view, cx| {
-                if view.link_generation != generation { return; }
-                view.link_busy = false;
-                view.link_review = None;
-                match result {
-                    Ok(changed) => {
-                        view.select_link_record(path, cx);
-                        view.link_message = Some(if changed { if remove { "Link removed." } else { "Link added after Inventory verification." } } else { "No change; the link was already in that state." }.into());
-                    }
-                    Err(error @ ShellError::Refused(_, _)) => {
-                        view.link_message = Some(format!("Link decision refused: {error}. Review again before retrying."));
-                    }
-                    Err(error) => {
-                        view.select_link_record(path, cx);
-                        view.link_message = Some(format!("Link result unavailable: {error}. The server may have applied it; check the refreshed links before retrying."));
-                    },
-                }
-                cx.notify();
-            });
-        }).detach();
-        cx.notify();
-    }
-
-    fn render_inventory_links(
-        &self,
-        records: &Remote<Vec<ProjectRecord>>,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut body = div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .p_3()
-            .child(div().text_lg().child("Project inventory links"))
-            .child("Choose a project record. Links are never inferred or created automatically.");
-        if self.repo.is_replica() && self.repo.shell().is_err() {
-            body = body.child("Inventory linking needs an owner-authenticated local shell, unavailable on this device.");
-        }
-        if records.loading {
-            body = body.child("Loading project records…");
-        }
-        if let Some(error) = &records.error {
-            body = body.child(format!("Could not load project records: {error}"));
-        }
-        if let Some(rows) = &records.value {
-            let hubs: Vec<_> = rows.iter().filter(|r| r.kind == "project").collect();
-            if hubs.is_empty() {
-                body = body.child("No project record is available to link.");
-            }
-            for row in hubs {
-                let path = row.path.clone();
-                body = body.child(
-                    Button::new(format!("link-record-{path}"))
-                        .small()
-                        .label(format!("{} · {}", row.title, row.path))
-                        .disabled(self.link_busy)
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.select_link_record(path.clone(), cx)
-                        })),
-                );
-            }
-        }
-        if let Some(path) = &self.link_path {
-            body = body.child(format!("Selected project record: {path}"));
-            if self.links.loading || self.link_items.loading {
-                body = body.child("Loading links and Inventory…");
-            }
-            if let Some(error) = &self.links.error {
-                body = body.child(
-                    div()
-                        .text_color(rgb(palette.red))
-                        .child(format!("Could not load links: {error}")),
-                );
-            }
-            if let Some(error) = &self.link_items.error {
-                body = body.child(
-                    div()
-                        .text_color(rgb(palette.red))
-                        .child(format!("Could not load Inventory: {error}")),
-                );
-            }
-            let refresh_path = path.clone();
-            body = body.child(
-                Button::new("link-refresh")
-                    .small()
-                    .label("Refresh links and Inventory")
-                    .disabled(self.link_busy)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.select_link_record(refresh_path.clone(), cx)
-                    })),
-            );
-            if let Some(message) = &self.link_message {
-                body = body.child(div().text_sm().child(message.clone()));
-            }
-            if let Some(links) = &self.links.value {
-                body = body.child("Existing links (current Inventory state not checked):");
-                if links.is_empty() {
-                    body = body.child("No links for this record.");
-                }
-                for link in links {
-                    let item_ref = link.item_ref.clone();
-                    let label = self
-                        .link_items
-                        .value
-                        .as_ref()
-                        .and_then(|items| {
-                            items.iter().find(|row| {
-                                shell::inventory_reference(&row.item.id).as_deref()
-                                    == Some(item_ref.as_str())
-                            })
-                        })
-                        .map(|row| row.item.label.clone())
-                        .unwrap_or_else(|| "Inventory item unavailable".into());
-                    let label_review = label.clone();
-                    body = body.child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(format!(
-                                "{label} · {} · last verified revision {}",
-                                link.item_ref, link.verified_revision
-                            ))
-                            .child(
-                                Button::new(format!("link-remove-{}", link.item_ref))
-                                    .small()
-                                    .label("Review removal")
-                                    .disabled(self.link_busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.review_inventory_link(
-                                            item_ref.clone(),
-                                            label_review.clone(),
-                                            None,
-                                            true,
-                                            cx,
-                                        )
-                                    })),
-                            ),
-                    );
-                }
-            }
-            if let Some(items) = &self.link_items.value {
-                body = body.child("Choose an owned Inventory item:");
-                let owned: Vec<_> = items
-                    .iter()
-                    .filter(|row| row.state.as_deref() == Some("owned"))
-                    .collect();
-                if owned.is_empty() {
-                    body = body.child("No owned Inventory items are available.");
-                }
-                for row in owned {
-                    let Some(item_ref) = shell::inventory_reference(&row.item.id) else {
-                        continue;
-                    };
-                    let id = row.item.id.clone();
-                    let label = row.item.label.clone();
-                    body = body.child(
-                        Button::new(format!("link-item-{item_ref}"))
-                            .small()
-                            .label(format!("{} · {}", label, id))
-                            .disabled(self.link_busy)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.review_inventory_link(
-                                    item_ref.clone(),
-                                    format!("{} · {}", label, id),
-                                    Some(id.clone()),
-                                    false,
-                                    cx,
-                                )
-                            })),
-                    );
-                }
-            }
-            if self.link_busy {
-                body = body.child("Checking or saving…");
-            }
-            if let Some(review) = &self.link_review {
-                body = body.child(div().flex().flex_col().gap_2().p_3().border_1().border_color(rgba(palette.border))
-                    .child(if review.remove { "Confirm removal" } else { "Confirm link" })
-                    .child(format!("Project record: {} · {}", review.record.title, review.record.path))
-                    .child(format!("Inventory: {} · {}", review.item_label, review.item_ref))
-                    .child(if review.remove { "Removal does not check whether the Inventory item still exists." } else { "Inventory was checked as owned. The server checks again when you confirm." })
-                    .child(format!("Project revision: {}", review.record.updated_at))
-                    .child(Button::new("link-confirm").small().primary().label(if review.remove { "Confirm removal" } else { "Confirm link" }).disabled(self.link_busy)
-                        .on_click(cx.listener(|view, _, _, cx| view.confirm_inventory_link(cx))))
-                    .child(Button::new("link-cancel").small().ghost().label("Cancel").disabled(self.link_busy)
-                        .on_click(cx.listener(|view, _, _, cx| { view.link_review = None; cx.notify(); }))));
-            }
-        }
-        div()
-            .id("project-links-scroll")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .child(body)
-            .into_any_element()
-    }
 
     fn create_project_note(
         &mut self,
@@ -1456,7 +733,7 @@ impl Projects {
         .detach();
     }
 
-    fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_note(&mut self, path: String, save: bool, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(record) = self.repo.notes().get(&path) {
             self.opening = None;
             self.show_note(record, save, window, cx);
@@ -1587,7 +864,7 @@ impl Projects {
         cx.notify();
     }
 
-    fn toggle_task(
+    pub(super) fn toggle_task(
         &mut self,
         path: String,
         done: bool,
@@ -1613,7 +890,7 @@ impl Projects {
         );
     }
 
-    fn toggle_global_task(
+    pub(super) fn toggle_global_task(
         &mut self,
         path: String,
         done: bool,
@@ -1623,7 +900,7 @@ impl Projects {
         self.toggle_task(path, done, window, cx);
     }
 
-    fn remove_record(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn remove_record(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
         self.repo.notes().forget(&path);
         let repo = self.repo.clone();
         data::write_repo(
@@ -1642,7 +919,7 @@ impl Projects {
 
     /// Writes one frontmatter field of a task through the capability, which owns the edit and
     /// answers with the record's new frontmatter.
-    fn set_task_field(
+    pub(super) fn set_task_field(
         &mut self,
         record: &ProjectRecord,
         key: &'static str,
@@ -1669,7 +946,7 @@ impl Projects {
         );
     }
 
-    fn edit_due(&mut self, record: ProjectRecord, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn edit_due(&mut self, record: ProjectRecord, window: &mut Window, cx: &mut Context<Self>) {
         let due = record.due.clone().unwrap_or_default();
         let input = cx.new(|cx| {
             let mut state = InputState::new(window, cx).placeholder("YYYY-MM-DD");
@@ -1913,714 +1190,6 @@ impl Projects {
     }
 }
 
-impl Projects {
-    fn task_table(
-        &self,
-        records: &[ProjectRecord],
-        new_task: &Entity<InputState>,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let cols = self.columns();
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let open_count = records
-            .iter()
-            .filter(|r| r.kind == "task" && !r.done)
-            .count();
-        let all_count = records.iter().filter(|r| r.kind == "task").count();
-        let done_count = all_count.saturating_sub(open_count);
-
-        let filter_bar = div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .mb_2()
-            .child(filter_pill(
-                "Open",
-                open_count,
-                self.task_filter == TaskFilter::Open,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::Open;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "All",
-                all_count,
-                self.task_filter == TaskFilter::All,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::All;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "Done",
-                done_count,
-                self.task_filter == TaskFilter::Done,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::Done;
-                    cx.notify();
-                }),
-            ));
-
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child("TASK"))
-            .child(div().w(px(cols.due)).child("DUE"))
-            .child(div().w(px(cols.priority)).child("PRIORITY"))
-            .child(div().w(px(28.)))
-            .into_any_element();
-        let mut rows = vec![header];
-
-        let filtered: Vec<_> = tasks::ordered(records)
-            .into_iter()
-            .filter(|t| self.task_filter.matches(t.done))
-            .collect();
-
-        if filtered.is_empty() && !records.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(match self.task_filter {
-                        TaskFilter::Open => "No open tasks in this project.",
-                        TaskFilter::Done => "No completed tasks yet.",
-                        TaskFilter::All => "No tasks in this project.",
-                    })
-                    .into_any_element(),
-            );
-        }
-
-        for (index, task) in filtered.into_iter().enumerate() {
-            let (toggle, open, del) = (task.clone(), task.clone(), task.clone());
-            let due = task.due.clone().filter(|d| !d.is_empty());
-            let editing = self
-                .due_edit
-                .as_ref()
-                .filter(|(record, _, _)| record.path == task.path)
-                .map(|(_, input, _)| input.clone());
-            let due_cell = match editing {
-                Some(input) => {
-                    let task_rec = task.clone();
-                    let today_date = chrono::Local::now().date_naive();
-                    let today_str = today_date.format("%Y-%m-%d").to_string();
-                    let tomorrow_str = (today_date + chrono::Duration::days(1))
-                        .format("%Y-%m-%d")
-                        .to_string();
-                    let week_str = (today_date + chrono::Duration::days(7))
-                        .format("%Y-%m-%d")
-                        .to_string();
-                    let chip = |cx: &mut Context<Self>,
-                                chip_id: &'static str,
-                                label: &'static str,
-                                val: String,
-                                rec: ProjectRecord| {
-                        div()
-                            .id((chip_id, index))
-                            .px_1()
-                            .py(px(0.5))
-                            .rounded(px(3.))
-                            .bg(rgba(palette.raised))
-                            .text_xs()
-                            .cursor_pointer()
-                            .hover(move |s| s.text_color(rgb(palette.accent)))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.set_task_field(&rec, "due", val.clone(), window, cx);
-                                view.due_edit = None;
-                                cx.notify();
-                            }))
-                            .child(label)
-                    };
-                    div()
-                        .w(px(cols.due.max(160.)))
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(Input::new(&input).small())
-                        .child(
-                            div()
-                                .flex()
-                                .gap_1()
-                                .child(chip(cx, "chip-today", "Today", today_str, task_rec.clone()))
-                                .child(chip(
-                                    cx,
-                                    "chip-tmrw",
-                                    "Tmrw",
-                                    tomorrow_str,
-                                    task_rec.clone(),
-                                ))
-                                .child(chip(cx, "chip-7d", "+7d", week_str, task_rec.clone()))
-                                .child(chip(cx, "chip-clear", "Clear", String::new(), task_rec)),
-                        )
-                        .into_any_element()
-                }
-                None => {
-                    let edit = task.clone();
-                    div()
-                        .id(("due", index))
-                        .w(px(cols.due))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            view.edit_due(edit.clone(), window, cx)
-                        }))
-                        .child(due_badge(due.as_deref(), task.done, &today, palette))
-                        .into_any_element()
-                }
-            };
-            let subtask_badge =
-                tasks::parse_subtask_progress(&task.content).map(|(done, total)| {
-                    div()
-                        .px_1p5()
-                        .py(px(0.5))
-                        .rounded(px(4.))
-                        .bg(rgba(if done == total {
-                            tint(palette.green, 0x22)
-                        } else {
-                            palette.raised
-                        }))
-                        .text_xs()
-                        .text_color(rgb(if done == total {
-                            palette.green
-                        } else {
-                            palette.muted
-                        }))
-                        .child(format!("{done}/{total}"))
-                });
-            let cycle = task.clone();
-            let priority = task.priority.clamp(1, 3);
-            rows.push(
-                row_for_density(cols.density)
-                    .id(("task-row", index))
-                    .group("task-row")
-                    .min_h(px(40.))
-                    .py_1()
-                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .when(task.done, |row| row.opacity(0.55))
-                    .child(
-                        div().w(px(24.)).flex().items_center().child(
-                            Checkbox::new(("task-done", index))
-                                .checked(task.done)
-                                .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                    view.toggle_task(toggle.path.clone(), *done, window, cx)
-                                })),
-                        ),
-                    )
-                    .child(
-                        div()
-                            .id(("task", index))
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.open_note(open.path.clone(), true, window, cx)
-                            }))
-                            .child(
-                                div()
-                                    .truncate()
-                                    .text_sm()
-                                    .when(task.done, |title| title.line_through())
-                                    .hover(move |style| style.text_color(rgb(palette.accent)))
-                                    .child(task.title.clone()),
-                            )
-                            .children(subtask_badge),
-                    )
-                    .child(due_cell)
-                    .child(
-                        div()
-                            .id(("priority", index))
-                            .w(px(cols.priority))
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                let next = cycle.priority.clamp(1, 3) % 3 + 1;
-                                view.set_task_field(
-                                    &cycle,
-                                    "priority",
-                                    next.to_string(),
-                                    window,
-                                    cx,
-                                )
-                            }))
-                            .child(priority_pill(priority, palette)),
-                    )
-                    .child(
-                        div().w(px(28.)).flex().justify_center().child(
-                            div()
-                                .id(("del-task", index))
-                                .cursor_pointer()
-                                .text_color(rgb(palette.muted))
-                                .opacity(0.)
-                                .group_hover("task-row", |s| s.opacity(1.))
-                                .hover(move |s| s.text_color(rgb(palette.red)))
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.remove_record(del.path.clone(), window, cx)
-                                }))
-                                .child("×"),
-                        ),
-                    )
-                    .into_any_element(),
-            );
-        }
-        rows.push(
-            row_for_density(cols.density)
-                .min_h(px(40.))
-                .py_1()
-                .child(
-                    div()
-                        .w(px(24.))
-                        .flex()
-                        .items_center()
-                        .text_color(rgb(palette.muted))
-                        .child("+"),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .child(Input::new(new_task).appearance(false).px_0()),
-                )
-                .into_any_element(),
-        );
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(filter_bar)
-            .child(list(rows, palette))
-            .into_any_element()
-    }
-
-    fn all_tasks_table(
-        &self,
-        tasks: &[GlobalTask],
-        search_input: &Entity<InputState>,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let cols = self.columns();
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let open_count = tasks.iter().filter(|t| !t.done).count();
-        let done_count = tasks.iter().filter(|t| t.done).count();
-        let all_count = tasks.len();
-
-        let filter_bar = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
-            .mb_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(filter_pill(
-                        "Open",
-                        open_count,
-                        self.global_task_filter == TaskFilter::Open,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.global_task_filter = TaskFilter::Open;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(filter_pill(
-                        "All",
-                        all_count,
-                        self.global_task_filter == TaskFilter::All,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.global_task_filter = TaskFilter::All;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(filter_pill(
-                        "Done",
-                        done_count,
-                        self.global_task_filter == TaskFilter::Done,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.global_task_filter = TaskFilter::Done;
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(search_box(cols.search).child(Input::new(search_input).small()));
-
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child("TASK"))
-            .child(column(cols.project).child("PROJECT"))
-            .child(div().w(px(cols.due)).child("DUE"))
-            .child(div().w(px(cols.priority)).child("PRIORITY"))
-            .into_any_element();
-        let mut rows = vec![header];
-
-        let query = self.search_query.as_str();
-        let filtered: Vec<_> = tasks
-            .iter()
-            .filter(|t| self.global_task_filter.matches(t.done))
-            .filter(|t| {
-                query.is_empty()
-                    || t.title.to_lowercase().contains(query)
-                    || t.project.to_lowercase().contains(query)
-            })
-            .collect();
-
-        if filtered.is_empty() && !tasks.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(if query.is_empty() {
-                        "No tasks in this filter view.".to_string()
-                    } else {
-                        format!("No tasks matching \"{query}\".")
-                    })
-                    .into_any_element(),
-            );
-        }
-
-        for (index, task) in filtered.into_iter().enumerate() {
-            let toggle = task.clone();
-            let proj_name = task.project.clone();
-            let due = task.due.clone().filter(|d| !d.is_empty());
-            let priority = task.priority.clamp(1, 3);
-            let subtask_badge = task
-                .summary
-                .as_deref()
-                .and_then(tasks::parse_subtask_progress)
-                .map(|(done, total)| {
-                    div()
-                        .px_1p5()
-                        .py(px(0.5))
-                        .rounded(px(4.))
-                        .bg(rgba(if done == total {
-                            tint(palette.green, 0x22)
-                        } else {
-                            palette.raised
-                        }))
-                        .text_xs()
-                        .text_color(rgb(if done == total {
-                            palette.green
-                        } else {
-                            palette.muted
-                        }))
-                        .child(format!("{done}/{total}"))
-                });
-            rows.push(
-                row_for_density(cols.density)
-                    .id(("all-task-row", index))
-                    .group("all-task-row")
-                    .min_h(px(40.))
-                    .py_1()
-                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .when(task.done, |row| row.opacity(0.55))
-                    .child(
-                        div().w(px(24.)).flex().items_center().child(
-                            Checkbox::new(("all-task-done", index))
-                                .checked(task.done)
-                                .on_click(cx.listener(move |view, done: &bool, window, cx| {
-                                    view.toggle_global_task(toggle.id.clone(), *done, window, cx)
-                                })),
-                        ),
-                    )
-                    .child(
-                        div()
-                            .id(("all-task", index))
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .truncate()
-                                    .text_sm()
-                                    .when(task.done, |title| title.line_through())
-                                    .child(task.title.clone()),
-                            )
-                            .children(subtask_badge),
-                    )
-                    .child(
-                        column(cols.project).child(
-                            div()
-                                .id(("proj-tag", index))
-                                .px_2()
-                                .py(px(1.5))
-                                .rounded(px(4.))
-                                .bg(rgba(tint(palette.accent, 0x12)))
-                                .border_1()
-                                .border_color(rgba(tint(palette.accent, 0x24)))
-                                .text_color(rgb(palette.accent))
-                                .text_xs()
-                                .font_weight(FontWeight::MEDIUM)
-                                .truncate()
-                                .cursor_pointer()
-                                .hover(move |s| {
-                                    s.bg(rgba(tint(palette.accent, 0x22)))
-                                        .text_color(rgb(palette.text))
-                                })
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.open_project(proj_name.clone(), cx);
-                                    view.tab = ProjectsTab::Hubs;
-                                }))
-                                .child(task.project.clone()),
-                        ),
-                    )
-                    .child(div().w(px(cols.due)).child(due_badge(
-                        due.as_deref(),
-                        task.done,
-                        &today,
-                        palette,
-                    )))
-                    .child(
-                        div()
-                            .w(px(cols.priority))
-                            .child(priority_pill(priority, palette)),
-                    )
-                    .into_any_element(),
-            );
-        }
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(filter_bar)
-            .child(list(rows, palette))
-            .into_any_element()
-    }
-
-    fn all_notes_table(
-        &self,
-        notes: &[GlobalNote],
-        search_input: &Entity<InputState>,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let cols = self.columns();
-        let hubs_count = notes.iter().filter(|n| n.kind == "project").count();
-        let regular_count = notes.len().saturating_sub(hubs_count);
-
-        let filter_bar = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
-            .mb_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(filter_pill(
-                        "All",
-                        notes.len(),
-                        self.note_kind_filter == NoteKindFilter::All,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.note_kind_filter = NoteKindFilter::All;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(filter_pill(
-                        "Hubs ★",
-                        hubs_count,
-                        self.note_kind_filter == NoteKindFilter::Hubs,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.note_kind_filter = NoteKindFilter::Hubs;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(filter_pill(
-                        "Notes ≡",
-                        regular_count,
-                        self.note_kind_filter == NoteKindFilter::Notes,
-                        palette,
-                        cx.listener(|view, _, _, cx| {
-                            view.note_kind_filter = NoteKindFilter::Notes;
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(search_box(cols.search).child(Input::new(search_input).small()));
-
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child("NOTE"))
-            .child(column(cols.project).child("PROJECT"))
-            .child(column(cols.kind).child("TYPE"))
-            .into_any_element();
-        let mut rows = vec![header];
-
-        let query = self.notes_search_query.as_str();
-        let filtered: Vec<_> = notes
-            .iter()
-            .filter(|n| {
-                let matches_kind = match self.note_kind_filter {
-                    NoteKindFilter::All => true,
-                    NoteKindFilter::Hubs => n.kind == "project",
-                    NoteKindFilter::Notes => n.kind != "project",
-                };
-                matches_kind
-                    && (query.is_empty()
-                        || n.title.to_lowercase().contains(query)
-                        || n.project.to_lowercase().contains(query)
-                        || n.path.to_lowercase().contains(query))
-            })
-            .collect();
-
-        if filtered.is_empty() && !notes.is_empty() {
-            rows.push(
-                row_for_density(cols.density)
-                    .min_h(px(40.))
-                    .py_2()
-                    .text_sm()
-                    .text_color(rgb(palette.muted))
-                    .child(format!("No notes matching \"{query}\"."))
-                    .into_any_element(),
-            );
-        }
-
-        for (index, note) in filtered.into_iter().enumerate() {
-            let open_path = note.path.clone();
-            let proj_name = note.project.clone();
-            let is_hub = note.kind == "project";
-            rows.push(
-                row_for_density(cols.density)
-                    .id(("all-note-row", index))
-                    .group("all-note-row")
-                    .min_h(px(40.))
-                    .py_1()
-                    .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .child(
-                        div().w(px(24.)).flex().items_center().child(
-                            div()
-                                .size(px(20.))
-                                .rounded(px(4.))
-                                .bg(rgba(palette.raised))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_xs()
-                                .text_color(rgb(if is_hub {
-                                    palette.accent
-                                } else {
-                                    palette.muted
-                                }))
-                                .child(if is_hub { "★" } else { "≡" }),
-                        ),
-                    )
-                    .child(
-                        div()
-                            .id(("all-note", index))
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_sm()
-                            .cursor_pointer()
-                            .hover(move |s| s.text_color(rgb(palette.accent)))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.open_note(open_path.clone(), true, window, cx);
-                            }))
-                            .child(note.title.clone()),
-                    )
-                    .child(
-                        column(cols.project).child(
-                            div()
-                                .id(("all-note-proj", index))
-                                .px_2()
-                                .py(px(1.5))
-                                .rounded(px(4.))
-                                .bg(rgba(tint(palette.accent, 0x12)))
-                                .border_1()
-                                .border_color(rgba(tint(palette.accent, 0x24)))
-                                .text_color(rgb(palette.accent))
-                                .text_xs()
-                                .font_weight(FontWeight::MEDIUM)
-                                .truncate()
-                                .cursor_pointer()
-                                .hover(move |s| {
-                                    s.bg(rgba(tint(palette.accent, 0x22)))
-                                        .text_color(rgb(palette.text))
-                                })
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.open_project(proj_name.clone(), cx);
-                                    view.tab = ProjectsTab::Hubs;
-                                }))
-                                .child(note.project.clone()),
-                        ),
-                    )
-                    .child(
-                        column(cols.kind).child(
-                            div()
-                                .px_2()
-                                .py(px(1.5))
-                                .rounded(px(4.))
-                                .bg(rgba(if is_hub {
-                                    tint(palette.accent, 0x18)
-                                } else {
-                                    palette.raised
-                                }))
-                                .border_1()
-                                .border_color(rgba(if is_hub {
-                                    tint(palette.accent, 0x30)
-                                } else {
-                                    palette.border
-                                }))
-                                .text_xs()
-                                .font_weight(if is_hub {
-                                    FontWeight::SEMIBOLD
-                                } else {
-                                    FontWeight::NORMAL
-                                })
-                                .text_color(rgb(if is_hub {
-                                    palette.accent
-                                } else {
-                                    palette.muted
-                                }))
-                                .child(note.kind.clone()),
-                        ),
-                    )
-                    .into_any_element(),
-            );
-        }
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(filter_bar)
-            .child(list(rows, palette))
-            .into_any_element()
-    }
-}
 
 impl Render for Projects {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

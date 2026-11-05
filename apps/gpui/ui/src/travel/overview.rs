@@ -1,4 +1,5 @@
 //! Trip overview, readiness check, who-is-around contacts, and timeline.
+use super::forms::Remove;
 use super::Travel;
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use gpui_kit::component::Disableable;
@@ -79,6 +80,22 @@ impl Travel {
         for (i, place) in plan.places().enumerate() {
             page = page.child(self.place_row(i, place, cx));
         }
+        page = page.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .pt_3()
+                .border_t_1()
+                .border_color(rgba(self.palette.border))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(self.palette.muted))
+                        .child("Delete this trip and its saved bookings."),
+                )
+                .children(self.remove_button(Remove::Plan(plan.id.clone()), cx)),
+        );
         page.into_any_element()
     }
 

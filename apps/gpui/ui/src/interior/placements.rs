@@ -6,6 +6,7 @@ use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     canvas, div, point, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, PathBuilder, Window,
 };
+use sjel_gpui_core::interior::PlacementUpdate;
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
@@ -305,16 +306,16 @@ impl RoomPlanHistory {
         cx.notify();
         let work = shell::run(async move {
             source
-                .apply_placement(
-                    &editor.space_id,
-                    &editor.item_id,
-                    &editor.revision_id,
-                    &editor.observation_id,
-                    editor.expected_revision,
+                .apply_placement(PlacementUpdate {
+                    space_id: &editor.space_id,
+                    item_id: &editor.item_id,
+                    revision_id: &editor.revision_id,
+                    observation_id: &editor.observation_id,
+                    expected_revision: editor.expected_revision,
                     x,
                     y,
-                    rot,
-                )
+                    rotation: rot,
+                })
                 .await
         });
         cx.spawn(async move |weak, cx| {

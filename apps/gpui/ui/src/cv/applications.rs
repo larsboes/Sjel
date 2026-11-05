@@ -41,9 +41,9 @@ impl CvPage {
                 cx.notify();
             }));
 
-        let status_tabs = view.statuses.iter().cloned().map(|st| {
+        let status_tabs = view.statuses.iter().map(|st| {
             let count = status_counts.get(st.as_str()).copied().unwrap_or(0);
-            let is_active = &st == filter;
+            let is_active = st == filter;
             let st_clone = st.clone();
             Button::new(SharedString::from(format!("tab-{}", st)))
                 .small()

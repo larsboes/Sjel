@@ -11,7 +11,7 @@ pub use badges::{
 };
 pub use cards::{
     back_button, card, list, progress_bar, row, row_for_density, section, stat_card,
-    stat_card_interactive, stat_strip, virtual_list,
+    stat_card_interactive, stat_strip, virtual_list, InteractiveStatCard,
 };
 pub use tables::{
     data_row, key_bar, page_scroll, remote_state, shortcut_hint, sub_tabs, table_header,

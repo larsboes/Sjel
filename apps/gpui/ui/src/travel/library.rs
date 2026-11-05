@@ -229,13 +229,7 @@ impl Travel {
                         })
                         .cursor_pointer()
                         .on_click(cx.listener(move |view, _, _, cx| {
-                            view.open_route(
-                                TravelRoute::Trip {
-                                    id: id.clone(),
-                                    section: sjel_gpui_core::travel::TripSection::Overview,
-                                },
-                                cx,
-                            );
+                            view.select(id.clone(), cx);
                         }))
                         .child(
                             div()
@@ -316,13 +310,7 @@ impl Travel {
                         .opacity(0.8)
                         .cursor_pointer()
                         .on_click(cx.listener(move |view, _, _, cx| {
-                            view.open_route(
-                                TravelRoute::Trip {
-                                    id: id.clone(),
-                                    section: sjel_gpui_core::travel::TripSection::Overview,
-                                },
-                                cx,
-                            );
+                            view.select(id.clone(), cx);
                         }))
                         .child(
                             div()

@@ -1236,10 +1236,9 @@ impl Travel {
 
         let target_id = plan_id.clone();
         cx.spawn(async move |this, cx| {
-            let mut downloaded = cached;
-            for tile in missing_tiles {
+            for (index, tile) in missing_tiles.into_iter().enumerate() {
                 let _ = travel::load_tile(tile, true).await;
-                downloaded += 1;
+                let downloaded = cached + index + 1;
                 let id = target_id.clone();
                 let _ = this.update(cx, |view, cx| {
                     view.offline_progress.insert(id, (downloaded, total));

@@ -5,6 +5,9 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::theme::Palette;
 
+type RenderedDiagram = Result<(String, f32, f32), String>;
+type DiagramCache = OnceLock<Mutex<HashMap<String, RenderedDiagram>>>;
+
 pub(crate) fn mermaid_source(text: &str) -> Option<String> {
     let mut lines = text.lines();
     let opening = lines.next()?.trim();
@@ -36,8 +39,7 @@ pub(crate) fn palette_hex(color: u32) -> String {
 }
 
 pub(crate) fn render_mermaid(source: &str, palette: Palette) -> Result<(String, f32, f32), String> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Result<(String, f32, f32), String>>>> =
-        OnceLock::new();
+    static CACHE: DiagramCache = OnceLock::new();
     let key = format!(
         "{source}\0{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
         palette.surface,

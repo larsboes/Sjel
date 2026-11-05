@@ -182,6 +182,16 @@ covers it.
   `tools/obsidian-plugin <name> smoke` verb that attaches to a running debug port, reloads the
   plugin, opens its view, and fails on any console error.
 
+- **`apps/gpui` escapes the format gate.** `tools/ci-impact.ts` and CI run
+  `cargo fmt --all --check` at the repository root, which does not reach the nested workspace in
+  `apps/gpui`. Workaround: `cargo fmt --all --check --manifest-path apps/gpui/Cargo.toml` by
+  hand, which also reports the root crates `apps/gpui` depends on by path, and
+  `rustfmt --edition 2021 <file>` for one changed file, because a bare `rustfmt` reorders
+  imports under another style edition. Found 2026-11-05:
+  `apps/gpui/src/sidebar/mod.rs` and `apps/gpui/ui/src/theme/settings.rs` were already
+  unformatted at `d07edc16`. Smallest change: add the `apps/gpui` manifest to the `cargo fmt`
+  step in `tools/ci-impact.ts` and `.github/workflows/ci.yml`, then format those two files.
+
 ## Done
 
 - `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a

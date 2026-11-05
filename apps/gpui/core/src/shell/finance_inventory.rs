@@ -544,23 +544,19 @@ impl Shell {
 
     pub async fn interior_roomplan_apply_placement(
         &self,
-        space_id: &str,
-        item_id: &str,
-        revision_id: &str,
-        observation_id: &str,
-        expected_revision: i64,
-        x: i32,
-        y: i32,
-        rot: i32,
+        update: crate::interior::PlacementUpdate<'_>,
     ) -> ShellResult<serde_json::Value> {
-        let path = format!("/interior/api/roomplan/spaces/{space_id}/placements/{item_id}");
+        let path = format!(
+            "/interior/api/roomplan/spaces/{}/placements/{}",
+            update.space_id, update.item_id
+        );
         let body = serde_json::json!({
-            "revision_id": revision_id,
-            "observation_id": observation_id,
-            "expected_revision": expected_revision,
-            "x": x,
-            "y": y,
-            "rot": rot
+            "revision_id": update.revision_id,
+            "observation_id": update.observation_id,
+            "expected_revision": update.expected_revision,
+            "x": update.x,
+            "y": update.y,
+            "rot": update.rotation
         });
         self.json(Method::PUT, &path, Some(body), 30).await
     }

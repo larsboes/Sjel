@@ -11,7 +11,7 @@ use sjel_gpui_core::shell::GlobalTask;
 
 use super::types::ContextEvent;
 use super::ContextPage;
-use crate::primitives::{stat_card_interactive, stat_strip};
+use crate::primitives::{stat_card_interactive, stat_strip, InteractiveStatCard};
 use crate::theme::Palette;
 
 pub fn render_day_header(
@@ -126,49 +126,55 @@ pub fn render_metric_cards(
 
     stat_strip(vec![
         stat_card_interactive(
-            "context-stat-events",
-            "EVENTS",
-            format!("{event_count} scheduled"),
-            Some(
-                if event_count == 0 {
-                    "Calendar clear"
-                } else {
-                    "Click to filter ·Meetings & blocks"
-                }
-                .into(),
-            ),
-            palette.text,
-            filter_kind == Some(TimelineKind::Event),
-            palette,
+            InteractiveStatCard {
+                id: "context-stat-events".into(),
+                label: "EVENTS".into(),
+                value: format!("{event_count} scheduled").into(),
+                detail: Some(
+                    if event_count == 0 {
+                        "Calendar clear"
+                    } else {
+                        "Click to filter ·Meetings & blocks"
+                    }
+                    .into(),
+                ),
+                tone: palette.text,
+                active: filter_kind == Some(TimelineKind::Event),
+                palette,
+            },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Event, cx)),
         ),
         stat_card_interactive(
-            "context-stat-tasks",
-            "TASKS",
-            format!("{open_task_count} open"),
-            Some(
-                if is_today && !attention.is_empty() {
-                    "Urgent or due today".to_string()
-                } else if done_task_count > 0 {
-                    format!("{done_task_count} completed")
-                } else {
-                    "Due today".to_string()
-                }
-                .into(),
-            ),
-            palette.text,
-            filter_kind == Some(TimelineKind::Task),
-            palette,
+            InteractiveStatCard {
+                id: "context-stat-tasks".into(),
+                label: "TASKS".into(),
+                value: format!("{open_task_count} open").into(),
+                detail: Some(
+                    if is_today && !attention.is_empty() {
+                        "Urgent or due today".to_string()
+                    } else if done_task_count > 0 {
+                        format!("{done_task_count} completed")
+                    } else {
+                        "Due today".to_string()
+                    }
+                    .into(),
+                ),
+                tone: palette.text,
+                active: filter_kind == Some(TimelineKind::Task),
+                palette,
+            },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Task, cx)),
         ),
         stat_card_interactive(
-            "context-stat-spend",
-            "SPENDING",
-            total_spend_str,
-            Some(format!("{} transactions", context.spend.len()).into()),
-            palette.text,
-            filter_kind == Some(TimelineKind::Spend),
-            palette,
+            InteractiveStatCard {
+                id: "context-stat-spend".into(),
+                label: "SPENDING".into(),
+                value: total_spend_str.into(),
+                detail: Some(format!("{} transactions", context.spend.len()).into()),
+                tone: palette.text,
+                active: filter_kind == Some(TimelineKind::Spend),
+                palette,
+            },
             cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Spend, cx)),
         ),
     ])

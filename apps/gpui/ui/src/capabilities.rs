@@ -85,10 +85,12 @@ fn capabilities<V: 'static>(
                 });
             capability_row(
                 state,
-                marked,
-                name,
-                *cap_state,
-                palette,
+                CapabilityRow {
+                    selected: marked,
+                    name,
+                    health: *cap_state,
+                    palette,
+                },
                 cx,
                 on_toggle.clone(),
                 on_open.clone(),
@@ -110,16 +112,27 @@ fn capabilities<V: 'static>(
         .into_any_element()
 }
 
+#[derive(Clone, Copy)]
+struct CapabilityRow<'a> {
+    selected: bool,
+    name: &'a str,
+    health: CapabilityHealth,
+    palette: Palette,
+}
+
 fn capability_row<V: 'static>(
     state: &State<'_>,
-    selected: bool,
-    name: &str,
-    cap_state: CapabilityHealth,
-    palette: Palette,
+    entry: CapabilityRow<'_>,
     cx: &mut Context<V>,
     on_toggle: impl Fn(&mut V, String, bool, &mut Window, &mut Context<V>) + 'static,
     on_open: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + 'static,
 ) -> AnyElement {
+    let CapabilityRow {
+        selected,
+        name,
+        health: cap_state,
+        palette,
+    } = entry;
     let busy = state.busy.contains(name);
     // Running is the normal state: the dot says it, and only the exceptions get words.
     let (tone, label) = match cap_state.liveness() {

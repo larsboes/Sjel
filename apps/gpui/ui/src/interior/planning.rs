@@ -275,7 +275,7 @@ fn add_planning_analysis(candidate: &mut PlanningCandidate, review: &serde_json:
                 .iter()
                 .filter_map(|(reference, count)| Some((reference.as_str(), count.as_u64()?)))
                 .collect::<Vec<_>>();
-            pieces.sort_by(|left, right| right.1.cmp(&left.1));
+            pieces.sort_by_key(|piece| std::cmp::Reverse(piece.1));
             if pieces.is_empty() {
                 format!("no direct sun across {checked} checked hours")
             } else {

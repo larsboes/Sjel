@@ -13,6 +13,18 @@ pub enum RoomPlanSource {
     Device(Arc<DeviceClient>),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PlacementUpdate<'a> {
+    pub space_id: &'a str,
+    pub item_id: &'a str,
+    pub revision_id: &'a str,
+    pub observation_id: &'a str,
+    pub expected_revision: i64,
+    pub x: i32,
+    pub y: i32,
+    pub rotation: i32,
+}
+
 impl RoomPlanSource {
     pub async fn layouts(&self) -> ShellResult<Vec<crate::inventory::InteriorLayoutSummary>> {
         match self {
@@ -209,43 +221,26 @@ impl RoomPlanSource {
 
     pub async fn apply_placement(
         &self,
-        space_id: &str,
-        item_id: &str,
-        revision_id: &str,
-        observation_id: &str,
-        expected_revision: i64,
-        x: i32,
-        y: i32,
-        rot: i32,
+        update: PlacementUpdate<'_>,
     ) -> ShellResult<serde_json::Value> {
         match self {
-            Self::Shell(shell) => {
-                shell
-                    .interior_roomplan_apply_placement(
-                        space_id,
-                        item_id,
-                        revision_id,
-                        observation_id,
-                        expected_revision,
-                        x,
-                        y,
-                        rot,
-                    )
-                    .await
-            }
+            Self::Shell(shell) => shell.interior_roomplan_apply_placement(update).await,
             Self::Device(client) => {
                 let body = serde_json::json!({
-                    "revision_id": revision_id,
-                    "observation_id": observation_id,
-                    "expected_revision": expected_revision,
-                    "x": x,
-                    "y": y,
-                    "rot": rot
+                    "revision_id": update.revision_id,
+                    "observation_id": update.observation_id,
+                    "expected_revision": update.expected_revision,
+                    "x": update.x,
+                    "y": update.y,
+                    "rot": update.rotation
                 });
                 let body = serde_json::to_vec(&body).map_err(|_| ShellError::Unreadable)?;
                 client
                     .put(
-                        &format!("/interior/api/roomplan/spaces/{space_id}/placements/{item_id}"),
+                        &format!(
+                            "/interior/api/roomplan/spaces/{}/placements/{}",
+                            update.space_id, update.item_id
+                        ),
                         &body,
                     )
                     .await

@@ -27,10 +27,17 @@ pub(crate) struct CsvMappingField {
     pub(super) _subscription: Subscription,
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ImportDerivedKey {
+    candidates_loaded_at: Option<Instant>,
+    dashboard_loaded_at: Option<Instant>,
+    trip_plans_loaded_at: Option<Instant>,
+    review_revision: u64,
+}
 
+#[derive(Default)]
 pub(crate) struct ImportDerived {
-    pub(super) key: Option<(Option<Instant>, Option<Instant>, Option<Instant>, u64)>,
+    pub(super) key: Option<ImportDerivedKey>,
     pub(super) pending_indices: Vec<usize>,
     pub(super) uncategorized: Vec<FinanceCandidate>,
     pub(super) review_queue: Vec<ExpenseReview>,
@@ -63,12 +70,12 @@ pub(crate) fn default_csv_mapping() -> serde_json::Value {
 
 impl FinancePage {
     pub(super) fn sync_import_derived(&mut self) {
-        let key = (
-            self.candidates.loaded_at,
-            self.dashboard.loaded_at,
-            self.trip_plans.loaded_at,
-            self.review_rev,
-        );
+        let key = ImportDerivedKey {
+            candidates_loaded_at: self.candidates.loaded_at,
+            dashboard_loaded_at: self.dashboard.loaded_at,
+            trip_plans_loaded_at: self.trip_plans.loaded_at,
+            review_revision: self.review_rev,
+        };
         if self.import_derived.key == Some(key) {
             return;
         }

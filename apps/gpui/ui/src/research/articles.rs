@@ -209,7 +209,10 @@ pub(super) fn render_markdown_prose(content: &str, palette: Palette) -> AnyEleme
                     .child(trimmed.trim_start_matches("### ").to_string())
                     .into_any_element(),
             );
-        } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+        } else if let Some(item) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
             elements.push(
                 div()
                     .flex()
@@ -221,11 +224,11 @@ pub(super) fn render_markdown_prose(content: &str, palette: Palette) -> AnyEleme
                             .text_size(px(12.0))
                             .text_color(rgb(palette.text))
                             .line_height(px(18.0))
-                            .child(trimmed[2..].to_string()),
+                            .child(item.to_string()),
                     )
                     .into_any_element(),
             );
-        } else if trimmed.starts_with("> ") {
+        } else if let Some(quote) = trimmed.strip_prefix("> ") {
             elements.push(
                 div()
                     .border_l_2()
@@ -235,7 +238,7 @@ pub(super) fn render_markdown_prose(content: &str, palette: Palette) -> AnyEleme
                     .text_size(px(12.0))
                     .text_color(rgb(palette.muted))
                     .line_height(px(18.0))
-                    .child(trimmed[2..].to_string())
+                    .child(quote.to_string())
                     .into_any_element(),
             );
         } else {

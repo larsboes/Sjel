@@ -160,19 +160,33 @@ pub fn stat_card(
         .into_any_element()
 }
 
-/// Interactive horizontal metric cell (`label`, `value`, optional `detail`, semantic `tone`, `active` state, and click handler).
+/// Content, styling state, and semantic color for an interactive metric card.
+pub struct InteractiveStatCard {
+    pub id: ElementId,
+    pub label: SharedString,
+    pub value: SharedString,
+    pub detail: Option<SharedString>,
+    pub tone: u32,
+    pub active: bool,
+    pub palette: Palette,
+}
+
+/// Render an interactive horizontal metric cell.
 pub fn stat_card_interactive(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
-    value: impl Into<SharedString>,
-    detail: Option<SharedString>,
-    tone: u32,
-    active: bool,
-    palette: Palette,
+    card: InteractiveStatCard,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    let InteractiveStatCard {
+        id,
+        label,
+        value,
+        detail,
+        tone,
+        active,
+        palette,
+    } = card;
     div()
-        .id(id.into())
+        .id(id)
         .flex_1()
         .min_w(px(120.))
         .p_3()
@@ -214,7 +228,7 @@ pub fn stat_card_interactive(
                         } else {
                             palette.muted
                         }))
-                        .child(label.into()),
+                        .child(label),
                 )
                 .when(active, |el| {
                     el.child(
@@ -231,7 +245,7 @@ pub fn stat_card_interactive(
                 .text_lg()
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(rgb(tone))
-                .child(value.into()),
+                .child(value),
         )
         .when_some(detail, |el, det| {
             el.child(div().text_xs().text_color(rgb(palette.muted)).child(det))

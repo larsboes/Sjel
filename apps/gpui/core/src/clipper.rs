@@ -181,12 +181,12 @@ pub fn extract_attribute(tag: &str, attr: &str) -> Option<String> {
     let pattern = format!("{attr}=");
     let at = lower.find(&pattern)?;
     let rest = tag[at + pattern.len()..].trim_start();
-    if rest.starts_with('"') {
-        let end = rest[1..].find('"')?;
-        Some(rest[1..1 + end].to_string())
-    } else if rest.starts_with('\'') {
-        let end = rest[1..].find('\'')?;
-        Some(rest[1..1 + end].to_string())
+    if let Some(value) = rest.strip_prefix('"') {
+        let end = value.find('"')?;
+        Some(value[..end].to_string())
+    } else if let Some(value) = rest.strip_prefix('\'') {
+        let end = value.find('\'')?;
+        Some(value[..end].to_string())
     } else {
         let end = rest
             .find(|c: char| c.is_whitespace() || c == '>')
@@ -1061,7 +1061,9 @@ mod tests {
         assert_eq!(citations.len(), 1);
         assert_eq!(
             citations[0].url.as_deref(),
-            Some("https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHr1rAgghLiyvOlnmUtStinv7TEPq4h4uiU_npZJTTJaXGTfJ1mVqtuKqFeueTPcQ31VW1okiJnEvXNPopRmYCf2-_giaFIqyH0xgI0I-fgVAgh5F7FmJa0gEYSzuTltfs=")
+            Some(
+                "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHr1rAgghLiyvOlnmUtStinv7TEPq4h4uiU_npZJTTJaXGTfJ1mVqtuKqFeueTPcQ31VW1okiJnEvXNPopRmYCf2-_giaFIqyH0xgI0I-fgVAgh5F7FmJa0gEYSzuTltfs="
+            )
         );
     }
 }

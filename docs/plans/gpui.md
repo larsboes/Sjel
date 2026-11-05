@@ -141,6 +141,16 @@ the Mac's last sync time.
    for cached trips.
 4. **Fare alerts.** Work Package 27, verified on a device.
 5. **Edits on the phone.** Trip fields and bookings, through the Trips routes the Mac uses.
+6. **Trip selection and deletion.** Shipped: a library row opens the trip overview through
+   `Travel::select` (`ui/src/travel/library.rs`), and the overview's foot now carries the
+   two-press "Delete trip" action, whose removal path (`Remove::Plan`, `Work::DeletePlan`) was
+   previously reachable only from item and stage rows (`ui/src/travel/overview.rs`). The delete
+   reads the plan's `updated_at` and sends it back as `expected_updated_at`, so a trip edited
+   elsewhere after it was opened is refused (`core/src/shell/people_calendar.rs`). Not run: the
+   manual check that a click opens the overview from every section, that one press arms the
+   delete and a second deletes the trip, and that a stale revision is refused. No headless test
+   covers either path: the GPUI test scheduler treats the details read that `select` starts as
+   nondeterministic activity.
 
 Done when an upcoming trip shows the offline-ready mark, then opens with its timeline, map and
 booking PDFs in airplane mode.
@@ -394,6 +404,20 @@ build was performed for this handoff.
    leg (`578e6948`). Linux credentials use the Secret Service (`37adf658`). Open: a Windows
    keychain crate, a PDF renderer off macOS, a launch on a real Linux desktop, packaging, and an
    Android host like `ios/host`. The pinned `gpui-mobile` already has an Android backend.
+5. **Lints.** Clippy is clean for `apps/gpui` at `--all-targets`
+   (`sjel cargo clippy --manifest-path apps/gpui/Cargo.toml --all-targets --locked`). The
+   remaining warnings were a manual counter loop, manual prefix slicing, a reversed-key sort,
+   `too_many_arguments`, `type_complexity`, a needless borrow and an ambiguous `into()`. The
+   argument and tuple bundles are now named types: `PlacementUpdate` (`core/src/interior.rs`),
+   `InteractiveStatCard` (`ui/src/primitives/cards.rs`), `CapabilityRow`
+   (`ui/src/capabilities.rs`), `ImportDerivedKey` (`ui/src/finance/import.rs`) and the render
+   cache aliases in `ui/src/docs/diagrams.rs`. Format a change with
+   `rustfmt --edition 2021 <file>`: a bare `rustfmt` sorts imports under another style edition
+   and rewrites every `use` it touches, which `cargo fmt --check` then rejects. No gate covers
+   formatting in `apps/gpui`, because the repository's format step runs at the root workspace
+   ([`tooling.md`](tooling.md#open)). `apps/gpui/src/sidebar/mod.rs` and
+   `apps/gpui/ui/src/theme/settings.rs` were already unformatted at `d07edc16` and stay out of
+   this change.
 
 ## 7. UI and UX roadmap
 

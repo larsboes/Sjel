@@ -1034,7 +1034,27 @@ impl Travel {
                 .size_full(),
             );
             let markers: Vec<_> = if matches!(self.route, TravelRoute::Map) {
-                self.location_markers()
+                let mut all_markers = self.location_markers();
+                // When on home map or user location is available, also ensure user's current location pin is represented
+                if let Some(user_coord) = self.current_user_location() {
+                    let has_user_pin = all_markers.iter().any(|m| m.place.coordinate() == Some(user_coord));
+                    if !has_user_pin {
+                        all_markers.insert(0, LocationMarker {
+                            plan_id: String::new(),
+                            place: travel::Place {
+                                name: "Current Location".into(),
+                                address: None,
+                                latitude: Some(user_coord.latitude),
+                                longitude: Some(user_coord.longitude),
+                            },
+                            from: String::new(),
+                            to: String::new(),
+                            label: "Current Location".into(),
+                            category: PlaceCategory::Place,
+                        });
+                    }
+                }
+                all_markers
             } else {
                 self.current_plan_markers()
             };
@@ -1210,36 +1230,99 @@ impl Travel {
                 map = map.child(card);
             }
         }
-        let controls = div()
-            .absolute()
-            .top(px(8.))
-            .left(px(8.))
-            .flex()
-            .gap_1()
-            .p_1()
-            .rounded(px(10.))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .bg(rgba(palette.surface))
-            .child(
-                self.button("fit-trip")
-                    .label("Fit trip")
-                    .primary()
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.selected_stop = None;
-                        view.fit_trip(cx);
-                    })),
-            )
-            .child(
-                self.button("zoom-in")
-                    .label("Zoom in")
-                    .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
-            )
-            .child(
-                self.button("zoom-out")
-                    .label("Zoom out")
-                    .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
-            );
+        let controls = if self.compact_map {
+            let is_zoomed_out = self.home_zoom_out;
+            div()
+                .absolute()
+                .top(px(8.))
+                .left(px(8.))
+                .flex()
+                .gap_1()
+                .p_1()
+                .rounded(px(10.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .child(
+                    self.button("home-map-here")
+                        .small()
+                        .label("📍 Here")
+                        .when(!is_zoomed_out, |b| b.primary())
+                        .when(is_zoomed_out, |b| b.ghost())
+                        .tooltip("Focus on your current location")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.home_zoom_out = false;
+                            view.selected_stop = None;
+                            if let Some(user_loc) = view.current_user_location() {
+                                view.center = Some(user_loc);
+                                view.zoom = 13.;
+                                view.fit_pending = false;
+                                view.load_map(cx);
+                            }
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    self.button("home-map-trips")
+                        .small()
+                        .label("🗺 Trips")
+                        .when(is_zoomed_out, |b| b.primary())
+                        .when(!is_zoomed_out, |b| b.ghost())
+                        .tooltip("Zoom out to view upcoming trips and stops")
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.home_zoom_out = true;
+                            view.selected_stop = None;
+                            view.fit_trip(cx);
+                        })),
+                )
+                .child(
+                    self.button("zoom-in")
+                        .small()
+                        .label("+")
+                        .ghost()
+                        .tooltip("Zoom in")
+                        .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
+                )
+                .child(
+                    self.button("zoom-out")
+                        .small()
+                        .label("−")
+                        .ghost()
+                        .tooltip("Zoom out")
+                        .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
+                )
+        } else {
+            div()
+                .absolute()
+                .top(px(8.))
+                .left(px(8.))
+                .flex()
+                .gap_1()
+                .p_1()
+                .rounded(px(10.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .child(
+                    self.button("fit-trip")
+                        .label("Fit trip")
+                        .primary()
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.selected_stop = None;
+                            view.fit_trip(cx);
+                        })),
+                )
+                .child(
+                    self.button("zoom-in")
+                        .label("Zoom in")
+                        .on_click(cx.listener(|view, _, _, cx| view.zoom_by(1., None, cx))),
+                )
+                .child(
+                    self.button("zoom-out")
+                        .label("Zoom out")
+                        .on_click(cx.listener(|view, _, _, cx| view.zoom_by(-1., None, cx))),
+                )
+        };
         map = map.child(controls);
         if no_locations && self.map_error.is_none() {
             let mut overlay = div()

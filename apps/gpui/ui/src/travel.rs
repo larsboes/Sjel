@@ -98,6 +98,7 @@ pub struct Travel {
     presence_loaded: bool,
     presence_again: bool,
     compact_map: bool,
+    home_zoom_out: bool,
     selected_day_filter: Option<String>,
     pub(super) offline_downloading: std::collections::HashSet<String>,
     pub(super) offline_progress: HashMap<String, (usize, usize)>,
@@ -242,6 +243,7 @@ impl Travel {
             presence_loaded: false,
             presence_again: false,
             compact_map: false,
+            home_zoom_out: false,
             selected_day_filter: None,
             offline_downloading: std::collections::HashSet::new(),
             offline_progress: HashMap::new(),
@@ -535,12 +537,66 @@ impl Travel {
             self.open_route(TravelRoute::Map, cx);
         }
         self.compact_map = true;
-        self.fit_pending = true;
         if !self.loaded && !self.loading {
             self.refresh(cx);
         }
         self.load_people_presence(cx, false);
+
+        if !self.home_zoom_out {
+            if let Some(user_loc) = self.current_user_location() {
+                self.center = Some(user_loc);
+                self.zoom = 13.;
+                self.fit_pending = false;
+                self.load_map(cx);
+            } else {
+                self.fit_pending = true;
+            }
+        } else {
+            self.fit_pending = true;
+        }
+
         self.map(cx)
+    }
+
+    /// Finds the user's current location:
+    /// 1. An active stay / trip destination happening today.
+    /// 2. If no trip is active today, the home base / origin of the nearest trip.
+    pub fn current_user_location(&self) -> Option<Coordinate> {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+        // 1. Check for any stay or destination happening today across plans
+        for plan in self.plans.iter().filter(|p| p.date_start <= today && p.date_end >= today && p.status != "cancelled") {
+            if let Some(details) = self.details.get(&plan.id).and_then(|slot| slot.value.as_ref()) {
+                for item in &details.details.items {
+                    if item.item_type != "stay" {
+                        continue;
+                    }
+                    let day = item.payload.get("check_in").and_then(serde_json::Value::as_str).or(item.day.as_deref()).unwrap_or(&plan.date_start);
+                    let to = item.payload.get("check_out").and_then(serde_json::Value::as_str).unwrap_or(day);
+                    if today.as_str() >= day && today.as_str() <= to {
+                        if let (Some(lat), Some(lng)) = (
+                            item.payload.get("latitude").and_then(serde_json::Value::as_f64),
+                            item.payload.get("longitude").and_then(serde_json::Value::as_f64),
+                        ) {
+                            return Some(Coordinate { latitude: lat, longitude: lng });
+                        }
+                    }
+                }
+            }
+            if let Some(coord) = plan.destinations.iter().find_map(|d| d.coordinate()) {
+                return Some(coord);
+            }
+        }
+
+        // 2. Fall back to base / origin of the nearest or upcoming trip
+        self.plans
+            .iter()
+            .filter(|p| p.status != "cancelled")
+            .min_by(|a, b| a.date_start.cmp(&b.date_start))
+            .and_then(|p| p.origin.coordinate())
+            .or_else(|| {
+                self.plans.first().and_then(|p| p.origin.coordinate())
+            })
     }
 
     pub(super) fn materialize_trip_draft(&mut self, draft: TripDraft, cx: &mut Context<Self>) {

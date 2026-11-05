@@ -81,9 +81,11 @@ follow the constraints in Decisions.
 
 ### 6. App
 
-A Finance view "Ideas": the list with stance, price against the nearest trigger, and new
-research count; the detail with thesis history, triggers, matched research, digest and
-proposals. Built with synthetic fixtures; the manual acceptance test is the operator's.
+Built: the Finance view "Ideas" (key `5`, `apps/gpui/ui/src/finance/ideas.rs`). A list with
+stance, price and the gap to the nearest level in the same currency; a form for a new idea; and
+for the selected idea its thesis, stance, price levels (a typed `1200,50` is read as `1200.50`),
+notes, close or reopen, and earlier theses. Open: the operator's manual acceptance test in the
+running app.
 
 ## Order
 

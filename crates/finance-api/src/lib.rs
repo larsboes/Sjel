@@ -378,3 +378,102 @@ pub struct AllocateExpenseRequest {
 pub struct LinkReimbursementRequest {
     pub expense_candidate_id: String,
 }
+
+/// One price level on an idea. `price` is a decimal with a point, such as `1200.50`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaTrigger {
+    /// `above` or `below`.
+    pub direction: String,
+    pub price: String,
+    pub currency: String,
+}
+
+/// What a client sends to create or replace an idea (`POST /api/ideas`, `PUT /api/ideas/{id}`).
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaDraft {
+    pub label: String,
+    #[serde(default)]
+    pub ticker: String,
+    #[serde(default)]
+    pub instrument: Option<String>,
+    /// `hold`, `watch`, `enter` or `exit`.
+    pub stance: String,
+    #[serde(default)]
+    pub thesis: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub triggers: Vec<FinanceIdeaTrigger>,
+    /// `open` or `closed`.
+    #[serde(default = "open_status")]
+    pub status: String,
+    #[serde(default)]
+    pub close_note: String,
+}
+
+fn open_status() -> String {
+    "open".into()
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaSnapshot {
+    #[serde(flatten)]
+    pub draft: FinanceIdeaDraft,
+    pub recorded_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaNote {
+    pub text: String,
+    pub recorded_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaPrice {
+    pub price: FinanceDecimalValue,
+    pub currency: String,
+    pub observed_on: String,
+}
+
+/// One idea as `GET /api/ideas` returns it: the current draft, its history and notes, and the
+/// newest price for its instrument or ticker.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdea {
+    pub id: String,
+    #[serde(flatten)]
+    pub current: FinanceIdeaDraft,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub history: Vec<FinanceIdeaSnapshot>,
+    #[serde(default)]
+    pub notes: Vec<FinanceIdeaNote>,
+    #[serde(default)]
+    pub price: Option<FinanceIdeaPrice>,
+}
+
+#[cfg(test)]
+mod idea_wire_tests {
+    use super::*;
+
+    /// The shape `GET /api/ideas` serializes (`crates/finance/src/server.rs`, `IdeaView`).
+    #[test]
+    fn an_idea_from_the_server_parses() {
+        let body = r#"[{"id":"idea-1","label":"Synthetic","ticker":"SYN","instrument":null,
+            "stance":"watch","thesis":"t2","keywords":["S"],
+            "triggers":[{"direction":"above","price":"10.5","currency":"EUR"}],
+            "status":"open","close_note":"","created_at":"2026-11-01T00:00:00Z",
+            "updated_at":"2026-11-02T00:00:00Z",
+            "history":[{"label":"Synthetic","ticker":"SYN","instrument":null,"stance":"watch",
+                "thesis":"t1","keywords":[],"triggers":[],"status":"open","close_note":"",
+                "recorded_at":"2026-11-01T00:00:00Z"}],
+            "notes":[{"text":"n","recorded_at":"2026-11-01T00:00:00Z"}],
+            "price":{"instrument":"SYN","observed_on":"2026-11-04",
+                "price":{"mantissa":"206100","scale":4},"currency":"EUR","source":"yahoo",
+                "fetched_at":"2026-11-04T00:00:00Z"}}]"#;
+        let ideas: Vec<FinanceIdea> = serde_json::from_str(body).expect("parses");
+        assert_eq!(ideas[0].current.triggers[0].price, "10.5");
+        assert_eq!(ideas[0].history[0].draft.thesis, "t1");
+        assert_eq!(ideas[0].price.as_ref().map(|p| p.price.scale), Some(4));
+    }
+}

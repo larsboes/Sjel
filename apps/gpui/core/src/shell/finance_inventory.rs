@@ -87,6 +87,52 @@ impl Shell {
         .await
     }
 
+    pub async fn finance_ideas(&self) -> ShellResult<Vec<super::FinanceIdea>> {
+        self.json(Method::GET, "/finance/api/ideas", None, 10).await
+    }
+
+    /// Creates an idea when `id` is `None`, else replaces it with a new snapshot.
+    pub async fn finance_save_idea(
+        &self,
+        id: Option<&str>,
+        draft: &super::FinanceIdeaDraft,
+    ) -> ShellResult<serde_json::Value> {
+        let body = serde_json::to_value(draft).map_err(|_| ShellError::Unreachable)?;
+        match id {
+            None => {
+                self.json(Method::POST, "/finance/api/ideas", Some(body), 30)
+                    .await
+            }
+            Some(id) if valid_idea_id(id) => {
+                self.json(
+                    Method::PUT,
+                    &format!("/finance/api/ideas/{id}"),
+                    Some(body),
+                    30,
+                )
+                .await
+            }
+            Some(_) => Err(ShellError::Refused(400, Some("Invalid idea id.".into()))),
+        }
+    }
+
+    pub async fn finance_add_idea_note(
+        &self,
+        id: &str,
+        text: &str,
+    ) -> ShellResult<serde_json::Value> {
+        if !valid_idea_id(id) {
+            return Err(ShellError::Refused(400, Some("Invalid idea id.".into())));
+        }
+        self.json(
+            Method::POST,
+            &format!("/finance/api/ideas/{id}/notes"),
+            Some(serde_json::json!({ "text": text })),
+            30,
+        )
+        .await
+    }
+
     pub async fn finance_reconcile_transfer(
         &self,
         id: &str,
@@ -690,4 +736,8 @@ impl Shell {
         });
         self.json(Method::POST, &path, Some(body), 10).await
     }
+}
+
+fn valid_idea_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }

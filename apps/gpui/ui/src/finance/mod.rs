@@ -29,6 +29,8 @@ actions!(
         SubscriptionsView,
         /// Show CSV import and candidate review.
         ImportReviewView,
+        /// Show investment ideas.
+        IdeasView,
         /// Focus the search field.
         FocusSearch,
         /// Reload data from the finance capability.
@@ -42,6 +44,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("2", TransactionsView, Some("FinancePage")),
         KeyBinding::new("3", SubscriptionsView, Some("FinancePage")),
         KeyBinding::new("4", ImportReviewView, Some("FinancePage")),
+        KeyBinding::new("5", IdeasView, Some("FinancePage")),
         KeyBinding::new("/", FocusSearch, Some("FinancePage")),
     ]);
 }
@@ -52,8 +55,10 @@ pub enum View {
     Transactions,
     Subscriptions,
     ImportReview,
+    Ideas,
 }
 
+mod ideas;
 mod import;
 mod overview;
 mod subscriptions;
@@ -117,6 +122,13 @@ pub struct FinancePage {
     pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
     pub(super) focus: FocusHandle,
     pub(super) focus_next: bool,
+    pub(super) ideas: Remote<Vec<shell::FinanceIdea>>,
+    pub(super) selected_idea: Option<String>,
+    pub(super) idea_inputs: Option<ideas::IdeaInputs>,
+    pub(super) thesis_for: Option<String>,
+    pub(super) new_idea_stance: &'static str,
+    pub(super) level_direction: &'static str,
+    pub ideas_scroll: ScrollHandle,
 }
 
 impl FinancePage {
@@ -174,6 +186,13 @@ impl FinancePage {
             search_input: None,
             focus: cx.focus_handle(),
             focus_next: true,
+            ideas: Remote::default(),
+            selected_idea: None,
+            idea_inputs: None,
+            thesis_for: None,
+            new_idea_stance: "watch",
+            level_direction: "above",
+            ideas_scroll: ScrollHandle::new(),
         }
     }
 
@@ -183,6 +202,7 @@ impl FinancePage {
             View::Transactions => None,
             View::Subscriptions => Some(&self.subscriptions_scroll),
             View::ImportReview => Some(&self.import_scroll),
+            View::Ideas => Some(&self.ideas_scroll),
         }
     }
 
@@ -229,6 +249,9 @@ impl FinancePage {
         let Ok(shell) = self.repo.shell() else {
             return;
         };
+        if self.ideas.value.is_some() {
+            self.load_ideas(cx);
+        }
 
         self.dashboard.loading = true;
         self.subscriptions.loading = true;
@@ -343,6 +366,10 @@ impl FinancePage {
         self.set_view(View::Subscriptions, cx);
     }
 
+    fn on_ideas_view(&mut self, _: &IdeasView, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_view(View::Ideas, cx);
+    }
+
     fn on_import_review_view(
         &mut self,
         _: &ImportReviewView,
@@ -404,7 +431,8 @@ impl Render for FinancePage {
                 .child(view_btn("Overview", View::Overview, cx))
                 .child(view_btn("Transactions", View::Transactions, cx))
                 .child(view_btn("Subscriptions", View::Subscriptions, cx))
-                .child(view_btn("Import & Review", View::ImportReview, cx)),
+                .child(view_btn("Import & Review", View::ImportReview, cx))
+                .child(view_btn("Ideas", View::Ideas, cx)),
         );
 
         // Body per Tab
@@ -413,6 +441,7 @@ impl Render for FinancePage {
             View::Transactions => self.render_transactions(window, palette, cx),
             View::Subscriptions => self.render_subscriptions(palette),
             View::ImportReview => self.render_import_review(palette, window, cx),
+            View::Ideas => self.render_ideas(window, palette, cx),
         };
 
         div()
@@ -422,6 +451,7 @@ impl Render for FinancePage {
             .on_action(cx.listener(Self::on_transactions_view))
             .on_action(cx.listener(Self::on_subscriptions_view))
             .on_action(cx.listener(Self::on_import_review_view))
+            .on_action(cx.listener(Self::on_ideas_view))
             .on_action(cx.listener(Self::on_focus_search))
             .on_action(cx.listener(Self::on_refresh))
             .size_full()
@@ -438,11 +468,7 @@ impl Render for FinancePage {
                     .child(content),
             )
             .child(key_bar(
-                &[
-                    ("1 / 2 / 3 / 4", "switch tab"),
-                    ("/", "search"),
-                    ("⌘r", "refresh"),
-                ],
+                &[("1 – 5", "switch tab"), ("/", "search"), ("⌘r", "refresh")],
                 palette,
             ))
     }

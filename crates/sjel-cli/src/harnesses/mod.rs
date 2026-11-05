@@ -911,7 +911,8 @@ fn foreign_at(harness: &Harness) -> Result<Vec<Stray>, String> {
             continue;
         };
         let is_link = file_type.is_symlink();
-        if !is_link && !file_type.is_dir() {
+        // A folder with no SKILL.md is a harness store, such as Claude Code's `synced/`.
+        if !is_link && (!file_type.is_dir() || !full.join("SKILL.md").exists()) {
             continue;
         }
         let marker = if is_link {

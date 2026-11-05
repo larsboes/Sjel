@@ -122,10 +122,11 @@ keyboard, drag, resize and Undo scenarios pass; Day focus and availability work 
 and rendered views have been checked in both themes. Implemented, awaiting native acceptance:
 Day and Week placement, quarter-hour move and resize, time editing and Undo, compact details,
 availability-to-entry and desktop travel drafts, month overflow and all-day spans. Verified:
-13 core calendar tests, 7 calendar UI tests, desktop and iOS simulator type checks. The UI tests
+13 core calendar tests, 8 calendar UI tests, desktop and iOS simulator type checks. The UI tests
 cover desktop drag and keyboard editing and a 375-point phone layout; replica tests cover queued
-move, resize and restoration. Open: sync-status mark, native gesture and sync acceptance, both
-themes, and scroll-cost measurement. The offscreen PNG example
+move, resize and restoration. Long-press touch capture, quarter-hour move preview, edge resize,
+cancellation and invalid resize rejection have a headless gesture test. Open: sync-status mark,
+native gesture and sync acceptance, both themes, and scroll-cost measurement. The offscreen PNG example
 (`cargo run --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui --example calendar-preview -- /tmp/calendar.png week light`)
 compiled, but sandboxed AppKit pasteboard access failed before rendering. Native visual and
 device checks have not passed.

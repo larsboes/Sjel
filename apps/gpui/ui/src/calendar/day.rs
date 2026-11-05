@@ -22,6 +22,15 @@ use crate::{Density, Palette};
 use super::grid::CalendarDrag;
 use super::types::{CalendarEvent, Composer, DayViewMode, Origin};
 
+#[derive(Clone)]
+struct TouchEdit {
+    id: String,
+    resize: bool,
+    start_y: gpui::Pixels,
+    original: chrono::NaiveDateTime,
+    target: chrono::NaiveDateTime,
+}
+
 /// The page's own state: which day, what answered it, and why nothing did.
 pub struct Calendar {
     /// This device's own store, once the app has one.
@@ -58,6 +67,7 @@ pub struct Calendar {
     undo_time: Option<(CalendarEntry, CalendarEntry)>,
     show_availability: bool,
     drop_minute: Option<u16>,
+    touch_edit: Option<TouchEdit>,
     clock: Option<gpui::Task<()>>,
     timeline_scroll: gpui::ScrollHandle,
     /// Bumped per read, so a slow answer for a week the person has left cannot replace the week
@@ -101,6 +111,7 @@ impl Calendar {
             undo_time: None,
             show_availability: false,
             drop_minute: None,
+            touch_edit: None,
             clock: None,
             timeline_scroll,
             generation: 0,
@@ -225,6 +236,7 @@ impl Calendar {
     pub fn open_day(&mut self, day: NaiveDate, cx: &mut Context<Self>) {
         let current_week = self.week.clone();
         self.selected = None;
+        self.touch_edit = None;
         self.day = day;
         self.week = calendar::week_dates(day);
         if self.week != current_week {
@@ -565,6 +577,7 @@ impl Calendar {
         let mut sheet = div()
             .id("calendar-event-sheet")
             .debug_selector(|| "calendar-event-sheet".into())
+            .occlude()
             .max_h(px(320.))
             .overflow_y_scroll()
             .absolute()
@@ -1019,6 +1032,7 @@ impl Calendar {
                         "mobile-calendar-block-{}",
                         entry.id
                     )))
+                    .debug_selector(|| "mobile-calendar-event".into())
                     .absolute()
                     .top(px(block.start as f32 / 60. * hour_height))
                     .left(gpui::relative(block.column as f32 / block.columns as f32))
@@ -1033,12 +1047,23 @@ impl Calendar {
                     .text_color(rgb(palette.text))
                     .child(entry.title.clone())
                     .child(calendar::time_label(entry, day))
+                    .when_some(
+                        self.touch_edit.as_ref().filter(|edit| edit.id == entry.id),
+                        |block, edit| {
+                            block.child(format!(
+                                "{} {}",
+                                if edit.resize { "End:" } else { "Move to:" },
+                                edit.target.format("%a %H:%M")
+                            ))
+                        },
+                    )
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.selected = Some(id.clone());
                         cx.notify();
                     }))
                     .when(self.writable(), |block| {
                         block
+                            .child(self.touch_time_target(entry, hour_height, cx))
                             .on_drag(
                                 CalendarDrag {
                                     id: entry.id.clone(),
@@ -1089,6 +1114,106 @@ impl Calendar {
             .children(all_day)
             .child(timeline)
             .into_any_element()
+    }
+
+    fn touch_time_target(
+        &self,
+        entry: &CalendarEntry,
+        hour_height: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let entity = cx.entity().downgrade();
+        let entry = entry.clone();
+        gpui::canvas(
+            |bounds, window, _| window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal),
+            move |bounds, hitbox, window, _| {
+                window.on_mouse_event(move |event: &gpui::LongPressEvent, phase, window, cx| {
+                    if !phase.bubble() {
+                        return;
+                    }
+                    let _ = entity.update(cx, |view, cx| match event.phase {
+                        gpui::TouchPhase::Started
+                            if hitbox.is_hovered(window)
+                                && !window.default_prevented()
+                                && view.writable()
+                                && !view.saving =>
+                        {
+                            let resize = event.start_position.y >= bounds.bottom() - px(12.);
+                            let timestamp = if resize {
+                                &entry.ends_at
+                            } else {
+                                &entry.starts_at
+                            };
+                            let Ok(original) = chrono::NaiveDateTime::parse_from_str(
+                                timestamp,
+                                "%Y-%m-%dT%H:%M:%S",
+                            ) else {
+                                return;
+                            };
+                            view.touch_edit = Some(TouchEdit {
+                                id: entry.id.clone(),
+                                resize,
+                                start_y: event.start_position.y,
+                                original,
+                                target: original,
+                            });
+                            window.capture_long_press(&cx.entity());
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                        gpui::TouchPhase::Moved | gpui::TouchPhase::Ended
+                            if view
+                                .touch_edit
+                                .as_ref()
+                                .is_some_and(|edit| edit.id == entry.id) =>
+                        {
+                            let edit = view.touch_edit.as_mut().expect("active touch edit");
+                            let delta = (f32::from(event.position.y - edit.start_y) / hour_height
+                                * 4.)
+                                .round() as i64
+                                * 15;
+                            if let Some(target) =
+                                edit.original.checked_add_signed(Duration::minutes(delta))
+                            {
+                                edit.target = target;
+                            }
+                            if event.phase == gpui::TouchPhase::Ended {
+                                let edit = view.touch_edit.take().expect("active touch edit");
+                                if edit.target != edit.original {
+                                    view.change_time(
+                                        &edit.id,
+                                        edit.target.date(),
+                                        (edit.target.hour() * 60 + edit.target.minute()) as u16,
+                                        edit.resize,
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                        gpui::TouchPhase::Cancelled
+                            if view
+                                .touch_edit
+                                .as_ref()
+                                .is_some_and(|edit| edit.id == entry.id) =>
+                        {
+                            view.touch_edit = None;
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                        _ => {}
+                    });
+                });
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .into_any_element()
     }
 }
 
@@ -1500,6 +1625,96 @@ mod tests {
         page.entries = vec![odd];
         let row = format!("{:?}", page.entries_of_day());
         assert!(row.contains("unheard-of"), "{row}");
+    }
+
+    #[gpui::test]
+    fn long_press_moves_resizes_and_cancels_without_a_mouse_drag(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let page = cx.new(|_| {
+            let day = calendar::parse_day("2026-11-05").unwrap();
+            let mut page = Calendar::at(day, Density::Mobile);
+            let mut event = entry(
+                "Review",
+                "2026-11-05T09:00:00",
+                "2026-11-05T10:00:00",
+                false,
+            );
+            event.id = "calendar:fixture".into();
+            page.entries = vec![event];
+            page.store = Some(Repo::new(Err(ShellError::NotSetUp)));
+            page.origin = Origin::Store;
+            page.loaded = true;
+            page.view_mode = DayViewMode::Grid;
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.simulate_resize(gpui::size(px(375.), px(812.)));
+        cx.run_until_parked();
+        let bounds = cx.debug_bounds("mobile-calendar-event").unwrap();
+        let start = bounds.origin + gpui::point(px(10.), px(5.));
+        cx.simulate_mouse_move(start, None, gpui::Modifiers::none());
+        cx.simulate_event(gpui::LongPressEvent {
+            phase: gpui::TouchPhase::Started,
+            start_position: start,
+            position: start,
+        });
+        page.read_with(cx, |page, _| {
+            assert!(page.touch_edit.as_ref().is_some_and(|edit| !edit.resize))
+        });
+        let moved = start + gpui::point(px(0.), px(26.));
+        cx.simulate_event(gpui::LongPressEvent {
+            phase: gpui::TouchPhase::Moved,
+            start_position: start,
+            position: moved,
+        });
+        page.read_with(cx, |page, _| {
+            assert_eq!(
+                page.touch_edit
+                    .as_ref()
+                    .unwrap()
+                    .target
+                    .format("%H:%M")
+                    .to_string(),
+                "09:30"
+            )
+        });
+        cx.simulate_event(gpui::LongPressEvent {
+            phase: gpui::TouchPhase::Cancelled,
+            start_position: start,
+            position: moved,
+        });
+        page.read_with(cx, |page, _| {
+            assert!(page.touch_edit.is_none());
+            assert!(!page.saving);
+            assert!(page.error.is_none());
+        });
+
+        let start = gpui::point(bounds.origin.x + px(10.), bounds.bottom() - px(4.));
+        cx.simulate_mouse_move(start, None, gpui::Modifiers::none());
+        cx.simulate_event(gpui::LongPressEvent {
+            phase: gpui::TouchPhase::Started,
+            start_position: start,
+            position: start,
+        });
+        page.read_with(cx, |page, _| {
+            assert!(page.touch_edit.as_ref().is_some_and(|edit| edit.resize))
+        });
+        let moved = start - gpui::point(px(0.), px(78.));
+        cx.simulate_event(gpui::LongPressEvent {
+            phase: gpui::TouchPhase::Ended,
+            start_position: start,
+            position: moved,
+        });
+        page.read_with(cx, |page, _| {
+            assert!(page.touch_edit.is_none());
+            assert!(page
+                .error
+                .as_ref()
+                .is_some_and(|error| error.contains("end must be after")));
+            assert!(!page.saving);
+        });
     }
 
     #[gpui::test]

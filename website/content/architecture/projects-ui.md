@@ -112,10 +112,10 @@ Implemented 2026-10-20 per user directive:
   - Interactive subsystem filters: All Systems, Power & Filter, Water Circuit, Drive & Drum, Drain & Pump, Safety & M1–M5.
   - Interactive clickable hotspot pins with live component readout card and direct navigation to project notes.
 - **Notion-Like CRUD Interactions**:
-  - **Projects Sidebar**: Inline `+ New` project creator with name and summary inputs; project status counts (open tasks, notes count); Archive/Unarchive and Delete Project operations.
+  - **Projects Sidebar**: Inline `+ New` project creator with name and summary inputs; project status counts (open tasks, notes count). Archiving goes through `POST /api/projects/archive` and `POST /api/projects/unarchive`.
   - **Tasks**: Inline `+ Add task` form, deletion button per task row, opened task card with deletion and backlinks.
   - **Notes**: Styled as Notion page cards with page icon, title, backlink pills, inline editing, and delete actions with confirmation prompts.
-  - **Backend Deletion Route**: Added `POST /api/record/remove` to `capabilities/projects/src/server.rs` with `RemoveRecord` schema; synchronized with store transaction and filesystem cleanup.
+  - **Backend Deletion Route**: Added `POST /api/record/remove` to `crates/projects/src/server.rs` with `RemoveRecord` schema; synchronized with store transaction and filesystem cleanup.
 - **Wikilink Resolution & Hover Previews**:
   - Wikilinks (`[[Target|Label]]`) resolve dynamically against attachments, local project notes, and other projects across Sjel.
   - Floating hover preview card displays record title, kind badge, due/priority metadata, and an automated excerpt when hovering over any record link.

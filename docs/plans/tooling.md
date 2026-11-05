@@ -184,8 +184,8 @@ covers it.
 
 ## Done
 
-- `projects archive <project>` and `POST /api/projects/archive` move a live project's records
-  and attachments under `Archive/`, after checking every target path.
+- `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a
+  project's records and attachments into or out of `Archive/`, after checking every target path.
 - Dependabot watches `/apps/gpui` (`.github/dependabot.yml`). It ignores the coupled
   `gpui-kit`, `gpui-pre` and `gpui-mobile` set, which moves by hand per
   [`gpui.md`](gpui.md#6-one-ui-crate-every-platform). The `verification result` check is

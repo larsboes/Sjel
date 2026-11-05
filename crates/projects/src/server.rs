@@ -128,6 +128,12 @@ const ROUTES: &[route_manifest::Route] = &[
     },
     route_manifest::Route {
         method: "POST",
+        path: "/api/projects/unarchive",
+        summary: "Restore an archived project folder from Archive/ to the live tree. Moves nothing when a target path is taken.",
+        request_schema: Some(route_manifest::schema_of::<ArchiveProject>),
+    },
+    route_manifest::Route {
+        method: "POST",
         path: "/api/record/rename",
         summary: "Rename a record: its file takes the new title, and every record linking [[old]] is rewritten to the new title with its alias and heading kept.",
         request_schema: Some(route_manifest::schema_of::<RenameRecord>),
@@ -758,6 +764,16 @@ async fn archive_project(
     Ok(Json(json!(archived)))
 }
 
+async fn unarchive_project(
+    State(projects): State<Shared>,
+    Json(body): Json<ArchiveProject>,
+) -> Result<Json<Value>, ApiError> {
+    let restored = ops::unarchive(&projects, &body.name)
+        .await
+        .map_err(|e| api_error(true, e))?;
+    Ok(Json(json!(restored)))
+}
+
 async fn rename_record(
     State(projects): State<Shared>,
     Json(body): Json<RenameRecord>,
@@ -829,6 +845,7 @@ fn router(projects: Shared) -> Router {
         .route("/api/tasks/done", post(set_done))
         .route("/api/projects", get(list_projects).post(add_project))
         .route("/api/projects/archive", post(archive_project))
+        .route("/api/projects/unarchive", post(unarchive_project))
         .route("/api/records", get(list_records))
         .route("/api/files", get(list_files))
         .route("/api/file", get(get_file).post(attach_file))

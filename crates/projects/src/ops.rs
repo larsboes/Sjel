@@ -487,7 +487,7 @@ pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Re
     Ok(renamed)
 }
 
-/// What `archive` moved under `Archive/`.
+/// What `archive` or `unarchive` moved.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Archived {
     /// The records' paths after the move.
@@ -504,22 +504,44 @@ pub struct Archived {
 /// # Errors
 /// The name is not a live project, or a record or file already sits at a target path.
 pub async fn archive(projects: &Projects, name: &str) -> Fallible<Archived> {
-    let prefix = format!("{name}/");
+    move_project(projects, name, false).await
+}
+
+/// Restore an archived project folder from `Archive/<name>/` to `<name>/`, the reverse of
+/// [`archive`]. A loose archived note, `Archive/<name>.md`, has no folder and is refused.
+///
+/// # Errors
+/// The name is not an archived project folder, is a domain, or a target path is taken.
+pub async fn unarchive(projects: &Projects, name: &str) -> Fallible<Archived> {
+    if record::is_domain(name) {
+        return Err(SaveError::Refused(format!("{name:?} is a domain, not a project")).into());
+    }
+    move_project(projects, name, true).await
+}
+
+async fn move_project(projects: &Projects, name: &str, restore: bool) -> Fallible<Archived> {
+    let (from, to_prefix) = if restore {
+        (format!("{ARCHIVE}/{name}/"), String::new())
+    } else {
+        (format!("{name}/"), format!("{ARCHIVE}/"))
+    };
     let records: Vec<Record> = projects
         .by_project(name)
         .await?
         .into_iter()
-        .filter(|r| !r.archived && r.path.starts_with(&prefix))
+        .filter(|r| r.archived == restore && r.path.starts_with(&from))
         .collect();
     if name.is_empty() || name.contains('/') || records.is_empty() {
-        return Err(SaveError::Refused(format!("no live project {name:?}")).into());
+        let state = if restore { "archived" } else { "live" };
+        return Err(SaveError::Refused(format!("no {state} project {name:?}")).into());
     }
     let files: Vec<String> = projects
         .attachments()?
         .into_iter()
-        .filter(|path| path.starts_with(&prefix))
+        .filter(|path| path.starts_with(&from))
         .collect();
-    let to = |path: &str| format!("{ARCHIVE}/{path}");
+    let strip = if restore { ARCHIVE.len() + 1 } else { 0 };
+    let to = |path: &str| format!("{to_prefix}{}", &path[strip..]);
     for path in records
         .iter()
         .map(|r| r.path.as_str())
@@ -548,7 +570,7 @@ pub async fn archive(projects: &Projects, name: &str) -> Fallible<Archived> {
         fs::rename(projects.root().join(path), &target)?;
         archived.attachments.push(to(path));
     }
-    remove_empty_dirs(&projects.root().join(name));
+    remove_empty_dirs(&projects.root().join(from.trim_end_matches('/')));
     Ok(archived)
 }
 
@@ -1259,6 +1281,14 @@ mod tests {
         assert!(projects.get("Other/Other.md").await.unwrap().is_some());
         assert!(archive(&projects, "W").await.is_err());
         assert!(archive(&projects, "Missing").await.is_err());
+
+        let restored = unarchive(&projects, "W").await.unwrap();
+        assert!(restored.records.contains(&task.path));
+        assert!(projects.root().join("W/Assets/plan.pdf").exists());
+        assert!(!projects.root().join("Archive/W").exists());
+        let back = projects.by_project("W").await.unwrap();
+        assert!(back.iter().all(|r| !r.archived));
+        assert!(unarchive(&projects, "W").await.is_err());
         let _ = fs::remove_dir_all(dir);
     }
 

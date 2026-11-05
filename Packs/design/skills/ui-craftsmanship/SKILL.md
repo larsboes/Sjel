@@ -15,7 +15,7 @@ the `gpui` skill.
 
 Source for rules 1–3: Kole Jain, "The 3 dashboard UI flaws that give away you've never built
 one" (https://www.youtube.com/watch?v=Ksx9C2-3yMo), adapted to Sjel. Rule 4 and the tip rule
-come from the vault note `Projects/Sjel/Connected shell.md` (2026-10-06).
+come from the projects record `Sjel/Connected shell.md` (2026-10-06).
 
 ## Rule 1: the data picks the form
 

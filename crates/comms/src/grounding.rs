@@ -61,7 +61,7 @@ fn tokens(text: &str) -> Vec<String> {
 }
 
 /// German and English month names and their common short forms, 1-indexed.
-fn month_number(token: &str) -> Option<u32> {
+pub(crate) fn month_number(token: &str) -> Option<u32> {
     Some(match token {
         "januar" | "january" | "jan" => 1,
         "februar" | "february" | "feb" => 2,

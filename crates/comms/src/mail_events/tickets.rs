@@ -36,7 +36,7 @@ pub(super) fn explicit_invitation(body: &str, title: Option<&str>) -> Option<Vec
     let date_line = field("Date")?;
     let time_line = field("Time")?;
     let location = field("Location")?;
-    let date = iso_date_english(date_line)?;
+    let date = iso_date_written(date_line)?;
     let (start_time, end_time) = time_range(time_line)?;
     let evidence = format!("Date: {date_line}\nTime: {time_line}");
     let city = postal_city(location);
@@ -116,6 +116,21 @@ fn iso_date(line: &str) -> Option<String> {
         .then(|| format!("{y}-{m}-{d}"))
 }
 
+/// The start and optional end line of each calendar block the scan appended (see
+/// [`super::ics`]), in order. Only blocks whose start reads as a German date count.
+fn calendar_dates<'a>(lines: &[&'a str]) -> Vec<(&'a str, Option<&'a str>)> {
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.starts_with(super::ics::MARKER))
+        .filter_map(|(at, _)| {
+            let start = lines.get(at + 1).filter(|l| iso_date(l).is_some())?;
+            let end = lines.get(at + 2).filter(|l| iso_date(l).is_some());
+            Some((*start, end.copied()))
+        })
+        .collect()
+}
+
 /// One leg. `date_line` is quoted as the evidence, so grounding checks the date against it.
 fn leg(from: &str, to: &str, from_city: String, city: String, date_line: Option<&str>) -> Event {
     let date = date_line.and_then(iso_date);
@@ -175,35 +190,19 @@ fn booking_key(sender: &str, reference: &str) -> String {
         .collect()
 }
 
-const MONTHS: [&str; 12] = [
-    "january",
-    "february",
-    "march",
-    "april",
-    "may",
-    "june",
-    "july",
-    "august",
-    "september",
-    "october",
-    "november",
-    "december",
-];
-
-/// `Thursday, 15 October 2026 (15:00 - 20:00)` or `Thursday, October 8, 2026 (from 3:00 PM)`
-/// as `2026-10-15`: an English date, day and month in either order, anything in brackets ignored.
-fn iso_date_english(text: &str) -> Option<String> {
+/// `Thursday, 15 October 2026 (15:00 - 20:00)`, `Thursday, October 8, 2026 (from 3:00 PM)` or
+/// `Samstag, 5. Dezember 2026 (ab 15:00)` as a `YYYY-MM-DD` date: a written English or German
+/// date, day and month in either order, anything in brackets ignored.
+fn iso_date_written(text: &str) -> Option<String> {
     let text = text.split('(').next()?;
-    let words: Vec<&str> = text
-        .split(|c: char| c.is_whitespace() || c == ',')
+    let words: Vec<String> = text
+        .split(|c: char| c.is_whitespace() || c == ',' || c == '.')
         .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
         .collect();
-    let month = words.iter().find_map(|w| {
-        MONTHS
-            .iter()
-            .position(|m| m.eq_ignore_ascii_case(w))
-            .map(|i| i + 1)
-    })?;
+    let month = words
+        .iter()
+        .find_map(|w| crate::grounding::month_number(w))?;
     let numbers: Vec<u32> = words
         .iter()
         .filter_map(|word| {
@@ -249,12 +248,14 @@ mod tests {
     }
 
     #[test]
-    fn an_english_date_reads_in_either_order() {
+    fn a_written_date_reads_in_either_order_and_language() {
         let uk = "Thursday, 15 October 2026 (15:00 - 20:00)";
         let us = "Thursday, October 8, 2026 (from 3:00 PM)";
-        assert_eq!(iso_date_english(uk).as_deref(), Some("2026-10-15"));
-        assert_eq!(iso_date_english(us).as_deref(), Some("2026-10-08"));
-        assert_eq!(iso_date_english("sometime soon"), None);
+        assert_eq!(iso_date_written(uk).as_deref(), Some("2026-10-15"));
+        assert_eq!(iso_date_written(us).as_deref(), Some("2026-10-08"));
+        assert_eq!(iso_date_written("sometime soon"), None);
+        let german = "Samstag, 5. Dezember 2026 (ab 15:00)";
+        assert_eq!(iso_date_written(german).as_deref(), Some("2026-12-05"));
     }
 
     #[test]

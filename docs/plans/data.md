@@ -371,6 +371,11 @@ Open items that belong to one capability and to no priority yet.
   uses the same model with grounded evidence. Open: measure extraction against a reviewed English
   and German mail corpus. Done when replayed invitations retain timed events and sourced programme
   details while unsupported dates and agenda items remain rejected.
+  Shipped: German Booking.com confirmations; Deutsche Bahn legs dated from the attached `.ics`
+  (`crates/comms/src/mail_events/ics.rs`); the sweep also reads labelled mail outside the inbox
+  (`SWEEP_QUERY` in `crates/comms/src/google.rs`). Open: a mail-derived booking stops at Calendar,
+  and no route adds it to a trip plan's items. Labelled mail older than the newest sweep page is
+  not backfilled.
 - **Mail classification labels.** The harness exported 121 fixtures with 0 labels
   (`<overlay>/config/comms-mail-stream-shadow.json`). Labels are hand judgements, written before
   any model output is read. The stream switch needs model agreement of at least control plus 10

@@ -1,7 +1,7 @@
 //! Gmail access. Reads are used by the bounded sweep; writes happen only after
 //! an explicit dashboard action:
 //!   - OAuth token refresh: POST https://oauth2.googleapis.com/token
-//!   - list threads:        GET  .../gmail/v1/users/me/threads?q=in:inbox
+//!   - list threads:        GET  .../gmail/v1/users/me/threads?q=SWEEP_QUERY
 //!   - thread metadata:     GET  .../gmail/v1/users/me/threads/{id}?format=metadata
 //!   - archive a thread:    POST .../gmail/v1/users/me/threads/{id}/modify
 //!   - move to Trash:       POST .../gmail/v1/users/me/threads/{id}/trash
@@ -219,15 +219,19 @@ fn safe_google_error_reason_from_response(
     safe_google_error_reason(&body)
 }
 
-/// Lists inbox threads (read-only, `q=in:inbox`), paging until `limit` ids are
-/// collected or the inbox is exhausted.
-pub fn list_inbox_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> {
+/// What the sweep reads: the inbox, and mail a Gmail filter moved under a user label without
+/// it. Such mail is filed, not gone; a booking or an event in it still needs reading.
+pub const SWEEP_QUERY: &str = "{in:inbox has:userlabels}";
+
+/// Lists the sweep's threads (read-only, [`SWEEP_QUERY`]), paging until `limit` ids are
+/// collected or the list is exhausted.
+pub fn list_sweep_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> {
     let mut out: Vec<ThreadStub> = Vec::new();
     let mut page_token: Option<String> = None;
 
     while out.len() < limit {
         let remaining = limit - out.len();
-        let page = list_inbox_threads_page(token, remaining.min(100), page_token.as_deref())?;
+        let page = list_sweep_threads_page(token, remaining.min(100), page_token.as_deref())?;
         for thread in page.threads {
             out.push(thread);
             if out.len() >= limit {
@@ -242,17 +246,17 @@ pub fn list_inbox_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> 
     Ok(out)
 }
 
-/// Read one Gmail inbox page. The opaque cursor is returned to the caller but
+/// Read one page of the sweep's threads. The opaque cursor is returned to the caller but
 /// never persisted; a fresh review session can safely begin at the newest page
 /// again because triage upserts are idempotent.
-pub fn list_inbox_threads_page(
+pub fn list_sweep_threads_page(
     token: &str,
     limit: usize,
     page_token: Option<&str>,
 ) -> Result<ThreadPage> {
     let page_size = limit.clamp(1, 100).to_string();
     let mut query: Vec<(&str, String)> =
-        vec![("q", "in:inbox".to_string()), ("maxResults", page_size)];
+        vec![("q", SWEEP_QUERY.to_string()), ("maxResults", page_size)];
     if let Some(cursor) = page_token.filter(|value| !value.trim().is_empty()) {
         query.push(("pageToken", cursor.to_string()));
     }
@@ -311,6 +315,8 @@ struct MessagePayload {
     #[serde(rename = "mimeType", default)]
     mime_type: Option<String>,
     #[serde(default)]
+    filename: Option<String>,
+    #[serde(default)]
     body: Option<MessageBody>,
     #[serde(default)]
     parts: Vec<MessagePayload>,
@@ -321,6 +327,11 @@ struct MessageBody {
     /// base64url, per Gmail's API. Absent for a part that is only a container.
     #[serde(default)]
     data: Option<String>,
+    /// Set instead of `data` for an attachment, which is fetched on its own.
+    #[serde(rename = "attachmentId", default)]
+    attachment_id: Option<String>,
+    #[serde(default)]
+    size: Option<u64>,
 }
 #[derive(Deserialize)]
 struct Header {
@@ -404,6 +415,11 @@ pub fn thread_meta_lookup(token: &str, id: &str) -> Result<Option<ThreadMeta>> {
 
 /// The latest message's payload under `format=full`. `None` for a missing thread.
 fn latest_payload(token: &str, id: &str) -> Result<Option<MessagePayload>> {
+    Ok(latest_message(token, id)?.and_then(|message| message.payload))
+}
+
+/// The latest message under `format=full`. `None` for a missing thread.
+fn latest_message(token: &str, id: &str) -> Result<Option<MessageDetail>> {
     std::thread::sleep(THREAD_FETCH_PAUSE);
     let http = client()?;
     let response = http
@@ -421,7 +437,7 @@ fn latest_payload(token: &str, id: &str) -> Result<Option<MessagePayload>> {
         )));
     }
     let detail: ThreadDetail = response.json()?;
-    Ok(detail.messages.into_iter().last().and_then(|m| m.payload))
+    Ok(detail.messages.into_iter().last())
 }
 
 /// The latest message's `text/html` and `text/plain` parts, undecorated, for the
@@ -466,9 +482,11 @@ pub fn thread_body_text(token: &str, id: &str) -> Result<Option<String>> {
     let Some(payload) = latest_payload(token, id)? else {
         return Ok(None);
     };
-    let payload = &payload;
+    Ok(body_text(&payload))
+}
 
-    let text = collect_part(payload, "text/plain")
+fn body_text(payload: &MessagePayload) -> Option<String> {
+    collect_part(payload, "text/plain")
         .or_else(|| {
             collect_part(payload, "text/html").map(|html| crate::extraction::html_to_lines(&html))
         })
@@ -476,8 +494,99 @@ pub fn thread_body_text(token: &str, id: &str) -> Result<Option<String>> {
             let text = text.trim();
             text.chars().take(BODY_TEXT_CAP).collect::<String>()
         })
-        .filter(|text| !text.is_empty());
-    Ok(text)
+        .filter(|text| !text.is_empty())
+}
+
+/// The latest message's body text and its calendar attachments, for the event scan.
+pub struct EventSource {
+    pub body: String,
+    /// Raw iCalendar text of each `text/calendar` part, in message order.
+    pub calendars: Vec<String>,
+}
+
+/// Largest calendar part read. A booking's `.ics` is a few kilobytes.
+const CALENDAR_PART_CAP: u64 = 64 * 1024;
+/// Most calendar parts read from one message.
+const CALENDAR_PART_LIMIT: usize = 4;
+
+/// [`thread_body_text`] plus the message's `text/calendar` parts, from one thread fetch.
+/// A booking that puts its date only in an attached `.ics` (Deutsche Bahn) is dated from it.
+/// Like the body, nothing here is persisted. A calendar part that cannot be read is skipped.
+pub fn thread_event_source(token: &str, id: &str) -> Result<Option<EventSource>> {
+    let Some(message) = latest_message(token, id)? else {
+        return Ok(None);
+    };
+    let Some(payload) = message.payload.as_ref() else {
+        return Ok(None);
+    };
+    let Some(body) = body_text(payload) else {
+        return Ok(None);
+    };
+    let mut parts = Vec::new();
+    calendar_parts(payload, &mut parts);
+    let calendars = parts
+        .into_iter()
+        .take(CALENDAR_PART_LIMIT)
+        .filter_map(|part| match (&part.data, &part.attachment_id, &message.id) {
+            (Some(data), _, _) => decode_body(data),
+            (None, Some(attachment), Some(message_id)) => {
+                attachment_text(token, message_id, attachment).ok().flatten()
+            }
+            _ => None,
+        })
+        .collect();
+    Ok(Some(EventSource { body, calendars }))
+}
+
+/// Every `text/calendar` part, or an `.ics` file Gmail typed otherwise, within the size cap.
+fn calendar_parts<'a>(payload: &'a MessagePayload, out: &mut Vec<&'a MessageBody>) {
+    let calendar = payload.mime_type.as_deref().is_some_and(|mime| {
+        mime.eq_ignore_ascii_case("text/calendar") || mime.eq_ignore_ascii_case("application/ics")
+    }) || payload
+        .filename
+        .as_deref()
+        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".ics"));
+    if calendar {
+        if let Some(body) = payload
+            .body
+            .as_ref()
+            .filter(|body| body.size.unwrap_or(0) <= CALENDAR_PART_CAP)
+        {
+            out.push(body);
+        }
+    }
+    for part in &payload.parts {
+        calendar_parts(part, out);
+    }
+}
+
+#[derive(Deserialize)]
+struct AttachmentResponse {
+    #[serde(default)]
+    data: Option<String>,
+}
+
+/// One attachment's text. `None` when Gmail no longer has it or it is not UTF-8.
+fn attachment_text(token: &str, message_id: &str, attachment_id: &str) -> Result<Option<String>> {
+    let attachment_id_valid = !attachment_id.is_empty()
+        && attachment_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+    if !valid_thread_id(message_id) || !attachment_id_valid {
+        return Ok(None);
+    }
+    let response = client()?
+        .get(format!(
+            "{}/messages/{message_id}/attachments/{attachment_id}",
+            gmail_base()
+        ))
+        .bearer_auth(token)
+        .send()?;
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+    let attachment: AttachmentResponse = response.json()?;
+    Ok(attachment.data.as_deref().and_then(decode_body))
 }
 
 /// A message body and its stable Gmail identifier, kept only for local analysis.

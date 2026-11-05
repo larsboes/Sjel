@@ -1,13 +1,15 @@
 //! Booking.com stays. Two layouts carry one: the confirmation ("Your booking in <city> is
 //! confirmed.", "<hotel> is expecting you", `Check-in <date>` on one line) and the receipt
 //! (`Property name`, `Check-in` and their values on the next line, the city in the address).
-//! Dates are English, day and month in either order.
+//! Dates are English, day and month in either order. The German confirmation has the same
+//! layout with `Anreise`, `Abreise`, "Die Unterkunft <hotel> erwartet Sie" and
+//! "Ihre Buchung in <city> ist bestätigt.".
 //!
 //! The reader answers for every Booking.com mail. A message from the property or an invoice
 //! names no stay of its own, and a model reading one made "Check-in" and "Check-out" events in
 //! a city called after the hotel. So such a mail has no events.
 
-use super::{booking_key, iso_date_english, Event};
+use super::{booking_key, iso_date_written, Event};
 
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Booking.com") {
@@ -22,21 +24,31 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
 }
 
 fn stay(lines: &[&str]) -> Option<Event> {
-    let (check_in_line, check_in) = value(lines, "Check-in")?;
-    let (_, check_out) = value(lines, "Check-out")?;
+    let (check_in_line, check_in) =
+        value(lines, "Check-in").or_else(|| value(lines, "Anreise"))?;
+    let (_, check_out) = value(lines, "Check-out").or_else(|| value(lines, "Abreise"))?;
     let hotel = lines
         .iter()
-        .find_map(|l| l.split_once(" is expecting you").map(|(name, _)| name))
-        .map(|name| name.trim_start_matches("[checkmark.png]").trim())
+        .find_map(|l| {
+            l.split_once(" is expecting you")
+                .or_else(|| l.split_once(" erwartet Sie"))
+                .map(|(name, _)| name)
+        })
+        .map(|name| {
+            let name = name.trim_start_matches("[checkmark.png]").trim();
+            name.strip_prefix("Die Unterkunft ").unwrap_or(name).trim()
+        })
         .or_else(|| value(lines, "Property name").map(|(_, name)| name))
         .filter(|name| !name.is_empty())?;
-    let reference = value(lines, "Confirmation:").or_else(|| value(lines, "Booking number"));
+    let reference = value(lines, "Confirmation:")
+        .or_else(|| value(lines, "Booking number"))
+        .or_else(|| value(lines, "Buchungsnummer:"));
     Some(Event {
         title: format!("Stay at {hotel}"),
-        date: Some(iso_date_english(check_in)?),
+        date: Some(iso_date_written(check_in)?),
         starts_at: None,
         ends_at: None,
-        end_date: Some(iso_date_english(check_out)?),
+        end_date: Some(iso_date_written(check_out)?),
         location: Some(hotel.to_string()),
         agenda: Vec::new(),
         city: city(lines).map(str::to_string),
@@ -66,8 +78,11 @@ fn city<'a>(lines: &[&'a str]) -> Option<&'a str> {
     lines
         .iter()
         .find_map(|l| {
-            let (_, rest) = l.split_once("Your booking in ")?;
+            let (_, rest) = l
+                .split_once("Your booking in ")
+                .or_else(|| l.split_once("Ihre Buchung in "))?;
             rest.split_once(" is confirmed")
+                .or_else(|| rest.split_once(" ist bestätigt"))
                 .map(|(city, _)| city.trim())
         })
         .or_else(|| {
@@ -127,6 +142,32 @@ mod tests {
         assert_eq!(receipt.booking_key, confirmation.booking_key);
         assert_eq!(
             crate::grounding::date_grounding(RECEIPT, &receipt.evidence, "2026-10-15"),
+            crate::grounding::DateGrounding::Supported
+        );
+    }
+
+    /// Synthetic, in the layout of a real German confirmation.
+    const GERMAN: &str = "Booking.com\n   Buchungsnummer: 1234567890\n\
+        Vielen Dank, Max!\nIhre Buchung in London ist bestätigt.\n\
+           [checkmark.png] Die Unterkunft Beispiel Hotel erwartet Sie am 5.\n   Dezember\n\
+           Ihre Buchung 3 Nächte, 1 Zimmer\n\
+           Anreise Samstag, 5. Dezember 2026 (ab 15:00)\n\
+           Abreise Dienstag, 8. Dezember 2026 (bis 11:00)\n";
+
+    #[test]
+    fn a_german_confirmation_is_the_same_stay() {
+        let stay = &legs(GERMAN).unwrap()[0];
+        assert_eq!(stay.title, "Stay at Beispiel Hotel");
+        assert_eq!(stay.date.as_deref(), Some("2026-12-05"));
+        assert_eq!(stay.end_date.as_deref(), Some("2026-12-08"));
+        assert_eq!(stay.city.as_deref(), Some("London"));
+        assert_eq!(
+            stay.booking_key,
+            legs(CONFIRMATION).unwrap()[0].booking_key,
+            "the key hashes only sender and reference"
+        );
+        assert_eq!(
+            crate::grounding::date_grounding(GERMAN, &stay.evidence, "2026-12-05"),
             crate::grounding::DateGrounding::Supported
         );
     }

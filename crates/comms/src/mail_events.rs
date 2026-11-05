@@ -17,6 +17,7 @@ use crate::{
     summarize::{self, Outcome, Reach},
 };
 
+mod ics;
 mod tickets;
 
 const ANALYSIS_VERSION: &str = "local-mail-event-analysis-v4";
@@ -736,8 +737,13 @@ pub(crate) fn analyze_candidates(
         .light_summarization_role()
         .filter(|role| role.is_loopback());
     for (item, candidate) in candidates {
-        let body = match google::thread_body_text(&token, &item.id) {
-            Ok(Some(body)) => body,
+        let body = match google::thread_event_source(&token, &item.id) {
+            Ok(Some(source)) => source
+                .calendars
+                .iter()
+                .map(|calendar| ics::render(calendar))
+                .filter(|block| !block.is_empty())
+                .fold(source.body, |body, block| format!("{body}\n\n{block}")),
             _ => {
                 report.failed += 1;
                 record_outcome(

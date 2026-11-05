@@ -2,9 +2,11 @@
 //!
 //! The confirmation lists each leg under "Leistungen" / "Services" as `von|from`, the station,
 //! an optional `dd.mm.yyyy hh:mm` line, then `nach|to`, the station and its optional date.
-//! A booking without a fixed train (Flexpreis) has no date lines.
+//! A booking without a fixed train (Flexpreis) has no date lines. A newer confirmation has none
+//! either and carries the journey in an attached `.ics`, one per leg; the scan appends it as a
+//! calendar block, and each undated leg takes its block's times when the counts match.
 
-use super::{booking_key, iso_date, leg, local_timestamp, Event};
+use super::{booking_key, calendar_dates, iso_date, leg, local_timestamp, Event};
 
 pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
     if !body.contains("Deutsche Bahn") {
@@ -24,7 +26,7 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
             .map(|reference| booking_key("deutschebahn.com", reference))
     });
     let block = &lines[start + 1..];
-    let mut events = Vec::new();
+    let mut stops = Vec::new();
     let mut i = 0;
     while i < block.len() {
         if !matches!(block[i], "von" | "from") {
@@ -36,21 +38,41 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
             return None;
         }
         let (to, to_date, next) = stop(block, next + 1)?;
-        let mut event = leg(
-            from,
-            to,
-            city_of_station(from),
-            city_of_station(to),
-            from_date.or(to_date),
-        );
-        event.starts_at = local_timestamp(from_date);
-        event.ends_at = local_timestamp(to_date);
-        events.push(Event {
-            booking_key: key.clone(),
-            ..event
-        });
+        stops.push((from, from_date, to, to_date));
         i = next;
     }
+    let undated = stops
+        .iter()
+        .filter(|(_, from_date, _, to_date)| from_date.is_none() && to_date.is_none())
+        .count();
+    let calendar = calendar_dates(&lines);
+    let mut calendar = (undated > 0 && calendar.len() == undated)
+        .then_some(calendar.into_iter())
+        .into_iter()
+        .flatten();
+    let events: Vec<Event> = stops
+        .into_iter()
+        .map(|(from, mut from_date, to, mut to_date)| {
+            if from_date.is_none() && to_date.is_none() {
+                if let Some((start, end)) = calendar.next() {
+                    (from_date, to_date) = (Some(start), end);
+                }
+            }
+            let mut event = leg(
+                from,
+                to,
+                city_of_station(from),
+                city_of_station(to),
+                from_date.or(to_date),
+            );
+            event.starts_at = local_timestamp(from_date);
+            event.ends_at = local_timestamp(to_date);
+            Event {
+                booking_key: key.clone(),
+                ..event
+            }
+        })
+        .collect();
     (!events.is_empty()).then_some(events)
 }
 
@@ -116,6 +138,25 @@ mod tests {
         assert_eq!(legs[0].title, "Hamburg Hbf → Köln Hbf");
         assert_eq!(legs[0].date, None);
         assert_eq!(legs[0].city.as_deref(), Some("Köln"));
+    }
+
+    #[test]
+    fn an_undated_leg_takes_its_calendar_attachment() {
+        let calendar = crate::mail_events::ics::render(
+            "BEGIN:VEVENT\nDTSTART;TZID=Europe/Berlin:20261110T081500\n\
+             DTEND;TZID=Europe/Berlin:20261110T093000\nSUMMARY:Hamburg - Köln\nEND:VEVENT\n",
+        );
+        let body = format!("{GERMAN_UNDATED}\n\n{calendar}");
+        let leg = &legs(&body).unwrap()[0];
+        assert_eq!(leg.date.as_deref(), Some("2026-11-10"));
+        assert_eq!(leg.starts_at.as_deref(), Some("2026-11-10T08:15"));
+        assert_eq!(leg.ends_at.as_deref(), Some("2026-11-10T09:30"));
+        assert_eq!(
+            crate::grounding::date_grounding(&body, &leg.evidence, "2026-11-10"),
+            crate::grounding::DateGrounding::Supported
+        );
+        let two = format!("{body}\n{calendar}");
+        assert_eq!(legs(&two).unwrap()[0].date, None, "counts differ: no guess");
     }
 
     #[test]

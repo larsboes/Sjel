@@ -294,16 +294,16 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         }
     };
 
-    let stubs = match google::list_inbox_threads(&token, limit) {
+    let stubs = match google::list_sweep_threads(&token, limit) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error: could not list inbox threads: {e}");
+            eprintln!("error: could not list sweep threads: {e}");
             std::process::exit(1);
         }
     };
 
     println!(
-        "comms sweep — {} inbox threads (READ-ONLY){}\n",
+        "comms sweep — {} inbox and labelled threads (READ-ONLY){}\n",
         stubs.len(),
         if dry_run { ", dry-run" } else { "" }
     );
@@ -330,6 +330,7 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
         };
         let id = meta.id.clone();
         let from = meta.from_addr.clone().unwrap_or_default();
+        let location = google::ThreadLocation::from_labels(&meta.label_ids);
         let intake = intake::from_thread(meta, &cfg.rules, &known_orgs);
         if intake.event_candidate {
             event_candidate_ids.push(id.clone());
@@ -342,6 +343,11 @@ fn cmd_sweep(args: &[String], cfg: &Config) {
                 Ok(true) => persisted_new += 1,
                 Ok(false) => {}
                 Err(e) => eprintln!("  warning: could not persist {id}: {e}"),
+            }
+            if location != google::ThreadLocation::Inbox {
+                if let Err(e) = st.observe_gmail_location(&id, location.as_str()) {
+                    eprintln!("  warning: could not record the location of {id}: {e}");
+                }
             }
         }
 

@@ -155,7 +155,7 @@ pub(super) fn run_inbox_sweep(
 ) -> Result<SweepOutcome, String> {
     let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
     let token = google::access_token(&cfg.google_env_path).map_err(|error| error.to_string())?;
-    let page = google::list_inbox_threads_page(&token, limit, cursor)
+    let page = google::list_sweep_threads_page(&token, limit, cursor)
         .map_err(|error| error.to_string())?;
     let (people_registry, people_registry_names) = people_registry_receipt();
     // Read once, before the loop: a sender is new against what the store held
@@ -184,6 +184,7 @@ pub(super) fn run_inbox_sweep(
                 continue;
             }
         };
+        let location = ThreadLocation::from_labels(&meta.label_ids);
         let intake = intake::from_thread(meta, &cfg.rules, &known_orgs);
         if intake.redaction_count() > 0 {
             outcome.redacted += 1;
@@ -202,6 +203,12 @@ pub(super) fn run_inbox_sweep(
         {
             outcome.new_count += 1;
             outcome.new_ids.push(id.clone());
+        }
+        // The upsert records a swept thread as in the inbox; a filtered one is filed.
+        if location != ThreadLocation::Inbox {
+            store
+                .observe_gmail_location(&id, location.as_str())
+                .map_err(|error| error.to_string())?;
         }
         outcome.fetched_ids.push(id);
         outcome.fetched += 1;

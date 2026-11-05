@@ -27,22 +27,13 @@
 //! projection must not be a second place they leave by.
 
 pub use traveler_api::{
-    Bucket, Company, CompanionPattern, DerivedTravel, DestinationCount, Spread, ATTENDANCE_NOTE,
+    Bucket, CompanionPattern, Company, DerivedTravel, DestinationCount, Spread, ATTENDANCE_NOTE,
     DESTINATION_NOTE, LEAD_TIME_NOTE, TRIPS_PREFIX,
 };
 
 use crate::store::{validate_prefix, TravelerStore};
 
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
-
-
-
-
-
-
-
-
-
 
 /// One plan row, as much of it as this projection reads.
 struct PlanRow {

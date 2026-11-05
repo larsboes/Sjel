@@ -24,7 +24,7 @@ use operator_profile::{
 const ROUTES: &[route_manifest::Route] = &[
     route_manifest::get("GET", ROUTE_HEALTH, "Liveness."),
     route_manifest::get("GET", ROUTE_READY, "Liveness plus database readiness."),
-    route_manifest::get("GET", ROUTE_ROUTES, "This manifest."),
+    route_manifest::get("GET", "/routes", "This manifest."),
     route_manifest::get(
         "GET",
         ROUTE_PROFILE,

@@ -327,7 +327,6 @@ fn parse_weights(spec: &str) -> Result<JourneyWeights, String> {
     Ok(weights)
 }
 
-
 /// The four quantities a ranking reads, pulled off a journey.
 ///
 /// A separate struct rather than four arguments so the scoring is testable

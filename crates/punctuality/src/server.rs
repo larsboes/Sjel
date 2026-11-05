@@ -144,9 +144,7 @@ async fn handle_lookup(State(state): State<AppState>, Json(body): Json<LookupBod
                 store
                     .stop_stats(&s.eva, &s.train_type, s.hour as i16, s.weekend, MIN_SAMPLE)
                     .map(|opt| {
-                        opt.map(|row| {
-                            with_threshold(from_stat_row(&row), &row, s.at_least_minutes)
-                        })
+                        opt.map(|row| with_threshold(from_stat_row(&row), &row, s.at_least_minutes))
                     })
                     .map_err(|e| e.to_string())
             })
@@ -180,10 +178,7 @@ async fn handle_station(State(state): State<AppState>, Query(p): Query<StationQu
         let rows = store
             .station_stats(&eva, p.train_type.as_deref(), MIN_SAMPLE)
             .map_err(|e| e.to_string())?;
-        Ok(json!(rows
-            .iter()
-            .map(from_stat_row)
-            .collect::<Vec<_>>()))
+        Ok(json!(rows.iter().map(from_stat_row).collect::<Vec<_>>()))
     })
     .await
     .map_err(fail)?

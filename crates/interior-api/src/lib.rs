@@ -35,7 +35,8 @@ pub const PROXY_ROUTE_INTERIOR_PLACEMENTS: &str = "/interior/api/placements";
 pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_REVISIONS: &str = "/interior/api/roomplan/revisions";
 pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_CAPTURES: &str = "/interior/api/roomplan/captures";
 pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_RECONCILE: &str = "/interior/api/roomplan/reconcile";
-pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_PROPOSE_PLACEMENT: &str = "/interior/api/roomplan/propose-placement";
+pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_PROPOSE_PLACEMENT: &str =
+    "/interior/api/roomplan/propose-placement";
 pub const PROXY_ROUTE_INTERIOR_ROOMPLAN_SPACES: &str = "/interior/api/roomplan/spaces";
 
 pub fn valid_roomplan_layout_id(id: &str) -> bool {

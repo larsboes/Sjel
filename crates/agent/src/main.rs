@@ -35,6 +35,9 @@ use serde_json::{json, Value};
 use sjel_agent::{Agent, AgentInput, Event};
 use sjel_server::agent_policy::{AgentRoutes, PolicyFiles};
 
+use crate::session::{Active, Session};
+use crate::terminal::{ReadOutcome, Terminal, Terminals};
+use crate::tier::Tier;
 use agent_api::{
     ApproveRequest, CreateSession, OpenTerminal, PromptRequest, SteerRequest, StreamQuery,
     TerminalInput, TerminalResize, TerminalStreamQuery, DEFAULT_AGENT_PORT, ROUTE_AGENT_SESSION,
@@ -44,9 +47,6 @@ use agent_api::{
     ROUTE_AGENT_TERMINAL_DELETE, ROUTE_AGENT_TERMINAL_INPUT, ROUTE_AGENT_TERMINAL_RESIZE,
     ROUTE_AGENT_TERMINAL_STREAM, ROUTE_HEALTH, ROUTE_READY, ROUTE_ROUTES,
 };
-use crate::session::{Active, Session};
-use crate::terminal::{ReadOutcome, Terminal, Terminals};
-use crate::tier::Tier;
 
 /// The inference role a run uses. An overlay that wants another names it here.
 const ROLE: &str = "coding";

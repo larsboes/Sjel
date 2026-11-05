@@ -4,10 +4,10 @@
 //! and `sjel-gpui-core` (client desktop feature catalogue and package manager).
 //! Zero server dependencies.
 
-use std::collections::BTreeSet;
-use std::path::{Component, Path};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use std::path::{Component, Path};
 
 pub const MAX_MANIFEST: u64 = 1_048_576;
 pub const MAX_PACKAGE: u64 = 1_073_741_824;
@@ -96,12 +96,7 @@ pub fn valid_feature_metadata(feature: &FeatureMetadata) -> bool {
             .data_access
             .iter()
             .all(|item| !item.trim().is_empty() && item.len() <= 120)
-        && feature
-            .data_access
-            .iter()
-            .collect::<BTreeSet<_>>()
-            .len()
-            == feature.data_access.len()
+        && feature.data_access.iter().collect::<BTreeSet<_>>().len() == feature.data_access.len()
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
@@ -144,7 +139,10 @@ pub struct Package {
 
 impl Package {
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema != 1 || !valid_package_identifier(&self.name) || self.platform != host_platform() {
+        if self.schema != 1
+            || !valid_package_identifier(&self.name)
+            || self.platform != host_platform()
+        {
             return Err("unsupported package schema, name or host platform".into());
         }
         if !valid_release_version(&self.version) {

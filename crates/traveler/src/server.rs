@@ -315,6 +315,7 @@ mod route_manifest_tests {
 #[cfg(test)]
 mod http_tests {
     use super::*;
+    use traveler::model::ProfileInput;
 
     async fn scratch_server(name: &str) -> (String, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("axon-traveler-http-{name}"));

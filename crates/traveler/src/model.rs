@@ -74,7 +74,13 @@ mod tests {
         input = ProfileInput::unstated();
         input.journey.price = 0.50;
         let err = input.validate().unwrap_err();
-        assert!(matches!(err, ProfileError::WeightSum { block: "journey", .. }));
+        assert!(matches!(
+            err,
+            ProfileError::WeightSum {
+                block: "journey",
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -85,7 +91,11 @@ mod tests {
         let err = input.validate().unwrap_err();
         assert!(matches!(
             err,
-            ProfileError::NegativeWeight { block: "soft", key: "budget_fit", .. }
+            ProfileError::NegativeWeight {
+                block: "soft",
+                key: "budget_fit",
+                ..
+            }
         ));
 
         input = ProfileInput::unstated();
@@ -93,7 +103,11 @@ mod tests {
         let err = input.validate().unwrap_err();
         assert!(matches!(
             err,
-            ProfileError::NegativeWeight { block: "journey", key: "price", .. }
+            ProfileError::NegativeWeight {
+                block: "journey",
+                key: "price",
+                ..
+            }
         ));
     }
 
@@ -118,7 +132,9 @@ mod tests {
         assert!(matches!(err, ProfileError::MissingBasisKey(_)));
 
         input = ProfileInput::unstated();
-        input.basis.insert("unknown.key".into(), Provenance::Default);
+        input
+            .basis
+            .insert("unknown.key".into(), Provenance::Default);
         let err = input.validate().unwrap_err();
         assert!(matches!(err, ProfileError::UnknownBasisKey(_)));
     }

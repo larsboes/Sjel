@@ -58,8 +58,6 @@ impl Shell {
     }
 }
 
-
-
 /// A closed range for one chart axis, padded so no point sits on the frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Domain {

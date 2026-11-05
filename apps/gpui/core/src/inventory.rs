@@ -1,7 +1,5 @@
 //! Inventory, household assets, wishlist budget, and interior spatial layout models.
 
-
-
 #[path = "inventory_compare.rs"]
 pub mod compare;
 

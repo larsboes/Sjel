@@ -19,6 +19,13 @@ use serde_json::json;
 use crate::device::DeviceClient;
 use crate::shell::{spawn, Shell, ShellResult};
 
+pub use agent_api::{
+    CommandMarks, OpenTerminal, Terminal, TerminalInput, TerminalMeta, TerminalOptions as Options,
+    TerminalResize, TerminalStreamQuery, ROUTE_AGENT_TERMINALS, ROUTE_AGENT_TERMINALS_OPTIONS,
+    ROUTE_AGENT_TERMINAL_DELETE, ROUTE_AGENT_TERMINAL_INPUT, ROUTE_AGENT_TERMINAL_RESIZE,
+    ROUTE_AGENT_TERMINAL_STREAM,
+};
+
 /// The path prefix the shell proxies to the capability.
 const BASE: &str = "/agent";
 /// Opening a terminal answers once the program is running, or with the reason it is not.
@@ -29,104 +36,6 @@ const STREAM_TIMEOUT: u64 = 24 * 60 * 60;
 const WRITE_TIMEOUT: u64 = 15;
 /// The most input one request may carry, before base64. The capability refuses more.
 pub const MAX_INPUT_BYTES: usize = 64 * 1024;
-
-/// One terminal the capability holds, as `GET /api/agent/terminals` lists it.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct Terminal {
-    pub id: String,
-    /// The preset that started it: `shell`, `claude`, `codex`, `pi` or one the overlay names.
-    #[serde(default)]
-    pub preset: String,
-    /// The program, for a list that has to tell two shells apart.
-    #[serde(default)]
-    pub title: String,
-    #[serde(default)]
-    pub cwd: String,
-    #[serde(default)]
-    pub started_at: i64,
-    #[serde(default)]
-    pub last_output_at: i64,
-    /// False once the program has ended, whether by itself or by `DELETE`.
-    #[serde(default)]
-    pub alive: bool,
-    #[serde(default)]
-    pub exit_code: Option<i32>,
-    #[serde(default)]
-    pub exit_signal: Option<String>,
-    /// How many streams are attached, this client included.
-    #[serde(default)]
-    pub clients: usize,
-    /// What the shell's own marks say about the command it is running.
-    #[serde(default)]
-    pub shell: CommandMarks,
-}
-
-/// What a shell with shell integration reports about its commands, from OSC 133 marks.
-///
-/// A shell without integration leaves every field at its default, and `integration` is how a
-/// reader tells "no command has ended yet" from "this shell says nothing".
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct CommandMarks {
-    #[serde(default)]
-    pub integration: bool,
-    #[serde(default)]
-    pub running: bool,
-    #[serde(default)]
-    pub last_exit_code: Option<i32>,
-    #[serde(default)]
-    pub last_finished_at: Option<i64>,
-}
-
-impl Terminal {
-    /// What a list row says: the program, or the preset when the program gave no name.
-    pub fn label(&self) -> String {
-        match self.title.trim() {
-            "" => self.preset.clone(),
-            title => title.to_owned(),
-        }
-    }
-
-    /// The last path component of the working directory, for a row that has no room for the rest.
-    pub fn directory(&self) -> String {
-        self.cwd
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .filter(|name| !name.is_empty())
-            .unwrap_or(&self.cwd)
-            .to_owned()
-    }
-
-    /// How it ended, for the line under the grid.
-    pub fn ending(&self) -> Option<String> {
-        if self.alive {
-            return None;
-        }
-        Some(match (&self.exit_signal, self.exit_code) {
-            (Some(signal), _) => format!("terminated by {signal}"),
-            (None, Some(code)) => format!("exited with {code}"),
-            (None, None) => "ended".to_owned(),
-        })
-    }
-
-    /// What the shell says about the command it is running, for a status line beside `live`.
-    ///
-    /// A command that ended well says nothing: the prompt is back, and that is the signal. One
-    /// that failed keeps its code, and one that is still running says so, so a long build on the
-    /// phone reports itself without anyone reading the screen.
-    pub fn command(&self) -> Option<String> {
-        if !self.shell.integration {
-            return None;
-        }
-        if self.shell.running {
-            return Some("running".to_owned());
-        }
-        match self.shell.last_exit_code {
-            Some(0) | None => None,
-            Some(code) => Some(format!("exit {code}")),
-        }
-    }
-}
 
 /// What one frame of a terminal's stream carried.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,16 +49,6 @@ pub enum Update {
     Exit { code: i32, signal: Option<String> },
     /// The shell's own marks moved: a command started or ended.
     Command(CommandMarks),
-}
-
-/// What a new terminal can be, as `GET /api/agent/terminals/options` answers: the preset names,
-/// and the folders it is offered to start in, home first.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct Options {
-    #[serde(default)]
-    pub presets: Vec<String>,
-    #[serde(default)]
-    pub folders: Vec<String>,
 }
 
 /// What `POST /api/agent/terminals` answers.

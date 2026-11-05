@@ -6,43 +6,7 @@
 //! dropped file into a zeroizing buffer, the browser opens for consent, and the grant goes to
 //! the OS keychain. No secret crosses an HTTP route.
 
-use serde::Deserialize;
-
-/// One declared credential, as sjel-status reports it.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct CredentialRow {
-    pub capability: String,
-    #[serde(default)]
-    pub id: String,
-    #[serde(default, rename = "type")]
-    pub kind: String,
-    #[serde(default)]
-    pub label: String,
-    #[serde(default)]
-    pub scopes: Vec<String>,
-    #[serde(default)]
-    pub steps: Vec<String>,
-    #[serde(default)]
-    pub env_fallback: Option<String>,
-    #[serde(default)]
-    pub in_keychain: bool,
-    #[serde(default)]
-    pub env_file: bool,
-    /// A manifest whose `[[credentials]]` did not parse.
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
-impl CredentialRow {
-    /// Where this machine holds the grant, in the words the page shows.
-    pub fn state(&self) -> &'static str {
-        match (self.in_keychain, self.env_file) {
-            (true, _) => "In the keychain",
-            (false, true) => "Old env file only — connect to move it to the keychain",
-            (false, false) => "Not connected",
-        }
-    }
-}
+pub use status_api::CredentialRow;
 
 /// Connects `row`'s grant from the dropped client JSON file
 /// (`sjel_credentials::google::connect_from_file`, the path `sjel credentials connect` takes too).

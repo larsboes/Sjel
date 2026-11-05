@@ -141,7 +141,6 @@ fn departure(journey: &Journey) -> &str {
         .map_or("", |l| l.departure_time.as_str())
 }
 
-
 pub fn duration(minutes: u32) -> String {
     match minutes / 60 {
         0 => format!("{minutes} min"),

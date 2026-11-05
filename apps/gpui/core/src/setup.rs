@@ -6,8 +6,10 @@
 use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
+pub use devices_api::{
+    Device as PairedDevice, PairingChallenge, PairingRequest as SetupJoinRequest,
+};
 pub use setup_api::*;
-pub use devices_api::{Device as PairedDevice, PairingChallenge, PairingRequest as SetupJoinRequest};
 
 /// Full combined view model for the `/setup` native page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

@@ -41,6 +41,7 @@ sjel-config = { path = "../../../crates/sjel-config" }
 sjel-links = { path = "../../../crates/links" }
 sjel-clip-socket = { path = "../../../crates/clip-socket" }
 sjel-credentials = { path = "../../../crates/sjel-credentials" }
+agent-api = { path = "../../../crates/agent-api" }
 assistant-api = { path = "../../../crates/assistant-api" }
 calendar-api = { path = "../../../crates/calendar-api" }
 documents-api = { path = "../../../crates/documents-api" }
@@ -53,13 +54,16 @@ import-api = { path = "../../../crates/import-api" }
 interior-api = { path = "../../../crates/interior-api" }
 inventory-api = { path = "../../../crates/inventory-api" }
 media-api = { path = "../../../crates/media-api" }
+operator-profile-api = { path = "../../../crates/operator-profile-api" }
 places-api = { path = "../../../crates/places-api" }
 projects-api = { path = "../../../crates/projects-api" }
+punctuality-api = { path = "../../../crates/punctuality-api" }
 scouting-api = { path = "../../../crates/scouting-api" }
 setup-api = { path = "../../../crates/setup-api" }
 software-api = { path = "../../../crates/software-api" }
 soundscape-api = { path = "../../../crates/soundscape-api" }
 status-api = { path = "../../../crates/status-api" }
+traveler-api = { path = "../../../crates/traveler-api" }
 trips-api = { path = "../../../crates/trips-api" }
 transit-api = { path = "../../../crates/transit-api" }
 web-links-api = { path = "../../../crates/web-links-api" }

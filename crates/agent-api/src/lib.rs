@@ -218,6 +218,220 @@ pub struct TerminalMeta {
     pub shell: Option<serde_json::Value>,
 }
 
+/// One conversation, as the capability lists it on the wire.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct Session {
+    pub id: String,
+    pub root: String,
+    #[serde(default)]
+    pub tier: Option<String>,
+    #[serde(default)]
+    pub created_at: u64,
+    #[serde(default)]
+    pub plugins: Vec<String>,
+    #[serde(default)]
+    pub turns: usize,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+impl Session {
+    /// The first prompt, on one line, or the root when the session has none yet.
+    pub fn label(&self) -> String {
+        match self
+            .title
+            .as_deref()
+            .filter(|title| !title.trim().is_empty())
+        {
+            Some(title) => title.to_owned(),
+            None => self.root.clone(),
+        }
+    }
+
+    /// The last path component of the root: what a list can show without a slash per row.
+    pub fn root_name(&self) -> String {
+        self.root
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&self.root)
+            .to_owned()
+    }
+}
+
+/// One step of a run, as the stream carried it.
+///
+/// `kind` is the capability's `type`, kept as a string so a front end that meets a kind it does
+/// not know can say so instead of failing to parse the whole event.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct Event {
+    /// Position in the run's log. A reconnect asks for everything after the last one seen.
+    #[serde(default)]
+    pub seq: u64,
+    /// The oldest retained event when a stream reports that its cursor fell behind the log.
+    #[serde(default)]
+    pub first_seq: u64,
+    #[serde(rename = "type", default)]
+    pub kind: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub arguments: String,
+    /// A tool call's id, so its result can be matched to it.
+    #[serde(default, rename = "id")]
+    pub tool_id: String,
+    /// The one-line summary an approval card shows.
+    #[serde(default)]
+    pub preview: String,
+    /// The lines an `edit` or a `write` will change, as they will read afterwards.
+    #[serde(default)]
+    pub diff: Option<String>,
+    #[serde(default, rename = "approval_id")]
+    pub approval: String,
+    #[serde(default)]
+    pub rule: Option<String>,
+    #[serde(default)]
+    pub class: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub input_tokens: u64,
+    #[serde(default)]
+    pub output_tokens: u64,
+    #[serde(default)]
+    pub message: String,
+}
+
+impl Event {
+    /// Why a run stopped, when it stopped for a reason the operator has to read.
+    pub fn failure(&self) -> Option<&str> {
+        (self.kind == "error").then(|| self.message.as_str())
+    }
+
+    /// True for the events that end a run's stream.
+    pub fn terminal(&self) -> bool {
+        matches!(self.kind.as_str(), "done" | "stopped" | "error")
+    }
+
+    /// A tool call the operator has to answer before it runs.
+    pub fn needs_approval(&self) -> Option<&str> {
+        (self.kind == "needs_approval" && !self.approval.is_empty()).then(|| self.approval.as_str())
+    }
+}
+
+/// One stored turn, as `/transcript` returns it: the `Message` enum `libs/agent` writes.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct Turn {
+    /// `system`, `user`, `assistant` or `tool`.
+    #[serde(rename = "role", default)]
+    pub role: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    /// Present for a `tool` turn: which call this answers.
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+}
+
+/// What a shell with shell integration reports about its commands, from OSC 133 marks.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct CommandMarks {
+    #[serde(default)]
+    pub integration: bool,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub last_exit_code: Option<i32>,
+    #[serde(default)]
+    pub last_finished_at: Option<i64>,
+}
+
+/// One terminal the capability holds, as `GET /api/agent/terminals` lists it.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct Terminal {
+    pub id: String,
+    #[serde(default)]
+    pub preset: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub cwd: String,
+    #[serde(default)]
+    pub started_at: i64,
+    #[serde(default)]
+    pub last_output_at: i64,
+    #[serde(default)]
+    pub alive: bool,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub exit_signal: Option<String>,
+    #[serde(default)]
+    pub clients: usize,
+    #[serde(default)]
+    pub shell: CommandMarks,
+}
+
+impl Terminal {
+    /// What a list row says: the program, or the preset when the program gave no name.
+    pub fn label(&self) -> String {
+        match self.title.trim() {
+            "" => self.preset.clone(),
+            title => title.to_owned(),
+        }
+    }
+
+    /// The last path component of the working directory, for a row that has no room for the rest.
+    pub fn directory(&self) -> String {
+        self.cwd
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&self.cwd)
+            .to_owned()
+    }
+
+    /// How it ended, for the line under the grid.
+    pub fn ending(&self) -> Option<String> {
+        if self.alive {
+            return None;
+        }
+        Some(match (&self.exit_signal, self.exit_code) {
+            (Some(signal), _) => format!("terminated by {signal}"),
+            (None, Some(code)) => format!("exited with {code}"),
+            (None, None) => "ended".to_owned(),
+        })
+    }
+
+    /// What the shell says about the command it is running, for a status line beside `live`.
+    pub fn command(&self) -> Option<String> {
+        if !self.shell.integration {
+            return None;
+        }
+        if self.shell.running {
+            return Some("running".to_owned());
+        }
+        match self.shell.last_exit_code {
+            Some(0) | None => None,
+            Some(code) => Some(format!("exit {code}")),
+        }
+    }
+}
+
+/// What a new terminal can be, as `GET /api/agent/terminals/options` answers.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+pub struct TerminalOptions {
+    #[serde(default)]
+    pub presets: Vec<String>,
+    #[serde(default)]
+    pub folders: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

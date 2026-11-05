@@ -66,3 +66,5 @@ pub mod terminal;
 pub mod today;
 pub mod travel;
 pub mod web_links;
+
+pub use operator_profile_api;

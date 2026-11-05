@@ -17,6 +17,8 @@ pub use details::{
 };
 pub use navigation::{TravelRoute, TripSection};
 pub use places::PlaceCoords;
+pub use punctuality_api;
+pub use traveler_api;
 
 pub use trips_api::{ResolvePlacesRequest, ResolvePlacesResult, ResolvedPlace, UnresolvedPlace};
 

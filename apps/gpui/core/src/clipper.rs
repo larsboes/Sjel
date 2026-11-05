@@ -9,48 +9,9 @@
 use crate::inline::Inline;
 use serde_json::{json, Value};
 
-/// Upstream's save behaviors, with the label the app shows.
-pub const BEHAVIORS: [(&str, &str); 6] = [
-    ("create", "New clip"),
-    ("overwrite", "Overwrite note"),
-    ("append-specific", "Append to note"),
-    ("prepend-specific", "Prepend to note"),
-    ("append-daily", "Append to daily"),
-    ("prepend-daily", "Prepend to daily"),
-];
-
-/// The template fields the app edits, as (key, label). Triggers are a list, edited one per line.
-pub const FIELDS: [(&str, &str); 4] = [
-    ("name", "Name"),
-    ("path", "Path"),
-    ("noteNameFormat", "Note name"),
-    ("noteContentFormat", "Note content"),
-];
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Interpreter {
-    pub available: bool,
-    pub model: Option<String>,
-    pub backend: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Settings {
-    /// 0 until the extension has seeded Sjel with its templates.
-    pub revision: i64,
-    pub templates: Vec<Value>,
-    pub interpreter: Interpreter,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ClipDocument {
-    pub key: String,
-    pub title: String,
-    pub url: String,
-    pub versions: u64,
-    pub updated_at: String,
-    pub markdown: String,
-}
+pub use feed_api::{
+    CitationStatus, ClipCitation, ClipDocument, ClipTurn, Interpreter, Settings, BEHAVIORS, FIELDS,
+};
 
 /// One line for a refusal code from comms.
 pub fn error_line(code: &str) -> String {
@@ -548,36 +509,6 @@ pub fn html_to_markdown(html: &str) -> String {
         }
     }
     cleaned
-}
-
-/// One turn of an LLM dialogue (prompt + response + optional thoughts).
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ClipTurn {
-    pub index: usize,
-    pub prompt: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thoughts: Option<String>,
-    pub response: String,
-}
-
-/// Verification status of a link or footnote reference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum CitationStatus {
-    /// Valid URL link (e.g. `[1](https://...)` or `[OpenAI](https://...)`).
-    Resolved,
-    /// Footnote reference like `[1]` in text with no URL target.
-    UnlinkedRef,
-    /// Link syntax with an empty or non-web scheme.
-    MalformedUrl,
-}
-
-/// One audit finding for a link or citation marker.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ClipCitation {
-    pub marker: String,
-    pub label: String,
-    pub url: Option<String>,
-    pub status: CitationStatus,
 }
 
 /// Unwraps Google interstitial tracking URLs (e.g. `https://www.google.com/url?sa=E&q=...`).

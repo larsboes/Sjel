@@ -8,6 +8,7 @@ description = "Pure wire models, backup records, agent gates, health models, and
 publish = false
 
 [dependencies]
+civil-date = { path = "../civil-date" }
 setup-api = { path = "../setup-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

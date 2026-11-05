@@ -13,124 +13,13 @@ use serde_json::json;
 
 use crate::shell::{spawn, Shell, ShellError, ShellResult};
 
-/// One conversation, as the capability lists it.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct Session {
-    pub id: String,
-    pub root: String,
-    #[serde(default)]
-    pub tier: Option<String>,
-    #[serde(default)]
-    pub created_at: u64,
-    #[serde(default)]
-    pub plugins: Vec<String>,
-    #[serde(default)]
-    pub turns: usize,
-    #[serde(default)]
-    pub active: bool,
-    #[serde(default)]
-    pub title: Option<String>,
-}
-
-impl Session {
-    /// The first prompt, on one line, or the root when the session has none yet.
-    pub fn label(&self) -> String {
-        match self
-            .title
-            .as_deref()
-            .filter(|title| !title.trim().is_empty())
-        {
-            Some(title) => title.to_owned(),
-            None => self.root.clone(),
-        }
-    }
-
-    /// The last path component of the root: what a list can show without a slash per row.
-    pub fn root_name(&self) -> String {
-        self.root
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .filter(|name| !name.is_empty())
-            .unwrap_or(&self.root)
-            .to_owned()
-    }
-}
-
-/// One step of a run, as the stream carried it.
-///
-/// `kind` is the capability's `type`, kept as a string so a front end that meets a kind it does
-/// not know can say so instead of failing to parse the whole event.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct Event {
-    /// Position in the run's log. A reconnect asks for everything after the last one seen.
-    #[serde(default)]
-    pub seq: u64,
-    /// The oldest retained event when a stream reports that its cursor fell behind the log.
-    #[serde(default)]
-    pub first_seq: u64,
-    #[serde(rename = "type", default)]
-    pub kind: String,
-    #[serde(default)]
-    pub content: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub arguments: String,
-    /// A tool call's id, so its result can be matched to it.
-    #[serde(default, rename = "id")]
-    pub tool_id: String,
-    /// The one-line summary an approval card shows.
-    #[serde(default)]
-    pub preview: String,
-    /// The lines an `edit` or a `write` will change, as they will read afterwards.
-    #[serde(default)]
-    pub diff: Option<String>,
-    #[serde(default, rename = "approval_id")]
-    pub approval: String,
-    #[serde(default)]
-    pub rule: Option<String>,
-    #[serde(default)]
-    pub class: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-    #[serde(default)]
-    pub input_tokens: u64,
-    #[serde(default)]
-    pub output_tokens: u64,
-    #[serde(default)]
-    pub message: String,
-}
-
-impl Event {
-    /// Why a run stopped, when it stopped for a reason the operator has to read.
-    pub fn failure(&self) -> Option<&str> {
-        (self.kind == "error").then(|| self.message.as_str())
-    }
-
-    /// True for the events that end a run's stream.
-    pub fn terminal(&self) -> bool {
-        matches!(self.kind.as_str(), "done" | "stopped" | "error")
-    }
-
-    /// A tool call the operator has to answer before it runs.
-    pub fn needs_approval(&self) -> Option<&str> {
-        (self.kind == "needs_approval" && !self.approval.is_empty()).then(|| self.approval.as_str())
-    }
-}
-
-/// One stored turn, as `/transcript` returns it: the `Message` enum `libs/agent` writes.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-pub struct Turn {
-    /// `system`, `user`, `assistant` or `tool`.
-    #[serde(rename = "role", default)]
-    pub role: String,
-    #[serde(default)]
-    pub content: Option<String>,
-    /// Present for a `tool` turn: which call this answers.
-    #[serde(default)]
-    pub tool_call_id: Option<String>,
-}
+pub use agent_api::{
+    ApproveRequest, CreateSession, Event, PromptRequest, Session, SessionMeta, SteerRequest,
+    StreamQuery, Tier, Turn, DEFAULT_AGENT_PORT, DEFAULT_TIER, ROUTE_AGENT_SESSION,
+    ROUTE_AGENT_SESSIONS, ROUTE_AGENT_SESSION_APPROVE, ROUTE_AGENT_SESSION_PROMPT,
+    ROUTE_AGENT_SESSION_STEER, ROUTE_AGENT_SESSION_STOP, ROUTE_AGENT_SESSION_STREAM,
+    ROUTE_AGENT_SESSION_TRANSCRIPT,
+};
 
 /// The path prefix the shell proxies to the capability.
 const BASE: &str = "/agent";

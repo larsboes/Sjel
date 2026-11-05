@@ -17,7 +17,7 @@ use gpui_kit::{
 };
 use zeroize::Zeroizing;
 
-use crate::data::Repo;
+use crate::data::{self, Remote, Repo};
 use crate::primitives::{list, note, section};
 use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::accounts::CredentialRow;
@@ -33,8 +33,7 @@ const KEY_PROVIDERS: &[(&str, &str)] = &[
 
 pub struct Accounts {
     repo: Repo,
-    rows: Option<Result<Vec<CredentialRow>, String>>,
-    loading: bool,
+    rows: Remote<Vec<CredentialRow>>,
     /// The client JSON dropped for each credential ID, until Connect reads it.
     dropped: HashMap<String, PathBuf>,
     /// The credential ID whose consent flow is running.
@@ -45,15 +44,14 @@ pub struct Accounts {
     key_input: Option<(Entity<InputState>, Subscription)>,
     key_status: Option<String>,
     confirm_key_removal: bool,
-    key_presence: Option<Result<HashMap<String, bool>, String>>,
+    key_presence: Remote<HashMap<String, bool>>,
 }
 
 impl Accounts {
     pub fn new(repo: Repo) -> Self {
         Self {
             repo,
-            rows: None,
-            loading: false,
+            rows: Remote::default(),
             dropped: HashMap::new(),
             busy: None,
             outcome: HashMap::new(),
@@ -61,7 +59,7 @@ impl Accounts {
             key_input: None,
             key_status: None,
             confirm_key_removal: false,
-            key_presence: None,
+            key_presence: Remote::default(),
         }
     }
 
@@ -87,7 +85,11 @@ impl Accounts {
     }
 
     pub fn refresh_if_missing(&mut self, cx: &mut Context<Self>) {
-        if self.rows.is_none() || self.key_presence.is_none() {
+        if (self.rows.value.is_none() && self.rows.error.is_none() && !self.rows.loading)
+            || (self.key_presence.value.is_none()
+                && self.key_presence.error.is_none()
+                && !self.key_presence.loading)
+        {
             self.refresh(cx);
         }
     }
@@ -182,13 +184,16 @@ impl Accounts {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let input_for_save = key_input.clone();
-        let presence = match &self.key_presence {
-            Some(Ok(keys)) if keys.get(&self.key_provider).copied().unwrap_or(false) => {
+        let presence = if let Some(keys) = self.key_presence.value.as_ref() {
+            if keys.get(&self.key_provider).copied().unwrap_or(false) {
                 "Key saved in the OS keychain."
+            } else {
+                "No key saved for this provider."
             }
-            Some(Ok(_)) => "No key saved for this provider.",
-            Some(Err(_)) => "Key status could not be read.",
-            None => "Checking key status…",
+        } else if self.key_presence.error.is_some() {
+            "Key status could not be read."
+        } else {
+            "Checking key status…"
         };
         section(
             "PROVIDER API KEYS",
@@ -294,49 +299,27 @@ impl Accounts {
 
     /// Reads the declarations again. Called when the section opens and after a connect.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        let Ok(client) = self.repo.shell() else {
-            self.rows = Some(Err("Sjel is not connected.".into()));
-            self.key_presence = Some(Err("Sjel is not connected.".into()));
-            cx.notify();
-            return;
-        };
-        if self.loading {
-            return;
-        }
-        self.loading = true;
-        cx.spawn(async move |this, cx| {
-            let result = shell::run(async move {
-                let rows = client.credentials().await;
-                let keys = client.provider_key_status().await;
-                (rows, keys)
-            })
-            .await;
-            let _ = this.update(cx, |view, cx| {
-                view.loading = false;
-                match result {
-                    Some((rows, keys)) => {
-                        view.rows =
-                            Some(rows.map_err(|error| {
-                                format!("Could not read the credentials: {error}")
-                            }));
-                        view.key_presence = Some(
-                            keys.map(|keys| {
-                                keys.into_iter()
-                                    .map(|key| (key.provider, key.present))
-                                    .collect()
-                            })
-                            .map_err(|error| error.to_string()),
-                        );
-                    }
-                    None => {
-                        view.rows = Some(Err("Could not read the credentials.".into()));
-                        view.key_presence = Some(Err("Could not read key status.".into()));
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
+        let repo = self.repo.clone();
+        data::read(
+            cx,
+            self,
+            |this| &mut this.rows,
+            &repo,
+            |shell| async move { shell.credentials().await },
+        );
+        data::read(
+            cx,
+            self,
+            |this| &mut this.key_presence,
+            &repo,
+            |shell| async move {
+                let keys = shell.provider_key_status().await?;
+                Ok(keys
+                    .into_iter()
+                    .map(|key| (key.provider, key.present))
+                    .collect())
+            },
+        );
     }
 
     fn drop_file(&mut self, id: &str, paths: &ExternalPaths, cx: &mut Context<Self>) {
@@ -552,26 +535,33 @@ impl Render for Accounts {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
         let key_input = self.key_input(window, cx);
-        if self.rows.is_none() && !self.loading {
-            self.refresh(cx);
-        }
-        let body: AnyElement = match &self.rows {
-            None => list(
-                vec![note("Reading the declared credentials…", palette.muted)],
-                palette,
-            ),
-            Some(Err(error)) => list(vec![note(error.clone(), palette.red)], palette),
-            Some(Ok(rows)) if rows.is_empty() => list(
-                vec![note("No capability declares a credential.", palette.muted)],
-                palette,
-            ),
-            Some(Ok(rows)) => {
+        self.refresh_if_missing(cx);
+        let body: AnyElement = if let Some(rows) = self.rows.value.as_ref() {
+            if rows.is_empty() {
+                list(
+                    vec![note("No capability declares a credential.", palette.muted)],
+                    palette,
+                )
+            } else {
                 let rows = rows.clone();
                 list(
                     rows.iter().map(|row| self.card(row, palette, cx)).collect(),
                     palette,
                 )
             }
+        } else if let Some(error) = self.rows.error.as_ref() {
+            list(
+                vec![note(
+                    format!("Could not read the credentials: {error}"),
+                    palette.red,
+                )],
+                palette,
+            )
+        } else {
+            list(
+                vec![note("Reading the declared credentials…", palette.muted)],
+                palette,
+            )
         };
         div()
             .flex()

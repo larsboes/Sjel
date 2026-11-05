@@ -122,6 +122,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1063,6 +1072,10 @@ dependencies = [
  "inout",
  "zeroize",
 ]
+
+[[package]]
+name = "civil-date"
+version = "0.1.0"
 
 [[package]]
 name = "clang-sys"
@@ -5376,6 +5389,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "operator-profile-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5860,6 +5882,15 @@ name = "pulp-wasm-simd-flag"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d8f70e07b9c3962945a74e59ca1c511bba65b6419468acc217c457d93f3c740"
+
+[[package]]
+name = "punctuality-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "pxfm"
@@ -7197,6 +7228,7 @@ dependencies = [
 name = "sjel-gpui-core"
 version = "0.1.0"
 dependencies = [
+ "agent-api",
  "assistant-api",
  "base64 0.22.1",
  "calendar-api",
@@ -7214,8 +7246,10 @@ dependencies = [
  "inventory-api",
  "libsql",
  "media-api",
+ "operator-profile-api",
  "places-api",
  "projects-api",
+ "punctuality-api",
  "qrcode",
  "reqwest 0.13.5",
  "scouting-api",
@@ -7232,6 +7266,7 @@ dependencies = [
  "status-api",
  "tokio",
  "transit-api",
+ "traveler-api",
  "trips-api",
  "web-links-api",
  "zeroize",
@@ -7429,6 +7464,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "status-api"
 version = "0.1.0"
 dependencies = [
+ "civil-date",
  "serde",
  "serde_json",
  "setup-api",
@@ -8160,6 +8196,16 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "traveler-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "transit-api",
 ]
 
 [[package]]

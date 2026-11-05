@@ -4,102 +4,11 @@
 //! both together until the dashboard page retires.
 
 use reqwest::Url;
-use serde::Deserialize;
 
-pub const TAGS: [&str; 4] = ["buy", "look", "go", "learn"];
-
-/// One row of `GET /comms/captures` (`capabilities/comms/src/store/captures.rs`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct Capture {
-    pub id: String,
-    pub text: Option<String>,
-    pub url: Option<String>,
-    pub tag: Option<String>,
-    pub status: String,
-    /// Where it went: `feed:<id>`, `places:<id>` or `inventory:<id>`.
-    pub routed_to: Option<String>,
-    pub client: Option<String>,
-    pub created_at: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Route {
-    Wishlist,
-    Feed,
-    Places,
-}
-
-impl Route {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Wishlist => "To wishlist",
-            Self::Feed => "To feed",
-            Self::Places => "To places",
-        }
-    }
-}
-
-/// Domains the comms feed has a reader for (`capabilities/comms/src/media`).
-const FEED_HOSTS: [&str; 7] = [
-    "github.com",
-    "reddit.com",
-    "arxiv.org",
-    "huggingface.co",
-    "youtube.com",
-    "youtu.be",
-    "instagram.com",
-];
-
-pub fn host(url: Option<&str>) -> Option<String> {
-    let host = Url::parse(url?).ok()?.host_str()?.to_owned();
-    Some(host.strip_prefix("www.").map(str::to_owned).unwrap_or(host))
-}
-
-/// The tag the rules give an untagged capture: a link to a place the feed reads is `look`.
-///
-/// One function for both a capture the Mac answered with and one this device typed, so the preview
-/// on the phone and the triage on the Mac cannot disagree about a URL.
-pub fn suggested_tag(tag: Option<&str>, url: Option<&str>) -> Option<&'static str> {
-    if let Some(tag) = tag {
-        return TAGS.iter().find(|known| **known == tag).copied();
-    }
-    let host = host(url)?;
-    FEED_HOSTS
-        .iter()
-        .any(|f| host == *f || host.ends_with(&format!(".{f}")))
-        .then_some("look")
-}
-
-/// Where a capture with this tag and url can go. A text-only note without a tag stays in the inbox.
-pub fn route_for(tag: Option<&str>, url: Option<&str>) -> Option<Route> {
-    match suggested_tag(tag, url)? {
-        "buy" => Some(Route::Wishlist),
-        "look" | "learn" if url.is_some() => Some(Route::Feed),
-        "go" => Some(Route::Places),
-        _ => None,
-    }
-}
-
-impl Capture {
-    /// The tag the rules give an untagged capture. A set tag always wins.
-    pub fn suggested_tag(&self) -> Option<&str> {
-        suggested_tag(self.tag.as_deref(), self.url.as_deref())
-    }
-
-    /// Where the capture can go. A text-only note without a tag stays in the inbox.
-    pub fn route(&self) -> Option<Route> {
-        route_for(self.tag.as_deref(), self.url.as_deref())
-    }
-
-    pub fn label(&self) -> String {
-        self.text
-            .clone()
-            .filter(|t| !t.is_empty())
-            .or_else(|| host(self.url.as_deref()))
-            .or_else(|| self.url.clone())
-            .unwrap_or_default()
-    }
-}
+pub use feed_api::{
+    cents_from, extract_price, host, route_for, slug, suggested_tag, Capture,
+    CaptureRoute as Route, FEED_HOSTS, TAGS,
+};
 
 /// What one capture field typed, before it is anything on a Mac.
 ///
@@ -171,65 +80,6 @@ impl Draft {
             Some(route) => route.label().to_owned(),
             None => "Stays in the inbox".to_owned(),
         }
-    }
-}
-
-/// `"49,90 €"` → 4990. `None` for text that is not a price.
-pub fn cents_from(text: &str) -> Option<i64> {
-    let lower = text.to_lowercase();
-    let mut t = lower.replace('€', "").replace("eur", "").trim().to_owned();
-    if t.is_empty() {
-        return None;
-    }
-    if t.contains('.') && t.contains(',') {
-        t = t.replace('.', "");
-    }
-    let t = t.replacen(',', ".", 1);
-    let (whole, frac) = t.split_once('.').unwrap_or((&t, ""));
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
-    if !digits(whole) || !(frac.is_empty() || (digits(frac) && frac.len() <= 2)) {
-        return None;
-    }
-    let frac = format!("{frac:0<2}");
-    Some(whole.parse::<i64>().ok()? * 100 + frac.parse::<i64>().ok()?)
-}
-
-/// `"Linen Shirt 49.90 €"` → `("Linen Shirt", Some(4990))`: a price typed at the end of the text.
-pub fn extract_price(text: Option<&str>) -> (String, Option<i64>) {
-    let trimmed = text.unwrap_or_default().trim();
-    let words: Vec<&str> = trimmed.split_whitespace().collect();
-    if words.len() >= 2 {
-        for take in [2, 1] {
-            if let Some(cents) = cents_from(&words[words.len() - take..].join(" ")) {
-                return (words[..words.len() - take].join(" "), Some(cents));
-            }
-        }
-    }
-    (trimmed.to_owned(), None)
-}
-
-/// `Proper shoes (On?)` → `proper-shoes-on`, the shape inventory's own ids have.
-pub fn slug(text: &str) -> String {
-    let mut out = String::new();
-    for c in text.to_lowercase().chars() {
-        let c = match c {
-            'ä' => 'a',
-            'ö' => 'o',
-            'ü' => 'u',
-            'ß' => 's',
-            c => c,
-        };
-        if c.is_ascii_alphanumeric() {
-            out.push(c);
-        } else if !out.ends_with('-') {
-            out.push('-');
-        }
-    }
-    let out = out.trim_matches('-');
-    if out.is_empty() {
-        "wunsch".into()
-    } else {
-        out.into()
     }
 }
 

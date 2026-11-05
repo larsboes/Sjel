@@ -18,10 +18,14 @@ use crate::{Density, Palette};
 mod connections;
 mod details;
 mod forms;
+mod itinerary;
+mod library;
 mod map;
 #[cfg(all(feature = "native-maps", target_os = "macos"))]
 mod native_renderer;
+mod overview;
 mod pages;
+mod saved;
 #[cfg(all(feature = "native-maps", target_os = "macos"))]
 mod vector;
 

@@ -920,6 +920,15 @@ impl FinancePage {
         field.update(cx, |input, cx| input.focus(window, cx));
     }
 
+    pub fn open_date(&mut self, date: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_view(View::Transactions, cx);
+        self.search_query = date.clone();
+        self.filter_rev = self.filter_rev.wrapping_add(1);
+        let field = self.search_field(window, cx);
+        field.update(cx, |input, cx| input.set_value(date, window, cx));
+        cx.notify();
+    }
+
     fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_search(window, cx);
     }

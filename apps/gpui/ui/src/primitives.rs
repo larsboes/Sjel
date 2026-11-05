@@ -376,6 +376,85 @@ pub fn stat_card(
         .into_any_element()
 }
 
+/// Interactive horizontal metric cell (`label`, `value`, optional `detail`, semantic `tone`, `active` state, and click handler).
+pub fn stat_card_interactive(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    value: impl Into<SharedString>,
+    detail: Option<SharedString>,
+    tone: u32,
+    active: bool,
+    palette: Palette,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id.into())
+        .flex_1()
+        .min_w(px(120.))
+        .p_3()
+        .rounded(RADIUS_MD)
+        .bg(rgba(if active {
+            tint(palette.accent, 0x18)
+        } else {
+            palette.surface
+        }))
+        .border_1()
+        .border_color(if active {
+            rgb(palette.accent)
+        } else {
+            rgba(palette.border)
+        })
+        .cursor_pointer()
+        .hover(move |s| {
+            s.bg(rgba(if active {
+                tint(palette.accent, 0x24)
+            } else {
+                palette.raised
+            }))
+        })
+        .on_click(on_click)
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(rgb(if active {
+                            palette.accent
+                        } else {
+                            palette.muted
+                        }))
+                        .child(label.into()),
+                )
+                .when(active, |el| {
+                    el.child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(rgb(palette.accent))
+                            .child("Filtered"),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .text_lg()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(rgb(tone))
+                .child(value.into()),
+        )
+        .when_some(detail, |el, det| {
+            el.child(div().text_xs().text_color(rgb(palette.muted)).child(det))
+        })
+        .into_any_element()
+}
+
 /// Horizontal strip of [`stat_card`] metrics.
 pub fn stat_strip(cards: Vec<AnyElement>) -> AnyElement {
     div()

@@ -34,7 +34,7 @@ use sjel_gpui_ui::backup::{self, BackupPage};
 use sjel_gpui_ui::calendar::page::CalendarPage;
 use sjel_gpui_ui::capabilities;
 use sjel_gpui_ui::clipper::ClipperSettings;
-use sjel_gpui_ui::context::ContextPage;
+use sjel_gpui_ui::context::{ContextEvent, ContextPage};
 use sjel_gpui_ui::cv::CvPage;
 use sjel_gpui_ui::docs::DocsPage;
 use sjel_gpui_ui::documents::Documents;
@@ -366,6 +366,7 @@ pub struct Workspace {
     _inbox_events: Subscription,
     pub calendar_page: Option<Entity<CalendarPage>>,
     pub context_page: Entity<ContextPage>,
+    _context_events: Subscription,
     pub finance_page: Option<Entity<FinancePage>>,
     pub people_page: Option<Entity<PeoplePage>>,
     pub backup_page: Option<Entity<BackupPage>>,
@@ -458,6 +459,7 @@ impl Workspace {
         let inbox = cx.new(|cx| Inbox::new(repo.clone(), cx));
         let inbox_events = cx.subscribe_in(&inbox, window, Self::on_inbox);
         let context_page = cx.new(|cx| ContextPage::new(repo.clone(), cx));
+        let context_events = cx.subscribe_in(&context_page, window, Self::on_context);
         let appearance_settings = AppearanceSettings::load();
         let finder = {
             let (repo, ask) = (repo.clone(), ask.clone());
@@ -552,6 +554,7 @@ impl Workspace {
             _inbox_events: inbox_events,
             calendar_page: None,
             context_page,
+            _context_events: context_events,
             finance_page: None,
             people_page: None,
             backup_page: None,
@@ -1502,6 +1505,37 @@ impl Workspace {
             MusicEvent::Close => {
                 self.music_page = None;
                 cx.notify();
+            }
+        }
+    }
+
+    fn on_context(
+        &mut self,
+        _: &Entity<ContextPage>,
+        event: &ContextEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            ContextEvent::OpenCalendar { day, entry_id } => {
+                let day = *day;
+                let entry_id = entry_id.clone();
+                self.go(Page::Calendar, cx);
+                self.ensure_calendar_page(cx)
+                    .update(cx, |cal, cx| cal.open_day(day, entry_id, cx));
+            }
+            ContextEvent::OpenProject(project) => {
+                if project.is_empty() {
+                    self.go(Page::Projects, cx);
+                } else {
+                    self.go_to_project(project.clone(), cx);
+                }
+            }
+            ContextEvent::OpenFinance { day } => {
+                let date = day.format("%Y-%m-%d").to_string();
+                self.go(Page::Finance, cx);
+                self.ensure_finance_page(cx)
+                    .update(cx, |fin, cx| fin.open_date(date, window, cx));
             }
         }
     }

@@ -8,8 +8,8 @@ use chrono::{Duration, Local, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, FocusHandle, FontWeight,
-    KeyBinding, SharedString, Window,
+    actions, div, prelude::*, px, rgb, rgba, AnyElement, App, Context, EventEmitter, FocusHandle,
+    FontWeight, KeyBinding, SharedString, Window,
 };
 use sjel_gpui_core::context::{
     format_day_header, format_money, needs_attention, ContextDay, TimelineItem, TimelineKind,
@@ -19,8 +19,22 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{key_bar, stat_card, stat_strip, tone_chip};
+use crate::primitives::{key_bar, mono_num, stat_card_interactive, stat_strip, tone_chip};
 use crate::theme::{Density, Palette, ThemeContext};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ContextEvent {
+    OpenCalendar {
+        day: NaiveDate,
+        entry_id: Option<String>,
+    },
+    OpenProject(String),
+    OpenFinance {
+        day: NaiveDate,
+    },
+}
+
+impl EventEmitter<ContextEvent> for ContextPage {}
 
 actions!(
     context_page,
@@ -53,6 +67,7 @@ pub struct ContextPage {
     palette: Option<Palette>,
     density: Density,
     pub day: NaiveDate,
+    pub filter_kind: Option<TimelineKind>,
     pub entries: Remote<Vec<CalendarEntry>>,
     pub tasks: Remote<Vec<GlobalTask>>,
     pub finance: Remote<FinanceDashboardProjection>,
@@ -67,12 +82,22 @@ impl ContextPage {
             palette: None,
             density: Density::Desktop,
             day: Local::now().date_naive(),
+            filter_kind: None,
             entries: Remote::default(),
             tasks: Remote::default(),
             finance: Remote::default(),
             focus: cx.focus_handle(),
             focus_next: true,
         }
+    }
+
+    pub fn toggle_filter(&mut self, kind: TimelineKind, cx: &mut Context<Self>) {
+        if self.filter_kind == Some(kind) {
+            self.filter_kind = None;
+        } else {
+            self.filter_kind = Some(kind);
+        }
+        cx.notify();
     }
 
     pub fn with_density(mut self, density: Density) -> Self {
@@ -336,21 +361,25 @@ impl ContextPage {
         let total_spend_str = format_money(context.total_spent_cents, &context.currency);
 
         let cards = stat_strip(vec![
-            stat_card(
+            stat_card_interactive(
+                "context-stat-events",
                 "EVENTS",
                 format!("{event_count} scheduled"),
                 Some(
                     if event_count == 0 {
                         "Calendar clear"
                     } else {
-                        "Meetings & blocks"
+                        "Click to filter ·Meetings & blocks"
                     }
                     .into(),
                 ),
                 palette.text,
+                self.filter_kind == Some(TimelineKind::Event),
                 palette,
+                cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Event, cx)),
             ),
-            stat_card(
+            stat_card_interactive(
+                "context-stat-tasks",
                 "TASKS",
                 format!("{open_task_count} open"),
                 Some(
@@ -364,50 +393,99 @@ impl ContextPage {
                     .into(),
                 ),
                 palette.text,
+                self.filter_kind == Some(TimelineKind::Task),
                 palette,
+                cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Task, cx)),
             ),
-            stat_card(
+            stat_card_interactive(
+                "context-stat-spend",
                 "SPENDING",
                 total_spend_str,
                 Some(format!("{} transactions", context.spend.len()).into()),
                 palette.text,
+                self.filter_kind == Some(TimelineKind::Spend),
                 palette,
+                cx.listener(|page, _, _, cx| page.toggle_filter(TimelineKind::Spend, cx)),
             ),
         ]);
 
+        let filtered_timeline: Vec<TimelineItem> = context
+            .timeline
+            .into_iter()
+            .filter(|item| self.filter_kind.is_none_or(|k| item.kind == k))
+            .collect();
+
         // Timeline list
-        let timeline_content = if context.timeline.is_empty() {
+        let timeline_content = if filtered_timeline.is_empty() {
             div()
                 .flex()
                 .flex_col()
                 .items_center()
                 .justify_center()
-                .py_12()
-                .gap_2()
-                .rounded(px(16.))
+                .py_6()
+                .px_4()
+                .gap_1()
+                .rounded(px(10.))
                 .border_1()
                 .border_color(rgba(palette.border))
                 .bg(rgba(palette.surface))
                 .child(
                     div()
-                        .text_base()
+                        .text_sm()
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(rgb(palette.muted))
-                        .child("Quiet day"),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child("No calendar events, due tasks, or transactions on this day."),
+                        .child(match self.filter_kind {
+                            Some(TimelineKind::Event) => "No events on this day",
+                            Some(TimelineKind::Task) => "No due tasks on this day",
+                            Some(TimelineKind::Spend) => "No transactions on this day",
+                            None => "Quiet day",
+                        }),
                 )
                 .into_any_element()
         } else {
-            let mut list = div().flex().flex_col().gap_2();
-            for item in context.timeline {
-                list = list.child(render_timeline_row(item, palette, cx));
+            let mut list = div().flex().flex_col().gap_1p5();
+            for item in filtered_timeline {
+                list = list.child(render_timeline_row(item, self.day, palette, cx));
             }
             list.into_any_element()
+        };
+
+        let day = self.day;
+        let filter_action = match self.filter_kind {
+            Some(TimelineKind::Event) => Some(
+                Button::new("context-open-calendar")
+                    .xsmall()
+                    .ghost()
+                    .label("Open Calendar →")
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(ContextEvent::OpenCalendar {
+                            day,
+                            entry_id: None,
+                        });
+                    }))
+                    .into_any_element(),
+            ),
+            Some(TimelineKind::Task) => Some(
+                Button::new("context-open-projects")
+                    .xsmall()
+                    .ghost()
+                    .label("Open Projects →")
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.emit(ContextEvent::OpenProject(String::new()));
+                    }))
+                    .into_any_element(),
+            ),
+            Some(TimelineKind::Spend) => Some(
+                Button::new("context-open-finance")
+                    .xsmall()
+                    .ghost()
+                    .label("Open Finance →")
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        cx.emit(ContextEvent::OpenFinance { day });
+                    }))
+                    .into_any_element(),
+            ),
+            None => None,
         };
 
         div()
@@ -419,17 +497,46 @@ impl ContextPage {
             .on_action(cx.listener(Self::on_refresh))
             .flex()
             .flex_col()
-            .gap_4()
+            .gap_3()
             .child(header)
             .child(cards)
             .child(
-                div().flex().items_center().justify_between().pt_2().child(
-                    div()
-                        .text_xs()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(rgb(palette.muted))
-                        .child("DAILY TIMELINE"),
-                ),
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .pt_1()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(rgb(palette.muted))
+                                    .child(match self.filter_kind {
+                                        Some(TimelineKind::Event) => "DAILY TIMELINE · EVENTS",
+                                        Some(TimelineKind::Task) => "DAILY TIMELINE · TASKS",
+                                        Some(TimelineKind::Spend) => "DAILY TIMELINE · SPENDING",
+                                        None => "DAILY TIMELINE",
+                                    }),
+                            )
+                            .when(self.filter_kind.is_some(), |el| {
+                                el.child(
+                                    Button::new("context-clear-filter")
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Show all")
+                                        .on_click(cx.listener(|page, _, _, cx| {
+                                            page.filter_kind = None;
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    )
+                    .children(filter_action),
             )
             .child(timeline_content)
             .when(!self.density.is_mobile(), |el| {
@@ -448,6 +555,7 @@ impl ContextPage {
 
 fn render_timeline_row(
     item: TimelineItem,
+    day: NaiveDate,
     palette: Palette,
     cx: &mut Context<ContextPage>,
 ) -> AnyElement {
@@ -459,13 +567,12 @@ fn render_timeline_row(
 
     let time_pill = match &item.time {
         Some(t) => div()
-            .w(px(64.))
-            .text_sm()
+            .w(px(56.))
+            .text_xs()
             .font_weight(FontWeight::SEMIBOLD)
-            .text_color(rgb(palette.text))
-            .child(t.clone()),
+            .child(mono_num(t.clone(), palette.text)),
         None => div()
-            .w(px(64.))
+            .w(px(56.))
             .text_xs()
             .font_weight(FontWeight::MEDIUM)
             .text_color(rgb(palette.muted))
@@ -496,20 +603,7 @@ fn render_timeline_row(
                 let curr = item.currency.as_deref().unwrap_or("EUR");
                 let is_expense = cents < 0;
                 let text = format_money(cents, curr);
-                div()
-                    .px_2()
-                    .py(px(2.))
-                    .rounded(px(6.))
-                    .bg(rgba(if is_expense { 0xef444422 } else { 0x22c55e22 }))
-                    .text_xs()
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(rgb(if is_expense {
-                        palette.red
-                    } else {
-                        palette.green
-                    }))
-                    .child(text)
-                    .into_any_element()
+                tone_chip(text, if is_expense { palette.red } else { palette.green })
             } else {
                 div().into_any_element()
             }
@@ -527,20 +621,41 @@ fn render_timeline_row(
         }
     };
 
+    let row_id = SharedString::from(format!("timeline-row-{}", item.id));
+    let item_kind = item.kind;
+    let raw_id = item.id.clone();
+    let subtitle_project = item.subtitle.clone();
+
     div()
+        .id(row_id)
         .flex()
         .items_center()
         .justify_between()
-        .p_3()
-        .rounded(px(12.))
+        .px_3()
+        .py_2()
+        .rounded(px(8.))
         .border_1()
         .border_color(rgba(palette.border))
         .bg(rgba(palette.surface))
+        .cursor_pointer()
+        .hover(move |s| s.bg(rgba(palette.raised)))
+        .on_click(cx.listener(move |_, _, _, cx| match item_kind {
+            TimelineKind::Event => {
+                let entry_id = raw_id.strip_prefix("event:").map(str::to_owned);
+                cx.emit(ContextEvent::OpenCalendar { day, entry_id });
+            }
+            TimelineKind::Task => {
+                cx.emit(ContextEvent::OpenProject(subtitle_project.clone()));
+            }
+            TimelineKind::Spend => {
+                cx.emit(ContextEvent::OpenFinance { day });
+            }
+        }))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap_4()
+                .gap_3()
                 .min_w_0()
                 .child(time_pill)
                 .child(kind_pill)

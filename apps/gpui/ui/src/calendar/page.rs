@@ -176,6 +176,14 @@ impl CalendarPage {
         self.load_proposals(cx, true);
     }
 
+    pub fn open_day(&mut self, day: NaiveDate, entry_id: Option<String>, cx: &mut Context<Self>) {
+        self.day = day;
+        self.selected_entry = entry_id;
+        self.loaded = None;
+        self.load(cx);
+        cx.notify();
+    }
+
     fn dates(&self) -> Vec<NaiveDate> {
         match self.view {
             View::Month => calendar::month_dates(self.day),

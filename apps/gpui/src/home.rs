@@ -13,9 +13,11 @@ use crate::route::Page;
 use crate::selection::Item;
 use crate::shell::{Approval, ShellError};
 use crate::workspace::Workspace;
+use sjel_gpui_core::context::TimelineKind;
 use sjel_gpui_ui::primitives::{
     dot, due_badge, list, note, placeholder, priority_pill, row, section,
 };
+use sjel_gpui_ui::sidebar::Seat;
 use sjel_gpui_ui::theme::{tint, Palette};
 
 pub fn render(
@@ -42,7 +44,7 @@ pub fn render(
                     .flex_col()
                     .gap_6()
                     .child(today(view, palette, cx))
-                    .child(focus_tasks(view, palette, cx)),
+                    .children(focus_tasks(view, palette, cx)),
             )
             .child(
                 div()
@@ -62,7 +64,7 @@ pub fn render(
             .gap_6()
             .w_full()
             .child(today(view, palette, cx))
-            .child(focus_tasks(view, palette, cx))
+            .children(focus_tasks(view, palette, cx))
             .children(prompt_outbox(view, palette, cx))
             .child(travel_card(view, palette, cx))
             .into_any_element()
@@ -183,23 +185,37 @@ fn travel_card(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) 
         section("Next trip & Location", body.into_any_element(), palette).into_any_element()
     } else {
         let body = div()
+            .id("home-compact-location")
             .flex()
             .flex_col()
             .gap_3()
-            .rounded(px(16.))
+            .rounded(px(14.))
             .bg(rgba(palette.surface))
             .border_1()
             .border_color(rgba(palette.border))
             .p_3()
+            .cursor_pointer()
+            .hover(move |s| s.border_color(rgba(palette.accent)))
+            .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx)))
             .child(map)
             .child(
-                div().flex().justify_end().child(
-                    Button::new("open-location")
-                        .ghost()
-                        .small()
-                        .label("Open Location")
-                        .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
-                ),
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child("No active trip · Click to open Location & Trips"),
+                    )
+                    .child(
+                        Button::new("open-location")
+                            .ghost()
+                            .small()
+                            .label("Open Location →")
+                            .on_click(cx.listener(|view, _, _, cx| view.go(Page::Travel, cx))),
+                    ),
             );
 
         section("Location", body.into_any_element(), palette).into_any_element()
@@ -270,11 +286,18 @@ fn approval_row(
         .child(Tag::warning().small().child("agent write"))
         .child(
             div()
+                .id(SharedString::from(format!("approval-open-{}", approval.id)))
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(px(2.))
+                .cursor_pointer()
+                .hover(move |s| s.opacity(0.85))
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.right_panel.open_on(Seat::Agent);
+                    cx.notify();
+                }))
                 .child(div().truncate().font_family(mono).text_sm().child(format!(
                     "{} {} · {}",
                     approval.method, approval.path, approval.capability
@@ -326,17 +349,21 @@ fn down_row(
         .child(dot(palette.red))
         .child(
             div()
+                .id(SharedString::from(format!("down-open-{name}")))
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(px(2.))
+                .cursor_pointer()
+                .hover(move |s| s.opacity(0.85))
+                .on_click(cx.listener(|view, _, _, cx| view.go(Page::Capabilities, cx)))
                 .child(div().text_sm().child(name.clone()))
                 .child(
                     div()
                         .text_xs()
                         .text_color(rgb(palette.muted))
-                        .child("Kept running, but not answering"),
+                        .child("Kept running, but not answering · Click to inspect"),
                 ),
         )
         .child(
@@ -356,7 +383,10 @@ fn focus_tasks(
     view: &Workspace,
     palette: Palette,
     cx: &mut Context<Workspace>,
-) -> impl IntoElement {
+) -> Option<AnyElement> {
+    if view.context_page.read(cx).filter_kind == Some(TimelineKind::Task) {
+        return None;
+    }
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let selected = view.selected();
     let body = match (&view.focus_tasks.value, &view.focus_tasks.error) {
@@ -367,112 +397,112 @@ fn focus_tasks(
             let total = view.urgent_task_count();
 
             if urgent.is_empty() {
-                note("No urgent or overdue tasks today.", palette.muted)
-            } else {
-                let shown = urgent.len();
-                let mut rows: Vec<AnyElement> = urgent
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, task)| {
-                        let task_id = task.id.clone();
-                        let task_toggle_id = task.id.clone();
-                        let task_priority_id = task.id.clone();
-                        let proj_name = task.project.clone();
-                        let due = task.due.clone().filter(|d| !d.is_empty());
-                        let priority = task.priority.clamp(1, 3);
-                        let marked = selected == Some(Item::FocusTask(task_id.clone()));
-                        view.selection
-                            .mark(row(), marked, palette)
-                            .child(
-                                div().w(px(20.)).child(
-                                    Checkbox::new(("home-task-done", index))
-                                        .checked(task.done)
-                                        .on_click(cx.listener(
-                                            move |view, done: &bool, window, cx| {
-                                                view.toggle_task(
-                                                    task_toggle_id.clone(),
-                                                    *done,
-                                                    window,
-                                                    cx,
-                                                );
-                                            },
-                                        )),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_sm()
-                                    .child(task.title.clone()),
-                            )
-                            .child(
-                                div()
-                                    .id(("home-proj-tag", index))
-                                    .px_2()
-                                    .py(px(2.))
-                                    .rounded(px(6.))
-                                    .bg(rgba(palette.raised))
-                                    .text_color(rgb(palette.accent))
-                                    .text_xs()
-                                    .truncate()
-                                    .cursor_pointer()
-                                    .hover(move |s| s.text_color(rgb(palette.text)))
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.go_to_project(proj_name.clone(), cx);
-                                    }))
-                                    .child(task.project.clone()),
-                            )
-                            .child(div().w(px(96.)).child(due_badge(
-                                due.as_deref(),
-                                task.done,
-                                &today,
-                                palette,
-                            )))
-                            .child(
-                                div()
-                                    .id(("home-priority-btn", index))
-                                    .w(px(48.))
-                                    .cursor_pointer()
-                                    .hover(move |s| s.opacity(0.8))
-                                    .on_click(cx.listener({
-                                        let id = task_priority_id.clone();
-                                        move |view, _, window, cx| {
-                                            view.cycle_task_priority(
-                                                id.clone(),
-                                                priority,
+                return None;
+            }
+            let shown = urgent.len();
+            let mut rows: Vec<AnyElement> = urgent
+                .into_iter()
+                .enumerate()
+                .map(|(index, task)| {
+                    let task_id = task.id.clone();
+                    let task_toggle_id = task.id.clone();
+                    let task_priority_id = task.id.clone();
+                    let proj_name = task.project.clone();
+                    let proj_name_title = task.project.clone();
+                    let due = task.due.clone().filter(|d| !d.is_empty());
+                    let priority = task.priority.clamp(1, 3);
+                    let marked = selected == Some(Item::FocusTask(task_id.clone()));
+                    view.selection
+                        .mark(row(), marked, palette)
+                        .child(
+                            div().w(px(20.)).child(
+                                Checkbox::new(("home-task-done", index))
+                                    .checked(task.done)
+                                    .on_click(cx.listener(
+                                        move |view, done: &bool, window, cx| {
+                                            view.toggle_task(
+                                                task_toggle_id.clone(),
+                                                *done,
                                                 window,
                                                 cx,
                                             );
-                                        }
-                                    }))
-                                    .child(priority_pill(priority, palette)),
+                                        },
+                                    )),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .id(("home-task-title", index))
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_sm()
+                                .cursor_pointer()
+                                .hover(move |s| s.text_color(rgb(palette.accent)))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.go_to_project(proj_name_title.clone(), cx);
+                                }))
+                                .child(task.title.clone()),
+                        )
+                        .child(
+                            div()
+                                .id(("home-proj-tag", index))
+                                .px_2()
+                                .py(px(2.))
+                                .rounded(px(6.))
+                                .bg(rgba(palette.raised))
+                                .text_color(rgb(palette.accent))
+                                .text_xs()
+                                .truncate()
+                                .cursor_pointer()
+                                .hover(move |s| s.text_color(rgb(palette.text)))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.go_to_project(proj_name.clone(), cx);
+                                }))
+                                .child(task.project.clone()),
+                        )
+                        .child(
+                            div()
+                                .w(px(96.))
+                                .child(due_badge(due.as_deref(), task.done, &today, palette)),
+                        )
+                        .child(
+                            div()
+                                .id(("home-priority-btn", index))
+                                .w(px(48.))
+                                .cursor_pointer()
+                                .hover(move |s| s.opacity(0.8))
+                                .on_click(cx.listener({
+                                    let id = task_priority_id.clone();
+                                    move |view, _, window, cx| {
+                                        view.cycle_task_priority(id.clone(), priority, window, cx);
+                                    }
+                                }))
+                                .child(priority_pill(priority, palette)),
+                        )
+                        .when(marked, |row| {
+                            row.child(
+                                div()
+                                    .flex_none()
+                                    .px(px(6.))
+                                    .py(px(1.5))
+                                    .rounded(px(6.))
+                                    .bg(rgba(tint(palette.accent, 0x24)))
+                                    .text_color(rgb(palette.accent))
+                                    .text_xs()
+                                    .child("Space"),
                             )
-                            .when(marked, |row| {
-                                row.child(
-                                    div()
-                                        .flex_none()
-                                        .px(px(6.))
-                                        .py(px(1.5))
-                                        .rounded(px(6.))
-                                        .bg(rgba(tint(palette.accent, 0x24)))
-                                        .text_color(rgb(palette.accent))
-                                        .text_xs()
-                                        .child("Space"),
-                                )
-                            })
-                            .into_any_element()
-                    })
-                    .collect();
-                if total > shown {
-                    rows.push(more_row(total - shown, palette, cx));
-                }
-                list(rows, palette)
+                        })
+                        .into_any_element()
+                })
+                .collect();
+            if total > shown {
+                rows.push(more_row(total - shown, palette, cx));
             }
+            list(rows, palette)
         }
     };
-    section("Urgent & overdue", body, palette)
+    Some(section("Urgent & overdue", body, palette).into_any_element())
 }
 
 /// `+N more` for the rows the list left out. Not selectable: selection covers only drawn rows.

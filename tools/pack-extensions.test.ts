@@ -904,6 +904,65 @@ describe.skipIf(!piConfigured)("pack extensions > questions widgets", () => {
       }
     });
   });
+
+  describe("an RPC client that sets PI_QUESTIONS_CLIENT renders ask and quiz itself", () => {
+    const quiz = { topic: "t", questions: [{ id: "q1", prompt: "p", options: ["a", "b"], correctIndex: 0 }] };
+    /** An rpc ctx whose editor dialog records its request and answers with `reply`. */
+    const host = (reply: string | undefined, seen: { title?: string; prefill?: string }) => ({
+      mode: "rpc",
+      ui: {
+        custom() {
+          throw new Error("ui.custom must not be called");
+        },
+        editor: async (title: string, prefill?: string) => {
+          seen.title = title;
+          seen.prefill = prefill;
+          return reply;
+        },
+      },
+    });
+    const withClient = async (fn: () => Promise<void>) => {
+      process.env.PI_QUESTIONS_CLIENT = "pi-questions/v1";
+      try {
+        await fn();
+      } finally {
+        delete process.env.PI_QUESTIONS_CLIENT;
+      }
+    };
+
+    test("the quiz goes out as JSON and the client's answers come back graded", async () => {
+      await withClient(async () => {
+        const seen: { title?: string; prefill?: string } = {};
+        const answers = {
+          topic: "t",
+          cancelled: false,
+          answers: [
+            { id: "q1", selectedIndex: 0, correct: true, idk: false, thinking: "because a", confidence: 80, note: null, contested: false },
+          ],
+        };
+        const r = await run("quiz", { ...quiz, purpose: "predict" }, [], host(JSON.stringify(answers), seen));
+        expect(seen.title).toBe("pi-questions/v1 quiz");
+        expect(JSON.parse(seen.prefill!).questions[0].correctIndex).toBe(0);
+        expect(JSON.parse(seen.prefill!).purpose).toBe("predict");
+        expect(textOf(r)).toMatch(/Quiz complete: 1\/1 correct/);
+        expect(textOf(r)).toMatch(/confidence 80%.*thinking: because a/);
+      });
+    });
+
+    test("a dismissed or malformed answer stops the round instead of throwing", async () => {
+      await withClient(async () => {
+        for (const reply of [undefined, "not json", '{"answers":"no"}']) {
+          const r = await run("quiz", quiz, [], host(reply, {}));
+          expect(r.details.cancelled).toBe(true);
+        }
+      });
+    });
+
+    test("without the variable, rpc mode keeps the plain-text fallback", async () => {
+      const r = await run("quiz", quiz, [], host("{}", {}));
+      expect(textOf(r)).toMatch(/non-interactive/);
+    });
+  });
 });
 
 /**

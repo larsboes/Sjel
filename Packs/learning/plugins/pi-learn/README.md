@@ -1,0 +1,58 @@
+# Learn: pi in the Obsidian sidebar
+
+A desktop Obsidian plugin that runs teach and practice sittings with pi, beside the notes they
+write. It runs on macOS, Linux and Windows.
+
+## What it does
+
+- Starts `pi --mode rpc` in the vault (`docs/rpc.md` in the pi package). Pi's own settings
+  supply the skills and extensions, so `teach`, `practice` and the `questions` extension load as
+  they do in the terminal.
+- Renders replies with Obsidian's Markdown renderer. `interactive` figures, mermaid, LaTeX and
+  `[[links]]` render inside the chat through the plugins that already handle them in notes.
+- Renders `quiz` and `ask` as inline cards. It sets `PI_QUESTIONS_CLIENT=pi-questions/v1`, and
+  `Packs/knowledge/extensions/questions.ts` (`fromHost`) hands each widget to the plugin as JSON
+  instead of falling back to plain text. A card returns the same result object as the terminal
+  widget: answer, thinking, confidence, note and contest.
+- Opens the note pi writes or edits in the main pane (setting: Follow edits).
+- Follows the open note. A path note is the path. Any other note is the focus, and its path is a
+  learning path that links to it or that it links to. Teach and Practice start from that context:
+  the path at the focus note, the path alone, or the note alone when no path holds it.
+- Reads the path with the vault contract's learning-path schema: node states as dots in the
+  header, and the graph itself under Plan.
+- Labels each quiz card by its `purpose`: probe, prediction or check.
+- Shows context used and the estimated API cost of the sitting (`get_session_stats`) in the footer.
+
+## Sittings
+
+Teach and Practice each start a fresh pi session: the vault is the memory, and a sitting resumes
+from the path graph's `current` node. Decided 2026-11-05 (`docs/plans/learning.md`, stage 3).
+With no learning path open, type a topic first. A message sent while pi works becomes a steer.
+
+## Settings
+
+| Setting | Meaning |
+|---|---|
+| pi command | The pi executable. macOS and Linux start it through the login shell, so a name on the shell's `PATH` works. |
+| Run pi in | Windows only: Windows, or WSL with the vault path translated by `wslpath`. |
+| Teach model, Practice model | Picked with a fuzzy search over the models pi lists (`get_available_models`), with a thinking level each. Pi's default applies when unset. The footer's model chip and thinking menu change the running sitting and remember the choice for its kind. |
+| Follow edits | Open the note pi writes. |
+
+## Build and install
+
+```sh
+tools/obsidian-plugin pi-learn install
+```
+
+Then reload the plugin in Obsidian. `tools/obsidian-plugin.test.ts` fails when the built or the
+installed copy is older than `src/`. `tools/pi-learn.test.ts` covers the path reader and the
+launch command per platform.
+
+## Check
+
+The view needs Obsidian, so these checks are manual:
+
+1. Open a learning path note, open Learn from the ribbon, press Teach.
+2. A `quiz` card appears, takes thinking and confidence, and reveals the verdict.
+3. The concept note pi writes opens in the main pane, and an `interactive` figure in a reply
+   renders.

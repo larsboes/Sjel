@@ -11,7 +11,27 @@ Read this at Phase 3, step 3, when a figure carries the idea better than text do
   2. The student moves the control in Obsidian.
   3. Ask what they saw, in their words.
   4. Explain the gap between the prediction and what they saw.
+- Build a simulation when the learner asks to see or to try something. When the concept is
+  dynamic (a parameter to sweep, a process over time, a distribution to sample), offer one.
 - A figure is a full part of its note. The note's text does not repeat what the figure shows.
+
+## Build in the background
+
+A figure build must not stop the teaching. This follows the demo builder of LearnHarness
+(`upstreams.toml`, `[learnharness]`).
+
+1. Write a brief that stands alone. The builder does not see the conversation. The brief gives
+   the concept, the prediction that the figure answers, each control and what it changes, the
+   formulas and constants, the readout and the assumptions for the caption.
+2. Start the build in a background agent: pi-subagents in Pi, the `Agent` tool in Claude Code.
+   Tell the learner in one line that a figure is in progress, then continue to teach.
+3. The builder writes the asset, renders it with `tools/figure-shot`, reads both PNGs, and fixes
+   the figure until every number and state on it is true. It reports the path only after that
+   check.
+4. When the figure arrives, embed it and teach with it. Name the control and the value to try:
+   "set consumers to 4 and watch partition 3". A figure that no turn refers to is decoration.
+5. If the build fails, say so and continue in prose. Make the brief more exact and try again
+   once.
 
 ## Pick the form
 

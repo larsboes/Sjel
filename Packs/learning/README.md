@@ -7,6 +7,7 @@ the result as concept notes and claim notes. Open work and decisions live in
 The Pack depends on [`knowledge`](../knowledge/README.md) by name. Every vault write goes
 through the `obsidian` skill, and graded quizzes come from that Pack's `quiz` pi extension.
 Without `quiz` (other harnesses, non-interactive runs), `teach` asks numbered text questions.
+The Learn plugin renders `quiz` and `ask` as cards in Obsidian.
 
 ## Skills
 
@@ -33,6 +34,12 @@ so that pi finds it from any working directory, the vault included:
 ```sh
 npx skills add wheresryan22/anatomy -g -a pi claude-code
 ```
+
+## Obsidian plugin
+
+[`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach and practice sittings with pi in
+Obsidian's sidebar, beside the notes they write. Build and install it with
+`tools/obsidian-plugin pi-learn install`.
 
 ## Activate
 

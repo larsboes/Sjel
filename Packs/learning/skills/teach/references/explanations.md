@@ -4,6 +4,36 @@ Read this at Phase 3, step 1, before the first explanation of a session. It sets
 explanation step. It is not a note template: the terminal turn teaches, and the note keeps only
 the clean result.
 
+## Method
+
+Two rules set the order of a session and the shape of each step. They paraphrase the teaching
+method of LearnHarness (`upstreams.toml`, `[learnharness]`), which names 3Blue1Brown as its
+reference.
+
+1. **Start from what the learner can accept as-is.** Find the few facts the learner can take
+   without a caveat: a real definition, or a universal statement ("every message in a partition
+   has exactly one offset"). Before you build on such a fact, check that it reads as obviously
+   true to the learner. A fact that needs "usually" is not a foundation yet: go one level deeper.
+2. **Make each step discoverable.** Before a step, state the problem that forces it. The learner
+   must feel that they could have found the step themselves. A step that arrives without a reason
+   feels arbitrary, and the learner does not commit to it.
+
+The goal of a session is the moment when loose facts become consequences of a few foundations.
+Coverage is not the goal.
+
+## Craft
+
+- **Concrete before abstract.** Work one case with real numbers before the general rule: "three
+  partitions, two consumers" before "N partitions, M consumers".
+- **The picture before the formula.** Show the mechanism first, as a figure, a table of states or
+  a timeline. The formula then names what the learner already sees.
+- **Derive, do not decree.** A formula is the answer to a question that the step asked. It never
+  appears from nowhere.
+- **Numbers the learner can check.** Every number comes from the model or from a cited source,
+  and the learner can calculate it again.
+- **Change one thing at a time.** A worked example changes one quantity and shows what follows.
+- **One term per concept.** Define a term at its first use. Do not replace it with a synonym later.
+
 ## Shape of one step
 
 Use the parts that the step needs, in this order.
@@ -39,6 +69,9 @@ property, one column per mode.
 - Use a strong image when it carries the mechanism ("removing the thermometer does not cure
   the fever"). Use at most one per step.
 - No emoji, no mode announcements, no closing offers.
+- No praise and no performed enthusiasm. Progress shows as the next step.
+- Name a wrong answer plainly ("That is not right: …"). Do not soften it into partial agreement.
+- Keep uncertainty at its real size. Do not make a vague claim sound exact.
 
 ## Terminal turn and note
 
@@ -48,7 +81,9 @@ property, one column per mode.
 | Questions, hints, feedback | Links to prerequisites, limits, the deciding test |
 | Corrections as they happen | Only the corrected statement |
 
-The note never contains the conversation. It keeps the general mechanism. The learner's case
+Write the concept note for a reader who returns in a year with no memory of the session. It
+opens with the mechanism, works one concrete example and links each prerequisite. The note never
+contains the conversation. It keeps the general mechanism. The learner's case
 appears in it only as a worked example, and only when the example makes the mechanism clearer.
 
 ## Math in the terminal

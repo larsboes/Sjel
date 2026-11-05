@@ -19,6 +19,9 @@
  *
  * Non-interactive modes (-p, json, rpc-without-tui): both tools return a graceful error instead
  * of hanging — the model should fall back to asking in plain text.
+ *
+ * An RPC client that renders `ask` and `quiz` itself sets `PI_QUESTIONS_CLIENT` to
+ * `HOST_PROTOCOL`. See `fromHost` for the exchange.
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -224,6 +227,43 @@ function topRule(width: number, view: { above: number; below: number }, theme: T
 /** Both tools answer with this when there is no terminal to ask in. */
 const NON_TUI_ERROR = "Error: interactive UI unavailable (non-interactive mode).";
 
+/* ────────────────────────── a client that renders the widget ────────────────────────── */
+
+/** The value of `PI_QUESTIONS_CLIENT` that opts an RPC client into `fromHost`. */
+export const HOST_PROTOCOL = "pi-questions/v1";
+
+function hostRenders(ctx: ExtensionContext): boolean {
+	return ctx.mode === "rpc" && process.env.PI_QUESTIONS_CLIENT === HOST_PROTOCOL;
+}
+
+/**
+ * Hand one widget to the RPC client and take its result.
+ *
+ * RPC mode forwards no custom components, so the exchange rides on the `editor` dialog: the
+ * title is `<HOST_PROTOCOL> <widget>`, the prefill is the tool's parameters as JSON, and the
+ * client answers with the result object that the TUI widget would return, as JSON. A dismissed
+ * dialog or a malformed answer becomes `empty`, so a broken client stops the round, not the session.
+ */
+async function fromHost<T extends object>(
+	ctx: ExtensionContext,
+	widget: "ask" | "quiz" | "quiz-review",
+	params: unknown,
+	empty: T,
+): Promise<T> {
+	const raw = await ctx.ui.editor(`${HOST_PROTOCOL} ${widget}`, JSON.stringify(params));
+	if (raw === undefined) return empty;
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		const list = widget === "quiz-review" ? "outcomes" : "answers";
+		if (parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>)[list])) {
+			return parsed as T;
+		}
+	} catch {
+		// fall through to the empty result
+	}
+	return empty;
+}
+
 /* ────────────────────────── ask: a decision round ────────────────────────── */
 
 interface AskOption {
@@ -325,7 +365,7 @@ async function runAsk(
 	const questions = params.questions as AskQuestion[];
 	const empty: AskResult = { topic, answers: [], cancelled: true };
 
-	if (ctx.mode !== "tui") {
+	if (ctx.mode !== "tui" && !hostRenders(ctx)) {
 		return askError(
 			`${NON_TUI_ERROR} Ask the round as a numbered list in text: 2-9 options each, your recommendation marked, and say a note can be added per question.`,
 			empty,
@@ -347,7 +387,9 @@ async function runAsk(
 		}
 	}
 
-	const result = await ctx.ui.custom<AskResult>((tui, theme, _kb, done) => {
+	const result = hostRenders(ctx)
+		? await fromHost(ctx, "ask", params, empty)
+		: await ctx.ui.custom<AskResult>((tui, theme, _kb, done) => {
 		let qIndex = 0;
 		let optionIndex = questions[0].recommendedIndex ?? 0;
 		let phase: "options" | "note" | "free" = "options";
@@ -686,8 +728,16 @@ interface QuizResult {
 	cancelled: boolean;
 }
 
+type QuizPurpose = "probe" | "predict" | "check";
+
 const QuizParams = Type.Object({
 	topic: Type.String({ description: "Short label for what this quiz probes, e.g. 'vector calculus prerequisites'" }),
+	purpose: Type.Optional(
+		Type.Union([Type.Literal("probe"), Type.Literal("predict"), Type.Literal("check")], {
+			description:
+				"probe: find the edge of what the learner holds. predict: before teaching a step, ask about the step not yet taught; a guess is the point. check: after teaching, apply the step to a new case. Shown as the card's label; grading is the same.",
+		}),
+	),
 	questions: Type.Array(
 		Type.Object({
 			id: Type.String({ description: "Unique id, e.g. 'q1'" }),
@@ -729,7 +779,7 @@ const QuizParams = Type.Object({
 });
 
 async function runQuiz(
-	params: { topic: string; questions?: QuizQuestion[]; mode?: "ask" | "review"; reviews?: QuizReview[] },
+	params: { topic: string; purpose?: QuizPurpose; questions?: QuizQuestion[]; mode?: "ask" | "review"; reviews?: QuizReview[] },
 	ctx: ExtensionContext,
 ): Promise<{ content: { type: "text"; text: string }[]; details: QuizResult | QuizReviewResult }> {
 	if (params.mode === "review") {
@@ -741,7 +791,7 @@ async function runQuiz(
 		details: { topic: params.topic, answers: [], cancelled: true },
 	});
 
-	if (ctx.mode !== "tui") {
+	if (ctx.mode !== "tui" && !hostRenders(ctx)) {
 		return error(`${NON_TUI_ERROR} Ask the questions as plain numbered text instead.`);
 	}
 	if (questions.length === 0) return error("Error: no questions provided");
@@ -751,7 +801,9 @@ async function runQuiz(
 		}
 	}
 
-	const result = await ctx.ui.custom<QuizResult>((tui, theme, _kb, done) => {
+	const result = hostRenders(ctx)
+		? await fromHost<QuizResult>(ctx, "quiz", { topic: params.topic, purpose: params.purpose, questions }, { topic: params.topic, answers: [], cancelled: true })
+		: await ctx.ui.custom<QuizResult>((tui, theme, _kb, done) => {
 		let qIndex = 0;
 		let optionIndex = 0;
 		let revealed = false;
@@ -1084,14 +1136,16 @@ async function runQuizReview(
 		details: { topic: params.topic, outcomes: [], cancelled: true },
 	});
 
-	if (ctx.mode !== "tui") {
+	if (ctx.mode !== "tui" && !hostRenders(ctx)) {
 		return error(`${NON_TUI_ERROR} State each revised verdict in plain text instead.`);
 	}
 	if (reviews.length === 0) {
 		return error("Error: mode 'review' needs at least one entry in reviews");
 	}
 
-	const result = await ctx.ui.custom<QuizReviewResult>((tui, theme, _kb, done) => {
+	const result = hostRenders(ctx)
+		? await fromHost<QuizReviewResult>(ctx, "quiz-review", params, { topic: params.topic, outcomes: [], cancelled: true })
+		: await ctx.ui.custom<QuizReviewResult>((tui, theme, _kb, done) => {
 		let index = 0;
 		let notePhase = false;
 		const cache = new ScreenCache();
@@ -1661,7 +1715,7 @@ export default function questions(pi: ExtensionAPI) {
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			return runQuiz(
-				params as { topic: string; questions?: QuizQuestion[]; mode?: "ask" | "review"; reviews?: QuizReview[] },
+				params as { topic: string; purpose?: QuizPurpose; questions?: QuizQuestion[]; mode?: "ask" | "review"; reviews?: QuizReview[] },
 				ctx,
 			);
 		},

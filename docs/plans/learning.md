@@ -54,7 +54,7 @@ Shipped 2026-11-04:
   (`tools/pack-extensions.test.ts`, "quiz math").
 
 - `interactive` plugin 0.3.2: the installed build was stale and never sent `interactive-dispose`.
-  It is rebuilt with `tools/interactive-plugin`, and `tools/interactive-plugin.test.ts` fails when
+  It is rebuilt with `tools/obsidian-plugin interactive`, and `tools/obsidian-plugin.test.ts` fails when
   `src/` changes without a rebuild. The plugin also sends `interactive-visibility`, styles
   `.sr-only`, and no longer grants `allow-same-origin` to `html-embed` frames.
 - `tools/figure-shot` renders an `interactive` figure to PNG in light and dark with headless Chrome.
@@ -69,10 +69,71 @@ Open. Decide after stage 1 between Obsidian mobile with a due-for-practice Base 
 Obsidian plugin, and the Sjel agent on the phone ([`agent.md`](agent.md)). Done when one
 practice session runs on the iPhone against vault claims.
 
-## 3. Stage 3: a Sjel learning surface
+## 3. Stage 3: the learning surface is Obsidian
 
-Not started. Only if stages 1 and 2 show friction that a UI removes. It reads and writes the
-same claim notes, so no data migrates.
+Decided 2026-11-05, replacing "a Sjel surface only after friction": the surface is the Learn
+Obsidian plugin, [`Packs/learning/plugins/pi-learn/`](../../Packs/learning/plugins/pi-learn/README.md),
+built directly rather than after an Agent Client trial. It must run on macOS, Linux and a Windows
+laptop whose code lives in WSL, so it is a desktop plugin that starts `pi --mode rpc`, not a web
+host. Obsidian in a browser (a VNC-streamed container) was rejected as laggy and a second app to
+maintain. Choices, decided 2026-11-05:
+
+| ID | Decision |
+|---|---|
+| S1 | The chat is a sidebar view. The main pane opens the note pi writes. |
+| S2 | Each Teach or Practice sitting starts a fresh pi session. The vault is the memory, and a sitting resumes from the path graph. |
+| S3 | `quiz` and `ask` render as inline cards. `questions.ts` hands them over through `pi-questions/v1` (`fromHost`). |
+| S4 | The learning-path schema (node states `held`, `current`, `open` as mermaid classes) lives in the vault contract; `teach` writes it and the plugin reads it. |
+| S5 | The vault root carries an `AGENTS.md` that only points at the contract and the skills. |
+| S6 | The plugin's context follows the open note: a concept note is the focus, and its path is the learning path linked to or from it. |
+| S7 | One explanation style for sessions and notes: `teach/references/explanations.md` (Method, Craft) paraphrases LearnHarness's method, with 3Blue1Brown as the reference. |
+| S8 | `quiz` takes `purpose` (`probe`, `predict`, `check`); figures build in a background agent from a brief that stands alone, and are checked before they arrive. |
+
+Pi Durable (`@earendil-works/pi-durable` 1.5.0) is not used: the vault is the durable store.
+Reconsider it for stage 2, where a phone would be a second client of one sitting.
+
+Shipped (uncommitted at the time of writing): the plugin with model and thinking pickers per
+sitting kind, the context and cost meter, the Plan graph and the note-following context; the
+`questions.ts` host protocol and `quiz` `purpose`; the schema in the vault contract and `teach`;
+the Method, Craft and figure-build rules in `teach`; the migrated Data Pipeline path; and
+`tools/obsidian-plugin` (was `tools/interactive-plugin`). Checked: `tools/pack-extensions.test.ts`,
+`tools/pi-learn.test.ts`, `tools/obsidian-plugin.test.ts`, a strict `tsc` run against
+`obsidian.d.ts`, one headless `pi --mode rpc` round trip in the vault (`Quiz complete: 1/1
+correct.`), and the view in a running Obsidian on macOS through the Chrome DevTools Protocol:
+it opens without errors, lists pi's models, and its header follows the open note.
+
+Open, in order. The stage 1 sessions come first: the UI items below are candidates, and observed
+friction in the Learning Log decides which of them are built.
+
+1. **Real sittings.** Run the five teach and five practice sittings of stage 1 in the plugin.
+   Record friction in the Learning Log line. Done when the log has ten lines and each UI item
+   below is marked observed or not observed.
+2. **The new teaching rules in a real sitting.** No sitting has run on Method, Craft, `purpose`
+   or the background figure build. Unverified: pi-subagents works in RPC mode, and a subagent's
+   figure reaches the sitting. Done when one sitting shows a prediction card, a check card and a
+   figure that the background build checked.
+3. **Practice follows teach.** `practice` does not yet use `purpose: "check"` or the rule that
+   each wrong option names a misconception. Done when `practice/SKILL.md` adopts both.
+4. **Model choice.** The default is pi's (`opencode-go/deepseek-v4.1-flash`). No model was
+   compared for teaching or figure quality. Done when one figure brief and one teach step have
+   run on two models and the settings default records the choice.
+5. **Windows.** Check native and WSL launch, and `follow` with a vault on NTFS. Not run.
+
+UI and speed candidates, built only when item 1 observes the friction:
+
+| Candidate | What it fixes | Smallest change |
+|---|---|---|
+| Streaming render | Each 120 ms re-render rebuilds the whole message, figures included. | Render finished blocks once; defer `interactive` blocks to `message_end`. |
+| Model list | `get_available_models` lists 627 models, most without credentials. | Filter to providers with credentials, or to pi's `enabledModels`, before the picker. |
+| Start time | The view and the settings tab each start pi; the settings tab starts one per open. | Reuse the view's pi for the settings tab and cache the model list. |
+| Node ↔ note | The header cannot mark the focus note's node, and graph nodes do not open notes. | Schema: a node's label is its note's name, or a `click id "[[Note]]"` line; the plugin marks and links it. |
+| Past sittings | Fresh sittings leave no list of earlier ones. | A list from pi's session directory for the vault, read-only. |
+| Input | No file, image or dictation input. | `prompt` accepts images; add a paperclip and a drop target. |
+| Thinking | Model reasoning is hidden; a long silence reads as a hang. | A collapsed "Thinking" block fed by `thinking_delta`. |
+| Ask card keys | `quiz` takes 1–9 and Enter; `ask` takes only clicks. | The same key handling in `askCard`. |
+
+Not planned: a LearnHarness-style background research agent, and a cost meter for subscription
+providers, whose cost pi does not report.
 
 ## 4. Pi learning workflow proposal
 

@@ -1,0 +1,9 @@
+{
+  "id": "pi-learn",
+  "name": "Learn (Sjel)",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Teach and practice sittings with pi in the sidebar, writing into the vault. Developed in Sjel.",
+  "author": "Lars Boes",
+  "isDesktopOnly": true
+}

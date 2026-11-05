@@ -166,6 +166,22 @@ covers it.
   change: a `tools/pi-render` command that prints the Unicode output of a LaTeX string (inline
   and display) and the prompt guidelines that the configured Packs register.
 
+- **Obsidian plugin typecheck and live RPC check.** `tools/obsidian-plugin` builds with
+  `bun build`, which does not typecheck, and Sjel has no `obsidian` type package. Checking
+  `pi-learn` needed a throwaway directory with `obsidian`, `typescript` and `@types/node` and a
+  strict `tsc` run against `src/`. Its live check was a `/tmp` script that started
+  `pi --mode rpc` through the plugin's `PiRpc`, asked for one `quiz` and answered the
+  `pi-questions/v1` dialog. Smallest change: `tools/obsidian-plugin <name> check` for the
+  typecheck, and an opt-in `tools/pi-learn.test.ts` case for the round trip, gated on an
+  environment variable because it spends model tokens.
+
+- **Obsidian view smoke check.** Checking the Learn view needed Obsidian relaunched with
+  `interceptor macos cdp launch Obsidian --port 9333 --confirm`, then ad-hoc `interceptor eval`
+  calls that reloaded the plugin, captured `console.error`, opened notes and read the header.
+  That found the `titleEl` defect that every unit test passed. Smallest change: a
+  `tools/obsidian-plugin <name> smoke` verb that attaches to a running debug port, reloads the
+  plugin, opens its view, and fails on any console error.
+
 ## Done
 
 - `sjel demo app [page]` runs the Mac app against the seeded demo node, to debug on

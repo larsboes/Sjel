@@ -50,6 +50,7 @@ Operate capabilities:
   capability feed [days]         Read the comms feed
   capability mail [status]       Read mail triage without Secret rows; pseudonymized for an agent
   capability mail events [replay] <id>...  Event-scan state of mails, or replay them locally
+  capability mail backfill <YYYY/MM/DD>     Sweep inbox and labelled mail since a day, page by page
   agent enroll [name]            Create or rotate an agent token (Keychain) and its server hash
   agent tier <name> <tier>       Owner-only: pseudonymized, zdr or trusted
   mcp                            Serve the capabilities as MCP tools on stdio, under each one's agent mode

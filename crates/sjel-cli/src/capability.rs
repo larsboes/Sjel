@@ -225,6 +225,9 @@ pub fn command(root: &Path, args: &[String]) -> ExitCode {
         "mail" if rest.first().map(String::as_str) == Some("events") => {
             mail_events(root, &rest[1..])
         }
+        "mail" if rest.first().map(String::as_str) == Some("backfill") => {
+            mail_backfill(root, &rest[1..])
+        }
         "mail" => {
             // Mail triage without Secret rows. From an agent session the gate also
             // pseudonymizes every row; from the operator's shell the rows are raw.
@@ -285,6 +288,31 @@ fn mail_events(root: &Path, args: &[String]) -> Result<ExitCode, String> {
         let path = format!("/triage/events/status?ids={}", ids.join(","));
         call(root, "comms", "get", &path, curl)
     }
+}
+
+/// `mail backfill <YYYY/MM/DD>`: sweeps every inbox and labelled thread received on or after the
+/// day, 100 per page, until Gmail has no more. Each page also runs the event and receipt scans.
+/// Prints one count line per page; no mail content.
+fn mail_backfill(root: &Path, args: &[String]) -> Result<ExitCode, String> {
+    let [after] = args else {
+        return usage_error("usage: sjel capability mail backfill <YYYY/MM/DD>");
+    };
+    let mut cursor: Option<String> = None;
+    for page in 1.. {
+        let body = serde_json::json!({ "limit": 100, "cursor": cursor, "after": after });
+        let answer = call_output(root, "comms", "post", "/triage/sweep", &[body.to_string()])?;
+        let answer: serde_json::Value = serde_json::from_str(&answer)
+            .map_err(|e| format!("sjel: comms answered something unreadable: {e}"))?;
+        println!(
+            "page {page}: {} fetched, {} new, {} event proposal(s)",
+            answer["fetched"], answer["new_count"], answer["events"]["proposals"]
+        );
+        match answer["next_cursor"].as_str() {
+            Some(next) if !next.is_empty() => cursor = Some(next.to_owned()),
+            _ => break,
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn usage_error(msg: &str) -> Result<ExitCode, String> {
@@ -403,6 +431,58 @@ fn call(
     path: &str,
     extra: &[String],
 ) -> Result<ExitCode, String> {
+    let (mut curl, header) = request(root, name, method, path, extra)?;
+    let Some(header) = header else {
+        return Ok(exit_with(curl.status()));
+    };
+    let mut child = curl
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("sjel: cannot run curl: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // A write error means curl already exited; its status below says why.
+        let _ = stdin.write_all(&header);
+    }
+    Ok(exit_with(child.wait()))
+}
+
+/// [`call`], with the answer returned instead of printed. A failed request is an error that
+/// carries the body, which `--fail-with-body` keeps.
+fn call_output(
+    root: &Path,
+    name: &str,
+    method: &str,
+    path: &str,
+    extra: &[String],
+) -> Result<String, String> {
+    let (mut curl, header) = request(root, name, method, path, extra)?;
+    let mut child = curl
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("sjel: cannot run curl: {e}"))?;
+    if let (Some(header), Some(mut stdin)) = (header, child.stdin.take()) {
+        let _ = stdin.write_all(&header);
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("sjel: curl did not finish: {e}"))?;
+    let body = String::from_utf8_lossy(&output.stdout).into_owned();
+    if output.status.success() {
+        Ok(body)
+    } else {
+        Err(format!("sjel: {name} {method} {path} failed: {body}"))
+    }
+}
+
+/// The curl command for one capability request, and the auth header it reads from stdin.
+fn request(
+    root: &Path,
+    name: &str,
+    method: &str,
+    path: &str,
+    extra: &[String],
+) -> Result<(Command, Option<Vec<u8>>), String> {
     let base = url(root, name)?;
     let auth = if base.starts_with("http://127.0.0.1:") {
         if in_agent_session() {
@@ -459,18 +539,7 @@ fn call(
         }
     }
 
-    let Some(header) = header else {
-        return Ok(exit_with(curl.status()));
-    };
-    let mut child = curl
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("sjel: cannot run curl: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        // A write error means curl already exited; its status below says why.
-        let _ = stdin.write_all(&header);
-    }
-    Ok(exit_with(child.wait()))
+    Ok((curl, header))
 }
 
 /// The header line `capability-auth` prints for `who`. It stays in this process's memory and

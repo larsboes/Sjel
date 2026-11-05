@@ -267,5 +267,31 @@ pub(super) fn draft_from(place: &str, run: &[&Entry]) -> Result<TripDraft, Strin
             .unwrap_or(Commitment::Possible),
         plan_id: None,
         unplanned_entry_ids: Vec::new(),
+        suggested_plan_id: None,
     })
 }
+
+/// The one existing plan a draft belongs to: a destination whose first segment ("London" of
+/// "London, UK") names the draft's place, and dates that overlap it. `plans` is trips'
+/// `GET /api/plans`. Two candidates, or none, answer `None`: attaching is the owner's call.
+pub fn suggest_plan(draft: &TripDraft, plans: &[Value]) -> Option<String> {
+    let mut matches = plans.iter().filter(|plan| {
+        let (Some(start), Some(end)) = (plan["date_start"].as_str(), plan["date_end"].as_str())
+        else {
+            return false;
+        };
+        // trips' date_end is inclusive, a draft's ends_before is exclusive.
+        let overlaps = start < draft.ends_before.as_str() && end >= draft.starts_on.as_str();
+        let same_place = plan["destinations"].as_array().is_some_and(|destinations| {
+            destinations.iter().filter_map(|d| d["name"].as_str()).any(|name| {
+                name.split([',', '→'])
+                    .next()
+                    .is_some_and(|first| first.trim().eq_ignore_ascii_case(draft.place.trim()))
+            })
+        });
+        overlaps && same_place
+    });
+    let first = matches.next()?["id"].as_str()?.to_string();
+    matches.next().is_none().then_some(first)
+}
+

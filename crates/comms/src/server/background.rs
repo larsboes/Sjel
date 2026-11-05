@@ -337,7 +337,7 @@ fn spawn_inbox_sweep(
                     }
                 }
 
-                match run_inbox_sweep(&cfg, max_threads, None) {
+                match run_sweep_catch_up(&cfg, max_threads, SWEEP_CATCH_UP_PAGES) {
                     Ok(mut outcome) => {
                         outcome.events = mail_events::analyze_sweep_candidates(
                             &runtime,
@@ -396,6 +396,9 @@ fn spawn_inbox_sweep(
         }
     }))
 }
+
+/// Most pages one timer sweep reads while every thread is new.
+const SWEEP_CATCH_UP_PAGES: usize = 10;
 
 /// Ticks since boot, so the backoff above can skip them without sleeping.
 pub(super) static TICKS_SINCE_START: AtomicU64 = AtomicU64::new(0);

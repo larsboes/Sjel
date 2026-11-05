@@ -924,6 +924,10 @@ struct MaterializeBody {
     entry_ids: Vec<String>,
     #[serde(default)]
     title: Option<String>,
+    /// Attach the entries to this existing plan (a draft's `suggested_plan_id`) instead of
+    /// the plan the ledger names or a new one.
+    #[serde(default)]
+    plan_id: Option<String>,
 }
 
 /// Writes a plan's committed travel back into the calendar.
@@ -1127,7 +1131,20 @@ async fn materialize_trip(
         // otherwise leave the entry permanently refusing to become one again
         // and pointing at something that no longer exists.
         let mut existing: Option<(String, Value)> = None;
-        for entry_id in &body.entry_ids {
+        if let Some(plan_id) = body.plan_id.as_deref() {
+            let url = format!("{base}/api/plans/{plan_id}");
+            let probe = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+                .send()
+                .map_err(|e| format!("cannot ask trips for {plan_id} ({e})"))?;
+            if !probe.status().is_success() {
+                return Err(format!("trips answered {} for {plan_id}", probe.status()));
+            }
+            let plan: Value = probe
+                .json()
+                .map_err(|e| format!("trips returned something unreadable: {e}"))?;
+            existing = Some((plan_id.to_string(), plan));
+        }
+        for entry_id in body.entry_ids.iter().filter(|_| existing.is_none()) {
             let Some(plan_id) = store.trip_plan_for(entry_id).map_err(|e| e.to_string())? else {
                 continue;
             };
@@ -1203,10 +1220,14 @@ async fn materialize_trip(
                     added.push(entry_id.clone());
                 }
             }
+            // Every entry, not only the added ones: a link made before items existed gets its
+            // item now, and trips updates an existing one in place.
+            let items = anchor_items(&client, &base, &plan_id, &entries.iter().collect::<Vec<_>>())?;
             if added.is_empty() {
                 return Ok(json!({
                     "plan_id": plan_id,
                     "created": false,
+                    "items": items,
                     "reason": format!("every entry already belongs to {plan_id}"),
                 }));
             }
@@ -1239,6 +1260,7 @@ async fn materialize_trip(
                 "plan_id": plan_id,
                 "created": false,
                 "extended": true,
+                "items": items,
                 "added_entry_ids": added,
                 "date_start": start,
                 "date_end": end,
@@ -1275,12 +1297,13 @@ async fn materialize_trip(
             .ok_or("trips accepted the plan but returned no id")?
             .to_string();
 
+        let items = anchor_items(&client, &base, &plan_id, &entries.iter().collect::<Vec<_>>())?;
         // Only now, after trips confirmed it exists.
         store
             .record_trip_materialization(&body.entry_ids, &plan_id)
             .map_err(|e| e.to_string())?;
 
-        Ok(json!({ "plan_id": plan_id, "created": true, "plan": plan }))
+        Ok(json!({ "plan_id": plan_id, "created": true, "items": items, "plan": plan }))
     })
     .await
     {
@@ -1291,6 +1314,54 @@ async fn materialize_trip(
             json!({ "error": error.to_string() }),
         ),
     }
+}
+
+/// trips' plans, for matching a draft to one. Any failure is `None`.
+fn trip_plans(trips_base: &str) -> Option<Vec<Value>> {
+    let url = format!("{}/api/plans", trips_base.trim_end_matches('/'));
+    let client = sjel_http::client(
+        sjel_http::Purpose::new("calendar-trips"),
+        std::time::Duration::from_secs(5),
+    )
+    .ok()?;
+    let response = sjel_server::InboundAuth::with_loopback_auth(client.get(&url), &url)
+        .send()
+        .ok()
+        .filter(|response| response.status().is_success())?;
+    response.json::<Vec<Value>>().ok()
+}
+
+/// One `event` item per entry on the plan, in the calendar-anchor shape the travel views
+/// already write (`calendar_entry_id`, `commitment`). The entry id is the item's
+/// `external_id`, so trips updates the item in place on a repeat.
+fn anchor_items(
+    client: &reqwest::blocking::Client,
+    base: &str,
+    plan_id: &str,
+    entries: &[&calendar::model::Entry],
+) -> Result<usize, String> {
+    let url = format!("{base}/api/plans/{plan_id}/items");
+    for entry in entries {
+        let item = json!({
+            "item_type": "event",
+            "day": entry.starts_at.get(..10),
+            "external_id": entry.id,
+            "title": entry.title,
+            "payload": { "calendar_entry_id": entry.id, "commitment": entry.commitment },
+        });
+        let response =
+            sjel_server::InboundAuth::with_loopback_auth(client.post(&url).json(&item), &url)
+                .send()
+                .map_err(|e| format!("POST {url}: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "trips refused the item for {} ({})",
+                entry.id,
+                response.status()
+            ));
+        }
+    }
+    Ok(entries.len())
 }
 
 /// Where the operator lives today: the `self` entity's home base in entities, else the
@@ -1340,6 +1411,7 @@ async fn trip_drafts(
 ) -> ApiResponse {
     let database_path = state.database_path.clone();
     let config_home = state.config.home_city.clone();
+    let trips_base = state.config.trips_base_url.clone();
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let max_gap_days = query.max_gap_days.unwrap_or(5);
         if max_gap_days < 0 {
@@ -1361,6 +1433,13 @@ async fn trip_drafts(
             }
             if draft.plan_id.is_some() {
                 draft.unplanned_entry_ids = unplanned;
+            }
+        }
+        if drafts.drafts.iter().any(|draft| draft.plan_id.is_none()) {
+            // A suggestion, so trips being down leaves the drafts as they are.
+            let plans = trip_plans(&trips_base).unwrap_or_default();
+            for draft in drafts.drafts.iter_mut().filter(|d| d.plan_id.is_none()) {
+                draft.suggested_plan_id = correlate::suggest_plan(draft, &plans);
             }
         }
         Ok(json!({

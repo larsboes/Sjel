@@ -121,9 +121,6 @@ covers it.
   the same reason `report --where` is not served. Smallest change: sample it daily into the store
   `capabilities/sjel-status/src/storage_history.rs` already owns, and serve the last snapshot from
   `/api/sjel-status/storage-installed`, so the panel and an agent read a number instead of waiting
-- **`sjel capability mail events <id>...` prints its usage for valid ids.** The agent read the
-  scan state with `sjel capability call comms get "/triage/events/status?ids=<a>,<b>"` instead.
-  Smallest change: fix the argument parsing of the `events` subcommand, and test it with two ids.
   for a walk.
 - **Local inference server admin.** To cap oMLX's SSD cache at 4 GB, lower `max_concurrent_requests`
   and clear 26 GB of stale cache, the agent posted to `/admin/api/global-settings` and

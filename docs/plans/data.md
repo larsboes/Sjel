@@ -69,8 +69,11 @@ proposal. `summarization_light` (`apple-foundationmodel`, 4096 tokens) staged no
 broke the grounding rules. Qwen with thinking on ends at `finish_reason: length`.
 
 **Open:** scanning and replay are disabled. A scan uses the `mail_evidence` role when the
-overlay defines one, else `summarization_light`. Every Amazon mail classifies
-`c2` because it names the recipient, and Inventory items carry no data class, so a `c2`
+overlay defines one, else `summarization_light`. Decided 2026-11-05: the operator's own name
+does not raise a mail to `c2` (`self_tokens` in the people registry, read by
+`people_registry::is_known_other_person`). It takes effect once a `self` entity exists, and
+none does: the operator is a `person`, and merge refuses two kinds. Inventory items carry no
+data class, so a `c2`
 delivery can be reviewed or matched but cannot create an item. Projects refuses `c2` evidence on
 a `c1` record. An approved proposal is not withdrawn when its thread later becomes `c3`; its
 evidence is already in the reviewed record. No project proposal has staged from real mail.
@@ -373,9 +376,13 @@ Open items that belong to one capability and to no priority yet.
   details while unsupported dates and agenda items remain rejected.
   Shipped: German Booking.com confirmations; Deutsche Bahn legs dated from the attached `.ics`
   (`crates/comms/src/mail_events/ics.rs`); the sweep also reads labelled mail outside the inbox
-  (`SWEEP_QUERY` in `crates/comms/src/google.rs`). Open: a mail-derived booking stops at Calendar,
-  and no route adds it to a trip plan's items. Labelled mail older than the newest sweep page is
-  not backfilled.
+  (`SWEEP_QUERY` in `crates/comms/src/google.rs`), `2181aab2`. The timer sweep reads older pages
+  while a page is all new; `sjel capability mail backfill <YYYY/MM/DD>` sweeps from a day. A trip
+  draft names the one existing plan to its place and dates (`suggested_plan_id`), and
+  materializing with that `plan_id` writes one `event` item per entry.
+  Open: a backfill over labelled mail stages newsletter events as `possible` entries (11 from
+  500 threads, run stopped there). Done when the event scan skips a filed newsletter unless it
+  confirms attendance.
 - **Mail classification labels.** The harness exported 121 fixtures with 0 labels
   (`<overlay>/config/comms-mail-stream-shadow.json`). Labels are hand judgements, written before
   any model output is read. The stream switch needs model agreement of at least control plus 10

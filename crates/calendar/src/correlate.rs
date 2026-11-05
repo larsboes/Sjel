@@ -21,7 +21,7 @@ pub use events::{
     FeasibleWindow, Verdict,
 };
 pub use feasibility::{impact, Feasibility};
-pub use trips::{cluster_trips, TripDraft, TripDrafts, Unclustered};
+pub use trips::{cluster_trips, suggest_plan, TripDraft, TripDrafts, Unclustered};
 pub use windows::{feasible_windows, query_window};
 
 #[cfg(test)]

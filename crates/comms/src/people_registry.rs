@@ -65,6 +65,8 @@ struct Registry {
     /// for the reversible path. Its dictionary matcher scans the text rather than single
     /// words, so a phrase can match there.
     all: Vec<String>,
+    /// The operator's own single-word names (`self_tokens`), lowercase. Also in `single`.
+    own: BTreeSet<String>,
     state: State,
 }
 
@@ -99,6 +101,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         return Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
+            own: BTreeSet::new(),
             state: State::Absent,
         };
     };
@@ -106,6 +109,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         return Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
+            own: BTreeSet::new(),
             state: State::Absent,
         };
     };
@@ -113,6 +117,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         return Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
+            own: BTreeSet::new(),
             state: State::Unreadable,
         };
     };
@@ -120,6 +125,7 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         return Registry {
             single: BTreeSet::new(),
             all: Vec::new(),
+            own: BTreeSet::new(),
             state: State::Unreadable,
         };
     };
@@ -140,10 +146,20 @@ fn load_from_path(p: Option<&std::path::Path>) -> Registry {
         .filter(|t| t.chars().count() >= MIN_NAME_CHARS)
         .map(str::to_string)
         .collect();
+    let own: BTreeSet<String> = value
+        .get("self_tokens")
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|t| t.as_str())
+        .filter(|t| !t.contains(' '))
+        .map(|t| t.to_ascii_lowercase())
+        .collect();
     let n = single.len();
     Registry {
         single,
         all,
+        own,
         state: State::Loaded(n),
     }
 }
@@ -189,6 +205,18 @@ pub fn is_known_person(token: &str) -> bool {
     registry().single.contains(&cleaned.to_ascii_lowercase())
 }
 
+/// [`is_known_person`], less the operator's own names: a mail that greets its recipient is
+/// not about another person. Redaction keeps using [`is_known_person`].
+pub fn is_known_other_person(token: &str) -> bool {
+    is_known_person(token) && !registry().own.contains(&normalized(token))
+}
+
+fn normalized(token: &str) -> String {
+    token
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_ascii_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,6 +229,17 @@ mod tests {
         let r = load_from_path(Some(&f));
         let _ = std::fs::remove_file(&f);
         r
+    }
+
+    #[test]
+    fn the_operator_s_own_names_are_loaded_apart_and_stay_known() {
+        let r = load_json(
+            "self",
+            r#"{"tokens":["Erika","Max","Muster"],"self_tokens":["Max","Muster"]}"#,
+        );
+        assert!(r.single.contains("max"), "redaction still matches it");
+        assert_eq!(r.own.iter().collect::<Vec<_>>(), ["max", "muster"]);
+        assert!(load_json("no-self", r#"{"tokens":["Erika"]}"#).own.is_empty());
     }
 
     #[test]

@@ -27,7 +27,8 @@ use crate::store::TriageItem;
 pub const KNOWN_PERSON_RATIONALE: &str =
     "Names a person the vault knows; facts about them stay local.";
 
-/// Classify a mail, then raise it to `c2` if it names someone the vault knows.
+/// Classify a mail, then raise it to `c2` if it names someone the vault knows, other than the
+/// operator.
 ///
 /// Q27's rule, and it is asked only of a `c1` result: `c2` and `c3` are already
 /// local-only, and `c0` a mailbox never produces. Only the subject and the
@@ -47,7 +48,7 @@ pub fn classify_mail(stream: &str, from: &str, subject: &str, snippet: &str) -> 
         from,
         subject,
         snippet,
-        people_registry::is_known_person,
+        people_registry::is_known_other_person,
     )
 }
 

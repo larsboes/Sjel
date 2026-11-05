@@ -1078,4 +1078,33 @@ mod cluster_tests {
         let out = cluster_trips(&[work], 5, None).unwrap();
         assert!(out.drafts.is_empty() && out.unclustered.is_empty());
     }
+
+    #[test]
+    fn a_draft_is_suggested_the_one_plan_to_its_place_and_dates() {
+        let draft = TripDraft {
+            place: "London".into(),
+            starts_on: "2026-12-05".into(),
+            ends_before: "2026-12-09".into(),
+            entry_ids: vec!["e:1".into()],
+            titles: vec!["Stay".into()],
+            commitment: Commitment::Committed,
+            plan_id: None,
+            unplanned_entry_ids: Vec::new(),
+            suggested_plan_id: None,
+        };
+        let plan = |id: &str, place: &str, start: &str, end: &str| {
+            json!({"id": id, "date_start": start, "date_end": end,
+                   "destinations": [{"id": "", "name": place}]})
+        };
+        let london = plan("p:london", "London, UK", "2026-12-05", "2026-12-08");
+        let berlin = plan("p:berlin", "Berlin", "2026-12-05", "2026-12-08");
+        let earlier = plan("p:old", "London", "2025-12-05", "2025-12-08");
+        let ends_the_day_before = plan("p:before", "London", "2026-12-01", "2026-12-04");
+        assert_eq!(
+            suggest_plan(&draft, &[london.clone(), berlin, earlier, ends_the_day_before]).as_deref(),
+            Some("p:london")
+        );
+        let twice = plan("p:again", "London", "2026-12-06", "2026-12-07");
+        assert_eq!(suggest_plan(&draft, &[london, twice]), None, "two plans: owner decides");
+    }
 }

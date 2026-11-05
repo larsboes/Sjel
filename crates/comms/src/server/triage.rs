@@ -83,6 +83,8 @@ pub(super) async fn triage_handler(Query(params): Query<TriageParams>) -> Json<V
 pub(super) struct TriageSweepBody {
     limit: Option<usize>,
     cursor: Option<String>,
+    /// `YYYY/MM/DD`: a backfill page of mail received on or after that day.
+    after: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -142,6 +144,9 @@ pub(super) struct SweepOutcome {
     #[serde(skip)]
     pub(super) event_candidate_ids: Vec<String>,
     next_cursor: Option<String>,
+    /// Every thread on this page was new to the store, so older pages may hold more.
+    #[serde(skip)]
+    page_all_new: bool,
 }
 
 /// The sweep itself, with no HTTP and no scheduling in it. Both the manual
@@ -152,10 +157,11 @@ pub(super) fn run_inbox_sweep(
     cfg: &Config,
     limit: usize,
     cursor: Option<&str>,
+    after: Option<&str>,
 ) -> Result<SweepOutcome, String> {
     let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
     let token = google::access_token(&cfg.google_env_path).map_err(|error| error.to_string())?;
-    let page = google::list_sweep_threads_page(&token, limit, cursor)
+    let page = google::list_sweep_threads_page(&token, limit, cursor, after)
         .map_err(|error| error.to_string())?;
     let (people_registry, people_registry_names) = people_registry_receipt();
     // Read once, before the loop: a sender is new against what the store held
@@ -175,6 +181,7 @@ pub(super) fn run_inbox_sweep(
         new_ids: Vec::new(),
         event_candidate_ids: Vec::new(),
         next_cursor: page.next_page_token.clone(),
+        page_all_new: false,
     };
     for stub in &page.threads {
         let meta = match google::thread_meta(&token, &stub.id) {
@@ -213,7 +220,44 @@ pub(super) fn run_inbox_sweep(
         outcome.fetched_ids.push(id);
         outcome.fetched += 1;
     }
+    outcome.page_all_new = outcome.skipped == 0 && outcome.new_count == page.threads.len();
     Ok(outcome)
+}
+
+/// The timer's sweep. It reads the newest page and keeps reading older pages while every
+/// thread on the last page was new, so a busy hour cannot push mail past the page it read.
+/// It stops at the first page that holds a known thread, or after `max_pages`.
+pub(super) fn run_sweep_catch_up(
+    cfg: &Config,
+    page_size: usize,
+    max_pages: usize,
+) -> Result<SweepOutcome, String> {
+    let mut outcome = run_inbox_sweep(cfg, page_size, None, None)?;
+    let mut pages = 1;
+    while pages < max_pages && outcome.fetched > 0 && outcome.page_all_new {
+        let Some(cursor) = outcome.next_cursor.take() else {
+            break;
+        };
+        let page = run_inbox_sweep(cfg, page_size, Some(&cursor), None)?;
+        outcome.absorb(page);
+        pages += 1;
+    }
+    Ok(outcome)
+}
+
+impl SweepOutcome {
+    /// Adds a later page's counts and ids. The cursor and the page flag become the later page's.
+    fn absorb(&mut self, page: SweepOutcome) {
+        self.fetched += page.fetched;
+        self.new_count += page.new_count;
+        self.skipped += page.skipped;
+        self.redacted += page.redacted;
+        self.fetched_ids.extend(page.fetched_ids);
+        self.new_ids.extend(page.new_ids);
+        self.event_candidate_ids.extend(page.event_candidate_ids);
+        self.next_cursor = page.next_cursor;
+        self.page_all_new = page.page_all_new;
+    }
 }
 
 pub(super) async fn triage_events_replay_handler(
@@ -326,10 +370,14 @@ pub(super) fn sweep_error_class(error: &str) -> &'static str {
 pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> HttpResponse {
     let limit = body.limit.unwrap_or(100).clamp(1, 100);
     let cursor = body.cursor.filter(|value| !value.trim().is_empty());
+    let after = body.after.filter(|value| !value.trim().is_empty());
+    if after.as_deref().is_some_and(|day| !google::valid_after_date(day)) {
+        return error_response(StatusCode::BAD_REQUEST, "after must be YYYY/MM/DD");
+    }
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {
         let runtime = sjel_runtime::current().map_err(|e| e.to_string())?;
         let cfg = Config::load();
-        let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref())?;
+        let mut outcome = run_inbox_sweep(&cfg, limit, cursor.as_deref(), after.as_deref())?;
         outcome.events =
             mail_events::analyze_sweep_candidates(&runtime, &cfg, &outcome.event_candidate_ids);
         outcome.receipts = mail_receipts::analyze_batch(&runtime, &cfg, &outcome.fetched_ids);

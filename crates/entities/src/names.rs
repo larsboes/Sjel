@@ -59,6 +59,11 @@ pub struct Registry {
     pub tokens: Vec<String>,
     /// Tokens the stoplist held back.
     pub withheld: Vec<String>,
+    /// The operator's own tokens, also in `tokens`. Redaction uses every token; the mail
+    /// data-class rule skips these, because a mail that names its own recipient is not about
+    /// another person.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub self_tokens: Vec<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -149,9 +154,10 @@ pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
             }
         }
     }
+    let mut own = Vec::new();
     for kind in ["person", "self"] {
         for entity in store.list(Some(kind), None)? {
-            let aliases = entity
+            let aliases: Vec<String> = entity
                 .values
                 .get("aliases")
                 .and_then(|v| v.value.as_array())
@@ -162,10 +168,15 @@ pub fn from_store(store: &EntitiesStore) -> Result<Registry, StoreError> {
                         .collect()
                 })
                 .unwrap_or_default();
+            if kind == "self" {
+                own.push((entity.name.clone(), aliases.clone()));
+            }
             people.push((entity.name, aliases));
         }
     }
-    Ok(build_with_places(&people, &places))
+    let mut registry = build_with_places(&people, &places);
+    registry.self_tokens = build_with_places(&own, &places).tokens;
+    Ok(registry)
 }
 
 #[cfg(test)]
@@ -209,6 +220,22 @@ mod tests {
         assert!(r.tokens.contains(&"Mustermann".to_string()));
         assert!(!r.tokens.iter().any(|t| t == "Bonn"));
         assert!(r.withheld.contains(&"Bonn".to_string()));
+    }
+
+    #[test]
+    fn the_operator_s_own_tokens_are_marked_and_still_redacted() {
+        let dir = std::env::temp_dir().join(format!("sjel-names-self-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = EntitiesStore::open(&dir.join("entities.db")).unwrap();
+        let none = std::collections::BTreeMap::new();
+        store.create("self", "Max Muster", None, &none, "operator").unwrap();
+        store.create("person", "Erika Beispiel", None, &none, "operator").unwrap();
+        let registry = from_store(&store).unwrap();
+        assert_eq!(registry.self_tokens, ["Max", "Muster"]);
+        assert!(registry.tokens.iter().any(|t| t == "Max"), "redaction keeps it");
+        assert!(registry.tokens.iter().any(|t| t == "Erika"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     fn person(name: &str, aliases: &[&str]) -> (String, Vec<String>) {

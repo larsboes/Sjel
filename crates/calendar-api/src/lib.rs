@@ -193,6 +193,10 @@ pub struct TripDraft {
     pub plan_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unplanned_entry_ids: Vec<String>,
+    /// When no entry is in a plan yet: the one existing plan to the same place whose dates
+    /// overlap the draft. A suggestion only; materializing with this `plan_id` attaches it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_plan_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]

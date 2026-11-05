@@ -231,7 +231,8 @@ pub fn list_sweep_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> 
 
     while out.len() < limit {
         let remaining = limit - out.len();
-        let page = list_sweep_threads_page(token, remaining.min(100), page_token.as_deref())?;
+        let page =
+            list_sweep_threads_page(token, remaining.min(100), page_token.as_deref(), None)?;
         for thread in page.threads {
             out.push(thread);
             if out.len() >= limit {
@@ -249,14 +250,21 @@ pub fn list_sweep_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> 
 /// Read one page of the sweep's threads. The opaque cursor is returned to the caller but
 /// never persisted; a fresh review session can safely begin at the newest page
 /// again because triage upserts are idempotent.
+/// `after` (`YYYY/MM/DD`, see [`valid_after_date`]) bounds a backfill to mail received on or
+/// after that day.
 pub fn list_sweep_threads_page(
     token: &str,
     limit: usize,
     page_token: Option<&str>,
+    after: Option<&str>,
 ) -> Result<ThreadPage> {
     let page_size = limit.clamp(1, 100).to_string();
-    let mut query: Vec<(&str, String)> =
-        vec![("q", SWEEP_QUERY.to_string()), ("maxResults", page_size)];
+    let q = match after {
+        Some(day) if valid_after_date(day) => format!("{SWEEP_QUERY} after:{day}"),
+        Some(_) => return Err(CommsError::Other("after must be YYYY/MM/DD".into())),
+        None => SWEEP_QUERY.to_string(),
+    };
+    let mut query: Vec<(&str, String)> = vec![("q", q), ("maxResults", page_size)];
     if let Some(cursor) = page_token.filter(|value| !value.trim().is_empty()) {
         query.push(("pageToken", cursor.to_string()));
     }
@@ -286,6 +294,14 @@ pub fn list_sweep_threads_page(
             .collect(),
         next_page_token: parsed.next_page_token,
     })
+}
+
+/// A Gmail `after:` day, `YYYY/MM/DD`. Anything else could add search operators to the query.
+pub fn valid_after_date(day: &str) -> bool {
+    let parts: Vec<&str> = day.split('/').collect();
+    matches!(parts.as_slice(), [y, m, d]
+        if y.len() == 4 && m.len() == 2 && d.len() == 2
+            && parts.iter().all(|p| p.bytes().all(|b| b.is_ascii_digit())))
 }
 
 #[derive(Deserialize)]
@@ -949,6 +965,14 @@ mod tests {
             "messages": (0..101).map(|i| serde_json::json!({"id": i.to_string()})).collect::<Vec<_>>()
         })).unwrap();
         assert!(message_bodies(oversized).is_err());
+    }
+
+    #[test]
+    fn an_after_day_is_only_a_date() {
+        assert!(valid_after_date("2026/07/23"));
+        assert!(!valid_after_date("2026-07-23"));
+        assert!(!valid_after_date("2026/07/23 OR in:spam"));
+        assert!(!valid_after_date(""));
     }
 
     #[test]

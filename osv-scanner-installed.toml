@@ -73,16 +73,6 @@ ignoreUntil = 2027-01-01
 reason = "ip-address 10.5.0, a fourth advisory against the same version, fixed in 10.7.1. Same reach and same end as GHSA-h3mg-xc3c-68pw."
 
 # Informational unmaintained-crate advisories in installed Cargo lockfiles.
-[[IgnoredVulns]]
-id = "RUSTSEC-2024-0436"
-ignoreUntil = 2027-01-01
-reason = "Unmaintained paste proc-macro 1.0.15, build-time only. No affected functions, CVSS or fixed version. Reach, re-measured 2026-11-01: the published lock of `tauri-cli 2.12.4`, the installed build tool; xberg-cli is installed at 1.3.10 and no longer carries it. Same advisory as the entry in osv-scanner.toml, arriving through a build tool rather than this checkout. Ends when tauri-cli republishes against pastey."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0192"
-ignoreUntil = 2027-01-01
-reason = "Unmaintained ttf-parser 0.25.1, non-optional and runtime-reachable in the crate that pulls it. No known vulnerability, no CVSS, no affected function and no fixed version. Reach here, re-measured 2026-11-01: the published lock of `tauri-cli 2.12.4`. The repository half of this advisory, its two callers and what bounds them, is the longer entry in osv-scanner.toml; this row is the same crate arriving through an installed build tool."
-
 # Transitive dependencies in published Cargo.lock files of crates installed at their latest release.
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0253"
@@ -95,35 +85,15 @@ ignoreUntil = 2027-01-01
 reason = "rustls 0.23.40 accepts TLS 1.3 handshake messages across encryption-level boundaries, fixed in 0.23.45. Reach: the published lock of cargo-deny 0.20.2, installed at its latest release, so no upgrade moves it. cargo-deny is referenced by nothing in this repository — it is not Sjel's, and the honest options are that its own upgrade brings a newer rustls or it is uninstalled. Ends when cargo-deny republishes, or when it is removed."
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2023-0071"
-ignoreUntil = 2027-01-01
-reason = "The Marvin attack: potential RSA key recovery through timing sidechannels in rsa 0.9.10. No fixed version exists upstream. Reach: the published lock of tauri-cli 2.12.1, a build tool for the app, at its latest stable release. The exposure is on the app-signing path rather than on a server that answers network requests. Ends when tauri-cli republishes against a fixed rsa, which upstream has not provided, or when the tool is dropped. This is the one entry here whose fix does not exist at all rather than being out of reach."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0206"
-ignoreUntil = 2027-01-01
-reason = "rustybuzz 0.20.1 is unmaintained. No vulnerability and no fixed version: an informational advisory. Reach: the published lock of tauri-cli 2.12.1, at its latest stable release, where it is reached through text shaping. Ends when tauri-cli republishes or is dropped."
-
-[[IgnoredVulns]]
 id = "GHSA-rj75-hqrm-r3gf"
 ignoreUntil = 2027-01-01
 reason = "Quadratic complexity in postcss-selector-parser's flat-selector parsing (CVE-2026-104844): `.a.a.a...` reaches itself as one word token carrying n indexes, and three passes scan those arrays per index, so a 400 KB selector costs ~34 s of one thread. Fixed in 7.1.6. Reach: the tree npm 12.2.0 bundles for itself (npm/node_modules/@npmcli/arborist <- @npmcli/query), not a package this machine installed, and 12.2.0 is the newest published release while still carrying 7.1.4 — so no install command here moves it. The exposure needs a caller to hand that parser an attacker-controlled selector; nothing in this repository or its CI does, and the audit's second pass is what reads it at all. Ends when npm republishes against a refreshed tree, or when npm is dropped. Accepted 2026-10-08 after `sjel update apply --only npm --re-resolve postcss-selector-parser` reported the package as one this plan does not move."
 
-# Cargo-installed build tools (tauri-cli, xberg-cli, cargo-deny).
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0386"
-ignoreUntil = 2027-01-01
-reason = "tokio 1.45.1 in `tauri-cli@2.12.4`'s published lock and 1.53.2 in `xberg-cli@1.3.10`'s, fixed in 1.51.6 and 1.53.3 respectively. `AsyncFd::new` and its siblings accepted any `T: AsRawFd` without proof of ownership. Reach: neither Sjel binary links tokio for that API — this is the build tool's own runtime, and closing it means borrowing a file descriptor the tool owns. Ends when either crate republishes against a fixed tokio."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0387"
-ignoreUntil = 2027-01-01
-reason = "crypto-bigint 0.5.5 in `tauri-cli@2.12.4`'s published lock, fixed in 0.7.6: subtraction, zero counting, division and Montgomery multiplication could take secret-dependent branches depending on compiler and CPU. Reach: build tool only, and the crate is used there for key and signature *encoding*, not for an operation whose timing an attacker on the other end of a network can sample. Ends when tauri-cli republishes against a fixed crypto-bigint."
-
+# Cargo-installed build tools (xberg-cli, cargo-deny).
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0346"
 ignoreUntil = 2027-01-01
-reason = "The `Debug` impls on `Tls12ClientSessionValue`/`Tls13ClientSessionValue` printed the TLS 1.2 master secret or TLS 1.3 resumption PSK, fixed in 0.23.46 (CVSS AV:L/AC:H/PR:H/UI:R — local, high privilege, user interaction). The trigger is printing one of those values, and no log line in cargo-deny, xberg-cli or tauri-cli formats a session value, so this is a latent exposure rather than one a connection reaches. Ends with the rustls version, per the note above."
+reason = "The `Debug` impls on `Tls12ClientSessionValue`/`Tls13ClientSessionValue` printed the TLS 1.2 master secret or TLS 1.3 resumption PSK, fixed in 0.23.46 (CVSS AV:L/AC:H/PR:H/UI:R — local, high privilege, user interaction). The trigger is printing one of those values, and no log line in cargo-deny or xberg-cli formats a session value, so this is a latent exposure rather than one a connection reaches. Ends with the rustls version, per the note above."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0348"
@@ -134,21 +104,6 @@ reason = "Brotli certificate decompression can allocate up to 1 GiB before authe
 id = "RUSTSEC-2026-0349"
 ignoreUntil = 2027-01-01
 reason = "An unauthenticated ServerHello can downgrade later connections to classical key exchange, fixed in 0.23.46 (AV:N/AC:H/PR:N/UI:N, C:L). Reach: an active MITM on a connection one of the three tools makes, which is exactly the access a network attacker has to a build tool fetching a registry. Ends with the rustls version."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2025-0144"
-ignoreUntil = 2027-01-01
-reason = "ml-dsa 0.0.4 signature verification / timing vulnerability, fixed in 0.0.5. Reach: tauri-cli 2.12.3 > tauri-bundler 2.10.3 > ml-dsa in tauri-cli's published Cargo.lock. Sjel uses Apple code signing, not ML-DSA. Ends when tauri-cli publishes a newer tauri-bundler."
-
-[[IgnoredVulns]]
-id = "GHSA-5x2r-hc65-25f9"
-ignoreUntil = 2027-01-01
-reason = "ml-dsa 0.0.4 polynomial verification issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
-
-[[IgnoredVulns]]
-id = "GHSA-h37v-hp6w-2pp8"
-ignoreUntil = 2027-01-01
-reason = "ml-dsa 0.0.4 encoding issue. Same reach and same end as RUSTSEC-2025-0144: tauri-cli's embedded Cargo.lock."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0381"
@@ -163,7 +118,7 @@ reason = "ip-address <= 10.7.3 strips zone identifiers with /%.*$/ before its 45
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0391"
 ignoreUntil = 2027-01-01
-reason = "zstd 0.13.3 and 0.14.2, fixed in 0.14.3: data from an abandoned stream leaks into the next stream on a reused context. Reach: cargo-deny 0.20.2 (zstd 0.13.3 <- spdx, embedded license data), tauri-cli 2.12.4 and xberg-cli 1.3.10 (0.14.2 in the published lock, 0.14.3 in the binaries rebuilt on 2026-10-28). Ends when cargo-deny moves spdx to zstd 0.14.3 and tauri-cli and xberg-cli republish."
+reason = "zstd 0.13.3 and 0.14.2, fixed in 0.14.3: data from an abandoned stream leaks into the next stream on a reused context. Reach: cargo-deny 0.20.2 (zstd 0.13.3 <- spdx, embedded license data) and xberg-cli 1.3.10 (0.14.2 in the published lock, 0.14.3 in the binaries rebuilt on 2026-10-28). Ends when cargo-deny moves spdx to zstd 0.14.3 and xberg-cli republishes."
 
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0395"

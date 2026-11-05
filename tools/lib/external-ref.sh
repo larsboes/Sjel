@@ -121,7 +121,11 @@ capability_endpoint() {  # <name> [ENV_KEY]
 # capability has no manifest here at all, which is the normal state for one this machine
 # only consumes — its manifest lives in whichever repo owns the host.
 _capability_env_file() {  # <name>
-  local mf="$SJEL_ROOT/capabilities/$1/service.toml"
+  local mf parent
+  for parent in crates services capabilities; do
+    mf="$SJEL_ROOT/$parent/$1/service.toml"
+    [ -f "$mf" ] && break
+  done
   [ -f "$mf" ] || return 0
   toml_get env_file "$mf"
 }

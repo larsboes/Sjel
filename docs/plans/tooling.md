@@ -10,6 +10,12 @@ covers it.
 
 ## Open
 
+- **GPUI dependency freshness.** `apps/gpui` is its own Cargo workspace. Dependabot watches only
+  `/` (`.github/dependabot.yml`), and `sjel update` covers software outside the checkout, so no
+  tool reports the GPUI pins. Workaround: crates.io and `gh api` lookups by hand. Smallest change:
+  a Dependabot block for `/apps/gpui` that ignores the coupled `gpui-kit`, `gpui-pre` and
+  `gpui-mobile` set, which moves by hand per [`gpui.md`](gpui.md#6-one-ui-crate-every-platform).
+  Auto-merge stays unsafe there until `gpui cargo check` is a required check on `main`.
 - **Harness intake review, live.** `tools/intake review --reviewer claude` passed only against a
   fake `claude` in `tools/skills.test.sh`. A real `claude -p` run has not happened. Unverified:
   the CLI accepts `--setting-sources project` together with `--json-schema`, and the field that

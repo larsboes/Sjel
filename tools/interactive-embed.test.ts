@@ -29,6 +29,7 @@ test('an asset read that finishes after native embed teardown cannot mount stale
     import { mock } from 'bun:test';
     import { strict as assert } from 'node:assert';
     class TFile { name = 'figure.html'; path = 'Assets/figure.html'; }
+    globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
     mock.module('obsidian', () => ({ Plugin: class {}, TFile, normalizePath: p => p, MarkdownRenderChild: class {} }));
     const { default: Interactive } = await import(${JSON.stringify(mainPath)});
     for (const teardown of ['block', 'plugin']) {
@@ -50,8 +51,9 @@ test('an asset read that finishes after native embed teardown cannot mount stale
       root.empty = () => { mounts++; };
       root.addEventListener('interactive-dispose', () => { disposals++; });
       const element = { empty() {}, createDiv: () => root };
-      let removeBlock;
-      const child = { registerEvent() {}, register: fn => { removeBlock = fn; } };
+      const cleanups = [];
+      const removeBlock = () => cleanups.forEach(fn => fn());
+      const child = { registerEvent() {}, register: fn => { cleanups.push(fn); } };
       const rendering = plugin.renderNativeBlock('file: Assets/figure.html', element, { sourcePath: 'Note.md' }, child);
       await started;
       if (teardown === 'block') removeBlock();

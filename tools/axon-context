@@ -13,7 +13,16 @@ usage() {
 }
 
 print_path_if_present() {
-  [ -e "$SJEL_ROOT/$1" ] && echo "read=$1"
+  case "$1" in /*) return 0 ;; esac
+  [ ! -e "$SJEL_ROOT/$1" ] || echo "read=$1"
+}
+
+# <name> -> the unit's directory relative to the repo, or nothing.
+unit_dir() {
+  local parent
+  for parent in crates services capabilities; do
+    [ ! -d "$SJEL_ROOT/$parent/$1" ] || { echo "$parent/$1"; return 0; }
+  done
 }
 
 context_with() {
@@ -35,8 +44,9 @@ context_with() {
   fi
   echo "target=$target"
   echo "registry=$row"
-  print_path_if_present "capabilities/$target/README.md"
-  print_path_if_present "capabilities/$target/service.toml"
+  local dir; dir="$(unit_dir "$target")"
+  print_path_if_present "$dir/README.md"
+  print_path_if_present "$dir/service.toml"
   capability_facts "$target"
   echo "next=sjel capability url $target"
 }
@@ -44,14 +54,15 @@ context_with() {
 # What an agent otherwise finds by grepping: routes, settings, config, log, and callers. Read from
 # source and paths only, so it works whether or not the capability is running.
 capability_facts() {
-  local name="$1" src="$SJEL_ROOT/capabilities/$1/src" overlay="" file
+  local name="$1" dir src overlay="" file
+  dir="$(unit_dir "$1")"; src="$SJEL_ROOT/$dir/src"
   if [ -d "$src" ] && command -v rg >/dev/null; then
     local routes
     routes="$(rg --no-filename -o '\.route\(\s*"[^"]+",\s*(get|post|put|patch|delete)' "$src" 2>/dev/null |
       sed -E 's/.*"([^"]+)",[[:space:]]*([a-z]+)/route=\2 \1/' | sort -u)"
     printf '%s\n' "$routes" | head -40
     [ "$(printf '%s\n' "$routes" | wc -l)" -gt 40 ] &&
-      echo "routes=first 40 of $(printf '%s\n' "$routes" | wc -l | tr -d ' '); rg '\.route\(' capabilities/$name/src"
+      echo "routes=first 40 of $(printf '%s\n' "$routes" | wc -l | tr -d ' '); rg '\.route\(' $dir/src"
     true
     rg --no-filename -o '"SJEL_[A-Z0-9_]+"' "$src" 2>/dev/null | tr -d '"' | sort -u |
       sed 's/^/env=/'
@@ -73,7 +84,7 @@ capability_facts() {
 
 unit_from_target() {
   case "$1" in
-    capabilities/*|libs/*|Packs/*) printf '%s\n' "$1" | cut -d/ -f2 ;;
+    crates/*|services/*|capabilities/*|libs/*|Packs/*) printf '%s\n' "$1" | cut -d/ -f2 ;;
     dashboard/*|tools/*|schemas/*) printf '%s\n' "$1" | cut -d/ -f1 ;;
     *) echo "$1" ;;
   esac
@@ -99,9 +110,10 @@ context_on() {
     echo "target=$target"
   fi
   "$SJEL_ROOT/tools/self" explain "$unit" --json 2>/dev/null || echo "self=unavailable-for-$unit"
-  print_path_if_present "capabilities/$unit/README.md"
-  print_path_if_present "capabilities/$unit/service.toml"
-  print_path_if_present "capabilities/$unit/Cargo.toml"
+  local dir; dir="$(unit_dir "$unit")"
+  print_path_if_present "$dir/README.md"
+  print_path_if_present "$dir/service.toml"
+  print_path_if_present "$dir/Cargo.toml"
   print_path_if_present "libs/$unit/README.md"
   print_path_if_present "libs/$unit/Cargo.toml"
   print_path_if_present "Packs/$unit/README.md"

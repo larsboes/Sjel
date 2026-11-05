@@ -40,12 +40,20 @@ function files(dir: string, prefix = ""): string[] {
   }).sort();
 }
 
+// Source manifests: same order as `sjel_manifest_for` in tools/lib/paths.sh.
+function unitDir(name: string) {
+  const dir = ["crates", "services", "capabilities"].map((parent) => join(root, parent, name))
+    .find((candidate) => existsSync(join(candidate, "service.toml")));
+  if (!dir) throw new Error(`${name}: no service.toml under crates/, services/ or capabilities/`);
+  return dir;
+}
+
 function service(name: string) {
-  return Bun.TOML.parse(readFileSync(join(root, "capabilities", name, "service.toml"), "utf8")) as Record<string, unknown>;
+  return Bun.TOML.parse(readFileSync(join(unitDir(name), "service.toml"), "utf8")) as Record<string, unknown>;
 }
 
 function feature(name: string) {
-  const path = join(root, "capabilities", name, "feature.toml");
+  const path = join(unitDir(name), "feature.toml");
   if (!existsSync(path)) throw new Error(`${name}: a feature.toml is required for a catalogued package`);
   const metadata = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   const allowed = new Set(["schema", "title", "summary", "category", "recommend_topics", "data_access"]);
@@ -78,7 +86,7 @@ function binaryName(name: string): string {
 }
 
 function binaryManifest(name: string, local: boolean) {
-  let text = readFileSync(join(root, "capabilities", name, "service.toml"), "utf8");
+  let text = readFileSync(join(unitDir(name), "service.toml"), "utf8");
   text = text.replace(/^build\s*=.*\n/gm, "");
   if (local) {
     text = text.replace(/^command\s*=.*$/m, `command = ["capabilities/${name}/bin/${binaryName(name)}"]`);
@@ -149,7 +157,7 @@ function runtime(options: Options, stage: string) {
   for (const name of core) {
     mkdirSync(join(stage, "capabilities", name), { recursive: true });
     const text = service(name).kind === "process" ? binaryManifest(name, false)
-      : readFileSync(join(root, "capabilities", name, "service.toml"), "utf8");
+      : readFileSync(join(unitDir(name), "service.toml"), "utf8");
     writeFileSync(join(stage, "capabilities", name, "service.toml"), text);
   }
   for (const name of ["sjel.toml", "systems.toml", "upstreams.toml", "profiles.toml", "self.json", "LICENSE", "README.md", "CONTRIBUTING.md", "ARCHITECTURE.md", "sjel"]) {

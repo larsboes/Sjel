@@ -239,7 +239,7 @@ charts. Travel, Map, Inventory and Wishlist are partly built. Travel has a share
 raster maps work on both clients, with the MapLibre vector prototype on macOS. `/systems` is the
 one page that is not a capability's: it puts macmon's live sample beside storage, updates, the
 runtime profile, the hourly host watch and the agent's reach, each read from whoever already owns
-that answer (`src/systems.rs`). Open work is in [`docs/plans/gpui.md`](../../docs/plans/gpui.md).
+that answer (`ui/src/systems/`). Open work is in [`docs/plans/gpui.md`](../../docs/plans/gpui.md).
 
 ## Workspace and the iOS app
 

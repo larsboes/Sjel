@@ -190,8 +190,10 @@ export function routes(entries = registry()): Route[] {
 export function absentPrefixes(names: string[]): Array<{ capability: string; prefix: string }> {
   const out: Array<{ capability: string; prefix: string }> = [];
   for (const name of names) {
-    const path = join(SJEL_ROOT, "capabilities", name, "service.toml");
-    if (!existsSync(path)) {
+    // Same order as `sjel_manifest_for` in tools/lib/paths.sh.
+    const path = ["crates", "services", "capabilities"].map((parent) => join(SJEL_ROOT, parent, name, "service.toml"))
+      .find((candidate) => existsSync(candidate)) ?? "";
+    if (!path) {
       throw new Error(`demo.toml: [absent.${name}] names no capability in this tree`);
     }
     const svc = Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>;

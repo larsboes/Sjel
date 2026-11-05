@@ -345,6 +345,11 @@ pub struct RemoveRecordRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct ArchiveProjectRequest {
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct RenameRecordRequest {
     pub path: String,
     pub title: String,

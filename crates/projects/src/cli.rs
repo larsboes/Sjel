@@ -7,6 +7,7 @@ const USAGE: &str = "usage: projects <command>
   projects                                     every project with its task counts
   add <project> <title> [--due YYYY-MM-DD] [--priority 1|2|3] [--summary TEXT]
   new-project <name> [--summary TEXT]
+  archive <project>                            move a live project's folder under Archive/
   new-note <project> <title> [--summary TEXT]
   edit <path>                                  open a record in $EDITOR and save it
   put <path> <file> [--base <file>]            create a record from a file; with --base, replace it
@@ -200,6 +201,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let path = positional(1)?;
             let removed = projects.remove(path).await?;
             println!("{} {path}", if removed { "removed" } else { "no record" });
+        }
+        "archive" => {
+            let archived = ops::archive(&projects, positional(1)?).await?;
+            println!(
+                "archived {}: {} record(s), {} attachment(s)",
+                positional(1)?,
+                archived.records.len(),
+                archived.attachments.len()
+            );
         }
         "rename" => {
             let renamed = ops::rename(&projects, positional(1)?, positional(2)?).await?;

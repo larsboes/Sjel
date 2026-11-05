@@ -487,6 +487,83 @@ pub async fn rename(projects: &Projects, path: &str, title: &str) -> Fallible<Re
     Ok(renamed)
 }
 
+/// What `archive` moved under `Archive/`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Archived {
+    /// The records' paths after the move.
+    pub records: Vec<String>,
+    /// The attachments' paths after the move.
+    pub attachments: Vec<String>,
+}
+
+/// Archive a live project: move its folder, records and attachments, under `Archive/`.
+///
+/// Every target is checked before the first move, so a name already taken in `Archive/` moves
+/// nothing. Titles do not change, so `[[links]]` to the project's records still resolve.
+///
+/// # Errors
+/// The name is not a live project, or a record or file already sits at a target path.
+pub async fn archive(projects: &Projects, name: &str) -> Fallible<Archived> {
+    let prefix = format!("{name}/");
+    let records: Vec<Record> = projects
+        .by_project(name)
+        .await?
+        .into_iter()
+        .filter(|r| !r.archived && r.path.starts_with(&prefix))
+        .collect();
+    if name.is_empty() || name.contains('/') || records.is_empty() {
+        return Err(SaveError::Refused(format!("no live project {name:?}")).into());
+    }
+    let files: Vec<String> = projects
+        .attachments()?
+        .into_iter()
+        .filter(|path| path.starts_with(&prefix))
+        .collect();
+    let to = |path: &str| format!("{ARCHIVE}/{path}");
+    for path in records
+        .iter()
+        .map(|r| r.path.as_str())
+        .chain(files.iter().map(String::as_str))
+    {
+        let target = to(path);
+        if projects.get(&target).await?.is_some() || projects.root().join(&target).exists() {
+            return Err(SaveError::Refused(format!("{target}: already taken")).into());
+        }
+    }
+    let mut archived = Archived {
+        records: Vec::new(),
+        attachments: Vec::new(),
+    };
+    for record in &records {
+        projects
+            .move_record(&record.path, &to(&record.path))
+            .await?;
+        archived.records.push(to(&record.path));
+    }
+    for path in &files {
+        let target = projects.root().join(to(path));
+        if let Some(dir) = target.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        fs::rename(projects.root().join(path), &target)?;
+        archived.attachments.push(to(path));
+    }
+    remove_empty_dirs(&projects.root().join(name));
+    Ok(archived)
+}
+
+/// Remove `dir` and the folders under it that hold no file. A folder that still holds one stays.
+fn remove_empty_dirs(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                remove_empty_dirs(&entry.path());
+            }
+        }
+    }
+    let _ = fs::remove_dir(dir);
+}
+
 /// The content of a new note, typed at birth like every vault note.
 pub fn new_note(project: &str, title: &str, summary: &str) -> Result<(String, String), String> {
     let project = check_name(project)?;
@@ -1157,6 +1234,32 @@ mod tests {
         let decoded = decode_base64("data:application/pdf;base64,cGRmLTE=").unwrap();
         assert_eq!(decoded, b"pdf-1");
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// An archive moves every record and attachment under `Archive/` and leaves no live folder.
+    #[tokio::test]
+    async fn an_archive_moves_the_whole_project_folder() {
+        let (projects, dir) = scratch("archive").await;
+        add_project(&projects, "W", "").await.unwrap();
+        let task = add_task(&projects, "W", "Folgen", "", None, 2)
+            .await
+            .unwrap();
+        attach(&projects, "W/Assets/plan.pdf", b"pdf")
+            .await
+            .unwrap();
+        add_project(&projects, "Other", "").await.unwrap();
+
+        let archived = archive(&projects, "W").await.unwrap();
+        assert_eq!(archived.attachments, vec!["Archive/W/Assets/plan.pdf"]);
+        assert!(archived.records.contains(&format!("Archive/{}", task.path)));
+        let left = projects.by_project("W").await.unwrap();
+        assert!(!left.is_empty() && left.iter().all(|r| r.archived));
+        assert!(!projects.root().join("W").exists());
+        assert!(projects.root().join("Archive/W/Assets/plan.pdf").exists());
+        assert!(projects.get("Other/Other.md").await.unwrap().is_some());
+        assert!(archive(&projects, "W").await.is_err());
+        assert!(archive(&projects, "Missing").await.is_err());
+        let _ = fs::remove_dir_all(dir);
     }
 
     /// A rename moves the file and every `[[link]]` that named it, and refuses a taken name.

@@ -1628,6 +1628,7 @@ mod tests {
             delta: ScrollDelta::Lines(point(0., -1.)),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
+            ..Default::default()
         });
         let (zoom, center, settled) = view.read_with(cx, |view, _| {
             (view.zoom, view.center.unwrap(), view.settle_seq)
@@ -1644,6 +1645,7 @@ mod tests {
             delta: ScrollDelta::Lines(point(0., 1.)),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
+            ..Default::default()
         });
         let back = view.read_with(cx, |view, _| (view.zoom, view.center.unwrap()));
         assert!(back.0 > zoom);
@@ -1757,6 +1759,7 @@ mod tests {
             delta: ScrollDelta::Lines(point(0., 1.)),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
+            ..Default::default()
         });
         assert_eq!(
             view.read_with(cx, |view, _| (view.zoom, view.center)),

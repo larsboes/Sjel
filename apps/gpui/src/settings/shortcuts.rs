@@ -89,7 +89,7 @@ pub(super) fn shortcuts(
                             .to_lowercase()
                             .contains(&shortcut_query.to_lowercase())
                         || strokes.iter().any(|stroke| {
-                            normalize_shortcut_query(&stroke.to_string())
+                            normalize_shortcut_query(&stroke.unparse(cx.platform_info().os))
                                 .to_lowercase()
                                 .contains(&normalized_query)
                         })

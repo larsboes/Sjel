@@ -30,13 +30,14 @@ pub fn render<V: 'static>(
     palette: Palette,
     cx: &mut Context<V>,
     on_toggle: impl Fn(&mut V, String, bool, &mut Window, &mut Context<V>) + Clone + 'static,
+    on_open: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
 ) -> impl IntoElement {
     div()
         .flex()
         .flex_col()
         .gap_8()
-        .child(capabilities(&state, palette, cx, on_toggle))
-        .child(agent_writes(&state, palette, cx))
+        .child(capabilities(&state, palette, cx, on_toggle, on_open.clone()))
+        .child(agent_writes(&state, palette, cx, on_open))
 }
 
 fn capabilities<V: 'static>(
@@ -44,6 +45,7 @@ fn capabilities<V: 'static>(
     palette: Palette,
     cx: &mut Context<V>,
     on_toggle: impl Fn(&mut V, String, bool, &mut Window, &mut Context<V>) + Clone + 'static,
+    on_open: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
 ) -> AnyElement {
     let Some(health) = &state.health.value else {
         let body = match &state.health.error {
@@ -83,6 +85,7 @@ fn capabilities<V: 'static>(
                 palette,
                 cx,
                 on_toggle.clone(),
+                on_open.clone(),
             )
         })
         .collect();
@@ -109,6 +112,7 @@ fn capability_row<V: 'static>(
     palette: Palette,
     cx: &mut Context<V>,
     on_toggle: impl Fn(&mut V, String, bool, &mut Window, &mut Context<V>) + 'static,
+    on_open: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + 'static,
 ) -> AnyElement {
     let busy = state.busy.contains(name);
     // Running is the normal state: the dot says it, and only the exceptions get words.
@@ -119,6 +123,7 @@ fn capability_row<V: 'static>(
     };
     let start = !cap_state.up;
     let target = name.to_owned();
+    let open_target = name.to_owned();
     let button = Button::new(SharedString::from(format!("toggle-{name}")))
         .small()
         .w(px(64.))
@@ -136,8 +141,13 @@ fn capability_row<V: 'static>(
     state
         .selection
         .mark(row(), selected, palette)
+        .id(SharedString::from(format!("cap-row-{name}")))
         .group("capability")
+        .cursor_pointer()
         .hover(move |style| style.bg(rgba(palette.raised)))
+        .on_click(cx.listener(move |view, _, window, cx| {
+            on_open(view, open_target.clone(), window, cx);
+        }))
         .child(dot(tone))
         .child(
             div()
@@ -183,6 +193,7 @@ fn agent_writes<V: 'static>(
     state: &State<'_>,
     palette: Palette,
     cx: &mut Context<V>,
+    on_open: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + 'static,
 ) -> AnyElement {
     let mono = cx.theme().mono_font_family.clone();
     let body = match (&state.agent.value, &state.agent.error) {
@@ -201,10 +212,12 @@ fn agent_writes<V: 'static>(
                     palette.muted,
                 )
             } else {
+                let on_open = std::sync::Arc::new(on_open);
                 list(
                     writes
                         .into_iter()
-                        .map(|call| {
+                        .enumerate()
+                        .map(|(ix, call)| {
                             let at = chrono::DateTime::from_timestamp(call.at, 0)
                                 .map(|t| {
                                     t.with_timezone(&chrono::Local).format("%H:%M").to_string()
@@ -215,9 +228,17 @@ fn agent_writes<V: 'static>(
                             } else {
                                 palette.muted
                             };
+                            let cap_target = call.capability.clone();
+                            let on_open_click = on_open.clone();
                             row()
+                                .id(("agent-write-row", ix))
                                 .font_family(mono.clone())
                                 .text_sm()
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(rgba(palette.raised)))
+                                .on_click(cx.listener(move |view, _, window, cx| {
+                                    on_open_click(view, cap_target.clone(), window, cx);
+                                }))
                                 .child(
                                     div()
                                         .w(px(56.))

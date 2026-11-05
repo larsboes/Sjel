@@ -2377,6 +2377,28 @@ impl Render for Workspace {
                 palette,
                 cx,
                 |view, name, start, window, cx| view.set_running(name, start, window, cx),
+                |view, name, _, cx| {
+                    let page = match name.as_str() {
+                        "finance" => Page::Finance,
+                        "calendar" => Page::Calendar,
+                        "trips" | "transit" | "places" => Page::Travel,
+                        "inventory" | "interior" => Page::Inventory,
+                        "projects" => Page::Projects,
+                        "documents" => Page::Documents,
+                        "media" => Page::Media,
+                        "backup" => Page::Backup,
+                        "import" => Page::Import,
+                        "software" => Page::Software,
+                        "web-links" | "links" => Page::Links,
+                        "feed" | "comms" => Page::Feed,
+                        "systems" => Page::Systems,
+                        "packs" => Page::Packs,
+                        "self" => Page::SelfModel,
+                        "setup" => Page::Setup,
+                        _ => Page::SelfModel,
+                    };
+                    view.go(page, cx);
+                },
             )
             .into_any_element(),
             Page::Backup => {

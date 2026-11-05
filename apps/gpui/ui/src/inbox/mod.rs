@@ -15,69 +15,50 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, EventEmitter, FontWeight, MouseButton,
     Render, SharedString, Window,
 };
-use gpui_kit::component::input::{Input, InputEvent, InputState};
-use sjel_gpui_core::capture::{self, Draft, TAGS};
+use gpui_kit::component::input::Input;
 use sjel_gpui_core::shell;
 use sjel_gpui_core::store::{LocalCapture, TursoStore};
 
-use crate::primitives::tone_chip;
-use crate::theme::{tint, ThemeContext};
+use crate::theme::ThemeContext;
 use crate::{Density, Palette};
 
+pub mod capture;
+pub mod field;
 pub mod triage;
+pub mod types;
+
+pub use capture::capture_tag_pill;
 pub use triage::{
     bind_keys as bind_triage_keys, Filter as TriageFilter, Inbox as TriageInbox,
     InboxEvent as TriageInboxEvent,
 };
+pub use types::InboxEvent;
 
-pub fn capture_tag_pill(tag: &str, palette: Palette) -> AnyElement {
-    let raw = tag.trim_start_matches('#').trim_end_matches('?');
-    let tag_color = match raw {
-        "todo" | "task" | "buy" | "price" => palette.accent,
-        "idea" | "look" => palette.amber,
-        "place" | "go" | "learn" => palette.green,
-        _ => palette.muted,
-    };
-    let label = if tag.starts_with('#') {
-        tag.to_owned()
-    } else {
-        format!("#{tag}")
-    };
-    tone_chip(label, tag_color)
-}
-
-/// What the page asks its host to do. The host owns the sync and the keyboard.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum InboxEvent {
-    /// A capture was written here and is waiting for the Mac, so the host may sync now.
-    Wrote,
-    /// The field took or lost the keyboard, so the host can show or hide it.
-    Editing(bool),
-}
+use self::capture::render_capture_row;
 
 /// The capture field and what it has caught.
 pub struct Inbox {
     /// The phone's replica, which is where a capture goes before the Mac hears anything.
-    store: Option<Arc<TursoStore>>,
+    pub(crate) store: Option<Arc<TursoStore>>,
     /// The field, built once so its text survives a reload.
-    input: Option<(gpui::Entity<InputState>, gpui::Subscription)>,
+    pub(crate) input: Option<(gpui::Entity<gpui_kit::component::input::InputState>, gpui::Subscription)>,
     /// The chip the person pressed, or none for "let the rules decide".
-    tag: Option<&'static str>,
+    pub(crate) tag: Option<&'static str>,
     /// Why the field would not keep what was typed.
-    error: Option<SharedString>,
+    pub(crate) error: Option<SharedString>,
     /// This phone's captures, newest first.
-    captures: Vec<LocalCapture>,
+    pub(crate) captures: Vec<LocalCapture>,
     /// The captures the Mac refused, by the id the queue holds them under. A refusal is shown on
     /// the row it belongs to: the projects band names records, and a capture is not a record.
-    refusals: Vec<(String, String)>,
+    pub(crate) refusals: Vec<(String, String)>,
     /// True while a capture is being written, so one press cannot make two.
-    saving: bool,
-    loaded: bool,
-    palette: Palette,
-    palette_override: Option<Palette>,
-    density: Density,
+    pub(crate) saving: bool,
+    pub(crate) loaded: bool,
+    pub(crate) palette: Palette,
+    pub(crate) palette_override: Option<Palette>,
+    pub(crate) density: Density,
     /// Bumped per read, so a slow answer cannot replace a newer list.
-    generation: u64,
+    pub(crate) generation: u64,
 }
 
 impl EventEmitter<InboxEvent> for Inbox {}
@@ -126,7 +107,7 @@ impl Inbox {
     }
 
     /// The Mac's reason for refusing this capture, if it refused one.
-    fn refusal_of(&self, capture: &LocalCapture) -> Option<String> {
+    pub(crate) fn refusal_of(&self, capture: &LocalCapture) -> Option<String> {
         self.refusals
             .iter()
             .find(|(path, _)| path == &capture.id)
@@ -178,282 +159,6 @@ impl Inbox {
         .detach();
         cx.notify();
     }
-
-    /// Keeps what is in the field: written into the replica first, queued for the Mac second.
-    fn keep(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.saving {
-            return;
-        }
-        let Some(input) = self.input.as_ref().map(|(input, _)| input.clone()) else {
-            return;
-        };
-        let typed = input.read(cx).value().to_string();
-        let draft = match Draft::parse(&typed, self.tag) {
-            Ok(draft) => draft,
-            Err(why) => {
-                self.error = Some(SharedString::from(why));
-                cx.notify();
-                return;
-            }
-        };
-        let Some(store) = self.store.clone() else {
-            self.error = Some(SharedString::from(
-                "Captures cannot be saved on this phone: its store did not open.",
-            ));
-            cx.notify();
-            return;
-        };
-        self.saving = true;
-        self.error = None;
-        let work = shell::run(async move {
-            store
-                .save_capture(
-                    draft.text.as_deref(),
-                    draft.url.as_deref(),
-                    draft.tag.as_deref(),
-                )
-                .await
-                .map_err(|e| e.to_string())
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            let answer = work
-                .await
-                .unwrap_or_else(|| Err("The capture was not written.".to_owned()));
-            let _ = this.update_in(cx, |view, window, cx| {
-                view.saving = false;
-                match answer {
-                    Ok(_) => {
-                        // The field empties and lets go of the chip: the next capture is a new
-                        // thought, not a correction of the last one.
-                        view.tag = None;
-                        if let Some((input, _)) = view.input.as_ref() {
-                            let input = input.clone();
-                            input.update(cx, |input, cx| input.set_value("", window, cx));
-                        }
-                        view.load(cx);
-                        cx.emit(InboxEvent::Wrote);
-                    }
-                    Err(error) => view.error = Some(SharedString::from(error)),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-        cx.notify();
-    }
-
-    /// The field, created once. Enter keeps the capture, and the keyboard follows the focus.
-    fn field(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Entity<InputState> {
-        if let Some((input, _)) = &self.input {
-            return input.clone();
-        }
-        let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("A thought, a link, or #buy …"));
-        let subscription =
-            cx.subscribe_in(&input, window, |view, _, event, window, cx| match event {
-                InputEvent::PressEnter { .. } => view.keep(window, cx),
-                InputEvent::Focus => cx.emit(InboxEvent::Editing(true)),
-                InputEvent::Blur => cx.emit(InboxEvent::Editing(false)),
-                _ => {}
-            });
-        self.input = Some((input.clone(), subscription));
-        input
-    }
-
-    /// The preview under the field: where this will land, or that it waits.
-    fn preview(&self, cx: &mut Context<Self>) -> AnyElement {
-        let palette = self.palette;
-        let typed = self
-            .input
-            .as_ref()
-            .map(|(input, _)| input.read(cx).value().to_string())
-            .unwrap_or_default();
-        div()
-            .text_xs()
-            .text_color(rgb(palette.muted))
-            .child(preview_label(&typed, self.tag))
-            .into_any_element()
-    }
-
-    /// The four tags, one at a time, and none for the rules to decide.
-    fn chips(&self, cx: &mut Context<Self>) -> AnyElement {
-        let palette = self.palette;
-        let mut row = div().flex().items_center().gap_2();
-        for tag in TAGS {
-            let active = self.tag == Some(tag);
-            row = row.child(
-                div()
-                    .id(SharedString::from(format!("inbox-tag-{tag}")))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .min_h(px(34.))
-                    .px_3()
-                    .rounded(px(8.))
-                    .text_xs()
-                    .cursor_pointer()
-                    .when(active, |chip| {
-                        chip.bg(rgb(palette.accent))
-                            .text_color(rgb(0xffffff))
-                            .font_weight(FontWeight::SEMIBOLD)
-                    })
-                    .when(!active, |chip| {
-                        chip.bg(rgba(palette.raised))
-                            .text_color(rgb(palette.muted))
-                            .border_1()
-                            .border_color(rgba(palette.border))
-                    })
-                    .child(format!("#{tag}"))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |view, _, _, cx| {
-                            view.tag = if view.tag == Some(tag) {
-                                None
-                            } else {
-                                Some(tag)
-                            };
-                            cx.notify();
-                        }),
-                    ),
-            );
-        }
-        row.into_any_element()
-    }
-
-    fn capture_row(&self, capture: &LocalCapture, index: usize) -> AnyElement {
-        let palette = self.palette;
-        let refusal = self.refusal_of(capture);
-        let tag_pill = match capture.tag.as_deref() {
-            Some(tag) => capture_tag_pill(tag, palette),
-            None => div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child("no tag")
-                .into_any_element(),
-        };
-        let url_line = capture.url.as_deref().and_then(|url| {
-            if capture.text.as_deref() != Some(url) {
-                Some(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.accent))
-                        .truncate()
-                        .child(url.to_string()),
-                )
-            } else {
-                None
-            }
-        });
-        // The state is a sentence of the Mac's and can be long, so it goes in the column under the
-        // title rather than beside the tag: a row that pushes its own text off the card is a row
-        // nobody can read.
-        let mut column = div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_w_0()
-            .gap(px(1.))
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(rgb(palette.text))
-                    .truncate()
-                    .child(capture.label()),
-            )
-            .children(url_line)
-            .child(div().flex().items_center().gap_2().child(tag_pill).when(
-                refusal.is_none(),
-                |line| {
-                    let (state, colour) = state_of(capture, palette);
-                    line.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .px_1p5()
-                            .py(px(0.5))
-                            .rounded_full()
-                            .bg(rgba(tint(colour, 0x18)))
-                            .child(div().size(px(5.)).rounded_full().bg(rgb(colour)))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(rgb(colour))
-                                    .child(state),
-                            ),
-                    )
-                },
-            ));
-        if let Some(reason) = refusal {
-            // The Mac said no. It is said here, on the row, because that is where the capture is
-            // and where the person can do something about it.
-            column = column.child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.red))
-                    .child(format!("The Mac refused it: {reason}")),
-            );
-        }
-        div()
-            .id(("inbox-capture", index))
-            .flex()
-            .items_center()
-            .gap_3()
-            .px(self.density.pad_x())
-            .py(self.density.pad_y())
-            .min_h(self.density.row_height())
-            .child(column)
-            .when_some(capture.tag.clone(), |row, tag| {
-                row.child(
-                    div()
-                        .flex_none()
-                        .px_2()
-                        .py(px(1.5))
-                        .rounded(px(4.))
-                        .bg(rgba(tint(palette.raised, 0x66)))
-                        .border_1()
-                        .border_color(rgba(palette.border))
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(
-                            capture::route_for(Some(&tag), capture.url.as_deref())
-                                .map(|route| route.label().to_owned())
-                                .unwrap_or_else(|| "Inbox".to_owned()),
-                        ),
-                )
-            })
-            .into_any_element()
-    }
-}
-
-/// The line that says where a capture is, in the Mac's own terms once it has one.
-///
-/// A capture this phone has not sent is waiting; one the Mac has is `new` until the operator
-/// triages it, and then it is `done` or `dismissed`. Saying "on the Mac" for all three would show a
-/// finished thought as if it were still in the inbox.
-fn state_of(capture: &LocalCapture, palette: Palette) -> (String, u32) {
-    if !capture.on_the_mac() {
-        return ("Waiting for the Mac".to_owned(), palette.amber);
-    }
-    match capture.status.as_deref() {
-        Some("done") => ("Done on the Mac".to_owned(), palette.green),
-        Some("dismissed") => ("Dismissed on the Mac".to_owned(), palette.muted),
-        _ => ("On the Mac".to_owned(), palette.green),
-    }
-}
-
-/// What the line under the field says.
-///
-/// A chip is a decision even before there is text, so it is answered: pressing `#buy` and reading
-/// "Stays in the inbox" would say the press did nothing.
-fn preview_label(typed: &str, tag: Option<&str>) -> String {
-    match Draft::parse(typed, tag) {
-        Ok(draft) => draft.preview(),
-        Err(_) => capture::route_for(tag, None)
-            .map(|route| route.label().to_owned())
-            .unwrap_or_else(|| "Stays in the inbox".to_owned()),
-    }
 }
 
 impl Render for Inbox {
@@ -470,7 +175,10 @@ impl Render for Inbox {
             .captures
             .iter()
             .enumerate()
-            .map(|(index, capture)| self.capture_row(capture, index))
+            .map(|(index, capture)| {
+                let refusal = self.refusal_of(capture);
+                render_capture_row(capture, refusal, index, self.density, palette)
+            })
             .collect();
         let list = if rows.is_empty() {
             div()
@@ -571,6 +279,7 @@ impl Render for Inbox {
 mod tests {
     use gpui::TestAppContext;
 
+    use super::capture::{preview_label, state_of};
     use super::*;
 
     fn captured(id: &str, text: &str, remote: Option<&str>) -> LocalCapture {

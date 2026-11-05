@@ -23,10 +23,10 @@ use finance::config::{
 };
 use finance::import::{self, CandidateState, CsvMapping, TransactionCandidate};
 use finance::investment::{self, HoldingsCoverage, InvestmentCsvMapping};
-use finance::obsidian;
 use finance::planning::{self, PlanningConfig, PlanningReport, SourceExpectation};
 use finance::store::FinanceStore;
 use finance::subscription::{burn_by_currency, PricePoint, StateChange};
+use finance::subscription_notes;
 use finance::JournalEngine;
 
 /// What this capability answers, served as data beside `/health`. Query parameters
@@ -67,12 +67,12 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "GET",
-        "/api/import/obsidian/scan",
+        "/api/import/subscription-notes/scan",
         "Subscription notes in projects that could be imported. Read-only.",
     ),
     r(
         "POST",
-        "/api/import/obsidian",
+        "/api/import/subscription-notes",
         "Import every subscription note in projects. Idempotent by note path.",
     ),
     r(
@@ -1857,12 +1857,12 @@ async fn append_state(
     }
 }
 
-async fn scan_vault(State(state): State<AppState>) -> ApiResponse {
+async fn scan_subscription_notes(State(state): State<AppState>) -> ApiResponse {
     let url = state.projects_base_url.clone();
     if url.is_empty() {
         return not_configured("projects_base_url");
     }
-    match tokio::task::spawn_blocking(move || obsidian::fetch(&url)).await {
+    match tokio::task::spawn_blocking(move || subscription_notes::fetch(&url)).await {
         Ok(Ok(notes)) => response(
             StatusCode::OK,
             json!({
@@ -1878,7 +1878,7 @@ async fn scan_vault(State(state): State<AppState>) -> ApiResponse {
     }
 }
 
-async fn import_vault(State(state): State<AppState>) -> ApiResponse {
+async fn import_subscription_notes(State(state): State<AppState>) -> ApiResponse {
     let url = state.projects_base_url.clone();
     if url.is_empty() {
         return not_configured("projects_base_url");
@@ -1886,7 +1886,7 @@ async fn import_vault(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
     let now = today();
     match tokio::task::spawn_blocking(move || -> Result<Value, String> {
-        let notes = obsidian::fetch(&url)?;
+        let notes = subscription_notes::fetch(&url)?;
         let store = FinanceStore::open(&database_path).map_err(|e| e.to_string())?;
         let (mut created, mut existing) = (0usize, 0usize);
         for note in &notes {
@@ -1902,7 +1902,7 @@ async fn import_vault(State(state): State<AppState>) -> ApiResponse {
         // divergence rather than resolve it — a price point is appended by a person
         // who knows which side is right.
         let subs = store.list().map_err(|e| e.to_string())?;
-        let mismatches = obsidian::currency_mismatches(&notes, &subs, &now);
+        let mismatches = subscription_notes::currency_mismatches(&notes, &subs, &now);
         Ok(json!({
             "ok": mismatches.is_empty(),
             "created": created,
@@ -1922,7 +1922,7 @@ async fn import_vault(State(state): State<AppState>) -> ApiResponse {
 ///
 /// Until 2026-10-20 this wrote a marked region into each vault note. The notes moved to
 /// `projects`, whose rendered tree nobody edits, so the copy is now one whole file per
-/// subscription beside the decision ledger's (`obsidian::PROJECTION_DIR`).
+/// subscription beside the decision ledger's (`subscription_notes::PROJECTION_DIR`).
 async fn writeback(State(state): State<AppState>) -> ApiResponse {
     let Some(overlay) = state.overlay_root.clone() else {
         return not_configured("the overlay root");
@@ -1938,8 +1938,8 @@ async fn writeback(State(state): State<AppState>) -> ApiResponse {
         let rates = store.latest_fx_rates().map_err(|e| e.to_string())?;
         let root = markdown_root::MarkdownRoot::declare(overlay.as_ref().clone())
             .map_err(|e| e.to_string())?;
-        let projected =
-            obsidian::export_projections(&root, &subs, &now, &rates).map_err(|e| e.to_string())?;
+        let projected = subscription_notes::export_projections(&root, &subs, &now, &rates)
+            .map_err(|e| e.to_string())?;
         Ok(json!({
             "ok": projected.refused.is_empty(),
             "projected": projected,
@@ -2641,7 +2641,7 @@ fn state_from(config: Config) -> AppState {
 /// balances, holdings, every transaction the ledger carries — and
 /// `CorsLayer::permissive()` made them readable by any page open in their
 /// browser. Four writes here take no request body (`/api/ledger/rebuild`,
-/// `/api/import/obsidian`, `/api/writeback`, and `/api/decisions/run`, whose
+/// `/api/import/subscription-notes`, `/api/writeback`, and `/api/decisions/run`, whose
 /// `Option<Json<_>>` accepts a missing one), so a cross-site *simple* POST
 /// reaches them with no preflight for CORS to refuse. Refusing the request,
 /// which is what this guard does, is what closes that.
@@ -2660,8 +2660,14 @@ fn build_router(state: AppState) -> Router {
         .route("/api/subscriptions/burn", get(burn))
         .route("/api/subscriptions/{id}/price", post(append_price))
         .route("/api/subscriptions/{id}/state", post(append_state))
-        .route("/api/import/obsidian/scan", get(scan_vault))
-        .route("/api/import/obsidian", post(import_vault))
+        .route(
+            "/api/import/subscription-notes/scan",
+            get(scan_subscription_notes),
+        )
+        .route(
+            "/api/import/subscription-notes",
+            post(import_subscription_notes),
+        )
         .route("/api/writeback", post(writeback))
         .route("/api/import/csv/preview", post(preview_csv))
         .route("/api/import/csv", post(import_csv))
@@ -3269,7 +3275,7 @@ mod origin_tests {
             ("GET", "/api/subscriptions"),
             ("POST", "/api/ledger/rebuild"),
             ("POST", "/api/writeback"),
-            ("POST", "/api/import/obsidian"),
+            ("POST", "/api/import/subscription-notes"),
         ] {
             assert_eq!(
                 answer(method, path, Some("https://evil.example")).await,

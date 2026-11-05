@@ -253,7 +253,7 @@ impl Subscription {
     ///
     /// `None` when the two points are in different currencies, per PRD Q103. The
     /// subtraction is arithmetic on two different units, and the one caller
-    /// ([`crate::obsidian::render_block`]) labels the result with the *earlier*
+    /// ([`crate::subscription_notes::render_block`]) labels the result with the *earlier*
     /// point's currency — so a USD price following a EUR one would have rendered a
     /// EUR-labelled figure that is neither. Refusing is the same answer this
     /// capability gives everywhere else it cannot state a currency.

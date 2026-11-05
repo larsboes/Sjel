@@ -511,7 +511,7 @@ const SEEDERS: Record<string, (ctx: Ctx) => Promise<string>> = {
     //    else, and a tracked markdown file that looks like somebody's real note is exactly
     //    the confusion to avoid.
     await writeSubscriptionNotes(ctx.url("/projects/api/record"));
-    const imported = await post<{ created: number }>(`${base}/import/obsidian`);
+    const imported = await post<{ created: number }>(`${base}/import/subscription-notes`);
 
     // 6. Proposals. No price fetch first, and none is needed: with no market
     //    observation a position is valued at the reviewed activity price the step

@@ -21,20 +21,20 @@ pub mod investment;
 pub mod journal;
 pub mod links;
 pub mod money;
-pub mod obsidian;
 pub mod planning;
 pub mod portfolio;
 pub mod price;
 pub mod risk;
 pub mod store;
 pub mod subscription;
+pub mod subscription_notes;
 
 pub use accounting::{AccountingEngine, JournalEngine};
 pub use config::Config;
 pub use money::{burn_in_eur, to_eur, EurAmount, EurBurn, NoRate, DECLARED_CURRENCY};
-pub use obsidian::{seed_from_note, ScannedNote};
 pub use store::FinanceStore;
 pub use subscription::{
     burn_at, burn_by_currency, BillingCycle, Burn, BurnByCurrency, CurrencyBurn, PricePoint, State,
     StateChange, Subscription,
 };
+pub use subscription_notes::{seed_from_note, ScannedNote};

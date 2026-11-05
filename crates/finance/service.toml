@@ -9,7 +9,7 @@ ready_path     = "/ready"
 autostart      = "false"
 proxy_api_only = "true"
 links_to       = ["trip:plan"]
-imports        = ["csv", "hledger-journal", "obsidian-markdown"]
+imports        = ["csv", "hledger-journal"]
 exports        = ["hledger-journal", "json"]
 
 # Canonical plaintext journal, snapshots, and finance configuration.

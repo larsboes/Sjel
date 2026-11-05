@@ -20,9 +20,9 @@ use crate::import::{CandidateState, TransactionCandidate};
 use crate::investment::{
     Holding, HoldingsCoverage, Quantity, ReviewedHoldingsSnapshot, ReviewedHoldingsSource,
 };
-use crate::obsidian::ScannedNote;
 use crate::price::{FetchAttempt, FetchStatus, FxObservation, PriceObservation};
 use crate::subscription::{BillingCycle, PricePoint, State, StateChange, Subscription};
+use crate::subscription_notes::ScannedNote;
 
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -434,7 +434,7 @@ impl FinanceStore {
             return Ok((existing, false));
         }
 
-        let seed = crate::obsidian::seed_from_note(note, today);
+        let seed = crate::subscription_notes::seed_from_note(note, today);
         let id = format!("sub_{:016x}", fnv1a64(note.source_path.as_bytes()));
 
         conn.execute(

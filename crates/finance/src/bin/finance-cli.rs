@@ -33,7 +33,7 @@ Usage:
   finance-cli subscriptions audit              read-only Q103 currency audit; exit 1 on a finding
 
 subscriptions audit opens no file for writing. It reports three things a wrong
-figure hides behind: a vault note whose price key cannot be read, a note whose
+figure hides behind: a subscription note whose price key cannot be read, a note whose
 declared currency differs from the currency of its price in force, and a billing
 subscription whose price cannot be stated in EUR because no rate covers the pair.
 Exit status is 1 when it finds any of the three, so a scheduled run notices.
@@ -270,7 +270,7 @@ fn export_decisions(rest: &[&str]) -> Result<bool, String> {
 
 /// PRD Q103's audit: every place a subscription figure can carry the wrong currency.
 ///
-/// Read-only by construction — it opens the store, scans the vault, and prints. It does
+/// Read-only by construction — it opens the store, reads the subscription notes, and prints. It does
 /// not import, does not write a region, and does not fetch. That matters because the
 /// answer it gives is most wanted while a service is running, and a reporting command
 /// that mutates is a command nobody runs at that moment.
@@ -290,7 +290,7 @@ fn audit_subscriptions(_rest: &[&str]) -> Result<bool, String> {
 
     // An unreachable projects capability is a fact worth printing, not a crash: the
     // store half of this audit is still worth running without the notes.
-    let notes = match finance::obsidian::fetch(&config.projects_base_url) {
+    let notes = match finance::subscription_notes::fetch(&config.projects_base_url) {
         Ok(notes) => notes,
         Err(error) => {
             println!("notes not read: {error}");
@@ -303,7 +303,7 @@ fn audit_subscriptions(_rest: &[&str]) -> Result<bool, String> {
     let mut deprecated: Vec<String> = Vec::new();
     let mut unreadable: Vec<String> = Vec::new();
     for note in &notes {
-        match finance::obsidian::read_price(&note.fields) {
+        match finance::subscription_notes::read_price(&note.fields) {
             Ok(reading) => {
                 if reading.key.is_deprecated() || !reading.shadowed.is_empty() {
                     let shadowed: Vec<&str> =
@@ -333,7 +333,7 @@ fn audit_subscriptions(_rest: &[&str]) -> Result<bool, String> {
     findings += unreadable.len();
 
     println!("\n-- notes whose currency differs from the price in force --");
-    let mismatches = finance::obsidian::currency_mismatches(&notes, &subs, &as_of);
+    let mismatches = finance::subscription_notes::currency_mismatches(&notes, &subs, &as_of);
     print_or_none(
         &mismatches
             .iter()

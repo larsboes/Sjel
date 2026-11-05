@@ -21,12 +21,11 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 use traveler::config::Config;
 use traveler::derive::{self, DerivedTravel, TRIPS_PREFIX};
-use traveler::model::{ProfileInput, TravelProfile, DEFAULT_PROFILE_ID};
+use traveler::model::{TravelProfile, DEFAULT_PROFILE_ID};
 use traveler::store::{PutOutcome, TravelerStore};
 use traveler::vault::{self, VaultProposals};
 
@@ -80,14 +79,7 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
 ];
 
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct PutProfileRequest {
-    profile: ProfileInput,
-    /// The revision the caller believes is current. Absent means "overwrite
-    /// whatever is there".
-    #[serde(default)]
-    expected_revision: Option<u32>,
-}
+pub use traveler_api::PutProfileRequest;
 
 /// A refusal that carries the capability's own reason, in the same shape every
 /// other Sjel capability uses.

@@ -626,6 +626,10 @@
       }
     },
     {
+      "name": "traveler-api",
+      "kind": "lib"
+    },
+    {
       "name": "trips",
       "kind": "capability",
       "service": {
@@ -1968,6 +1972,16 @@
       ]
     },
     {
+      "from": "places-api",
+      "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places-api/Cargo.toml"
+      ]
+    },
+    {
       "from": "projects",
       "to": "content-item",
       "kinds": [
@@ -2848,6 +2862,16 @@
       ]
     },
     {
+      "from": "traveler",
+      "to": "traveler-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/traveler/Cargo.toml"
+      ]
+    },
+    {
       "from": "trips",
       "to": "civil-date",
       "kinds": [
@@ -2940,6 +2964,16 @@
     {
       "from": "trips",
       "to": "station-time",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/trips/Cargo.toml"
+      ]
+    },
+    {
+      "from": "trips",
+      "to": "traveler-api",
       "kinds": [
         "cargo-dep"
       ],

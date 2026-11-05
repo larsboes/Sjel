@@ -233,6 +233,9 @@ their open edits.
    Done for `places`: `crates/places-api` (`places-api`) extracts pure wire models,
    places, visits, person links, geocode requests and responses, search filters,
    and route constants shared with `sjel-places` and `sjel-gpui-core`.
+   Done for `traveler`: `crates/traveler-api` (`traveler-api`) extracts pure wire models,
+   profile constraints, ranking weights, paces, anchors, derived baseline projections,
+   TELOS proposals, and route constants shared with `sjel-traveler` and `sjel-trips`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

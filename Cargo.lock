@@ -5530,6 +5530,7 @@ dependencies = [
  "sjel-server",
  "sjel-store",
  "tokio",
+ "traveler-api",
 ]
 
 [[package]]
@@ -5555,6 +5556,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tower-http 0.7.1",
+ "traveler-api",
  "trips-api",
 ]
 
@@ -6251,6 +6253,16 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "traveler-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "transit-api",
 ]
 
 [[package]]

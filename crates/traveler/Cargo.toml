@@ -28,6 +28,7 @@ sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }
 route-manifest = { path = "../route-manifest" }
+traveler-api = { path = "../traveler-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled, same as every other

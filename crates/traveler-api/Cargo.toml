@@ -1,0 +1,17 @@
+[package]
+name = "traveler-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pure wire models, profile constraints, ranking weights, and contracts for Sjel traveller capability."
+publish = false
+
+[dependencies]
+schemars = "1.2.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+transit-api = { path = "../transit-api" }
+
+[lints]
+workspace = true

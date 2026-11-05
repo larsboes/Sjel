@@ -128,7 +128,10 @@ pub struct RankFactor {
     pub rationale: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, JsonSchema, Default)]
+pub const WEIGHT_SUM_TOLERANCE: f64 = 1e-6;
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[serde(default)]
 pub struct JourneyWeights {
     pub price: f64,
     pub duration: f64,
@@ -136,9 +139,38 @@ pub struct JourneyWeights {
     pub reliability: f64,
 }
 
+impl Default for JourneyWeights {
+    fn default() -> Self {
+        Self {
+            price: 0.30,
+            duration: 0.20,
+            changes: 0.15,
+            reliability: 0.35,
+        }
+    }
+}
+
 impl JourneyWeights {
     pub fn sum(&self) -> f64 {
         self.price + self.duration + self.changes + self.reliability
+    }
+
+    pub fn is_normalised(&self) -> bool {
+        (self.sum() - 1.0).abs() <= WEIGHT_SUM_TOLERANCE
+    }
+
+    pub fn first_negative(&self) -> Option<(&'static str, f64)> {
+        for (key, val) in [
+            ("price", self.price),
+            ("duration", self.duration),
+            ("changes", self.changes),
+            ("reliability", self.reliability),
+        ] {
+            if val.is_nan() || val < 0.0 {
+                return Some((key, val));
+            }
+        }
+        None
     }
 }
 

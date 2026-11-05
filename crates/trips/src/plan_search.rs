@@ -56,42 +56,7 @@ pub const WEIGHT_RETROSPECTIVE: f64 = 0.10;
 pub const FACTOR_RETROSPECTIVE: (&str, &str) = ("retrospective", "How the last trip here went");
 
 /// The soft ranking weights, matching `capabilities/traveler` profile's `soft` section.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SoftWeights {
-    pub budget_fit: f64,
-    pub feasibility: f64,
-    pub season: f64,
-    pub events: f64,
-    pub retrospective: f64,
-}
-
-impl SoftWeights {
-    /// Every weight at `>= 0`, with a NaN read as 0. The traveler profile refuses
-    /// a negative weight, but this file also takes weights from a request.
-    pub fn clamped(self) -> Self {
-        let floor = |w: f64| if w > 0.0 { w } else { 0.0 };
-        Self {
-            budget_fit: floor(self.budget_fit),
-            feasibility: floor(self.feasibility),
-            season: floor(self.season),
-            events: floor(self.events),
-            retrospective: floor(self.retrospective),
-        }
-    }
-}
-
-impl Default for SoftWeights {
-    fn default() -> Self {
-        Self {
-            budget_fit: WEIGHT_BUDGET_FIT,
-            feasibility: WEIGHT_FEASIBILITY,
-            season: WEIGHT_SEASON,
-            events: WEIGHT_EVENTS,
-            retrospective: WEIGHT_RETROSPECTIVE,
-        }
-    }
-}
+pub use traveler_api::SoftWeights;
 
 /// The longest span a search may cover — the same bound `flight_when` already
 /// enforces, so a month and a hand-typed window cannot mean different things.

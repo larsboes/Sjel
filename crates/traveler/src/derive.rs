@@ -26,151 +26,23 @@
 //! `travelers` holds real names and is already served by `GET /api/plans`; this
 //! projection must not be a second place they leave by.
 
-use serde::{Deserialize, Serialize};
+pub use traveler_api::{
+    Bucket, Company, CompanionPattern, DerivedTravel, DestinationCount, Spread, ATTENDANCE_NOTE,
+    DESTINATION_NOTE, LEAD_TIME_NOTE, TRIPS_PREFIX,
+};
 
 use crate::store::{validate_prefix, TravelerStore};
 
 type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
-/// The prefix `trips` writes its tables under.
-pub const TRIPS_PREFIX: &str = "trips";
 
-/// The sentence every response carries, because the counts below cannot say it
-/// themselves. Served rather than documented so a consumer that never reads this
-/// file still learns what the number means.
-pub const ATTENDANCE_NOTE: &str =
-    "counts plans, not confirmed trips: a plan is excluded only when its retrospective records \
-     not_taken, and nothing records that any other plan was attended";
 
-/// Why the lead-time spread covers fewer plans than the rest of the response.
-pub const LEAD_TIME_NOTE: &str =
-    "lead_time_days covers only plans whose row was created before the trip started: the vault \
-     import stamps created_at with the import date, so an imported trip's row age is how long \
-     ago the import ran, not how far ahead it was booked";
 
-/// Why the destination counts under-count repeats.
-pub const DESTINATION_NOTE: &str =
-    "destinations are as stored, so one city typed two ways counts as two and a multi-stop plan \
-     is a single name; repeat_destinations under-counts for the same reason";
 
-/// A min/median/max over one measurement. Median rather than mean because trip
-/// length and booking lead time are both skewed by a single outlier — a
-/// twenty-day stay and a trip booked a year ahead would each move a mean and
-/// neither would move a median.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Spread {
-    pub min: i64,
-    pub median: i64,
-    pub max: i64,
-}
 
-impl Spread {
-    fn of(mut values: Vec<i64>) -> Option<Self> {
-        if values.is_empty() {
-            return None;
-        }
-        values.sort_unstable();
-        let middle = values.len() / 2;
-        let median = if values.len() % 2 == 1 {
-            values[middle]
-        } else {
-            (values[middle - 1] + values[middle]) / 2
-        };
-        Some(Self {
-            min: values[0],
-            median,
-            max: values[values.len() - 1],
-        })
-    }
-}
 
-/// One destination and how many plans named it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DestinationCount {
-    pub name: String,
-    pub trips: usize,
-}
 
-/// One bucket of a histogram.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Bucket {
-    pub key: String,
-    pub trips: usize,
-}
 
-/// How many people were on the plan, as a shape rather than a list.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Company {
-    /// No travellers recorded. Not the same as travelling alone — the field is
-    /// empty for a plan nobody filled in.
-    pub unrecorded: usize,
-    /// Travelling alone: the plan explicitly records a self-marker (`"me"`,
-    /// `"solo"`, `"self"`, `"ich"`, `"allein"`) or only entries resolved as
-    /// `not_person` in `{trips}_people`.
-    #[serde(default)]
-    pub solo: usize,
-    /// Exactly one traveller besides the operator's own entry, or one name.
-    pub pair: usize,
-    pub group: usize,
-}
-
-/// Pseudonymous companion pattern keyed only by register entity id (`ent:…`).
-///
-/// Never carries a real name: `{trips}_people` resolves raw `travelers` strings
-/// to `ent:…` ids, and any unresolved string is counted only in `Company` shape
-/// (`pair` / `group`) and never emitted here.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompanionPattern {
-    pub person_id: String,
-    pub trips: usize,
-    pub pair_trips: usize,
-    pub group_trips: usize,
-    pub destinations: Vec<DestinationCount>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DerivedTravel {
-    /// Plans counted, after exclusions.
-    pub considered: usize,
-    /// Plan ids left out because a retrospective records `not_taken`.
-    pub excluded_not_taken: Vec<String>,
-    pub length_days: Option<Spread>,
-    /// Days between the plan row being created and the trip starting.
-    ///
-    /// Only over plans whose row predates the trip, and that restriction is the
-    /// measurement. The vault import stamps `created_at` with the import date,
-    /// so for imported history the row's age is how long ago the import ran — a
-    /// negative number that is not a lead time at all. `lead_time_plans` and
-    /// `lead_time_skipped` say how much of the set this rests on, because a
-    /// median over two plans and a median over twelve must not read the same.
-    pub lead_time_days: Option<Spread>,
-    /// How many plans the lead-time spread was computed from.
-    pub lead_time_plans: usize,
-    /// Plans whose row was created after the trip had already started.
-    pub lead_time_skipped: usize,
-    /// Every destination named, most-visited first.
-    pub destinations: Vec<DestinationCount>,
-    /// The subset named by more than one plan.
-    ///
-    /// Under-counts, and the notes say why: the same city typed two ways is two
-    /// destinations, which is the identity problem `places` already detects and
-    /// reports as `merge_candidates`.
-    pub repeat_destinations: Vec<DestinationCount>,
-    pub company: Company,
-    /// Pseudonymous companion patterns keyed by register entity id (`ent:…`)
-    /// from `{trips}_people`. Empty until names are resolved; never carries raw names.
-    #[serde(default)]
-    pub companion_patterns: Vec<CompanionPattern>,
-    /// Plans per calendar month, `01`..`12`, most-used first.
-    pub months: Vec<Bucket>,
-    pub modes: Vec<Bucket>,
-    /// The plan ids every number above was computed from. The whole point of
-    /// publishing it: a reader can check the set rather than trust the summary.
-    pub basis: Vec<String>,
-    /// What these counts cannot say, in the response rather than in a comment,
-    /// so a consumer that never reads this file still learns the limits.
-    pub notes: Vec<String>,
-}
 
 /// One plan row, as much of it as this projection reads.
 struct PlanRow {

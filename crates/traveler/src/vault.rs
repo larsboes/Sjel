@@ -15,53 +15,13 @@
 
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub use traveler_api::{
+    FieldProposal, SkippedSection, VaultProposals, ADMISSIBLE_SECTIONS, EXCLUDED_HEADINGS,
+};
+
 use crate::model::{Anchor, Pace, Provenance, TravelProfile};
-
-/// Admissible section identifiers that may propose profile fields.
-pub const ADMISSIBLE_SECTIONS: &[&str] = &[
-    "frontmatter:summary",
-    "frontmatter:current_focus",
-    "frontmatter:category_affinity",
-    "callout:Charter",
-    "heading:Interests",
-    "heading:Preferences",
-    "heading:Constraints",
-    "heading:Travel",
-];
-
-/// Section headings that are explicitly excluded from proposing profile fields.
-pub const EXCLUDED_HEADINGS: &[&str] = &["CURRENT_STATE", "Current State", "Draft", "History"];
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FieldProposal {
-    /// Profile basis key (`interests`, `anchors`, `pace`,
-    /// `hard.earliest_departure`, `hard.latest_arrival`, `hard.max_changes`,
-    /// `hard.min_transfer_buffer_min`, `hard.avoid_overnight_travel`).
-    pub field: String,
-    pub current: Value,
-    pub proposed: Value,
-    pub source_file: String,
-    pub section: String,
-    pub quoted_span: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SkippedSection {
-    pub source_file: String,
-    pub section: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VaultProposals {
-    pub available: bool,
-    pub scanned_files: Vec<String>,
-    pub proposals: Vec<FieldProposal>,
-    pub skipped_sections: Vec<SkippedSection>,
-}
 
 /// Propose profile field diffs from TELOS markdown files in `telos_dir`.
 ///

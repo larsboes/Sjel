@@ -805,7 +805,7 @@ mod http_tests {
             std::env::temp_dir().join(format!("sjel-entities-http-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let store = EntitiesStore::open(&dir.join("axon.db")).unwrap();
+        let store = EntitiesStore::open(&dir.join("sjel.db")).unwrap();
         // Port 9 answers nothing, so a geocode is "unavailable" and no request leaves.
         let state = Arc::new(AppState {
             store,

@@ -41,8 +41,8 @@ jobs:
       # back to sjel.toml's shipped default. Same minimal seed ci.yml uses.
       - name: Minimal overlay for path resolution
         run: |
-          mkdir -p "$HOME/.axon-overlay/config"
-          cat > "$HOME/.axon-overlay/config/machine.toml" <<'TOML'
+          mkdir -p "$HOME/.sjel-overlay/config"
+          cat > "$HOME/.sjel-overlay/config/machine.toml" <<'TOML'
           os = "linux"
           container_runtime = "docker"
           capabilities = []

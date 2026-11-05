@@ -62,7 +62,7 @@ impl Registry {
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".local").join("state"));
-        let state_dir = state_home.join("axon").join("pack-deployments");
+        let state_dir = state_home.join("sjel").join("pack-deployments");
 
         // Pack roots: the public source of truth first, then the overlay's Packs when this
         // machine has an overlay that carries one, then the store of approved upstream skills.

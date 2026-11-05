@@ -104,7 +104,7 @@ _inside() {  # _inside <path> <root> -> exit 0 when path is root or below it
 }
 
 TARGET="${CARGO_TARGET_DIR:-}"
-[ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/axon-cargo-hermetic/target"
+[ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/sjel-cargo-hermetic/target"
 # One target per checkout: cargo reuses a member's test binary across checkouts that share a
 # target, and env!("CARGO_MANIFEST_DIR") inside it then names the other checkout.
 TARGET="$TARGET/hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
@@ -121,9 +121,9 @@ done
 # order for a caller that wants its sandbox named explicitly.
 isolate_sjel_env
 
-SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/axon-cargo-hermetic.XXXXXX")"
+SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/sjel-cargo-hermetic.XXXXXX")"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/axon" "$SANDBOX/vault" "$SANDBOX/decisions"
+mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault" "$SANDBOX/decisions"
 
 # An empty JSON object, not an absent file: comms resolves $SJEL_COMMS_CONFIG first and only
 # then the overlay and then a gitignored dev config next to its source. Pointing it at a file
@@ -134,7 +134,7 @@ echo '{}' > "$SANDBOX/comms.json"
 export CARGO_TARGET_DIR="$TARGET"
 export SJEL_PERSONAL_ROOT="$SANDBOX/overlay"
 export SJEL_OVERLAY_ROOT="$SANDBOX/overlay"
-export SJEL_DB_PATH="$SANDBOX/overlay/data/axon/axon.db"
+export SJEL_DB_PATH="$SANDBOX/overlay/data/sjel/sjel.db"
 export SJEL_COMMS_CONFIG="$SANDBOX/comms.json"
 # The projection roots. Each of these is a directory a capability WRITES markdown into, and
 # each resolves independently of SJEL_DB_PATH — which is the whole lesson of the third

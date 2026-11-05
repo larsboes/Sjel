@@ -1,7 +1,7 @@
 # Online SQLite backup contract for the shared database file.
 kind                 = "data"
 name                 = "store"
-backup_sqlite_online = "data/axon/axon.db"
+backup_sqlite_online = "data/sjel/sjel.db"
 backup_target        = "backup-target"
 backup_retain        = "14"
 backup_advise_days   = "1"

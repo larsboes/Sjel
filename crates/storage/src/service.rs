@@ -145,11 +145,11 @@ mod tests {
     #[test]
     fn a_launchagent_probe_is_scoped_to_the_users_domain() {
         assert_eq!(
-            probe_argv("launchagent", "com.axon.macmon", Some(501)),
+            probe_argv("launchagent", "com.sjel.macmon", Some(501)),
             Some(vec![
                 "launchctl".into(),
                 "print".into(),
-                "gui/501/com.axon.macmon".into()
+                "gui/501/com.sjel.macmon".into()
             ])
         );
         assert_eq!(
@@ -162,7 +162,7 @@ mod tests {
     fn an_unreadable_uid_leaves_a_launchagent_unverifiable_not_absent() {
         // `None` rather than a wrong domain: a label probed in the wrong domain would read
         // as a stopped service on a machine where it runs.
-        assert_eq!(probe_argv("launchagent", "com.axon.macmon", None), None);
+        assert_eq!(probe_argv("launchagent", "com.sjel.macmon", None), None);
     }
 
     #[test]

@@ -179,29 +179,30 @@ esac
 
 validate_tar "$ARCHIVE" "backup archive"
 OUTER_LIST="$LAST_TAR_LIST"
-META_MEMBER="$(grep -E '^(\./)?axon-backup\.toml$' "$OUTER_LIST" || true)"
+# An archive taken before the rename carries the manifest under its old name.
+META_MEMBER="$(grep -E '^(\./)?(sjel|axon)-backup\.toml$' "$OUTER_LIST" || true)"
 if [ -n "$META_MEMBER" ]; then
   [ "$(printf '%s\n' "$META_MEMBER" | grep -c .)" -eq 1 ] || fail "archive contains more than one backup manifest"
-  tar -xOzf "$ARCHIVE" "$META_MEMBER" > "$WORK/axon-backup.toml"
-  FORMAT="$(toml_get format "$WORK/axon-backup.toml")"
-  ARCHIVE_CAP="$(toml_get capability "$WORK/axon-backup.toml")"
+  tar -xOzf "$ARCHIVE" "$META_MEMBER" > "$WORK/backup-manifest.toml"
+  FORMAT="$(toml_get format "$WORK/backup-manifest.toml")"
+  ARCHIVE_CAP="$(toml_get capability "$WORK/backup-manifest.toml")"
   [ "$FORMAT" = "1" ] || fail "unsupported backup format '$FORMAT'"
   [ "$ARCHIVE_CAP" = "$CAP" ] || fail "archive belongs to capability '$ARCHIVE_CAP', not '$CAP'"
-  CREATED_AT="$(toml_get created_at "$WORK/axon-backup.toml")"
-  IMAGE="$(toml_get image "$WORK/axon-backup.toml")"
-  TAG="$(toml_get tag "$WORK/axon-backup.toml")"
+  CREATED_AT="$(toml_get created_at "$WORK/backup-manifest.toml")"
+  IMAGE="$(toml_get image "$WORK/backup-manifest.toml")"
+  TAG="$(toml_get tag "$WORK/backup-manifest.toml")"
   # Optional: written since Q77 (2026-09-02), absent from every archive taken before it.
-  IMAGE_DIGEST="$(toml_get image_digest "$WORK/axon-backup.toml")"
-  SQLITE_REL="$(toml_get sqlite "$WORK/axon-backup.toml")"
-  SQLITE_ONLINE_REL="$(toml_get sqlite_online "$WORK/axon-backup.toml")"
+  IMAGE_DIGEST="$(toml_get image_digest "$WORK/backup-manifest.toml")"
+  SQLITE_REL="$(toml_get sqlite "$WORK/backup-manifest.toml")"
+  SQLITE_ONLINE_REL="$(toml_get sqlite_online "$WORK/backup-manifest.toml")"
   # Optional: an archive taken before the field existed does not carry it, and is checked
   # for non-emptiness instead of an exact match.
-  EXPECT_TABLES="$(toml_get sqlite_tables "$WORK/axon-backup.toml")"
-  EXPECT_ROWS="$(toml_get sqlite_rows "$WORK/axon-backup.toml")"
+  EXPECT_TABLES="$(toml_get sqlite_tables "$WORK/backup-manifest.toml")"
+  EXPECT_ROWS="$(toml_get sqlite_rows "$WORK/backup-manifest.toml")"
   PATHS=()
-  while IFS= read -r line; do [ -n "$line" ] && PATHS+=("$line"); done < <(toml_array backup_paths "$WORK/axon-backup.toml")
+  while IFS= read -r line; do [ -n "$line" ] && PATHS+=("$line"); done < <(toml_array backup_paths "$WORK/backup-manifest.toml")
   CPATHS=()
-  while IFS= read -r line; do [ -n "$line" ] && CPATHS+=("$line"); done < <(toml_array backup_container_paths "$WORK/axon-backup.toml")
+  while IFS= read -r line; do [ -n "$line" ] && CPATHS+=("$line"); done < <(toml_array backup_container_paths "$WORK/backup-manifest.toml")
 
   CURRENT_IMAGE="$(toml_get image "$MANIFEST")"
   CURRENT_TAG="$(toml_get tag "$MANIFEST")"
@@ -222,12 +223,12 @@ if [ -n "$META_MEMBER" ]; then
     || fail "archive was taken from '$IMAGE:$TAG'; this manifest declares '$CURRENT_IMAGE:$CURRENT_TAG' — use the matching Sjel revision"
   [ "$SQLITE_REL:$SQLITE_ONLINE_REL" = "$CURRENT_SQLITE:$CURRENT_SQLITE_ONLINE" ] \
     || fail "archive database contract differs from the current tracked manifest; use the matching Sjel revision"
-  [ "$(toml_array backup_paths "$WORK/axon-backup.toml")" = "$(toml_array backup_paths "$MANIFEST")" ] \
+  [ "$(toml_array backup_paths "$WORK/backup-manifest.toml")" = "$(toml_array backup_paths "$MANIFEST")" ] \
     || fail "archive path contract differs from the current tracked manifest; use the matching Sjel revision"
-  [ "$(toml_array backup_container_paths "$WORK/axon-backup.toml")" = "$(toml_array backup_container_paths "$MANIFEST")" ] \
+  [ "$(toml_array backup_container_paths "$WORK/backup-manifest.toml")" = "$(toml_array backup_container_paths "$MANIFEST")" ] \
     || fail "archive container-path contract differs from the current tracked manifest; use the matching Sjel revision"
 else
-  [ "$ALLOW_LEGACY" -eq 1 ] || fail "archive has no axon-backup.toml; pass --allow-legacy only for a known pre-format archive"
+  [ "$ALLOW_LEGACY" -eq 1 ] || fail "archive has no backup manifest; pass --allow-legacy only for a known pre-format archive"
   case "$(basename "$ARCHIVE")" in
     "$CAP"-*.tar.gz) ;;
     *) fail "legacy archive name does not identify capability '$CAP'" ;;

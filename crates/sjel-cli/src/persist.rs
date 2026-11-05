@@ -19,7 +19,10 @@ use crate::runner::{fail, get_array, launcher, read_table, status_of, which, Svc
 use crate::schedule;
 
 const PREFIX: &str = "com.sjel";
+/// Unit names this CLI wrote before the rename. Both are unloaded and deleted on install, so a
+/// host that ran either stops carrying a supervisor entry nothing reads again.
 const LEGACY_PREFIX: &str = "com.axon";
+const LEGACY_SYSTEMD_PREFIX: &str = "axon-";
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum Mode {
@@ -84,9 +87,9 @@ fn unit_path(s: &Svc) -> Result<PathBuf, String> {
         "macos" => Ok(home().join(format!("Library/LaunchAgents/{PREFIX}.{}.plist", s.cap))),
         "linux" => Ok(
             systemd_dir().join(if mode(s, false) == Ok(Some(Mode::Scheduled)) {
-                format!("axon-{}.timer", s.cap)
+                format!("sjel-{}.timer", s.cap)
             } else {
-                format!("axon-{}.service", s.cap)
+                format!("sjel-{}.service", s.cap)
             }),
         ),
         "windows" => Err("no windows persistence backend yet".to_owned()),
@@ -97,7 +100,7 @@ fn unit_path(s: &Svc) -> Result<PathBuf, String> {
 /// The oneshot a Linux timer activates. Every other combination is one file.
 fn companion_path(s: &Svc) -> Option<PathBuf> {
     (s.platform.os == "linux" && mode(s, false) == Ok(Some(Mode::Scheduled)))
-        .then(|| systemd_dir().join(format!("axon-{}.service", s.cap)))
+        .then(|| systemd_dir().join(format!("sjel-{}.service", s.cap)))
 }
 
 /// The PATH directories a bare supervisor environment needs: where the runtime, the command,
@@ -513,9 +516,9 @@ fn loaded(s: &Svc) -> &'static str {
                 return "unknown";
             }
             let unit = if mode(s, false) == Ok(Some(Mode::Scheduled)) {
-                format!("axon-{}.timer", s.cap)
+                format!("sjel-{}.timer", s.cap)
             } else {
-                format!("axon-{}.service", s.cap)
+                format!("sjel-{}.service", s.cap)
             };
             let active = Command::new("systemctl")
                 .args(["--user", "is-active", "--quiet", &unit])
@@ -566,6 +569,27 @@ fn remove_legacy_launchd_unit(cap: &str) {
         .status();
     let _ = std::fs::remove_file(&legacy);
     println!("removed legacy unit {}", legacy.display());
+}
+
+/// A Linux host that ran the pre-rename unit keeps it enabled, which would start the capability
+/// twice under two names. Both files go, and the unit is stopped first.
+fn remove_legacy_systemd_unit(cap: &str) {
+    for suffix in ["service", "timer"] {
+        let legacy = systemd_dir().join(format!("{LEGACY_SYSTEMD_PREFIX}{cap}.{suffix}"));
+        if !legacy.is_file() {
+            continue;
+        }
+        let name = legacy
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let _ = Command::new("systemctl")
+            .args(["--user", "disable", "--now", &name])
+            .stderr(Stdio::null())
+            .status();
+        let _ = std::fs::remove_file(&legacy);
+        println!("removed legacy unit {}", legacy.display());
+    }
 }
 
 fn write(path: &Path, body: &str) -> R<()> {
@@ -653,6 +677,7 @@ pub fn install(s: &mut Svc) -> R<u8> {
             println!("installed {}", unit.display());
         }
         "linux" => {
+            remove_legacy_systemd_unit(&s.cap);
             let code = status_of(Command::new("systemctl").args(["--user", "daemon-reload"]));
             if code != 0 {
                 return fail(code, "");

@@ -290,7 +290,7 @@ fn materialize_stage(
     let stage = unique_temp_dir(
         stage_parent,
         &format!(
-            ".axon-{}-stage-{}-",
+            ".sjel-{}-stage-{}-",
             config.adapter,
             basename(&unit.destination)
         ),
@@ -344,7 +344,7 @@ fn replace_atomically(config: &DeployConfig, stage: &Path, destination: &Path, s
         .and_then(Path::parent)
         .unwrap_or_else(|| Path::new("."));
     let backup = parent.join(format!(
-        ".axon-{}-backup-{}-{}",
+        ".sjel-{}-backup-{}-{}",
         config.adapter,
         basename(destination),
         std::process::id()

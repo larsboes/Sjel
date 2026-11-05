@@ -116,8 +116,8 @@ alias chrome-debug='"/Applications/Google Chrome.app/Contents/MacOS/Google Chrom
 # unlock instead of a locked vault. Deliberately does NOT validate it: `bw status` is a
 # Node startup on every shell, and a stale key costs one failed command and a `bwu`,
 # while checking costs a second of latency on every terminal that never touches bw.
-[[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/axon/bw-session" ]] \
-  && export BW_SESSION="$(<"${XDG_CACHE_HOME:-$HOME/.cache}/axon/bw-session")"
+[[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/sjel/bw-session" ]] \
+  && export BW_SESSION="$(<"${XDG_CACHE_HOME:-$HOME/.cache}/sjel/bw-session")"
 
 # Re-unlock and adopt the key in THIS shell. A subprocess cannot export into its parent,
 # so this stays a function rather than living inside bw-unlock.

@@ -927,7 +927,7 @@ mod tests {
             &paths_stub(),
             &env,
             &Options {
-                url: Some("axon-owner.turso.io"),
+                url: Some("sjel-owner.turso.io"),
                 interval_secs: None,
                 mint_days: super::super::mint::DEFAULT_MINT_DAYS,
                 remint: false,

@@ -72,20 +72,32 @@ fn home_dir() -> PathBuf {
         .unwrap_or_default()
 }
 
-fn session_file() -> PathBuf {
+fn xdg_cache_dir() -> PathBuf {
     std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home_dir().join(".cache"))
-        .join("axon/bw-session")
+}
+
+fn session_file() -> PathBuf {
+    xdg_cache_dir().join("sjel/bw-session")
+}
+
+/// Where an unlock cached before the rename sits. Read, never written: a person who unlocked
+/// once keeps working without unlocking again.
+fn legacy_session_file() -> PathBuf {
+    xdg_cache_dir().join("axon/bw-session")
 }
 
 fn session_candidates() -> Vec<(String, Zeroizing<String>)> {
     let mut out: Vec<(String, Zeroizing<String>)> = Vec::new();
-    if let Ok(raw) = fs::read_to_string(session_file()) {
+    for path in [session_file(), legacy_session_file()] {
+        let Ok(raw) = fs::read_to_string(&path) else {
+            continue;
+        };
         let raw = Zeroizing::new(raw);
         let value = Zeroizing::new(raw.trim().to_owned());
         if !value.is_empty() {
-            out.push((session_file().display().to_string(), value));
+            out.push((path.display().to_string(), value));
         }
     }
     if let Ok(raw) = std::env::var("BW_SESSION") {
@@ -815,7 +827,18 @@ fn command_exists(program: &str) -> bool {
         .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(program).is_file()))
 }
 
+/// The store entry names an unlocked vault master is kept under. The current name is written and
+/// read first; the pre-rename name is read too, because an existing entry is a stored item and
+/// moving it costs a re-entry by hand for no gain.
+const SECRET_SERVICE_NAMES: [&str; 2] = ["sjel-bw-master", "axon-bw-master"];
+
 fn secret_store_read(account: &str) -> Option<Zeroizing<Vec<u8>>> {
+    SECRET_SERVICE_NAMES
+        .into_iter()
+        .find_map(|service| secret_store_read_from(service, account))
+}
+
+fn secret_store_read_from(service: &str, account: &str) -> Option<Zeroizing<Vec<u8>>> {
     let (program, args) = match secret_backend() {
         "macos" => (
             "security",
@@ -823,7 +846,7 @@ fn secret_store_read(account: &str) -> Option<Zeroizing<Vec<u8>>> {
                 "find-generic-password".to_string(),
                 "-w".into(),
                 "-s".into(),
-                "axon-bw-master".into(),
+                service.into(),
                 "-a".into(),
                 account.into(),
             ],
@@ -833,7 +856,7 @@ fn secret_store_read(account: &str) -> Option<Zeroizing<Vec<u8>>> {
             vec![
                 "lookup".into(),
                 "service".into(),
-                "axon-bw-master".into(),
+                service.into(),
                 "account".into(),
                 account.into(),
             ],
@@ -860,19 +883,21 @@ fn secret_store_read(account: &str) -> Option<Zeroizing<Vec<u8>>> {
 
 fn secret_store_has(account: &str) -> bool {
     match secret_backend() {
-        "macos" => run_child(
-            "security",
-            &[
-                "find-generic-password".into(),
-                "-s".into(),
-                "axon-bw-master".into(),
-                "-a".into(),
-                account.into(),
-            ],
-            None,
-            Duration::from_secs(30),
-        )
-        .is_ok_and(|out| out.success),
+        "macos" => SECRET_SERVICE_NAMES.into_iter().any(|service| {
+            run_child(
+                "security",
+                &[
+                    "find-generic-password".into(),
+                    "-s".into(),
+                    service.into(),
+                    "-a".into(),
+                    account.into(),
+                ],
+                None,
+                Duration::from_secs(30),
+            )
+            .is_ok_and(|out| out.success)
+        }),
         "linux" => secret_store_read(account).is_some(),
         _ => false,
     }

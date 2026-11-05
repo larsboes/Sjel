@@ -52,8 +52,8 @@ export OPENCODE_DISABLE_MODELS_FETCH=true
 # --- Bitwarden CLI session ---
 # Pick up a session cached by tools/bw-unlock so a new shell starts from the existing
 # unlock. Deliberately does NOT validate it (see init.zsh for the why).
-if [ -r "${XDG_CACHE_HOME:-$HOME/.cache}/axon/bw-session" ]; then
-  export BW_SESSION="$(<"${XDG_CACHE_HOME:-$HOME/.cache}/axon/bw-session")"
+if [ -r "${XDG_CACHE_HOME:-$HOME/.cache}/sjel/bw-session" ]; then
+  export BW_SESSION="$(<"${XDG_CACHE_HOME:-$HOME/.cache}/sjel/bw-session")"
 fi
 
 # Re-unlock and adopt the key in THIS shell (a subprocess can't export into its parent).

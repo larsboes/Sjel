@@ -1,5 +1,5 @@
 {
-  "_note": "Public template. Copy to axon-overlay/config/calendar.json and fill real values there — never here. calendar resolves config from $SJEL_CALENDAR_CONFIG > $SJEL_PERSONAL_ROOT/config/calendar.json > capabilities/calendar/calendar.config.json at runtime (see src/config.rs Config::load). Phases A–D need no file at all; only the Google sync (Phase E) reads one. There is no database key: PRD Q45 made the store path a deployment fact ($SJEL_DB_PATH, else $SJEL_PERSONAL_ROOT/data/axon/axon.db), because a file per capability would drop the cross-capability joins the shared instance existed for.",
+  "_note": "Public template. Copy to sjel-overlay/config/calendar.json and fill real values there — never here. calendar resolves config from $SJEL_CALENDAR_CONFIG > $SJEL_PERSONAL_ROOT/config/calendar.json > capabilities/calendar/calendar.config.json at runtime (see src/config.rs Config::load). Phases A–D need no file at all; only the Google sync (Phase E) reads one. There is no database key: PRD Q45 made the store path a deployment fact ($SJEL_DB_PATH, else $SJEL_PERSONAL_ROOT/data/sjel/sjel.db), because a file per capability would drop the cross-capability joins the shared instance existed for.",
 
   "_comment_port": "HTTP port for calendar-server (default 8087). SJEL_PORT from the service runner wins, then SJEL_CALENDAR_PORT, then this.",
   "port": 8087,

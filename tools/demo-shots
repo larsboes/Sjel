@@ -41,9 +41,9 @@ up() {
     -v "$SJEL_ROOT:/src" -v "$NAME-target:/src/target" -v "$NAME-cargo:/usr/local/cargo/registry" \
     -p "127.0.0.1:$DEMO_PORT:$DEMO_PORT" -w /src "$NAME" bash -c '
       set -euo pipefail
-      mkdir -p "$HOME/.axon-overlay/config"
+      mkdir -p "$HOME/.sjel-overlay/config"
       printf "os = \"linux\"\ncontainer_runtime = \"docker\"\ncapabilities = []\n" \
-        > "$HOME/.axon-overlay/config/machine.toml"
+        > "$HOME/.sjel-overlay/config/machine.toml"
       # Start, seed and record. The capabilities stay up afterwards.
       tools/demo-up
       touch demo/state/seeded

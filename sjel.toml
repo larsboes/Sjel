@@ -25,7 +25,7 @@ name = "sjel"
 # sjel.local.toml. tools/lib/paths.sh prefers that file and falls back to this value,
 # which is also what keeps a fresh clone working: CI has no sjel.local.toml and resolves
 # this default instead.
-overlay = "~/.axon-overlay"
+overlay = "~/.sjel-overlay"
 
 # [upstream] cooldown_min_days / cooldown_max_days stood here until 2026-09-02, when Q74
 # deleted the adoption hold. All three readers went with it in the same change:

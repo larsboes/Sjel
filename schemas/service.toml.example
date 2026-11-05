@@ -89,7 +89,7 @@ env_file = "config/example.env"           # relative to the selected overlay; re
 # capability's data lands.
 
 # Optional — only if this capability is backed up by tools/backup.sh.
-# Each completed archive embeds `axon-backup.toml` with this historical contract plus
+# Each completed archive embeds `sjel-backup.toml` with this historical contract plus
 # the pinned image identity. tools/restore.sh verifies that identity and restores only
 # into an isolated destination; the active overlay is never a valid restore target.
 # Overlay-relative host paths. A directory is copied by contents; a single FILE is
@@ -102,7 +102,7 @@ backup_paths  = ["data/example/data", "config/example.json"]
 backup_sqlite = "data/example/data/db.sqlite3"  # a SQLite DB owned by the container: backup.sh holds the capability down and copies it COLD.
                                           # Never opened from the host while the container runs — SQLite's WAL needs every
                                           # connection on one host, and a virtiofs bind mount is not that (2026-07-25 outage).
-# backup_sqlite_online = "data/axon/axon.db"
+# backup_sqlite_online = "data/sjel/sjel.db"
                                           # the same file copied OPEN, with `sqlite3 .backup`, and no service hold. Use this
                                           # one only when the readers are host processes on this machine — then every
                                           # connection IS on one host and the rule above is satisfied. capabilities/store
@@ -286,7 +286,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 #
 # kind  = "data"
 # name  = "store"
-# backup_sqlite_online = "data/axon/axon.db"
+# backup_sqlite_online = "data/sjel/sjel.db"
 # backup_target        = "backup-target"
 # backup_advise_days   = "1"
 # backup_stale_days    = "7"

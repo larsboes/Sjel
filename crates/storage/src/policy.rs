@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn a_missing_base_directory_yields_nothing_rather_than_failing() {
-        assert!(expand_glob("/nonexistent-axon-fixture/*/target", "/home/runner").is_empty());
+        assert!(expand_glob("/nonexistent-sjel-fixture/*/target", "/home/runner").is_empty());
     }
 
     #[test]

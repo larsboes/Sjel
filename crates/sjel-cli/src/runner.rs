@@ -626,7 +626,7 @@ impl<'a> Svc<'a> {
     /// Without this the first watchdog tick after a rebuild starts a second copy on a port the
     /// live one already holds, and both report themselves as running.
     fn legacy_pid_file(&self) -> PathBuf {
-        PathBuf::from(format!("/tmp/axon-{}.pid", self.cap))
+        PathBuf::from(format!("/tmp/sjel-{}.pid", self.cap))
     }
 
     /// Build when the artifact is missing, or always when `force` (restart).
@@ -1035,7 +1035,7 @@ impl<'a> Svc<'a> {
         match self.platform.runtime.as_str() {
             "docker" | "podman" => self.runtime_bin.clone_from(&self.platform.runtime),
             other => {
-                return fail(1, format!("service-runner.sh: unsupported container_runtime '{other}' (axon-overlay/config/machine.toml)"));
+                return fail(1, format!("service-runner.sh: unsupported container_runtime '{other}' (sjel-overlay/config/machine.toml)"));
             }
         }
         let Some(p) = which(&self.runtime_bin) else {

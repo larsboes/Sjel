@@ -34,13 +34,13 @@ sed -n '/^verify_archive() {/,/^}/p' "$ROOT/tools/backup.sh" > "$FUNCTION_SRC"
 grep -q '^verify_archive() {' "$FUNCTION_SRC" \
   || fail "could not extract verify_archive from tools/backup.sh — the guard moved, was renamed, or was removed"
 
-# The archive member check requires ./axon-backup.toml, so both fixtures carry it. That is not
+# The archive member check requires ./sjel-backup.toml, so both fixtures carry it. That is not
 # decoration: it is what keeps a "clean archive" case from passing for the wrong reason.
 make_archive() {
   local name="$1" mode="$2" stage="$SCRATCH/stage-$1"
   mkdir -p "$stage"
   printf 'payload\n' > "$stage/real.txt"
-  printf 'capability = "synthetic"\n' > "$stage/axon-backup.toml"
+  printf 'capability = "synthetic"\n' > "$stage/sjel-backup.toml"
   [ "$mode" = "with-link" ] && ln -s /tmp "$stage/outward-link"
   ( cd "$stage" && COPYFILE_DISABLE=1 tar czf "$SCRATCH/$name" . )
 }

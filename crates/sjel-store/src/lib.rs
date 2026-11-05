@@ -763,7 +763,7 @@ mod tests {
     fn an_unusable_path_fails_at_open() {
         let blocker = temp_database("blocker");
         std::fs::write(&blocker, b"not a directory").unwrap();
-        let result = open_pool(&blocker.join("axon.db"), "blocked", |_| Ok(()));
+        let result = open_pool(&blocker.join("sjel.db"), "blocked", |_| Ok(()));
         assert!(result.is_err(), "an unusable path opened anyway");
     }
 

@@ -48,7 +48,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 
 /// Where the one shared SQLite file lives (PRD Q45, 2026-08-27).
 ///
-/// `SJEL_DB_PATH` > `<overlay>/data/axon/axon.db` > a scratch file. Resolved the
+/// `SJEL_DB_PATH` > `<overlay>/data/sjel/sjel.db` > a scratch file. Resolved the
 /// same way the Postgres DSN was — env first, then the overlay — so moving a
 /// deployment is still one variable.
 ///
@@ -71,9 +71,9 @@ pub fn database_path() -> PathBuf {
     {
         return expand_tilde(&explicit);
     }
-    overlay_data_dir("axon")
+    overlay_data_dir("sjel")
         .unwrap_or_else(|| std::env::temp_dir().join("sjel-no-overlay"))
-        .join("axon.db")
+        .join("sjel.db")
 }
 
 /// The deployment's home timezone, from `<overlay>/config/deployment.env`.
@@ -226,7 +226,7 @@ mod tests {
         let _o = EnvGuard::set("SJEL_PERSONAL_ROOT", "/tmp/fake-overlay");
         assert_eq!(
             database_path(),
-            PathBuf::from("/tmp/fake-overlay/data/axon/axon.db")
+            PathBuf::from("/tmp/fake-overlay/data/sjel/sjel.db")
         );
 
         let _none = EnvGuard::take("SJEL_PERSONAL_ROOT");
@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn port_resolution_order_is_axon_port_then_fallback_then_file_then_default() {
+    fn port_resolution_order_is_the_env_then_fallback_then_file_then_default() {
         let _env = env_lock();
         let _a = EnvGuard::take("SJEL_PORT");
         let _f = EnvGuard::take("SJEL_CONFIG_TEST_PORT");

@@ -82,7 +82,7 @@ fn local_host_name() -> String {
     };
     run("scutil", &["--get", "LocalHostName"])
         .or_else(|| run("hostname", &["-s"]))
-        .unwrap_or_else(|| "axon".to_string())
+        .unwrap_or_else(|| "sjel".to_string())
 }
 
 /// Registers `_sjel._tcp` with macOS's own `dns-sd`, so no mDNS library enters the tree. The

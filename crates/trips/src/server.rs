@@ -1951,7 +1951,7 @@ mod readiness_tests {
             std::env::temp_dir().join(format!("trips-ready-blocker-{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
         let state = AppState {
-            database_path: Arc::new(blocker.join("axon.db")),
+            database_path: Arc::new(blocker.join("sjel.db")),
             export_root: None,
             travel: Arc::new(Default::default()),
             export_lock: Arc::new(tokio::sync::Mutex::new(())),

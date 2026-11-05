@@ -121,7 +121,7 @@ expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CA
 POISON="/nowhere/sjel-poison/Knowledge-Base"
 out=$(SJEL_PERSONAL_ROOT="/nowhere/sjel-poison/overlay" \
       SJEL_OVERLAY_ROOT="/nowhere/sjel-poison/overlay" \
-      SJEL_DB_PATH="/nowhere/sjel-poison/overlay/data/axon/axon.db" \
+      SJEL_DB_PATH="/nowhere/sjel-poison/overlay/data/sjel/sjel.db" \
       SJEL_COMMS_CONFIG="/nowhere/sjel-poison/overlay/config/comms.json" \
       SJEL_TRIPS_EXPORT_ROOT="$POISON" \
       SJEL_FINANCE_DECISIONS_ROOT="$POISON" \
@@ -133,7 +133,7 @@ for var in SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
   expect_not_under "an inherited $var does not survive" "$var" "/nowhere/sjel-poison"
 done
 expect_ends_with "the comms config is a file, not a directory" SJEL_COMMS_CONFIG ".json"
-expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/overlay/data/axon/axon.db"
+expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/overlay/data/sjel/sjel.db"
 
 # The projection roots must not be the sandbox OVERLAY either. SJEL_FINANCE_DECISIONS_ROOT
 # exists (PRD Q80) precisely because redirecting the overlay instead would redirect the

@@ -64,7 +64,7 @@ make_vault_tree() { # <stage> <sqlite-content> [omit-tls]
     mkdir -p "$stage/data/vaultwarden/tls"
     printf '%s\n' certificate > "$stage/data/vaultwarden/tls/cert.pem"
   fi
-  cat > "$stage/axon-backup.toml" <<'META'
+  cat > "$stage/sjel-backup.toml" <<'META'
 format = "1"
 capability = "vaultwarden"
 created_at = "2026-01-02T030405Z"
@@ -107,7 +107,7 @@ digest_stage="$SCRATCH/digest-stage"
 mkdir -p "$digest_stage"
 make_vault_tree "$digest_stage" VALID
 DIGEST_REF="vaultwarden/server@sha256:1111111111111111111111111111111111111111111111111111111111111111"
-printf 'image_digest = "%s"\n' "$DIGEST_REF" >> "$digest_stage/axon-backup.toml"
+printf 'image_digest = "%s"\n' "$DIGEST_REF" >> "$digest_stage/sjel-backup.toml"
 tar czf "$SCRATCH/vault-digest.tar.gz" -C "$digest_stage" .
 expect_pass "archive carrying a running digest" "$RESTORE" vaultwarden "$SCRATCH/vault-digest.tar.gz" \
   --destination "$SCRATCH/vault-digest-out"
@@ -153,7 +153,7 @@ mkdir -p "$container_payload" "$container_stage"
 printf '%s\n' required > "$container_payload/required.txt"
 chmod 750 "$container_payload/required.txt"
 tar czpf "$container_stage/container-config.tar.gz" -C "$container_payload" .
-cat > "$container_stage/axon-backup.toml" <<'META'
+cat > "$container_stage/sjel-backup.toml" <<'META'
 format = "1"
 capability = "container-demo"
 created_at = "2026-01-02T030405Z"
@@ -183,16 +183,16 @@ esac
 [ "$restored_mode" = 750 ] || { echo "FAIL: container-path mode was $restored_mode, expected 750"; fails=$((fails + 1)); }
 
 store_stage="$SCRATCH/store-stage"
-mkdir -p "$store_stage/data/axon"
-printf '%s\n' 'SHARED DATABASE' > "$store_stage/data/axon/axon.db"
-cat > "$store_stage/axon-backup.toml" <<'META'
+mkdir -p "$store_stage/data/sjel"
+printf '%s\n' 'SHARED DATABASE' > "$store_stage/data/sjel/sjel.db"
+cat > "$store_stage/sjel-backup.toml" <<'META'
 format = "1"
 capability = "store"
 created_at = "2026-01-02T030405Z"
 image = ""
 tag = ""
 sqlite = ""
-sqlite_online = "data/axon/axon.db"
+sqlite_online = "data/sjel/sjel.db"
 sqlite_tables = "46"
 sqlite_rows = "469598"
 backup_paths = []
@@ -231,13 +231,13 @@ MOCK_SQLITE_TABLES=45 expect_fail_with "missing table is caught" \
 
 # An archive from before the counts were recorded. It still has to contain something.
 no_counts_stage="$SCRATCH/store-nocounts-stage"
-mkdir -p "$no_counts_stage/data/axon"
-printf '%s\n' 'SHARED DATABASE' > "$no_counts_stage/data/axon/axon.db"
+mkdir -p "$no_counts_stage/data/sjel"
+printf '%s\n' 'SHARED DATABASE' > "$no_counts_stage/data/sjel/sjel.db"
 {
   printf 'format = "1"\ncapability = "store"\ncreated_at = "2026-01-02T030405Z"\n'
-  printf 'image = ""\ntag = ""\nsqlite = ""\nsqlite_online = "data/axon/axon.db"\n'
+  printf 'image = ""\ntag = ""\nsqlite = ""\nsqlite_online = "data/sjel/sjel.db"\n'
   printf 'backup_paths = []\nbackup_container_paths = []\n'
-} > "$no_counts_stage/axon-backup.toml"
+} > "$no_counts_stage/sjel-backup.toml"
 tar czf "$SCRATCH/store-nocounts.tar.gz" -C "$no_counts_stage" .
 MOCK_SQLITE_TABLES=0 expect_fail_with "an empty database is caught without a recorded expectation" \
   "the copy came back empty" \
@@ -247,9 +247,9 @@ expect_pass "archive without recorded contents still restores" \
 
 # A corrupt copy fails on the integrity check, before any count is compared.
 broken_store="$SCRATCH/store-broken-stage"
-mkdir -p "$broken_store/data/axon"
-printf '%s\n' 'BROKEN' > "$broken_store/data/axon/axon.db"
-cp "$store_stage/axon-backup.toml" "$broken_store/axon-backup.toml"
+mkdir -p "$broken_store/data/sjel"
+printf '%s\n' 'BROKEN' > "$broken_store/data/sjel/sjel.db"
+cp "$store_stage/sjel-backup.toml" "$broken_store/sjel-backup.toml"
 tar czf "$SCRATCH/store-broken.tar.gz" -C "$broken_store" .
 expect_fail_with "a corrupt live copy is caught" "failed integrity_check" \
   "$RESTORE" store "$SCRATCH/store-broken.tar.gz" --destination "$SCRATCH/store-broken-out"
@@ -266,9 +266,9 @@ mkdir -p "$pg_stage"
 printf '%s\n' 'select 1;' > "$pg_stage/pg_dumpall.sql"
 {
   printf 'format = "1"\ncapability = "store"\ncreated_at = "2026-01-02T030405Z"\n'
-  printf 'image = ""\ntag = ""\nsqlite = ""\nsqlite_online = "data/axon/axon.db"\n'
+  printf 'image = ""\ntag = ""\nsqlite = ""\nsqlite_online = "data/sjel/sjel.db"\n'
   printf 'backup_paths = []\nbackup_container_paths = []\n'
-} > "$pg_stage/axon-backup.toml"
+} > "$pg_stage/sjel-backup.toml"
 tar czf "$SCRATCH/pg-retired.tar.gz" -C "$pg_stage" .
 PG_DEST="$SCRATCH/pg-retired-out"
 expect_fail_with "a PostgreSQL archive is refused by name" "was retired on 2026-08-27" \

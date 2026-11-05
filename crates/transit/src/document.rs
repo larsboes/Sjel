@@ -90,9 +90,9 @@ impl TempFile {
             .map(|d| d.as_nanos())
             .unwrap_or_default();
         let name = if extension.is_empty() {
-            format!("axon-transit-{}-{unique:x}", std::process::id())
+            format!("sjel-transit-{}-{unique:x}", std::process::id())
         } else {
-            format!("axon-transit-{}-{unique:x}.{extension}", std::process::id())
+            format!("sjel-transit-{}-{unique:x}.{extension}", std::process::id())
         };
         let path = std::env::temp_dir().join(name);
         let mut file =

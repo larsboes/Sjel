@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn a_walk_of_a_missing_path_is_zero_not_an_error() {
         let mut walk = Walk::default();
-        assert_eq!(walk.size(Path::new("/nonexistent-axon-fixture/target")), 0);
+        assert_eq!(walk.size(Path::new("/nonexistent-sjel-fixture/target")), 0);
     }
 
     #[test]

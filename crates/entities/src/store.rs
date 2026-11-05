@@ -979,7 +979,7 @@ mod tests {
             std::env::temp_dir().join(format!("sjel-entities-store-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        (EntitiesStore::open(&dir.join("axon.db")).unwrap(), dir)
+        (EntitiesStore::open(&dir.join("sjel.db")).unwrap(), dir)
     }
 
     fn values(pairs: &[(&str, Value)]) -> BTreeMap<String, Value> {

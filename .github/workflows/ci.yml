@@ -206,8 +206,8 @@ jobs:
       # registry. Give the runner the standard overlay shape with no capabilities enabled.
       - name: Minimal overlay for the config read
         run: |
-          mkdir -p "$HOME/.axon-overlay/config"
-          cat > "$HOME/.axon-overlay/config/machine.toml" <<'TOML'
+          mkdir -p "$HOME/.sjel-overlay/config"
+          cat > "$HOME/.sjel-overlay/config/machine.toml" <<'TOML'
           os = "linux"
           container_runtime = "docker"
           capabilities = []

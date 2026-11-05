@@ -8,7 +8,7 @@
 # tools/lib/paths.sh reads this file first and falls back to sjel.toml's shipped default.
 # Single-line scalars, quoted — tools/lib/toml.sh's parsing contract.
 
-overlay = "~/.axon-overlay"
+overlay = "~/.sjel-overlay"
 
 # Optional. An overlay describes a deployment, and a deployment may own several machines
 # — a cheap always-on service node and a separate compute node, say. Resolution order:

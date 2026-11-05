@@ -318,7 +318,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let state = Arc::new(AppState {
-            store: SoftwareStore::open(&dir.join("axon.db")).await.unwrap(),
+            store: SoftwareStore::open(&dir.join("sjel.db")).await.unwrap(),
             home: dir.clone(),
             scanning: Mutex::new(()),
         });

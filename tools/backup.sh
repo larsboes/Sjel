@@ -678,7 +678,7 @@ fi
   # something true about what is absent. Without it, "the archive has no .obsidian/plugin-backups"
   # and "the source had none" are indistinguishable at restore time, and only one is a problem.
   write_toml_array backup_exclude ${EXCLUDES[@]+"${EXCLUDES[@]}"}
-} > "$STAGE/axon-backup.toml"
+} > "$STAGE/sjel-backup.toml"
 
 echo "→ tarball $CAP-$TS.tar.gz"
 # COPYFILE_DISABLE stops macOS tar emitting AppleDouble ._ files / xattrs; a
@@ -709,9 +709,9 @@ verify_archive() {  # <path>
     return 1
   fi
   case "$members" in
-    *./axon-backup.toml*) ;;
+    *./sjel-backup.toml* | *./axon-backup.toml*) ;;
     *)
-      echo "backup.sh: $1 is missing ./axon-backup.toml — incomplete, refusing to ship it" >&2
+      echo "backup.sh: $1 is missing ./sjel-backup.toml — incomplete, refusing to ship it" >&2
       return 1
       ;;
   esac

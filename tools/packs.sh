@@ -4,7 +4,7 @@
 # This tool used to symlink Pack skills into ~/.claude/skills. It no longer does
 # (principal, 2026-08-09: "we should only deploy from sjel overlays never using
 # symlinks"). The deployment now copies, and ownership is proven by a ledger at
-# ~/.local/state/axon/pack-deployments/claude.json rather than by reading a
+# ~/.local/state/sjel/pack-deployments/claude.json rather than by reading a
 # symlink's target.
 #
 # Kept as a shim rather than deleted because `sjel pack list claude`, two Pack

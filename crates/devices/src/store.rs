@@ -878,7 +878,7 @@ mod tests {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir(&dir).unwrap();
-        let store = DevicesStore::open(&dir.join("axon.db")).unwrap();
+        let store = DevicesStore::open(&dir.join("sjel.db")).unwrap();
         (TestDir(dir), store)
     }
 

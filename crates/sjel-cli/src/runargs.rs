@@ -307,9 +307,9 @@ mod tests {
     #[test]
     fn docker_inspect_reduces_to_the_same_classes() {
         let json = r#"{
-          "Config": {"Env": ["PATH=/usr/bin", "POSTGRES_PASSWORD=secret-value", "POSTGRES_DB=axon"]},
+          "Config": {"Env": ["PATH=/usr/bin", "POSTGRES_PASSWORD=secret-value", "POSTGRES_DB=sjel"]},
           "Mounts": [
-            {"Type": "volume", "Name": "axon-postgres-data", "Source": "/var/lib/docker/volumes/axon-postgres-data/_data", "Destination": "/var/lib/postgresql/data"},
+            {"Type": "volume", "Name": "sjel-postgres-data", "Source": "/var/lib/docker/volumes/sjel-postgres-data/_data", "Destination": "/var/lib/postgresql/data"},
             {"Type": "bind", "Source": "/overlay/data/pg", "Destination": "/backup"},
             {"Type": "tmpfs", "Source": "", "Destination": "/run"}
           ],
@@ -324,7 +324,7 @@ mod tests {
             v(&[
                 "cap NET_ADMIN",
                 "mount /overlay/data/pg:/backup",
-                "mount axon-postgres-data:/var/lib/postgresql/data",
+                "mount sjel-postgres-data:/var/lib/postgresql/data",
                 "network default",
                 "port 0.0.0.0:53:53/udp",
                 "port 127.0.0.1:5432:5432/tcp"
@@ -361,7 +361,7 @@ mod tests {
             "removed publish"
         );
         assert!(runspec_diff(
-            &v(&["mount axon-pg-data:/var/lib/postgresql/data"]),
+            &v(&["mount sjel-pg-data:/var/lib/postgresql/data"]),
             &v(&["mount postgres_data:/var/lib/postgresql"]),
             "mount"
         )
@@ -392,7 +392,7 @@ mod tests {
         let env = dir.join("env");
         std::fs::write(
             &env,
-            format!("POSTGRES_DB=axon\nPOSTGRES_PASSWORD={secret}\n\n# a comment\n"),
+            format!("POSTGRES_DB=sjel\nPOSTGRES_PASSWORD={secret}\n\n# a comment\n"),
         )
         .unwrap();
         let run = |lines: &[&str]| env_diff(&env, &v(lines));
@@ -400,18 +400,18 @@ mod tests {
         assert_eq!(
             run(&[
                 "PATH=/usr/bin",
-                "POSTGRES_DB=axon",
+                "POSTGRES_DB=sjel",
                 &format!("POSTGRES_PASSWORD={secret}")
             ]),
             (String::new(), true)
         );
-        let (out, ok) = run(&["POSTGRES_DB=axon", "POSTGRES_PASSWORD=old-value"]);
+        let (out, ok) = run(&["POSTGRES_DB=sjel", "POSTGRES_PASSWORD=old-value"]);
         assert!(!ok && out.contains("value differs: POSTGRES_PASSWORD"));
         assert!(
             !out.contains(secret) && !out.contains("old-value"),
             "values never appear"
         );
-        let (out, _) = run(&["POSTGRES_DB=axon"]);
+        let (out, _) = run(&["POSTGRES_DB=sjel"]);
         assert!(
             out.contains("declared, not in container: POSTGRES_PASSWORD") && !out.contains(secret)
         );
@@ -419,7 +419,7 @@ mod tests {
             run(&[
                 "PATH=/x",
                 "LANG=C",
-                "POSTGRES_DB=axon",
+                "POSTGRES_DB=sjel",
                 &format!("POSTGRES_PASSWORD={secret}")
             ])
             .0,

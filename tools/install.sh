@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/install.sh — first-time Sjel setup. Detects OS, resolves where the
-# private overlay (axon-overlay) lives, scaffolds or clones it, writes this
+# private overlay (sjel-overlay) lives, scaffolds or clones it, writes this
 # machine's machine.toml, then hands off to the harness-specific Pack
 # deployers for optional activation.
 #
@@ -176,7 +176,7 @@ if [ -n "$CURRENT_OVERLAY" ]; then
   read -r -p "Overlay location [$CURRENT_OVERLAY]: " OVERLAY_INPUT
   OVERLAY_RAW="${OVERLAY_INPUT:-$CURRENT_OVERLAY}"
 else
-  SUGGESTED_OVERLAY="~/.axon-overlay"
+  SUGGESTED_OVERLAY="~/.sjel-overlay"
   read -r -p "Overlay location [$SUGGESTED_OVERLAY]: " OVERLAY_INPUT
   OVERLAY_RAW="${OVERLAY_INPUT:-$SUGGESTED_OVERLAY}"
 fi

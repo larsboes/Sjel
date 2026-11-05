@@ -317,7 +317,7 @@ run gone remove-persistence
 # The same capability contract, the other backend. Rendering is pure, so this runs on either host:
 # what is asserted is the unit the declaration implies, not that systemd accepted it.
 machine linux '["always", "ondemand", "gone"]'
-UNIT="$FAKE_HOME/.config/systemd/user/axon-always.service"
+UNIT="$FAKE_HOME/.config/systemd/user/sjel-always.service"
 rm -f "$UNIT"
 expect_state "linux, nothing installed" always missing
 
@@ -344,15 +344,15 @@ expect_state "linux, unit edited" always stale
 # at the primary unit would report that as installed.
 machine linux '["sched"]'
 SYSD="$FAKE_HOME/.config/systemd/user"
-TIMER="$SYSD/axon-sched.timer"
-ONESHOT="$SYSD/axon-sched.service"
+TIMER="$SYSD/sjel-sched.timer"
+ONESHOT="$SYSD/sjel-sched.service"
 rm -f "$TIMER" "$ONESHOT"
 
 # The primary unit for a scheduled job is the timer — the answer must name it, not the .service,
 # because the timer is what gets enabled and what `installed` therefore has to mean.
 run sched persistence-status
 case "$out" in
-  *"axon-sched.timer"*) ;;
+  *"sjel-sched.timer"*) ;;
   *) fail "linux, scheduled: expected the timer to be the primary unit, said: $out" ;;
 esac
 
@@ -437,7 +437,7 @@ esac
 
 # Same declaration, other backend: systemd takes the quoted form so a value with a space survives.
 machine_env linux '["FOO=two words"]'
-UNIT="$FAKE_HOME/.config/systemd/user/axon-always.service"
+UNIT="$FAKE_HOME/.config/systemd/user/sjel-always.service"
 rm -f "$UNIT"
 HOME="$FAKE_HOME" XDG_CONFIG_HOME="$FAKE_HOME/.config" \
   "$ROOT/tools/service-runner.sh" persistence-status always >/dev/null 2>&1

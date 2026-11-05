@@ -193,7 +193,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let store = OperatorProfileStore::open(&dir.join("axon.db"))
+        let store = OperatorProfileStore::open(&dir.join("sjel.db"))
             .await
             .unwrap();
         (store, dir)

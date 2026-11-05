@@ -287,7 +287,7 @@ private_archive="$SCRATCH/private-destination/private-ledger/private-ledger-$MOC
 private_payload="$(tar -xOzf "$private_archive" ./data/private-ledger/entries.txt 2>/dev/null)"
 [ "$private_payload" = "private ledger payload" ] \
   || fail "private archive omitted or changed the declared overlay data"
-private_meta="$(tar -xOzf "$private_archive" ./axon-backup.toml 2>/dev/null)"
+private_meta="$(tar -xOzf "$private_archive" ./sjel-backup.toml 2>/dev/null)"
 printf '%s' "$private_meta" | grep -q 'capability = "private-ledger"' \
   || fail "private archive did not record its capability"
 grep -q '"target": "private-target"' "$OVERLAY/backup/receipts/private-ledger.json" \
@@ -316,7 +316,7 @@ if "$BACKUP" --stream vaultwarden > "$stream_archive" 2> "$stream_log"; then :; 
 fi
 mv "$OVERLAY/config/systems.local.toml.saved" "$OVERLAY/config/systems.local.toml"
 tar -tzf "$stream_archive" >/dev/null 2>&1 || fail "stream stdout was not a valid gzip archive"
-tar -tzf "$stream_archive" | grep './axon-backup.toml' >/dev/null \
+tar -tzf "$stream_archive" | grep './sjel-backup.toml' >/dev/null \
   || fail "stream archive omitted its backup contract"
 grep -q 'stream vaultwarden archive' "$stream_log" \
   || fail "stream diagnostics were not written to stderr"
@@ -324,7 +324,7 @@ grep -q 'stream vaultwarden archive' "$stream_log" \
 # Which build wrote these bytes. `tag` stopped answering that on 2026-09-02 (Q77) — the
 # manifest declares "alpine", a rolling channel that reads the same for every archive this
 # capability will ever produce — so backup.sh records the running container's digest beside it.
-stream_meta="$(tar -xOzf "$stream_archive" ./axon-backup.toml)"
+stream_meta="$(tar -xOzf "$stream_archive" ./sjel-backup.toml)"
 printf '%s' "$stream_meta" | grep -q 'image_digest = "vaultwarden/server@sha256:d1d1d1d1"' \
   || fail "the archive does not record the digest the container was running: $stream_meta"
 
@@ -333,7 +333,7 @@ printf '%s' "$stream_meta" | grep -q 'image_digest = "vaultwarden/server@sha256:
 reset_run
 MOCK_DOCKER_REPO_DIGEST="" "$BACKUP" --stream vaultwarden > "$SCRATCH/vaultwarden-localid.tar.gz" 2>/dev/null \
   || fail "stream backup failed with an image that has no registry digest"
-printf '%s' "$(tar -xOzf "$SCRATCH/vaultwarden-localid.tar.gz" ./axon-backup.toml)" \
+printf '%s' "$(tar -xOzf "$SCRATCH/vaultwarden-localid.tar.gz" ./sjel-backup.toml)" \
   | grep -q 'image_digest = "sha256:0f0f0f0f"' \
   || fail "an image with no registry digest did not fall back to the local image id"
 if grep -q '^ssh:' "$MOCK_LOG"; then fail "stream mode contacted a push target"; fi
@@ -533,18 +533,18 @@ reset_run
 # capabilities/store's contract (PRD Q45). The two properties that separate it from the cold
 # one above are asserted directly, because getting either wrong is silent: it must NOT stop
 # anything, and it must take the copy through sqlite3 rather than reading the file itself.
-mkdir -p "$FIXTURE/capabilities/store" "$OVERLAY/data/axon" "$SCRATCH/remote/store"
+mkdir -p "$FIXTURE/capabilities/store" "$OVERLAY/data/sjel" "$SCRATCH/remote/store"
 cat > "$FIXTURE/capabilities/store/service.toml" <<'MANIFEST'
 kind = "data"
 name = "store"
-backup_sqlite_online = "data/axon/axon.db"
+backup_sqlite_online = "data/sjel/sjel.db"
 backup_target = "synthetic-target"
 backup_retain = "2"
 MANIFEST
 printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = ["vaultwarden", "store"]\n' \
   > "$OVERLAY/config/machine.toml"
-printf 'SHARED DATABASE\n' > "$OVERLAY/data/axon/axon.db"
-printf 'write-ahead log\n' > "$OVERLAY/data/axon/axon.db-wal"
+printf 'SHARED DATABASE\n' > "$OVERLAY/data/sjel/sjel.db"
+printf 'write-ahead log\n' > "$OVERLAY/data/sjel/sjel.db-wal"
 
 reset_run
 expect_fail_with "source root cannot override a SQLite source" "does not apply to SQLite" \
@@ -556,7 +556,7 @@ export SJEL_DB_PATH="$SCRATCH/other.db"
 export MOCK_TIMESTAMP=20260105T030303Z
 expect_pass "store backs up the configured database" "$BACKUP" store
 configured_archive="$(find "$SCRATCH/remote/store" -name 'store-*.tar.gz' | head -1)"
-[ "$(tar -xOzf "$configured_archive" ./data/axon/axon.db)" = 'OTHER DATABASE' ] \
+[ "$(tar -xOzf "$configured_archive" ./data/sjel/sjel.db)" = 'OTHER DATABASE' ] \
   || fail "store backup did not contain the configured database"
 unset SJEL_DB_PATH
 rm -rf "$SCRATCH/remote/store"; mkdir -p "$SCRATCH/remote/store"
@@ -568,7 +568,7 @@ unset SJEL_DB_PATH
 
 reset_run
 export MOCK_TIMESTAMP=20260106T030303Z
-export SJEL_DB_PATH="$OVERLAY/data/axon/axon.db"
+export SJEL_DB_PATH="$OVERLAY/data/sjel/sjel.db"
 expect_pass "live sqlite backup" "$BACKUP" store
 unset SJEL_DB_PATH
 if grep -q '^service:' "$MOCK_LOG"; then
@@ -580,8 +580,8 @@ assert_order 'sqlite:backup' 'sqlite:integrity'
 store_archive="$(find "$SCRATCH/remote/store" -name 'store-*.tar.gz' | head -1)"
 [ -n "$store_archive" ] || fail "no store archive was shipped"
 if [ -n "$store_archive" ]; then
-  meta="$(tar -xOzf "$store_archive" ./axon-backup.toml)"
-  printf '%s' "$meta" | grep -q 'sqlite_online = "data/axon/axon.db"' \
+  meta="$(tar -xOzf "$store_archive" ./sjel-backup.toml)"
+  printf '%s' "$meta" | grep -q 'sqlite_online = "data/sjel/sjel.db"' \
     || fail "the archive contract does not name the live database"
   # No image, so no digest. The field is omitted rather than written empty: an empty string
   # would claim the answer is known to be nothing, and this capability has no container at all.
@@ -593,7 +593,7 @@ if [ -n "$store_archive" ]; then
   printf '%s' "$meta" | grep -q 'sqlite_rows = "469598"' || fail "row count not recorded"
   # The WAL sidecar is not staged: `.backup` checkpoints into the copy, so an archive
   # carrying one would mean the copy was a file read after all.
-  tar -tzf "$store_archive" | grep -q 'axon.db-wal' && fail "a WAL sidecar reached the archive"
+  tar -tzf "$store_archive" | grep -q 'sjel.db-wal' && fail "a WAL sidecar reached the archive"
 fi
 grep -q '"contents": "sqlite_online"' "$OVERLAY/backup/receipts/store.json" \
   || fail "the receipt does not describe a live database copy"
@@ -612,8 +612,8 @@ unset MOCK_FAIL_BACKUP
 cat > "$FIXTURE/capabilities/store/service.toml" <<'MANIFEST'
 kind = "data"
 name = "store"
-backup_sqlite = "data/axon/axon.db"
-backup_sqlite_online = "data/axon/axon.db"
+backup_sqlite = "data/sjel/sjel.db"
+backup_sqlite_online = "data/sjel/sjel.db"
 backup_target = "synthetic-target"
 MANIFEST
 reset_run
@@ -777,7 +777,7 @@ MACHINE
 cat > "$FIXTURE/capabilities/store/service.toml" <<'MANIFEST'
 kind = "data"
 name = "store"
-backup_sqlite_online = "data/axon/axon.db"
+backup_sqlite_online = "data/sjel/sjel.db"
 backup_target = "synthetic-target"
 backup_retain = "2"
 MANIFEST

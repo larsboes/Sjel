@@ -2,22 +2,25 @@
 //! would go, start the import, and read what the ledger holds for that folder afterwards.
 //! Source files are only read; the capability moves and removes nothing.
 
+pub mod types;
+pub mod rows;
+
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, IntoElement, PathPromptOptions, SharedString,
+    div, prelude::*, rgb, AnyElement, Context, IntoElement, PathPromptOptions, SharedString,
     Window,
 };
 
-use crate::backup::size;
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{dot, list, note, row, section};
+use crate::primitives::{list, note, section};
 use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::shell::{ImportJob, ImportPlan, ImportStatus};
 
-const RUN: &str = "import:run";
+pub use types::RUN;
+pub use rows::{line, plan_rows, status_rows};
 
 pub struct ImportPage {
     repo: Repo,
@@ -55,12 +58,20 @@ impl ImportPage {
         self.poll(cx);
     }
 
-    fn running(&self) -> bool {
+    pub fn running(&self) -> bool {
         self.job
             .value
             .as_ref()
             .and_then(Option::as_ref)
             .is_some_and(|job| !job.finished)
+    }
+
+    pub fn folder(&self) -> Option<&str> {
+        self.folder.as_deref()
+    }
+
+    pub fn set_folder(&mut self, folder: Option<String>) {
+        self.folder = folder;
     }
 
     fn choose(&mut self, cx: &mut Context<Self>) {
@@ -222,91 +233,6 @@ impl ImportPage {
     }
 }
 
-fn plan_rows(plan: &ImportPlan, palette: Palette) -> Vec<AnyElement> {
-    let mut rows: Vec<AnyElement> = plan
-        .routes
-        .iter()
-        .map(|route| {
-            let tone = if route.route == "skip" {
-                palette.muted
-            } else {
-                palette.accent
-            };
-            line(
-                dot(tone),
-                &route.route,
-                route.files,
-                Some(size(route.bytes)),
-                palette,
-            )
-        })
-        .collect();
-    rows.extend(plan.skipped.iter().map(|skip| {
-        line(
-            div(),
-            &format!("skip: {}", skip.reason),
-            skip.files,
-            None,
-            palette,
-        )
-    }));
-    rows
-}
-
-fn status_rows(status: &ImportStatus, palette: Palette) -> Vec<AnyElement> {
-    status
-        .rows
-        .iter()
-        .map(|row| {
-            let tone = match row.outcome.as_str() {
-                "imported" | "present" => palette.green,
-                "pending" => palette.amber,
-                "failed" => palette.red,
-                _ => palette.muted,
-            };
-            let label = match &row.detail {
-                Some(detail) => format!("{} {} · {detail}", row.route, row.outcome),
-                None => format!("{} {}", row.route, row.outcome),
-            };
-            line(dot(tone), &label, row.files, None, palette)
-        })
-        .collect()
-}
-
-fn line(
-    lead: impl IntoElement,
-    label: &str,
-    files: usize,
-    bytes: Option<String>,
-    palette: Palette,
-) -> AnyElement {
-    row()
-        .child(div().w(px(7.)).child(lead))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_sm()
-                .child(label.to_owned()),
-        )
-        .child(
-            div()
-                .w(px(80.))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(format!("{files} files")),
-        )
-        .child(
-            div()
-                .w(px(72.))
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(bytes.unwrap_or_default()),
-        )
-        .into_any_element()
-}
-
 impl Render for ImportPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = ThemeContext::of(window, cx).palette;
@@ -352,5 +278,18 @@ impl Render for ImportPage {
             .children(self.progress(palette))
             .child(section("Where the files go", plan, palette))
             .child(section("In Sjel", status, palette))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_import_page_initial_state() {
+        let repo = Repo::new(Err(sjel_gpui_core::shell::ShellError::NotSetUp));
+        let page = ImportPage::new(repo);
+        assert!(!page.running());
+        assert_eq!(page.folder(), None);
     }
 }

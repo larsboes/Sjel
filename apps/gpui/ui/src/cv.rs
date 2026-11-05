@@ -751,7 +751,7 @@ impl CvPage {
                                         .text_size(px(11.0))
                                         .text_color(rgb(palette.accent))
                                         .child(format!(
-                                            "🔗 {}",
+                                            "↗ {}",
                                             u.chars().take(24).collect::<String>()
                                         ))
                                 })),

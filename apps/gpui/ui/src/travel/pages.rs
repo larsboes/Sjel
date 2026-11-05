@@ -1465,12 +1465,12 @@ impl Travel {
                     .unwrap_or_else(|| "transit".into());
 
                 let mode_icon = match mode.to_lowercase().as_str() {
-                    "train" | "rail" => "🚆",
+                    "train" | "rail" => "⇄",
                     "flight" | "fly" | "plane" | "air" => "✈",
-                    "bus" => "🚌",
-                    "car" | "drive" => "🚗",
-                    "ferry" | "boat" => "⛴",
-                    _ => "📍",
+                    "bus" => "→",
+                    "car" | "drive" => "→",
+                    "ferry" | "boat" => "≈",
+                    _ => "◎",
                 };
 
                 let destination = stage.destination.clone();
@@ -1592,7 +1592,7 @@ impl Travel {
                                 .child(
                                     div()
                                         .text_color(rgb(palette.muted))
-                                        .child("🌙 Overnight / Layover:"),
+                                        .child("☾ Overnight / Layover:"),
                                 )
                                 .child(div().text_color(rgb(palette.text)).child(if same_hub {
                                     format!(
@@ -1713,7 +1713,7 @@ impl Travel {
                                     div()
                                         .text_xs()
                                         .text_color(rgb(palette.muted))
-                                        .child(format!("📍 {location}")),
+                                        .child(format!("◎ {location}")),
                                 )
                             })
                             .when_some(entry.and_then(|e| e.notes.clone()), |row, notes| {
@@ -1769,7 +1769,7 @@ impl Travel {
                                     div()
                                         .text_xs()
                                         .text_color(rgb(palette.muted))
-                                        .child(format!("📍 {location}")),
+                                        .child(format!("◎ {location}")),
                                 )
                             })
                             .when_some(event.notes.clone(), |row, notes| {

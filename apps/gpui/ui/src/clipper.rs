@@ -7,7 +7,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{IconName, Sizable};
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Window};
 use serde_json::Value;
 use sjel_gpui_core::blocks::Doc;
@@ -1213,7 +1213,8 @@ impl Clips {
                                     Button::new(("turn-paste-prompt", i))
                                         .small()
                                         .ghost()
-                                        .label("📋 Paste Prompt")
+                                        .icon(IconName::Copy)
+                                        .label("Paste Prompt")
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.paste_into_prompt(i, window, cx);
                                         })),
@@ -1249,7 +1250,8 @@ impl Clips {
                                     Button::new(("turn-paste-thoughts", i))
                                         .small()
                                         .ghost()
-                                        .label("📋 Paste Thoughts")
+                                        .icon(IconName::Copy)
+                                        .label("Paste Thoughts")
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.paste_into_thoughts(i, window, cx);
                                         }))
@@ -1279,7 +1281,8 @@ impl Clips {
                                     Button::new(("turn-paste-rich", i))
                                         .small()
                                         .primary()
-                                        .label("📋 Paste Response (Rich + Links)")
+                                        .icon(IconName::Copy)
+                                        .label("Paste Response (Rich + Links)")
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.paste_rich_turn(i, window, cx);
                                         })),

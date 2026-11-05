@@ -1184,7 +1184,7 @@ impl Travel {
                             div()
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
-                                .child(format!("📅 {date_str}")),
+                                .child(date_str),
                         );
                     }
                 }

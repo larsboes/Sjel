@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, dot, note, placeholder, section};
+use crate::primitives::{card, dot, note, placeholder, section, stat_card, stat_strip};
 use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::self_model::{
     incoming_couplings, isolated_units, outgoing_couplings, unit_degree, unit_liveness,
@@ -100,32 +100,29 @@ impl SelfPage {
         let coupling_count = model.coupling.len();
         let upstreams_count = model.upstreams.len();
 
-        let stat_item = |label: &'static str, value: String| {
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(
-                    div()
-                        .text_lg()
-                        .font_weight(gpui_kit::FontWeight::BOLD)
-                        .text_color(rgb(palette.text))
-                        .child(value),
-                )
-                .child(div().text_xs().text_color(rgb(palette.muted)).child(label))
-        };
-
-        card(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(stat_item("Units", units_count.to_string()))
-                .child(stat_item("Couplings", coupling_count.to_string()))
-                .child(stat_item("Upstreams", upstreams_count.to_string()))
-                .into_any_element(),
-            palette,
-        )
+        stat_strip(vec![
+            stat_card(
+                "UNITS",
+                units_count.to_string(),
+                None,
+                palette.text,
+                palette,
+            ),
+            stat_card(
+                "COUPLINGS",
+                coupling_count.to_string(),
+                None,
+                palette.text,
+                palette,
+            ),
+            stat_card(
+                "UPSTREAMS",
+                upstreams_count.to_string(),
+                None,
+                palette.text,
+                palette,
+            ),
+        ])
     }
 
     fn unit_card(

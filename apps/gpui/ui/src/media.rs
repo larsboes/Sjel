@@ -9,7 +9,7 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Remote, Repo};
-use crate::primitives::{card, dot, note, placeholder, section};
+use crate::primitives::{card, dot, mono_num, note, placeholder, section, stat_card, stat_strip};
 use crate::theme::{Palette, ThemeContext};
 use sjel_gpui_core::media::{
     format_bytes, run_label, sort_run_items, total_volume_bytes, MediaIngestDetail,
@@ -124,71 +124,29 @@ impl MediaPage {
                             })),
                     ),
             )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(16.0))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.0))
-                            .child(
-                                div()
-                                    .text_size(px(20.0))
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(rgb(palette.text))
-                                    .child(status.files.to_string()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .text_color(rgb(palette.muted))
-                                    .child("unique digests"),
-                            ),
-                    )
-                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgba(palette.border)))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.0))
-                            .child(
-                                div()
-                                    .text_size(px(20.0))
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(rgb(palette.text))
-                                    .child(status.locations.to_string()),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .text_color(rgb(palette.muted))
-                                    .child("indexed paths"),
-                            ),
-                    )
-                    .child(div().w(px(1.0)).h(px(28.0)).bg(rgba(palette.border)))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.0))
-                            .child(
-                                div()
-                                    .text_size(px(20.0))
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(rgb(palette.text))
-                                    .child(format_bytes(total_bytes)),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("across {} volume(s)", volume_count)),
-                            ),
-                    ),
-            );
+            .child(stat_strip(vec![
+                stat_card(
+                    "UNIQUE DIGESTS",
+                    status.files.to_string(),
+                    None,
+                    palette.text,
+                    palette,
+                ),
+                stat_card(
+                    "INDEXED PATHS",
+                    status.locations.to_string(),
+                    None,
+                    palette.text,
+                    palette,
+                ),
+                stat_card(
+                    "TOTAL VOLUME",
+                    format_bytes(total_bytes),
+                    Some(format!("across {} volume(s)", volume_count).into()),
+                    palette.text,
+                    palette,
+                ),
+            ]));
 
         card(header.into_any_element(), palette)
     }
@@ -243,16 +201,14 @@ impl MediaPage {
                             div()
                                 .w(px(100.0))
                                 .text_size(px(12.0))
-                                .text_color(rgb(palette.text))
-                                .child(format!("{} paths", vol.locations)),
+                                .child(mono_num(format!("{} paths", vol.locations), palette.text)),
                         )
                         .child(
                             div()
                                 .w(px(100.0))
                                 .text_size(px(12.0))
                                 .font_weight(gpui::FontWeight::MEDIUM)
-                                .text_color(rgb(palette.text))
-                                .child(format_bytes(vol.bytes)),
+                                .child(mono_num(format_bytes(vol.bytes), palette.text)),
                         )
                         .child(
                             div()

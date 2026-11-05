@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::dot;
+use crate::primitives::{dot, key_bar, sub_tabs};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::backup::{
     format_age_seconds, format_bytes, format_duration, run_outcome, BackupRunAttemptRecord,
@@ -276,6 +276,7 @@ impl BackupPage {
 
         let is_backing_up_all = self.action_in_flight.contains_key(BACK_UP_ALL)
             || self.backups.value.as_ref().is_some_and(|b| b.running());
+        let entity = cx.entity();
 
         div()
             .flex()
@@ -284,33 +285,37 @@ impl BackupPage {
             .pb_3()
             .border_b_1()
             .border_color(rgba(tint(palette.border, 0x22)))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(self.render_tab_button(
+            .child(sub_tabs(
+                "backup",
+                vec![
+                    (
                         "Capability Contracts",
-                        BackupTab::Contracts,
-                        backups_count,
-                        palette,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
+                        Some(backups_count),
+                        self.tab == BackupTab::Contracts,
+                    ),
+                    (
                         "Targets & Cadence",
-                        BackupTab::Targets,
-                        targets_count,
-                        palette,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
+                        Some(targets_count),
+                        self.tab == BackupTab::Targets,
+                    ),
+                    (
                         "Attempt Ledger",
-                        BackupTab::History,
-                        runs_count,
-                        palette,
-                        cx,
-                    )),
-            )
+                        Some(runs_count),
+                        self.tab == BackupTab::History,
+                    ),
+                ],
+                palette,
+                move |idx, _window, cx| {
+                    entity.update(cx, |page, cx| {
+                        let next = match idx {
+                            0 => BackupTab::Contracts,
+                            1 => BackupTab::Targets,
+                            _ => BackupTab::History,
+                        };
+                        page.set_tab(next, cx);
+                    });
+                },
+            ))
             .child(
                 div()
                     .flex()
@@ -338,45 +343,6 @@ impl BackupPage {
                             .on_click(cx.listener(|page, _, _, cx| page.trigger_backup_all(cx))),
                     ),
             )
-            .into_any_element()
-    }
-
-    fn render_tab_button(
-        &self,
-        label: &str,
-        tab: BackupTab,
-        count: usize,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let is_active = self.tab == tab;
-        div()
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .cursor_pointer()
-            .text_sm()
-            .font_weight(if is_active {
-                gpui::FontWeight::SEMIBOLD
-            } else {
-                gpui::FontWeight::NORMAL
-            })
-            .bg(if is_active {
-                rgba(tint(palette.accent, 0x20))
-            } else {
-                rgba(0)
-            })
-            .text_color(if is_active {
-                rgb(palette.accent)
-            } else {
-                rgb(palette.muted)
-            })
-            .hover(|s| s.bg(rgba(tint(palette.border, 0x30))))
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(move |page, _, _, cx| page.set_tab(tab, cx)),
-            )
-            .child(format!("{label} ({count})"))
             .into_any_element()
     }
 
@@ -1071,6 +1037,7 @@ impl Render for BackupPage {
                         BackupTab::History => self.render_history_view(palette, cx),
                     }),
             )
+            .child(key_bar(&[("1 / 2 / 3", "switch tab")], palette))
     }
 }
 

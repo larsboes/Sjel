@@ -1224,7 +1224,7 @@ impl CalendarPage {
                                 div()
                                     .text_xs()
                                     .text_color(rgb(palette.muted))
-                                    .child(format!("📍 {l}")),
+                                    .child(format!("◎ {l}")),
                             )
                         })
                         // Notes

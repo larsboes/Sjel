@@ -17,7 +17,7 @@ use gpui_kit::{
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{card, dot, list, note, placeholder, section};
+use crate::primitives::{card, dot, list, note, placeholder, section, tone_chip};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::packs::{
     all_packs, deployed_units, held_packs, installed_harnesses, matrix_rows, orphaned_harnesses,
@@ -66,14 +66,7 @@ fn column(basis: f32, min: f32, inner: AnyElement) -> impl IntoElement {
 
 /// A status chip: the tone says what the value means, the label names it.
 fn pill(tone: u32, label: String) -> AnyElement {
-    div()
-        .px_2()
-        .py(px(1.))
-        .rounded(px(4.))
-        .bg(rgba(tint(tone, 0x22)))
-        .text_color(rgb(tone))
-        .child(label)
-        .into_any_element()
+    tone_chip(label, tone)
 }
 
 impl PacksPage {

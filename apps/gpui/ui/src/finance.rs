@@ -25,8 +25,8 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::virtual_list;
-use crate::theme::{tint, Palette, ThemeContext};
+use crate::primitives::{key_bar, mono_num, stat_card, stat_strip, tone_chip, virtual_list};
+use crate::theme::{Palette, ThemeContext};
 
 actions!(
     finance_page,
@@ -1244,19 +1244,14 @@ impl Render for FinancePage {
                     .overflow_hidden()
                     .child(content),
             )
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .pt_2()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(shortcut_hint("1 / 2 / 3", "switch tab", palette))
-                    .child(shortcut_hint("/", "search", palette))
-                    .child(shortcut_hint("⌘r", "refresh", palette)),
-            )
+            .child(key_bar(
+                &[
+                    ("1 / 2 / 3 / 4", "switch tab"),
+                    ("/", "search"),
+                    ("⌘r", "refresh"),
+                ],
+                palette,
+            ))
     }
 }
 
@@ -2232,37 +2227,40 @@ impl FinancePage {
 
         let net = income - spend;
 
-        let stat_cards = div()
-            .flex()
-            .gap_4()
-            .child(stat_card(
+        let stat_cards = stat_strip(vec![
+            stat_card(
                 "MONTHLY SPENDING",
                 format_money(-spend, &curr),
-                "Personal expenses",
+                Some("Personal expenses".into()),
+                palette.text,
                 palette,
-            ))
-            .child(stat_card(
+            ),
+            stat_card(
                 "MONTHLY INCOME",
                 format_money(income, &curr),
-                "Inflows & earnings",
+                Some("Inflows & earnings".into()),
+                palette.text,
                 palette,
-            ))
-            .child(stat_card(
+            ),
+            stat_card(
                 "NET SAVINGS",
                 format_money(net, &curr),
-                if net >= 0 {
-                    "Positive net"
+                Some(if net >= 0 {
+                    "Positive net".into()
                 } else {
-                    "Negative net"
-                },
+                    "Negative net".into()
+                }),
+                if net >= 0 { palette.green } else { palette.red },
                 palette,
-            ))
-            .child(stat_card(
+            ),
+            stat_card(
                 "RECURRING BURN",
                 format_money(-monthly_burn, &curr),
-                format!("{active_subs} active subscriptions"),
+                Some(format!("{active_subs} active subscriptions").into()),
+                palette.text,
                 palette,
-            ));
+            ),
+        ]);
 
         let recent_rows: Vec<AnyElement> = projection
             .map(|p| {
@@ -2828,17 +2826,7 @@ impl FinancePage {
                             .flex()
                             .items_center()
                             .gap_3()
-                            .child(
-                                div()
-                                    .px_1()
-                                    .py(px(1.))
-                                    .rounded(px(3.))
-                                    .bg(rgba(tint(status_color, 0x22)))
-                                    .text_xs()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(rgb(status_color))
-                                    .child(sub.status.to_uppercase()),
-                            )
+                            .child(tone_chip(sub.status.to_uppercase(), status_color))
                             .child(
                                 div()
                                     .flex()
@@ -2911,45 +2899,6 @@ impl FinancePage {
     }
 }
 
-fn stat_card(
-    label: &'static str,
-    main: impl Into<SharedString>,
-    sub: impl Into<SharedString>,
-    palette: Palette,
-) -> AnyElement {
-    div()
-        .flex_1()
-        .p_4()
-        .rounded(px(8.))
-        .border_1()
-        .border_color(rgba(palette.border))
-        .bg(rgba(palette.surface))
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.muted))
-                .child(label),
-        )
-        .child(
-            div()
-                .text_xl()
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(palette.text))
-                .child(main.into()),
-        )
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(sub.into()),
-        )
-        .into_any_element()
-}
-
 fn default_csv_mapping() -> serde_json::Value {
     serde_json::json!({
         "delimiter": ";",
@@ -3006,8 +2955,7 @@ fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyElement {
                         .w(px(80.))
                         .text_xs()
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.muted))
-                        .child(tx.date.clone()),
+                        .child(mono_num(tx.date.clone(), palette.muted)),
                 )
                 .child(
                     div()
@@ -3039,40 +2987,8 @@ fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyElement {
                         .text_color(rgb(palette.muted))
                         .child(tx.account.clone()),
                 )
-                .child(
-                    div()
-                        .px_2()
-                        .py(px(2.))
-                        .rounded(px(4.))
-                        .bg(rgba(tint(amount_color, 0x22)))
-                        .text_xs()
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(rgb(amount_color))
-                        .child(amount_text),
-                ),
+                .child(tone_chip(amount_text, amount_color)),
         )
-        .into_any_element()
-}
-
-fn shortcut_hint(key: &'static str, desc: &'static str, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px_1()
-                .py(px(1.))
-                .rounded(px(3.))
-                .bg(rgba(palette.surface))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.text))
-                .child(key),
-        )
-        .child(div().child(desc))
         .into_any_element()
 }
 

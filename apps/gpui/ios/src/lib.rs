@@ -3417,7 +3417,7 @@ impl Render for Capabilities {
                     NavItem {
                         id: "calendar",
                         label: "Calendar",
-                        icon: "📅",
+                        icon: "▦",
                         badge: None,
                     },
                     NavItem {

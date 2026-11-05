@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use crate::data::{Remote, Repo};
 use crate::interior::RoomPlanHistory;
-use crate::primitives::virtual_list;
+use crate::primitives::{key_bar, stat_card, stat_strip, sub_tabs, virtual_list};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
@@ -1599,6 +1599,11 @@ impl InventoryPage {
             .unwrap_or(0);
         let layouts_count = self.layouts.value.as_ref().map(|l| l.len()).unwrap_or(0);
 
+        let mail_count = self.mail_proposals.value.as_ref().map_or(0, |items| {
+            items.iter().filter(|p| p.decision.is_none()).count()
+        });
+        let entity = cx.entity();
+
         div()
             .flex()
             .items_center()
@@ -1606,42 +1611,43 @@ impl InventoryPage {
             .pb_3()
             .border_b_1()
             .border_color(rgba(tint(palette.border, 0x22)))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(self.render_tab_button(
+            .child(sub_tabs(
+                "inventory",
+                vec![
+                    (
                         "Owned Items",
-                        InventoryTab::Owned,
-                        owned_count,
-                        palette,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
+                        Some(owned_count),
+                        self.tab == InventoryTab::Owned,
+                    ),
+                    (
                         "Wishlist",
-                        InventoryTab::Wishlist,
-                        wishlist_count,
-                        palette,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
+                        Some(wishlist_count),
+                        self.tab == InventoryTab::Wishlist,
+                    ),
+                    (
                         "Interior Layouts",
-                        InventoryTab::Interior,
-                        layouts_count,
-                        palette,
-                        cx,
-                    ))
-                    .child(self.render_tab_button(
+                        Some(layouts_count),
+                        self.tab == InventoryTab::Interior,
+                    ),
+                    (
                         "Mail review",
-                        InventoryTab::MailReview,
-                        self.mail_proposals.value.as_ref().map_or(0, |items| {
-                            items.iter().filter(|p| p.decision.is_none()).count()
-                        }),
-                        palette,
-                        cx,
-                    )),
-            )
+                        Some(mail_count),
+                        self.tab == InventoryTab::MailReview,
+                    ),
+                ],
+                palette,
+                move |idx, _window, cx| {
+                    entity.update(cx, |page, cx| {
+                        let next = match idx {
+                            0 => InventoryTab::Owned,
+                            1 => InventoryTab::Wishlist,
+                            2 => InventoryTab::Interior,
+                            _ => InventoryTab::MailReview,
+                        };
+                        page.set_tab(next, cx);
+                    });
+                },
+            ))
             .child(
                 div().flex().items_center().gap_3().child(
                     Button::new("refresh-inventory")
@@ -1651,45 +1657,6 @@ impl InventoryPage {
                         .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
                 ),
             )
-            .into_any_element()
-    }
-
-    fn render_tab_button(
-        &self,
-        label: &str,
-        tab: InventoryTab,
-        count: usize,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let is_active = self.tab == tab;
-        div()
-            .px_3()
-            .py_1()
-            .rounded_md()
-            .cursor_pointer()
-            .text_sm()
-            .font_weight(if is_active {
-                gpui::FontWeight::SEMIBOLD
-            } else {
-                gpui::FontWeight::NORMAL
-            })
-            .bg(if is_active {
-                rgba(tint(palette.accent, 0x20))
-            } else {
-                rgba(0)
-            })
-            .text_color(if is_active {
-                rgb(palette.accent)
-            } else {
-                rgb(palette.muted)
-            })
-            .hover(|s| s.bg(rgba(tint(palette.border, 0x30))))
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(move |page, _, _, cx| page.set_tab(tab, cx)),
-            )
-            .child(format!("{label} ({count})"))
             .into_any_element()
     }
 
@@ -1747,24 +1714,29 @@ impl InventoryPage {
                             ),
                     ),
             )
-            .child(
-                // Stat Cards
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(self.render_stat_card("Owned Assets", &owned_count.to_string(), palette))
-                    .child(self.render_stat_card(
-                        "Estimated Value",
-                        &format_cents(Some(total_cents)),
-                        palette,
-                    ))
-                    .child(self.render_stat_card(
-                        "Categories",
-                        &categories.len().to_string(),
-                        palette,
-                    )),
-            )
+            .child(stat_strip(vec![
+                stat_card(
+                    "OWNED ASSETS",
+                    owned_count.to_string(),
+                    None,
+                    palette.text,
+                    palette,
+                ),
+                stat_card(
+                    "ESTIMATED VALUE",
+                    format_cents(Some(total_cents)),
+                    None,
+                    palette.text,
+                    palette,
+                ),
+                stat_card(
+                    "CATEGORIES",
+                    categories.len().to_string(),
+                    None,
+                    palette.text,
+                    palette,
+                ),
+            ]))
             .child(
                 // Filter Bar
                 div()
@@ -1849,30 +1821,6 @@ impl InventoryPage {
                     },
                 )
             })
-            .into_any_element()
-    }
-
-    fn render_stat_card(&self, label: &str, value: &str, palette: Palette) -> AnyElement {
-        div()
-            .flex_1()
-            .p_3()
-            .rounded_lg()
-            .bg(rgba(tint(palette.raised, 0x40)))
-            .border_1()
-            .border_color(rgba(tint(palette.border, 0x30)))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(label.to_string()),
-            )
-            .child(
-                div()
-                    .text_lg()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.text))
-                    .child(value.to_string()),
-            )
             .into_any_element()
     }
 
@@ -3210,6 +3158,10 @@ impl Render for InventoryPage {
                     })
                     .into_any_element()
             })
+            .child(key_bar(
+                &[("1 / 2 / 3 / 4", "switch tab"), ("/", "search")],
+                palette,
+            ))
     }
 }
 

@@ -146,10 +146,10 @@ impl PlaceCategory {
 
     pub fn icon(&self) -> &'static str {
         match self {
-            Self::Stay => "🛏",
-            Self::Station => "🚆",
+            Self::Stay => "⌂",
+            Self::Station => "⇄",
             Self::Airport => "✈",
-            Self::Place => "📍",
+            Self::Place => "◎",
         }
     }
 

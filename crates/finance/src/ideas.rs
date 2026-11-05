@@ -567,3 +567,102 @@ fn post_task(
         .map(|_| ())
         .map_err(|error| format!("projects /api/tasks: {error}"))
 }
+
+/// The terms research is matched on: the label, the ticker without its exchange suffix
+/// (`RHM` for `RHM.DE`, so the suffix `DE` does not match every German headline), and the
+/// keywords.
+pub fn research_terms(draft: &IdeaDraft) -> Vec<String> {
+    let symbol = draft
+        .ticker
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    std::iter::once(draft.label.clone())
+        .chain(std::iter::once(symbol))
+        .chain(draft.keywords.iter().cloned())
+        .filter(|term| !term.trim().is_empty())
+        .collect()
+}
+
+/// The most feed items one idea lists.
+pub const MAX_RESEARCH_ITEMS: usize = 8;
+
+/// Feed items whose title or summary names one of the idea's terms, newest first.
+/// `items` pairs each item with its summary, which is matched but not returned.
+pub fn match_research(
+    draft: &IdeaDraft,
+    items: &[(crate::decision::FeedEvidence, String)],
+) -> Vec<crate::decision::FeedEvidence> {
+    let terms = research_terms(draft);
+    let mut matched: Vec<_> = items
+        .iter()
+        .filter(|(item, summary)| {
+            terms.iter().any(|term| {
+                crate::decision::mentions(&item.title, term)
+                    || crate::decision::mentions(summary, term)
+            })
+        })
+        .map(|(item, _)| item.clone())
+        .collect();
+    matched.sort_by(|a, b| b.day.cmp(&a.day).then(a.id.cmp(&b.id)));
+    matched.truncate(MAX_RESEARCH_ITEMS);
+    matched
+}
+
+#[cfg(test)]
+mod research_tests {
+    use super::*;
+    use crate::decision::FeedEvidence;
+
+    fn item(id: &str, title: &str, day: &str) -> (FeedEvidence, String) {
+        (
+            FeedEvidence {
+                id: id.into(),
+                title: title.into(),
+                url: format!("https://example.org/{id}"),
+                day: day.into(),
+            },
+            String::new(),
+        )
+    }
+
+    fn idea(label: &str, ticker: &str, keywords: &[&str]) -> IdeaDraft {
+        IdeaDraft {
+            label: label.into(),
+            ticker: ticker.into(),
+            instrument: None,
+            stance: Stance::Watch,
+            thesis: String::new(),
+            keywords: keywords.iter().map(|k| (*k).into()).collect(),
+            triggers: Vec::new(),
+            status: IdeaStatus::Open,
+            close_note: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_planted_item_shows_on_its_idea_and_on_no_other() {
+        let items = vec![
+            item("a", "Synthex raises its dividend", "2026-11-02"),
+            item("b", "Markets in DE close higher", "2026-11-03"),
+            (
+                FeedEvidence {
+                    id: "c".into(),
+                    title: "Quarterly roundup".into(),
+                    url: "https://example.org/c".into(),
+                    day: "2026-11-04".into(),
+                },
+                "Volumes at SXG hit a record".into(),
+            ),
+        ];
+        let exchange = idea("Synthex", "SYX.SI", &["SXG"]);
+        let other = idea("Othercorp", "OTH.DE", &[]);
+        let matched: Vec<_> = match_research(&exchange, &items)
+            .into_iter()
+            .map(|item| item.id)
+            .collect();
+        assert_eq!(matched, ["c", "a"]);
+        assert!(match_research(&other, &items).is_empty());
+    }
+}

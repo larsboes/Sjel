@@ -450,6 +450,17 @@ pub struct FinanceIdea {
     pub notes: Vec<FinanceIdeaNote>,
     #[serde(default)]
     pub price: Option<FinanceIdeaPrice>,
+    /// Comms feed items that name the idea's label, ticker symbol or keywords, newest first.
+    #[serde(default)]
+    pub research: Vec<FinanceIdeaResearch>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaResearch {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub day: String,
 }
 
 #[cfg(test)]
@@ -470,10 +481,12 @@ mod idea_wire_tests {
             "notes":[{"text":"n","recorded_at":"2026-11-01T00:00:00Z"}],
             "price":{"instrument":"SYN","observed_on":"2026-11-04",
                 "price":{"mantissa":"206100","scale":4},"currency":"EUR","source":"yahoo",
-                "fetched_at":"2026-11-04T00:00:00Z"}}]"#;
+                "fetched_at":"2026-11-04T00:00:00Z"},
+            "research":[{"id":"r1","title":"Synthetic news","url":"https://example.org/r1","day":"2026-11-03"}]}]"#;
         let ideas: Vec<FinanceIdea> = serde_json::from_str(body).expect("parses");
         assert_eq!(ideas[0].current.triggers[0].price, "10.5");
         assert_eq!(ideas[0].history[0].draft.thesis, "t1");
         assert_eq!(ideas[0].price.as_ref().map(|p| p.price.scale), Some(4));
+        assert_eq!(ideas[0].research[0].day, "2026-11-03");
     }
 }

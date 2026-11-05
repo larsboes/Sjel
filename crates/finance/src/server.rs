@@ -43,7 +43,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "GET",
         "/api/ideas",
-        "Every investment idea, newest edit first, with history, notes and the newest price for its instrument or ticker.",
+        "Every investment idea, newest edit first, with history, notes, the newest price for its instrument or ticker, and up to 8 comms feed items of the last 90 days that name its label, ticker symbol or keywords (research).",
     ),
     r(
         "POST",
@@ -336,27 +336,46 @@ struct IdeaView {
     #[serde(flatten)]
     idea: finance::ideas::Idea,
     price: Option<finance::price::PriceObservation>,
+    research: Vec<finance::decision::FeedEvidence>,
 }
 
-fn idea_views(store: &FinanceStore, only: Option<&str>) -> Result<Vec<IdeaView>, String> {
+/// How far back research is matched against ideas.
+const RESEARCH_DAYS: u32 = 90;
+
+fn idea_views(
+    store: &FinanceStore,
+    only: Option<&str>,
+    comms_base_url: &str,
+) -> Result<Vec<IdeaView>, String> {
     let ideas = store.ideas(only).map_err(|error| error.to_string())?;
     let prices = store.latest_prices().map_err(|error| error.to_string())?;
+    let feed = if ideas.is_empty() {
+        Vec::new()
+    } else {
+        read_feed(comms_base_url, Some(RESEARCH_DAYS))
+    };
     Ok(ideas
         .into_iter()
         .map(|idea| {
             let price = finance::ideas::price_key(&idea.current)
                 .and_then(|key| prices.iter().find(|price| price.instrument == key))
                 .cloned();
-            IdeaView { idea, price }
+            let research = finance::ideas::match_research(&idea.current, &feed);
+            IdeaView {
+                idea,
+                price,
+                research,
+            }
         })
         .collect())
 }
 
 async fn list_ideas(State(state): State<AppState>) -> ApiResponse {
     let database_path = state.database_path.clone();
+    let comms_base_url = state.comms_base_url.clone();
     match tokio::task::spawn_blocking(move || {
         let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
-        idea_views(&store, None)
+        idea_views(&store, None, &comms_base_url)
     })
     .await
     {
@@ -368,9 +387,10 @@ async fn list_ideas(State(state): State<AppState>) -> ApiResponse {
 
 async fn get_idea(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
     let database_path = state.database_path.clone();
+    let comms_base_url = state.comms_base_url.clone();
     match tokio::task::spawn_blocking(move || {
         let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
-        idea_views(&store, Some(&id))
+        idea_views(&store, Some(&id), &comms_base_url)
     })
     .await
     {
@@ -2691,20 +2711,27 @@ async fn run_decisions(
 /// admits that only from a human with a rationale.
 ///
 /// It fails CLOSED: an item whose class comms does not state is dropped, not
-/// assumed public. `GET /feed` does not carry `data_class` today, so this
-/// currently drops every item and proposals are minted with no feed evidence,
-/// which the design already names as an acceptable state ("a proposal with no
-/// feed items is a proposal with no reading attached"). The one-line comms change
-/// that restores the evidence is recorded for the merge reviewer; guessing a
-/// class here is the alternative, and a guessed class is the defect.
+/// assumed public.
 fn read_feed_items(base_url: &str) -> Vec<finance::decision::FeedEvidence> {
+    read_feed(base_url, None)
+        .into_iter()
+        .map(|(item, _)| item)
+        .collect()
+}
+
+/// Quotable feed items of the last `days` (comms' default when `None`), each with its summary.
+fn read_feed(base_url: &str, days: Option<u32>) -> Vec<(finance::decision::FeedEvidence, String)> {
     if base_url.is_empty() {
         return Vec::new();
     }
     let Ok(client) = finance::price::blocking_client() else {
         return Vec::new();
     };
-    let mut request = client.get(format!("{}/feed", base_url.trim_end_matches('/')));
+    let mut url = format!("{}/feed", base_url.trim_end_matches('/'));
+    if let Some(days) = days {
+        url.push_str(&format!("?days={days}"));
+    }
+    let mut request = client.get(url);
     if let Some(header) = sjel_server::InboundAuth::from_deployment().bearer_header() {
         request = request.header("Authorization", header);
     }
@@ -2718,12 +2745,18 @@ fn read_feed_items(base_url: &str) -> Vec<finance::decision::FeedEvidence> {
         .iter()
         .filter(|item| item_is_quotable(item))
         .filter_map(|item| {
-            Some(finance::decision::FeedEvidence {
-                id: item.get("id")?.as_str()?.to_string(),
-                title: item.get("title")?.as_str()?.to_string(),
-                url: item.get("url")?.as_str()?.to_string(),
-                day: item.get("day")?.as_str()?.to_string(),
-            })
+            Some((
+                finance::decision::FeedEvidence {
+                    id: item.get("id")?.as_str()?.to_string(),
+                    title: item.get("title")?.as_str()?.to_string(),
+                    url: item.get("url")?.as_str()?.to_string(),
+                    day: item.get("day")?.as_str()?.to_string(),
+                },
+                item.get("summary")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            ))
         })
         .collect()
 }

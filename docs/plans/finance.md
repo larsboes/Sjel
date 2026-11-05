@@ -59,11 +59,12 @@ Checked live 2026-11-05: a test level produced one task, and a second run produc
 
 ### 3. Research routing
 
-`comms` feed items match an open idea on ticker, label or keywords. The matcher generalizes
-`match_feed_items` in `crates/finance/src/decision.rs`. Matches show under the idea with source,
-date and link.
-
-Done when: a planted feed item naming a keyword shows on its idea and on no other.
+Built: `GET /api/ideas` attaches up to 8 comms feed items of the last 90 days whose title or
+summary names the idea's label, ticker symbol (the part before the exchange suffix) or a
+keyword, as whole tokens (`match_research` in `crates/finance/src/ideas.rs`, the tokenizer of
+`crates/finance/src/decision.rs`). The app lists them under Research. Checked 2026-11-05: the
+90-day feed held 1,037 items (651 arXiv, 325 GitHub) and none named the three example ideas, so
+research depends on a finance source (section 4).
 
 ### 4. Mauerstrassenwetten source
 

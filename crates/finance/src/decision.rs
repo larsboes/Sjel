@@ -644,6 +644,12 @@ fn match_feed_items(inputs: &DecisionInputs<'_>, label: &str) -> Vec<FeedEvidenc
         .collect()
 }
 
+/// Whether `text` names `term` as a run of whole tokens. A term shorter than
+/// [`MIN_LABEL_LENGTH`] never matches.
+pub fn mentions(text: &str, term: &str) -> bool {
+    term.chars().count() >= MIN_LABEL_LENGTH && contains_token_run(&tokens(text), &tokens(term))
+}
+
 /// One tokenizer for both sides. Two would drift, and the drift would show up as
 /// evidence that silently stops matching.
 fn tokens(value: &str) -> Vec<String> {

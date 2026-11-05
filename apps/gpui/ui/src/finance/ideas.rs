@@ -339,6 +339,7 @@ impl FinancePage {
                 (!idea.current.ticker.is_empty()).then(|| idea.current.ticker.clone()),
                 price_text(idea),
                 gap,
+                (!idea.research.is_empty()).then(|| format!("{} research", idea.research.len())),
             ]
             .into_iter()
             .flatten()
@@ -630,6 +631,44 @@ impl FinancePage {
                     ),
             );
 
+        let research = panel()
+            .child(title("RESEARCH", palette))
+            .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                "Feed items of the last 90 days that name this idea's name, ticker or keywords.",
+            ))
+            .children(idea.research.iter().map(|item| {
+                let url = item.url.clone();
+                div()
+                    .id(SharedString::from(format!("idea-research-{}", item.id)))
+                    .flex()
+                    .gap_3()
+                    .text_sm()
+                    .cursor_pointer()
+                    .on_click(move |_, _, cx| cx.open_url(&url))
+                    .child(
+                        div()
+                            .w(px(80.))
+                            .flex_none()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(item.day.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_color(rgb(palette.accent))
+                            .child(item.title.clone()),
+                    )
+            }))
+            .when(idea.research.is_empty(), |panel| {
+                panel.child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("Nothing yet. Keywords widen the match."),
+                )
+            });
+
         // Earlier theses, each shown once, newest first.
         let mut earlier: Vec<(String, String)> = Vec::new();
         for snapshot in idea.history.iter().rev().skip(1) {
@@ -667,6 +706,7 @@ impl FinancePage {
             .child(header)
             .child(thesis)
             .child(levels)
+            .child(research)
             .child(notes)
             .child(history)
             .into_any_element()

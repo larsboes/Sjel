@@ -444,7 +444,10 @@ inside this list is by use.
 
 - **Documents.** Cursor paging instead of 7,154 rows on mount (needed by §2). Page thumbnails,
   text search in the rendered PDF, drag and drop from Finder into import.
-- **Finance.** A six-month spending and income chart. A keyboard category picker.
+- **Finance.** Built: the overview cards show the newest month instead of the
+  all-time sum, a six-month income and spending chart, and a holdings panel with each price's
+  source, age and FX rate. Open: a keyboard category picker, and paging for
+  `GET /api/import/candidates`.
 - **People.** Interaction history: notes that mention the person, with dates.
 - **Inventory.** State history and layout impact preview (from Work Package 26).
 - **Travel, Tasks, Notes & Feed UI/UX upgrades (2026-10-28).**

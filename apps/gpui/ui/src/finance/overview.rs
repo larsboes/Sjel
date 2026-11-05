@@ -10,10 +10,11 @@ use gpui_kit::{
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{format_exact_money, parse_personal_cents};
 use sjel_gpui_core::shell::{
-    self, BalanceCoverage, BalanceKind, ManualBalance, ManualBalanceUpdate, ShellError,
+    self, BalanceCoverage, BalanceKind, FinancePortfolio, FinancePosition, FinanceTrendPoint,
+    ManualBalance, ManualBalanceUpdate, ShellError,
 };
 
-use crate::primitives::{stat_card, stat_strip};
+use crate::primitives::{mono_num, stat_card, stat_strip, tone_chip};
 use crate::theme::Palette;
 
 use super::transactions::render_tx_row;
@@ -197,34 +198,38 @@ impl FinancePage {
         let monthly_burn = self.subs_derived.monthly_burn;
         let active_subs = self.subs_derived.active_count;
         let projection = self.dashboard.value.as_ref();
-        let (income, spend, curr) = match projection {
-            Some(p) => (
-                p.summary.income_cents,
-                p.summary.personal_spending_cents,
-                p.summary.currency.clone(),
-            ),
-            None => (0, 0, "EUR".to_owned()),
-        };
-
+        let curr = projection
+            .map(|p| p.summary.currency.clone())
+            .filter(|currency| !currency.is_empty())
+            .unwrap_or_else(|| "EUR".to_owned());
+        let trend = projection.map(|p| p.trend.as_slice()).unwrap_or_default();
+        // The summary covers every imported row; the cards show one month.
+        let latest = trend.last();
+        let month_label = latest
+            .map(|point| month_name(&point.month, "%b %Y"))
+            .unwrap_or_else(|| "no data".into());
+        let income = latest.map_or(0, |point| point.income_cents);
+        let spend = latest.map_or(0, |point| point.personal_spending_cents);
         let net = income - spend;
+        let portfolio = projection.and_then(|p| p.portfolio.as_ref());
 
-        let stat_cards = stat_strip(vec![
+        let mut cards = vec![
             stat_card(
-                "MONTHLY SPENDING",
+                format!("SPENDING · {month_label}"),
                 format_money(-spend, &curr),
                 Some("Personal expenses".into()),
                 palette.text,
                 palette,
             ),
             stat_card(
-                "MONTHLY INCOME",
+                format!("INCOME · {month_label}"),
                 format_money(income, &curr),
                 Some("Inflows & earnings".into()),
                 palette.text,
                 palette,
             ),
             stat_card(
-                "NET SAVINGS",
+                format!("NET · {month_label}"),
                 format_money(net, &curr),
                 Some(if net >= 0 {
                     "Positive net".into()
@@ -241,7 +246,36 @@ impl FinancePage {
                 palette.text,
                 palette,
             ),
-        ]);
+        ];
+        if let Some(portfolio) = portfolio {
+            let fresh = portfolio
+                .positions
+                .iter()
+                .filter(|position| position.price_freshness == "fresh")
+                .count();
+            let total = portfolio.positions.len();
+            cards.push(stat_card(
+                "PORTFOLIO",
+                format_exact_money(
+                    &portfolio.total.mantissa,
+                    portfolio.total.scale,
+                    &portfolio.currency,
+                )
+                .unwrap_or_else(|| "—".into()),
+                Some(format!("{fresh} of {total} prices fresh").into()),
+                if fresh == total {
+                    palette.text
+                } else {
+                    palette.amber
+                },
+                palette,
+            ));
+        }
+        let stat_cards = stat_strip(cards);
+        let trend_panel = render_trend(trend, &curr, palette);
+        let holdings_panel = portfolio
+            .map(|portfolio| render_holdings(portfolio, palette))
+            .unwrap_or_else(|| div().into_any_element());
 
         let recent_rows: Vec<AnyElement> = projection
             .map(|p| {
@@ -436,6 +470,8 @@ impl FinancePage {
             .vertical_scrollbar(&self.overview_scroll)
             .pb_6()
             .child(stat_cards)
+            .child(trend_panel)
+            .child(holdings_panel)
             .child(balance_panel)
             .child(balance_editor)
             .child(recent_preview)
@@ -618,5 +654,318 @@ impl FinancePage {
                     ),
             )
             .into_any_element()
+    }
+}
+
+const TREND_MONTHS: usize = 6;
+const TREND_BAR_HEIGHT: f32 = 96.;
+
+/// The six calendar months ending at the newest month in `trend`, oldest first.
+/// A month with no imported rows is `None`, not zero.
+fn trend_window(trend: &[FinanceTrendPoint]) -> Vec<(String, Option<&FinanceTrendPoint>)> {
+    let Some(last) = trend.last() else {
+        return Vec::new();
+    };
+    let Some((year, month)) = last
+        .month
+        .split_once('-')
+        .and_then(|(y, m)| Some((y.parse::<i32>().ok()?, m.parse::<i32>().ok()?)))
+    else {
+        return Vec::new();
+    };
+    (0..TREND_MONTHS as i32)
+        .rev()
+        .map(|back| {
+            let index = year * 12 + (month - 1) - back;
+            let key = format!(
+                "{:04}-{:02}",
+                index.div_euclid(12),
+                index.rem_euclid(12) + 1
+            );
+            let point = trend.iter().find(|point| point.month == key);
+            (key, point)
+        })
+        .collect()
+}
+
+fn month_name(month: &str, format: &str) -> String {
+    chrono::NaiveDate::parse_from_str(&format!("{month}-01"), "%Y-%m-%d")
+        .map(|date| date.format(format).to_string())
+        .unwrap_or_else(|_| month.to_owned())
+}
+
+fn panel(palette: Palette) -> gpui_kit::Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .p_4()
+        .rounded(px(8.))
+        .border_1()
+        .border_color(rgba(palette.border))
+        .bg(rgba(palette.surface))
+}
+
+fn panel_title(text: impl Into<SharedString>, palette: Palette) -> gpui_kit::Div {
+    div()
+        .text_xs()
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(rgb(palette.muted))
+        .child(text.into())
+}
+
+fn render_trend(trend: &[FinanceTrendPoint], currency: &str, palette: Palette) -> AnyElement {
+    let window = trend_window(trend);
+    if window.is_empty() {
+        return div().into_any_element();
+    }
+    let peak = window
+        .iter()
+        .filter_map(|(_, point)| *point)
+        .map(|point| point.income_cents.max(point.personal_spending_cents))
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let bar = |cents: i64, tone: u32| {
+        let height = (cents.max(0) as f32 / peak as f32 * TREND_BAR_HEIGHT).max(2.);
+        div()
+            .w(px(14.))
+            .h(px(height))
+            .rounded_t(px(3.))
+            .bg(rgb(tone))
+    };
+    let columns = window.into_iter().map(|(month, point)| {
+        let short = month_name(&month, "%b");
+        let (bars, net) = match point {
+            Some(point) => {
+                let net = point.income_cents - point.personal_spending_cents;
+                (
+                    div()
+                        .flex()
+                        .items_end()
+                        .gap_1()
+                        .h(px(TREND_BAR_HEIGHT))
+                        .child(bar(point.income_cents, palette.green))
+                        .child(bar(point.personal_spending_cents, palette.red))
+                        .into_any_element(),
+                    mono_num(
+                        format_money(net, currency),
+                        if net >= 0 { palette.green } else { palette.red },
+                    )
+                    .text_xs()
+                    .into_any_element(),
+                )
+            }
+            None => (
+                div()
+                    .h(px(TREND_BAR_HEIGHT))
+                    .flex()
+                    .items_end()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("no rows")
+                    .into_any_element(),
+                div().text_xs().child(" ").into_any_element(),
+            ),
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap_1()
+            .child(bars)
+            .child(div().text_xs().text_color(rgb(palette.muted)).child(short))
+            .child(net)
+    });
+    let legend = |text: &'static str, tone: u32| {
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .child(div().size(px(8.)).rounded(px(2.)).bg(rgb(tone)))
+            .child(text)
+    };
+    panel(palette)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(panel_title("LAST 6 MONTHS", palette))
+                .child(
+                    div()
+                        .flex()
+                        .gap_3()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(legend("Income", palette.green))
+                        .child(legend("Spending", palette.red)),
+                ),
+        )
+        .child(div().flex().items_end().gap_2().children(columns))
+        .into_any_element()
+}
+
+/// Where a position's price came from, in one line a person can act on.
+fn price_provenance(position: &FinancePosition) -> (String, bool) {
+    let source = position.market_price_source.as_deref().unwrap_or("none");
+    let date = position.market_price_observed_on.as_deref().unwrap_or("");
+    let stale = position.price_freshness != "fresh";
+    let text = match (source, &position.conversion) {
+        ("broker", _) | ("none", _) => match date {
+            "" => "No price".to_owned(),
+            date => format!("Broker price from {date} · no market quote"),
+        },
+        (source, Some(conversion)) => format!(
+            "{source} · {date} · {} @ {} ({})",
+            format_exact_money(
+                &conversion.quoted_price.mantissa,
+                conversion.quoted_price.scale,
+                &conversion.quoted_currency
+            )
+            .unwrap_or_default(),
+            decimal_text(&conversion.rate.mantissa, conversion.rate.scale),
+            conversion.rate_observed_on
+        ),
+        (source, None) => format!("{source} · {date}"),
+    };
+    let age = match position.price_age_days {
+        Some(days) if stale && days > 0 => format!(" · {days} d old"),
+        _ => String::new(),
+    };
+    (format!("{text}{age}"), stale)
+}
+
+fn decimal_text(mantissa: &str, scale: u32) -> String {
+    let scale = scale as usize;
+    let (sign, digits) = match mantissa.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", mantissa),
+    };
+    if scale == 0 {
+        return format!("{sign}{digits}");
+    }
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    format!("{sign}{whole},{}", fraction.trim_end_matches('0'))
+        .trim_end_matches(',')
+        .to_owned()
+}
+
+fn percent_bp(bp: i64) -> String {
+    format!("{}{:.1} %", if bp > 0 { "+" } else { "" }, bp as f64 / 100.)
+}
+
+fn render_holdings(portfolio: &FinancePortfolio, palette: Palette) -> AnyElement {
+    let mut positions: Vec<&FinancePosition> = portfolio.positions.iter().collect();
+    positions.sort_by_key(|position| std::cmp::Reverse(position.share_bp));
+    let rows = positions.into_iter().map(|position| {
+        let (provenance, stale) = price_provenance(position);
+        let change = position.change_since_review_bp.filter(|bp| *bp != 0);
+        div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .py_1()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(div().text_sm().child(position.label.clone()))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(if stale { palette.amber } else { palette.muted }))
+                            .child(provenance),
+                    ),
+            )
+            .child(match change {
+                Some(bp) => tone_chip(
+                    format!("{} vs last trade", percent_bp(bp)),
+                    if bp >= 0 { palette.green } else { palette.red },
+                ),
+                None => div().into_any_element(),
+            })
+            .child(
+                mono_num(
+                    percent_bp(position.share_bp).replace('+', ""),
+                    palette.muted,
+                )
+                .w(px(56.))
+                .text_xs(),
+            )
+            .child(
+                mono_num(
+                    format_exact_money(
+                        &position.value.mantissa,
+                        position.value.scale,
+                        &position.currency,
+                    )
+                    .unwrap_or_else(|| "—".into()),
+                    palette.text,
+                )
+                .w(px(110.))
+                .text_sm(),
+            )
+    });
+    panel(palette)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(panel_title("HOLDINGS", palette))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(format!("As of {}", portfolio.as_of)),
+                ),
+        )
+        .child(div().flex().flex_col().children(rows))
+        .children(portfolio.caveats.iter().map(|caveat| {
+            div()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(caveat.clone())
+        }))
+        .into_any_element()
+}
+
+#[cfg(test)]
+mod overview_tests {
+    use super::*;
+
+    fn point(month: &str) -> FinanceTrendPoint {
+        FinanceTrendPoint {
+            month: month.into(),
+            income_cents: 100,
+            personal_spending_cents: 50,
+        }
+    }
+
+    #[test]
+    fn the_trend_window_is_six_calendar_months_across_a_year_with_gaps_kept() {
+        let trend = [point("2025-09"), point("2026-01"), point("2026-02")];
+        let window = trend_window(&trend);
+        let months: Vec<_> = window.iter().map(|(month, _)| month.as_str()).collect();
+        assert_eq!(
+            months,
+            ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
+        );
+        assert!(window[1].1.is_none());
+        assert!(window[5].1.is_some());
+        assert!(trend_window(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_rate_is_written_with_its_significant_decimals() {
+        assert_eq!(decimal_text("11224", 4), "1,1224");
+        assert_eq!(decimal_text("83393", 5), "0,83393");
+        assert_eq!(decimal_text("104365", 4), "10,4365");
+        assert_eq!(decimal_text("10000", 4), "1");
     }
 }

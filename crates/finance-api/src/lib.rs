@@ -246,6 +246,63 @@ pub struct FinanceDashboardProjection {
     pub balance_snapshot: Option<ManualBalanceSnapshot>,
     #[serde(default)]
     pub tracked_net_worth: Option<TrackedNetWorth>,
+    /// One point per calendar month (`YYYY-MM`), oldest first.
+    #[serde(default)]
+    pub trend: Vec<FinanceTrendPoint>,
+    #[serde(default)]
+    pub portfolio: Option<FinancePortfolio>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceTrendPoint {
+    pub month: String,
+    #[serde(default)]
+    pub income_cents: i64,
+    #[serde(default)]
+    pub personal_spending_cents: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinancePortfolio {
+    pub as_of: String,
+    pub currency: String,
+    pub total: FinanceDecimalValue,
+    #[serde(default)]
+    pub positions: Vec<FinancePosition>,
+    #[serde(default)]
+    pub caveats: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinancePosition {
+    pub instrument: String,
+    pub label: String,
+    pub currency: String,
+    pub value: FinanceDecimalValue,
+    /// `market` or `review`.
+    pub value_basis: String,
+    #[serde(default)]
+    pub market_price_source: Option<String>,
+    #[serde(default)]
+    pub market_price_observed_on: Option<String>,
+    #[serde(default)]
+    pub price_age_days: Option<i64>,
+    /// `fresh`, `stale` or `none`.
+    pub price_freshness: String,
+    #[serde(default)]
+    pub share_bp: i64,
+    #[serde(default)]
+    pub change_since_review_bp: Option<i64>,
+    #[serde(default)]
+    pub conversion: Option<FinancePriceConversion>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinancePriceConversion {
+    pub quoted_price: FinanceDecimalValue,
+    pub quoted_currency: String,
+    pub rate: FinanceDecimalValue,
+    pub rate_observed_on: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]

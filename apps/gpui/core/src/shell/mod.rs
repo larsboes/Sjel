@@ -57,11 +57,11 @@ struct CalendarGoogleExportOptOut {
 pub use finance_api::{
     AllocateExpenseRequest, BalanceCoverage, BalanceKind, CandidateState, FinanceCandidate,
     FinanceCsvMappingProfile, FinanceCsvPreview, FinanceDashboardProjection,
-    FinanceDashboardSummary, FinanceDecimalValue, FinanceTransaction, LinkReimbursementRequest,
-    ManualBalance, ManualBalanceSnapshot, ManualBalanceUpdate, PricePointRecord,
-    ReclassifyBatchRequest, ReclassifyItem, ReconcileTransferRequest, ReviewCandidateRequest,
-    SharedExpenseSummary, StateChangeRecord, SubscriptionRecord, SubscriptionState,
-    TrackedNetWorth, TransactionKind,
+    FinanceDashboardSummary, FinanceDecimalValue, FinancePortfolio, FinancePosition,
+    FinanceTransaction, FinanceTrendPoint, LinkReimbursementRequest, ManualBalance,
+    ManualBalanceSnapshot, ManualBalanceUpdate, PricePointRecord, ReclassifyBatchRequest,
+    ReclassifyItem, ReconcileTransferRequest, ReviewCandidateRequest, SharedExpenseSummary,
+    StateChangeRecord, SubscriptionRecord, SubscriptionState, TrackedNetWorth, TransactionKind,
 };
 
 pub use entities_api::{DuplicatePair, DuplicateSide, EntityFact, EntityField, EntityRecord};

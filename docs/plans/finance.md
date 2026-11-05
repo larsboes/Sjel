@@ -42,29 +42,15 @@ price work stays in [`data.md`](data.md#5-domain-backlog) until it moves here.
 
 ### 1. Ideas ledger
 
-An idea is one thought about one instrument, held or not.
+Built: `crates/finance/src/ideas.rs` and the append-only `finance_idea_events` table. An idea
+has `label`, `ticker`, an optional held `instrument`, `stance` (`hold`, `watch`, `enter`,
+`exit`), `thesis`, `keywords`, `triggers` and `status`. Routes: `GET`/`POST /api/ideas`,
+`GET`/`PUT /api/ideas/{id}` (`PUT` appends a full snapshot), `POST /api/ideas/{id}/notes`. An open
+idea's ticker without a held instrument joins the nightly Yahoo fetch under the ticker as its
+key. Checked live 2026-11-05: the three example ideas exist, an edit kept the earlier thesis
+in `history`, and `S68.SI` got a price, with SGD added to the ECB fetch.
 
-| Field | Meaning |
-|---|---|
-| `id` | Stable id. |
-| `instrument` | An `instruments` id when held, else empty. |
-| `ticker`, `label` | The Yahoo symbol and a display name. A ticker makes the nightly fetch price it. |
-| `stance` | `hold`, `watch`, `enter`, `exit`. |
-| `thesis` | Free text: why, and what would prove it wrong. |
-| `keywords` | Extra match terms for research (for example `SGX`, `Singapore Exchange`). |
-| `triggers` | Zero or more `{direction: above\|below, price, currency}`. |
-| `status` | `open` or `closed`, with a closing note. |
-
-Changes are append-only events, like `finance_decision_events`, so the history of a thesis
-survives edits. Routes: `GET /api/ideas`, `POST /api/ideas`, `PATCH /api/ideas/{id}`,
-`POST /api/ideas/{id}/notes`.
-
-Examples the first version must hold: exit levels for the Rheinmetall position, a re-entry
-level for Rocket Lab, and a `watch` idea for a non-cyclical exchange operator (`S68.SI`,
-Singapore Exchange, in SGD).
-
-Done when: the three examples are created through the API and in the app, an edit keeps the old
-thesis in the event history, and a ticker on a not-held idea gets a nightly price.
+Open: the ideas in the app (section 6).
 
 ### 2. Triggers
 

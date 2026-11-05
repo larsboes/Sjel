@@ -354,6 +354,17 @@ impl FinanceStore {
             );
             CREATE INDEX IF NOT EXISTS idx_{prefix}_decision_events_decision
                 ON {prefix}_decision_events(decision_id, recorded_at);
+
+            -- Investment ideas, append-only: a snapshot per create or edit, a note per note.
+            CREATE TABLE IF NOT EXISTS {prefix}_idea_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('snapshot','note')),
+                body_json TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_idea_events_idea
+                ON {prefix}_idea_events(idea_id, id);
             "
         ))?;
         rebuild_decision_events_check(conn, prefix)?;
@@ -1008,6 +1019,71 @@ impl FinanceStore {
             ],
         )?;
         Ok(changed == 1)
+    }
+
+    /// Appends one idea event. A snapshot body is the validated draft; a note body is
+    /// `{"text": ...}`.
+    pub fn append_idea_event(
+        &self,
+        idea_id: &str,
+        event: &crate::ideas::IdeaEvent,
+        recorded_at: &str,
+    ) -> Fallible<()> {
+        let prefix = &self.prefix;
+        let (kind, body) = match event {
+            crate::ideas::IdeaEvent::Snapshot(draft) => ("snapshot", serde_json::to_string(draft)?),
+            crate::ideas::IdeaEvent::Note(text) => {
+                ("note", serde_json::json!({ "text": text }).to_string())
+            }
+        };
+        self.conn()?.execute(
+            &format!(
+                "INSERT INTO {prefix}_idea_events (idea_id, kind, body_json, recorded_at)
+                 VALUES (?1,?2,?3,?4)"
+            ),
+            params![idea_id, kind, body, recorded_at],
+        )?;
+        Ok(())
+    }
+
+    /// Every idea folded from its events, newest edit first. `only` limits it to one id.
+    pub fn ideas(&self, only: Option<&str>) -> Fallible<Vec<crate::ideas::Idea>> {
+        use crate::ideas::{fold, IdeaEvent};
+        let prefix = &self.prefix;
+        let conn = self.conn()?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT idea_id, kind, body_json, recorded_at FROM {prefix}_idea_events
+             WHERE ?1 IS NULL OR idea_id = ?1 ORDER BY idea_id, id"
+        ))?;
+        let rows = statement
+            .query_map(params![only], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut grouped: Vec<(String, Vec<(IdeaEvent, String)>)> = Vec::new();
+        for (idea_id, kind, body, recorded_at) in rows {
+            let event = if kind == "snapshot" {
+                IdeaEvent::Snapshot(serde_json::from_str(&body)?)
+            } else {
+                let value: serde_json::Value = serde_json::from_str(&body)?;
+                IdeaEvent::Note(value["text"].as_str().unwrap_or_default().to_string())
+            };
+            match grouped.last_mut() {
+                Some((id, events)) if *id == idea_id => events.push((event, recorded_at)),
+                _ => grouped.push((idea_id, vec![(event, recorded_at)])),
+            }
+        }
+        let mut ideas: Vec<_> = grouped
+            .iter()
+            .filter_map(|(id, events)| fold(id, events))
+            .collect();
+        ideas.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.id.cmp(&b.id)));
+        Ok(ideas)
     }
 
     /// Every attempt, successful or not.

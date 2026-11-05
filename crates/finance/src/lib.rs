@@ -16,6 +16,7 @@ pub mod balance;
 pub mod clock;
 pub mod config;
 pub mod decision;
+pub mod ideas;
 pub mod import;
 pub mod investment;
 pub mod journal;

@@ -878,6 +878,26 @@ pub fn run_named(
         .ok_or("no reviewed holdings snapshot is in the projection; import one first")?;
     let broker_prices = broker_prices_from_snapshot(&snapshot);
     let subscriptions = store.list().map_err(|error| error.to_string())?;
+    // An open idea's ticker is priced like an instrument, under the ticker as its key.
+    let mut instruments = config.instruments.clone();
+    for idea in store.ideas(None).map_err(|error| error.to_string())? {
+        let draft = idea.current;
+        let known = instruments.iter().any(|profile| {
+            profile.instrument == draft.ticker || profile.ticker.as_deref() == Some(&draft.ticker)
+        });
+        if draft.status == crate::ideas::IdeaStatus::Open
+            && draft.instrument.is_none()
+            && !draft.ticker.is_empty()
+            && !known
+        {
+            instruments.push(crate::config::InstrumentProfile {
+                instrument: draft.ticker.clone(),
+                label: draft.label,
+                asset_class: "watch".into(),
+                ticker: Some(draft.ticker),
+            });
+        }
+    }
     let mut runs = Vec::new();
     for name in names {
         // Built here, once per named provider, and never on an async runtime: a
@@ -910,7 +930,7 @@ pub fn run_named(
             &subscriptions,
         );
         let context = FetchContext {
-            instruments: &config.instruments,
+            instruments: &instruments,
             broker_prices: &broker_prices,
             quote_currencies: &quote_currencies,
             as_of,

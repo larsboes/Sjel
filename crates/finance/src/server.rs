@@ -42,6 +42,27 @@ const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/routes", "This manifest."),
     r(
         "GET",
+        "/api/ideas",
+        "Every investment idea, newest edit first, with history, notes and the newest price for its instrument or ticker.",
+    ),
+    r(
+        "POST",
+        "/api/ideas",
+        "Create an idea. Body: label, stance (hold|watch|enter|exit), optional ticker, instrument, thesis, keywords, triggers [{direction: above|below, price: \"1200.50\", currency}]. Response: id.",
+    ),
+    r("GET", "/api/ideas/{id}", "One idea with its history and notes."),
+    r(
+        "PUT",
+        "/api/ideas/{id}",
+        "Replace an idea with a new snapshot; the old one stays in its history. Body: as for POST /api/ideas, plus optional status (open|closed) and close_note.",
+    ),
+    r(
+        "POST",
+        "/api/ideas/{id}/notes",
+        "Append a note to an idea. Body: text.",
+    ),
+    r(
+        "GET",
         "/api/links",
         "Transactions that reference a typed id. Required: to=<id>, such as to=trip:plan:… (website/content/capabilities/links.md).",
     ),
@@ -308,6 +329,182 @@ fn failed(error: String) -> ApiResponse {
         StatusCode::INTERNAL_SERVER_ERROR,
         json!({ "ok": false, "capability": "finance", "error": error }),
     )
+}
+
+#[derive(Debug, Serialize)]
+struct IdeaView {
+    #[serde(flatten)]
+    idea: finance::ideas::Idea,
+    price: Option<finance::price::PriceObservation>,
+}
+
+fn idea_views(store: &FinanceStore, only: Option<&str>) -> Result<Vec<IdeaView>, String> {
+    let ideas = store.ideas(only).map_err(|error| error.to_string())?;
+    let prices = store.latest_prices().map_err(|error| error.to_string())?;
+    Ok(ideas
+        .into_iter()
+        .map(|idea| {
+            let price = finance::ideas::price_key(&idea.current)
+                .and_then(|key| prices.iter().find(|price| price.instrument == key))
+                .cloned();
+            IdeaView { idea, price }
+        })
+        .collect())
+}
+
+async fn list_ideas(State(state): State<AppState>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+        idea_views(&store, None)
+    })
+    .await
+    {
+        Ok(Ok(views)) => response(StatusCode::OK, views),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+async fn get_idea(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+        idea_views(&store, Some(&id))
+    })
+    .await
+    {
+        Ok(Ok(mut views)) if !views.is_empty() => response(StatusCode::OK, views.remove(0)),
+        Ok(Ok(_)) => response(
+            StatusCode::NOT_FOUND,
+            json!({ "error": "no idea with this id" }),
+        ),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+/// Appends a snapshot. `id` is `None` to create a new idea, `Some` to replace one that exists.
+async fn write_idea(
+    state: AppState,
+    id: Option<String>,
+    draft: finance::ideas::IdeaDraft,
+) -> ApiResponse {
+    let draft = match finance::ideas::validate(draft) {
+        Ok(draft) => draft,
+        Err(error) => return response(StatusCode::BAD_REQUEST, json!({ "error": error })),
+    };
+    let database_path = state.database_path.clone();
+    let creating = id.is_none();
+    match tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
+        let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+        let id = match id {
+            Some(id) => {
+                if store
+                    .ideas(Some(&id))
+                    .map_err(|e| e.to_string())?
+                    .is_empty()
+                {
+                    return Ok(None);
+                }
+                id
+            }
+            None => format!(
+                "idea-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |duration| duration.as_nanos())
+            ),
+        };
+        store
+            .append_idea_event(
+                &id,
+                &finance::ideas::IdeaEvent::Snapshot(draft),
+                &now_timestamp(),
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(Some(id))
+    })
+    .await
+    {
+        Ok(Ok(Some(id))) => response(
+            if creating {
+                StatusCode::CREATED
+            } else {
+                StatusCode::OK
+            },
+            json!({ "ok": true, "id": id }),
+        ),
+        Ok(Ok(None)) => response(
+            StatusCode::NOT_FOUND,
+            json!({ "error": "no idea with this id" }),
+        ),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+async fn create_idea(
+    State(state): State<AppState>,
+    Json(draft): Json<finance::ideas::IdeaDraft>,
+) -> ApiResponse {
+    write_idea(state, None, draft).await
+}
+
+async fn replace_idea(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(draft): Json<finance::ideas::IdeaDraft>,
+) -> ApiResponse {
+    write_idea(state, Some(id), draft).await
+}
+
+#[derive(Debug, Deserialize)]
+struct IdeaNoteBody {
+    text: String,
+}
+
+async fn add_idea_note(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<IdeaNoteBody>,
+) -> ApiResponse {
+    let text = body.text.trim().to_string();
+    if text.is_empty() {
+        return response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "text must not be empty" }),
+        );
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || -> Result<bool, String> {
+        let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+        if store
+            .ideas(Some(&id))
+            .map_err(|e| e.to_string())?
+            .is_empty()
+        {
+            return Ok(false);
+        }
+        store
+            .append_idea_event(
+                &id,
+                &finance::ideas::IdeaEvent::Note(text),
+                &now_timestamp(),
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(true)
+    })
+    .await
+    {
+        Ok(Ok(true)) => response(StatusCode::CREATED, json!({ "ok": true })),
+        Ok(Ok(false)) => response(
+            StatusCode::NOT_FOUND,
+            json!({ "error": "no idea with this id" }),
+        ),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
 }
 
 /// No notes source or no overlay is a 409 rather than a 500: nothing is broken, the
@@ -2719,6 +2916,9 @@ fn build_router(state: AppState) -> Router {
         .route("/api/decisions/run", post(run_decisions))
         .route("/api/decisions/{id}/verdict", post(record_verdict))
         .route("/api/trips/{id}/spending", get(trip_spending))
+        .route("/api/ideas", get(list_ideas).post(create_idea))
+        .route("/api/ideas/{id}", get(get_idea).put(replace_idea))
+        .route("/api/ideas/{id}/notes", post(add_idea_note))
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,

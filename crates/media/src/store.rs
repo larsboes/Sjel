@@ -59,75 +59,7 @@ pub struct Location {
     pub mtime_ns: i64,
 }
 
-/// One mounted volume as the ledger knows it: what it is called, how many of its paths are
-/// indexed, how many bytes those are, and when a verb last saw it.
-#[derive(Debug, Serialize)]
-pub struct VolumeRow {
-    pub uuid: String,
-    pub label: String,
-    pub locations: i64,
-    pub bytes: i64,
-    pub last_seen: String,
-}
-
-/// One ingest run's counts. `finished` is null while a run is still going.
-#[derive(Debug, Serialize)]
-pub struct IngestRow {
-    pub id: i64,
-    pub source: String,
-    pub staging: String,
-    pub started: String,
-    pub finished: Option<String>,
-    pub considered: i64,
-    pub imported: i64,
-    pub duplicates: i64,
-    pub refused: i64,
-    pub failed: i64,
-    pub resumed: i64,
-    pub verified: i64,
-}
-
-/// One path's disposition inside a run. These are the rows the counts above are made of; a
-/// refusal names the path and the reason, which the counts alone cannot.
-#[derive(Debug, Serialize)]
-pub struct ItemRow {
-    pub relpath: String,
-    pub digest: Option<String>,
-    pub size: Option<i64>,
-    pub disposition: String,
-    pub reason: String,
-    pub imported_relpath: Option<String>,
-    pub verified: bool,
-}
-
-/// One digest's perceptual hash in the advisory perceptual layer (`F4`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PhashRow {
-    pub digest: String,
-    pub phash: String,
-    pub algorithm: String,
-    pub computed_at: String,
-}
-
-/// One operator review decision over a pair of distinct digests (`F4`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ReviewRow {
-    pub left_digest: String,
-    pub right_digest: String,
-    pub decision: String,
-    pub note: String,
-    pub decided_at: String,
-}
-
-/// One digest's embedded GPS coordinates and capture day (PRD N4: index and link, never copy).
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct GeotagRow {
-    pub digest: String,
-    pub latitude: f64,
-    pub longitude: f64,
-    pub captured_at: Option<String>,
-    pub indexed_at: String,
-}
+pub use media_api::{GeotagRow, IngestRow, ItemRow, PhashRow, ReviewRow, VolumeRow};
 
 impl Ledger {
     pub fn open(path: &Path) -> Result<Self> {

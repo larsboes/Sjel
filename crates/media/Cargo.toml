@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum.workspace = true
+media-api = { path = "../media-api" }
 route-manifest = { path = "../route-manifest" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }

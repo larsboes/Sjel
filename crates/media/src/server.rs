@@ -21,9 +21,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use media::store::Ledger;
-
-/// The port the dev proxy and the health poll reach. Overridden by `SJEL_PORT`.
-pub const DEFAULT_PORT: u16 = 8102;
+pub use media_api::DEFAULT_MEDIA_PORT as DEFAULT_PORT;
 
 /// How many runs `GET /api/ingests` reports. One page of history, not the whole table: a run is
 /// one row per file, and a panel wants the last few, not the archive.
@@ -31,31 +29,31 @@ const RECENT_RUNS: i64 = 20;
 
 /// The manifest served at `GET /routes`.
 pub const ROUTES: &[route_manifest::Route] = &[
-    route_manifest::get("GET", "/health", "Liveness."),
-    route_manifest::get("GET", "/routes", "This manifest."),
+    route_manifest::get("GET", media_api::ROUTE_MEDIA_HEALTH, "Liveness."),
+    route_manifest::get("GET", media_api::ROUTE_MEDIA_ROUTES, "This manifest."),
     route_manifest::get(
         "GET",
-        "/api/status",
+        media_api::ROUTE_MEDIA_STATUS,
         "Index totals and every volume the ledger holds, with its indexed path and byte counts.",
     ),
     route_manifest::get(
         "GET",
-        "/api/ingests",
+        media_api::ROUTE_MEDIA_INGESTS,
         "The 20 most recent ingest runs, newest first, with each run's disposition counts.",
     ),
     route_manifest::get(
         "GET",
-        "/api/ingests/{id}",
+        media_api::ROUTE_MEDIA_INGEST_BY_ID,
         "One ingest run and the disposition of every path it considered.",
     ),
     route_manifest::get(
         "GET",
-        "/api/perceptual",
+        media_api::ROUTE_MEDIA_PERCEPTUAL,
         "Advisory perceptual near-duplicate candidates from media_phashes and their operator review decisions from media_reviews.",
     ),
     route_manifest::get(
         "GET",
-        "/api/geotags",
+        media_api::ROUTE_MEDIA_GEOTAGS,
         "Indexed EXIF geotags with latitude, longitude, and capture dates from media_geotags.",
     ),
 ];
@@ -174,13 +172,13 @@ async fn geotags(State(ledger): State<Arc<Ledger>>) -> Result<Json<Value>, ApiEr
 
 fn router(ledger: Arc<Ledger>) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/routes", get(routes))
-        .route("/api/status", get(status))
-        .route("/api/ingests", get(ingests))
-        .route("/api/ingests/{id}", get(ingest))
-        .route("/api/perceptual", get(perceptual))
-        .route("/api/geotags", get(geotags))
+        .route(media_api::ROUTE_MEDIA_HEALTH, get(health))
+        .route(media_api::ROUTE_MEDIA_ROUTES, get(routes))
+        .route(media_api::ROUTE_MEDIA_STATUS, get(status))
+        .route(media_api::ROUTE_MEDIA_INGESTS, get(ingests))
+        .route(media_api::ROUTE_MEDIA_INGEST_BY_ID, get(ingest))
+        .route(media_api::ROUTE_MEDIA_PERCEPTUAL, get(perceptual))
+        .route(media_api::ROUTE_MEDIA_GEOTAGS, get(geotags))
         .layer(middleware::from_fn_with_state(
             "media",
             sjel_server::origin::refuse_foreign_origins,

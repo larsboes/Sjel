@@ -1,5 +1,7 @@
 //! An exact-byte ingest gate. The shared store owns the database file; this crate owns media_ tables.
 
+pub use media_api::*;
+
 pub mod duplicates;
 pub mod ingest;
 pub mod mirror;

@@ -354,6 +354,10 @@
       }
     },
     {
+      "name": "media-api",
+      "kind": "lib"
+    },
+    {
       "name": "operator-profile",
       "kind": "capability",
       "service": {
@@ -1772,6 +1776,16 @@
     {
       "from": "media",
       "to": "civil-date",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/media/Cargo.toml"
+      ]
+    },
+    {
+      "from": "media",
+      "to": "media-api",
       "kinds": [
         "cargo-dep"
       ],

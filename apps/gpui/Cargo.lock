@@ -4443,6 +4443,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-api"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7194,6 +7203,7 @@ dependencies = [
  "interior-api",
  "inventory-api",
  "libsql",
+ "media-api",
  "projects-api",
  "qrcode",
  "reqwest 0.13.5",

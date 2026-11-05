@@ -227,6 +227,9 @@ their open edits.
    Done for `setup`: `crates/setup-api` (`setup-api`) extracts pure wire models,
    probe marks, setup probes, steps, plans, verification and apply envelopes, LAN status,
    and route constants shared with `sjel-status`, `sjel-cli`, and `sjel-gpui-core`.
+   Done for `media`: `crates/media-api` (`media-api`) extracts pure wire models,
+   volume rows, ledger statuses, ingest runs and items, perceptual hashes and reviews,
+   geotags, and route constants shared with `sjel-media` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

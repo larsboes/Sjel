@@ -17,47 +17,11 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::process::Command;
 
-use serde::Serialize;
+pub use media_api::{
+    NearDuplicateCandidate, PerceptualReport, PhashIndexReport, ADVISORY_NOTE, DEFAULT_MAX_DISTANCE,
+};
 
 use crate::store::{Ledger, Result, ReviewRow};
-
-pub const DEFAULT_MAX_DISTANCE: u32 = 10;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PhashIndexReport {
-    pub uuid: String,
-    pub considered: usize,
-    pub computed: usize,
-    pub skipped_non_image: usize,
-    pub failed: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct NearDuplicateCandidate {
-    pub left_digest: String,
-    pub right_digest: String,
-    pub left_phash: String,
-    pub right_phash: String,
-    pub hamming_distance: u32,
-    pub left_locations: Vec<String>,
-    pub right_locations: Vec<String>,
-    pub review: Option<ReviewRow>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PerceptualReport {
-    pub phashes: usize,
-    pub max_distance: u32,
-    pub candidates: Vec<NearDuplicateCandidate>,
-    pub reviewed_count: usize,
-    pub unreviewed_count: usize,
-    pub reviews: Vec<ReviewRow>,
-    pub advisory_note: &'static str,
-}
-
-pub const ADVISORY_NOTE: &str =
-    "Advisory only: perceptual near-duplicates have different bytes and are never passed to \
-     `supersede` or `reclaim` automatically. Every pair requires explicit operator review.";
 
 /// Compute a 64-bit horizontal gradient hash (`dhash64`) from a 9-column by
 /// 8-row luminance grid (`72` bytes in row-major order).

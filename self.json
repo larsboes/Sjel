@@ -392,6 +392,10 @@
       }
     },
     {
+      "name": "places-api",
+      "kind": "lib"
+    },
+    {
       "name": "presentations",
       "kind": "pack"
     },
@@ -1896,6 +1900,16 @@
     {
       "from": "places",
       "to": "links",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/places/Cargo.toml"
+      ]
+    },
+    {
+      "from": "places",
+      "to": "places-api",
       "kinds": [
         "cargo-dep"
       ],

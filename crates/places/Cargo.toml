@@ -29,6 +29,7 @@ sjel-store = { path = "../sjel-store" }
 # A lib rather than a dependency on finance: a capability does not link another
 # capability's crate, and the shape belongs to neither of them alone.
 candidate-fingerprint = { path = "../candidate-fingerprint" }
+places-api = { path = "../places-api" }
 route-manifest = { path = "../route-manifest" }
 # The typed-id minter, shared so a place id is `place:<hex>` like every other (website/content/capabilities/links.md).
 sjel-links = { path = "../links" }

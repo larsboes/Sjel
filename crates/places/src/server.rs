@@ -431,29 +431,7 @@ async fn list_places(
     }
 }
 
-#[derive(Debug, Deserialize, serde::Serialize, schemars::JsonSchema)]
-pub struct CreatePlaceRequest {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub query: Option<String>,
-    #[serde(default)]
-    pub link: Option<String>,
-    #[serde(default)]
-    pub note: Option<String>,
-    #[serde(default)]
-    pub address: Option<String>,
-    #[serde(default)]
-    pub city: Option<String>,
-    #[serde(default)]
-    pub country_code: Option<String>,
-    #[serde(default)]
-    pub kind: Option<String>,
-    #[serde(default)]
-    pub latitude: Option<f64>,
-    #[serde(default)]
-    pub longitude: Option<f64>,
-}
+pub use places_api::CreatePlaceRequest;
 
 async fn create_place(
     State(state): State<AppState>,

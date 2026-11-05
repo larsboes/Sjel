@@ -5,6 +5,8 @@
 //! `transit.*` and `punctuality.*` are read-only SELECTs, the correlation-join
 //! usage `capabilities/store/README.md` chose one database for.
 
+pub use places_api::*;
+
 pub mod backfill;
 pub mod climate;
 pub mod config;

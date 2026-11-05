@@ -341,6 +341,8 @@ impl Mirror {
                     address: row.get(5).ok(),
                     latitude: row.get(6).ok(),
                     longitude: row.get(7).ok(),
+                    source: String::new(),
+                    external_ref: None,
                 });
             }
 

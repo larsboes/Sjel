@@ -12,7 +12,6 @@
 //!   there is nowhere to put a person, an amount or a date.
 
 use crate::store::{stable_id, Place, PlacesStore};
-use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
@@ -36,13 +35,7 @@ pub fn nominatim_url() -> String {
         .unwrap_or_else(|| NOMINATIM_URL.to_string())
 }
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
-pub struct StructuredQuery {
-    pub street: Option<String>,
-    pub postalcode: Option<String>,
-    pub city: Option<String>,
-    pub country: Option<String>,
-}
+pub use places_api::StructuredQuery;
 
 /// What can be asked. Place text or a bare coordinate pair, by construction —
 /// the two shapes README D3 permits on the wire.

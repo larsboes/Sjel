@@ -10,7 +10,6 @@
 use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde::{Deserialize, Serialize};
 use sjel_store::QueryAll;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
@@ -22,53 +21,7 @@ pub struct PlacesStore {
     prefix: String,
 }
 
-/// A registry row. `external_ref` holds a stable foreign identity such as an
-/// EVA code (`eva:8000207`) or an OSM id (`osm:node/123`), which is what makes
-/// every backfill idempotent: the same source identity is the same place.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Place {
-    pub id: String,
-    pub name: String,
-    pub kind: String,
-    pub address: Option<String>,
-    pub city: Option<String>,
-    pub country_code: Option<String>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-    pub source: String,
-    pub external_ref: Option<String>,
-}
-
-/// One recorded visit: the operator was here, then, and rated it so.
-///
-/// Distinct from `Place`, which describes somewhere that exists. Nothing here is
-/// a property of the place -- two people disagree about the same restaurant, and a
-/// registry that held one rating would be wrong for one of them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PlaceVisit {
-    pub id: String,
-    pub place_id: String,
-    /// The export's own timestamp. Its date is what a planner asks about.
-    pub visited_on: Option<String>,
-    pub rating: Option<i64>,
-    pub source: String,
-    pub external_ref: Option<String>,
-}
-
-/// A visit joined to the place it happened at, which is the only shape a reader
-/// wants: a rating with no name is a number.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PlaceVisitRow {
-    pub place_id: String,
-    pub place_name: String,
-    pub city: Option<String>,
-    pub country_code: Option<String>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-    pub visited_on: Option<String>,
-    pub rating: Option<i64>,
-    pub source: String,
-}
+pub use places_api::{Place, PlaceVisit, PlaceVisitRow};
 
 #[derive(Debug, Clone)]
 pub struct CacheEntry {

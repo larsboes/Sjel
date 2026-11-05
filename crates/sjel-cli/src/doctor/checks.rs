@@ -1228,7 +1228,7 @@ fn db_path(ctx: &Ctx) -> (String, &'static str, bool) {
     if env.is_empty() {
         (
             overlay_dir(ctx)
-                .join("data/axon/axon.db")
+                .join("data/sjel/sjel.db")
                 .display()
                 .to_string(),
             "overlay default",

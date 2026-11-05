@@ -11,7 +11,7 @@
 # probe_timeout_ms (tools/doctor --online reachability; it never prints a URL).
 # Single-line TOML only (tools/lib/toml.sh).
 
-[axon]
+[sjel]
 url   = "local"
 kind  = "project"
 local = "yes"

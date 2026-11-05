@@ -73,7 +73,7 @@ pulls declared channels and recreates running containers when the digest changes
 containers remain stopped.
 
 [`tools/backup.sh`](../../../tools/backup.sh) records the running container's digest as `image_digest`
-in the archive's `axon-backup.toml`, falling back to its local image ID if no repository digest is
+in the archive's `sjel-backup.toml`, falling back to its local image ID if no repository digest is
 available. [`tools/restore.sh`](../../../tools/restore.sh) prints that historical identity. It does not
 reject a restore solely because today's digest differs: rolling channels are expected to move.
 Compare the identities when assessing compatibility. An older archive or a backup with no

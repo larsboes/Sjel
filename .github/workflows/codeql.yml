@@ -31,9 +31,7 @@ name: CodeQL
 #
 # On Rust: every language here runs `build-mode: none`, which extracts from source instead of
 # observing a build — no build system is invoked, so none can fail to be invoked. The extractor
-# discovers the root Cargo workspace and its member manifests recursively. (#13 originally
-# raised this against the Bazel build, retired 2026-08-25 by PRD Q44; the answer predated and
-# outlived it.)
+# discovers the root Cargo workspace and its member manifests recursively.
 #
 # What the first run actually measured, because "the job is green" is not the same claim:
 #

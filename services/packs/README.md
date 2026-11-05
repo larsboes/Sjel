@@ -3,7 +3,7 @@
 
 What Sjel has deployed into each agent harness on this machine, and the proof that it did.
 
-This capability owns the deployment ledgers under `~/.local/state/axon/pack-deployments/`
+This capability owns the deployment ledgers under `~/.local/state/sjel/pack-deployments/`
 — one JSON file per harness, each recording every deployed unit, the Pack source it came
 from, and the digest that was installed. It owns nothing else. The deployers stay in
 `tools/`, where operator machinery belongs (`CONTRIBUTING.md#three-architectural-nouns`).

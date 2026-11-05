@@ -6,12 +6,12 @@ A shared library, not a capability: no domain of its own, no CLI (CONTRIBUTING.m
 
 ## Why this exists
 
-PRD Q45 retired Postgres in favor of SQLite (`axon.db`) with `rusqlite`. While SQLite's WAL mode provided single-file simplicity and zero container overhead, its single-writer limitation (`SQLITE_BUSY` when multiple agents and UI threads interact) and lack of native embedded vector indexing created a ceiling.
+PRD Q45 retired Postgres in favor of SQLite (`sjel.db`) with `rusqlite`. While SQLite's WAL mode provided single-file simplicity and zero container overhead, its single-writer limitation (`SQLITE_BUSY` when multiple agents and UI threads interact) and lack of native embedded vector indexing created a ceiling.
 
 `sjel-turso` brings LibSQL (Turso's open-source SQLite engine) into Sjel:
 1. **Concurrent writers**: `tests/multi_writer_concurrency.rs` covers concurrent inserts. Contention on the shared file in production is not measured.
 2. **Async core**: Native Tokio asynchronous I/O matching Axum capability servers and GPUI background task loops.
-3. **Byte-level compatibility**: Directly opens existing SQLite `.db` files (`axon.db`) without dump/reload.
+3. **Byte-level compatibility**: Directly opens existing SQLite `.db` files (`sjel.db`) without dump/reload.
 
 ## Connection Lifecycle
 

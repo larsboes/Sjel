@@ -588,7 +588,7 @@ mod tests {
         let missing = std::env::temp_dir().join("sjel-calendar-does-not-exist.env");
         let error = read_env_key(&missing, "GOOGLE_CLIENT_ID").unwrap_err();
         assert!(
-            error.contains("axon-calendar-does-not-exist.env"),
+            error.contains("sjel-calendar-does-not-exist.env"),
             "{error}"
         );
         assert!(error.contains("GOOGLE_REFRESH_TOKEN"), "{error}");

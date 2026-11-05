@@ -806,7 +806,7 @@ fn cloud_derivatives_ddl(table: &str) -> String {
 /// One-time translation of the three-class vocabulary into C0-C3 (Q27, Q72).
 ///
 /// The doctrine above holds only while no deployed file predates a constraint
-/// change. `axon.db` does: it holds triage, feed and derivative rows written
+/// change. `sjel.db` does: it holds triage, feed and derivative rows written
 /// under `CHECK (data_class IN (...))` with the old vocabulary, and
 /// `CREATE TABLE IF NOT EXISTS` never revisits an installed table. So this is
 /// the table-rebuild dance SQLite's own documentation prescribes, run once,

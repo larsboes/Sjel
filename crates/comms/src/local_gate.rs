@@ -61,7 +61,7 @@ use crate::summarize::{Admission, LocalGate};
 /// The high half of every key this module takes. It named an advisory-lock
 /// namespace; it now names the lock file, so a stray file beside the database is
 /// still recognisable as this subsystem's rather than anyone else's.
-const LOCAL_INFERENCE_NAMESPACE: i64 = 0x41_58_4F_4E; // "AXON"
+const LOCAL_INFERENCE_NAMESPACE: i64 = 0x53_4A_45_4C; // "SJEL"
 
 /// Which lock a backend takes. Any two processes must derive the same number
 /// from the same backend name or they do not contend, and the whole point is
@@ -71,7 +71,7 @@ const LOCAL_INFERENCE_NAMESPACE: i64 = 0x41_58_4F_4E; // "AXON"
 ///
 /// FNV-1a, 32-bit. The low half identifies the backend, the high half is the
 /// namespace above, so the whole key stays positive and readable as
-/// `AXON:<backend hash>`.
+/// `SJEL:<backend hash>`.
 pub(crate) fn lock_key(backend_name: &str) -> i64 {
     let mut hash: u32 = 0x811c_9dc5;
     for byte in backend_name.as_bytes() {
@@ -96,7 +96,7 @@ const WAIT_TIMEOUT: Duration = Duration::from_secs(90);
 /// stable across builds, which is the property that makes two processes contend.
 pub(crate) fn lock_path(database_path: &Path, backend_name: &str) -> PathBuf {
     let directory = database_path.parent().unwrap_or(Path::new("."));
-    directory.join(format!("axon-local-{:x}.lock", lock_key(backend_name)))
+    directory.join(format!("sjel-local-{:x}.lock", lock_key(backend_name)))
 }
 
 /// One SQLite write lock, held for the duration of a local request to one
@@ -214,10 +214,10 @@ mod tests {
     /// database and clear of whatever else writes there.
     /// Pinned to its derivation rather than to a copy of itself.
     #[test]
-    fn every_key_sits_in_the_axon_namespace() {
+    fn every_key_sits_in_the_sjel_namespace() {
         assert_eq!(
             LOCAL_INFERENCE_NAMESPACE,
-            i64::from(u32::from_be_bytes(*b"AXON")),
+            i64::from(u32::from_be_bytes(*b"SJEL")),
             "the namespace must stay byte-identical across every process"
         );
         for backend in ["omlx", "foundation-models", "ollama", ""] {
@@ -278,8 +278,8 @@ mod tests {
         // Pinned literals: a refactor of the hash that changes these silently
         // splits a running process from a restarted one, and both would report
         // healthy while sharing no lock at all.
-        assert_eq!(lock_key("omlx"), 0x41_58_4F_4E_EA_68_17_05);
-        assert_eq!(lock_key("foundation-models"), 0x41_58_4F_4E_54_17_33_81);
+        assert_eq!(lock_key("omlx"), 0x53_4A_45_4C_EA_68_17_05);
+        assert_eq!(lock_key("foundation-models"), 0x53_4A_45_4C_54_17_33_81);
     }
 
     /// Everything above this line is arithmetic and drop semantics, and runs

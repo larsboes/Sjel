@@ -52,10 +52,11 @@ use std::path::{Path, PathBuf};
 
 use crate::{check_pattern, frontmatter_spanned, MarkdownRoot, RegionSpec, RootError};
 
-/// The header's opening token. Matched to decide whether a file at a projection's
-/// path is one of ours, so it is stable forever: changing it makes every projection
-/// already in the vault look foreign and the next export refuse all of them.
-const HEADER: &str = "<!-- axon:projection";
+/// The header's opening marker. Matched to decide whether a file at a projection's
+/// path is one of ours, so both spellings stay matched forever: a projection written
+/// before the rename must not look foreign to the next export.
+const HEADER: &str = "<!-- sjel:projection";
+const LEGACY_HEADER: &str = "<!-- axon:projection";
 
 /// What a write did, or refused to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,7 +89,10 @@ pub enum ProjectionOutcome {
 /// projection because it recognised *a* header. The owner is already written into the
 /// header, so it is read back out rather than tracked somewhere new.
 fn declared_owner(document: &str) -> Option<&str> {
-    let after = document.split_once(HEADER)?.1;
+    let after = document
+        .split_once(HEADER)
+        .or_else(|| document.split_once(LEGACY_HEADER))?
+        .1;
     let after = after.trim_start();
     let value = after.strip_prefix("owner=")?;
     let end = value
@@ -431,7 +435,7 @@ mod tests {
         );
         assert_eq!(declared_owner("# a human note\n"), None);
         assert_eq!(
-            declared_owner("<!-- axon:projection v=1 -->\n"),
+            declared_owner("<!-- sjel:projection v=1 -->\n"),
             None,
             "a header that names no owner claims nothing"
         );

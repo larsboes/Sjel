@@ -53,9 +53,8 @@ fi
 #
 # The prune list is derived trees, not an allow-list of our directories: node_modules and .git
 # are not this repository, target/ is cargo's output, .claude/worktrees/ is a scratch checkout of
-# this repository (a red gate there is a red gate nobody can act on — the reason the root bunfig
-# carries the bazel-* carve-out), and bazel-* is the retired Bazel root symlinks the root bunfig
-# already ignores for tests. Upstream's `-path` prune is what carries the vendored carve-out,
+# this repository (a red gate there is a red gate nobody can act on), and bazel-* is the root
+# symlinks the root bunfig already ignores for tests. Upstream's `-path` prune is what carries the vendored carve-out,
 # because bash 3.2.57 — the stock macOS shell this repository targets (CONTRIBUTING.md#portable-shell)
 # — cannot PARSE a `case` statement inside a command substitution containing a pipeline: measured
 # 2026-09-22, `/bin/bash -c 'X="$(printf a | while read l; do case "$l" in a) ;; esac; done)"'`

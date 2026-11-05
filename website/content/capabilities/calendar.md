@@ -57,7 +57,7 @@ import/export decisions in [`google.rs`](../../../capabilities/calendar/src/goog
   Google event instead of creating another. The ledger's target calendar wins over changed
   deployment configuration.
 - Imported Google entries and linked rhythm instances cannot be exported. Exported events carry
-  `extendedProperties.private.axon_entry_id` and `axon_kind` for traceability. Timed exports carry
+  `extendedProperties.private.sjel_entry_id` and `sjel_kind` for traceability. Timed exports carry
   both the home timezone and an explicit offset; all-day exports keep exclusive date ends.
 
 These are reviewed import and export operations, not a continuous incremental-sync-token

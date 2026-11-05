@@ -9,10 +9,6 @@
 # shape, and it has bitten this repo before (the 2026-07-16 note about untracked capabilities
 # appearing in a committed ARCHITECTURE.md).
 #
-# Split out of tools/check-bazel-package-labels.sh on 2026-08-25 (PRD Q44). The half that went
-# was a declared-label list, which had nothing left to compare once the build stopped being
-# package-scoped. Trackedness is a property of the git checkout, so it survived unchanged.
-#
 # Usage: tools/check-generator-inputs-tracked.sh
 # Exit 0 = every generator input is tracked, 1 = at least one is not.
 set -e

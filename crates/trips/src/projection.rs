@@ -151,15 +151,15 @@ pub fn render(details: &PlanDetails) -> String {
     let mut out = String::new();
 
     // Frontmatter, as `capabilities/trips/README.md` specified it: the trip id, the
-    // schema and the revision. `axon_revision` is the plan's `updated_at`, which is
+    // schema and the revision. `sjel_revision` is the plan's `updated_at`, which is
     // the revision the store already uses as its optimistic-concurrency token
     // (`expected_updated_at`) — a second notion of "which revision is this" would be
     // one nothing else could check against.
     out.push_str("---\n");
-    push_field(&mut out, "axon_trip_id", &plan.id);
-    push_field(&mut out, "axon_schema", "schemas/trip-plan.schema.json");
-    push_field(&mut out, "axon_projection_version", &VERSION.to_string());
-    push_field(&mut out, "axon_revision", &plan.updated_at);
+    push_field(&mut out, "sjel_trip_id", &plan.id);
+    push_field(&mut out, "sjel_schema", "schemas/trip-plan.schema.json");
+    push_field(&mut out, "sjel_projection_version", &VERSION.to_string());
+    push_field(&mut out, "sjel_revision", &plan.updated_at);
     push_field(&mut out, "title", &plan.title);
     push_field(&mut out, "date_start", &plan.date_start);
     push_field(&mut out, "date_end", &plan.date_end);
@@ -502,7 +502,7 @@ mod tests {
         assert!(rendered.contains("- Again: yes"));
         let fields = markdown_root::frontmatter(&rendered).unwrap();
         assert_eq!(
-            fields.get("axon_projection_version").map(String::as_str),
+            fields.get("sjel_projection_version").map(String::as_str),
             Some("3")
         );
 
@@ -535,10 +535,10 @@ mod tests {
     fn the_frontmatter_carries_id_schema_and_revision() {
         let rendered = render(&details("trip:plan:18c72d1e", "Berlin", vec![]));
         let fields = markdown_root::frontmatter(&rendered).unwrap();
-        assert_eq!(fields.get("axon_trip_id").unwrap(), "trip:plan:18c72d1e");
-        assert_eq!(fields.get("axon_revision").unwrap(), "1786907994");
+        assert_eq!(fields.get("sjel_trip_id").unwrap(), "trip:plan:18c72d1e");
+        assert_eq!(fields.get("sjel_revision").unwrap(), "1786907994");
         assert_eq!(
-            fields.get("axon_schema").unwrap(),
+            fields.get("sjel_schema").unwrap(),
             "schemas/trip-plan.schema.json"
         );
     }

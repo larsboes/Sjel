@@ -8,7 +8,7 @@ The [store capability](../../../capabilities/store/README.md) owns the shared fi
 ## Database specifications
 
 [`sjel-config`](../../../libs/sjel-config/src/lib.rs) resolves `SJEL_DB_PATH`, then
-`<overlay>/data/axon/axon.db`, with a temporary scratch file as its fallback when no overlay
+`<overlay>/data/sjel/sjel.db`, with a temporary scratch file as its fallback when no overlay
 resolves. [`sjel-store`](../../../libs/sjel-store/src/lib.rs) applies these settings to each pooled
 connection:
 
@@ -109,7 +109,7 @@ with `tar -tvzf <restore-dir>/container-*.tar.gz`; the convenience extraction pr
 an unprivileged host user cannot re-apply a container's numeric ownership. Apply that archive only
 inside the intended disposable or stopped container after the verification pass.
 
-Archives created before the embedded `axon-backup.toml` format require `--allow-legacy`. That mode
+Archives created before the embedded `sjel-backup.toml` format require `--allow-legacy`. That mode
 uses the standard archive name and current manifest as weaker identity evidence, so it is for a
 known private receipt, not an arbitrary file. Actual restore timestamps, digests, application-level
 queries and verdicts stay in the private overlay; only a redacted pass/fail result belongs in a

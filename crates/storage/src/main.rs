@@ -514,8 +514,7 @@ fn cmd_report(json: bool, where_request: Option<WhereRequest>) -> Result<u8, Str
 
     // A class whose paths have all vanished is skipped by the list above, which is right for
     // an empty directory and wrong for a path that is gone: it makes a dead entry quieter
-    // than a live one. `omlx-kv-cache` and `bazel-cache` both named directories that no
-    // longer existed, and nothing said so.
+    // than a live one.
     let absent: Vec<&Measured> = measured
         .iter()
         .filter(|m| measured_state(!m.paths.is_empty(), m.complete) == MeasuredState::Absent)

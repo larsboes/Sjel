@@ -316,9 +316,7 @@ mod tests {
     }
 
     /// The system scratch dir, which is neither inside the repo nor inside the private
-    /// data dir — the property this helper exists for. It read `TEST_TMPDIR` first until
-    /// 2026-08-25 (PRD Q44), because Bazel handed every test its own; `cargo test` sets
-    /// no such variable, so that branch could only ever be dead here.
+    /// data dir — the property this helper exists for.
     fn fixture_path(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(name)
     }

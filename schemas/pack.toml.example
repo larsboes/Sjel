@@ -18,7 +18,7 @@ license      = "MIT"                      # SPDX id; add a LICENSE file in the p
 capabilities = ["printing"]              # optional: capabilities/<name> this pack drives
 personal     = ["config/example.json"]   # optional: files relative to the selected overlay that skills read at runtime
 links        = ["moonraker"]             # optional: systems.toml ids this pack relates to
-deployer     = "packs-axon"              # optional: a dedicated tool owns this pack's destinations
+deployer     = "packs-sjel"              # optional: a dedicated tool owns this pack's destinations
 
 
 # `deployer` names the one tool that owns this pack's destination directories.

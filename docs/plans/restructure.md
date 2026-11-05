@@ -54,7 +54,8 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
   `toolchain.toml` 25 of 319, `systems.toml` 12 of 126, `Cargo.toml` 3 of 102, `upstreams.toml`
   29 comment lines, `osv-scanner-installed.toml` 6 of 246, and 51 of 455 across all `service.toml`
   files.
-- "Axon" appeared 804 times in 299 files at the rename baseline.
+- "Axon" appeared 804 times in 299 files at the rename baseline; 566 in 154 files after the
+  rename's five commits, of which 447 are the compatibility reads listed in §2 Order.
 - 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
   "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
 - Over 800 lines: `capabilities/comms/README.md`, `capabilities/calendar/README.md`.
@@ -69,11 +70,37 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
    also move to the neutral register (`on-documentation.md`, Register).
    Done: secondary capability README sweep (`ec859210`, refined in `cc44c287`).
-5. "Axon" goes in the lines each pass touches, the rest in one rename commit. The compatibility
-   paths need their own migration: `X-Axon-*` headers are still accepted until the phone app
-   ships (the gate rewrites them), and `axon.toml` and `axon.local.toml` are still read after the
-   `sjel.*` names (`tools/manifest-resolution.test.sh`). Persisted paths need a data migration.
-   Check with `git grep -n -i axon`.
+5. Done: the rename, in five commits. Internal identifiers (`f8f4ef17`), scratch paths and
+   `tools/sjel-context` (`8732a364`), the wire protocols (`35cfaf53`), the persisted names with
+   `tools/migrate-axon-names.sh` (`620081f1`), and the prose that described them. 898
+   occurrences in 265 files became 566 in 154, and 447 of those are the compatibility reads
+   below. What still answers to a pre-rename name, and why each one stays:
+
+   - `axon.toml` and `axon.local.toml` are read after the `sjel.*` names, so a checkout made
+     before the rename still resolves its overlay (`tools/manifest-resolution.test.sh`).
+   - `x-axon-*` headers, the `axon-device-auth/v1` signing string, and `axon-pairing/v1`,
+     `axon-sync/v1`, `sjel-node`'s predecessor: accepted, never sent. A device paired before
+     the rename keeps working without a re-pair.
+   - `/__axon/freshness` and the `/axon-status` mount: a capability built before the rename
+     cannot answer a path it has never heard of.
+   - `com.axon.*` launchd labels and `axon-*.service` systemd units: unloaded and deleted on
+     install, so a host that ran either stops carrying a supervisor entry nothing reads again.
+   - `axon-backup.toml` inside an archive, and the `sjel-bw-master` keychain entry's
+     predecessor: an archive and a stored item are records, not settings.
+   - `<!-- axon:begin -->` / `<!-- axon:projection -->` markers: read, rewritten as `sjel:` the
+     first time a note is written. No note in the vault carries one.
+   - `axon-clip`: a live browser extension with a stored `captured_via` tag, superseded by
+     `crates/comms/clipper` rather than by a rename ([`data.md`](data.md)).
+   - `bazel-*`: not the retired build, but the symlinks it left at the root of a checkout that
+     once ran it. `.gitignore`, `bunfig.toml`, `audit.rs` and the install-policy prune each
+     carry one line for that, and nothing else about Bazel remains.
+
+   History that keeps its word: `research/` and the agent-harness fixture record what was
+   measured when, and `upstreams.toml` carries Bazel's verdict as a retired dependency.
+
+   Checks not run: the migration ran on this machine only, not on a Linux host, so the
+   systemd-unit rename and the `sjel_filter` nftables replacement are unexercised outside
+   their generated-output tests.
 
 ### Planning outside the plans
 

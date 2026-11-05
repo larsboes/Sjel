@@ -44,8 +44,18 @@
 
 use std::fmt;
 
-const BEGIN: &str = "<!-- axon:begin";
-const END: &str = "<!-- axon:end";
+const BEGIN: &str = "<!-- sjel:begin";
+const END: &str = "<!-- sjel:end";
+
+/// The marker prefixes a note may carry, current first. A note written before the rename holds
+/// the old one, and a reader that only knew the new name would not see that region at all — it
+/// would append a second one over prose it does not own.
+const BEGIN_PREFIXES: [&str; 2] = [BEGIN, "<!-- axon:begin"];
+const END_PREFIXES: [&str; 2] = [END, "<!-- axon:end"];
+
+fn starts_with_any(text: &str, prefixes: [&str; 2]) -> bool {
+    prefixes.iter().any(|prefix| text.starts_with(prefix))
+}
 
 /// Which region, and what version of the generator wrote it. The version travels
 /// into the marker so a later generator can recognise output it no longer knows
@@ -105,7 +115,7 @@ impl fmt::Display for RegionError {
                 "a second complete region '{owner}' begins at line {line}; which one is authoritative is not decidable here"
             ),
             RegionError::MalformedOpener { line } => {
-                write!(f, "axon:begin at line {line} names no owner")
+                write!(f, "a region marker at line {line} names no owner")
             }
         }
     }
@@ -226,7 +236,7 @@ pub fn find(doc: &str, owner: &str) -> Result<Option<FoundRegion>, RegionError> 
         let trimmed = text.trim_start();
         let human_line = index + 1;
 
-        if trimmed.starts_with(BEGIN) {
+        if starts_with_any(trimmed, BEGIN_PREFIXES) {
             let Some(this_owner) = marker_value(trimmed, "owner") else {
                 return Err(RegionError::MalformedOpener { line: human_line });
             };
@@ -254,7 +264,7 @@ pub fn find(doc: &str, owner: &str) -> Result<Option<FoundRegion>, RegionError> 
             continue;
         }
 
-        if trimmed.starts_with(END) {
+        if starts_with_any(trimmed, END_PREFIXES) {
             // A closer with no owner belongs to whichever region is open, which
             // keeps hand-written markers usable without making them ambiguous.
             match marker_value(trimmed, "owner") {
@@ -444,7 +454,7 @@ mod tests {
 
     #[test]
     fn a_hand_written_marker_with_no_hash_is_treated_as_touched() {
-        let doc = "# Note\n<!-- axon:begin owner=finance v=1 -->\nhand written\n<!-- axon:end owner=finance -->\n";
+        let doc = "# Note\n<!-- sjel:begin owner=finance v=1 -->\nhand written\n<!-- sjel:end owner=finance -->\n";
         let (out, outcome) = apply(doc, &spec(), "generated").unwrap();
         assert_eq!(out, doc);
         assert!(matches!(outcome, RegionOutcome::Conflict { .. }));
@@ -461,7 +471,7 @@ mod tests {
     // Each malformed marker case returns its own named error.
     #[test]
     fn an_unterminated_region_is_an_error() {
-        let doc = "# Note\n<!-- axon:begin owner=finance v=1 sha=0 -->\nbody\n";
+        let doc = "# Note\n<!-- sjel:begin owner=finance v=1 sha=0 -->\nbody\n";
         assert!(matches!(
             find(doc, "finance"),
             Err(RegionError::Unterminated { .. })
@@ -470,7 +480,7 @@ mod tests {
 
     #[test]
     fn a_nested_opener_is_an_error() {
-        let doc = "<!-- axon:begin owner=finance v=1 sha=0 -->\n<!-- axon:begin owner=finance v=1 sha=0 -->\nbody\n<!-- axon:end owner=finance -->\n";
+        let doc = "<!-- sjel:begin owner=finance v=1 sha=0 -->\n<!-- sjel:begin owner=finance v=1 sha=0 -->\nbody\n<!-- sjel:end owner=finance -->\n";
         assert!(matches!(
             find(doc, "finance"),
             Err(RegionError::Nested { .. })
@@ -479,7 +489,7 @@ mod tests {
 
     #[test]
     fn a_closer_without_an_opener_is_an_error() {
-        let doc = "# Note\n<!-- axon:end owner=finance -->\n";
+        let doc = "# Note\n<!-- sjel:end owner=finance -->\n";
         assert!(matches!(
             find(doc, "finance"),
             Err(RegionError::CloserWithoutOpener { .. })
@@ -488,7 +498,7 @@ mod tests {
 
     #[test]
     fn a_second_complete_region_is_an_error() {
-        let doc = "<!-- axon:begin owner=finance v=1 sha=0 -->\na\n<!-- axon:end owner=finance -->\n<!-- axon:begin owner=finance v=1 sha=0 -->\nb\n<!-- axon:end owner=finance -->\n";
+        let doc = "<!-- sjel:begin owner=finance v=1 sha=0 -->\na\n<!-- sjel:end owner=finance -->\n<!-- sjel:begin owner=finance v=1 sha=0 -->\nb\n<!-- sjel:end owner=finance -->\n";
         assert!(matches!(
             find(doc, "finance"),
             Err(RegionError::Duplicate { .. })
@@ -497,7 +507,7 @@ mod tests {
 
     #[test]
     fn an_opener_naming_no_owner_is_an_error() {
-        let doc = "# Note\n<!-- axon:begin v=1 sha=0 -->\nbody\n<!-- axon:end -->\n";
+        let doc = "# Note\n<!-- sjel:begin v=1 sha=0 -->\nbody\n<!-- sjel:end -->\n";
         assert!(matches!(
             find(doc, "finance"),
             Err(RegionError::MalformedOpener { .. })
@@ -536,6 +546,21 @@ mod tests {
         let (out, outcome) = apply("", &spec(), "body").unwrap();
         assert_eq!(outcome, RegionOutcome::Created);
         assert!(out.starts_with(BEGIN));
+    }
+
+    #[test]
+    fn a_note_written_under_the_old_marker_is_still_its_region() {
+        let legacy = render(&spec(), "hand written\n", "\n")
+            .replace("<!-- sjel:begin", "<!-- axon:begin")
+            .replace("<!-- sjel:end", "<!-- axon:end");
+        let doc = format!("# Note\n{legacy}");
+        let found = find(&doc, "finance").unwrap().unwrap();
+        assert_eq!(found.body, "hand written\n");
+        // An update re-renders the pair, so a note migrates the first time it is written.
+        let (out, outcome) = apply(&doc, &spec(), "replaced\n").unwrap();
+        assert_eq!(outcome, RegionOutcome::Updated);
+        assert!(out.contains("<!-- sjel:begin"), "{out}");
+        assert!(!out.contains("axon:begin"), "{out}");
     }
 
     #[test]

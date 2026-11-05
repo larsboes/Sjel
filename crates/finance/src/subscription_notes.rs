@@ -560,11 +560,11 @@ pub fn render_projection(sub: &Subscription, today: &str, rates: &[FxObservation
         let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
         out.push_str(&format!("{key}: \"{escaped}\"\n"));
     };
-    field(&mut out, "axon_subscription_id", &sub.id);
+    field(&mut out, "sjel_subscription_id", &sub.id);
     field(&mut out, "title", &sub.name);
     // Where the human note is expected. It is the store's import identity, so a note
     // written back at this path is the one that ends this projection.
-    field(&mut out, "axon_source_path", &sub.source_path);
+    field(&mut out, "sjel_source_path", &sub.source_path);
     if let Some(category) = &sub.category {
         field(&mut out, "category", category);
     }

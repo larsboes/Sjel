@@ -2,13 +2,10 @@
 //! test in it carries: `db_tests::`. That is the one selector the database-backed
 //! modules in comms, places, scouting and transit are also named by, so CI names
 //! a filter and never a list of capabilities — see `capabilities/scouting/src/store.rs`.
-//! It was `postgres_tests` until PRD Q45 retired the server; a temp file per test is
-//! the whole fixture now.
+//! A temp file per test is the whole fixture: the store is one SQLite file.
 //!
-//! An integration test rather than a `#[cfg(test)]` module because it links the library
-//! from outside, the way a caller does. It was a Bazel-only target under
-//! `src/postgres_test.rs` until 2026-08-25 — a path Cargo never compiled at all, so the
-//! suite ran nowhere but `bazel test //:postgres_integration_tests` (PRD Q44).
+//! An integration test rather than a `#[cfg(test)]` module because it links the library from
+//! outside, the way a caller does.
 
 mod db_tests {
     use finance::accounting::{Amount, JournalTransaction, Posting};

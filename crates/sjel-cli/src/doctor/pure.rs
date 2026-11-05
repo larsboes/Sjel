@@ -1743,8 +1743,8 @@ mod tests {
             [skip("thing", "overlay declares probe = \"no\"")]
         );
         assert_eq!(
-            resolve_probe_targets(&sys("[axon]\nurl = \"local\""), &none),
-            [skip("axon", "url = \"local\" — not an endpoint")]
+            resolve_probe_targets(&sys("[sjel]\nurl = \"local\""), &none),
+            [skip("sjel", "url = \"local\" — not an endpoint")]
         );
         assert_eq!(
             resolve_probe_targets(&sys("[broken]\nurl = \"http://[not a url\""), &none),

@@ -251,8 +251,8 @@ fn scan_git_history(label: &str, repo: &str, r: &mut Report) {
 /// The directories osv-scanner is told to skip. Generated, not code — `capabilities/*/target`
 /// alone runs to thousands of files — and the same set `.gitignore` excludes. `to-integrate/`
 /// joins them for the reason `CONTRIBUTING.md#scratch-is-not-documentation` gives, and
-/// `bazel-*` stays listed after PRD Q44 retired Bazel, because the symlinks it left still point
-/// at multi-gigabyte trees on existing checkouts.
+/// `bazel-*` stays listed because those symlinks still point at multi-gigabyte trees on a
+/// checkout that once built that way.
 const EXCLUDED: [&str; 6] = [
     "target",
     "bazel-bin",

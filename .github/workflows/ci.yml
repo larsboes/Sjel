@@ -151,15 +151,10 @@ jobs:
       # Every tools/*.test.sh, discovered rather than listed — a hand-list is how a committed
       # test comes to run nowhere (the Sjel#116 shape, again). They all drive real scripts
       # against throwaway roots under /tmp, and this job has bun on PATH for the ones
-      # (service-runner, doctor-driving) that need it. Ran as Bazel sh_test targets until
-      # PRD Q44 (2026-08-25) retired Bazel; this loop is their one home since.
+      # (service-runner, doctor-driving) that need it.
       #
-      # No exclusions. toolchain-scope.test.sh was excluded here from 2026-08-26 to 2026-09-07
-      # as "only ever green inside the Bazel sandbox". It was not: the sandbox scrubbed the
-      # SJEL_* environment, and the measurement that justified the exclusion was taken on a
-      # machine whose shell exports it, so the suite read the operator's overlay instead of its
-      # own fixtures. It now calls isolate_sjel_env like the other scratch-root suites and
-      # passes in both places (PRD defect D7).
+      # No exclusions. A suite that passes unless it inherits the operator's environment has to
+      # call isolate_sjel_env (tools/lib/test-support.sh), not leave this list.
       # In parallel, one per CPU. Each suite works in its own mktemp root; logs print in order after.
       - name: shell tests
         run: |
@@ -361,9 +356,8 @@ jobs:
         run: tools/check-obsidian-plugins.sh
       - name: self.json is current
         run: tools/self check
-      # Runs here rather than as an sh_test: it drives the whole tools/doctor, and a Bazel
-      # sandbox that under-declares doctor's inputs makes the persistence check return early
-      # and the test pass over an empty report — green for the wrong reason.
+      # Runs here rather than behind a step-level wrapper: it drives the whole tools/doctor, so
+      # it needs the real checkout to answer at all.
       - name: doctor reports orphan units, and only orphan units
         run: tools/persistence-orphans.test.sh
 

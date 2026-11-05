@@ -1,27 +1,12 @@
 # bunfig.toml — Bun's config. One section so far, and one reason for it.
 #
-# Bazel dropped convenience symlinks at the workspace root (bazel-Sjel, bazel-bin, bazel-out,
-# bazel-testlogs), and bazel-Sjel pointed at the execroot, which symlinked every source file
-# straight back here. `bun test` follows them, so from a checkout that has ever run Bazel it
-# discovered all 27 test files twice and reported 54. PRD Q44 retired Bazel on 2026-08-25;
-# this stays because the symlinks it left on existing checkouts do not go away with it.
+# A checkout that once ran Bazel carries its convenience symlinks at the workspace root, and
+# one of them pointed at the execroot, which links every source file back here. `bun test`
+# follows them, so a test file is discovered twice and — worse than a doubled count — loaded
+# under two paths, which breaks child-process spawning for the whole run.
 #
-# Double-counting was the visible half. The damaging half was that loading a test module
-# under two paths broke child-process spawning for the whole run: every execFileSync whose
-# child wrote to stdout failed with status 1 and an empty stderr, while a child that wrote
-# nothing still succeeded. tools/lib/demo-endpoints.test.ts calls `tools/capability.sh
-# registry` at collection time, so it died there — and the run still printed "0 fail",
-# because an unhandled error between tests is not a failed test. 385 tests passed where 391
-# exist; the six that never ran were not named anywhere.
-#
-# CI never saw any of this. The bun-tests job runs on a fresh checkout, where no such
-# symlinks exist to follow — which is exactly why this could sit in a working tree for as
-# long as it did while main stayed green. It is a local-only fault, and a local gate that is
-# red for a reason nobody can act on is a gate people stop reading.
-#
-# Anchored `bazel-*/**`, not `**/bazel-*/**`: the convenience symlinks live only at the
-# workspace root, and .gitignore already anchors its own `/bazel-*` for the same reason —
-# unanchored, that pattern swallowed real directories elsewhere in the tree.
+# Anchored `bazel-*/*`, not `**/bazel-*/*`: the symlinks live only at the workspace root, and
+# .gitignore anchors its own `/bazel-*` for the same reason.
 #
 # This deliberately does NOT list which directories hold tests. The one rootward `bun test`
 # is the point (Sjel#116): a test file added anywhere is gated by existing, and the moment

@@ -1,7 +1,7 @@
 //! Public, zero-personal-data config for the Trips store.
 //!
 //! The store path comes from `sjel_config::database_path` — `SJEL_DB_PATH`, else
-//! `<overlay>/data/axon/axon.db`. One file for every capability (PRD Q45), so
+//! `<overlay>/data/sjel/sjel.db`. One file for every capability (PRD Q45), so
 //! there is no per-capability database to resolve any more.
 
 use serde::Deserialize;

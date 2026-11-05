@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub struct Config {
     /// The one shared SQLite file, under the table prefix `punctuality` (PRD Q45).
     /// Resolved by `sjel_config::database_path`: `SJEL_DB_PATH`, else
-    /// `<overlay>/data/axon/axon.db`. Not a per-capability setting any more — a file
+    /// `<overlay>/data/sjel/sjel.db`. Not a per-capability setting any more — a file
     /// per capability would drop the cross-capability joins the shared instance
     /// existed for, so `SJEL_PUNCTUALITY_DATABASE_URL` is now ignored.
     pub database_path: PathBuf,

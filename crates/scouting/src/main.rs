@@ -171,7 +171,7 @@ fn build_api_adapter(name: &str, no_store: bool) -> Option<Box<dyn SourceAdapter
                 _ => {
                     eprintln!(
                         "error: adapter 'transit_fare' needs default_from_eva/default_to_eva set in \
-                         transit's overlay config (axon-overlay/config/transit.json) -- no baked-in \
+                         transit's overlay config (sjel-overlay/config/transit.json) -- no baked-in \
                          station default, by design (see capabilities/transit/src/config.rs)"
                     );
                     std::process::exit(1);
@@ -433,7 +433,7 @@ fn print_help() {
     println!("                           instead of the default merged cross-source ranking");
     println!("  --emit-json              print raw opportunities as JSON, no scoring");
     println!("  --opp-embeddings <path>  pre-computed opportunity embedding vectors");
-    println!("  --database-path <path>   store file (default: the shared axon.db)");
+    println!("  --database-path <path>   store file (default: the shared sjel.db)");
     println!("  --no-store               don't persist results");
     println!("  --backlog                show stored backlog instead of fetching");
     println!("  --include-dismissed      include dismissed entries in --backlog");

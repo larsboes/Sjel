@@ -17,12 +17,9 @@ sjel.local.toml
 # disk, and it holds the same private overlay path.
 axon.local.toml
 
-# Bazel's convenience symlinks (bazel-bin, bazel-out, bazel-testlogs, bazel-<workspace>).
-# Kept after PRD Q44 retired Bazel (2026-08-25): every checkout that ever ran it still has
-# them on disk, and an untracked symlink into a stale output tree must not become a tracked
-# file. Anchored to the repo root, where they live — unanchored, this pattern also swallowed
-# two real directories that were linked from the README and shipped in ARCHITECTURE.md while
-# never being in the repo at all.
+# The convenience symlinks an old Bazel build left at the workspace root. A checkout that ran
+# it still has them, and an untracked symlink into a stale output tree must not become a
+# tracked file. Anchored, because unanchored it also swallowed real directories of that name.
 /bazel-*
 .DS_Store
 **/target/
@@ -101,7 +98,7 @@ demo/overlay/data/
 # The local-inference advisory gate writes one lock file beside the database.
 # `local_gate::lock_path` falls back to the working directory when a config
 # carries no database path, which is how one of these reached a commit once.
-axon-local-*.lock
+sjel-local-*.lock
 
 # Skill eval workspaces. tools/skill-eval writes one next to the skill it evaluates
 # (<skill>-workspace/iteration-N/), which is where skill-creator's method says results live —

@@ -592,6 +592,14 @@
       "kind": "lib"
     },
     {
+      "name": "storage-reclaim",
+      "kind": "capability",
+      "service": {
+        "kind": "process",
+        "requires": []
+      }
+    },
+    {
       "name": "store",
       "kind": "capability",
       "service": {

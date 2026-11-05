@@ -38,7 +38,7 @@ power-loss test at each durable write, and any check of a started primary.
 
 ## 1. Facts (checked 2026-10-25)
 
-- **One shared file.** Capabilities open `<overlay>/data/axon/axon.db` through
+- **One shared file.** Capabilities open `<overlay>/data/sjel/sjel.db` through
   `sjel_config::database_path`.
 - **Two engines.** 3 capabilities use `libs/sjel-turso` (libSQL): `projects`, `software`,
   `operator-profile`. 21 use `libs/sjel-store` (rusqlite). A binary links one engine, never both.
@@ -61,7 +61,7 @@ power-loss test at each durable write, and any check of a started primary.
   shared file, and each breaks when the file splits:
   1. `capabilities/sjel-status/src/status/search.rs` (the finder's server search).
   2. `apps/gpui/core/src/data/repo.rs`: the desktop app reads `projects_records` and
-     `calendar_entries` from `axon.db` directly.
+     `calendar_entries` from `sjel.db` directly.
   3. `sjel mirror build`, which copies tables out of the shared file.
 
 **Docs to correct when the split starts.** `capabilities/store/README.md` and
@@ -202,7 +202,7 @@ migrations").
 5. **Split files.** Each capability writes `<overlay>/data/<cap>/<cap>.db`. One writer per file
    ends `SQLITE_BUSY` between capabilities without depending on MVCC. Schema versions use
    `PRAGMA user_version` per file. A read across owners goes through the owner's API. `ATTACH` is
-   only for migrations and one-off reports. When the last capability has moved, `axon.db` is
+   only for migrations and one-off reports. When the last capability has moved, `sjel.db` is
    archived, not deleted.
 6. **Sync last.** Before any replica or sync service: per-database identity, authorization,
    conflicts, revocation, freshness and data-class admission.

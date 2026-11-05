@@ -675,7 +675,7 @@ mod db_tests {
             std::env::temp_dir().join(format!("punctuality-blocker-{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
         assert!(
-            Store::open(&blocker.join("axon.db")).is_err(),
+            Store::open(&blocker.join("sjel.db")).is_err(),
             "an unusable path opened anyway"
         );
     }

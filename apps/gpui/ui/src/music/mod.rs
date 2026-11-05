@@ -1,44 +1,41 @@
 //! Native importer for YouTube audio: one song, or an album cut from a long recording.
 
+pub mod forms;
+pub mod types;
+
 use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
+use gpui_kit::component::input::{Input, InputState, TextareaState};
 use gpui_kit::component::{Disableable, Sizable};
-use gpui_kit::{div, prelude::*, px, rgb, Context, Entity, EventEmitter, FontWeight, Window};
+use gpui_kit::{div, prelude::*, rgb, Context, Entity, EventEmitter, FontWeight, Window};
 use sjel_gpui_core::shell::{self, MusicBuild, MusicJob, ShellError};
 
 use crate::data::Repo;
 use crate::theme::Palette;
 
-pub enum MusicEvent {
-    Close,
-}
+pub use types::MusicEvent;
+use types::Mode;
 
-/// What one run of the importer produces.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    Song,
-    Album,
-}
+use self::forms::{render_album_inputs, render_job_card, render_song_inputs};
 
 pub struct Music {
-    repo: Repo,
-    mode: Mode,
-    title: Entity<InputState>,
-    start: Entity<InputState>,
-    end: Entity<InputState>,
-    palette: Option<Palette>,
-    url: Entity<InputState>,
-    album: Entity<InputState>,
-    artist: Entity<InputState>,
-    year: Entity<InputState>,
-    tracklist: Entity<TextareaState>,
-    probing: bool,
-    starting: bool,
-    message: Option<String>,
-    error: Option<String>,
-    job: Option<MusicJob>,
+    pub(crate) repo: Repo,
+    pub(crate) mode: Mode,
+    pub(crate) title: Entity<InputState>,
+    pub(crate) start: Entity<InputState>,
+    pub(crate) end: Entity<InputState>,
+    pub(crate) palette: Option<Palette>,
+    pub(crate) url: Entity<InputState>,
+    pub(crate) album: Entity<InputState>,
+    pub(crate) artist: Entity<InputState>,
+    pub(crate) year: Entity<InputState>,
+    pub(crate) tracklist: Entity<TextareaState>,
+    pub(crate) probing: bool,
+    pub(crate) starting: bool,
+    pub(crate) message: Option<String>,
+    pub(crate) error: Option<String>,
+    pub(crate) job: Option<MusicJob>,
 }
 
 impl EventEmitter<MusicEvent> for Music {}
@@ -359,40 +356,8 @@ impl Render for Music {
                             .on_click(cx.listener(|view, _, window, cx| view.probe(window, cx))),
                     ),
             )
-            .when(song, |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(div().flex_1().child(Input::new(&self.title)))
-                        .child(div().flex_1().child(Input::new(&self.artist)))
-                        .child(div().w(px(110.)).child(Input::new(&self.year))),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(div().flex_1().child(Input::new(&self.start)))
-                        .child(div().flex_1().child(Input::new(&self.end))),
-                )
-            })
-            .when(!song, |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(div().flex_1().child(Input::new(&self.album)))
-                        .child(div().flex_1().child(Input::new(&self.artist)))
-                        .child(div().w(px(110.)).child(Input::new(&self.year))),
-                )
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child("Tracklist: one start time per line, followed by artist and title."),
-                )
-                .child(Textarea::new(&self.tracklist).h(px(230.)))
-            })
+            .when(song, |el| el.child(render_song_inputs(self)))
+            .when(!song, |el| el.child(render_album_inputs(self, palette)))
             .child(
                 div()
                     .flex()
@@ -424,36 +389,6 @@ impl Render for Music {
             .when_some(self.error.clone(), |el, error| {
                 el.child(div().text_sm().text_color(rgb(palette.red)).child(error))
             })
-            .when_some(job, |el, job| {
-                el.child(
-                    div()
-                        .id("music-job")
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(format!("{} · {}", job.album, job.state)),
-                        )
-                        .when_some(job.outdir.clone(), |el, path| {
-                            el.child(div().text_xs().text_color(rgb(palette.muted)).child(path))
-                        })
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap_1()
-                                .children(job.log.into_iter().map(|line| {
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child(line)
-                                        .into_any_element()
-                                })),
-                        ),
-                )
-            })
+            .when_some(job, |el, job| el.child(render_job_card(job, palette)))
     }
 }

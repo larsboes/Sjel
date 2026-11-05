@@ -1,39 +1,46 @@
 //! The native Links launcher: saved destinations first, with history suggestions kept behind review.
 
+mod candidates;
+mod constants;
+mod forms;
+mod row;
+
 use std::collections::BTreeMap;
 
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Subscription,
-    Window,
+    div, prelude::*, px, rgb, AnyElement, Context, Entity, IntoElement, Render, SharedString,
+    Subscription, Window,
 };
 use sjel_gpui_core::web_links::{WebLink, WebLinkCandidate, WebLinkHistoryReply, WebLinks};
 
 use crate::data::{self, Busy, Remote, Repo};
 use crate::primitives::{card, note, placeholder};
-use crate::theme::{Palette, ThemeContext};
+use crate::theme::ThemeContext;
 
-const ADD: &str = "web-links:add";
-const SCAN: &str = "web-links:history-scan";
+pub(crate) use candidates::render_candidate_row;
+pub(crate) use constants::{ADD, SCAN};
+pub(crate) use forms::render_add_form;
+pub(crate) use row::render_link_row;
 
 pub struct LinksPage {
-    repo: Repo,
-    links: Remote<WebLinks>,
-    candidates: Remote<Vec<WebLinkCandidate>>,
-    busy: Busy,
-    query: String,
-    query_input: Option<(Entity<InputState>, Subscription)>,
-    url_input: Option<(Entity<InputState>, Subscription)>,
-    title_input: Option<(Entity<InputState>, Subscription)>,
-    group_input: Option<(Entity<InputState>, Subscription)>,
-    edit_id: Option<String>,
-    edit_title: Option<Entity<InputState>>,
-    edit_group: Option<Entity<InputState>>,
-    confirm_remove: Option<String>,
-    history_days: u16,
-    show_add: bool,
+    pub(crate) repo: Repo,
+    pub(crate) links: Remote<WebLinks>,
+    pub(crate) candidates: Remote<Vec<WebLinkCandidate>>,
+    pub(crate) busy: Busy,
+    pub(crate) query: String,
+    pub(crate) query_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) url_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) title_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) group_input: Option<(Entity<InputState>, Subscription)>,
+    pub(crate) edit_id: Option<String>,
+    pub(crate) edit_title: Option<Entity<InputState>>,
+    pub(crate) edit_group: Option<Entity<InputState>>,
+    pub(crate) confirm_remove: Option<String>,
+    pub(crate) history_days: u16,
+    pub(crate) show_add: bool,
 }
 
 impl LinksPage {
@@ -94,7 +101,7 @@ impl LinksPage {
         input
     }
 
-    fn ensure_add_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn ensure_add_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.url_input.is_some() {
             return;
         }
@@ -112,7 +119,7 @@ impl LinksPage {
         self.group_input = Some(make(window, cx, "Group (optional)"));
     }
 
-    fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(url) = self
             .url_input
             .as_ref()
@@ -154,7 +161,7 @@ impl LinksPage {
         }
     }
 
-    fn begin_edit(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn begin_edit(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
         if self.edit_id.as_deref() == Some(link.id.as_str()) {
             self.edit_id = None;
             return;
@@ -175,7 +182,7 @@ impl LinksPage {
         cx.notify();
     }
 
-    fn save_edit(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn save_edit(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         let title = self
             .edit_title
             .as_ref()
@@ -212,7 +219,7 @@ impl LinksPage {
         }
     }
 
-    fn remove(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn remove(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         let key = format!("remove:{id}");
         data::write(
@@ -234,7 +241,7 @@ impl LinksPage {
         }
     }
 
-    fn toggle_pin(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_pin(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
         let id = link.id.clone();
         let pinned = !link.pinned;
         let repo = self.repo.clone();
@@ -253,12 +260,12 @@ impl LinksPage {
         );
     }
 
-    fn request_remove(&mut self, id: String, cx: &mut Context<Self>) {
+    pub(crate) fn request_remove(&mut self, id: String, cx: &mut Context<Self>) {
         self.confirm_remove = Some(id);
         cx.notify();
     }
 
-    fn open(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open(&mut self, link: &WebLink, window: &mut Window, cx: &mut Context<Self>) {
         cx.open_url(&link.url);
         let id = link.id.clone();
         let repo = self.repo.clone();
@@ -310,7 +317,7 @@ impl LinksPage {
         }
     }
 
-    fn history_decision(
+    pub(crate) fn history_decision(
         &mut self,
         candidate: WebLinkCandidate,
         decision: &'static str,
@@ -359,194 +366,6 @@ impl LinksPage {
             .iter()
             .any(|value| value.to_lowercase().contains(&query))
     }
-
-    fn link_row(
-        &self,
-        link: &WebLink,
-        palette: Palette,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let saved = link.clone();
-        let saved_for_open = saved.clone();
-        let saved_for_edit = saved.clone();
-        let heading = div()
-            .flex()
-            .items_center()
-            .gap(px(10.))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .child(div().truncate().text_sm().child(if link.pinned {
-                        format!("★  {}", link.title)
-                    } else {
-                        link.title.clone()
-                    }))
-                    .child(
-                        div()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{}{} · {}",
-                                link.host,
-                                link.tenant
-                                    .as_ref()
-                                    .map(|tenant| format!(" · {tenant}"))
-                                    .unwrap_or_default(),
-                                link.url
-                            )),
-                    ),
-            )
-            .child(
-                Button::new(SharedString::from(format!("open-{}", link.id)))
-                    .small()
-                    .label("Open")
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.open(&saved_for_open, window, cx)
-                    })),
-            )
-            .child(
-                Button::new(SharedString::from(format!("pin-{}", link.id)))
-                    .small()
-                    .ghost()
-                    .label(if link.pinned { "Unpin" } else { "Pin" })
-                    .on_click(
-                        cx.listener(move |view, _, window, cx| view.toggle_pin(&saved, window, cx)),
-                    ),
-            )
-            .child(
-                Button::new(SharedString::from(format!("edit-{}", link.id)))
-                    .small()
-                    .ghost()
-                    .label("Edit")
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.begin_edit(&saved_for_edit, window, cx)
-                    })),
-            );
-        if self.edit_id.as_deref() != Some(link.id.as_str()) {
-            return heading.into_any_element();
-        }
-        let title = self.edit_title.clone();
-        let group = self.edit_group.clone();
-        let id = link.id.clone();
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .child(heading)
-            .child(
-                div()
-                    .flex()
-                    .gap(px(8.))
-                    .children(title.map(|input| Input::new(&input)))
-                    .children(group.map(|input| Input::new(&input)))
-                    .child(
-                        Button::new("web-link-save-edit")
-                            .small()
-                            .label("Save")
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.save_edit(id.clone(), window, cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("web-link-cancel-edit")
-                            .small()
-                            .ghost()
-                            .label("Cancel")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.edit_id = None;
-                                view.confirm_remove = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        if self.confirm_remove.as_deref() == Some(link.id.as_str()) {
-                            let remove_id = link.id.clone();
-                            Button::new("web-link-remove-confirm")
-                                .small()
-                                .danger()
-                                .label("Confirm remove")
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.remove(remove_id.clone(), window, cx)
-                                }))
-                        } else {
-                            let remove_id = link.id.clone();
-                            Button::new("web-link-remove")
-                                .small()
-                                .ghost()
-                                .label("Remove…")
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.request_remove(remove_id.clone(), cx)
-                                }))
-                        },
-                    ),
-            )
-            .into_any_element()
-    }
-
-    fn candidate_row(
-        &self,
-        candidate: &WebLinkCandidate,
-        palette: Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let keep = candidate.clone();
-        let dismiss = candidate.clone();
-        div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .truncate()
-                            .text_sm()
-                            .child(if candidate.title.is_empty() {
-                                candidate.host.clone()
-                            } else {
-                                candidate.title.clone()
-                            }),
-                    )
-                    .child(
-                        div()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{} · {} visits · {}",
-                                candidate.browser, candidate.visits, candidate.url
-                            )),
-                    ),
-            )
-            .child(
-                Button::new(SharedString::from(format!("keep-{}", candidate.id)))
-                    .small()
-                    .label("Keep")
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.history_decision(keep.clone(), "keep", window, cx)
-                    })),
-            )
-            .child(
-                Button::new(SharedString::from(format!("dismiss-{}", candidate.id)))
-                    .small()
-                    .ghost()
-                    .label("Dismiss")
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.history_decision(dismiss.clone(), "dismiss", window, cx)
-                    })),
-            )
-            .into_any_element()
-    }
 }
 
 impl Render for LinksPage {
@@ -568,7 +387,7 @@ impl Render for LinksPage {
             .map(|(name, links)| {
                 let rows = links
                     .iter()
-                    .map(|link| self.link_row(link, palette, window, cx))
+                    .map(|link| render_link_row(self, link, palette, window, cx))
                     .collect::<Vec<_>>();
                 card(
                     div()
@@ -596,47 +415,11 @@ impl Render for LinksPage {
                 .children(group_views)
                 .into_any_element()
         };
-        let add_form = if self.show_add {
-            self.ensure_add_inputs(window, cx);
-            let url = self.url_input.as_ref().map(|(input, _)| input.clone());
-            let title = self.title_input.as_ref().map(|(input, _)| input.clone());
-            let group = self.group_input.as_ref().map(|(input, _)| input.clone());
-            let form = div()
-                .flex()
-                .flex_col()
-                .gap(px(8.))
-                .child(div().text_sm().child("Add a destination"))
-                .children(url.map(|input| Input::new(&input)))
-                .children(title.map(|input| Input::new(&input)))
-                .children(group.map(|input| Input::new(&input)))
-                .child(
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .child(
-                            Button::new("web-links-add-save")
-                                .label("Save link")
-                                .loading(self.busy.contains(ADD))
-                                .on_click(cx.listener(|view, _, window, cx| view.add(window, cx))),
-                        )
-                        .child(
-                            Button::new("web-links-add-cancel")
-                                .ghost()
-                                .label("Cancel")
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.show_add = false;
-                                    cx.notify();
-                                })),
-                        ),
-                );
-            Some(card(form.into_any_element(), palette))
-        } else {
-            None
-        };
+        let add_form = render_add_form(self, palette, window, cx);
         let candidates = self.candidates.value.as_deref().unwrap_or_default();
         let history_rows: Vec<AnyElement> = candidates
             .iter()
-            .map(|candidate| self.candidate_row(candidate, palette, cx))
+            .map(|candidate| render_candidate_row(candidate, palette, cx))
             .collect();
         let history = if candidates.is_empty() {
             None

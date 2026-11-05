@@ -3,61 +3,34 @@
 //! the note field carries why, and a decision button saves both. A row marked `remove` offers its
 //! uninstall, which the capability runs through whoever installed it.
 
+pub mod row;
+pub mod types;
+
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::input::{InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, IntoElement, SharedString, Window,
+    div, prelude::*, rgb, AnyElement, Context, Entity, IntoElement, SharedString, Window,
 };
 
 use crate::data::{self, Busy, Remote, Repo};
-use crate::primitives::{dot, list, note, placeholder, row, section};
-use crate::theme::{Palette, ThemeContext};
+use crate::primitives::{list, note, placeholder, section};
+use crate::theme::ThemeContext;
 use sjel_gpui_core::shell::{SoftwareApp, SoftwareApps};
 
-const SCAN: &str = "software:scan";
+pub use types::{shows, Filter, FILTERS, SCAN};
+use types::size;
 
-/// Which rows the page lists. Review holds every kind: a stale decision is one list to work.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Filter {
-    Apps,
-    Leftovers,
-    Tools,
-    Review,
-}
-
-const FILTERS: [(Filter, &str); 4] = [
-    (Filter::Apps, "Apps"),
-    (Filter::Leftovers, "Leftovers"),
-    (Filter::Tools, "Tools"),
-    (Filter::Review, "Review"),
-];
-
-/// Present rows only: an uninstalled one keeps its history in the store, not on this page.
-pub fn shows(filter: Filter, app: &SoftwareApp) -> bool {
-    app.present
-        && match filter {
-            Filter::Apps => app.kind == "app" || app.kind.is_empty(),
-            Filter::Leftovers => app.kind == "leftover",
-            Filter::Tools => app.kind == "tool",
-            Filter::Review => app.review.is_some(),
-        }
-}
-const DECISIONS: [(&str, &str); 4] = [
-    ("use", "Use"),
-    ("remove", "Remove"),
-    ("replace", "Replace"),
-    ("rebuild", "Rebuild"),
-];
+use self::row::render_app_row;
 
 pub struct Software {
-    repo: Repo,
-    apps: Remote<SoftwareApps>,
-    busy: Busy,
+    pub(crate) repo: Repo,
+    pub(crate) apps: Remote<SoftwareApps>,
+    pub(crate) busy: Busy,
     /// The bundle id whose decision row is open.
-    open: Option<String>,
-    note: Option<Entity<InputState>>,
-    filter: Filter,
+    pub(crate) open: Option<String>,
+    pub(crate) note: Option<Entity<InputState>>,
+    pub(crate) filter: Filter,
 }
 
 impl Software {
@@ -83,7 +56,7 @@ impl Software {
         );
     }
 
-    fn scan(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn scan(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         data::write(
             cx,
@@ -96,7 +69,7 @@ impl Software {
         );
     }
 
-    fn toggle(&mut self, app: &SoftwareApp, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn toggle(&mut self, app: &SoftwareApp, window: &mut Window, cx: &mut Context<Self>) {
         if self.open.as_deref() == Some(app.bundle_id.as_str()) {
             self.open = None;
         } else {
@@ -112,7 +85,7 @@ impl Software {
         cx.notify();
     }
 
-    fn decide(&mut self, decision: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn decide(&mut self, decision: &'static str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(bundle_id) = self.open.clone() else {
             return;
         };
@@ -139,7 +112,7 @@ impl Software {
         );
     }
 
-    fn uninstall(&mut self, bundle_id: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn uninstall(&mut self, bundle_id: String, window: &mut Window, cx: &mut Context<Self>) {
         let repo = self.repo.clone();
         let key = format!("uninstall:{bundle_id}");
         data::write(
@@ -156,122 +129,6 @@ impl Software {
                 this.load(cx);
             },
         );
-    }
-
-    fn app_row(&self, app: &SoftwareApp, palette: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let open = self.open.as_deref() == Some(app.bundle_id.as_str());
-        let (tone, label) = decision_look(app.decision.as_deref(), palette);
-        let clicked = app.clone();
-        let header = row()
-            .id(SharedString::from(format!("app-{}", app.bundle_id)))
-            .cursor_pointer()
-            .hover(move |style| style.bg(rgba(palette.raised)))
-            .on_click(cx.listener(move |view, _, window, cx| view.toggle(&clicked, window, cx)))
-            .child(dot(tone))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(div().truncate().text_sm().child(app.name.clone()))
-                    .children(app.review.clone().map(|r| {
-                        div()
-                            .truncate()
-                            .text_xs()
-                            .text_color(rgb(palette.amber))
-                            .child(r)
-                    }))
-                    .children(
-                        app.note
-                            .clone()
-                            .filter(|n| !n.is_empty() && !open)
-                            .map(|n| {
-                                div()
-                                    .truncate()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(n)
-                            }),
-                    ),
-            )
-            .child(
-                div()
-                    .w(px(72.))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(size(app.app_bytes + app.data_bytes)),
-            )
-            .child(
-                div()
-                    .w(px(80.))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(match app.kind.as_str() {
-                        "tool" => app.source.clone(),
-                        "leftover" => "no app".to_owned(),
-                        _ => last_used(app.last_used.as_deref()),
-                    }),
-            )
-            .child(
-                div()
-                    .w(px(64.))
-                    .text_xs()
-                    .text_color(rgb(tone))
-                    .child(label),
-            );
-        if !open {
-            return header.into_any_element();
-        }
-        let busy = self.busy.contains(&format!("decide:{}", app.bundle_id));
-        let buttons = DECISIONS.iter().map(|(decision, title)| {
-            let decision: &'static str = decision;
-            Button::new(SharedString::from(format!("decide-{decision}")))
-                .small()
-                .when(app.decision.as_deref() != Some(decision), |b| b.ghost())
-                .label(*title)
-                .loading(busy)
-                .on_click(cx.listener(move |view, _, window, cx| view.decide(decision, window, cx)))
-        });
-        let uninstalling = self.busy.contains(&format!("uninstall:{}", app.bundle_id));
-        let target = app.bundle_id.clone();
-        let uninstall = (app.decision.as_deref() == Some("remove")).then(|| {
-            Button::new("software-uninstall")
-                .small()
-                .danger()
-                .label(uninstall_label(app))
-                .loading(uninstalling)
-                .on_click(cx.listener(move |view, _, window, cx| {
-                    view.uninstall(target.clone(), window, cx)
-                }))
-        });
-        let input = self.note.clone();
-        div()
-            .flex()
-            .flex_col()
-            .child(header)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .px_3()
-                    .pb_3()
-                    .children(input.map(|input| Input::new(&input)))
-                    .child(div().flex().gap_2().children(buttons).children(uninstall))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(format!(
-                                "{} · app {} · data {}",
-                                app.bundle_id,
-                                size(app.app_bytes),
-                                size(app.data_bytes)
-                            )),
-                    ),
-            )
-            .into_any_element()
     }
 }
 
@@ -314,7 +171,7 @@ impl Render for Software {
             .on_click(cx.listener(|view, _, window, cx| view.scan(window, cx)));
         let rows: Vec<AnyElement> = shown
             .into_iter()
-            .map(|app| self.app_row(app, palette, cx))
+            .map(|app| render_app_row(self, app, palette, cx))
             .collect();
         div()
             .flex()
@@ -345,44 +202,9 @@ impl Render for Software {
     }
 }
 
-/// Says what the button will do: Trash for an app or leftover, a manager's uninstall otherwise.
-fn uninstall_label(app: &SoftwareApp) -> String {
-    match (app.kind.as_str(), app.source.as_str()) {
-        ("tool", manager) => format!("Uninstall ({manager})"),
-        (_, source) if source.starts_with("cask:") => "Uninstall (brew cask)".to_owned(),
-        _ => "Move to Trash".to_owned(),
-    }
-}
-
-fn decision_look(decision: Option<&str>, palette: Palette) -> (u32, &'static str) {
-    match decision {
-        Some("use") => (palette.green, "use"),
-        Some("remove") => (palette.red, "remove"),
-        Some("replace") => (palette.amber, "replace"),
-        Some("rebuild") => (palette.amber, "rebuild"),
-        _ => (palette.muted, ""),
-    }
-}
-
-/// The date part of Spotlight's stamp, or `never` when it holds none.
-fn last_used(stamp: Option<&str>) -> String {
-    match stamp.and_then(|s| s.get(..10)) {
-        Some(date) => date.to_owned(),
-        None => "never".to_owned(),
-    }
-}
-
-fn size(bytes: u64) -> String {
-    let mb = bytes as f64 / 1_048_576.;
-    if mb >= 1_024. {
-        format!("{:.1} GB", mb / 1_024.)
-    } else {
-        format!("{mb:.0} MB")
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::types::{last_used, uninstall_label};
     use super::*;
 
     fn row(kind: &str, present: bool, review: Option<&str>) -> SoftwareApp {

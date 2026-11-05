@@ -122,7 +122,7 @@ async fn run_setup(args: &[&str]) -> Result<Value, String> {
 /// `stdin_value` is the only way a credential leaves this process, and it leaves through a pipe:
 /// never argv (visible in `ps`), never the environment, never this process's stdout.
 async fn run_setup_with(args: &[&str], stdin_value: Option<&str>) -> Result<Value, String> {
-    run_setup_at(&axon_root()?, args, stdin_value).await
+    run_setup_at(&sjel_root()?, args, stdin_value).await
 }
 
 /// The two functions above with the checkout handed in, so a test can run a fake `sjel` and check

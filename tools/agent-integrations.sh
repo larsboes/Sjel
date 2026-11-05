@@ -208,7 +208,7 @@ interceptor_detect() {  # <harness> -> the shared 14-field row
     [ "$n" -eq "$total" ] && skill="yes"
   }
   configured="no"; [ "$skill" = "yes" ] && configured="yes"
-  marker="$dir/.interceptor-skills-axoned"
+  marker="$dir/.interceptor-skills-sjel"
   marker_present="no"
   [ -s "$marker" ] && marker_present="yes"
   state="missing"
@@ -247,7 +247,7 @@ interceptor_install() {  # <harness> — the product re-adopts its own skills, o
 interceptor_write_marker() {  # <harness>
   local dir
   dir="$(interceptor_harness_dir "$1")"
-  [ -n "$dir" ] && [ -d "$dir" ] && date -u +%Y-%m-%d > "$dir/.interceptor-skills-axoned"
+  [ -n "$dir" ] && [ -d "$dir" ] && date -u +%Y-%m-%d > "$dir/.interceptor-skills-sjel"
 }
 
 # ── the table (C15) ────────────────────────────────────────────────────────

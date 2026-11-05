@@ -67,7 +67,7 @@ pub struct FlatFileConvention {
 
 #[derive(Debug, Clone)]
 pub struct DeployConfig {
-    pub axon_root: PathBuf,
+    pub sjel_root: PathBuf,
     /// Ordered Pack roots; the first is the public source of truth.
     pub pack_roots: Option<Vec<PathBuf>>,
     pub destination: PathBuf,
@@ -206,7 +206,7 @@ pub fn resolve(p: &Path) -> PathBuf {
 pub fn pack_roots(config: &DeployConfig) -> Vec<PathBuf> {
     match &config.pack_roots {
         Some(roots) if !roots.is_empty() => roots.clone(),
-        _ => vec![config.axon_root.join("Packs")],
+        _ => vec![config.sjel_root.join("Packs")],
     }
 }
 
@@ -340,7 +340,7 @@ pub fn read_pack_skills(config: &DeployConfig, pack: &str) -> Result<Vec<String>
 /// A Pack whose manifest names a `deployer` is owned by that tool alone. The read is from
 /// `sjelRoot/Packs`, not the Pack roots — the same place pack-deploy.ts looks.
 pub fn pack_deployer(config: &DeployConfig, pack: &str) -> Option<String> {
-    let manifest = config.axon_root.join("Packs").join(pack).join("pack.toml");
+    let manifest = config.sjel_root.join("Packs").join(pack).join("pack.toml");
     let parsed: toml::Table = fs::read_to_string(manifest).ok()?.parse().ok()?;
     parsed
         .get("deployer")
@@ -624,7 +624,7 @@ pub fn desired_files(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<F
             let text = fs::read_to_string(&file.absolute_path)
                 .map_err(|e| format!("{}: {e}", file.absolute_path.display()))?;
             file.content = Some(
-                transform(&text, &format!("{pack}/{}", unit.key), &config.axon_root)?.into_bytes(),
+                transform(&text, &format!("{pack}/{}", unit.key), &config.sjel_root)?.into_bytes(),
             );
         }
         return Ok(Files::from([(file.relative_path.clone(), file)]));
@@ -921,7 +921,7 @@ mod tests {
 
     fn config_for(root: &Path) -> DeployConfig {
         DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -1002,7 +1002,7 @@ mod tests {
         let root = temp_dir("current");
         let config = config_for(&root);
         pkg(&root, "demo", &["alpha"]);
-        let src = config.axon_root.join("Packs/demo/skills/alpha/SKILL.md");
+        let src = config.sjel_root.join("Packs/demo/skills/alpha/SKILL.md");
         let dest = config.destination.join("alpha/SKILL.md");
         fs::create_dir_all(dest.parent().unwrap()).unwrap();
         fs::copy(&src, &dest).unwrap();
@@ -1085,7 +1085,7 @@ mod tests {
         let config = config_for(&root);
         pkg(&root, "demo", &["alpha"]);
         write(
-            &config.axon_root.join("Packs/demo/skills/alpha/SKILL.md"),
+            &config.sjel_root.join("Packs/demo/skills/alpha/SKILL.md"),
             "---\nname: wrong\ndescription: d\n---\n",
         );
         let rows = get_statuses(&config, None).unwrap();
@@ -1101,7 +1101,7 @@ mod tests {
         let root = temp_dir("dedicated");
         let config = config_for(&root);
         pkg(&root, "demo", &["alpha"]);
-        let manifest = config.axon_root.join("Packs/demo/pack.toml");
+        let manifest = config.sjel_root.join("Packs/demo/pack.toml");
         let body = fs::read_to_string(&manifest).unwrap();
         write(&manifest, &format!("{body}deployer = \"somewhere-else\"\n"));
         assert_eq!(

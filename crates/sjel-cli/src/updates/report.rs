@@ -497,7 +497,7 @@ pub fn gather_integrations(ctx: &Ctx) -> Vec<Row> {
             );
             continue;
         }
-        let marker_name = ".interceptor-skills-axoned";
+        let marker_name = ".interceptor-skills-sjel";
         let mut oldest_days: Option<i64> = None;
         let mut oldest_date = String::new();
         for h in &harnesses {

@@ -569,7 +569,7 @@ pub fn list_public(root: &Path, args: &[String]) -> ExitCode {
         }
     }
     let config = DeployConfig {
-        axon_root: root.to_path_buf(),
+        sjel_root: root.to_path_buf(),
         pack_roots: Some(vec![root.join("Packs")]),
         destination: PathBuf::new(),
         state_file: PathBuf::new(),

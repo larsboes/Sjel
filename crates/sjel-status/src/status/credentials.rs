@@ -7,7 +7,7 @@ use super::*;
 /// still exists. No value is read. The desktop app connects a grant in-process
 /// (`libs/sjel-credentials/src/google.rs`), so nothing secret ever crosses this route.
 pub(crate) async fn credentials_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let rows = tokio::task::spawn_blocking(move || declared(&root))
         .await
         .map_err(|_| bad_gateway("the credentials scan stopped"))?;

@@ -31,7 +31,7 @@
 # already sources toml.sh.
 
 # Where the private half of the systems map lives for the active overlay.
-axon_systems_local() {
+sjel_systems_local() {
   echo "$SJEL_OVERLAY_ROOT/config/systems.local.toml"
 }
 
@@ -87,7 +87,7 @@ capability_endpoint() {  # <name> [ENV_KEY]
   local name="$1" env_key="${2:-}" provider url env_file systems
   provider="$(capability_provider "$name")"
   if [ -n "$provider" ]; then
-    systems="$(axon_systems_local)"
+    systems="$(sjel_systems_local)"
     if [ -f "$systems" ]; then
       url="$(toml_get_in "$provider" url "$systems")"
     else
@@ -161,7 +161,7 @@ _capability_env_file() {  # <name>
 # systems_owner <id> — the declared owner of a systems entry, empty when it declares none.
 systems_owner() {
   local systems
-  systems="$(axon_systems_local)"
+  systems="$(sjel_systems_local)"
   [ -f "$systems" ] || return 0
   toml_get_in "$1" owner "$systems"
 }
@@ -171,7 +171,7 @@ systems_owner() {
 # separate array could disagree with the sections, and the shorter list wins silently.
 trusted_peer_ids() {
   local systems sec
-  systems="$(axon_systems_local)"
+  systems="$(sjel_systems_local)"
   [ -f "$systems" ] || return 0
   for sec in $(toml_sections "$systems"); do
     [ "$(toml_get_in "$sec" owner "$systems")" = "self" ] || continue

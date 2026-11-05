@@ -97,7 +97,7 @@ fn pi_agents_root() -> PathBuf {
 fn agents_config(skill_config: &DeployConfig) -> DeployConfig {
     let root = pi_agents_root();
     DeployConfig {
-        axon_root: skill_config.axon_root.clone(),
+        sjel_root: skill_config.sjel_root.clone(),
         pack_roots: skill_config.pack_roots.clone(),
         destination: root.clone(),
         state_file: agents_state_path(),
@@ -1025,7 +1025,7 @@ mod tests {
         )
         .unwrap();
         let config = DeployConfig {
-            axon_root: root.clone(),
+            sjel_root: root.clone(),
             pack_roots: Some(vec![pack_root.clone()]),
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -1090,7 +1090,7 @@ mod tests {
         .unwrap();
         mutate::set_test_machine_toml(Some(machine));
         let config = DeployConfig {
-            axon_root: root.clone(),
+            sjel_root: root.clone(),
             pack_roots: Some(vec![pack_root.clone()]),
             destination: root.join("dest"),
             state_file: root.join("state.json"),

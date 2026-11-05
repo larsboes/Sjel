@@ -248,7 +248,7 @@ fn record_unit(config: &DeployConfig, state: &mut State, pack: &str, unit: &Unit
     record.skills.insert(
         unit.key.clone(),
         SkillRecord {
-            source: relative(&config.axon_root, &unit.source_root),
+            source: relative(&config.sjel_root, &unit.source_root),
             desired_digest: digest.to_owned(),
             installed_digest: digest.to_owned(),
             digest_policy: Some(DIGEST_POLICY.to_owned()),
@@ -1051,7 +1051,7 @@ pub struct Profile {
 }
 
 pub fn read_profiles(config: &DeployConfig) -> Result<Vec<Profile>, String> {
-    read_profiles_at(&config.axon_root)
+    read_profiles_at(&config.sjel_root)
 }
 
 /// `profiles.toml` is repository-wide, so `use` reads it before it knows which harness it is
@@ -1173,7 +1173,7 @@ pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, S
 /// The Pack is outside the bound profile, or the binding does not resolve.
 pub fn refuse_outside_binding(config: &DeployConfig, pack: &str) -> Result<(), String> {
     let harness = config.adapter.as_str();
-    let Some(profile) = bound_profile_at(&config.axon_root, harness)? else {
+    let Some(profile) = bound_profile_at(&config.sjel_root, harness)? else {
         return Ok(());
     };
     if resolve_profile_packs(config, &profile)?
@@ -1306,7 +1306,7 @@ fn machine_toml_for(root: &Path) -> Option<PathBuf> {
 /// A key both files name reports `profiles.toml`.
 pub fn held_sources(config: &DeployConfig) -> Result<BTreeMap<String, String>, String> {
     let mut out = BTreeMap::new();
-    if let Some(path) = machine_toml_for(&config.axon_root) {
+    if let Some(path) = machine_toml_for(&config.sjel_root) {
         let label = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -1316,7 +1316,7 @@ pub fn held_sources(config: &DeployConfig) -> Result<BTreeMap<String, String>, S
             out.insert(key, label.clone());
         }
     }
-    let shared = read_unit_holds_at(&config.axon_root)?;
+    let shared = read_unit_holds_at(&config.sjel_root)?;
     for key in holds_for_harness(&shared, &config.adapter) {
         out.insert(key, PROFILES_SOURCE.to_owned());
     }
@@ -1808,7 +1808,7 @@ mod tests {
             root.display()
         );
         let config = DeployConfig {
-            axon_root: root.clone(),
+            sjel_root: root.clone(),
             pack_roots: None,
             destination: root.join("target/profile-check"),
             state_file: root.join("target/profile-check.json"),
@@ -1927,7 +1927,7 @@ packs = ["coding"]
         )
         .unwrap();
         let mut config = DeployConfig {
-            axon_root: root.clone(),
+            sjel_root: root.clone(),
             pack_roots: None,
             destination: root.join("destination"),
             state_file: root.join("state.json"),
@@ -2105,7 +2105,7 @@ packs = ["coding"]
         .unwrap();
         set_test_machine_toml(Some(machine.clone()));
         let mut config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2191,7 +2191,7 @@ packs = ["coding"]
         )
         .unwrap();
         let mut config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2299,7 +2299,7 @@ packs = ["coding"]
         )
         .unwrap();
         let config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2377,7 +2377,7 @@ packs = ["coding"]
         )
         .unwrap();
         let config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2478,7 +2478,7 @@ packs = ["coding"]
 
         let agents_dest = root.join("agents-dest");
         let config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2556,7 +2556,7 @@ packs = ["coding"]
         )
         .unwrap();
         let config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state.json"),
@@ -2643,7 +2643,7 @@ mod discard_tests {
         .unwrap();
         fs::write(pack.join("skills/alpha/references/guide.md"), "guide\n").unwrap();
         let config = DeployConfig {
-            axon_root: root.join("repo"),
+            sjel_root: root.join("repo"),
             pack_roots: None,
             destination: root.join("dest"),
             state_file: root.join("state/claude.json"),

@@ -161,7 +161,7 @@ pub fn activate_profile(config: &DeployConfig, profile_name: &str) -> Result<Vec
     let roots = config
         .pack_roots
         .clone()
-        .unwrap_or_else(|| vec![config.axon_root.join("Packs")]);
+        .unwrap_or_else(|| vec![config.sjel_root.join("Packs")]);
     let updated = update_document(document, &roots, &wanted);
     let text = serde_json::to_string_pretty(&updated).map_err(|e| format!("{e}"))?;
     // Write beside the file and rename, so a crash mid-write never leaves a truncated document.
@@ -267,7 +267,7 @@ mod tests {
             "[unit_hold]\nantigravity = [\"demo/beta\"]\n\n[[profile]]\nname = \"full\"\ndescription = \"test\"\npacks = [\"*\"]\n",
         );
         let config = DeployConfig {
-            axon_root: repo.clone(),
+            sjel_root: repo.clone(),
             pack_roots: Some(vec![repo.join("Packs")]),
             destination: root.join("home/.gemini/config/skills.json"),
             state_file: root.join("state/antigravity.json"),

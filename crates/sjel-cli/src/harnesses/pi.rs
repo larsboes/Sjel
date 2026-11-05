@@ -460,7 +460,7 @@ mod tests {
         std::fs::write(pack.join("extensions/thing.ts"), "export default 1;\n").unwrap();
 
         let config = DeployConfig {
-            axon_root: root.clone(),
+            sjel_root: root.clone(),
             pack_roots: Some(vec![pack_root.clone()]),
             destination: root.join("dest"),
             state_file: root.join("state.json"),

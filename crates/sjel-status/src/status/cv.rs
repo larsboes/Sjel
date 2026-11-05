@@ -19,7 +19,7 @@ async fn run_cv_with_input(
     input: Option<&str>,
 ) -> Result<(bool, String, String), (StatusCode, Json<Value>)> {
     use tokio::io::AsyncWriteExt;
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let mut child = tokio::process::Command::new(root.join(CV))
         .args(args)
         .current_dir(&root)

@@ -275,7 +275,7 @@ pub(crate) async fn backup_handler(
         ));
     }
 
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let overlay = overlay_root().map_err(bad_gateway)?;
     let store = backup_store().map_err(bad_gateway)?;
     // A body names the destination; no body means the one the manifest declares. The
@@ -366,7 +366,7 @@ pub(crate) async fn backup_handler(
 /// The declarations are re-read from the tools on every call, so a capability that starts
 /// declaring a contract appears without a restart of this process.
 pub(crate) async fn backup_targets_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let store = backup_store().map_err(bad_gateway)?;
     let declared = ::backup::targets::declared(&root).map_err(gateway)?;
     store.refresh_targets(&declared).map_err(gateway)?;
@@ -411,7 +411,7 @@ pub(crate) struct PolicyRequest {
 pub(crate) async fn backup_policy_handler(
     Json(request): Json<PolicyRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let store = backup_store().map_err(bad_gateway)?;
     let declared = ::backup::targets::declared(&root).map_err(gateway)?;
     if !declared.iter().any(|target| target.id == request.target) {
@@ -448,7 +448,7 @@ pub(crate) struct VerifyRequest {
 pub(crate) async fn backup_verify_handler(
     Json(request): Json<VerifyRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let overlay = overlay_root().map_err(bad_gateway)?;
     let store = backup_store().map_err(bad_gateway)?;
     let declared = ::backup::targets::declared(&root).map_err(gateway)?;

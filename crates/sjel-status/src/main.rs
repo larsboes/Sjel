@@ -308,7 +308,7 @@ async fn main() {
     // and the loop lives here because this process already owns the state the decision reads
     // and the trigger that acts on it. `off` is the row being absent, so nothing runs until
     // somebody sets an interval from the surface.
-    match (backup_store(), axon_root(), sjel_config::overlay_root()) {
+    match (backup_store(), sjel_root(), sjel_config::overlay_root()) {
         (Ok(store), Ok(root), Some(overlay)) => {
             tokio::spawn(::backup::policy::due_loop(
                 std::sync::Arc::new(store),
@@ -344,7 +344,7 @@ async fn main() {
     // The disk's history: one sample an hour, so "is it growing" has an answer a single
     // report cannot give. It runs here because this is the one always-up surface, and it
     // writes its own table in the shared database (src/storage_history.rs).
-    match (axon_root(), sjel_config::overlay_root()) {
+    match (sjel_root(), sjel_config::overlay_root()) {
         (Ok(root), Some(_)) => storage_history::spawn(sjel_config::database_path(), root),
         (Err(error), _) => {
             eprintln!("[sjel-status] storage history not started: {error}");

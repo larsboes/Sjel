@@ -76,7 +76,7 @@ fn ttl_for(report: &Value) -> Duration {
 }
 
 async fn run_updates_report(offline: bool) -> Result<Value, String> {
-    let root = axon_root()?;
+    let root = sjel_root()?;
     let mut cmd = tokio::process::Command::new(root.join("tools/updates"));
     cmd.arg("report").arg("--json").current_dir(&root);
     if offline {
@@ -198,7 +198,7 @@ pub(crate) async fn updates_apply_handler(
             })),
         ));
     }
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     // Detached: the child outlives this request by design, and its stdout is dropped because the
     // receipt — not this process — is what reports the outcome. `--yes` because there is no TTY
     // here and the tool refuses to install unattended without it.

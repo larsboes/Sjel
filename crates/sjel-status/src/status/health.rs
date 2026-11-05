@@ -98,7 +98,7 @@ pub(crate) async fn health_handler() -> Json<Value> {
 /// overlay's location both already have exactly one home, and this process learning
 /// either would be a second one. Same pattern as the registry.
 pub(crate) async fn repos_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let out = tokio::process::Command::new(root.join("tools/repos"))
         .arg("--json")
         .output()
@@ -139,7 +139,7 @@ pub(crate) async fn repos_handler() -> Result<Json<Value>, (StatusCode, Json<Val
 /// is a fact about this machine right now. `up` is `null` for a capability that declares
 /// nothing to poll — unknown, not down — matching the capabilities endpoint.
 pub(crate) async fn self_model_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let path = root.join("self.json");
     let text = std::fs::read_to_string(&path).map_err(|e| {
         bad_gateway(format!(

@@ -24,7 +24,7 @@ use super::*;
 /// which is what resolves the overlay the policy lives in, and builds the release binary
 /// on the first run after a checkout.
 pub(crate) async fn storage_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let out = tokio::process::Command::new(root.join("tools/storage/storage"))
         .arg("report")
         .arg("--json")

@@ -21,7 +21,7 @@ pub(crate) struct WatchRequest {
 pub(crate) async fn upstream_watch_handler(
     Json(request): Json<WatchRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let mut command = tokio::process::Command::new(root.join("tools/research-registers.ts"));
     command
         .arg("watch")

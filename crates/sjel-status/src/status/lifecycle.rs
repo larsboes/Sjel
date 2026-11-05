@@ -30,7 +30,7 @@ pub(crate) async fn lifecycle(
         ));
     }
 
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let out = tokio::process::Command::new(root.join("tools/service-runner.sh"))
         .arg(action)
         .arg(&service.name)

@@ -98,7 +98,7 @@ impl Registry {
         let resolved = |p: PathBuf| engine::resolve(&p);
 
         let claude = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(claude_roots),
             destination: resolved(
                 env_path("CLAUDE_SKILLS_DIR")
@@ -121,7 +121,7 @@ impl Registry {
             validate_adapter_files: None,
         };
         let codex = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(codex_roots),
             // `$CODEX_HOME/skills`, not `~/.agents/skills`. That shared directory is one of pi's
             // automatic global discovery roots (pi.rs::discovery_roots), so a Pack deployed there
@@ -142,7 +142,7 @@ impl Registry {
             validate_adapter_files: Some(engine::validate_codex_files),
         };
         let opencode = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(opencode_roots),
             destination: resolved(
                 env_path("OPENCODE_SKILLS_DIR")
@@ -160,7 +160,7 @@ impl Registry {
             validate_adapter_files: None,
         };
         let pi = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(pi_roots),
             // Unused by pi's skill channel, but getStatuses needs a valid configuration.
             destination: home.join(".pi").join("agent").join("skills"),
@@ -176,7 +176,7 @@ impl Registry {
         };
 
         let copilot = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(copilot_roots),
             destination: resolved(
                 env_path("COPILOT_SKILLS_DIR")
@@ -201,7 +201,7 @@ impl Registry {
             .map(|o| o.join("config").join("agent.toml"))
             .unwrap_or_else(|| root.join("config").join("agent.toml"));
         let agent = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(agent_roots),
             destination: agent_destination.clone(),
             state_file: resolved(state_dir.join("sjel-agent.json")),
@@ -220,7 +220,7 @@ impl Registry {
         let mut antigravity_roots = vec![root.join("Packs")];
         with_overlay(&mut antigravity_roots);
         let antigravity = DeployConfig {
-            axon_root: root.to_path_buf(),
+            sjel_root: root.to_path_buf(),
             pack_roots: Some(antigravity_roots),
             destination: antigravity_destination,
             state_file: resolved(state_dir.join("antigravity.json")),

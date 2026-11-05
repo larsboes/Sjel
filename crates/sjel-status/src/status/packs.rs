@@ -47,7 +47,7 @@ use super::*;
 /// the launcher like every other tool this process runs. It is the same reader the doctor and
 /// `tools/harnesses status` use, so the page, the doctor and the CLI cannot disagree.
 pub(crate) async fn packs_handler() -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
     let out = tokio::process::Command::new(root.join("tools/harnesses"))
         .arg("status")
         .arg("--json")
@@ -86,7 +86,7 @@ pub(crate) async fn packs_write_handler(
     // will not act on should not depend on how this host is configured to find out.
     let (tool, args) = plan_pack_write(&request.action, request.harness.trim(), &request.packs)
         .map_err(bad_request)?;
-    let root = axon_root().map_err(bad_gateway)?;
+    let root = sjel_root().map_err(bad_gateway)?;
 
     // A registry harness may have no per-harness launcher at all — sjel-agent is declared in its
     // own overlay config and reached with `tools/harnesses use`. Saying so is the answer; spawning

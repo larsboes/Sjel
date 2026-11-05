@@ -16,7 +16,7 @@ use axum::Json;
 use serde_json::json;
 use tower::ServiceExt as _;
 
-use super::axon_root;
+use super::sjel_root;
 
 /// Where the mirror capability writes: `<overlay>/data/mirror/`.
 fn mirror_dir() -> Result<std::path::PathBuf, String> {
@@ -128,7 +128,7 @@ pub(crate) async fn mirror_rebuild_handler() -> Response {
         )
             .into_response();
     };
-    let root = match axon_root() {
+    let root = match sjel_root() {
         Ok(root) => root,
         Err(message) => {
             return (

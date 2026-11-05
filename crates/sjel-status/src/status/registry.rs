@@ -195,7 +195,7 @@ pub(crate) struct CapabilityView {
 /// the checkout, and says nothing once the binary is copied anywhere else.
 /// `tools/lib/paths.sh` exports it, so anything started by `service-runner.sh`
 /// inherits it; a hand-started run has to say where it is.
-pub(crate) fn axon_root() -> Result<PathBuf, String> {
+pub(crate) fn sjel_root() -> Result<PathBuf, String> {
     sjel_config::env_var("SJEL_ROOT")
         .map(PathBuf::from)
         .map_err(|_| {
@@ -284,7 +284,7 @@ pub(crate) static REGISTRY_CACHE: OnceLock<Mutex<Option<RegistrySnapshot>>> = On
 /// a caller what it must send, and learning that from a 400 is the thing this
 /// endpoint exists to avoid.
 pub(crate) async fn registry() -> Result<Vec<Service>, String> {
-    let root = axon_root()?;
+    let root = sjel_root()?;
     let key = manifest_key(&root);
 
     if let Some(key) = key.as_ref() {

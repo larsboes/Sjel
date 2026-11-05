@@ -1046,7 +1046,7 @@ impl Workspace {
             return panel.clone();
         }
         let repo = self.repo.clone();
-        let panel = cx.new(|cx| crate::soundscape::Soundscape::new(repo, cx));
+        let panel = cx.new(|cx| crate::soundscape::new(repo, cx));
         // It is a panel over this window, so it paints in this window's frame and follows its
         // appearance; nothing here has to move it.
         let _ = window;

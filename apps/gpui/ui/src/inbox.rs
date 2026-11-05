@@ -20,10 +20,31 @@ use sjel_gpui_core::capture::{self, Draft, TAGS};
 use sjel_gpui_core::shell;
 use sjel_gpui_core::store::{LocalCapture, TursoStore};
 
-use crate::theme::tint;
+use crate::primitives::tone_chip;
+use crate::theme::{tint, ThemeContext};
 use crate::{Density, Palette};
 
 pub mod triage;
+pub use triage::{
+    bind_keys as bind_triage_keys, Filter as TriageFilter, Inbox as TriageInbox,
+    InboxEvent as TriageInboxEvent,
+};
+
+pub fn capture_tag_pill(tag: &str, palette: Palette) -> AnyElement {
+    let raw = tag.trim_start_matches('#').trim_end_matches('?');
+    let tag_color = match raw {
+        "todo" | "task" | "buy" | "price" => palette.accent,
+        "idea" | "look" => palette.amber,
+        "place" | "go" | "learn" => palette.green,
+        _ => palette.muted,
+    };
+    let label = if tag.starts_with('#') {
+        tag.to_owned()
+    } else {
+        format!("#{tag}")
+    };
+    tone_chip(label, tag_color)
+}
 
 /// What the page asks its host to do. The host owns the sync and the keyboard.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +74,7 @@ pub struct Inbox {
     saving: bool,
     loaded: bool,
     palette: Palette,
+    palette_override: Option<Palette>,
     density: Density,
     /// Bumped per read, so a slow answer cannot replace a newer list.
     generation: u64,
@@ -72,6 +94,7 @@ impl Inbox {
             saving: false,
             loaded: false,
             palette: Palette::dark(),
+            palette_override: None,
             density,
             generation: 0,
         }
@@ -85,6 +108,7 @@ impl Inbox {
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
+        self.palette_override = Some(palette);
         if self.palette != palette {
             self.palette = palette;
             cx.notify();
@@ -300,28 +324,12 @@ impl Inbox {
         let palette = self.palette;
         let refusal = self.refusal_of(capture);
         let tag_pill = match capture.tag.as_deref() {
-            Some(tag) => {
-                let tag_color = match tag {
-                    "todo" | "task" => palette.accent,
-                    "idea" => palette.amber,
-                    "place" | "go" => palette.green,
-                    "buy" | "price" => palette.accent,
-                    _ => palette.muted,
-                };
-                div()
-                    .px_1p5()
-                    .py(px(0.5))
-                    .rounded(px(3.))
-                    .bg(rgba(tint(tag_color, 0x18)))
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(rgb(tag_color))
-                    .child(format!("#{tag}"))
-            }
+            Some(tag) => capture_tag_pill(tag, palette),
             None => div()
                 .text_xs()
                 .text_color(rgb(palette.muted))
-                .child("no tag"),
+                .child("no tag")
+                .into_any_element(),
         };
         let url_line = capture.url.as_deref().and_then(|url| {
             if capture.text.as_deref() != Some(url) {
@@ -450,6 +458,9 @@ fn preview_label(typed: &str, tag: Option<&str>) -> String {
 
 impl Render for Inbox {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.palette_override.is_none() {
+            self.palette = ThemeContext::of(window, cx).palette;
+        }
         let palette = self.palette;
         let input = self.field(window, cx);
         let waiting = self.waiting();

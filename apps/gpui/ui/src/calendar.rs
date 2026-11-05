@@ -32,6 +32,7 @@ use sjel_gpui_core::mirror::Mirror;
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
 use crate::data::{self, Press, Repo};
+use crate::theme::ThemeContext;
 use crate::{Density, Palette};
 
 pub mod page;
@@ -106,6 +107,7 @@ pub struct Calendar {
     /// A host's word about this copy, e.g. why a newer one could not be fetched.
     note: Option<SharedString>,
     palette: Palette,
+    palette_override: Option<Palette>,
     density: Density,
     pub view_mode: DayViewMode,
     /// Bumped per read, so a slow answer for a week the person has left cannot replace the week
@@ -140,6 +142,7 @@ impl Calendar {
             saving: false,
             note: None,
             palette: Palette::light(),
+            palette_override: None,
             density,
             view_mode: DayViewMode::default(),
             generation: 0,
@@ -183,6 +186,7 @@ impl Calendar {
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
+        self.palette_override = Some(palette);
         if self.palette != palette {
             self.palette = palette;
             cx.notify();
@@ -949,6 +953,9 @@ fn parse_time(text: &str) -> Option<(u32, u32)> {
 
 impl Render for Calendar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.palette_override.is_none() {
+            self.palette = ThemeContext::of(window, cx).palette;
+        }
         let palette = self.palette;
         let day = self.day;
         let today = Local::now().date_naive();

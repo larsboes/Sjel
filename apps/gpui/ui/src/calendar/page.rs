@@ -19,7 +19,8 @@ use sjel_gpui_core::calendar::{
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::theme::{tint, Palette};
+use crate::primitives::{key_bar, tone_chip};
+use crate::theme::{tint, Density, Palette, ThemeContext};
 
 actions!(
     calendar,
@@ -100,6 +101,7 @@ struct Form {
 pub struct CalendarPage {
     repo: Repo,
     palette: Option<Palette>,
+    density: Density,
     pub view: View,
     /// The selected day; the grid shows its month or week.
     pub day: NaiveDate,
@@ -122,9 +124,14 @@ pub struct CalendarPage {
 
 impl CalendarPage {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
+        Self::with_density(repo, Density::Desktop, cx)
+    }
+
+    pub fn with_density(repo: Repo, density: Density, cx: &mut Context<Self>) -> Self {
         Self {
             repo,
             palette: None,
+            density,
             view: View::Month,
             day: Local::now().date_naive(),
             entries: Remote::default(),
@@ -141,6 +148,13 @@ impl CalendarPage {
             side_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             focus_next: true,
+        }
+    }
+
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
         }
     }
 
@@ -655,7 +669,10 @@ impl Render for CalendarPage {
         if std::mem::take(&mut self.focus_next) && self.form.is_none() {
             window.focus(&self.focus, cx);
         }
-        let palette = self.palette.unwrap_or_else(Palette::dark);
+        let palette = self
+            .palette
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
+        let is_mobile = self.density.is_mobile();
         let today = Local::now().date_naive();
         let dates = self.dates();
         let label = match self.view {
@@ -807,23 +824,21 @@ impl Render for CalendarPage {
                 )
             })
             .child(content)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .pt_1()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(shortcut_hint("←→", "day", palette))
-                    .child(shortcut_hint("↑↓", "week", palette))
-                    .child(shortcut_hint("[ ]", "page", palette))
-                    .child(shortcut_hint("t", "today", palette))
-                    .child(shortcut_hint("m/w", "view", palette))
-                    .child(shortcut_hint("e", "entry", palette))
-                    .child(shortcut_hint("n", "new", palette))
-                    .child(shortcut_hint("⌫", "delete", palette)),
-            )
+            .when(!is_mobile, |el| {
+                el.child(key_bar(
+                    &[
+                        ("←→", "day"),
+                        ("↑↓", "week"),
+                        ("[ ]", "page"),
+                        ("t", "today"),
+                        ("m/w", "view"),
+                        ("e", "entry"),
+                        ("n", "new"),
+                        ("⌫", "delete"),
+                    ],
+                    palette,
+                ))
+            })
     }
 }
 
@@ -1168,17 +1183,7 @@ impl CalendarPage {
                                         .flex()
                                         .items_center()
                                         .gap_1()
-                                        .child(
-                                            div()
-                                                .px_1()
-                                                .py(px(1.))
-                                                .rounded(px(3.))
-                                                .bg(rgba(tint(color, 0x2e)))
-                                                .text_xs()
-                                                .font_weight(FontWeight::SEMIBOLD)
-                                                .text_color(rgb(color))
-                                                .child(kind_str),
-                                        )
+                                        .child(tone_chip(kind_str, color))
                                         .when(
                                             entry.commitment == "tentative"
                                                 || entry.commitment == "possible",
@@ -1415,28 +1420,6 @@ fn chip(entry: &CalendarEntry, palette: Palette) -> gpui_kit::Div {
                 }))
                 .child(entry.title.clone()),
         )
-}
-
-fn shortcut_hint(key: &'static str, desc: &'static str, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px_1()
-                .py(px(1.))
-                .rounded(px(3.))
-                .bg(rgba(palette.surface))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.text))
-                .child(key),
-        )
-        .child(div().child(desc))
-        .into_any_element()
 }
 
 fn muted(text: &str, palette: Palette) -> gpui_kit::Div {

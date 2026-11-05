@@ -14,7 +14,7 @@ use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::{Remote, Repo};
 use crate::primitives::filter_pill;
-use crate::theme::Palette;
+use crate::theme::{Density, Palette, ThemeContext};
 
 actions!(
     inbox,
@@ -90,6 +90,7 @@ impl Filter {
 pub struct Inbox {
     repo: Repo,
     palette: Option<Palette>,
+    density: Density,
     pub rows: Remote<Vec<Capture>>,
     pub filter: Filter,
     pub cursor: Option<String>,
@@ -106,9 +107,14 @@ pub struct Inbox {
 
 impl Inbox {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
+        Self::with_density(repo, Density::Desktop, cx)
+    }
+
+    pub fn with_density(repo: Repo, density: Density, cx: &mut Context<Self>) -> Self {
         Self {
             repo,
             palette: None,
+            density,
             rows: Remote::default(),
             filter: Filter::New,
             cursor: None,
@@ -118,6 +124,13 @@ impl Inbox {
             editing: None,
             list_focus: cx.focus_handle(),
             focus_list_next: true,
+        }
+    }
+
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
         }
     }
 
@@ -438,7 +451,9 @@ impl Render for Inbox {
         if std::mem::take(&mut self.focus_list_next) {
             window.focus(&self.list_focus, cx);
         }
-        let palette = self.palette.unwrap_or_else(Palette::dark);
+        let palette = self
+            .palette
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         let field = self.capture_field(window, cx);
         let routable = self.routable().len();
         let count = |filter| in_view(self.rows.value.iter().flatten(), filter).len();
@@ -714,7 +729,7 @@ impl Inbox {
                             .into_any_element(),
                     })
                     .when_some(tag, |el, tag| {
-                        el.child(div().text_xs().text_color(rgb(palette.muted)).child(tag))
+                        el.child(super::capture_tag_pill(&tag, palette))
                     })
                     .child(actions),
             )

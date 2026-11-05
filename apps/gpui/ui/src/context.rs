@@ -19,7 +19,8 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::theme::{tint, Palette};
+use crate::primitives::{key_bar, stat_card, stat_strip, tone_chip};
+use crate::theme::{Density, Palette, ThemeContext};
 
 actions!(
     context_page,
@@ -50,6 +51,7 @@ pub fn bind_keys(cx: &mut App) {
 pub struct ContextPage {
     repo: Repo,
     palette: Option<Palette>,
+    density: Density,
     pub day: NaiveDate,
     pub entries: Remote<Vec<CalendarEntry>>,
     pub tasks: Remote<Vec<GlobalTask>>,
@@ -63,12 +65,25 @@ impl ContextPage {
         Self {
             repo,
             palette: None,
+            density: Density::Desktop,
             day: Local::now().date_naive(),
             entries: Remote::default(),
             tasks: Remote::default(),
             finance: Remote::default(),
             focus: cx.focus_handle(),
             focus_next: true,
+        }
+    }
+
+    pub fn with_density(mut self, density: Density) -> Self {
+        self.density = density;
+        self
+    }
+
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
         }
     }
 
@@ -193,7 +208,9 @@ impl ContextPage {
 
 impl Render for ContextPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = self.palette.unwrap_or_else(Palette::dark);
+        let palette = self
+            .palette
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
         self.render_day(palette, window, cx)
     }
 }
@@ -318,37 +335,45 @@ impl ContextPage {
         let done_task_count = context.tasks.iter().filter(|t| t.done).count();
         let total_spend_str = format_money(context.total_spent_cents, &context.currency);
 
-        let cards = div()
-            .flex()
-            .gap_4()
-            .child(stat_card(
+        let cards = stat_strip(vec![
+            stat_card(
                 "EVENTS",
                 format!("{event_count} scheduled"),
-                if event_count == 0 {
-                    "Calendar clear"
-                } else {
-                    "Meetings & blocks"
-                },
+                Some(
+                    if event_count == 0 {
+                        "Calendar clear"
+                    } else {
+                        "Meetings & blocks"
+                    }
+                    .into(),
+                ),
+                palette.text,
                 palette,
-            ))
-            .child(stat_card(
+            ),
+            stat_card(
                 "TASKS",
                 format!("{open_task_count} open"),
-                if is_today && !attention.is_empty() {
-                    "Urgent or due today".to_string()
-                } else if done_task_count > 0 {
-                    format!("{done_task_count} completed")
-                } else {
-                    "Due today".to_string()
-                },
+                Some(
+                    if is_today && !attention.is_empty() {
+                        "Urgent or due today".to_string()
+                    } else if done_task_count > 0 {
+                        format!("{done_task_count} completed")
+                    } else {
+                        "Due today".to_string()
+                    }
+                    .into(),
+                ),
+                palette.text,
                 palette,
-            ))
-            .child(stat_card(
+            ),
+            stat_card(
                 "SPENDING",
                 total_spend_str,
-                format!("{} transactions", context.spend.len()),
+                Some(format!("{} transactions", context.spend.len()).into()),
+                palette.text,
                 palette,
-            ));
+            ),
+        ]);
 
         // Timeline list
         let timeline_content = if context.timeline.is_empty() {
@@ -407,59 +432,18 @@ impl ContextPage {
                 ),
             )
             .child(timeline_content)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .pt_2()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(shortcut_hint("← / → or [ ]", "step day", palette))
-                    .child(shortcut_hint("t", "today", palette))
-                    .child(shortcut_hint("⌘r", "refresh", palette)),
-            )
+            .when(!self.density.is_mobile(), |el| {
+                el.child(div().pt_2().child(key_bar(
+                    &[
+                        ("← / → or [ ]", "step day"),
+                        ("t", "today"),
+                        ("⌘r", "refresh"),
+                    ],
+                    palette,
+                )))
+            })
             .into_any_element()
     }
-}
-
-fn stat_card(
-    label: &'static str,
-    main: impl Into<SharedString>,
-    sub: impl Into<SharedString>,
-    palette: Palette,
-) -> AnyElement {
-    div()
-        .flex_1()
-        .p_4()
-        .rounded(px(16.))
-        .border_1()
-        .border_color(rgba(palette.border))
-        .bg(rgba(palette.surface))
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(rgb(palette.muted))
-                .child(label),
-        )
-        .child(
-            div()
-                .text_xl()
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(palette.text))
-                .child(main.into()),
-        )
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(palette.muted))
-                .child(sub.into()),
-        )
-        .into_any_element()
 }
 
 fn render_timeline_row(
@@ -488,15 +472,7 @@ fn render_timeline_row(
             .child("ALL DAY"),
     };
 
-    let kind_pill = div()
-        .px_2()
-        .py(px(1.5))
-        .rounded(px(6.))
-        .bg(rgba(tint(kind_color, 0x22)))
-        .text_xs()
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(rgb(kind_color))
-        .child(kind_name);
+    let kind_pill = tone_chip(kind_name, kind_color);
 
     let right_element: AnyElement = match item.kind {
         TimelineKind::Task => {
@@ -592,28 +568,6 @@ fn render_timeline_row(
                 ),
         )
         .child(right_element)
-        .into_any_element()
-}
-
-fn shortcut_hint(key: &'static str, desc: &'static str, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px_1()
-                .py(px(1.))
-                .rounded(px(3.))
-                .bg(rgba(palette.surface))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.text))
-                .child(key),
-        )
-        .child(div().child(desc))
         .into_any_element()
 }
 

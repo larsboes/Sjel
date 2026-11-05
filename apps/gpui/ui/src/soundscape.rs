@@ -21,8 +21,13 @@ use gpui::{
 };
 use sjel_gpui_core::soundscape::{self, Control, LayerName, Playback, Preset, Visual};
 
-use crate::theme::SoundscapePrefs;
+use crate::theme::{SoundscapePrefs, ThemeContext};
 use crate::Palette;
+
+pub mod slideover;
+pub use slideover::{
+    CloseDrawer, NextPreset, SoundscapeSlideover, ToggleMix, ToggleTransport, WIDTH,
+};
 
 /// One cell of a level bar. Ten steps is a hundredth of a value without a keyboard.
 const STEPS: usize = 10;
@@ -46,6 +51,7 @@ pub struct Soundscape {
     device: Option<SharedString>,
     error: Option<SharedString>,
     palette: Palette,
+    palette_override: Option<Palette>,
     /// Counts renders between two frames asked for, so the meter redraws at a fifth of the rate.
     tick: usize,
 }
@@ -65,6 +71,7 @@ impl Soundscape {
             device: None,
             error: None,
             palette: Palette::dark(),
+            palette_override: None,
             tick: 0,
         }
     }
@@ -87,8 +94,9 @@ impl Soundscape {
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
-        if self.palette != palette {
+        if self.palette != palette || self.palette_override != Some(palette) {
             self.palette = palette;
+            self.palette_override = Some(palette);
             cx.notify();
         }
     }
@@ -404,7 +412,10 @@ fn title_case(key: &str) -> String {
 
 impl Render for Soundscape {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = self.palette;
+        let palette = self
+            .palette_override
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
+        self.palette = palette;
         let playing = self.control.playing();
         // The meter is the only thing here that moves, and it moves because the audio thread wrote a
         // new report. A frame is asked for while something sounds and not one otherwise, and not on

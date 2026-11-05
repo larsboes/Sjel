@@ -3,6 +3,7 @@
 //! Shared across macOS desktop and iOS mobile clients.
 
 pub mod accounts;
+pub mod agent_seat;
 pub mod ask;
 pub mod backup;
 pub mod block_menu;

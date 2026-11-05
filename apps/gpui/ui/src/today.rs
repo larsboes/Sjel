@@ -27,7 +27,14 @@ use sjel_gpui_core::today::{self, Entry, Project, Spot, Task, Today as View};
 
 use crate::data::{self, Press};
 use crate::primitives::{priority_pill, progress_bar};
+use crate::theme::ThemeContext;
 use crate::{tint, Density, Palette};
+use gpui_kit::component::{Icon, IconName, Sizable};
+
+pub use crate::context::{
+    bind_keys as bind_context_keys, ContextPage, NextDay, PreviousDay, Refresh as RefreshDay,
+    Today as TodayAction,
+};
 
 /// What the page asks its host to do. The host owns the network, the copy on disk and the sync.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,6 +94,7 @@ pub struct Today {
     /// that fails puts the row back, because the replica still has the old one.
     optimistic: Option<(String, bool)>,
     palette: Palette,
+    palette_override: Option<Palette>,
     density: Density,
     /// Bumped per read, so a slow answer for a day the person has left cannot replace the day on
     /// screen.
@@ -123,6 +131,7 @@ impl Today {
             busy: Busy::default(),
             optimistic: None,
             palette: Palette::dark(),
+            palette_override: None,
             density,
             generation: 0,
         }
@@ -174,8 +183,9 @@ impl Today {
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
-        if self.palette != palette {
+        if self.palette != palette || self.palette_override != Some(palette) {
             self.palette = palette;
+            self.palette_override = Some(palette);
             cx.notify();
         }
     }
@@ -793,7 +803,12 @@ impl Today {
                                 MouseButton::Left,
                                 cx.listener(|_, _, _, cx| cx.emit(TodayEvent::People)),
                             )
-                            .child("👤 People & Places"),
+                            .child(
+                                Icon::new(IconName::User)
+                                    .xsmall()
+                                    .text_color(rgb(palette.muted)),
+                            )
+                            .child("People & Places"),
                     )
                     .child(
                         div()
@@ -817,7 +832,12 @@ impl Today {
                                 MouseButton::Left,
                                 cx.listener(|_, _, _, cx| cx.emit(TodayEvent::Documents)),
                             )
-                            .child("📄 Documents"),
+                            .child(
+                                Icon::new(IconName::File)
+                                    .xsmall()
+                                    .text_color(rgb(palette.muted)),
+                            )
+                            .child("Documents"),
                     ),
             )
             .into_any_element()
@@ -855,8 +875,11 @@ fn due_mark(due: &str, overdue: bool, palette: Palette) -> AnyElement {
 }
 
 impl Render for Today {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = self.palette;
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = self
+            .palette_override
+            .unwrap_or_else(|| ThemeContext::of(window, cx).palette);
+        self.palette = palette;
         let view = self.view.clone();
         let mut page = div()
             .id("today")

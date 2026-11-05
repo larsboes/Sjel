@@ -708,7 +708,9 @@ impl Capabilities {
                                 }
                                 _ => {
                                     view.agent_text_streaming = false;
-                                    view.agent_rows.push(format_agent_event(&agent_event));
+                                    view.agent_rows.push(
+                                        sjel_gpui_ui::agent_seat::format_agent_event(&agent_event),
+                                    );
                                 }
                             }
                             if terminal {
@@ -1767,36 +1769,17 @@ impl Capabilities {
                 )
             })
             .children(sessions.into_iter().map(|session| {
-                let id = session.id.clone();
-                let active = selected.as_deref() == Some(id.as_str());
-                let label = session.title.clone().unwrap_or_else(|| session.root_name());
-                div()
-                    .id(SharedString::from(format!("phone-agent-session-{id}")))
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .px_3()
-                    .py_2()
-                    .rounded(px(7.))
-                    .when(active, |row| row.bg(rgba(palette.raised)))
-                    .text_color(rgb(palette.text))
-                    .child(div().flex_1().truncate().child(label))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(if session.active {
-                                palette.green
-                            } else {
-                                palette.muted
-                            }))
-                            .child(if session.active { "live" } else { "saved" }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |view, _, _, _cx| {
-                            view.attach_agent_session(session.clone(), false)
-                        }),
-                    )
+                let active = selected.as_deref() == Some(session.id.as_str());
+                let session_for_click = session.clone();
+                sjel_gpui_ui::agent_seat::session_row(
+                    "phone-agent",
+                    &session,
+                    active,
+                    palette,
+                    cx.listener(move |view, _, _, _cx| {
+                        view.attach_agent_session(session_for_click.clone(), false)
+                    }),
+                )
             }))
             .when(paired, |panel| {
                 panel
@@ -1815,7 +1798,8 @@ impl Capabilities {
                                         .text_color(rgb(palette.muted))
                                         .child("Tier:"),
                                 )
-                                .child(phone_tier_pill(
+                                .child(sjel_gpui_ui::agent_seat::tier_pill(
+                                    "phone",
                                     "sjel",
                                     draft_tier == "sjel",
                                     palette,
@@ -1824,7 +1808,8 @@ impl Capabilities {
                                         cx.notify();
                                     }),
                                 ))
-                                .child(phone_tier_pill(
+                                .child(sjel_gpui_ui::agent_seat::tier_pill(
+                                    "phone",
                                     "project",
                                     draft_tier == "project",
                                     palette,
@@ -1833,7 +1818,8 @@ impl Capabilities {
                                         cx.notify();
                                     }),
                                 ))
-                                .child(phone_tier_pill(
+                                .child(sjel_gpui_ui::agent_seat::tier_pill(
+                                    "phone",
                                     "account",
                                     draft_tier == "account",
                                     palette,
@@ -2502,63 +2488,6 @@ fn launch_edge_off() -> bool {
     let flag = std::env::var("SJEL_SIDEBAR").unwrap_or_default();
     let sound = std::env::var("SJEL_SOUNDSCAPE").unwrap_or_default();
     matches!(flag.as_str(), "off" | "0") || matches!(sound.as_str(), "off" | "0")
-}
-
-fn format_agent_event(event: &AgentEvent) -> String {
-    match event.kind.as_str() {
-        "turn" => format!("you: {}", event.content),
-        "text" => event.content.clone(),
-        "tool_call" => format!("{} · {}", event.name, event.arguments),
-        "tool_result" => format!("{} · {}", event.name, event.content),
-        "needs_approval" => format!("Waiting for approval · {} · {}", event.name, event.preview),
-        "approved" => format!("Allowed · {}", event.name),
-        "denied" => format!("Denied · {}", event.name),
-        "error" => format!("Run error · {}", event.message),
-        "done" => "Run finished".to_owned(),
-        "stopped" => "Run stopped".to_owned(),
-        other => other.to_owned(),
-    }
-}
-
-fn phone_tier_pill(
-    label: &'static str,
-    active: bool,
-    palette: Palette,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
-) -> impl IntoElement {
-    let (bg, text_color, border_color) = if active {
-        (
-            rgba(tint(palette.accent, 0x24)),
-            rgb(palette.accent),
-            rgba(tint(palette.accent, 0x50)),
-        )
-    } else {
-        (
-            rgba(palette.raised),
-            rgb(palette.muted),
-            rgba(palette.border),
-        )
-    };
-    div()
-        .id(SharedString::from(format!("phone-tier-{label}")))
-        .flex()
-        .items_center()
-        .px_2()
-        .py(px(3.))
-        .rounded(px(5.))
-        .cursor_pointer()
-        .bg(bg)
-        .border_1()
-        .border_color(border_color)
-        .text_xs()
-        .font_weight(if active {
-            gpui::FontWeight::SEMIBOLD
-        } else {
-            gpui::FontWeight::NORMAL
-        })
-        .text_color(text_color)
-        .on_click(on_click)
-        .child(label)
 }
 
 fn agent_action_button(

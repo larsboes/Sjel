@@ -25,6 +25,7 @@ use sjel_gpui_core::mirror::{Mirror, PeopleCopy};
 use sjel_gpui_core::people::{self, Person};
 use sjel_gpui_core::places::{self, PersonLink, Place};
 
+use crate::theme::ThemeContext;
 use crate::{tint, Density, Palette};
 
 pub mod page;
@@ -72,6 +73,7 @@ pub struct People {
     loaded: bool,
     loading: bool,
     palette: Palette,
+    palette_override: Option<Palette>,
     density: Density,
     scroll: ScrollHandle,
     /// Bumped per read, so a slow answer for a copy the person has left cannot replace the rows on
@@ -100,6 +102,7 @@ impl People {
             loaded: false,
             loading: false,
             palette: Palette::dark(),
+            palette_override: None,
             density,
             scroll: ScrollHandle::new(),
             generation: 0,
@@ -131,6 +134,7 @@ impl People {
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
+        self.palette_override = Some(palette);
         if self.palette != palette {
             self.palette = palette;
             cx.notify();
@@ -425,20 +429,7 @@ impl People {
     }
 
     fn initials_badge(&self, initials: &str) -> AnyElement {
-        let palette = self.palette;
-        div()
-            .flex_none()
-            .size(px(30.))
-            .rounded_full()
-            .bg(rgba(tint(palette.accent, 0x22)))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_xs()
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(rgb(palette.accent))
-            .child(initials.to_owned())
-            .into_any_element()
+        initials_badge(initials, self.palette)
     }
 
     fn person_row(&self, person: &Person, cx: &mut Context<Self>) -> AnyElement {
@@ -798,8 +789,29 @@ impl People {
     }
 }
 
+pub fn initials_badge(initials: &str, palette: Palette) -> AnyElement {
+    div()
+        .flex_none()
+        .size(px(32.))
+        .rounded_full()
+        .bg(rgba(tint(palette.accent, 0x22)))
+        .border_1()
+        .border_color(rgba(tint(palette.accent, 0x44)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_xs()
+        .font_weight(gpui::FontWeight::BOLD)
+        .text_color(rgb(palette.accent))
+        .child(initials.to_owned())
+        .into_any_element()
+}
+
 impl Render for People {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.palette_override.is_none() {
+            self.palette = ThemeContext::of(window, cx).palette;
+        }
         let palette = self.palette;
         // The register's name, not the card's: the card carries its own heading, and a title that
         // changed to "Person" said less than the name under it already did.

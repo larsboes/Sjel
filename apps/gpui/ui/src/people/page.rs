@@ -23,8 +23,8 @@ use sjel_gpui_core::people::{filter_people, Person};
 use sjel_gpui_core::shell::{self, DuplicatePair, EntityField, EntityRecord, Shell, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::primitives::virtual_list;
-use crate::theme::{tint, Palette, ThemeContext};
+use crate::primitives::{key_bar, virtual_list};
+use crate::theme::{tint, Density, Palette, ThemeContext};
 
 actions!(
     people_page,
@@ -142,6 +142,7 @@ struct PeopleDerived {
 pub struct PeoplePage {
     repo: Repo,
     palette: Option<Palette>,
+    density: Density,
     pub people: Remote<Vec<EntityRecord>>,
     /// The fields the registry declares for a person: what a form may offer.
     pub fields: Remote<Vec<EntityField>>,
@@ -168,9 +169,14 @@ pub struct PeoplePage {
 
 impl PeoplePage {
     pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
+        Self::with_density(repo, Density::Desktop, cx)
+    }
+
+    pub fn with_density(repo: Repo, density: Density, cx: &mut Context<Self>) -> Self {
         Self {
             repo,
             palette: None,
+            density,
             people: Remote::default(),
             fields: Remote::default(),
             duplicates: Remote::default(),
@@ -188,6 +194,13 @@ impl PeoplePage {
             detail_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             focus_next: true,
+        }
+    }
+
+    pub fn set_density(&mut self, density: Density, cx: &mut Context<Self>) {
+        if self.density != density {
+            self.density = density;
+            cx.notify();
         }
     }
 
@@ -1150,22 +1163,7 @@ impl Render for PeoplePage {
                                         page.detail_scroll.set_offset(point(px(0.), px(0.)));
                                         cx.notify();
                                     }))
-                                    .child(
-                                        div()
-                                            .w(px(32.))
-                                            .h(px(32.))
-                                            .rounded_full()
-                                            .bg(rgba(tint(palette.accent, 0x22)))
-                                            .border_1()
-                                            .border_color(rgb(palette.accent))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .text_xs()
-                                            .font_weight(FontWeight::BOLD)
-                                            .text_color(rgb(palette.accent))
-                                            .child(initials),
-                                    )
+                                    .child(super::initials_badge(&initials, palette))
                                     .child(
                                         div()
                                             .flex_1()
@@ -1279,18 +1277,16 @@ impl Render for PeoplePage {
                     .child(list_pane)
                     .child(detail_pane),
             )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .pt_2()
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child(shortcut_hint("↓ / ↑ or j / k", "navigate", palette))
-                    .child(shortcut_hint("/", "search", palette))
-                    .child(shortcut_hint("⌘r", "refresh", palette)),
-            )
+            .when(!self.density.is_mobile(), |el| {
+                el.child(key_bar(
+                    &[
+                        ("↓ / ↑ or j / k", "navigate"),
+                        ("/", "search"),
+                        ("⌘r", "refresh"),
+                    ],
+                    palette,
+                ))
+            })
     }
 }
 
@@ -1539,28 +1535,6 @@ fn detail_row(label: &str, val: String, palette: Palette) -> AnyElement {
                 .text_color(rgb(palette.text))
                 .child(val),
         )
-        .into_any_element()
-}
-
-fn shortcut_hint(key: &'static str, desc: &'static str, palette: Palette) -> AnyElement {
-    div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(
-            div()
-                .px_1()
-                .py(px(1.))
-                .rounded(px(3.))
-                .bg(rgba(palette.surface))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.text))
-                .child(key),
-        )
-        .child(div().child(desc))
         .into_any_element()
 }
 

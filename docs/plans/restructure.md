@@ -242,6 +242,9 @@ their open edits.
    Done for `operator-profile`: `crates/operator-profile-api` (`operator-profile-api`) extracts pure wire models,
    profile entries, statement inputs, field values, harness targets, classifications, requests, validation routines,
    and route constants shared with `sjel-operator-profile`.
+   Done for `agent`: `crates/agent-api` (`agent-api`) extracts pure wire models,
+   session requests and envelopes, terminal inputs and resizes, streams, tier definitions, session/terminal metadata,
+   and route constants shared with `sjel-agent-capability` and `sjel-gpui-core`.
 6. Retired legacy non-crate directories `capabilities/` and `libs/`: `agentbox`, `host-firewall`,
    and `shell` moved to `tools/`, `overlay.ts` consolidated into `tools/lib/overlay.ts`, and
    doctor updated.

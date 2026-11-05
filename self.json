@@ -12,6 +12,10 @@
       }
     },
     {
+      "name": "agent-api",
+      "kind": "lib"
+    },
+    {
       "name": "archive",
       "kind": "capability",
       "service": {
@@ -699,6 +703,16 @@
     }
   ],
   "coupling": [
+    {
+      "from": "agent",
+      "to": "agent-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/agent/Cargo.toml"
+      ]
+    },
     {
       "from": "agent",
       "to": "inference",

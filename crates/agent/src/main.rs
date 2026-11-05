@@ -31,12 +31,19 @@ use axum::routing::{delete, get, post};
 use axum::{Extension, Json, Router};
 use base64::Engine as _;
 use futures::stream;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde_json::{json, Value};
 use sjel_agent::{Agent, AgentInput, Event};
 use sjel_server::agent_policy::{AgentRoutes, PolicyFiles};
 
+use agent_api::{
+    ApproveRequest, CreateSession, OpenTerminal, PromptRequest, SteerRequest, StreamQuery,
+    TerminalInput, TerminalResize, TerminalStreamQuery, DEFAULT_AGENT_PORT, ROUTE_AGENT_SESSION,
+    ROUTE_AGENT_SESSIONS, ROUTE_AGENT_SESSION_APPROVE, ROUTE_AGENT_SESSION_PROMPT,
+    ROUTE_AGENT_SESSION_STEER, ROUTE_AGENT_SESSION_STOP, ROUTE_AGENT_SESSION_STREAM,
+    ROUTE_AGENT_SESSION_TRANSCRIPT, ROUTE_AGENT_TERMINALS, ROUTE_AGENT_TERMINALS_OPTIONS,
+    ROUTE_AGENT_TERMINAL_DELETE, ROUTE_AGENT_TERMINAL_INPUT, ROUTE_AGENT_TERMINAL_RESIZE,
+    ROUTE_AGENT_TERMINAL_STREAM, ROUTE_HEALTH, ROUTE_READY, ROUTE_ROUTES,
+};
 use crate::session::{Active, Session};
 use crate::terminal::{ReadOutcome, Terminal, Terminals};
 use crate::tier::Tier;
@@ -48,7 +55,7 @@ const MAX_STEER_BYTES: usize = 4_000;
 /// How many model requests one turn may make before it stops asking for tools. A run that keeps
 /// calling tools forever is a run burning a local model's time.
 const MAX_TURNS: usize = 40;
-const PORT: u16 = 8108;
+const PORT: u16 = DEFAULT_AGENT_PORT;
 
 /// The routes the agent token never reaches, whatever the owner's mode says.
 ///
@@ -59,13 +66,13 @@ const AGENT_ROUTES: AgentRoutes = AgentRoutes {
     confirm: &[],
     get_writes: &[],
     closed: &[
-        ("POST", "/api/agent/terminals"),
-        ("GET", "/api/agent/terminals"),
-        ("GET", "/api/agent/terminals/options"),
-        ("GET", "/api/agent/terminals/{id}/stream"),
-        ("POST", "/api/agent/terminals/{id}/input"),
-        ("POST", "/api/agent/terminals/{id}/resize"),
-        ("DELETE", "/api/agent/terminals/{id}"),
+        ("POST", ROUTE_AGENT_TERMINALS),
+        ("GET", ROUTE_AGENT_TERMINALS),
+        ("GET", ROUTE_AGENT_TERMINALS_OPTIONS),
+        ("GET", ROUTE_AGENT_TERMINAL_STREAM),
+        ("POST", ROUTE_AGENT_TERMINAL_INPUT),
+        ("POST", ROUTE_AGENT_TERMINAL_RESIZE),
+        ("DELETE", ROUTE_AGENT_TERMINAL_DELETE),
     ],
 };
 
@@ -76,92 +83,6 @@ struct AppState {
     dir: PathBuf,
     /// The shells held for the app and the phone.
     terminals: Arc<Terminals>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct CreateSession {
-    /// Absolute path the run works in. Absent means `$HOME` for an `account` session and this
-    /// capability's checkout otherwise.
-    #[serde(default)]
-    root: Option<String>,
-    /// `sjel`, `project` or `account`. Absent means `project`. The tier sets the plugin set and
-    /// the scope, and cannot be changed afterwards.
-    #[serde(default)]
-    tier: Option<String>,
-    /// Plugin names, to narrow the tier's own set. Absent means the whole tier. A name the tier
-    /// does not carry is refused at creation rather than dropped, so a client cannot believe it
-    /// widened the session.
-    #[serde(default)]
-    plugins: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct PromptRequest {
-    prompt: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct SteerRequest {
-    message: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct ApproveRequest {
-    approval_id: String,
-    allow: bool,
-    /// `once`, or `session` to allow this exact call for the rest of the session. Anything else
-    /// is refused rather than read as one of them.
-    #[serde(default)]
-    scope: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct StreamQuery {
-    /// The last sequence the caller already has. A reconnect sends what it saw last.
-    #[serde(default)]
-    from: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct OpenTerminal {
-    /// A preset name from `<overlay>/config/agent.toml`, or one of the five defaults. An empty
-    /// string is the login shell.
-    preset: String,
-    /// An existing directory under `$HOME`. Absent means `$HOME`.
-    #[serde(default)]
-    cwd: Option<String>,
-    #[serde(default)]
-    cols: Option<u16>,
-    #[serde(default)]
-    rows: Option<u16>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct TerminalInput {
-    /// Bytes to write to the pty, base64. At most 64 KiB, before decoding.
-    data: String,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct TerminalResize {
-    cols: u16,
-    rows: u16,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct TerminalStreamQuery {
-    /// The byte offset the caller already has. Absent means the oldest output still held.
-    #[serde(default)]
-    from: Option<u64>,
 }
 
 fn failure(status: StatusCode, message: impl AsRef<str>) -> (StatusCode, Json<Value>) {
@@ -218,103 +139,103 @@ async fn routes() -> Json<Value> {
     Json(route_manifest::manifest(
         "agent",
         &[
-            route_manifest::get("GET", "/health", "Liveness."),
+            route_manifest::get("GET", ROUTE_HEALTH, "Liveness."),
             route_manifest::get(
                 "GET",
-                "/ready",
+                ROUTE_READY,
                 "The local coding role resolves, so a run can start.",
             ),
-            route_manifest::get("GET", "/routes", "This manifest."),
+            route_manifest::get("GET", ROUTE_ROUTES, "This manifest."),
             route_manifest::get(
                 "GET",
-                "/api/agent/sessions",
+                ROUTE_AGENT_SESSIONS,
                 "Every session filed on this machine, newest first.",
             ),
             route_manifest::get(
                 "GET",
-                "/api/agent/sessions/{id}",
+                ROUTE_AGENT_SESSION,
                 "One session's meta: root, tier, plugins, turn count, and whether a run is active.",
             ),
             route_manifest::get(
                 "GET",
-                "/api/agent/sessions/{id}/transcript",
+                ROUTE_AGENT_SESSION_TRANSCRIPT,
                 "One session's turns, as stored.",
             ),
             route_manifest::get(
                 "GET",
-                "/api/agent/sessions/{id}/stream",
+                ROUTE_AGENT_SESSION_STREAM,
                 "Server-sent events for the session. `?from=<seq>` resumes where a reader left off, \
                  and the response keeps alive while a tool call waits for the owner.",
             ),
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/sessions",
+                path: ROUTE_AGENT_SESSIONS,
                 summary: "Start a session in a tier: its plugin set, and a root inside its scope.",
                 request_schema: Some(route_manifest::schema_of::<CreateSession>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/sessions/{id}/prompt",
+                path: ROUTE_AGENT_SESSION_PROMPT,
                 summary: "Send one prompt and start the run. One run per session at a time.",
                 request_schema: Some(route_manifest::schema_of::<PromptRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/sessions/{id}/approve",
+                path: ROUTE_AGENT_SESSION_APPROVE,
                 summary: "Allow or deny the tool call waiting on an approval id.",
                 request_schema: Some(route_manifest::schema_of::<ApproveRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/sessions/{id}/steer",
+                path: ROUTE_AGENT_SESSION_STEER,
                 summary: "Queue a message for the next model request in the run.",
                 request_schema: Some(route_manifest::schema_of::<SteerRequest>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/sessions/{id}/stop",
+                path: ROUTE_AGENT_SESSION_STOP,
                 summary: "Stop the turn and keep the conversation.",
                 request_schema: None,
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/terminals",
+                path: ROUTE_AGENT_TERMINALS,
                 summary: "Open a pty on this Mac: a preset from the overlay, a directory under $HOME, \
                  and the size the client draws.",
                 request_schema: Some(route_manifest::schema_of::<OpenTerminal>),
             },
             route_manifest::get(
                 "GET",
-                "/api/agent/terminals",
+                ROUTE_AGENT_TERMINALS,
                 "Every terminal held on this Mac, newest first.",
             ),
             route_manifest::get(
                 "GET",
-                "/api/agent/terminals/options",
+                ROUTE_AGENT_TERMINALS_OPTIONS,
                 "What a new terminal can be: the preset names, and the folders it is offered to \
                  start in (home, then ~/Developer's folders, newest first).",
             ),
             route_manifest::get(
                 "GET",
-                "/api/agent/terminals/{id}/stream",
+                ROUTE_AGENT_TERMINAL_STREAM,
                 "Server-sent events for one terminal: `output` frames with their byte offset, \
                  `truncated` with the oldest offset still held, and one `exit`.",
             ),
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/terminals/{id}/input",
+                path: ROUTE_AGENT_TERMINAL_INPUT,
                 summary: "Write base64 bytes to the pty, as if typed.",
                 request_schema: Some(route_manifest::schema_of::<TerminalInput>),
             },
             route_manifest::Route {
                 method: "POST",
-                path: "/api/agent/terminals/{id}/resize",
+                path: ROUTE_AGENT_TERMINAL_RESIZE,
                 summary: "Change the pty's size. The last resize wins.",
                 request_schema: Some(route_manifest::schema_of::<TerminalResize>),
             },
             route_manifest::Route {
                 method: "DELETE",
-                path: "/api/agent/terminals/{id}",
+                path: ROUTE_AGENT_TERMINAL_DELETE,
                 summary: "End the terminal: SIGHUP to its process group, SIGKILL after five seconds.",
                 request_schema: None,
             },
@@ -945,29 +866,29 @@ async fn close_terminal(
 
 fn router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/health", get(health))
-        .route("/ready", get(ready))
-        .route("/routes", get(routes))
+        .route(ROUTE_HEALTH, get(health))
+        .route(ROUTE_READY, get(ready))
+        .route(ROUTE_ROUTES, get(routes))
         .route(
-            "/api/agent/sessions",
+            ROUTE_AGENT_SESSIONS,
             get(list_sessions).post(create_session),
         )
-        .route("/api/agent/sessions/{id}", get(session_meta))
-        .route("/api/agent/sessions/{id}/transcript", get(transcript))
-        .route("/api/agent/sessions/{id}/stream", get(stream))
-        .route("/api/agent/sessions/{id}/prompt", post(prompt))
-        .route("/api/agent/sessions/{id}/approve", post(approve))
-        .route("/api/agent/sessions/{id}/steer", post(steer))
-        .route("/api/agent/sessions/{id}/stop", post(stop))
+        .route(ROUTE_AGENT_SESSION, get(session_meta))
+        .route(ROUTE_AGENT_SESSION_TRANSCRIPT, get(transcript))
+        .route(ROUTE_AGENT_SESSION_STREAM, get(stream))
+        .route(ROUTE_AGENT_SESSION_PROMPT, post(prompt))
+        .route(ROUTE_AGENT_SESSION_APPROVE, post(approve))
+        .route(ROUTE_AGENT_SESSION_STEER, post(steer))
+        .route(ROUTE_AGENT_SESSION_STOP, post(stop))
         .route(
-            "/api/agent/terminals",
+            ROUTE_AGENT_TERMINALS,
             get(list_terminals).post(open_terminal),
         )
-        .route("/api/agent/terminals/options", get(terminal_options))
-        .route("/api/agent/terminals/{id}", delete(close_terminal))
-        .route("/api/agent/terminals/{id}/stream", get(terminal_stream))
-        .route("/api/agent/terminals/{id}/input", post(terminal_input))
-        .route("/api/agent/terminals/{id}/resize", post(terminal_resize))
+        .route(ROUTE_AGENT_TERMINALS_OPTIONS, get(terminal_options))
+        .route(ROUTE_AGENT_TERMINAL_DELETE, delete(close_terminal))
+        .route(ROUTE_AGENT_TERMINAL_STREAM, get(terminal_stream))
+        .route(ROUTE_AGENT_TERMINAL_INPUT, post(terminal_input))
+        .route(ROUTE_AGENT_TERMINAL_RESIZE, post(terminal_resize))
         .with_state(state)
 }
 

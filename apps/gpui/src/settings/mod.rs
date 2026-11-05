@@ -25,6 +25,7 @@ mod features;
 mod shortcuts;
 mod system;
 
+#[cfg(test)]
 pub(crate) use shortcuts::humanize;
 
 fn recommendation_dismissals_path() -> Option<std::path::PathBuf> {

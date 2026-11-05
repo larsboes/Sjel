@@ -22,7 +22,7 @@ use serde::Serialize;
 use crate::clock;
 use crate::config::{InstrumentProfile, TargetPolicy};
 use crate::investment::{self, DecimalValue, HoldingsCoverage, Quantity, ReviewedHoldingsSnapshot};
-use crate::price::PriceObservation;
+use crate::price::{FxObservation, PriceObservation};
 
 /// Ten thousand basis points is the whole portfolio.
 pub const FULL_ALLOCATION_BP: i64 = 10_000;
@@ -51,6 +51,10 @@ pub struct PositionView {
     /// `fresh`, `stale` or `none`. Never a boolean: "no price at all" and "a
     /// price nobody refreshed" send a reader to two different places.
     pub price_freshness: String,
+    /// Present when the market quote was in another currency and a published
+    /// rate stated it in the holding's currency. `market_price` is then the
+    /// converted figure.
+    pub conversion: Option<PriceConversion>,
     pub value: DecimalValue,
     /// `market` when a market observation priced it, `review` when the broker
     /// activity price did.
@@ -62,6 +66,18 @@ pub struct PositionView {
     pub outside_band: bool,
     pub change_since_review: Option<DecimalValue>,
     pub change_since_review_bp: Option<i64>,
+}
+
+/// The quote as the provider published it and the dated rate that converted it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PriceConversion {
+    pub quoted_price: Quantity,
+    pub quoted_currency: String,
+    pub rate: Quantity,
+    pub rate_base: String,
+    pub rate_quote: String,
+    pub rate_observed_on: String,
+    pub rate_source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -95,6 +111,7 @@ pub struct PortfolioReport {
 pub struct PortfolioInputs<'a> {
     pub snapshot: &'a ReviewedHoldingsSnapshot,
     pub latest_prices: &'a [PriceObservation],
+    pub fx_rates: &'a [FxObservation],
     pub instruments: &'a [InstrumentProfile],
     pub targets: Option<&'a TargetPolicy>,
     pub as_of: &'a str,
@@ -141,28 +158,50 @@ pub fn report(inputs: PortfolioInputs<'_>) -> Result<PortfolioReport, String> {
         }
         let profile = profiles.get(holding.instrument.as_str());
         let observation = prices.get(holding.instrument.as_str());
-        // A market price in a different currency from the holding must not value
-        // it. Measured 2026-09-05: a EUR holding priced by a USD market quote was
-        // valued at the USD number with no conversion and no marker, which is a
-        // wrong figure that looks right. Converting here is not the fix either --
-        // the FX rate is a second observation with its own date, and layering it
-        // in silently would hide two provenance facts behind one number. So the
-        // position falls back to its reviewed price and the mismatch is named.
-        let currency_matches = observation
-            .map(|observation| observation.currency == holding.currency)
-            .unwrap_or(true);
-        if !currency_matches {
-            caveats.push(format!(
-                "{} is held in {} and its market price is quoted in {}; it is valued at its reviewed price until an FX conversion with its own dated rate exists",
-                holding.instrument,
-                holding.currency,
-                observation.map(|o| o.currency.as_str()).unwrap_or("")
-            ));
-        }
-        let observation = observation.filter(|_| currency_matches);
+        // A quote in another currency values the position only through a published
+        // rate, and the position carries the quote, the rate and its date.
+        let mut conversion = None;
+        let mut converted_price = None;
+        let observation = match observation {
+            Some(observation) if observation.currency != holding.currency => {
+                let converted = crate::money::is_declared(&holding.currency)
+                    .then(|| {
+                        crate::money::unit_price_in_eur(
+                            &observation.price,
+                            &observation.currency,
+                            inputs.fx_rates,
+                        )
+                    })
+                    .flatten();
+                match converted {
+                    Some((price, rate)) => {
+                        conversion = Some(PriceConversion {
+                            quoted_price: observation.price.clone(),
+                            quoted_currency: observation.currency.clone(),
+                            rate: rate.rate.clone(),
+                            rate_base: rate.base.clone(),
+                            rate_quote: rate.quote.clone(),
+                            rate_observed_on: rate.observed_on.clone(),
+                            rate_source: rate.source.clone(),
+                        });
+                        converted_price = Some(price);
+                        Some(observation)
+                    }
+                    None => {
+                        caveats.push(format!(
+                            "{} is held in {} and its market price is quoted in {}; no published rate covers the pair, so it is valued at its reviewed price",
+                            holding.instrument, holding.currency, observation.currency
+                        ));
+                        None
+                    }
+                }
+            }
+            other => other,
+        };
         let age_days = observation
             .and_then(|observation| clock::days_between(&observation.observed_on, inputs.as_of));
-        let market_price = observation.map(|observation| observation.price.clone());
+        let market_price =
+            converted_price.or_else(|| observation.map(|observation| observation.price.clone()));
         let (unit_price, value_basis) = match (&market_price, &holding.latest_unit_price) {
             (Some(price), _) => (Some(price.clone()), "market"),
             (None, Some(price)) => (Some(price.clone()), "review"),
@@ -221,6 +260,7 @@ pub fn report(inputs: PortfolioInputs<'_>) -> Result<PortfolioReport, String> {
                 .map(|observation| observation.observed_on.clone()),
             price_age_days: age_days,
             price_freshness: freshness(value_basis, age_days, freshness_days).into(),
+            conversion,
             value,
             value_basis: value_basis.into(),
             // Filled in below, once the total exists.
@@ -456,6 +496,7 @@ mod tests {
         let report = report(PortfolioInputs {
             snapshot: &snapshot(holdings),
             latest_prices: &[],
+            fx_rates: &[],
             instruments: &[],
             targets: None,
             as_of: "2026-09-05",
@@ -484,6 +525,7 @@ mod tests {
         let report = report(PortfolioInputs {
             snapshot: &books,
             latest_prices: &[],
+            fx_rates: &[],
             instruments: &[],
             targets: None,
             as_of: "2026-09-05",
@@ -514,6 +556,7 @@ mod tests {
         let report = report(PortfolioInputs {
             snapshot: &snapshot(vec![holding("SYN-A", 10, 10_000)]),
             latest_prices: std::slice::from_ref(&observation),
+            fx_rates: &[],
             instruments: &[],
             targets: None,
             as_of: "2026-09-05",
@@ -544,6 +587,7 @@ mod tests {
         let report = report(PortfolioInputs {
             snapshot: &snapshot(vec![holding("SYN-A", 10, 10_000)]),
             latest_prices: std::slice::from_ref(&observation),
+            fx_rates: &[],
             instruments: &[],
             targets: None,
             as_of: "2026-09-05",
@@ -558,6 +602,48 @@ mod tests {
             .caveats
             .iter()
             .any(|caveat| caveat.contains("quoted in USD")));
+    }
+
+    #[test]
+    fn a_foreign_quote_with_a_published_rate_values_the_position_and_names_the_rate() {
+        let observation = PriceObservation {
+            instrument: "SYN-A".into(),
+            observed_on: "2026-09-04".into(),
+            price: quantity(1_100_000, 4),
+            currency: "USD".into(),
+            source: "yahoo".into(),
+            fetched_at: "2026-09-04T10:00:00Z".into(),
+        };
+        let rate = FxObservation {
+            base: "EUR".into(),
+            quote: "USD".into(),
+            observed_on: "2026-09-03".into(),
+            rate: quantity(11_000, 4),
+            source: "ecb".into(),
+            fetched_at: "2026-09-04T10:00:00Z".into(),
+        };
+        let report = report(PortfolioInputs {
+            snapshot: &snapshot(vec![holding("SYN-A", 10, 10_000)]),
+            latest_prices: std::slice::from_ref(&observation),
+            fx_rates: std::slice::from_ref(&rate),
+            instruments: &[],
+            targets: None,
+            as_of: "2026-09-05",
+            currency: "EUR",
+        })
+        .expect("a report");
+        let position = &report.positions[0];
+        // 110.00 USD at 1.1 USD per EUR is 100.00 EUR; 10 units are 1,000.00.
+        assert_eq!(position.value_basis, "market");
+        assert_eq!(position.market_price, Some(quantity(100_000_000, 6)));
+        assert_eq!(investment::to_minor_units(&position.value), Ok(100_000));
+        let conversion = position.conversion.as_ref().expect("a conversion");
+        assert_eq!(conversion.quoted_currency, "USD");
+        assert_eq!(conversion.rate_observed_on, "2026-09-03");
+        assert!(report
+            .caveats
+            .iter()
+            .all(|caveat| !caveat.contains("quoted in")));
     }
 
     #[test]
@@ -580,6 +666,7 @@ mod tests {
         let report = report(PortfolioInputs {
             snapshot: &snapshot(vec![holding("SYN-A", 100, 10_000)]),
             latest_prices: &[],
+            fx_rates: &[],
             instruments: &[],
             targets: Some(&targets),
             as_of: "2026-09-05",
@@ -631,6 +718,7 @@ mod tests {
                 holding("SYN-B", 100, 10_000),
             ]),
             latest_prices: &[],
+            fx_rates: &[],
             instruments: &[],
             targets: Some(&targets),
             as_of: "2026-09-05",

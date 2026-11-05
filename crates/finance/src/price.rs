@@ -628,6 +628,11 @@ pub fn parse_yahoo_chart(
         .and_then(|meta| meta.get("currency"))
         .and_then(|currency| currency.as_str())
         .ok_or_else(|| "a chart result with no currency".to_string())?;
+    // London quotes in pence (`GBp`). Stated in pounds so an ISO rate applies.
+    let (currency, minor_unit) = match currency {
+        "GBp" => ("GBP", true),
+        other => (other, false),
+    };
     let timestamps = result
         .get("timestamp")
         .and_then(|value| value.as_array())
@@ -667,7 +672,10 @@ pub fn parse_yahoo_chart(
             continue;
         }
         let day = crate::clock::civil_from_days(seconds.div_euclid(86_400));
-        let quantity = parse_provider_decimal(&format!("{price:.4}"))?;
+        let mut quantity = parse_provider_decimal(&format!("{price:.4}"))?;
+        if minor_unit {
+            quantity.scale += 2;
+        }
         observations.push(PriceObservation {
             instrument: instrument.to_string(),
             observed_on: day,
@@ -870,21 +878,6 @@ pub fn run_named(
         .ok_or("no reviewed holdings snapshot is in the projection; import one first")?;
     let broker_prices = broker_prices_from_snapshot(&snapshot);
     let subscriptions = store.list().map_err(|error| error.to_string())?;
-    let quote_currencies = fx_targets(
-        snapshot
-            .holdings
-            .iter()
-            .map(|holding| holding.currency.as_str()),
-        &subscriptions,
-    );
-    let context = FetchContext {
-        instruments: &config.instruments,
-        broker_prices: &broker_prices,
-        quote_currencies: &quote_currencies,
-        as_of,
-        fetched_at,
-        history_days: 400,
-    };
     let mut runs = Vec::new();
     for name in names {
         // Built here, once per named provider, and never on an async runtime: a
@@ -905,13 +898,32 @@ pub fn run_named(
                 ))
             }
         };
+        // Read per provider: a quote an earlier provider just wrote names a
+        // currency the FX provider must fetch in this same run.
+        let latest_prices = store.latest_prices().map_err(|error| error.to_string())?;
+        let quote_currencies = fx_targets(
+            snapshot
+                .holdings
+                .iter()
+                .map(|holding| holding.currency.as_str())
+                .chain(latest_prices.iter().map(|price| price.currency.as_str())),
+            &subscriptions,
+        );
+        let context = FetchContext {
+            instruments: &config.instruments,
+            broker_prices: &broker_prices,
+            quote_currencies: &quote_currencies,
+            as_of,
+            fetched_at,
+            history_days: 400,
+        };
         runs.push(run_provider(store, provider.as_ref(), &context, dry_run)?);
     }
     Ok(runs)
 }
 
 /// The currencies the FX provider fetches against [`FX_BASE`]: every currency a
-/// holding is in, and every currency a subscription is priced in.
+/// holding or a market quote is in, and every currency a subscription is priced in.
 ///
 /// Holdings alone are not enough. `money::to_eur` needs a rate for each subscription
 /// currency (PRD Q103), and a store whose holdings are all EUR used to hand the `ecb`
@@ -1160,6 +1172,19 @@ mod tests {
         assert_eq!(observations[0].price.mantissa, 7_731_700);
         assert_eq!(observations[0].price.scale, 4);
         assert_eq!(observations[1].price.mantissa, 7_701_900);
+    }
+
+    #[test]
+    fn a_pence_quote_is_stated_in_pounds() {
+        let body = r#"{"chart":{"result":[{"meta":{"currency":"GBp"},
+            "timestamp":[1788442200],
+            "indicators":{"quote":[{"close":[4512.5]}]}}],"error":null}}"#;
+        let observations =
+            parse_yahoo_chart(body, "SYN-A", "2026-09-05T00:00:00Z").expect("prices");
+        assert_eq!(observations[0].currency, "GBP");
+        // 4512.5000 pence is 45.125000 pounds.
+        assert_eq!(observations[0].price.mantissa, 45_125_000);
+        assert_eq!(observations[0].price.scale, 6);
     }
 
     #[test]

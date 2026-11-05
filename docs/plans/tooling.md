@@ -206,6 +206,13 @@ covers it.
   unformatted at `d07edc16`. Smallest change: add the `apps/gpui` manifest to the `cargo fmt`
   step in `tools/ci-impact.ts` and `.github/workflows/ci.yml`, then format those two files.
 
+- **Instrument ticker lookup.** Setting `ticker` on a finance instrument needed a symbol search
+  and a check that the listing matches the holding. Workaround: a session script queried Yahoo's
+  public symbol search by instrument label, then compared the reviewed broker price with the
+  listing's one-year range converted to EUR. Smallest change: `finance-cli prices suggest`,
+  which prints candidate symbols per instrument with exchange, currency and that range check,
+  and writes nothing.
+
 ## Done
 
 - `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a

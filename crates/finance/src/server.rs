@@ -1346,6 +1346,8 @@ async fn dashboard_projection(
     let commitments = state.commitments.clone();
     let planning_config = state.planning.clone();
     let projection_write = state.projection_write.clone();
+    let instruments = state.instruments.clone();
+    let targets = state.targets.clone();
     match tokio::task::spawn_blocking(move || {
         let _projection_guard = projection_write
             .lock()
@@ -1365,6 +1367,33 @@ async fn dashboard_projection(
             .transpose()
             .map_err(|error| error.to_string())?
             .unwrap_or_default();
+        // The summary currency is valued through `portfolio::report`, so the
+        // dashboard and `GET /api/portfolio` state one total.
+        if let Some(snapshot) = investment.as_ref() {
+            let reads = InvestmentReads {
+                snapshot: snapshot.clone(),
+                latest_prices: store.latest_prices().map_err(|error| error.to_string())?,
+                fx_rates: store.latest_fx_rates().map_err(|error| error.to_string())?,
+            };
+            let currency = view.summary.currency.clone();
+            let report = portfolio_report(
+                &reads,
+                &instruments,
+                targets.as_deref(),
+                &today(),
+                &currency,
+            )?;
+            view.portfolio_values
+                .retain(|value| value.currency != currency);
+            view.portfolio_values
+                .push(finance::investment::PortfolioValuation {
+                    currency,
+                    value: report.total.clone(),
+                    priced_holdings: report.priced_positions,
+                    unpriced_holdings: report.unpriced_positions,
+                });
+            view.portfolio = Some(report);
+        }
         view.investment = investment;
         let balance_snapshot = balance_snapshot_path
             .as_deref()
@@ -1999,11 +2028,12 @@ impl AppState {
     }
 }
 
-/// What `GET /api/portfolio` reads. Two fields, because that is what the report
-/// takes: the reviewed snapshot and the newest observation per instrument.
+/// What `GET /api/portfolio` reads: the reviewed snapshot, the newest
+/// observation per instrument and the newest rate per currency pair.
 struct InvestmentReads {
     snapshot: finance::investment::ReviewedHoldingsSnapshot,
     latest_prices: Vec<finance::price::PriceObservation>,
+    fx_rates: Vec<finance::price::FxObservation>,
 }
 
 fn read_investments(database_path: &std::path::Path) -> Result<Option<InvestmentReads>, String> {
@@ -2014,6 +2044,7 @@ fn read_investments(database_path: &std::path::Path) -> Result<Option<Investment
     Ok(Some(InvestmentReads {
         snapshot,
         latest_prices: store.latest_prices().map_err(|e| e.to_string())?,
+        fx_rates: store.latest_fx_rates().map_err(|e| e.to_string())?,
     }))
 }
 
@@ -2027,6 +2058,7 @@ fn portfolio_report(
     finance::portfolio::report(finance::portfolio::PortfolioInputs {
         snapshot: &reads.snapshot,
         latest_prices: &reads.latest_prices,
+        fx_rates: &reads.fx_rates,
         instruments,
         targets,
         as_of,

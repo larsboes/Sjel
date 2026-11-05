@@ -165,6 +165,29 @@ fn latest_for_pair<'a>(code: &str, rates: &'a [FxObservation]) -> Option<&'a FxO
         })
 }
 
+/// A unit price quoted in `currency`, stated in EUR at two more decimal places,
+/// with the rate that did it. `None` when no usable rate covers the pair.
+pub fn unit_price_in_eur<'a>(
+    price: &Quantity,
+    currency: &str,
+    rates: &'a [FxObservation],
+) -> Option<(Quantity, &'a FxObservation)> {
+    let rate = latest_for_pair(&currency.trim().to_ascii_uppercase(), rates)?;
+    let widened = price.mantissa.checked_mul(100)?;
+    let mantissa = if is_declared(&rate.base) {
+        divide(widened, &rate.rate)?
+    } else {
+        multiply(widened, &rate.rate)?
+    };
+    Some((
+        Quantity {
+            mantissa,
+            scale: price.scale.checked_add(2)?,
+        },
+        rate,
+    ))
+}
+
 /// `amount / rate`, rounded half away from zero. `None` when the rate is not positive.
 fn divide(amount_cents: i64, rate: &Quantity) -> Option<i64> {
     if rate.mantissa <= 0 {

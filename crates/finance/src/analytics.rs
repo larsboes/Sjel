@@ -185,6 +185,8 @@ pub struct DashboardProjection {
     pub shared_expenses: Vec<SharedExpenseSummary>,
     pub purpose_spending: Vec<PurposeSpendingSummary>,
     pub trip_spending: Vec<TripSpendingSummary>,
+    /// The market-priced holdings in the summary currency, filled by the server.
+    pub portfolio: Option<crate::portfolio::PortfolioReport>,
 }
 
 pub fn project(transactions: &[JournalTransaction], currency: &str) -> Vec<TransactionRow> {
@@ -533,6 +535,7 @@ pub fn dashboard(rows: &[TransactionRow], filter: &AnalyticsFilter) -> Dashboard
         shared_expenses,
         purpose_spending,
         trip_spending,
+        portfolio: None,
     }
 }
 

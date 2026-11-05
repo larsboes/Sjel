@@ -705,6 +705,7 @@ pub fn recompute(
     let portfolio = crate::portfolio::report(crate::portfolio::PortfolioInputs {
         snapshot: &snapshot,
         latest_prices: &latest_prices,
+        fx_rates: &store.latest_fx_rates().map_err(|error| error.to_string())?,
         instruments: &config.instruments,
         targets: config.targets.as_ref(),
         as_of,
@@ -1003,6 +1004,7 @@ mod tests {
             market_price_observed_on: None,
             price_age_days: None,
             price_freshness: "none".into(),
+            conversion: None,
             value: crate::investment::from_minor_units(500_000),
             value_basis: "review".into(),
             share_bp,

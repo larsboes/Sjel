@@ -399,9 +399,12 @@ Open items that belong to one capability and to no priority yet.
   decision on reading every body in the sweep. Known limits: a fixed list of multi-label
   suffixes instead of the Public Suffix List, look-alike checks on the first domain label only,
   and a known-sender set that also holds earlier phishing domains.
-- **Finance investments.** `instruments` holds 13 records and `allocations` is empty. Open: the
-  target cohort (active allocations sum to 10,000 bp ±50), tickers where known (a wrong ticker
-  prices the wrong company silently), and the `finance-prices` launchd unit.
+- **Finance investments.** `instruments` holds 13 records and `allocations` is empty. Ten carry
+  a Yahoo `ticker`, set 2026-11-05 after a range check against the broker price. A quote in USD,
+  GBP or NOK values a EUR holding through the newest ECB rate, which the position names
+  (`conversion` in `GET /api/portfolio`). Open: the target cohort (active allocations sum to
+  10,000 bp ±50), the identity of `CARBON-EUR` (the only carbon ETC match, `CO2.MI`, trades
+  three to four times its broker price), and a quote source for the two certificates.
 - **Wishlist hardening.** A wish names a target (model and configuration), the highest price
   worth paying and a deadline, so a discount can be judged against it. Done by hand 2026-11-03 for
   the three electronics wishes of the Black Friday week (2026-11-23 to 2026-11-30): `target` and

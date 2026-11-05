@@ -365,6 +365,20 @@ impl FinanceStore {
             );
             CREATE INDEX IF NOT EXISTS idx_{prefix}_idea_events_idea
                 ON {prefix}_idea_events(idea_id, id);
+
+            -- A trigger's hits and re-arms, append-only. The newest row per trigger is its state.
+            CREATE TABLE IF NOT EXISTS {prefix}_idea_trigger_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id TEXT NOT NULL,
+                trigger_key TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('hit','rearm')),
+                price TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                observed_on TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_idea_trigger_events_key
+                ON {prefix}_idea_trigger_events(idea_id, trigger_key, id);
             "
         ))?;
         rebuild_decision_events_check(conn, prefix)?;
@@ -1084,6 +1098,55 @@ impl FinanceStore {
             .collect();
         ideas.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then(a.id.cmp(&b.id)));
         Ok(ideas)
+    }
+
+    /// Records a hit (`armed` becomes false) or a rearm for one trigger.
+    #[allow(clippy::too_many_arguments)]
+    pub fn append_trigger_event(
+        &self,
+        idea_id: &str,
+        trigger_key: &str,
+        hit: bool,
+        price: &str,
+        currency: &str,
+        observed_on: &str,
+        recorded_at: &str,
+    ) -> Fallible<()> {
+        let prefix = &self.prefix;
+        self.conn()?.execute(
+            &format!(
+                "INSERT INTO {prefix}_idea_trigger_events
+                    (idea_id, trigger_key, kind, price, currency, observed_on, recorded_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)"
+            ),
+            params![
+                idea_id,
+                trigger_key,
+                if hit { "hit" } else { "rearm" },
+                price,
+                currency,
+                observed_on,
+                recorded_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Whether one trigger is armed: true unless its newest event is a hit.
+    pub fn trigger_armed(&self, idea_id: &str, trigger_key: &str) -> Fallible<bool> {
+        let prefix = &self.prefix;
+        let kind: Option<String> = self
+            .conn()?
+            .query_row(
+                &format!(
+                    "SELECT kind FROM {prefix}_idea_trigger_events
+                     WHERE idea_id = ?1 AND trigger_key = ?2 ORDER BY id DESC LIMIT 1"
+                ),
+                params![idea_id, trigger_key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(kind.as_deref() != Some("hit"))
     }
 
     /// Every attempt, successful or not.

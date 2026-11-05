@@ -158,6 +158,29 @@ fn fetch_prices(rest: &[&str]) -> Result<bool, String> {
         );
         any = any || run.succeeded();
     }
+    if !dry_run {
+        let outcomes = finance::ideas::check_triggers(
+            &store,
+            &config.projects_base_url,
+            &finance::config::ideas_project(),
+            &as_of,
+            &fetched_at,
+        )?;
+        for outcome in &outcomes {
+            println!(
+                "trigger  {:<24} {:<8} {}{}",
+                outcome.label,
+                outcome.action,
+                outcome.trigger_key,
+                if outcome.detail.is_empty() {
+                    String::new()
+                } else {
+                    format!("  {}", outcome.detail)
+                }
+            );
+        }
+        println!("triggers: {} changed or skipped", outcomes.len());
+    }
     Ok(any)
 }
 

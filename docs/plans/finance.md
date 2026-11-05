@@ -32,12 +32,6 @@ price work stays in [`data.md`](data.md#5-domain-backlog) until it moves here.
   `/api/import/subscription-notes` and `/api/import/subscription-notes/scan`. Finance declares no
   Obsidian import.
 
-## Open decisions
-
-1. **Notification channel for a trigger hit.** Unverified which surface the Mac and the phone
-   both receive today. Candidates: a comms capture, the phone's local notification host
-   (`ios/host`).
-
 ## Spec
 
 ### 1. Ideas ledger
@@ -54,12 +48,14 @@ Open: the ideas in the app (section 6).
 
 ### 2. Triggers
 
-After each nightly price fetch, every open trigger is compared with the newest price, converted
-with the newest ECB rate when currencies differ (the rule in `crates/finance/src/money.rs`,
-`unit_price_in_eur`). A crossing records one hit event and notifies once. It does not fire again
-until the price crosses back.
-
-Done when: a synthetic test crosses, holds and re-crosses a level and gets exactly two hits.
+Built: `check_triggers` in `crates/finance/src/ideas.rs` runs at the end of
+`finance-cli prices fetch` (the `finance-prices` unit). A level is compared in its own currency,
+or through EUR at the newest ECB rate when the quote is in another one. A crossing creates a
+`projects` task due that day in `ideas_project` (finance.json, default `Inbox`), and the hit is
+recorded in `finance_idea_trigger_events` only after the task exists, so a failed delivery
+retries on the next run. A level fires again only after the price is back on the near side.
+The phone announces the task at 09:00 through the task rule in `apps/gpui/core/src/notify.rs`.
+Checked live 2026-11-05: a test level produced one task, and a second run produced none.
 
 ### 3. Research routing
 

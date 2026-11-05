@@ -214,6 +214,19 @@ struct FinanceFileConfig {
     comms_base_url: Option<String>,
     #[serde(default)]
     projects_base_url: Option<String>,
+    #[serde(default)]
+    ideas_project: Option<String>,
+}
+
+/// The `projects` project that receives a task when an idea's price trigger fires.
+pub const DEFAULT_IDEAS_PROJECT: &str = "Inbox";
+
+/// `ideas_project` from finance.json, else [`DEFAULT_IDEAS_PROJECT`].
+pub fn ideas_project() -> String {
+    file_config()
+        .and_then(|config| config.ideas_project)
+        .filter(|project| !project.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_IDEAS_PROJECT.to_string())
 }
 
 /// comms' loopback port. A capability calling another capability's HTTP contract

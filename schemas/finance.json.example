@@ -6,6 +6,7 @@
   "journal": "<finance-journal-path>",
   "investment_snapshot": "<finance-investment-snapshot-path>",
   "balance_snapshot": "<finance-balance-snapshot-path>",
+  "ideas_project": "Inbox",
   "csv_mappings": [
     {
       "label": "Synthetic semicolon export",

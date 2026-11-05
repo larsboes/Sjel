@@ -271,3 +271,299 @@ mod tests {
         assert!(fold("idea-2", &[(IdeaEvent::Note("x".into()), "t".into())]).is_none());
     }
 }
+
+/// A trigger's stable identity across edits that keep the same level.
+pub fn trigger_key(trigger: &Trigger) -> String {
+    let direction = match trigger.direction {
+        Direction::Above => "above",
+        Direction::Below => "below",
+    };
+    format!("{direction}:{}:{}", trigger.price, trigger.currency)
+}
+
+/// `amount` in EUR: as is when it is EUR, else through the newest published rate.
+fn in_eur(
+    amount: &crate::investment::Quantity,
+    currency: &str,
+    rates: &[crate::price::FxObservation],
+) -> Option<crate::investment::Quantity> {
+    if crate::money::is_declared(currency) {
+        Some(amount.clone())
+    } else {
+        crate::money::unit_price_in_eur(amount, currency, rates).map(|(price, _)| price)
+    }
+}
+
+/// `left` compared with `right`, exactly, at the wider scale.
+fn compare(
+    left: &crate::investment::Quantity,
+    right: &crate::investment::Quantity,
+) -> Option<std::cmp::Ordering> {
+    let scale = left.scale.max(right.scale);
+    let widen = |q: &crate::investment::Quantity| {
+        i128::from(q.mantissa).checked_mul(10_i128.checked_pow(scale - q.scale)?)
+    };
+    Some(widen(left)?.cmp(&widen(right)?))
+}
+
+/// Whether `price` (quoted in `currency`) is past the trigger's level. `None` when the two
+/// currencies differ and no published rate joins them.
+pub fn is_past(
+    trigger: &Trigger,
+    price: &crate::investment::Quantity,
+    currency: &str,
+    rates: &[crate::price::FxObservation],
+) -> Option<bool> {
+    let level = crate::price::parse_provider_decimal(&trigger.price).ok()?;
+    let (price, level) = if currency.eq_ignore_ascii_case(&trigger.currency) {
+        (price.clone(), level)
+    } else {
+        (
+            in_eur(price, currency, rates)?,
+            in_eur(&level, &trigger.currency, rates)?,
+        )
+    };
+    let ordering = compare(&price, &level)?;
+    Some(match trigger.direction {
+        Direction::Above => ordering.is_ge(),
+        Direction::Below => ordering.is_le(),
+    })
+}
+
+/// What one evaluation does to one trigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TriggerStep {
+    /// Past the level and armed: notify once and disarm.
+    Hit,
+    /// Back on the near side after a hit: arm again.
+    Rearm,
+    Nothing,
+}
+
+/// `armed` is false after a hit until a rearm. A trigger with no history is armed.
+pub fn step(past: bool, armed: bool) -> TriggerStep {
+    match (past, armed) {
+        (true, true) => TriggerStep::Hit,
+        (false, false) => TriggerStep::Rearm,
+        _ => TriggerStep::Nothing,
+    }
+}
+
+#[cfg(test)]
+mod trigger_tests {
+    use super::*;
+    use crate::investment::Quantity;
+
+    fn q(mantissa: i64, scale: u32) -> Quantity {
+        Quantity { mantissa, scale }
+    }
+
+    #[test]
+    fn a_level_fires_once_per_crossing() {
+        let trigger = Trigger {
+            direction: Direction::Above,
+            price: "100".into(),
+            currency: "EUR".into(),
+        };
+        let mut armed = true;
+        let mut hits = 0;
+        for price in [9_000, 10_100, 10_500, 9_900, 10_200] {
+            let past = is_past(&trigger, &q(price, 2), "EUR", &[]).expect("same currency");
+            match step(past, armed) {
+                TriggerStep::Hit => {
+                    hits += 1;
+                    armed = false;
+                }
+                TriggerStep::Rearm => armed = true,
+                TriggerStep::Nothing => {}
+            }
+        }
+        assert_eq!(hits, 2);
+    }
+
+    #[test]
+    fn a_level_in_another_currency_compares_through_the_rate() {
+        let rate = crate::price::FxObservation {
+            base: "EUR".into(),
+            quote: "USD".into(),
+            observed_on: "2026-11-05".into(),
+            rate: q(11_000, 4),
+            source: "ecb".into(),
+            fetched_at: "2026-11-05T00:00:00Z".into(),
+        };
+        let below_100_eur = Trigger {
+            direction: Direction::Below,
+            price: "100".into(),
+            currency: "EUR".into(),
+        };
+        // 105.60 USD is 96.00 EUR.
+        assert_eq!(
+            is_past(
+                &below_100_eur,
+                &q(10_560, 2),
+                "USD",
+                std::slice::from_ref(&rate)
+            ),
+            Some(true)
+        );
+        // 115.50 USD is 105.00 EUR.
+        assert_eq!(
+            is_past(
+                &below_100_eur,
+                &q(11_550, 2),
+                "USD",
+                std::slice::from_ref(&rate)
+            ),
+            Some(false)
+        );
+        assert_eq!(is_past(&below_100_eur, &q(1, 0), "NOK", &[rate]), None);
+    }
+}
+
+/// One trigger's result in a check run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TriggerOutcome {
+    pub idea_id: String,
+    pub label: String,
+    pub trigger_key: String,
+    /// `hit`, `rearm`, `failed` or `skipped`.
+    pub action: &'static str,
+    pub detail: String,
+}
+
+fn quantity_text(quantity: &crate::investment::Quantity) -> String {
+    let digits = quantity.mantissa.unsigned_abs().to_string();
+    let scale = quantity.scale as usize;
+    let sign = if quantity.mantissa < 0 { "-" } else { "" };
+    if scale == 0 {
+        return format!("{sign}{digits}");
+    }
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole}.{fraction}")
+    }
+}
+
+/// Compares every open idea's triggers with its newest price. A hit creates a task due today
+/// in `project` through the `projects` capability, and is recorded only when the task exists,
+/// so a failed delivery is retried on the next run.
+pub fn check_triggers(
+    store: &crate::store::FinanceStore,
+    projects_base_url: &str,
+    project: &str,
+    today: &str,
+    recorded_at: &str,
+) -> Result<Vec<TriggerOutcome>, String> {
+    let ideas = store.ideas(None).map_err(|error| error.to_string())?;
+    let prices = store.latest_prices().map_err(|error| error.to_string())?;
+    let rates = store.latest_fx_rates().map_err(|error| error.to_string())?;
+    let mut outcomes = Vec::new();
+    for idea in ideas
+        .iter()
+        .filter(|idea| idea.current.status == IdeaStatus::Open)
+    {
+        let price = price_key(&idea.current)
+            .and_then(|key| prices.iter().find(|price| price.instrument == key));
+        for trigger in &idea.current.triggers {
+            let key = trigger_key(trigger);
+            let mut outcome = TriggerOutcome {
+                idea_id: idea.id.clone(),
+                label: idea.current.label.clone(),
+                trigger_key: key.clone(),
+                action: "skipped",
+                detail: String::new(),
+            };
+            let Some(price) = price else {
+                outcome.detail = "no price for this idea's instrument or ticker".into();
+                outcomes.push(outcome);
+                continue;
+            };
+            let Some(past) = is_past(trigger, &price.price, &price.currency, &rates) else {
+                outcome.detail = format!(
+                    "no published rate joins {} and {}",
+                    price.currency, trigger.currency
+                );
+                outcomes.push(outcome);
+                continue;
+            };
+            let armed = store
+                .trigger_armed(&idea.id, &key)
+                .map_err(|error| error.to_string())?;
+            let price_text = quantity_text(&price.price);
+            match step(past, armed) {
+                TriggerStep::Nothing => continue,
+                TriggerStep::Rearm => outcome.action = "rearm",
+                TriggerStep::Hit => {
+                    let direction = match trigger.direction {
+                        Direction::Above => "above",
+                        Direction::Below => "below",
+                    };
+                    let title = format!(
+                        "{} {direction} {} {}, now {price_text} {} ({})",
+                        idea.current.label,
+                        trigger.price,
+                        trigger.currency,
+                        price.currency,
+                        price.observed_on
+                    );
+                    let summary = format!(
+                        "Price trigger of the finance idea {}. Thesis: {}",
+                        idea.id, idea.current.thesis
+                    );
+                    match post_task(projects_base_url, project, &title, &summary, today) {
+                        Ok(()) => {
+                            outcome.action = "hit";
+                            outcome.detail = title;
+                        }
+                        Err(error) => {
+                            outcome.action = "failed";
+                            outcome.detail = error;
+                            outcomes.push(outcome);
+                            continue;
+                        }
+                    }
+                }
+            }
+            store
+                .append_trigger_event(
+                    &idea.id,
+                    &key,
+                    outcome.action == "hit",
+                    &price_text,
+                    &price.currency,
+                    &price.observed_on,
+                    recorded_at,
+                )
+                .map_err(|error| error.to_string())?;
+            outcomes.push(outcome);
+        }
+    }
+    Ok(outcomes)
+}
+
+fn post_task(
+    projects_base_url: &str,
+    project: &str,
+    title: &str,
+    summary: &str,
+    due: &str,
+) -> Result<(), String> {
+    let client = crate::price::blocking_client()?;
+    let url = format!("{}/api/tasks", projects_base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "project": project,
+        "title": title,
+        "summary": summary,
+        "due": due,
+        "priority": 1,
+    });
+    sjel_server::InboundAuth::with_loopback_auth(client.post(&url).json(&body), &url)
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map(|_| ())
+        .map_err(|error| format!("projects /api/tasks: {error}"))
+}

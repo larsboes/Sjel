@@ -10,6 +10,10 @@ covers it.
 
 ## Open
 
+- **Archive a project.** The projects capability reads a project as archived when its folder
+  sits under `Archive/`, but no route or `sjel` command moves it there. `POST /api/record/property`
+  can only set `status: done` or `cancelled`, so a closed project stays in the live list. Smallest
+  change: `POST /api/projects/archive` that moves the folder under `Archive/` and reindexes it.
 - **Harness intake review, live.** `tools/intake review --reviewer claude` passed only against a
   fake `claude` in `tools/skills.test.sh`. A real `claude -p` run has not happened. Unverified:
   the CLI accepts `--setting-sources project` together with `--json-schema`, and the field that

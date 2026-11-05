@@ -1056,15 +1056,32 @@ pub fn read_profiles(config: &DeployConfig) -> Result<Vec<Profile>, String> {
 
 /// `profiles.toml` is repository-wide, so `use` reads it before it knows which harness it is
 /// activating; this is the same read without a whole DeployConfig.
+///
+/// The overlay's machine.toml may define more `[[profile]]` entries for this machine. They are
+/// appended to the shared ones, and a name both files define is an error rather than a silent
+/// override.
 pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
-    let path = root.join("profiles.toml");
-    if !path.is_file() {
-        return Ok(Vec::new());
+    let mut profiles = read_profiles_file(&root.join("profiles.toml"))?;
+    if let Some(machine) = machine_toml_for(root) {
+        for profile in read_profiles_file(&machine)? {
+            if profiles.iter().any(|p| p.name == profile.name) {
+                return Err(format!(
+                    "{}: profile '{}' is already defined in profiles.toml; give the machine profile its own name",
+                    machine.display(),
+                    profile.name
+                ));
+            }
+            profiles.push(profile);
+        }
     }
-    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let parsed: toml::Table = text
-        .parse()
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(profiles)
+}
+
+/// One file's `[[profile]]` entries. A missing file or table defines none.
+fn read_profiles_file(path: &Path) -> Result<Vec<Profile>, String> {
+    let Some(parsed) = read_toml_table(path)? else {
+        return Ok(Vec::new());
+    };
     let Some(profiles) = parsed.get("profile").and_then(toml::Value::as_array) else {
         return Ok(Vec::new());
     };
@@ -1078,22 +1095,24 @@ pub fn read_profiles_at(root: &Path) -> Result<Vec<Profile>, String> {
         .collect()
 }
 
-/// The `[harness_profile]` key that binds every harness the table does not name.
-pub const BIND_ALL: &str = "*";
-
-/// Resolve a harness's named profile binding, falling back to `*`.
-///
-/// # Errors
-/// The file, binding table, profile name or profile definition is invalid.
-pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, String> {
-    let path = root.join("profiles.toml");
+fn read_toml_table(path: &Path) -> Result<Option<toml::Table>, String> {
     if !path.is_file() {
         return Ok(None);
     }
-    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let parsed: toml::Table = text
-        .parse()
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    text.parse()
+        .map(Some)
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The `[harness_profile]` key that binds every harness the table does not name.
+pub const BIND_ALL: &str = "*";
+
+/// The profile name one file's `[harness_profile]` binds `harness` to, falling back to `*`.
+fn binding_in(path: &Path, harness: &str) -> Result<Option<String>, String> {
+    let Some(parsed) = read_toml_table(path)? else {
+        return Ok(None);
+    };
     let Some(binding) = parsed.get("harness_profile") else {
         return Ok(None);
     };
@@ -1103,12 +1122,39 @@ pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, S
     let Some(value) = table.get(harness).or_else(|| table.get(BIND_ALL)) else {
         return Ok(None);
     };
-    let name = value.as_str().ok_or_else(|| {
-        format!(
-            "{}: harness_profile entries must be profile names (strings)",
-            path.display()
-        )
-    })?;
+    value
+        .as_str()
+        .map(|name| Some(name.to_owned()))
+        .ok_or_else(|| {
+            format!(
+                "{}: harness_profile entries must be profile names (strings)",
+                path.display()
+            )
+        })
+}
+
+/// Resolve a harness's named profile binding, falling back to `*`.
+///
+/// The overlay's machine.toml is read first: a `[harness_profile]` entry there (by name or `*`)
+/// binds the harness on this machine only, and profiles.toml's binding applies where it says
+/// nothing. This is the same split as `[unit_hold]`: the shared file holds the default, the
+/// machine decides for itself.
+///
+/// # Errors
+/// The file, binding table, profile name or profile definition is invalid.
+pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, String> {
+    let shared = root.join("profiles.toml");
+    let machine = machine_toml_for(root);
+    let machine_binding = match &machine {
+        Some(path) => binding_in(path, harness)?.map(|name| (name, path.clone())),
+        None => None,
+    };
+    let Some((name, source)) = (match machine_binding {
+        Some(found) => Some(found),
+        None => binding_in(&shared, harness)?.map(|name| (name, shared.clone())),
+    }) else {
+        return Ok(None);
+    };
     read_profiles_at(root)?
         .into_iter()
         .find(|p| p.name == name)
@@ -1116,7 +1162,7 @@ pub fn bound_profile_at(root: &Path, harness: &str) -> Result<Option<Profile>, S
         .ok_or_else(|| {
             format!(
                 "{}: harness_profile binds {harness} to '{name}', which no [[profile]] defines",
-                path.display()
+                source.display()
             )
         })
 }
@@ -1137,7 +1183,7 @@ pub fn refuse_outside_binding(config: &DeployConfig, pack: &str) -> Result<(), S
         return Ok(());
     }
     Err(format!(
-        "{pack} is not in profile '{}', which profiles.toml [harness_profile] binds to {harness}. \
+        "{pack} is not in profile '{}', which [harness_profile] binds to {harness}. \
          Add the Pack to that profile or change the binding, then run: tools/harnesses apply --harness {harness}",
         profile.name
     ))
@@ -1959,6 +2005,79 @@ packs = ["coding"]
         // No table, no holds: a repository that declares none behaves as it did before.
         fs::write(root.join("profiles.toml"), "[[profile]]\nname = \"p\"\n").unwrap();
         assert!(read_unit_holds_at(&root).unwrap().is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A machine's own `[harness_profile]` wins for this machine, its `[[profile]]` entries add to
+    /// the shared ones, a harness it does not bind keeps the shared binding, and a profile name
+    /// both files define is an error.
+    #[test]
+    fn a_harness_profile_in_machine_toml_overrides_profiles_toml() {
+        let root = std::env::temp_dir().join(format!(
+            "sjel-harnesses-machine-profile-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("repo")).unwrap();
+        fs::create_dir_all(root.join("overlay/config")).unwrap();
+        fs::write(
+            root.join("repo/profiles.toml"),
+            "[harness_profile]\n\"*\" = \"coding\"\npi = \"full\"\n[[profile]]\nname = \"coding\"\n[[profile]]\nname = \"full\"\n",
+        )
+        .unwrap();
+        let machine = root.join("overlay/config/machine.toml");
+        fs::write(
+            &machine,
+            "os = \"linux\"\n\n[harness_profile]\nclaude = \"work\"\n\n[[profile]]\nname = \"work\"\npacks = [\"coding\", \"gitlab-pipeline\"]\n",
+        )
+        .unwrap();
+        set_test_machine_toml(Some(machine.clone()));
+        let repo = root.join("repo");
+
+        let claude = bound_profile_at(&repo, "claude").unwrap().unwrap();
+        assert_eq!(claude.name, "work");
+        assert_eq!(
+            claude.packs,
+            vec!["coding".to_owned(), "gitlab-pipeline".to_owned()]
+        );
+        assert_eq!(
+            bound_profile_at(&repo, "codex").unwrap().unwrap().name,
+            "coding"
+        );
+        assert_eq!(bound_profile_at(&repo, "pi").unwrap().unwrap().name, "full");
+        assert_eq!(
+            read_profiles_at(&repo)
+                .unwrap()
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["coding", "full", "work"]
+        );
+
+        // A machine `*` binds every harness it does not name, ahead of profiles.toml's own.
+        fs::write(&machine, "[harness_profile]\n\"*\" = \"full\"\n").unwrap();
+        assert_eq!(
+            bound_profile_at(&repo, "codex").unwrap().unwrap().name,
+            "full"
+        );
+
+        fs::write(&machine, "[harness_profile]\nclaude = \"missing\"\n").unwrap();
+        let err = bound_profile_at(&repo, "claude").unwrap_err();
+        assert!(
+            err.contains("machine.toml") && err.contains("no [[profile]] defines"),
+            "{err}"
+        );
+
+        fs::write(&machine, "[[profile]]\nname = \"coding\"\n").unwrap();
+        let err = read_profiles_at(&repo).unwrap_err();
+        assert!(err.contains("already defined"), "{err}");
+
+        set_test_machine_toml(Some(root.join("overlay/config/absent.toml")));
+        assert_eq!(
+            bound_profile_at(&repo, "claude").unwrap().unwrap().name,
+            "coding"
+        );
+        set_test_machine_toml(None);
         let _ = fs::remove_dir_all(&root);
     }
 

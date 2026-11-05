@@ -123,7 +123,7 @@ fn validate_identity(
     }
     if algorithm != "ed25519" {
         return Err(StoreError::Invalid(
-            "algorithm must be ed25519 in axon-pairing/v1".into(),
+            "algorithm must be ed25519 in sjel-pairing/v1".into(),
         ));
     }
     let normalized_key = public_key.trim().to_ascii_lowercase();
@@ -279,7 +279,7 @@ impl DevicesStore {
         )
         .map_err(db)?;
         let qr_payload = serde_json::json!({
-            "protocol_version": "axon-pairing/v1",
+            "protocol_version": devices_api::PROTOCOL_VERSION,
             "challenge_id": challenge_id,
             "code": code,
         })
@@ -703,10 +703,19 @@ impl DevicesStore {
         let public_key = public_key_bytes(&public_key)
             .map_err(|_| StoreError::Unauthorized("registered device key is invalid".into()))?;
         let signature = &request.signature;
-        let message = auth::signing_message(request, method, path_and_query, body);
-        UnparsedPublicKey::new(&ED25519, public_key.as_slice())
-            .verify(&message, signature)
-            .map_err(|_| StoreError::Unauthorized("signature is invalid".into()))?;
+        let mut verified = false;
+        for message in auth::candidate_messages(request, method, path_and_query, body) {
+            if UnparsedPublicKey::new(&ED25519, public_key.as_slice())
+                .verify(&message, signature)
+                .is_ok()
+            {
+                verified = true;
+                break;
+            }
+        }
+        if !verified {
+            return Err(StoreError::Unauthorized("signature is invalid".into()));
+        }
 
         let tx = conn.unchecked_transaction().map_err(db)?;
         tx.execute(
@@ -964,7 +973,7 @@ mod tests {
         let (_dir, store) = store();
         let challenge = store.create_challenge().unwrap();
         assert_eq!(challenge.code.len(), 10);
-        assert!(challenge.qr_payload.contains("axon-pairing/v1"));
+        assert!(challenge.qr_payload.contains("sjel-pairing/v1"));
         let device = store
             .claim(
                 &challenge.challenge_id,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/calendar-proposal-provenance.schema.json",
+  "$id": "https://sjel.local/schemas/calendar-proposal-provenance.schema.json",
   "title": "Sjel Calendar Proposal Provenance",
   "description": "Bounded evidence retained when a reviewed Comms analysis date or locally extracted mail event is proposed to Calendar.",
   "type": "object",

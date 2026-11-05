@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/roomplan-sync-manifest.schema.json",
+  "$id": "https://sjel.local/schemas/roomplan-sync-manifest.schema.json",
   "title": "RoomPlan sync manifest",
   "type": "object",
   "required": ["protocol_version", "room_id", "revision_id", "status", "expected_sha256", "asset_filename", "observation_filename"],

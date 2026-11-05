@@ -22,7 +22,10 @@ pub(super) fn render(calendar: &str) -> String {
             }
             ("END", Some(_)) if value.eq_ignore_ascii_case("VEVENT") => {
                 if let Some((summary, Some(start), end)) = event.take() {
-                    out.push_str(&format!("{MARKER} {}\n{start}\n", summary.unwrap_or_default()));
+                    out.push_str(&format!(
+                        "{MARKER} {}\n{start}\n",
+                        summary.unwrap_or_default()
+                    ));
                     if let Some(end) = end {
                         out.push_str(&format!("{end}\n"));
                     }
@@ -80,7 +83,9 @@ fn local_line(value: &str) -> Option<String> {
         Some(time) => (time, true),
         None => (time, false),
     };
-    let time = time.strip_prefix('T').filter(|t| t.len() >= 4 && digits(t))?;
+    let time = time
+        .strip_prefix('T')
+        .filter(|t| t.len() >= 4 && digits(t))?;
     let hour: u8 = time[..2].parse().ok()?;
     if utc {
         return (3..=20).contains(&hour).then_some(date);
@@ -108,7 +113,10 @@ mod tests {
     #[test]
     fn dates_utc_and_unreadable_starts() {
         assert_eq!(local_line("20261110").as_deref(), Some("10.11.2026"));
-        assert_eq!(local_line("20261110T120000Z").as_deref(), Some("10.11.2026"));
+        assert_eq!(
+            local_line("20261110T120000Z").as_deref(),
+            Some("10.11.2026")
+        );
         assert_eq!(local_line("20261110T230000Z"), None);
         assert_eq!(local_line("soon"), None);
         let no_start = "BEGIN:VEVENT\nSUMMARY:x\nEND:VEVENT\n";

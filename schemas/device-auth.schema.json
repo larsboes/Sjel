@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/device-auth.schema.json",
+  "$id": "https://sjel.local/schemas/device-auth.schema.json",
   "title": "Sjel signed device request",
-  "description": "Header values for axon-device-auth/v1. The signature is Ed25519 over the canonical request bytes described by the devices capability.",
+  "description": "Header values for sjel-device-auth/v1. The signature is Ed25519 over the canonical request bytes described by the devices capability.",
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol_version", "device_id", "timestamp", "nonce", "signature"],
   "properties": {
-    "protocol_version": { "const": "axon-device-auth/v1" },
+    "protocol_version": { "enum": ["sjel-device-auth/v1", "axon-device-auth/v1"] },
     "device_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "timestamp": { "type": "integer", "minimum": 1 },
     "nonce": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },

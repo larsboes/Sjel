@@ -1,4 +1,4 @@
-//! The `axon-device-auth/v1` protocol between a paired device and the node, written once.
+//! The `sjel-device-auth/v1` protocol between a paired device and the node, written once.
 //!
 //! A paired device signs every request with its Ed25519 key. The signature covers the bytes from
 //! [`signing_message`]. The devices capability rebuilds the same bytes to verify
@@ -12,17 +12,24 @@ mod pinned;
 #[cfg(feature = "pinned-tls")]
 pub use pinned::{decode_pin, pinned_tls, PinnedCertificate};
 
-pub const PROTOCOL_VERSION: &str = "axon-device-auth/v1";
+pub const PROTOCOL_VERSION: &str = "sjel-device-auth/v1";
 
-/// The header names a device sends. Still the legacy `x-axon-*` names, on purpose:
-/// a server accepts both since 2026-10-01, and a phone build sending `x-sjel-*` would fail
-/// against a server that has not restarted since. Switch once every server runs the renaming
-/// gate (`sjel_server::normalize_legacy_headers`).
+/// The pre-rename protocol string, still accepted: it is part of the bytes a device signs, so a
+/// phone paired before the rename cannot be re-interpreted, only re-paired. Dropped when no
+/// paired device predates the rename.
+pub const LEGACY_PROTOCOL_VERSION: &str = "axon-device-auth/v1";
+
+/// Every protocol string a verifier must accept, current first.
+pub const ACCEPTED_PROTOCOL_VERSIONS: [&str; 2] = [PROTOCOL_VERSION, LEGACY_PROTOCOL_VERSION];
+
+/// The header names a device sends. `x-axon-*` is still accepted by
+/// `sjel_server::normalize_legacy_headers`, so a server that has not restarted since keeps
+/// admitting this build.
 pub const SENT_HEADERS: [&str; 4] = [
-    "x-axon-device-id",
-    "x-axon-timestamp",
-    "x-axon-nonce",
-    "x-axon-signature",
+    "x-sjel-device-id",
+    "x-sjel-timestamp",
+    "x-sjel-nonce",
+    "x-sjel-signature",
 ];
 
 /// The exact bytes a device signs. `path_and_query` is the path the capability sees, not the
@@ -36,8 +43,30 @@ pub fn signing_message(
     path_and_query: &str,
     body: &[u8],
 ) -> Vec<u8> {
+    signing_message_for(
+        PROTOCOL_VERSION,
+        device_id,
+        timestamp,
+        nonce,
+        method,
+        path_and_query,
+        body,
+    )
+}
+
+/// The signed bytes for one named protocol version, which is what lets a verifier check a
+/// signature made under a legacy string without knowing which one the device used.
+pub fn signing_message_for(
+    version: &str,
+    device_id: &str,
+    timestamp: i64,
+    nonce: &str,
+    method: &str,
+    path_and_query: &str,
+    body: &[u8],
+) -> Vec<u8> {
     format!(
-        "{PROTOCOL_VERSION}\n{device_id}\n{timestamp}\n{nonce}\n{}\n{path_and_query}\n{}\n",
+        "{version}\n{device_id}\n{timestamp}\n{nonce}\n{}\n{path_and_query}\n{}\n",
         method.to_ascii_uppercase(),
         hex(&Sha256::digest(body)),
     )
@@ -156,7 +185,7 @@ mod tests {
             b"{}",
         );
         let text = String::from_utf8(message).unwrap();
-        assert!(text.starts_with("axon-device-auth/v1\ndev_test\n1700000000\n"));
+        assert!(text.starts_with("sjel-device-auth/v1\ndev_test\n1700000000\n"));
         assert!(text.contains("\nGET\n/api/devices/me\n"));
         assert!(text.ends_with('\n'));
         let nonce = "00".repeat(16);
@@ -183,9 +212,27 @@ mod tests {
         .unwrap();
         let text = String::from_utf8(signed).unwrap();
         assert!(text.contains("\nGET\n/api/devices/me\n"));
-        assert_eq!(headers[0], ("x-axon-device-id", "dev_1".to_owned()));
+        assert_eq!(headers[0], ("x-sjel-device-id", "dev_1".to_owned()));
         assert_eq!(headers[2].1.len(), 32);
         assert_eq!(headers[3].1, "07".repeat(64));
+    }
+
+    #[test]
+    fn a_legacy_version_signs_different_bytes() {
+        let current = signing_message("d", 1, &"00".repeat(16), "GET", "/api/x", b"");
+        let legacy = signing_message_for(
+            LEGACY_PROTOCOL_VERSION,
+            "d",
+            1,
+            &"00".repeat(16),
+            "GET",
+            "/api/x",
+            b"",
+        );
+        assert_ne!(current, legacy);
+        assert!(String::from_utf8(legacy)
+            .unwrap()
+            .starts_with("axon-device-auth/v1\n"));
     }
 
     #[test]

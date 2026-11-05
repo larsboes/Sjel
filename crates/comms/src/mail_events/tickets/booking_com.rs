@@ -24,8 +24,7 @@ pub(super) fn legs(body: &str) -> Option<Vec<Event>> {
 }
 
 fn stay(lines: &[&str]) -> Option<Event> {
-    let (check_in_line, check_in) =
-        value(lines, "Check-in").or_else(|| value(lines, "Anreise"))?;
+    let (check_in_line, check_in) = value(lines, "Check-in").or_else(|| value(lines, "Anreise"))?;
     let (_, check_out) = value(lines, "Check-out").or_else(|| value(lines, "Abreise"))?;
     let hotel = lines
         .iter()

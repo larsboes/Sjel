@@ -231,8 +231,7 @@ pub fn list_sweep_threads(token: &str, limit: usize) -> Result<Vec<ThreadStub>> 
 
     while out.len() < limit {
         let remaining = limit - out.len();
-        let page =
-            list_sweep_threads_page(token, remaining.min(100), page_token.as_deref(), None)?;
+        let page = list_sweep_threads_page(token, remaining.min(100), page_token.as_deref(), None)?;
         for thread in page.threads {
             out.push(thread);
             if out.len() >= limit {
@@ -543,13 +542,17 @@ pub fn thread_event_source(token: &str, id: &str) -> Result<Option<EventSource>>
     let calendars = parts
         .into_iter()
         .take(CALENDAR_PART_LIMIT)
-        .filter_map(|part| match (&part.data, &part.attachment_id, &message.id) {
-            (Some(data), _, _) => decode_body(data),
-            (None, Some(attachment), Some(message_id)) => {
-                attachment_text(token, message_id, attachment).ok().flatten()
-            }
-            _ => None,
-        })
+        .filter_map(
+            |part| match (&part.data, &part.attachment_id, &message.id) {
+                (Some(data), _, _) => decode_body(data),
+                (None, Some(attachment), Some(message_id)) => {
+                    attachment_text(token, message_id, attachment)
+                        .ok()
+                        .flatten()
+                }
+                _ => None,
+            },
+        )
         .collect();
     Ok(Some(EventSource { body, calendars }))
 }

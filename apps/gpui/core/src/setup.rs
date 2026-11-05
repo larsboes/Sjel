@@ -400,7 +400,7 @@ mod tests {
         };
         assert_eq!(lan.pairing_hosts(), ["100.116.104.41", "lars-mac"]);
         let challenge: PairingChallenge = serde_json::from_str(
-            r#"{"protocol_version": "axon-pairing/v1", "challenge_id": "pair_01",
+            r#"{"protocol_version": "sjel-pairing/v1", "challenge_id": "pair_01",
                 "code": "482913abcd", "expires_at": 1761303600,
                 "qr_payload": "{}"}"#,
         )

@@ -4,7 +4,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const PROTOCOL_VERSION: &str = "axon-pairing/v1";
+pub const PROTOCOL_VERSION: &str = "sjel-pairing/v1";
+/// The pre-rename string, still carried through: a pairing payload's version is recorded, not
+/// rejected, so an older phone can still pair.
+pub const LEGACY_PROTOCOL_VERSION: &str = "axon-pairing/v1";
 pub const QR_KIND: &str = "sjel-pair/1";
 
 pub const ROUTE_DEVICES: &str = "/api/devices";
@@ -127,7 +130,7 @@ pub struct PairingChallenge {
     pub code: String,
     /// Epoch seconds: ten minutes after it was minted.
     pub expires_at: i64,
-    /// The `axon-pairing/v1` JSON the challenge carries, for a paste on the phone.
+    /// The `sjel-pairing/v1` JSON the challenge carries, for a paste on the phone.
     #[serde(default)]
     pub qr_payload: String,
 }

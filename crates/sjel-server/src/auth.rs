@@ -106,11 +106,11 @@ const EXEMPT_PATHS: &[&str] = &["/health", "/ready", FRESHNESS_PATH, LEGACY_FRES
 pub const FRESHNESS_PATH: &str = "/__sjel/freshness";
 pub const LEGACY_FRESHNESS_PATH: &str = "/__axon/freshness";
 
-/// The header whose presence makes a request a device-signed one (`axon-device-auth/v1`,
-/// `capabilities/devices/src/auth.rs`). The other three headers are read by the verifier.
+/// The header whose presence makes a request a device-signed one (`sjel-device-auth/v1`,
+/// `crates/device-auth`). The other three headers are read by the verifier.
 pub const DEVICE_SIGNATURE_HEADER: &str = "x-sjel-signature";
 
-/// The request headers renamed from Axon to Sjel: legacy name, current name.
+/// The request headers renamed with the product: legacy name, current name.
 pub const LEGACY_HEADERS: [(&str, &str); 5] = [
     ("x-axon-device-id", "x-sjel-device-id"),
     ("x-axon-timestamp", "x-sjel-timestamp"),
@@ -121,7 +121,7 @@ pub const LEGACY_HEADERS: [(&str, &str); 5] = [
 
 /// Renames each legacy `x-axon-*` header to its `x-sjel-*` name, so everything behind the gate
 /// reads the current names only. When a request carries both, the current one wins and the
-/// legacy one is dropped. Kept until every paired phone sends the new names.
+/// legacy one is dropped. Kept until no paired phone predates the rename.
 pub fn normalize_legacy_headers(headers: &mut HeaderMap) {
     for (legacy, current) in LEGACY_HEADERS {
         let values: Vec<_> = headers.get_all(legacy).iter().cloned().collect();
@@ -142,7 +142,8 @@ pub fn normalize_legacy_headers(headers: &mut HeaderMap) {
 /// proxy (`capabilities/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
 const MAX_SIGNED_BODY_BYTES: usize = 8 * 1024 * 1024;
 
-/// Checks one `axon-device-auth/v1` signed request against the device registry.
+/// Checks one `sjel-device-auth/v1` signed request against the device registry. The verifier
+/// accepts the pre-rename protocol string too, so a phone paired before the rename stays paired.
 ///
 /// A trait rather than a dependency because the registry is a capability
 /// (`capabilities/devices`) and this crate is under every capability. The shell supplies the

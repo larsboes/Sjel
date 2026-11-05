@@ -16,7 +16,7 @@
 use std::io::Write;
 
 fn fixture(names: &[&str]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join("axon-comms-rung0");
+    let dir = std::env::temp_dir().join("sjel-comms-rung0");
     std::fs::create_dir_all(&dir).unwrap();
     let p = dir.join(format!("registry-{}.json", std::process::id()));
     let tokens = names

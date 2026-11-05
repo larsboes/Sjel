@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/axon-sync.schema.json",
+  "$id": "https://sjel.local/schemas/sjel-sync.schema.json",
   "title": "Sjel node-neutral synchronization protocol",
   "description": "Portable mutations, acknowledgements, revisions and conflicts for an offline-capable Sjel device and canonical node. The protocol does not assume that the canonical node is a Mac.",
   "$defs": {
@@ -135,7 +135,7 @@
         "sent_at"
       ],
       "properties": {
-        "protocol_version": { "const": "axon-sync/v1" },
+        "protocol_version": { "enum": ["sjel-sync/v1", "axon-sync/v1"] },
         "envelope_id": { "$ref": "#/$defs/operation_id" },
         "origin_node_id": { "$ref": "#/$defs/node_id" },
         "target_node_id": { "$ref": "#/$defs/node_id" },
@@ -175,7 +175,7 @@
         "sent_at"
       ],
       "properties": {
-        "protocol_version": { "const": "axon-sync/encrypted/v1" },
+        "protocol_version": { "enum": ["sjel-sync/encrypted/v1", "axon-sync/encrypted/v1"] },
         "envelope_id": { "$ref": "#/$defs/operation_id" },
         "origin_node_id": { "$ref": "#/$defs/node_id" },
         "target_node_id": { "$ref": "#/$defs/node_id" },

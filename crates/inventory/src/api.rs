@@ -196,7 +196,7 @@ const ROUTES: &[route_manifest::Route] = &[
     r(
         "POST",
         "/api/sync",
-        "Signed axon-sync/v1 mutations from a paired device.",
+        "Signed sjel-sync/v1 mutations from a paired device.",
     ),
 ];
 
@@ -719,7 +719,8 @@ async fn api_sync(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs() as i64);
-    if envelope.protocol_version != "axon-sync/v1" {
+    // `axon-sync/v1` is the pre-rename string a paired phone still sends for one release.
+    if envelope.protocol_version != "sjel-sync/v1" && envelope.protocol_version != "axon-sync/v1" {
         return Err((
             StatusCode::BAD_REQUEST,
             "unsupported sync protocol version".into(),

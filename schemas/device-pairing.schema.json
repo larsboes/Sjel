@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/device-pairing.schema.json",
+  "$id": "https://sjel.local/schemas/device-pairing.schema.json",
   "title": "Sjel device pairing",
   "description": "The one-time invitation and claim shapes used to register a device public key. Private keys never enter this contract.",
   "$defs": {
@@ -9,7 +9,7 @@
       "required": ["protocol_version", "challenge_id", "code", "expires_at", "qr_payload"],
       "additionalProperties": false,
       "properties": {
-        "protocol_version": { "const": "axon-pairing/v1" },
+        "protocol_version": { "enum": ["sjel-pairing/v1", "axon-pairing/v1"] },
         "challenge_id": { "type": "string", "pattern": "^pair_[0-9a-f]{32}$" },
         "code": { "type": "string", "pattern": "^[A-Z2-9]{10}$" },
         "expires_at": { "type": "integer", "minimum": 1 },

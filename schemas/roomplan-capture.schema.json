@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/roomplan-capture.schema.json",
+  "$id": "https://sjel.local/schemas/roomplan-capture.schema.json",
   "title": "Native RoomPlan capture draft",
   "type": "object",
   "required": ["schema_version", "draft_id", "created_at", "source", "coordinate_system", "room", "assets", "provenance"],

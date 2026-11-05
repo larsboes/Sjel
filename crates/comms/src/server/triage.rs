@@ -380,7 +380,10 @@ pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> H
     let limit = body.limit.unwrap_or(100).clamp(1, 100);
     let cursor = body.cursor.filter(|value| !value.trim().is_empty());
     let after = body.after.filter(|value| !value.trim().is_empty());
-    if after.as_deref().is_some_and(|day| !google::valid_after_date(day)) {
+    if after
+        .as_deref()
+        .is_some_and(|day| !google::valid_after_date(day))
+    {
         return error_response(StatusCode::BAD_REQUEST, "after must be YYYY/MM/DD");
     }
     let result = tokio::task::spawn_blocking(move || -> Result<Value, String> {

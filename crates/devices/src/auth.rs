@@ -1,4 +1,4 @@
-//! Signed requests from registered devices (`axon-device-auth/v1`).
+//! Signed requests from registered devices (`sjel-device-auth/v1`).
 //!
 //! The signature covers the device id, request target, timestamp, nonce and body digest. The
 //! registry stores each accepted nonce, so a valid signature cannot be replayed inside the
@@ -6,11 +6,10 @@
 
 use axum::http::HeaderMap;
 
-pub use device_auth::PROTOCOL_VERSION;
-// `x-sjel-*` since 2026-10-01. The gate renames a legacy `x-axon-*` header to these
-// names before anything reads it (`sjel_server::normalize_legacy_headers`), so a paired phone
-// that still sends the old names keeps working. The protocol string above is unchanged: it is
-// part of what the device signs.
+pub use device_auth::{ACCEPTED_PROTOCOL_VERSIONS, PROTOCOL_VERSION, signing_message_for};
+// The gate renames a legacy `x-axon-*` header to these names before anything reads it
+// (`sjel_server::normalize_legacy_headers`), so a paired phone that still sends the old names
+// keeps working.
 pub const DEVICE_ID_HEADER: &str = "x-sjel-device-id";
 pub const TIMESTAMP_HEADER: &str = "x-sjel-timestamp";
 pub const NONCE_HEADER: &str = "x-sjel-nonce";
@@ -82,6 +81,27 @@ pub fn signing_message(
     )
 }
 
+/// One candidate message per accepted protocol version, current first. A phone paired before the
+/// rename signed the legacy string, and the verifier has no way to know which one it used.
+pub fn candidate_messages(
+    request: &SignedRequest,
+    method: &str,
+    path_and_query: &str,
+    body: &[u8],
+) -> [Vec<u8>; ACCEPTED_PROTOCOL_VERSIONS.len()] {
+    ACCEPTED_PROTOCOL_VERSIONS.map(|version| {
+        signing_message_for(
+            version,
+            &request.device_id,
+            request.timestamp,
+            &request.nonce,
+            method,
+            path_and_query,
+            body,
+        )
+    })
+}
+
 pub use device_auth::{decode_hex, hex};
 
 #[cfg(test)]
@@ -98,7 +118,7 @@ mod tests {
         };
         let message = signing_message(&request, "get", "/api/devices/me", b"{}");
         let text = String::from_utf8(message).unwrap();
-        assert!(text.starts_with("axon-device-auth/v1\ndev_test\n1700000000\n"));
+        assert!(text.starts_with("sjel-device-auth/v1\ndev_test\n1700000000\n"));
         assert!(text.contains("\nGET\n/api/devices/me\n"));
         assert!(text.ends_with('\n'));
         assert_ne!(

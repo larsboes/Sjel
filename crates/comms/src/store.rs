@@ -1624,10 +1624,22 @@ pub(crate) mod db_tests {
             store.get_triage(id).unwrap().unwrap().data_class
         };
         raise("thread:own-name", crate::intake::KNOWN_PERSON_RATIONALE);
-        assert_eq!(sweep("thread:own-name", false), "c2", "a blind sweep never lowers");
-        assert_eq!(sweep("thread:own-name", true), "c1", "re-read against the registry");
+        assert_eq!(
+            sweep("thread:own-name", false),
+            "c2",
+            "a blind sweep never lowers"
+        );
+        assert_eq!(
+            sweep("thread:own-name", true),
+            "c1",
+            "re-read against the registry"
+        );
         raise("thread:money", "Financial or insurance metadata is Others.");
-        assert_eq!(sweep("thread:money", true), "c2", "other reasons never lower");
+        assert_eq!(
+            sweep("thread:money", true),
+            "c2",
+            "other reasons never lower"
+        );
     }
 
     #[test]

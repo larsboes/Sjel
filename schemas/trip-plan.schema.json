@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/trip-plan.schema.json",
+  "$id": "https://sjel.local/schemas/trip-plan.schema.json",
   "title": "Sjel Trip Plan",
   "type": "object",
   "required": [

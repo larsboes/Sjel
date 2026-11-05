@@ -394,8 +394,13 @@ pub fn run(
     Ok(outcomes)
 }
 
+/// How long one model call may take.
+const MODEL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 fn ask(context: &RunContext<'_>, prompt: &str) -> Result<(String, String), String> {
-    let client = crate::price::blocking_client()?;
+    let client = sjel_http::builder(sjel_http::Purpose::new("finance-review"), MODEL_TIMEOUT)
+        .build()
+        .map_err(|error| format!("client could not be built: {error}"))?;
     let url = format!(
         "{}/api/ask",
         context.assistant_base_url.trim_end_matches('/')

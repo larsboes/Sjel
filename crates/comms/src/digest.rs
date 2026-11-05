@@ -1530,7 +1530,7 @@ mod tests {
         fn stored_mail(store: &Store, id: &str, data_class: &str) -> (Config, String) {
             let mut cfg = Config::with_inference(over_window_light_role());
             cfg.google_env_path =
-                std::env::temp_dir().join(format!("axon-absent-google-env-{}", std::process::id()));
+                std::env::temp_dir().join(format!("sjel-absent-google-env-{}", std::process::id()));
             cfg.database_path = crate::store::db_tests::test_database("digest_mail_drain_gate");
             let mut item = crate::store::db_tests::mk_triage(id, "aktiv");
             item.snippet = Some("paragraph ".repeat(400));

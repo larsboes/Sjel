@@ -1015,7 +1015,10 @@ mod tests {
         assert!(is_candidate(&item));
         item.stream = "aktiv".into();
         item.subject = Some("New GDG Amsterdam event: Weekly Meeten en Drinken".into());
-        assert!(is_candidate(&item), "mail from a person or service keeps the old gate");
+        assert!(
+            is_candidate(&item),
+            "mail from a person or service keeps the old gate"
+        );
     }
 
     #[test]

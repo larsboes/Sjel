@@ -59,7 +59,7 @@ pub(crate) struct Acknowledgement {
 
 pub(crate) fn empty_response(envelope: &Envelope, now: i64) -> ResponseEnvelope {
     ResponseEnvelope {
-        protocol_version: "axon-sync/v1",
+        protocol_version: "sjel-sync/v1",
         envelope_id: envelope.envelope_id.clone(),
         origin_node_id: envelope.origin_node_id.clone(),
         target_node_id: envelope.target_node_id.clone(),

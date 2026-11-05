@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://axon.local/schemas/content-item.schema.json",
+  "$id": "https://sjel.local/schemas/content-item.schema.json",
   "title": "Sjel Content Item",
   "description": "Canonical reader contract. Source adapters extend content without creating a second reader model.",
   "type": "object",

@@ -146,6 +146,21 @@ capabilities = ["home-assistant", "vaultwarden"]
 # [unit_hold]
 # pi = ["security/extensions/inference-keys"]
 
+# --- harness profiles (optional) -----------------------------------------
+# Which profile each harness gets on THIS machine. Same shape as profiles.toml's
+# [harness_profile]; an entry here (by harness name or "*") wins over profiles.toml for that
+# harness, and a harness this table does not bind keeps the shared binding. A [[profile]] defined
+# here is added to profiles.toml's and may name the overlay's own Packs; reusing a shared
+# profile's name is an error.
+#
+# [harness_profile]
+# claude = "work"
+#
+# [[profile]]
+# name = "work"
+# description = "Coding agents plus this machine's work Packs"
+# packs = ["coding", "harness", "security", "writing", "gitlab-pipeline"]
+
 # --- state mounts (optional, repeatable) ---------------------------------
 # Where a tool on this machine actually persists data. Sjel records the tool's own default
 # location, it never relocates it (CONTRIBUTING.md#state-mounts-record-reality).

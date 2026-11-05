@@ -84,8 +84,21 @@ for comments and scores on posts that match an idea.
 
 ### 5. Model digest and proposals
 
-A weekly digest per open idea cites its matched items. Proposals
-follow the constraints in Decisions.
+Built: `crates/finance/src/review.rs` and the table `finance_idea_reviews`. Once a week per
+open idea, at the end of `finance-cli prices fetch`, and on demand through
+`POST /api/ideas/{id}/review` ("Review now" in the app), the `assistant` capability's cloud
+role (`ideas_model_role` in finance.json, default `cloud_assistant_google`) receives the idea's
+name, ticker, stance, thesis, levels, notes, latest price and the summary or transcript of its
+matched feed items, numbered as sources. It never receives a quantity, a value or an account.
+The answer is a digest, an `enter`, `exit` or `hold` proposal, a rationale and the cited
+sources; a citation of a source the prompt did not give is dropped. A failed call stores
+nothing and the next run asks again. `POST /api/ideas/{id}/reviews/{review_id}/verdict` records
+`accepted` or `rejected` once. Each night the price move 30 and 90 days after a proposal is
+recorded; `enter` is right when the price rose, `exit` when it fell, `hold` is not judged. The
+30-day track record goes into the next prompt and shows in the app.
+
+Not yet run against a model: on 2026-11-05 the runtime profile was On the go, and the assistant
+deferred every cloud call ("enable remote-models while On the go").
 
 ### 6. App
 

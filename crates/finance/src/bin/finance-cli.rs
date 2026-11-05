@@ -180,6 +180,25 @@ fn fetch_prices(rest: &[&str]) -> Result<bool, String> {
             );
         }
         println!("triggers: {} changed or skipped", outcomes.len());
+        let scored = finance::review::score(&store, &as_of)?;
+        println!("reviews: {scored} move(s) scored");
+        let reviewed = finance::review::run(
+            &store,
+            &finance::review::RunContext {
+                comms_base_url: &config.comms_base_url,
+                assistant_base_url: &finance::config::assistant_base_url(),
+                model_role: &finance::config::ideas_model_role(),
+                today: &as_of,
+                now: &fetched_at,
+            },
+            None,
+        )?;
+        for outcome in &reviewed {
+            println!(
+                "review   {:<24} {:<8} {}",
+                outcome.label, outcome.result, outcome.detail
+            );
+        }
     }
     Ok(any)
 }

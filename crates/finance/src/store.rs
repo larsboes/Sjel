@@ -379,6 +379,26 @@ impl FinanceStore {
             );
             CREATE INDEX IF NOT EXISTS idx_{prefix}_idea_trigger_events_key
                 ON {prefix}_idea_trigger_events(idea_id, trigger_key, id);
+
+            -- Model reviews of ideas. The verdict and the two moves are filled in once each.
+            CREATE TABLE IF NOT EXISTS {prefix}_idea_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idea_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                model TEXT NOT NULL,
+                digest TEXT NOT NULL,
+                action TEXT NOT NULL CHECK (action IN ('enter','exit','hold')),
+                rationale TEXT NOT NULL,
+                cited_json TEXT NOT NULL,
+                price_json TEXT,
+                verdict TEXT CHECK (verdict IN ('accepted','rejected')),
+                verdict_note TEXT NOT NULL DEFAULT '',
+                verdict_at TEXT,
+                move_30_bp INTEGER,
+                move_90_bp INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_{prefix}_idea_reviews_idea
+                ON {prefix}_idea_reviews(idea_id, id);
             "
         ))?;
         rebuild_decision_events_check(conn, prefix)?;
@@ -1147,6 +1167,153 @@ impl FinanceStore {
             )
             .optional()?;
         Ok(kind.as_deref() != Some("hit"))
+    }
+
+    /// Stores one model review and returns its id. `price` is the observation it was made
+    /// against.
+    pub fn insert_review(
+        &self,
+        idea_id: &str,
+        created_at: &str,
+        model: &str,
+        review: &crate::review::ModelReview,
+        price: Option<&PriceObservation>,
+    ) -> Fallible<i64> {
+        let prefix = &self.prefix;
+        let conn = self.conn()?;
+        let price_json = price.map(serde_json::to_string).transpose()?;
+        conn.execute(
+            &format!(
+                "INSERT INTO {prefix}_idea_reviews
+                    (idea_id, created_at, model, digest, action, rationale, cited_json, price_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+            ),
+            params![
+                idea_id,
+                created_at,
+                model,
+                review.digest,
+                review.action.as_str(),
+                review.rationale,
+                serde_json::to_string(&review.cited)?,
+                price_json
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Reviews, newest first; `only` limits them to one idea.
+    pub fn reviews(&self, only: Option<&str>) -> Fallible<Vec<crate::review::Review>> {
+        let prefix = &self.prefix;
+        let conn = self.conn()?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT id, idea_id, created_at, model, digest, action, rationale, cited_json,
+                    price_json, verdict, verdict_note, verdict_at, move_30_bp, move_90_bp
+             FROM {prefix}_idea_reviews WHERE ?1 IS NULL OR idea_id = ?1 ORDER BY id DESC"
+        ))?;
+        let rows = statement
+            .query_map(params![only], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<i64>>(12)?,
+                    row.get::<_, Option<i64>>(13)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut reviews = Vec::with_capacity(rows.len());
+        for (
+            id,
+            idea_id,
+            created_at,
+            model,
+            digest,
+            action,
+            rationale,
+            cited,
+            price,
+            verdict,
+            verdict_note,
+            verdict_at,
+            move_30_bp,
+            move_90_bp,
+        ) in rows
+        {
+            let price: Option<serde_json::Value> =
+                price.as_deref().map(serde_json::from_str).transpose()?;
+            let price_field = |key: &str| price.as_ref().and_then(|value| value.get(key)).cloned();
+            let price_text = price_field("price").and_then(|value| {
+                let quantity: crate::investment::Quantity = serde_json::from_value(value).ok()?;
+                Some(crate::ideas::quantity_text(&quantity))
+            });
+            reviews.push(crate::review::Review {
+                id,
+                idea_id,
+                created_at,
+                model,
+                digest,
+                action: crate::review::Action::parse(&action)
+                    .unwrap_or(crate::review::Action::Hold),
+                rationale,
+                cited: serde_json::from_str(&cited)?,
+                price: price_text,
+                currency: price_field("currency").and_then(|v| v.as_str().map(str::to_string)),
+                price_on: price_field("observed_on").and_then(|v| v.as_str().map(str::to_string)),
+                verdict,
+                verdict_note,
+                verdict_at,
+                move_30_bp,
+                move_90_bp,
+            });
+        }
+        Ok(reviews)
+    }
+
+    /// Records the verdict on a review that has none. False when the review does not exist or
+    /// already has one.
+    pub fn set_review_verdict(
+        &self,
+        id: i64,
+        verdict: &str,
+        note: &str,
+        at: &str,
+    ) -> Fallible<bool> {
+        let prefix = &self.prefix;
+        let changed = self.conn()?.execute(
+            &format!(
+                "UPDATE {prefix}_idea_reviews SET verdict = ?2, verdict_note = ?3, verdict_at = ?4
+                 WHERE id = ?1 AND verdict IS NULL"
+            ),
+            params![id, verdict, note, at],
+        )?;
+        Ok(changed == 1)
+    }
+
+    /// Records the price move at one horizon (30 or 90 days), once.
+    pub fn set_review_move(&self, id: i64, horizon: i64, move_bp: i64) -> Fallible<()> {
+        let prefix = &self.prefix;
+        let column = match horizon {
+            30 => "move_30_bp",
+            90 => "move_90_bp",
+            _ => return Err(format!("no move column for {horizon} days").into()),
+        };
+        self.conn()?.execute(
+            &format!(
+                "UPDATE {prefix}_idea_reviews SET {column} = ?2 WHERE id = ?1 AND {column} IS NULL"
+            ),
+            params![id, move_bp],
+        )?;
+        Ok(())
     }
 
     /// Every attempt, successful or not.

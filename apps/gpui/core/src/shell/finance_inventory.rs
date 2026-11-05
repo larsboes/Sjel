@@ -133,6 +133,41 @@ impl Shell {
         .await
     }
 
+    /// Asks the model for a review of one idea now. Slow: one cloud model call.
+    pub async fn finance_review_idea(&self, id: &str) -> ShellResult<serde_json::Value> {
+        if !valid_idea_id(id) {
+            return Err(ShellError::Refused(400, Some("Invalid idea id.".into())));
+        }
+        self.json(
+            Method::POST,
+            &format!("/finance/api/ideas/{id}/review"),
+            Some(serde_json::json!({})),
+            120,
+        )
+        .await
+    }
+
+    pub async fn finance_review_verdict(
+        &self,
+        id: &str,
+        review_id: i64,
+        verdict: &str,
+    ) -> ShellResult<serde_json::Value> {
+        if !valid_idea_id(id) || !matches!(verdict, "accepted" | "rejected") {
+            return Err(ShellError::Refused(
+                400,
+                Some("Invalid review verdict.".into()),
+            ));
+        }
+        self.json(
+            Method::POST,
+            &format!("/finance/api/ideas/{id}/reviews/{review_id}/verdict"),
+            Some(serde_json::json!({ "verdict": verdict })),
+            30,
+        )
+        .await
+    }
+
     pub async fn finance_reconcile_transfer(
         &self,
         id: &str,

@@ -216,6 +216,27 @@ struct FinanceFileConfig {
     projects_base_url: Option<String>,
     #[serde(default)]
     ideas_project: Option<String>,
+    #[serde(default)]
+    ideas_model_role: Option<String>,
+    #[serde(default)]
+    assistant_base_url: Option<String>,
+}
+
+/// `ideas_model_role` from finance.json, else [`crate::review::DEFAULT_MODEL_ROLE`].
+pub fn ideas_model_role() -> String {
+    file_config()
+        .and_then(|config| config.ideas_model_role)
+        .filter(|role| !role.trim().is_empty())
+        .unwrap_or_else(|| crate::review::DEFAULT_MODEL_ROLE.to_string())
+}
+
+/// The assistant capability's loopback address: `SJEL_ASSISTANT_BASE_URL`, finance.json
+/// `assistant_base_url`, else port 8100.
+pub fn assistant_base_url() -> String {
+    sjel_config::env_var("SJEL_ASSISTANT_BASE_URL")
+        .ok()
+        .or_else(|| file_config().and_then(|config| config.assistant_base_url))
+        .unwrap_or_else(|| "http://127.0.0.1:8100".to_string())
 }
 
 /// The `projects` project that receives a task when an idea's price trigger fires.

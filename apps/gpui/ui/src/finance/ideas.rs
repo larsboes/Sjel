@@ -4,7 +4,7 @@
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_kit::component::scroll::ScrollableElement;
-use gpui_kit::component::Sizable;
+use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
 };
@@ -227,6 +227,47 @@ impl FinancePage {
             return;
         };
         let work = shell::run(async move { shell.finance_add_idea_note(&id, &text).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                if let Err(error) = result {
+                    page.notice = Some(error.to_string());
+                }
+                page.load_ideas(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn review_now(&mut self, cx: &mut Context<Self>) {
+        let (Some(id), Ok(shell)) = (self.selected_idea.clone(), self.repo.shell()) else {
+            return;
+        };
+        self.reviewing = true;
+        self.notice = None;
+        cx.notify();
+        let work = shell::run(async move { shell.finance_review_idea(&id).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |page, cx| {
+                page.reviewing = false;
+                if let Err(error) = result {
+                    page.notice = Some(format!("Review failed: {error}"));
+                }
+                page.load_ideas(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn judge_review(&mut self, review_id: i64, verdict: &'static str, cx: &mut Context<Self>) {
+        let (Some(id), Ok(shell)) = (self.selected_idea.clone(), self.repo.shell()) else {
+            return;
+        };
+        let work =
+            shell::run(async move { shell.finance_review_verdict(&id, review_id, verdict).await });
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |page, cx| {
@@ -669,6 +710,8 @@ impl FinancePage {
                 )
             });
 
+        let review = self.render_review_panel(&idea, palette, cx);
+
         // Earlier theses, each shown once, newest first.
         let mut earlier: Vec<(String, String)> = Vec::new();
         for snapshot in idea.history.iter().rev().skip(1) {
@@ -706,9 +749,187 @@ impl FinancePage {
             .child(header)
             .child(thesis)
             .child(levels)
+            .child(review)
             .child(research)
             .child(notes)
             .child(history)
+            .into_any_element()
+    }
+}
+
+fn action_tone(action: &str, palette: Palette) -> u32 {
+    match action {
+        "enter" => palette.green,
+        "exit" => palette.red,
+        _ => palette.muted,
+    }
+}
+
+fn move_text(label: &str, bp: Option<i64>) -> Option<String> {
+    bp.map(|bp| format!("{label} {:+.1} %", bp as f64 / 100.))
+}
+
+impl FinancePage {
+    fn render_review_panel(
+        &self,
+        idea: &FinanceIdea,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let record = idea.track_record;
+        let header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(title("MODEL REVIEW", palette))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                        if record.scored == 0 {
+                            "No proposal scored yet".to_string()
+                        } else {
+                            format!(
+                                "{} of {} proposals right after 30 days",
+                                record.right, record.scored
+                            )
+                        },
+                    ))
+                    .child(
+                        Button::new("idea-review-now")
+                            .xsmall()
+                            .label(if self.reviewing {
+                                "Reviewing…"
+                            } else {
+                                "Review now"
+                            })
+                            .disabled(self.reviewing || idea.current.status != "open")
+                            .on_click(cx.listener(|page, _, _, cx| page.review_now(cx))),
+                    ),
+            );
+        let mut panel = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_3()
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .bg(rgba(palette.surface))
+            .child(header)
+            .child(div().text_xs().text_color(rgb(palette.muted)).child(
+                "Advice from a model, weekly: it reads the research below and proposes enter, exit or hold. Nothing is traded.",
+            ));
+        let Some(latest) = idea.reviews.first() else {
+            return panel
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(rgb(palette.muted))
+                        .child("No review yet."),
+                )
+                .into_any_element();
+        };
+        let at_price = match (&latest.price, &latest.currency) {
+            (Some(price), Some(currency)) => format!(" at {price} {currency}"),
+            _ => String::new(),
+        };
+        let moves = [
+            move_text("30 d", latest.move_30_bp),
+            move_text("90 d", latest.move_90_bp),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ");
+        let review_id = latest.id;
+        panel = panel
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(tone_chip(
+                        latest.action.clone(),
+                        action_tone(&latest.action, palette),
+                    ))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(format!(
+                                "{}{at_price} · {}{}",
+                                latest.created_at.get(..10).unwrap_or_default(),
+                                latest.model,
+                                if moves.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(" · {moves}")
+                                }
+                            )),
+                    ),
+            )
+            .child(div().text_sm().child(latest.digest.clone()))
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(palette.muted))
+                    .child(latest.rationale.clone()),
+            )
+            .children(latest.cited.iter().enumerate().map(|(index, item)| {
+                let url = item.url.clone();
+                div()
+                    .id(SharedString::from(format!("idea-review-cite-{index}")))
+                    .text_xs()
+                    .cursor_pointer()
+                    .text_color(rgb(palette.accent))
+                    .on_click(move |_, _, cx| cx.open_url(&url))
+                    .child(format!("{} · {}", item.day, item.title))
+            }))
+            .child(match latest.verdict.as_deref() {
+                Some(verdict) => div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(format!("You {verdict} this proposal."))
+                    .into_any_element(),
+                None => div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        Button::new("idea-review-accept")
+                            .xsmall()
+                            .label("Accept")
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.judge_review(review_id, "accepted", cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("idea-review-reject")
+                            .xsmall()
+                            .ghost()
+                            .label("Reject")
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                page.judge_review(review_id, "rejected", cx)
+                            })),
+                    )
+                    .into_any_element(),
+            });
+        panel
+            .children(idea.reviews.iter().skip(1).map(|review| {
+                let parts = [
+                    Some(review.created_at.get(..10).unwrap_or_default().to_string()),
+                    Some(review.action.clone()),
+                    review.verdict.clone(),
+                    move_text("30 d", review.move_30_bp),
+                    move_text("90 d", review.move_90_bp),
+                ];
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(parts.into_iter().flatten().collect::<Vec<_>>().join(" · "))
+            }))
             .into_any_element()
     }
 }

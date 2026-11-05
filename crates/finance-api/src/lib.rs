@@ -453,6 +453,43 @@ pub struct FinanceIdea {
     /// Comms feed items that name the idea's label, ticker symbol or keywords, newest first.
     #[serde(default)]
     pub research: Vec<FinanceIdeaResearch>,
+    /// Model reviews, newest first.
+    #[serde(default)]
+    pub reviews: Vec<FinanceIdeaReview>,
+    #[serde(default)]
+    pub track_record: FinanceTrackRecord,
+}
+
+/// One model review: a digest of the research and an `enter`, `exit` or `hold` proposal.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceIdeaReview {
+    pub id: i64,
+    pub created_at: String,
+    pub model: String,
+    pub digest: String,
+    pub action: String,
+    pub rationale: String,
+    #[serde(default)]
+    pub cited: Vec<FinanceIdeaResearch>,
+    #[serde(default)]
+    pub price: Option<String>,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub verdict: Option<String>,
+    #[serde(default)]
+    pub move_30_bp: Option<i64>,
+    #[serde(default)]
+    pub move_90_bp: Option<i64>,
+}
+
+/// How this idea's judged proposals did after 30 days.
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema,
+)]
+pub struct FinanceTrackRecord {
+    pub scored: usize,
+    pub right: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
@@ -482,11 +519,18 @@ mod idea_wire_tests {
             "price":{"instrument":"SYN","observed_on":"2026-11-04",
                 "price":{"mantissa":"206100","scale":4},"currency":"EUR","source":"yahoo",
                 "fetched_at":"2026-11-04T00:00:00Z"},
-            "research":[{"id":"r1","title":"Synthetic news","url":"https://example.org/r1","day":"2026-11-03"}]}]"#;
+            "research":[{"id":"r1","title":"Synthetic news","url":"https://example.org/r1","day":"2026-11-03"}],
+            "reviews":[{"id":3,"idea_id":"idea-1","created_at":"2026-11-05T00:00:00Z","model":"m",
+                "digest":"d [1]","action":"hold","rationale":"r","cited":[{"id":"r1","title":"Synthetic news",
+                "url":"https://example.org/r1","day":"2026-11-03"}],"price":"20.61","currency":"SGD",
+                "price_on":"2026-11-04","verdict":null,"verdict_note":"","verdict_at":null,
+                "move_30_bp":null,"move_90_bp":null}],
+            "track_record":{"scored":0,"right":0}}]"#;
         let ideas: Vec<FinanceIdea> = serde_json::from_str(body).expect("parses");
         assert_eq!(ideas[0].current.triggers[0].price, "10.5");
         assert_eq!(ideas[0].history[0].draft.thesis, "t1");
         assert_eq!(ideas[0].price.as_ref().map(|p| p.price.scale), Some(4));
         assert_eq!(ideas[0].research[0].day, "2026-11-03");
+        assert_eq!(ideas[0].reviews[0].action, "hold");
     }
 }

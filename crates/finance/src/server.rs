@@ -62,6 +62,16 @@ const ROUTES: &[route_manifest::Route] = &[
         "Append a note to an idea. Body: text.",
     ),
     r(
+        "POST",
+        "/api/ideas/{id}/review",
+        "Ask the model for a review of one open idea now: a digest of its matched research and an enter, exit or hold proposal citing its sources. Sends name, ticker, stance, thesis, levels, notes, latest price and public feed text to the configured cloud role. Response: outcome.",
+    ),
+    r(
+        "POST",
+        "/api/ideas/{id}/reviews/{review_id}/verdict",
+        "Record the verdict on a review once. Body: verdict (accepted|rejected), optional note.",
+    ),
+    r(
         "GET",
         "/api/links",
         "Transactions that reference a typed id. Required: to=<id>, such as to=trip:plan:… (website/content/capabilities/links.md).",
@@ -337,7 +347,12 @@ struct IdeaView {
     idea: finance::ideas::Idea,
     price: Option<finance::price::PriceObservation>,
     research: Vec<finance::decision::FeedEvidence>,
+    /// Model reviews, newest first, at most [`REVIEWS_SHOWN`].
+    reviews: Vec<finance::review::Review>,
+    track_record: finance::review::TrackRecord,
 }
+
+const REVIEWS_SHOWN: usize = 5;
 
 /// How far back research is matched against ideas.
 const RESEARCH_DAYS: u32 = 90;
@@ -349,10 +364,11 @@ fn idea_views(
 ) -> Result<Vec<IdeaView>, String> {
     let ideas = store.ideas(only).map_err(|error| error.to_string())?;
     let prices = store.latest_prices().map_err(|error| error.to_string())?;
+    let all_reviews = store.reviews(only).map_err(|error| error.to_string())?;
     let feed = if ideas.is_empty() {
         Vec::new()
     } else {
-        read_feed(comms_base_url, Some(RESEARCH_DAYS))
+        finance::feed::read_feed(comms_base_url, Some(RESEARCH_DAYS))
     };
     Ok(ideas
         .into_iter()
@@ -361,10 +377,18 @@ fn idea_views(
                 .and_then(|key| prices.iter().find(|price| price.instrument == key))
                 .cloned();
             let research = finance::ideas::match_research(&idea.current, &feed);
+            let reviews: Vec<_> = all_reviews
+                .iter()
+                .filter(|review| review.idea_id == idea.id)
+                .cloned()
+                .collect();
+            let track_record = finance::review::track_record(&reviews);
             IdeaView {
                 idea,
                 price,
                 research,
+                reviews: reviews.into_iter().take(REVIEWS_SHOWN).collect(),
+                track_record,
             }
         })
         .collect())
@@ -521,6 +545,85 @@ async fn add_idea_note(
         Ok(Ok(false)) => response(
             StatusCode::NOT_FOUND,
             json!({ "error": "no idea with this id" }),
+        ),
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+async fn review_idea(State(state): State<AppState>, Path(id): Path<String>) -> ApiResponse {
+    let database_path = state.database_path.clone();
+    let comms_base_url = state.comms_base_url.clone();
+    match tokio::task::spawn_blocking(
+        move || -> Result<Vec<finance::review::RunOutcome>, String> {
+            let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+            finance::review::run(
+                &store,
+                &finance::review::RunContext {
+                    comms_base_url: &comms_base_url,
+                    assistant_base_url: &finance::config::assistant_base_url(),
+                    model_role: &finance::config::ideas_model_role(),
+                    today: &today(),
+                    now: &now_timestamp(),
+                },
+                Some(&id),
+            )
+        },
+    )
+    .await
+    {
+        Ok(Ok(outcomes)) => match outcomes.into_iter().next() {
+            Some(outcome) if outcome.result == "reviewed" => response(StatusCode::CREATED, outcome),
+            Some(outcome) => response(StatusCode::BAD_GATEWAY, outcome),
+            None => response(
+                StatusCode::NOT_FOUND,
+                json!({ "error": "no open idea with this id" }),
+            ),
+        },
+        Ok(Err(error)) => failed(error),
+        Err(_) => failed("task panicked".into()),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ReviewVerdictBody {
+    verdict: String,
+    #[serde(default)]
+    note: String,
+}
+
+async fn review_verdict(
+    State(state): State<AppState>,
+    Path((id, review_id)): Path<(String, i64)>,
+    Json(body): Json<ReviewVerdictBody>,
+) -> ApiResponse {
+    if !matches!(body.verdict.as_str(), "accepted" | "rejected") {
+        return response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "verdict must be accepted or rejected" }),
+        );
+    }
+    let database_path = state.database_path.clone();
+    match tokio::task::spawn_blocking(move || -> Result<bool, String> {
+        let store = FinanceStore::open(&database_path).map_err(|error| error.to_string())?;
+        let belongs = store
+            .reviews(Some(&id))
+            .map_err(|error| error.to_string())?
+            .iter()
+            .any(|review| review.id == review_id);
+        if !belongs {
+            return Ok(false);
+        }
+        store
+            .set_review_verdict(review_id, &body.verdict, body.note.trim(), &now_timestamp())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    {
+        Ok(Ok(true)) => response(StatusCode::OK, json!({ "ok": true })),
+        Ok(Ok(false)) => response(
+            StatusCode::CONFLICT,
+            json!({ "error": "no such review on this idea, or it already has a verdict" }),
         ),
         Ok(Err(error)) => failed(error),
         Err(_) => failed("task panicked".into()),
@@ -2713,84 +2816,10 @@ async fn run_decisions(
 /// It fails CLOSED: an item whose class comms does not state is dropped, not
 /// assumed public.
 fn read_feed_items(base_url: &str) -> Vec<finance::decision::FeedEvidence> {
-    read_feed(base_url, None)
+    finance::feed::read_feed(base_url, None)
         .into_iter()
         .map(|(item, _)| item)
         .collect()
-}
-
-/// Quotable feed items of the last `days` (comms' default when `None`), each with its summary.
-fn read_feed(base_url: &str, days: Option<u32>) -> Vec<(finance::decision::FeedEvidence, String)> {
-    if base_url.is_empty() {
-        return Vec::new();
-    }
-    let Ok(client) = finance::price::blocking_client() else {
-        return Vec::new();
-    };
-    let mut url = format!("{}/feed", base_url.trim_end_matches('/'));
-    if let Some(days) = days {
-        url.push_str(&format!("?days={days}"));
-    }
-    let request = sjel_server::InboundAuth::with_capability_loopback_auth(
-        client.get(&url),
-        &url,
-        sjel_server::comms_config_token(),
-    );
-    let body = match request
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .and_then(reqwest::blocking::Response::text)
-    {
-        Ok(body) => body,
-        Err(error) => {
-            eprintln!("finance: comms feed read failed: {error}");
-            return Vec::new();
-        }
-    };
-    let items = match serde_json::from_str::<Vec<Value>>(&body) {
-        Ok(items) => items,
-        Err(error) => {
-            eprintln!("finance: comms feed is not a JSON list: {error}");
-            return Vec::new();
-        }
-    };
-    items
-        .iter()
-        .filter(|item| item_is_quotable(item))
-        .filter_map(|item| {
-            Some((
-                finance::decision::FeedEvidence {
-                    id: item.get("id")?.as_str()?.to_string(),
-                    title: item.get("title")?.as_str()?.to_string(),
-                    url: item.get("url")?.as_str()?.to_string(),
-                    day: item.get("day")?.as_str()?.to_string(),
-                },
-                item.get("summary")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-            ))
-        })
-        .collect()
-}
-
-/// May this item's title and URL be copied into a `c1` row?
-///
-/// Only when comms states a class and that class is no stricter than the row's
-/// own. `class_rank` is the single home of the ordering
-/// (libs/content-item/src/lib.rs:350); comparing the strings here would be a
-/// second copy of the vocabulary.
-fn item_is_quotable(item: &Value) -> bool {
-    let Some(stated) = item.get("data_class").and_then(Value::as_str) else {
-        return false;
-    };
-    let (Some(stated), Some(row)) = (
-        content_item::class_rank(stated),
-        content_item::class_rank(finance::decision::DATA_CLASS),
-    ) else {
-        return false;
-    };
-    stated <= row
 }
 
 /// The per-trip slice, so a caller does not download the whole projection to read
@@ -2965,6 +2994,11 @@ fn build_router(state: AppState) -> Router {
         .route("/api/ideas", get(list_ideas).post(create_idea))
         .route("/api/ideas/{id}", get(get_idea).put(replace_idea))
         .route("/api/ideas/{id}/notes", post(add_idea_note))
+        .route("/api/ideas/{id}/review", post(review_idea))
+        .route(
+            "/api/ideas/{id}/reviews/{review_id}/verdict",
+            post(review_verdict),
+        )
         // ADD NEW ROUTES ABOVE THIS LINE. Below it they lose the origin guard.
         .layer(axum::middleware::from_fn_with_state(
             CAPABILITY,
@@ -3295,25 +3329,6 @@ mod tests {
         .await;
         assert_eq!(unknown.0, StatusCode::NOT_FOUND);
         assert_eq!(unknown.1 .0["error"], "no proposal with that id");
-    }
-
-    /// The class bound on feed evidence is on the CLASS, not on the field count.
-    /// An item comms does not classify is dropped rather than assumed public, and
-    /// an item comms classifies above the row's own `c1` is dropped whatever its
-    /// four fields say.
-    #[test]
-    fn only_an_item_comms_classifies_at_or_below_the_row_is_quotable() {
-        let at_class = json!({ "id": "a", "title": "t", "url": "u", "day": "2026-09-05",
-                               "data_class": "c1" });
-        let public = json!({ "id": "b", "data_class": "c0" });
-        let stricter = json!({ "id": "c", "data_class": "c2" });
-        let unstated = json!({ "id": "d", "title": "t", "url": "u", "day": "2026-09-05" });
-        let unknown = json!({ "id": "e", "data_class": "confidential" });
-        assert!(item_is_quotable(&at_class));
-        assert!(item_is_quotable(&public));
-        assert!(!item_is_quotable(&stricter));
-        assert!(!item_is_quotable(&unstated));
-        assert!(!item_is_quotable(&unknown));
     }
 
     #[tokio::test]

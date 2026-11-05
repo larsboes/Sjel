@@ -431,7 +431,7 @@ pub struct TriggerOutcome {
     pub detail: String,
 }
 
-fn quantity_text(quantity: &crate::investment::Quantity) -> String {
+pub fn quantity_text(quantity: &crate::investment::Quantity) -> String {
     let digits = quantity.mantissa.unsigned_abs().to_string();
     let scale = quantity.scale as usize;
     let sign = if quantity.mantissa < 0 { "-" } else { "" };

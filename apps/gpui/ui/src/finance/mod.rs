@@ -129,6 +129,7 @@ pub struct FinancePage {
     pub(super) new_idea_stance: &'static str,
     pub(super) level_direction: &'static str,
     pub ideas_scroll: ScrollHandle,
+    pub(super) reviewing: bool,
 }
 
 impl FinancePage {
@@ -193,6 +194,7 @@ impl FinancePage {
             new_idea_stance: "watch",
             level_direction: "above",
             ideas_scroll: ScrollHandle::new(),
+            reviewing: false,
         }
     }
 

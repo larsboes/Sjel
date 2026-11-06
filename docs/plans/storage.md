@@ -181,12 +181,67 @@ capability's API crate ([`restructure.md`](restructure.md#3-layout)):
 Projects and calendar move to this contract when it exists. Order of new domains (D3,
 2026-10-25): inventory and wishlist, then People (needs an entities outbox, Work Package 23).
 
+#### State per part
+
+| Part | Calendar | Projects |
+|---|---|---|
+| Pull | Done: `GET /api/entries/changes` with tombstones (`crates/calendar/src/store.rs`, `changes_since`) | Lists every live project, then reads records whose `updated_at` moved, then sweeps (`core/src/sync.rs`, `pull`) |
+| Push | `POST`, `PATCH` and `DELETE` on `/api/entries`; a 404 on `PATCH` re-creates the entry | Dashboard routes; a create is detected by matching refusal text (`Reply::missing`) |
+| Idempotency | None. A create that reached the Mac but whose answer was lost is sent again and makes a duplicate. | None, same risk |
+| Order and refusal | Done for both: one refused record blocks only itself, and `_sync_refusals` keeps the reason (#244, closed) | |
+| Pending pull | Done for both: `dirty_keys` skips records with an unsent write | |
+
+The calendar cursor is a second-resolution stamp that is unique only within one process
+(`now_text`, `LAST_STAMP`). A second process that writes entries, or a transaction that commits
+after a pull read a higher stamp, can produce a change below the phone's cursor, which the phone
+then never pulls. Not observed; this is an inference from the code.
+
+#### Steps
+
+Each step is one commit with its own check.
+
+1. **Contract types.** `Changes<T> { cursor, upserted, deleted }`, `Tombstone`, and the
+   idempotency header name, in one shared crate that both the capabilities and `apps/gpui/core`
+   link (decision S1). Done when calendar's feed serializes through it and its feed test passes
+   unchanged.
+2. **Sequence cursor.** Each owner gets a change log with an `INTEGER PRIMARY KEY` sequence,
+   written in the same transaction as the record and its tombstone. The feed answers
+   `seq > since`. Calendar first, keeping the old stamp cursor readable for one release.
+   Done when a test with two store handles writing in the same second loses no change.
+3. **Idempotent push.** The phone mints a key when it queues a write (new column on
+   `_offline_mutations`) and sends it on every replay. The server keeps a ledger of
+   key → answer and returns the stored answer on a repeat (decision S2). Done when a test sends
+   a create, drops the answer, replays it, and finds one record on the Mac.
+4. **Projects feed.** `GET /api/changes` in `crates/projects` with tombstones on delete and
+   archive. The phone's projects pull switches to it, and the list-and-sweep pull and
+   `Reply::missing` are deleted. Done when the projects sync tests pass against the feed and a
+   delete on the Mac removes the record on the phone.
+5. **One domain shape on the phone.** `core/src/sync.rs` runs every domain through one
+   `push`, `pull` and `apply` shape; a new domain adds a table, a feed path and its write
+   routes. Captures stay as they are: they are create-only. Done when calendar and projects run
+   through it and the file has no per-domain pull loop.
+6. **First pairing.** A test where a phone that never paired holds records, pairs, and syncs:
+   every record exists on the Mac once and stays on the phone.
+7. **Inventory and wishlist on the phone** (D3): the phone store's tables, the feed and
+   idempotency in `crates/inventory`, and the phone page (route 11 in
+   [`gpui.md`](gpui.md#1-route-matrix), planned). Done when an item added offline reaches
+   the Mac once on reconnect and an item changed on the Mac reaches the phone.
+8. **People** after Work Package 23 gives entities an outbox.
+
+#### Decisions needed
+
+- **S1. Where the contract types live.** Proposed: one small crate
+  (`crates/sync-contract`), the pattern `crates/roomplan-contract` set. The alternative is a copy
+  in each API crate, which is the drift `restructure.md` §3 measured.
+- **S2. Where the idempotency ledger lives.** Proposed: one table per capability database,
+  written in the same transaction as the write, so a write and its ledger row cannot disagree.
+  A shared middleware in `crates/sjel-http` would be less code but writes outside that
+  transaction. Keys older than 30 days are dropped; a phone offline longer than that replays
+  without protection (my estimate of an acceptable bound, not measured).
+
 ### Also open
 
 - **Search on the phone** over the store and the copy, so cached reads stay useful offline.
-- **First pairing keeps the phone's records.** Records made on a phone that never paired are
-  queued, so the first sync should create them on the Mac, and pull skips records with an unsent
-  write. No test covers a phone that pairs after it already holds records.
 - **Copy contents.** Which tables the copy carries as pages move to the phone, under the data
   rules above.
 

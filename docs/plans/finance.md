@@ -97,8 +97,11 @@ nothing and the next run asks again. `POST /api/ideas/{id}/reviews/{review_id}/v
 recorded; `enter` is right when the price rose, `exit` when it fell, `hold` is not judged. The
 30-day track record goes into the next prompt and shows in the app.
 
-Not yet run against a model: on 2026-11-05 the runtime profile was On the go, and the assistant
-deferred every cloud call ("enable remote-models while On the go").
+First live review 2026-11-06 with `gemini-3.8-flash` after the operator allowed remote models
+while On the go and raised the role's `max_requests_per_day` from 1 to 10 (`inference.json`):
+`hold` on the Rheinmetall idea, with the digest naming its one source as thin. A model call gets
+120 s. Known limit: a Reddit link post's feed entry carries only its link, so such a source
+gives the model a title and little else.
 
 ### 6. App
 

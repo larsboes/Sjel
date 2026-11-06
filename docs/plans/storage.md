@@ -151,7 +151,18 @@ about the expanded archive refers to the whole archive, not this filtered intake
 
 ## 3. Phone standalone
 
-The phone works without the Mac for notes, tasks, capture and calendar today.
+The phone works without the Mac for notes, tasks, capture and calendar today. Unpaired, Mail and
+Documents show a card that names the Mac as their source (`376a85ed`); Agent and People already
+did.
+
+The custom outbox stays. Turso's sync engine (`turso` crate, feature `sync`, read at `2709799`,
+0.9.0-pre.2) replicates the whole database file: push replays local changes as row upserts
+(`sync/engine/src/database_replay_generator.rs`), so a phone write would reach the Mac's tables
+without passing the owning capability, against the conflict rule below. Its self-hosted server
+(`tursodb --sync-server`) has no authentication and is for local and development use
+(`docs/sql-reference/cli/command-line-options.mdx`), while the phone talks only over the signed
+device client. Partial sync is marked experimental. Not measured, and not needed for this
+answer: opening the store file, recursive CTEs, vector queries, crash recovery, an iOS build.
 
 ### A sync contract per domain
 
@@ -173,6 +184,9 @@ Projects and calendar move to this contract when it exists. Order of new domains
 ### Also open
 
 - **Search on the phone** over the store and the copy, so cached reads stay useful offline.
+- **First pairing keeps the phone's records.** Records made on a phone that never paired are
+  queued, so the first sync should create them on the Mac, and pull skips records with an unsent
+  write. No test covers a phone that pairs after it already holds records.
 - **Copy contents.** Which tables the copy carries as pages move to the phone, under the data
   rules above.
 
@@ -187,7 +201,7 @@ migrations").
    queries in `projects`, `json_each` in `calendar`, vector search (`F32_BLOB`,
    `vector_top_k`), concurrent writers, crash recovery, and an iOS build. Unverified until read:
    whether the `turso` crate brings an offline sync engine that could replace the custom outbox
-   in §3.
+   in §3. Answered: it does not (§3).
 2. **Remove the replica leftovers** unless step 1 brings replicas back: stop and delete
    `capabilities/sqld`, `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs`, the
    `SJEL_TURSO_URL` handling, `tools/install-sqld.sh`, and the `[libsql-server]` and `[sqld]`

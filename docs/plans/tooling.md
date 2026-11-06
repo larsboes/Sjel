@@ -10,6 +10,12 @@ covers it.
 
 ## Open
 
+- **Unpaired and per-tab phone screenshots.** `ios/run-sim` installs on the first simulator and
+  takes one screenshot of the launch tab. Workaround: run it with `SJEL_IOS_SIM` set to a never
+  paired simulator, then loop `simctl launch` with `SIMCTL_CHILD_SJEL_TAB` and
+  `SIMCTL_CHILD_SJEL_SIDEBAR=off` per tab. Smallest change: `ios/run-sim --tabs today,mail,…`
+  writes one screenshot per tab, and `--unpaired` picks or creates a simulator with no pairing.
+
 - **Sandboxed GPUI build target.** Cargo could not write the configured shared target or a
   target below the checkout. Workaround: pass `--target-dir /private/tmp/sjel-calendar-target`
   to native Cargo checks and tests. Smallest change: let the build tooling select and report

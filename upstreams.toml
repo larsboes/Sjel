@@ -358,7 +358,7 @@ verdict = "watch"
 license = "MIT"
 summary = "Turso Database, the Rust rewrite of SQLite; a successor candidate to the libSQL fork Sjel links"
 why = "The Rust rewrite of SQLite, noted 2026-10-24 as a successor candidate to the libSQL fork Sjel links. Not read: the question a reading answers is whether it opens the store file unchanged, runs the recursive CTEs and vector queries the stores use, and recovers after a crash, measured against libSQL rather than inferred from the shared name."
-revisit = "Read it when libSQL is next upgraded or a store failure makes the engine a live question; a reading that finds no measured advantage moves this row to reject."
+revisit = "Read it when libSQL is next upgraded or a store failure makes the engine a live question; a reading that finds no measured advantage moves this row to reject. The sync engine (feature `sync`, read at 2709799) does not replace the phone outbox: it replays row upserts past the owning capability, and its self-hosted server has no authentication (docs/plans/storage.md, section 3)."
 
 [bun]
 url = "https://github.com/oven-sh/bun"

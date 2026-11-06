@@ -64,22 +64,28 @@ fn settings_target(explicit: Option<PathBuf>, agent_dir: Option<PathBuf>, home: 
     })
 }
 
+/// The ledger this harness owns. A machine that has not run
+/// `tools/migrate-axon-names.sh` still holds the pre-rename one, and a tool that read only the
+/// current name would start a fresh ledger and call every existing deployment unowned.
+fn ledger_path(env: &str, file: &str) -> PathBuf {
+    if let Some(explicit) = env_path(env) {
+        return engine::resolve(&explicit);
+    }
+    let state = state_home();
+    let current = state.join("sjel").join("pack-deployments").join(file);
+    let legacy = state.join("axon").join("pack-deployments").join(file);
+    if !current.exists() && legacy.exists() {
+        return engine::resolve(&legacy);
+    }
+    engine::resolve(&current)
+}
+
 pub fn state_path() -> PathBuf {
-    engine::resolve(&env_path("SJEL_PI_STATE_FILE").unwrap_or_else(|| {
-        state_home()
-            .join("axon")
-            .join("pack-deployments")
-            .join("pi.json")
-    }))
+    ledger_path("SJEL_PI_STATE_FILE", "pi.json")
 }
 
 fn agents_state_path() -> PathBuf {
-    engine::resolve(&env_path("SJEL_PI_AGENTS_STATE_FILE").unwrap_or_else(|| {
-        state_home()
-            .join("axon")
-            .join("pack-deployments")
-            .join("pi-agents.json")
-    }))
+    ledger_path("SJEL_PI_AGENTS_STATE_FILE", "pi-agents.json")
 }
 
 /// Where pi-subagents looks for agent files: flat, no pack subdirectory, no recursion.

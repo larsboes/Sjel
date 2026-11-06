@@ -2490,6 +2490,54 @@ fn launch_edge_off() -> bool {
     matches!(flag.as_str(), "off" | "0") || matches!(sound.as_str(), "off" | "0")
 }
 
+/// The card an unpaired phone shows on a page whose data lives only on the Mac.
+fn needs_mac(
+    id: &'static str,
+    page: &'static str,
+    palette: Palette,
+    cx: &mut Context<Capabilities>,
+) -> AnyElement {
+    div()
+        .rounded(px(12.))
+        .bg(rgba(palette.surface))
+        .p_4()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(
+            div()
+                .text_base()
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child(format!("{page} needs your Mac")),
+        )
+        .child(
+            div()
+                .text_sm()
+                .text_color(rgb(palette.muted))
+                .child(format!(
+                "{page} is read from the Mac this phone is paired with. This phone is not paired."
+            )),
+        )
+        .child(
+            div()
+                .id(id)
+                .min_h(px(44.))
+                .flex()
+                .items_center()
+                .text_sm()
+                .text_color(rgb(palette.accent))
+                .child("Pair in Settings →")
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|view, _, _, cx| {
+                        view.active_tab = Tab::Settings;
+                        cx.notify();
+                    }),
+                ),
+        )
+        .into_any_element()
+}
+
 fn agent_action_button(
     label: &'static str,
     id: &'static str,
@@ -2767,6 +2815,9 @@ impl Render for Capabilities {
         let is_interior = self.active_tab == Tab::Interior;
         let is_mail = self.active_tab == Tab::Mail;
         let is_documents = self.active_tab == Tab::Documents;
+        // Mail and Documents are read live from the Mac (docs/plans/gpui.md, "What may live on the
+        // phone"), so an unpaired phone says so instead of showing an empty list.
+        let paired = self.client.is_some();
         self.mail
             .update(cx, |mail, cx| mail.set_palette(palette, cx));
         self.documents
@@ -3253,7 +3304,10 @@ impl Render for Capabilities {
                         )
                     })
                     .when(is_today, |page| page.child(self.today.clone()))
-                    .when(is_mail, |page| page.child(self.mail.clone()))
+                    .when(is_mail && paired, |page| page.child(self.mail.clone()))
+                    .when(is_mail && !paired, |page| {
+                        page.child(needs_mac("needs-mac-mail", "Mail", palette, cx))
+                    })
                     .when(is_inbox, |page| page.child(self.inbox.clone()))
                     .when(is_travel, |page| page.child(self.travel.clone()))
                     .when(is_calendar, |page| page.child(self.calendar.clone()))
@@ -3276,7 +3330,12 @@ impl Render for Capabilities {
                                     }),
                                 ),
                         )
-                        .child(div().flex_1().min_h_0().child(self.documents.clone()))
+                        .when(paired, |page| {
+                            page.child(div().flex_1().min_h_0().child(self.documents.clone()))
+                        })
+                        .when(!paired, |page| {
+                            page.child(needs_mac("needs-mac-documents", "Documents", palette, cx))
+                        })
                     })
                     .when(is_interior, |page| {
                         page.child(

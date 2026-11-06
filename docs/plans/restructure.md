@@ -70,10 +70,11 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
 4. Code comments and READMEs, module by module, in the same pass as the layout change. READMEs
    also move to the neutral register (`on-documentation.md`, Register).
    Done: secondary capability README sweep (`ec859210`, refined in `cc44c287`).
-5. Done: the rename, in five commits. Internal identifiers (`f8f4ef17`), scratch paths and
-   `tools/sjel-context` (`8732a364`), the wire protocols (`35cfaf53`), the persisted names with
-   `tools/migrate-axon-names.sh` (`620081f1`), and the prose that described them. At this
-   snapshot 533 occurrences remain in 120 tracked files, including compatibility reads, old
+5. Done: the rename and persisted-path follow-up. Five commits cover internal identifiers
+   (`f8f4ef17`), scratch paths and `tools/sjel-context` (`8732a364`), the wire protocols
+   (`35cfaf53`), persisted names with `tools/migrate-axon-names.sh` (`620081f1`), and the first
+   prose sweep. The persisted-path and fixture cleanup is `71558dc0`. At this snapshot 533
+   occurrences remain in 120 tracked files, including compatibility reads, old
    record formats and test fixtures. What still answers to a pre-rename name, and why each one
    stays:
 

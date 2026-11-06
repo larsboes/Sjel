@@ -447,8 +447,10 @@ inside this list is by use.
   text search in the rendered PDF, drag and drop from Finder into import.
 - **Finance.** Built: the overview cards show the newest month instead of the
   all-time sum, a six-month income and spending chart, and a holdings panel with each price's
-  source, age and FX rate. Open: a keyboard category picker, and paging for
-  `GET /api/import/candidates`.
+  source, age and FX rate. A keyboard category picker in Import & Review: typed words filter
+  the known expense accounts, ↑↓ move, Enter applies and selects the next uncategorized
+  expense. Paging for `GET /api/import/candidates` is dropped: measured 2026-11-06, 1,470
+  candidates (859 KB) answer in 0.14 s, against the app's 10 s timeout.
 - **People.** Interaction history: notes that mention the person, with dates.
 - **Inventory.** State history and layout impact preview (from Work Package 26).
 - **Travel, Tasks, Notes & Feed UI/UX upgrades (2026-10-28).**

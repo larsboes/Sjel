@@ -303,6 +303,44 @@ pub fn filter_transactions<'a>(
         .collect()
 }
 
+/// Expense accounts that match what the person typed, best first, at most `limit`.
+///
+/// Every word of `query` must appear in the account, case-insensitive. An account whose
+/// segment starts with the first word ranks above one that only contains it, then the
+/// shorter account wins. `expenses:…:uncategorized` is never suggested.
+pub fn category_suggestions(categories: &[String], query: &str, limit: usize) -> Vec<String> {
+    let words: Vec<String> = query
+        .split(|c: char| c.is_whitespace() || c == ':')
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let mut ranked: Vec<(u8, usize, &String)> = categories
+        .iter()
+        .filter(|account| {
+            account.starts_with("expenses:")
+                && !account.split(':').any(|segment| segment == "uncategorized")
+        })
+        .filter_map(|account| {
+            let lower = account.to_lowercase();
+            if !words.iter().all(|word| lower.contains(word.as_str())) {
+                return None;
+            }
+            let segment_start = words.first().is_none_or(|first| {
+                lower
+                    .split([':', '-'])
+                    .any(|segment| segment.starts_with(first.as_str()))
+            });
+            Some((u8::from(!segment_start), account.len(), account))
+        })
+        .collect();
+    ranked.sort();
+    ranked
+        .into_iter()
+        .take(limit)
+        .map(|(_, _, account)| account.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,5 +477,30 @@ mod tests {
         };
         let res2 = filter_transactions(&txs, &f2);
         assert_eq!(res2.len(), 2);
+    }
+
+    #[test]
+    fn category_suggestions_rank_segment_starts_first_and_skip_uncategorized() {
+        let categories: Vec<String> = [
+            "expenses:food:groceries",
+            "expenses:food:fast-food",
+            "expenses:leisure:gaming-groups",
+            "expenses:uncategorized",
+            "income:salary",
+        ]
+        .iter()
+        .map(|c| (*c).to_string())
+        .collect();
+        assert_eq!(
+            category_suggestions(&categories, "gro", 5),
+            ["expenses:food:groceries", "expenses:leisure:gaming-groups"]
+        );
+        assert_eq!(
+            category_suggestions(&categories, "food fast", 5),
+            ["expenses:food:fast-food"]
+        );
+        assert_eq!(category_suggestions(&categories, "", 2).len(), 2);
+        assert!(category_suggestions(&categories, "uncat", 5).is_empty());
+        assert!(category_suggestions(&categories, "salary", 5).is_empty());
     }
 }

@@ -130,6 +130,7 @@ pub struct FinancePage {
     pub(super) level_direction: &'static str,
     pub ideas_scroll: ScrollHandle,
     pub(super) reviewing: bool,
+    pub(super) reclass_highlight: usize,
 }
 
 impl FinancePage {
@@ -195,6 +196,7 @@ impl FinancePage {
             level_direction: "above",
             ideas_scroll: ScrollHandle::new(),
             reviewing: false,
+            reclass_highlight: 0,
         }
     }
 

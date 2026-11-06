@@ -19,6 +19,9 @@ use crate::theme::Palette;
 
 use super::FinancePage;
 
+/// How many category suggestions the picker shows.
+const RECLASS_SUGGESTIONS: usize = 6;
+
 #[derive(Default)]
 pub(crate) struct TxDerived {
     pub(super) key: Option<(Option<Instant>, u64)>,
@@ -133,12 +136,20 @@ impl FinancePage {
         }
         let input =
             cx.new(|cx| InputState::new(window, cx).placeholder("expenses:category:merchant"));
-        let subscription = cx.subscribe_in(&input, window, |page, input, event, _, cx| {
-            if matches!(event, InputEvent::Change) {
-                page.reclass_account = input.read(cx).value().to_string();
-                cx.notify();
-            }
-        });
+        let subscription =
+            cx.subscribe_in(
+                &input,
+                window,
+                |page, input, event, window, cx| match event {
+                    InputEvent::Change => {
+                        page.reclass_account = input.read(cx).value().to_string();
+                        page.reclass_highlight = 0;
+                        cx.notify();
+                    }
+                    InputEvent::PressEnter { .. } => page.apply_reclass(None, window, cx),
+                    _ => {}
+                },
+            );
         self.reclass_input = Some((input.clone(), subscription));
         input
     }
@@ -162,6 +173,65 @@ impl FinancePage {
         input
     }
 
+    /// Known expense accounts matching the typed text, best first.
+    pub(super) fn reclass_suggestions(&self) -> Vec<String> {
+        let categories = self
+            .dashboard
+            .value
+            .as_ref()
+            .map(|dashboard| dashboard.categories.as_slice())
+            .unwrap_or_default();
+        sjel_gpui_core::finance::category_suggestions(
+            categories,
+            &self.reclass_account,
+            RECLASS_SUGGESTIONS,
+        )
+    }
+
+    /// Moves the highlighted suggestion by `step`, staying inside the list.
+    pub(super) fn move_reclass_highlight(&mut self, step: isize, cx: &mut Context<Self>) {
+        let count = self.reclass_suggestions().len();
+        if count > 0 {
+            self.reclass_highlight = self
+                .reclass_highlight
+                .saturating_add_signed(step)
+                .min(count - 1);
+            cx.notify();
+        }
+    }
+
+    /// Applies `account`, else the highlighted suggestion, else the typed text, to the selected
+    /// expense (the first uncategorized one when none is selected), clears the field and moves
+    /// to the next expense.
+    pub(super) fn apply_reclass(
+        &mut self,
+        account: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let account = account
+            .or_else(|| {
+                self.reclass_suggestions()
+                    .get(self.reclass_highlight)
+                    .cloned()
+            })
+            .unwrap_or_else(|| self.reclass_account.trim().to_owned());
+        let id = self.selected_reclass_candidate.clone().or_else(|| {
+            self.import_derived
+                .uncategorized
+                .first()
+                .map(|candidate| candidate.id.clone())
+        });
+        let Some(id) = id else {
+            return;
+        };
+        if let Some((input, _)) = &self.reclass_input {
+            input.update(cx, |state, cx| state.set_value(String::new(), window, cx));
+        }
+        self.reclass_highlight = 0;
+        self.reclassify(id, account, cx);
+    }
+
     pub(super) fn reclassify_selected(&mut self, cx: &mut Context<Self>) {
         let (Some(id), account) = (
             self.selected_reclass_candidate.clone(),
@@ -169,6 +239,16 @@ impl FinancePage {
         ) else {
             return;
         };
+        self.reclassify(id, account, cx);
+    }
+
+    fn reclassify(&mut self, id: String, account: String, cx: &mut Context<Self>) {
+        let uncategorized = &self.import_derived.uncategorized;
+        let next = uncategorized
+            .iter()
+            .position(|candidate| candidate.id == id)
+            .and_then(|index| uncategorized.get(index + 1))
+            .map(|candidate| candidate.id.clone());
         if !account.starts_with("expenses:")
             || account.split(':').any(|segment| segment == "uncategorized")
         {
@@ -192,11 +272,14 @@ impl FinancePage {
                         page.notice = Some(format!(
                             "{} candidate reclassified.",
                             value["reclassified"].as_u64().unwrap_or_default()
-                        ))
+                        ));
+                        page.selected_reclass_candidate = next;
                     }
-                    Err(error) => page.notice = Some(error.to_string()),
+                    Err(error) => {
+                        page.notice = Some(error.to_string());
+                        page.selected_reclass_candidate = None;
+                    }
                 }
-                page.selected_reclass_candidate = None;
                 page.reclass_account.clear();
                 page.load(cx);
             });

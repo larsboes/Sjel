@@ -571,7 +571,42 @@ impl FinancePage {
                     ),
             );
         }
-        let category_input = Input::new(&self.reclass_field(window, cx)).small();
+        let category_input = div()
+            .flex_1()
+            .capture_key_down(cx.listener(|page, event: &gpui::KeyDownEvent, _, cx| {
+                match event.keystroke.key.as_str() {
+                    "up" => page.move_reclass_highlight(-1, cx),
+                    "down" => page.move_reclass_highlight(1, cx),
+                    _ => return,
+                }
+                cx.stop_propagation();
+            }))
+            .child(Input::new(&self.reclass_field(window, cx)).small());
+        let suggestions = self.reclass_suggestions();
+        let suggestion_row = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_1()
+            .children(suggestions.into_iter().enumerate().map(|(index, account)| {
+                let chosen = account.clone();
+                Button::new(SharedString::from(format!(
+                    "finance-category-suggestion-{index}"
+                )))
+                .xsmall()
+                .label(account.trim_start_matches("expenses:").to_string())
+                .when(index == self.reclass_highlight, |button| button.primary())
+                .when(index != self.reclass_highlight, |button| button.ghost())
+                .on_click(cx.listener(move |page, _, window, cx| {
+                    page.apply_reclass(Some(chosen.clone()), window, cx)
+                }))
+            }))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child("↑↓ choose · ⏎ apply and go to the next"),
+            );
         let categorize_panel = div()
             .flex()
             .flex_col()
@@ -616,7 +651,8 @@ impl FinancePage {
                             )
                             .on_click(cx.listener(|page, _, _, cx| page.reclassify_selected(cx))),
                     ),
-            );
+            )
+            .child(suggestion_row);
         let categorize_panel = if uncategorized_len > self.category_limit {
             categorize_panel.child(
                 Button::new("finance-category-more")

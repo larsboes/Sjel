@@ -135,7 +135,10 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
                         .unwrap();
                     let mut reader = BufReader::new(stream.try_clone().unwrap());
                     let mut line = String::new();
-                    reader.read_line(&mut line).unwrap();
+                    // A reachability probe connects and closes without a request line.
+                    if reader.read_line(&mut line).unwrap() == 0 {
+                        continue;
+                    }
                     requests.push(line.clone());
                     let mut length = 0;
                     loop {

@@ -897,6 +897,15 @@ pub(crate) mod db_tests {
     /// `pub(crate)` because `cloud_run`'s tests need a real store too: the
     /// enqueue refusal they pin is only worth pinning against a store that
     /// would happily have written the row.
+    /// A loopback backend that accepts and closes every connection: the reachability gate admits
+    /// it, and a request that gets through comes back `http_error`.
+    pub(crate) fn closing_backend() -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free loopback port");
+        let base = format!("http://{}/v1", listener.local_addr().expect("a bound address"));
+        std::thread::spawn(move || listener.incoming().for_each(drop));
+        base
+    }
+
     pub(crate) fn open_test_store(name: &str) -> Store {
         let path = test_database(name);
         Store::open(&path)

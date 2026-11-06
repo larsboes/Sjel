@@ -366,18 +366,18 @@ mod tests {
 
     /// T3, on the second prefill path. This function speaks HTTP itself, so the
     /// class question has to be asked here or not at all — and the role is
-    /// pointed at a port nothing listens on, so a prompt that got through would
+    /// pointed at a backend that closes every connection, so a prompt that got through would
     /// come back `http_error`. `local_refused` therefore says no request was
     /// attempted, with no network mock to be wrong about.
-    /// A light rung pointed at a port nothing listens on.
+    /// A light rung pointed at a backend that closes every connection.
     ///
     /// The window is wide enough that a probe text is `Rung::Light`, so an
     /// `over_window` verdict cannot be mistaken for a refusal, and the closed
-    /// port means anything that does reach the model comes back `http_error`.
+    /// backend means anything that does reach the model comes back `http_error`.
     fn unreachable_light_role() -> sjel_inference::InferenceConfig {
         serde_json::from_value(serde_json::json!({
             "backends": {
-                "foundation-models": { "api": "openai", "base_url": "http://127.0.0.1:9/v1" },
+                "foundation-models": { "api": "openai", "base_url": crate::store::db_tests::closing_backend() },
             },
             "roles": {
                 "summarization_light": {
@@ -404,7 +404,7 @@ mod tests {
             );
         }
         // The control: c2 is local-only, not local-forbidden, so it reaches the
-        // closed port instead of being refused for its class.
+        // closing backend instead of being refused for its class.
         for allowed in ["c0", "c1", "c2"] {
             assert_ne!(
                 summarize(&runtime, &text, &cfg, allowed).error_class(),
@@ -812,7 +812,7 @@ mod tests {
         /// never made.
         ///
         /// The `c2` control is what makes the assertion mean something: it takes
-        /// the same path, reaches the closed port and *does* move the ledger, so
+        /// the same path, reaches the closing backend and *does* move the ledger, so
         /// this cannot pass on a drain that stopped recording attempts at all.
         #[test]
         fn a_refused_class_moves_no_retry_ledger_through_the_drain() {
@@ -849,7 +849,7 @@ mod tests {
                 .expect("the row exists");
             assert_eq!(
                 control.summary_attempts, 1,
-                "c2 reached the closed port, so the ledger must have moved"
+                "c2 reached the backend, so the ledger must have moved"
             );
         }
     }

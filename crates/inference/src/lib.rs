@@ -723,6 +723,19 @@ pub fn afm_available(base_url: &str) -> bool {
         .is_some_and(|body| body.get("model_available").and_then(|v| v.as_bool()) == Some(true))
 }
 
+/// A stopped local server is an absent resource, not a failed request: deferring keeps retry
+/// budgets intact until it starts again. AFM has its own readiness check in `afm_available`.
+fn loopback_listening(base_url: &str) -> bool {
+    let Some(address) = reqwest::Url::parse(base_url)
+        .ok()
+        .and_then(|url| url.socket_addrs(|| None).ok())
+        .and_then(|addresses| addresses.into_iter().next())
+    else {
+        return false;
+    };
+    std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(250)).is_ok()
+}
+
 impl ResolvedRole {
     /// Rechecked at dispatch, not role resolution: a mode change must also stop cached roles.
     ///
@@ -749,7 +762,14 @@ impl ResolvedRole {
                         .parse::<std::net::IpAddr>()
                         .is_ok_and(|ip| ip.is_loopback())
             });
-        status.admit_model(&self.backend_name, &self.model, local)
+        status.admit_model(&self.backend_name, &self.model, local)?;
+        if local && !self.is_afm() && !loopback_listening(&self.backend.base_url) {
+            return Err(sjel_runtime::Deferred(format!(
+                "deferred by runtime profile: local backend '{}' is not running",
+                self.backend_name
+            )));
+        }
+        Ok(())
     }
 
     pub fn is_afm(&self) -> bool {
@@ -1857,6 +1877,18 @@ mod tests {
         ]);
         assert_eq!(body["input"][0], "query: lens");
         assert_eq!(body["input"][1], "passage: item");
+    }
+
+    #[test]
+    fn a_stopped_local_backend_defers_instead_of_failing() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let role = peer_role(&base, None, false);
+        let normal = sjel_runtime::Status::normal("test");
+        assert!(role.runtime_admission_with(&normal).is_ok());
+        drop(listener);
+        let refused = role.runtime_admission_with(&normal).unwrap_err();
+        assert!(sjel_runtime::is_deferred(&refused.0), "{refused}");
     }
 
     #[test]

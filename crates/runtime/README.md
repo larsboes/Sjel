@@ -39,6 +39,8 @@ Privacy classes, provider approval and request budgets still apply. A blocked op
 policy-deferred, not a provider failure. Existing outputs and retry budgets survive mode changes.
 AFM availability and context are checked before inference; no fallback or input truncation evades
 the restriction.
+A loopback backend that is not listening defers the same way, so a stopped local model server
+costs no retry budget and its work resumes once it starts.
 
 ## State and power
 

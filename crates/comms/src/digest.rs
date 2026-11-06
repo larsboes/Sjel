@@ -1506,7 +1506,7 @@ mod tests {
         fn over_window_light_role() -> sjel_inference::InferenceConfig {
             serde_json::from_value(serde_json::json!({
                 "backends": {
-                    "omlx": { "api": "openai", "base_url": "http://127.0.0.1:9/v1" },
+                    "omlx": { "api": "openai", "base_url": crate::store::db_tests::closing_backend() },
                 },
                 "roles": {
                     "summarization_light": {

@@ -1833,8 +1833,14 @@ mod tests {
                 })],
             ];
             for chunks in turns {
-                let (stream, _) = llm_listener.accept().unwrap();
-                let mut reader = BufReader::new(stream);
+                // A reachability probe connects and closes without a request line.
+                let mut reader = loop {
+                    let (stream, _) = llm_listener.accept().unwrap();
+                    let mut reader = BufReader::new(stream);
+                    if reader.fill_buf().is_ok_and(|bytes| !bytes.is_empty()) {
+                        break reader;
+                    }
+                };
                 let mut length = 0usize;
                 loop {
                     let mut line = String::new();

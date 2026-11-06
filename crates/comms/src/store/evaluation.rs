@@ -225,7 +225,7 @@ impl Store {
     /// `context_revision`. The table is already keyed on `context_kind`
     /// (migrations.rs), so a second kind needs no migration at all — which
     /// matters, because `CREATE TABLE IF NOT EXISTS` never revisits an installed
-    /// table and `axon.db` already holds this one.
+    /// table and `sjel.db` already holds this one.
     pub fn replace_context_snapshot(
         &self,
         kind: &str,

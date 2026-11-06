@@ -3,7 +3,7 @@
 //! and in this capability that means the profile rows and nothing else.
 //!
 //! The store path resolves through `sjel_config::database_path`: `SJEL_DB_PATH`,
-//! else `<overlay>/data/axon/axon.db`. It is a deployment fact rather than a
+//! else `<overlay>/data/sjel/sjel.db`. It is a deployment fact rather than a
 //! capability one (PRD Q45), and this capability reads it for the same reason
 //! `capabilities/places` does — a file per capability would put the profile in a
 //! second database from the plans it is derived from.

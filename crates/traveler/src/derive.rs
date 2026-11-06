@@ -526,7 +526,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-traveler-derive-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let store = TravelerStore::open(&dir.join("axon.db")).unwrap();
+        let store = TravelerStore::open(&dir.join("sjel.db")).unwrap();
         let conn = store.conn().unwrap();
         conn.execute_batch(
             "
@@ -816,7 +816,7 @@ mod tests {
         let dir = std::env::temp_dir().join("sjel-traveler-derive-notrips");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let store = TravelerStore::open(&dir.join("axon.db")).unwrap();
+        let store = TravelerStore::open(&dir.join("sjel.db")).unwrap();
 
         let derived = derive(&store, TRIPS_PREFIX).unwrap();
         assert_eq!(derived.considered, 0);

@@ -40,10 +40,8 @@ pub fn parse_cargo_search(name: &str, text: &str) -> Option<String> {
 
 /// crates.io's version list → the newest STABLE release, and the newest release of any kind.
 ///
-/// The defect this exists to fix: `cargo search` returns only the maximum version, so for
-/// `tauri-cli` it answered `3.0.0-alpha.4` while the released patch `2.12.1` sat one line
-/// further down the list the registry had already sent. Yanked versions are dropped: they are
-/// published but withdrawn, and offering one is the same mistake in the other direction.
+/// `cargo search` returns only the maximum version, which can be a pre-release. Yanked versions
+/// are dropped because they are published but withdrawn.
 pub fn parse_crates_io_versions(json: &str) -> (Option<String>, Option<String>) {
     let Ok(v) = serde_json::from_str::<Value>(json) else {
         return (None, None);
@@ -613,7 +611,7 @@ mod tests {
 
     // Output captured from `cargo install --list` on this host, 2026-10-01. The indented lines
     // are each crate's binaries; a parser that folded them in would report a crate named "btm".
-    const CARGO_LIST: &str = "bottom v0.14.7:\n    btm\nmacmon v0.7.0:\n    macmon\ntauri-cli v2.12.0:\n    cargo-tauri\nxberg-cli v1.0.14:\n    xberg\n";
+    const CARGO_LIST: &str = "bottom v0.14.7:\n    btm\nmacmon v0.7.0:\n    macmon\nexample-cli v2.12.0:\n    example\nxberg-cli v1.0.14:\n    xberg\n";
 
     fn nv(name: &str, version: &str) -> NameVersion {
         NameVersion {
@@ -636,7 +634,7 @@ mod tests {
                     version: "0.7.0".into()
                 },
                 CrateEntry {
-                    name: "tauri-cli".into(),
+                    name: "example-cli".into(),
                     version: "2.12.0".into()
                 },
                 CrateEntry {

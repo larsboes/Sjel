@@ -1391,7 +1391,7 @@ mod tests {
 
     // Output captured from `cargo install --list` on this host, 2026-10-01.
     const CARGO_LIST: &str =
-        "bottom v0.14.7:\n    btm\nmacmon v0.7.0:\n    macmon\ntauri-cli v2.12.0:\n    cargo-tauri\nxberg-cli v1.0.14:\n    xberg\n";
+        "bottom v0.14.7:\n    btm\nmacmon v0.7.0:\n    macmon\nexample-cli v2.12.0:\n    example\nxberg-cli v1.0.14:\n    xberg\n";
     const NPM_OUTDATED: &str = r#"{"@marckrenn/pi-sub-bar":{"current":"1.4.0","wanted":"1.5.0","latest":"1.5.0"},"pnpm":{"current":"10.23.0","wanted":"12.8.1","latest":"12.8.1"}}"#;
     const NPM_INSTALLED: &str = r#"{"dependencies":{"@marckrenn/pi-sub-bar":{"version":"1.4.0"},"@earendil-works/pi-coding-agent":{"version":"0.99.2"},"uv":{"version":"1.4.0"}}}"#;
     const NPM_TREE_CONSTRAINED: &str = r#"{"dependencies":{"claude-agent-sdk-pi":{"version":"1.0.16","dependencies":{"@mariozechner/pi-coding-agent":{"version":"0.52.12","dependencies":{"@mariozechner/pi-agent-core":{"version":"0.52.12"}}}}},"@mariozechner/pi-agent-core":{"version":"0.52.12"},"defuddle":{"version":"0.19.3"}}}"#;
@@ -1494,7 +1494,7 @@ mod tests {
         let fake = Fake::new(&[
             (
                 "cargo install --list",
-                "tauri-cli v2.12.0:\n    cargo-tauri\n",
+                "example-cli v2.12.0:\n    example\n",
             ),
             (
                 "curl -sS",
@@ -1507,7 +1507,7 @@ mod tests {
         assert_eq!(r.latest.as_deref(), Some("2.12.1"));
         assert_eq!(
             r.action.as_deref(),
-            Some("cargo install tauri-cli --locked --force")
+            Some("cargo install example-cli --locked --force")
         );
         let note = r.note.clone().unwrap();
         assert!(
@@ -1521,7 +1521,7 @@ mod tests {
         let fake = Fake::new(&[
             (
                 "cargo install --list",
-                "tauri-cli v2.12.0:\n    cargo-tauri\n",
+                "example-cli v2.12.0:\n    example\n",
             ),
             ("curl -sS", r#"{"versions":[{"num":"3.0.0-alpha.4"}]}"#),
         ]);

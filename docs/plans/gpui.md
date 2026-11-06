@@ -190,11 +190,11 @@ branches". A second trip planned this way shows whether the model needs it.
 
 ## 3. What retiring the dashboard still takes
 
-The dashboard, its Tauri shell and the Tauri plugins are deleted (2026-11-03). GPUI has no browser
-handoff: a path no page answers opens the page of its first segment. No rule lives only in
-TypeScript: `merge-candidate` is `capabilities/entities/src/duplicates.rs`, `who-is-around` is
+The dashboard and its desktop shell are deleted. GPUI has no browser handoff: a path no page
+answers opens the page of its first segment. No rule lives only in TypeScript:
+`merge-candidate` is `capabilities/entities/src/duplicates.rs`, `who-is-around` is
 `core/src/travel/around.rs`, `mail-model-proposal` is `ModelVerdict::proposes_change` in
-`core/src/mail.rs`. Foundation Models in the Tauri app is retired.
+`core/src/mail.rs`. The previous client's Foundation Models feature is retired.
 
 The former gates are now open checks. None of them ran:
 
@@ -202,8 +202,8 @@ The former gates are now open checks. None of them ran:
 2. The new views: People → Duplicates, a trip's "Who is around", the mail model verdict with
    Accept, and Retry or Cancel on a stopped Gmail action.
 3. Fare alerts (Work Package 27) on a device, and the legacy RoomPlan drafts on a phone that holds
-   real Tauri scans. Check whether the Tauri iOS build (`com.larsboes.sjel`) is still installed,
-   and remove it.
+   existing capture exports. Remove the retired iOS app build (`com.larsboes.sjel`) if it is still
+   installed.
 
 Open work:
 

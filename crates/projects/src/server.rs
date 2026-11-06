@@ -951,7 +951,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let projects = Arc::new(
-            Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
                 .await
                 .unwrap(),
         );
@@ -1017,7 +1017,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let projects = Arc::new(
-            Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+            Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
                 .await
                 .unwrap(),
         );
@@ -1111,7 +1111,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-projects-mail-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .unwrap();
         let router = router(Arc::new(projects));
@@ -1335,7 +1335,7 @@ mod tests {
             std::env::temp_dir().join(format!("sjel-projects-mail-class-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .unwrap();
         let router = router(Arc::new(projects));
@@ -1370,7 +1370,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .unwrap();
         let router = router(Arc::new(projects));
@@ -1443,7 +1443,7 @@ mod tests {
             std::env::temp_dir().join(format!("sjel-projects-mail-render-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .unwrap();
         let router = router(Arc::new(projects));
@@ -1506,7 +1506,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-projects-router-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .expect("store opens");
         let router = router(Arc::new(projects));
@@ -1614,7 +1614,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-projects-stamp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .expect("store opens");
         let router = router(Arc::new(projects));

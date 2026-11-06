@@ -1933,7 +1933,7 @@ fn row_to_decision_event(row: &Row) -> rusqlite::Result<Option<(String, StoredDe
 ///
 /// The doctrine above -- one `CREATE TABLE IF NOT EXISTS` batch, no ALTER path --
 /// holds only while no deployed file predates a constraint change. Measured
-/// 2026-09-06: the owner's `axon.db` already holds this table with
+/// 2026-09-06: the owner's `sjel.db` already holds this table with
 /// `CHECK (event IN ('verdict','outcome','superseded'))`, written by an earlier
 /// run of this same code, and `CREATE TABLE IF NOT EXISTS` never revisits an
 /// installed table. So this is the table-rebuild dance SQLite's own documentation

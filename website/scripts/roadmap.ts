@@ -75,7 +75,7 @@ const LAUNCHED_GROUPS: MonthGroup[] = [
       {
         title: "Single Native GPUI Foundation",
         badge: "Core UI",
-        desc: "Consolidated desktop and mobile clients onto Zed's GPUI framework, fully retiring the legacy Tauri app and web dashboard.",
+        desc: "Consolidated desktop and mobile clients onto Zed's GPUI framework, retiring the former web dashboard and desktop shell.",
         href: `${REPO}/commit/41d6e6a2`,
       },
       {

@@ -5,7 +5,7 @@
 //! data it operates on is the most private in the system.
 //!
 //! The store path comes from `sjel_config::database_path`: `$SJEL_DB_PATH`, else
-//! `$SJEL_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact rather than a
+//! `$SJEL_PERSONAL_ROOT/data/sjel/sjel.db`. It is a deployment fact rather than a
 //! capability one (PRD Q45), so `$SJEL_FINANCE_DATABASE_URL` is gone -- a file per
 //! capability would drop the cross-capability joins places builds its spend layer
 //! on.

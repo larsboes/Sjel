@@ -6,7 +6,9 @@
 
 use axum::http::HeaderMap;
 
-pub use device_auth::{ACCEPTED_PROTOCOL_VERSIONS, PROTOCOL_VERSION, signing_message_for};
+pub use device_auth::{
+    ACCEPTED_PROTOCOL_VERSIONS, LEGACY_PROTOCOL_VERSION, PROTOCOL_VERSION, signing_message_for,
+};
 // The gate renames a legacy `x-axon-*` header to these names before anything reads it
 // (`sjel_server::normalize_legacy_headers`), so a paired phone that still sends the old names
 // keeps working.

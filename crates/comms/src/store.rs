@@ -943,7 +943,7 @@ pub(crate) mod db_tests {
         let blocker = std::env::temp_dir().join(format!("comms-blocker-{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
         assert!(
-            Store::open(&blocker.join("axon.db")).is_err(),
+            Store::open(&blocker.join("sjel.db")).is_err(),
             "an unusable path opened anyway"
         );
     }
@@ -962,7 +962,7 @@ pub(crate) mod db_tests {
         let _ = std::fs::remove_dir_all(&directory);
         assert!(!directory.exists(), "the test starts with no directory");
 
-        let store = Store::open(&directory.join("axon.db"))
+        let store = Store::open(&directory.join("sjel.db"))
             .expect("a first run creates the directory it was pointed at");
         store.ping().expect("and the database in it is usable");
     }

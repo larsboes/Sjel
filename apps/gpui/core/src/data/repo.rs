@@ -195,7 +195,7 @@ fn configured_db_path() -> Option<PathBuf> {
     let path = if configured.is_some() || sjel_config::overlay_root().is_some() {
         sjel_config::database_path()
     } else {
-        PathBuf::from(std::env::var("SJEL_OVERLAY_ROOT").ok()?).join("data/axon/axon.db")
+        PathBuf::from(std::env::var("SJEL_OVERLAY_ROOT").ok()?).join("data/sjel/sjel.db")
     };
     path.is_file().then_some(path)
 }
@@ -1070,7 +1070,7 @@ mod tests {
                 ));
                 let _ = std::fs::remove_dir_all(&dir);
                 std::fs::create_dir_all(&dir).unwrap();
-                let path = dir.join("axon.db");
+                let path = dir.join("sjel.db");
 
                 let writer = open_local(&path).await.unwrap();
                 writer
@@ -1110,7 +1110,7 @@ mod tests {
     ///
     /// The release profile is the one the quotes in this module and in the README come from; the
     /// test profile prints the same ratio at larger milliseconds. `SJEL_DB_PATH` or an overlay's
-    /// `data/axon/axon.db` has to exist; without one it says so and passes. Every path reads the
+    /// `data/sjel/sjel.db` has to exist; without one it says so and passes. Every path reads the
     /// same rows, so a change that made one of them wrong fails here.
     #[test]
     #[ignore = "needs this machine's database; prints timings"]

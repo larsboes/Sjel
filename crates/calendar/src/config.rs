@@ -5,7 +5,7 @@
 //!
 //! Resolution for the store path:
 //!   `sjel_config::database_path` -- `$SJEL_DB_PATH`, else
-//!   `$SJEL_PERSONAL_ROOT/data/axon/axon.db`. It is a deployment fact, not a
+//!   `$SJEL_PERSONAL_ROOT/data/sjel/sjel.db`. It is a deployment fact, not a
 //!   capability one, so `calendar.json` cannot move this capability off the
 //!   shared file on its own.
 //!
@@ -299,10 +299,10 @@ mod tests {
     #[test]
     fn a_configured_env_path_wins_over_the_overlay_default() {
         let google = GoogleConfig {
-            env_path: Some("/etc/axon/creds.env".into()),
+            env_path: Some("/etc/sjel/creds.env".into()),
             ..Default::default()
         };
-        assert_eq!(google.env_path(), PathBuf::from("/etc/axon/creds.env"));
+        assert_eq!(google.env_path(), PathBuf::from("/etc/sjel/creds.env"));
     }
 
     /// No file: `from_file` is the resolution `load` runs once the file is

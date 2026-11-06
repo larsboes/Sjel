@@ -29,7 +29,7 @@ fn overlay() -> Option<(AmexProfile, PathBuf, PathBuf)> {
     let root = PathBuf::from(root);
     let config = root.join("config/finance.json");
     let raw = root.join("data/finance/import/raw");
-    let database = root.join("data/axon/axon.db");
+    let database = root.join("data/sjel/sjel.db");
     for path in [&config, &raw, &database] {
         if !path.exists() {
             eprintln!("SJEL_PERSONAL_ROOT is set but the overlay is incomplete; skipping");

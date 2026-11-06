@@ -152,7 +152,7 @@ fn enabled_capabilities(paths: &Paths) -> Vec<String> {
 ///
 /// The last fallback is what lets `verify` answer "does this machine's own primary accept the
 /// credential it holds" without also telling every follower to follow it: `SJEL_TURSO_URL` is what
-/// a *replica* reads, and a replica over the shared `axon.db` cannot open until that file is
+/// a *replica* reads, and a replica over the shared `sjel.db` cannot open until that file is
 /// split. Recording it early would take `projects` down to make a setup command look complete.
 fn url(paths: &Paths, env: &EnvFile) -> Option<String> {
     recorded_url(env).or_else(|| hosted_url(paths))
@@ -482,7 +482,7 @@ pub(crate) fn apply(
         lines.extend(sqld_lines);
         if options.url.is_none() {
             // Deliberately NOT written into the record unless the operator passed --url: that
-            // setting is what a *replica* reads, and no replica can open over the shared `axon.db`
+            // setting is what a *replica* reads, and no replica can open over the shared `sjel.db`
             // yet. Recording it early would take `projects` down to make a setup command look
             // complete. Here the URL is reported, so the day the split lands it is one flag away.
             lines.push(format!(

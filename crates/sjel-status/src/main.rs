@@ -749,7 +749,7 @@ mod backup_tests {
         // every capability still reading it, so a run there holds nothing down.
         let mut store = cap("store");
         store.backup_target = "backup-target".into();
-        store.backup_sqlite_online = "data/axon/axon.db".into();
+        store.backup_sqlite_online = "data/sjel/sjel.db".into();
         assert!(!store.backup_contract().unwrap().holds_service);
 
         let mut vw = cap("vaultwarden");

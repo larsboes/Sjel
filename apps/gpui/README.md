@@ -194,7 +194,7 @@ project again. `core/src/data/` holds every read and write, and `ui/src/data.rs`
 that needs a window: a read settles into the slot the page draws and never runs twice at once, and
 a write toasts its outcome and then lets the caller re-read only what it changed.
 
-Where a local `axon.db` is readable, `Repo` in `core/src/data/repo.rs` answers projects, tasks,
+Where a local `sjel.db` is readable, `Repo` in `core/src/data/repo.rs` answers projects, tasks,
 calendar and record reads from it and falls back to the shell otherwise, over one LibSQL handle
 opened once per process and shared by every clone. Holding the connection rather than reopening it
 is the point: opening one costs 0.05 ms, but a fresh connection starts on an empty SQLite page
@@ -229,10 +229,10 @@ operating-system chrome, and GPUI draws the content. The workspace pins one GPUI
 Sources: `upstreams.toml`, the mobile page of gpui-kit's website docs, and `src/macos_glass.rs`.
 
 It is a stack decision, not a speed fix: Sjel's waits come from services, not from rendering. A
-release build starts in one frame under 10 ms with about 100 MB resident — against about 220–300 MB
-for a Tauri and WKWebView process pair — and the Swift menu bar keeps system-wide ⌃⌥Space, so global
-invocation pays neither a second resident process nor a cold-launch hop. How the numbers were
-measured: `SJEL_GPUI_FRAMES` and `ps -o rss=` in `src/frames.rs`.
+release build starts in one frame under 10 ms with about 100 MB resident, and the Swift menu bar
+keeps system-wide ⌃⌥Space, so global invocation pays no second resident process and no
+cold-launch hop. How the numbers were measured: `SJEL_GPUI_FRAMES` and `ps -o rss=` in
+`src/frames.rs`.
 
 One Cargo workspace builds GPUI, gpui-kit and gpui-mobile. Every page is native, and GPUI draws the
 charts. Travel, Map, Inventory and Wishlist are partly built. Travel has a shared native map view:

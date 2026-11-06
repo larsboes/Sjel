@@ -8,7 +8,7 @@ mod tests {
 
     /// `Repo` lives in `core`, so `cfg(test)` there cannot see this test: the app enables core's
     /// `test-support` feature from its dev-dependencies instead. Without that line these window
-    /// tests read this machine's real `axon.db`, which made them slow and flaky rather than red.
+    /// tests read this machine's real `sjel.db`, which made them slow and flaky rather than red.
     #[test]
     fn these_tests_read_no_local_database() {
         assert!(

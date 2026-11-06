@@ -302,7 +302,7 @@ mod tests {
             let directory =
                 std::env::temp_dir().join(format!("comms-gate-test-{}", std::process::id()));
             std::fs::create_dir_all(&directory).expect("a writable temp directory");
-            directory.join("axon.db")
+            directory.join("sjel.db")
         }
 
         /// C15 against real file locks, not the key arithmetic: two loopback

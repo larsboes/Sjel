@@ -1253,7 +1253,7 @@ pub(crate) mod db_tests {
         let blocker = std::env::temp_dir().join(format!("places-blocker-{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
         assert!(
-            PlacesStore::open(&blocker.join("axon.db")).is_err(),
+            PlacesStore::open(&blocker.join("sjel.db")).is_err(),
             "an unusable path opened anyway"
         );
     }

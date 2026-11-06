@@ -108,7 +108,7 @@ pub struct Config {
     pub events_dir: Option<PathBuf>,
     /// The one shared SQLite file this capability's tables live in, under the
     /// prefix `scouting` (PRD Q45). Resolved by `sjel_config::database_path`:
-    /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. It is a deployment
+    /// `SJEL_DB_PATH`, else `<overlay>/data/sjel/sjel.db`. It is a deployment
     /// fact rather than a capability one, so a `database_url` left in
     /// `scouting.json` is ignored -- a file per capability would drop the
     /// cross-capability correlation with `transit` that Phase 2 exists for.

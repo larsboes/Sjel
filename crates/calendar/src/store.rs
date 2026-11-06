@@ -1512,7 +1512,7 @@ mod db_tests {
         let blocker = std::env::temp_dir().join(format!("calendar-blocker-{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
         assert!(
-            CalendarStore::open(&blocker.join("axon.db")).is_err(),
+            CalendarStore::open(&blocker.join("sjel.db")).is_err(),
             "an unusable path opened anyway"
         );
     }

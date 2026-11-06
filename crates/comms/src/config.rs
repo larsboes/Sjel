@@ -341,7 +341,7 @@ impl Default for MailModelConfig {
 pub struct Config {
     /// The one shared SQLite file, under the table prefix `comms` (PRD Q45).
     /// Resolved by `sjel_config::database_path`: `SJEL_DB_PATH`, else
-    /// `<overlay>/data/axon/axon.db`. A deployment fact, not a capability one:
+    /// `<overlay>/data/sjel/sjel.db`. A deployment fact, not a capability one:
     /// a file per capability would drop the cross-capability joins the shared
     /// instance existed for, so `SJEL_COMMS_DATABASE_URL` and a `database_url`
     /// in `comms.json` are both gone.
@@ -734,7 +734,7 @@ mod tests {
     fn the_store_path_comes_from_the_deployment_not_from_comms_json() {
         let _env = env_lock();
         // Cleared first: with the host's overlay vars in scope, the path both
-        // sides resolve is the deployed axon.db. No test may name the live
+        // sides resolve is the deployed sjel.db. No test may name the live
         // store, even to compare a `PathBuf`.
         let _config = EnvGuard::take("SJEL_COMMS_CONFIG");
         let _overlay = EnvGuard::take("SJEL_PERSONAL_ROOT");

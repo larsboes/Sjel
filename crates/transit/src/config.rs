@@ -44,7 +44,7 @@ pub struct Config {
     pub default_time: Option<String>,
     /// The one shared SQLite file `store::TransitStore` opens, under the table
     /// prefix `transit` (PRD Q45). Resolved by `sjel_config::database_path`:
-    /// `SJEL_DB_PATH`, else `<overlay>/data/axon/axon.db`. Not a per-capability
+    /// `SJEL_DB_PATH`, else `<overlay>/data/sjel/sjel.db`. Not a per-capability
     /// setting any more -- a file per capability would drop the cross-capability
     /// joins the shared instance existed for, so a `database_url` in
     /// `transit.json` is now ignored.

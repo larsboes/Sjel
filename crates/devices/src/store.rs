@@ -1022,6 +1022,47 @@ mod tests {
     }
 
     #[test]
+    fn a_signature_using_the_pre_rename_protocol_still_authenticates() {
+        let (_dir, store) = store();
+        let keypair = ring::signature::Ed25519KeyPair::from_seed_unchecked(&[8u8; 32]).unwrap();
+        let challenge = store.create_challenge().unwrap();
+        let device = store
+            .claim(
+                &challenge.challenge_id,
+                &challenge.code,
+                "iPhone".into(),
+                "ios".into(),
+                "ed25519".into(),
+                auth::hex(keypair.public_key().as_ref()),
+            )
+            .unwrap();
+        let current_time = 1_700_000_000;
+        let mut request = SignedRequest {
+            device_id: device.id.clone(),
+            timestamp: current_time,
+            nonce: "03".repeat(16),
+            signature: Vec::new(),
+        };
+        request.signature = keypair
+            .sign(&auth::signing_message_for(
+                auth::LEGACY_PROTOCOL_VERSION,
+                &request.device_id,
+                request.timestamp,
+                &request.nonce,
+                "GET",
+                "/api/devices/me",
+                b"",
+            ))
+            .as_ref()
+            .to_vec();
+
+        let authenticated = store
+            .authenticate_at(&request, "GET", "/api/devices/me", b"", current_time)
+            .unwrap();
+        assert_eq!(authenticated.id, device.id);
+    }
+
+    #[test]
     fn duplicate_keys_and_invalid_keys_are_refused() {
         let (_dir, store) = store();
         let challenge = store.create_challenge().unwrap();

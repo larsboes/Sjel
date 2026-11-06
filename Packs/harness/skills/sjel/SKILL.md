@@ -1,6 +1,6 @@
 ---
 name: sjel
-description: Operates Sjel (formerly Axon) and guides work on its repository through dynamic discovery, bounded self-context, capability APIs, architecture placement, focused branches, and proportionate verification. Use when operating Sjel or Sjel services or feeds, diagnosing them, planning or coding inside the Sjel repository (~/Developer/Sjel, formerly Axon), deciding where code belongs there, or handling its branches and PRs. Do not use for unrelated repositories, direct Home Assistant or device control, or generic prose and skill authoring with no Sjel decision.
+description: Operates Sjel and guides work on its repository through dynamic discovery, bounded self-context, capability APIs, architecture placement, focused branches, and proportionate verification. Use when operating Sjel or Sjel services or feeds, diagnosing them, planning or coding inside the Sjel repository (~/Developer/Sjel), deciding where code belongs there, or handling its branches and PRs. Do not use for unrelated repositories, direct Home Assistant or device control, or generic prose and skill authoring with no Sjel decision.
 ---
 
 # Sjel

@@ -744,7 +744,7 @@ pub(crate) mod tests {
         let dir = std::env::temp_dir().join(format!("sjel-projects-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let projects = Projects::open(&dir.join("axon.db"), dir.join("rendered"))
+        let projects = Projects::open(&dir.join("sjel.db"), dir.join("rendered"))
             .await
             .unwrap();
         (projects, dir)
@@ -758,7 +758,7 @@ pub(crate) mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("axon.db");
+        let path = dir.join("sjel.db");
         let conn = sjel_turso::open_local(&path).await.unwrap();
         conn.execute_batch("CREATE TABLE projects_mail_proposals (id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, line_id TEXT NOT NULL, event TEXT NOT NULL, project TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected', 'approved_pending_action')), UNIQUE (source_id, line_id, event, project)); INSERT INTO projects_mail_proposals VALUES (1, 'm', 'l', 'project_evidence', 'P', '{\"source_id\":\"m\",\"line_id\":\"l\",\"event\":\"project_evidence\",\"project\":\"P\",\"title\":\"t\",\"evidence\":\"e\",\"data_class\":\"c1\",\"task_suggestion\":null}', 2, 'approved_pending_action');").await.unwrap();
         drop(conn);

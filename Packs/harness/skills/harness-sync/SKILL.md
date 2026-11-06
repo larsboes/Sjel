@@ -67,7 +67,7 @@ clear the state, and each is a decision:
 - `accept` keeps the edit: it imports the destination's text into the Pack, so review `git diff`
   afterwards and revert what should not have been imported.
 - `discard` drops the edit: it writes the Pack's text to the destination and keeps the replaced copy
-  under `~/.local/state/axon/pack-deployments/discarded/`. Run it without `--force` first; it lists
+  under `~/.local/state/sjel/pack-deployments/discarded/`. Run it without `--force` first; it lists
   the files it would replace, add and remove, and refuses until given `--force`. The Pack is never
   written.
 

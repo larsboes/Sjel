@@ -96,7 +96,7 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("sjel-status-device-gate-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let store = DevicesStore::open(&dir.join("axon.db")).unwrap();
+        let store = DevicesStore::open(&dir.join("sjel.db")).unwrap();
         let key = Ed25519KeyPair::from_seed_unchecked(&[5u8; 32]).unwrap();
         let challenge = store.create_challenge().unwrap();
         let device = store

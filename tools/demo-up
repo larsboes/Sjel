@@ -37,7 +37,7 @@ source "$_here/lib/paths.sh"
 # demo needs a path rather than a server, a user, a password and a database name. Overridable
 # for a caller that wants the file somewhere else, which is what SJEL_DB_PATH already means.
 DEMO_STATE="$SJEL_ROOT/demo/state"
-DEMO_DB_PATH="${SJEL_DB_PATH:-$DEMO_STATE/axon.db}"
+DEMO_DB_PATH="${SJEL_DB_PATH:-$DEMO_STATE/sjel.db}"
 
 # Which capabilities the demo runs, read from the overlay rather than written twice.
 #

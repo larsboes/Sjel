@@ -39,7 +39,7 @@ required-features = ["native-maps"]
 [dev-dependencies]
 # Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
 gpui = { workspace = true, features = ["test-support"] }
-# Keeps `Repo` off this machine's real axon.db in the Projects window tests (core's Cargo.toml).
+# Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
 
 [lints]

@@ -1,7 +1,7 @@
 //! Turso / LibSQL storage engine for Sjel.
 //!
 //! Provides async multi-writer concurrency, MVCC, and
-//! vector search over Sjel's shared SQLite-compatible database (`axon.db`).
+//! vector search over Sjel's shared SQLite-compatible database (`sjel.db`).
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error as StdError;
@@ -170,7 +170,7 @@ where
 ///
 /// ```no_run
 /// # async fn example() -> Result<(), sjel_turso::Error> {
-/// let store = sjel_turso::Store::open("/path/axon.db", "places", |conn| async move {
+/// let store = sjel_turso::Store::open("/path/sjel.db", "places", |conn| async move {
 ///     conn.execute("CREATE TABLE IF NOT EXISTS places_items (id TEXT PRIMARY KEY)", ())
 ///         .await?;
 ///     Ok(())

@@ -1,6 +1,6 @@
 //! `sjel mirror` — a read-only copy of this machine's data, for a device that is not here.
 //!
-//! The phone cannot hold an embedded replica of `axon.db`: a replica's primary must own its
+//! The phone cannot hold an embedded replica of `sjel.db`: a replica's primary must own its
 //! database file, and this machine's file is opened directly by eighteen capability processes. So
 //! the first thing a phone can have is a **copy**, refreshed when asked — [`research/offline-on-the-phone.md`]
 //! route R1. It moves no data between files, changes no capability, and closes off none of the

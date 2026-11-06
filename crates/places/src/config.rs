@@ -2,7 +2,7 @@
 //! lives here — everything personal comes from the private overlay at runtime.
 //!
 //! The store path resolves through `sjel_config::database_path`: `SJEL_DB_PATH`,
-//! else `<overlay>/data/axon/axon.db`. It is a deployment fact rather than a
+//! else `<overlay>/data/sjel/sjel.db`. It is a deployment fact rather than a
 //! capability one (PRD Q45) — a file per capability would drop the
 //! cross-capability joins `layers.rs` and `backfill.rs` are built on.
 

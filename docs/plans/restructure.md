@@ -6,7 +6,7 @@ comments and documentation in the same pass. Lane A in [`PLAN.md`](../../PLAN.md
 
 ## 1. Delete
 
-Done: `dashboard/` with `src-tauri`, the Tauri plugins in `plugins/`, the dashboard bundle on
+Done: `dashboard/` with its desktop wrapper, the plugins in `plugins/`, the dashboard bundle on
 the Pages site, the `sjel-status` static serve and `matches_dashboard_nav`. `demo/` stays: its
 seeded stack feeds `tools/demo-shots`. Open:
 
@@ -72,9 +72,10 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
    Done: secondary capability README sweep (`ec859210`, refined in `cc44c287`).
 5. Done: the rename, in five commits. Internal identifiers (`f8f4ef17`), scratch paths and
    `tools/sjel-context` (`8732a364`), the wire protocols (`35cfaf53`), the persisted names with
-   `tools/migrate-axon-names.sh` (`620081f1`), and the prose that described them. 898
-   occurrences in 265 files became 566 in 154, and 447 of those are the compatibility reads
-   below. What still answers to a pre-rename name, and why each one stays:
+   `tools/migrate-axon-names.sh` (`620081f1`), and the prose that described them. At this
+   snapshot 533 occurrences remain in 120 tracked files, including compatibility reads, old
+   record formats and test fixtures. What still answers to a pre-rename name, and why each one
+   stays:
 
    - `axon.toml` and `axon.local.toml` are read after the `sjel.*` names, so a checkout made
      before the rename still resolves its overlay (`tools/manifest-resolution.test.sh`).
@@ -93,10 +94,10 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
      `crates/comms/clipper` rather than by a rename ([`data.md`](data.md)).
    - `bazel-*`: not the retired build, but the symlinks it left at the root of a checkout that
      once ran it. `.gitignore`, `bunfig.toml`, `audit.rs` and the install-policy prune each
-     carry one line for that, and nothing else about Bazel remains.
+     carry one line for that. The remaining build-dependency verdict lives in `upstreams.toml`.
 
-   History that keeps its word: `research/` and the agent-harness fixture record what was
-   measured when, and `upstreams.toml` carries Bazel's verdict as a retired dependency.
+   Historical records in `research/` and the agent-harness fixture keep their original source
+   data.
 
    Checks not run: the migration ran on this machine only, not on a Linux host, so the
    systemd-unit rename and the `sjel_filter` nftables replacement are unexercised outside

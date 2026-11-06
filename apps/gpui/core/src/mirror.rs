@@ -740,7 +740,7 @@ mod tests {
             built_at: "2026-10-21T21:21:30Z".to_owned(),
             integrity: "ok".to_owned(),
             foreign_key_violations: 0,
-            source: "/Users/someone/overlay/data/axon/axon.db".to_owned(),
+            source: "/Users/someone/overlay/data/sjel/sjel.db".to_owned(),
             mode: "phone".to_owned(),
             tables: vec![
                 TableCopy {

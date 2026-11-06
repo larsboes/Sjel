@@ -2260,7 +2260,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        (PlacesStore::open(&dir.join("axon.db")).unwrap(), dir)
+        (PlacesStore::open(&dir.join("sjel.db")).unwrap(), dir)
     }
 
     #[test]

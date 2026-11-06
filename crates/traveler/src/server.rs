@@ -321,7 +321,7 @@ mod http_tests {
         let dir = std::env::temp_dir().join(format!("sjel-traveler-http-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let store = TravelerStore::open(&dir.join("axon.db")).unwrap();
+        let store = TravelerStore::open(&dir.join("sjel.db")).unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let app = router(Arc::new(store));

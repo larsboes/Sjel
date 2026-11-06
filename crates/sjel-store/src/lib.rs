@@ -576,7 +576,7 @@ mod tests {
     }
 
     /// The parent directory is created by `open`, not by importing this crate.
-    /// The overlay's `data/axon/` does not exist on a fresh machine.
+    /// The overlay's `data/sjel/` does not exist on a fresh machine.
     #[test]
     fn open_creates_the_directory_the_file_lives_in() {
         let path = temp_database("nested").parent().unwrap().join("a/b/c.db");

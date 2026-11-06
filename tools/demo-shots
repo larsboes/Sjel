@@ -92,12 +92,12 @@ launch() {
     | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')/release/sjel-gpui"
   mkdir -p "$home"
   # A fresh snapshot each launch, so the local reads match the node.
-  sqlite3 "$SJEL_ROOT/demo/state/axon.db" ".backup '$home/axon.db'"
+  sqlite3 "$SJEL_ROOT/demo/state/sjel.db" ".backup '$home/sjel.db'"
   env -i HOME="$home" USER="$USER" PATH=/usr/bin:/bin TMPDIR="$home" LANG=en_US.UTF-8 \
     SJEL_STATUS_URL="http://127.0.0.1:$DEMO_PORT" \
     SJEL_INBOUND_TOKEN_FILE="$SJEL_ROOT/demo/state/comms-api-secret" \
     SJEL_PERSONAL_ROOT="$SJEL_ROOT/demo/overlay" SJEL_OVERLAY_ROOT="$SJEL_ROOT/demo/overlay" \
-    SJEL_DB_PATH="$home/axon.db" SJEL_CONFIG_DIR="$home/config" SJEL_NOTES_DIR="$home/notes" \
+    SJEL_DB_PATH="$home/sjel.db" SJEL_CONFIG_DIR="$home/config" SJEL_NOTES_DIR="$home/notes" \
     SJEL_REPLICA_PATH="$home/replica.db" \
     "$@" "$bin" >"$home/app.log" 2>&1 &
 }

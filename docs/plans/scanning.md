@@ -76,14 +76,15 @@ captures with Apple RoomPlan ([Apple's guide](https://developer.apple.com/docume
   history.
 - Deterministic layout proposals: search, solver findings, access paths, direct sun. A reviewed
   result is saved as a new layout without moving current placements.
-- Legacy migration: the old Tauri app stages each capture in its Files folder, and GPUI imports
-  it after checking ID, size and hash. Conflicting IDs are never replaced.
+- Legacy migration: GPUI imports capture exports from the previous phone client after checking
+  ID, size and hash. Conflicting IDs are never replaced.
 
 **Open.**
 
-1. **Device validation (Q-RP4).** On a LiDAR iPhone with real Tauri scans: capture quality,
-   alignment against the measured flat, and the Files export and import. Simulator checks cannot
-   cover this. The Tauri app is deleted; this check is open in [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes).
+1. **Device validation (Q-RP4).** On a LiDAR iPhone with existing RoomPlan capture exports:
+   capture quality, alignment against the measured flat, and the Files export and import.
+   Simulator checks cannot cover this. The previous phone client is retired; this check is open
+   in [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes).
 2. **Gemini interior ideas.** Groundwork exists in `capabilities/assistant/src/main.rs`: a typed
    request and response, a per-request consent flag, bounded JPEG and geometry checks, paid-role
    admission, a daily usage ledger. Missing: the route, the provider review, a paid role pointed

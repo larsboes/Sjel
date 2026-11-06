@@ -201,8 +201,8 @@ then never pulls. Not observed; this is an inference from the code.
 Each step is one commit with its own check.
 
 1. **Contract types.** `Changes<T> { cursor, upserted, deleted }`, `Tombstone`, and the
-   idempotency header name, in one shared crate that both the capabilities and `apps/gpui/core`
-   link (decision S1). Done when calendar's feed serializes through it and its feed test passes
+   idempotency header name, in `crates/sync-contract`, linked by the capabilities and
+   `apps/gpui/core` (S1). Done when calendar's feed serializes through it and its feed test passes
    unchanged.
 2. **Sequence cursor.** Each owner gets a change log with an `INTEGER PRIMARY KEY` sequence,
    written in the same transaction as the record and its tombstone. The feed answers
@@ -210,7 +210,7 @@ Each step is one commit with its own check.
    Done when a test with two store handles writing in the same second loses no change.
 3. **Idempotent push.** The phone mints a key when it queues a write (new column on
    `_offline_mutations`) and sends it on every replay. The server keeps a ledger of
-   key → answer and returns the stored answer on a repeat (decision S2). Done when a test sends
+   key → answer and returns the stored answer on a repeat (S2). Done when a test sends
    a create, drops the answer, replays it, and finds one record on the Mac.
 4. **Projects feed.** `GET /api/changes` in `crates/projects` with tombstones on delete and
    archive. The phone's projects pull switches to it, and the list-and-sweep pull and
@@ -228,16 +228,14 @@ Each step is one commit with its own check.
    the Mac once on reconnect and an item changed on the Mac reaches the phone.
 8. **People** after Work Package 23 gives entities an outbox.
 
-#### Decisions needed
+#### Decisions
 
-- **S1. Where the contract types live.** Proposed: one small crate
-  (`crates/sync-contract`), the pattern `crates/roomplan-contract` set. The alternative is a copy
-  in each API crate, which is the drift `restructure.md` §3 measured.
-- **S2. Where the idempotency ledger lives.** Proposed: one table per capability database,
-  written in the same transaction as the write, so a write and its ledger row cannot disagree.
-  A shared middleware in `crates/sjel-http` would be less code but writes outside that
-  transaction. Keys older than 30 days are dropped; a phone offline longer than that replays
-  without protection (my estimate of an acceptable bound, not measured).
+- **S1. Contract types** live in one crate, `crates/sync-contract`, the pattern
+  `crates/roomplan-contract` set (2026-11-06). A copy per API crate would drift
+  ([`restructure.md`](restructure.md#3-layout)).
+- **S2. Idempotency ledger** is one table per capability database, written in the same
+  transaction as the write, so a write and its ledger row cannot disagree (2026-11-06). Keys
+  older than 30 days are dropped; a phone offline longer than that replays without protection.
 
 ### Also open
 

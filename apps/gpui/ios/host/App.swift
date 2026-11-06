@@ -58,8 +58,8 @@ final class SjelController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "Sjel"
-        navigationController?.navigationBar.prefersLargeTitles = true
+        // Every GPUI page carries its own heading, so a bar above it only takes height.
+        navigationController?.setNavigationBarHidden(true, animated: false)
         view.backgroundColor = .systemBackground
         gpui_ios_set_embedded()
         gpui_ios_register_app()

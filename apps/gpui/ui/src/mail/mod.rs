@@ -496,21 +496,25 @@ impl gpui_kit::Render for Mail {
             }),
         );
 
+        // A phone has no keyboard and one density, so it gets neither the key hint nor the selector.
+        let mobile = self.density == crate::theme::Density::Mobile;
         div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(muted(
-                        "j/k move · x select · d dismiss · e archive · # trash · w waiting · o Gmail",
-                        palette,
-                    ))
-                    .child(density_selector),
-            )
+            .when(!mobile, |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(muted(
+                            "j/k move · x select · d dismiss · e archive · # trash · w waiting · o Gmail",
+                            palette,
+                        ))
+                        .child(density_selector),
+                )
+            })
             .child(statuses)
             .child(categories)
             .when_some(self.notice.clone(), |el, (text, failed)| {

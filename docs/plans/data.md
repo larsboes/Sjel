@@ -350,6 +350,30 @@ the GPUI Settings tab. No new client, page or CLI verb set.
   It fails if a tracked artifact names a model or key file that the surface does not report, or if
   its verdict for a backend disagrees with `tools/model-check`.
 
+### oMLX on AC only
+
+Decided 2026-11-06: oMLX stays, and it runs on AC power only. On battery, every role that it
+serves waits. A stopped loopback server defers its work and uses no retry budget (`9ca4426b`).
+AFM serves the roles it has passed a measurement for: `assistant`, `summarization_light` and
+`document_classification`.
+
+No other oMLX role moves without a measurement on its own job, per the 2026-10-24 rule in
+[`research/local-decision-models.md`](../../research/local-decision-models.md#small-local-models-specific-jobs-only-decided-2026-10-24):
+
+- `embedding`, `reranking`: AFM has no equivalent. Apple NLEmbedding scored 3/6 and 4/6 useful
+  top-1 on the frozen comms corpus (`systems.toml`, `[apple-natural-language]`). A different model
+  also means re-embedding every stored vector.
+- `mail_evidence`: AFM staged nothing on the first real-mail run, because its rows broke the
+  grounding rules (see "Mail evidence for projects and inventory").
+- `summarization`: the long-item rung behind `summarization_light`. Its items wait for AC.
+- `coding`: the agent capability calls Sjel tools on this role. A cloud backend would send
+  personal tool results off the machine, so it stays local.
+- `assistant_strong`: open. Candidate: AFM phrases the answer, and a rule table selects and
+  calls the read-only tool, because AFM failed tool calls on 3 prompts of 3. Not designed yet.
+
+**Operator step, not run:** `sjel runtime allow other-local-models off`. Until it runs, the
+battery profile still admits oMLX.
+
 ## 4. Adaptive data
 
 Features should adapt to what the user actually does. Not designed yet. Inputs that

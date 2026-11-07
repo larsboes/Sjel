@@ -102,6 +102,22 @@ the Method, Craft and figure-build rules in `teach`; the migrated Data Pipeline 
 correct.`), and the view in a running Obsidian on macOS through the Chrome DevTools Protocol:
 it opens without errors, lists pi's models, and its header follows the open note.
 
+Shipped 2026-11-07: the sitting loop and card lifecycle were rebuilt without a pilot record, which
+overrides the observation gate below for those defects (decided 2026-11-07). Teach and Practice
+are persistent controls; Enter starts the chosen kind; **Finish sitting** cancels an outstanding
+question and asks the active skill to run its closing procedure, closing only after a completed
+reply that reports no failed tool. Starting another sitting over an unfinished one needs a
+decision. Stop and close settle every pending card once and reject late answers. Answered cards
+remain expandable with their thinking, confidence and feedback instead of collapsing to a score.
+The composer follows the reader's scroll position, and its button names its real action. The
+plugin gained `package.json` and `tests/` (linkedom), so `bun run check` typechecks and runs 30
+DOM and view tests. Checked: those tests, the repository's plugin tests,
+`tools/check-obsidian-plugins.sh`, `tools/check-bun-install-policy.sh`, a live reload with no
+console errors, and screenshots of the empty and answered states. The screenshots found three
+more defects, now fixed: Obsidian's button rule overrode the chip and send styling, the idle
+badge showed a spinner ring, and the empty state repeated the persistent controls. The override
+followed two read-only reviews, not a sitting; no model-backed sitting has run.
+
 Open, in order. The stage 1 sessions come first: the UI items below are candidates, and observed
 friction in the Learning Log decides which of them are built.
 
@@ -123,14 +139,18 @@ UI and speed candidates, built only when item 1 observes the friction:
 
 | Candidate | What it fixes | Smallest change |
 |---|---|---|
-| Streaming render | Each 120 ms re-render rebuilds the whole message, figures included. | Render finished blocks once; defer `interactive` blocks to `message_end`. |
+| Streaming render | Each 120 ms re-render of the live message unloads and rebuilds its rendered components. | The answer no longer moves the reader's scroll position; incremental rendering of unchanged blocks is still open. |
 | Model list | `get_available_models` lists 627 models, most without credentials. | Filter to providers with credentials, or to pi's `enabledModels`, before the picker. |
 | Start time | The view and the settings tab each start pi; the settings tab starts one per open. | Reuse the view's pi for the settings tab and cache the model list. |
 | Node ↔ note | The header cannot mark the focus note's node, and graph nodes do not open notes. | Schema: a node's label is its note's name, or a `click id "[[Note]]"` line; the plugin marks and links it. |
 | Past sittings | Fresh sittings leave no list of earlier ones. | A list from pi's session directory for the vault, read-only. |
+| Practice evidence | Progress is a held/current/open graph; practice leaves only its Learning Log line. | A per-claim practice record with a due date, kept separate from note `maturity`. |
 | Input | No file, image or dictation input. | `prompt` accepts images; add a paperclip and a drop target. |
 | Thinking | Model reasoning is hidden; a long silence reads as a hang. | A collapsed "Thinking" block fed by `thinking_delta`. |
-| Ask card keys | `quiz` takes 1–9 and Enter; `ask` takes only clicks. | The same key handling in `askCard`. |
+
+Shipped 2026-11-07 with the sitting loop: `ask` and review take the quiz's keyboard path, every
+card keeps a Stop action through its reveal, and each result object is unchanged. The remaining
+candidates above still need observed friction.
 
 Not planned: a LearnHarness-style background research agent, and a cost meter for subscription
 providers, whose cost pi does not report.

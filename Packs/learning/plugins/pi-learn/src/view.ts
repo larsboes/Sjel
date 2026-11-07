@@ -1,4 +1,4 @@
-import { Component, ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
+import { Component, ItemView, MarkdownRenderer, Modal, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type PiLearnPlugin from './main';
 import { askCard, quizCard, reviewCard } from './cards';
 import { QUESTIONS_PROTOCOL, THINKING_LEVELS, buildLaunch, splitModel } from './launch';
@@ -21,6 +21,9 @@ interface Live {
 }
 
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
+const CLOSED_MARKER = '<!-- pi-learn:sitting-closed -->';
+type DialogAnswer = { value?: string; confirmed?: boolean; cancelled?: true };
+type PendingDialog = { controller: AbortController; pi: PiRpc };
 
 export class LearnView extends ItemView {
   private pi: PiRpc | null = null;
@@ -32,7 +35,19 @@ export class LearnView extends ItemView {
   /** The open note when it is not a path note: the concept a sitting starts from. */
   private focusFile: TFile | null = null;
   private planOpen = false;
+  private paintSeq = 0;
   private models: PiModel[] = [];
+  private sittingActive = false;
+  private lastTopic = '';
+  private transitioning = false;
+  private closing = false;
+  private closeConfirmed = false;
+  private closeFailed = false;
+  private stopping = false;
+  private disposed = false;
+  private stickToBottom = true;
+  private dialogs = new Map<string, PendingDialog>();
+  private resetModal: Modal | null = null;
 
   /** Not `titleEl`: ItemView owns that name, and a field declaration resets it. */
   private pathTitleEl!: HTMLElement;
@@ -46,6 +61,10 @@ export class LearnView extends ItemView {
   private modelBtn!: HTMLButtonElement;
   private thinkSel!: HTMLSelectElement;
   private meterEl!: HTMLElement;
+  private sendBtn!: HTMLButtonElement;
+  private teachBtn!: HTMLButtonElement;
+  private practiceBtn!: HTMLButtonElement;
+  private finishBtn!: HTMLButtonElement;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: PiLearnPlugin) {
     super(leaf);
@@ -62,6 +81,10 @@ export class LearnView extends ItemView {
   }
 
   async onOpen() {
+    this.disposed = false;
+    this.sittingActive = false;
+    this.closing = false;
+    this.streaming = false;
     const root = this.contentEl;
     root.empty();
     root.addClass('pi-learn');
@@ -78,10 +101,20 @@ export class LearnView extends ItemView {
     this.dotsEl = head.createDiv({ cls: 'pi-learn-dots' });
     this.planEl = head.createDiv({ cls: 'pi-learn-plan' });
     this.planEl.hide();
-    this.statusEl = root.createDiv({ cls: 'pi-learn-status' });
+    const controls = head.createDiv({ cls: 'pi-learn-sittings', attr: { 'aria-label': 'Sitting controls' } });
+    this.teachBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Teach' });
+    this.teachBtn.onclick = () => void this.sitting('teach');
+    this.practiceBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Practice' });
+    this.practiceBtn.onclick = () => void this.sitting('practice');
+    this.finishBtn = controls.createEl('button', { cls: 'pi-learn-chip', text: 'Finish sitting' });
+    this.finishBtn.onclick = () => void this.finishSitting();
+    this.statusEl = root.createDiv({ cls: 'pi-learn-status', attr: { role: 'status' } });
     this.statusEl.hide();
 
     this.streamEl = root.createDiv({ cls: 'pi-learn-stream' });
+    this.streamEl.addEventListener('scroll', () => {
+      this.stickToBottom = this.streamEl.scrollHeight - this.streamEl.clientHeight - this.streamEl.scrollTop < 48;
+    });
     this.emptyState();
 
     // Composer and footer.
@@ -89,18 +122,17 @@ export class LearnView extends ItemView {
     const box = dock.createDiv({ cls: 'pi-learn-composer' });
     this.input = box.createEl('textarea', {
       cls: 'pi-learn-input',
-      attr: { rows: '1', placeholder: 'Answer, ask, or name a topic…' },
+      attr: { rows: '1', placeholder: 'Name a topic…', 'aria-label': 'Topic or message' },
     });
-    this.input.addEventListener('input', () => this.grow());
+    this.input.addEventListener('input', () => { this.grow(); this.paintControls(); });
     this.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         void this.send();
       }
     });
-    const send = box.createEl('button', { cls: 'pi-learn-send', attr: { 'aria-label': 'Send (Enter)' } });
-    setIcon(send, 'arrow-up');
-    send.onclick = () => (this.streaming && !this.input.value.trim() ? void this.abort() : void this.send());
+    this.sendBtn = box.createEl('button', { cls: 'pi-learn-send' });
+    this.sendBtn.onclick = () => (this.streaming && !this.input.value.trim() ? void this.abort() : void this.send());
 
     const foot = dock.createDiv({ cls: 'pi-learn-foot' });
     this.modelBtn = foot.createEl('button', { cls: 'pi-learn-chip pi-learn-model', text: 'model', attr: { 'aria-label': 'Choose the model' } });
@@ -120,12 +152,27 @@ export class LearnView extends ItemView {
     await this.trackPath(this.app.workspace.getActiveFile());
     await this.paintPath();
     this.paintBadge();
+    this.paintControls();
     void this.connect();
   }
 
   async onClose() {
+    this.disposed = true;
+    this.resetModal?.close();
+    this.cancelDialogs();
     this.pi?.stop();
+    this.pi = null;
+    this.clearTranscript();
+    if (this.sittingActive) this.notice('Sitting stopped without finishing. Notes already written remain; resume from the learning path.');
+  }
+
+  private clearTranscript() {
+    if (this.live?.timer !== null && this.live?.timer !== undefined) window.clearTimeout(this.live.timer);
+    this.live = null;
     for (const c of this.components) c.unload();
+    this.components = [];
+    this.streamEl.empty();
+    this.stickToBottom = true;
   }
 
   /* ───────────── learning path context ───────────── */
@@ -156,6 +203,7 @@ export class LearnView extends ItemView {
   }
 
   private async paintPath() {
+    const seq = ++this.paintSeq;
     this.pathTitleEl.empty();
     this.dotsEl.empty();
     this.planBtn.toggle(this.pathFile !== null);
@@ -179,6 +227,7 @@ export class LearnView extends ItemView {
     });
     name.onclick = () => void this.openInMain(file);
     const markdown = await this.app.vault.cachedRead(file);
+    if (seq !== this.paintSeq || this.disposed) return;
     const path = parsePath(markdown);
     if (path) {
       const p = progress(path);
@@ -187,23 +236,26 @@ export class LearnView extends ItemView {
         text: `${p.held} of ${path.nodes.length} held${focus ? ` · at ${focus.basename}` : p.current ? ' · resuming' : ''}`,
       });
       for (const n of path.nodes) {
-        this.dotsEl.createSpan({ cls: `pi-learn-dot is-${n.state}`, attr: { 'aria-label': n.label } });
+        this.dotsEl.createSpan({ cls: `pi-learn-dot is-${n.state}`, attr: { 'aria-label': `${n.label}: ${n.state}`, title: `${n.label} · ${n.state}` } });
       }
     }
-    if (this.planOpen) await this.paintPlan(markdown);
+    if (this.planOpen) await this.paintPlan(markdown, seq);
   }
 
   private async togglePlan() {
     this.planOpen = !this.planOpen;
     this.planBtn.toggleClass('is-active', this.planOpen);
     this.planEl.toggle(this.planOpen);
-    if (this.planOpen && this.pathFile) await this.paintPlan(await this.app.vault.cachedRead(this.pathFile));
+    if (this.planOpen && this.pathFile) {
+      const seq = this.paintSeq;
+      await this.paintPlan(await this.app.vault.cachedRead(this.pathFile), seq);
+    }
   }
 
-  private async paintPlan(markdown: string) {
-    this.planEl.empty();
+  private async paintPlan(markdown: string, seq: number) {
     const graph = pathGraph(markdown);
-    if (!graph) return;
+    if (!graph || seq !== this.paintSeq || this.disposed) return;
+    this.planEl.empty();
     await MarkdownRenderer.render(this.app, '```mermaid\n' + graph + '```', this.planEl, this.pathFile?.path ?? '', this);
   }
 
@@ -214,18 +266,23 @@ export class LearnView extends ItemView {
   }
 
   private ensurePi(): PiRpc {
+    if (this.disposed) throw new Error('Learn is closed');
     if (this.pi?.running) return this.pi;
     const launch = buildLaunch(this.plugin.settings, this.vaultPath(), process.platform, process.env);
-    this.pi = new PiRpc(
+    const pi = new PiRpc(
       launch,
-      (e) => this.onEvent(e),
+      (e) => { if (this.pi === pi) this.onEvent(e); },
       (code, stderr) => {
+        if (this.pi !== pi || this.disposed) return;
+        this.cancelDialogs();
+        this.closing = false;
         this.setStreaming(false);
         if (code !== 0) this.notice(`pi stopped (exit ${code ?? 'error'}). ${stderr.trim().split('\n').pop() ?? ''}`, true);
       },
     );
-    this.pi.start();
-    return this.pi;
+    this.pi = pi;
+    pi.start();
+    return pi;
   }
 
   /** Start pi, list its models, and show the current one. */
@@ -293,7 +350,8 @@ export class LearnView extends ItemView {
   /* ───────────── sittings and messages ───────────── */
 
   private async sitting(kind: Kind) {
-    const topic = this.input.value.trim();
+    if (this.transitioning || this.disposed || this.stopping) return;
+    const topic = this.input.value.trim() || (!this.pathFile && !this.focusFile ? this.lastTopic : '');
     const path = this.pathFile ? `[[${this.pathFile.basename}]]` : null;
     const focus = this.focusFile ? `[[${this.focusFile.basename}]]` : null;
     if (!path && !focus && !topic) {
@@ -301,18 +359,35 @@ export class LearnView extends ItemView {
       this.notice('Open a note or a learning path, or type a topic first.');
       return;
     }
-    const pi = this.ensurePi();
+    this.transitioning = true;
+    this.paintControls();
     try {
-      if (this.streaming) await pi.command({ type: 'abort' });
-      await pi.command({ type: 'new_session' });
+      if (this.sittingActive && !(await this.confirmReset())) return;
+      if (this.disposed) return;
+      const pi = this.ensurePi();
+      if ((this.streaming || this.dialogs.size) && !(await this.abort())) return;
+      const result = await pi.command({ type: 'new_session' });
+      if (result?.cancelled) {
+        this.notice('pi kept the current sitting.');
+        return;
+      }
+      this.cancelDialogs();
       this.kind = kind;
       await this.applyKind();
     } catch (err) {
       this.notice(`Could not start the sitting: ${(err as Error).message}`, true);
       return;
+    } finally {
+      this.transitioning = false;
+      this.paintControls();
     }
-    this.streamEl.empty();
+    if (this.disposed) return;
+    this.clearTranscript();
+    this.sittingActive = true;
+    this.lastTopic = topic;
+    this.closing = false;
     this.paintBadge();
+    this.paintControls();
     const label = this.focusFile?.basename ?? this.pathFile?.basename.replace(/\s+—\s+Learning Path$/, '') ?? topic;
     this.divider(`${kind === 'teach' ? 'Teaching' : 'Practice'} · ${label}`);
     const extra = (path || focus) && topic ? ` ${topic}` : '';
@@ -322,6 +397,8 @@ export class LearnView extends ItemView {
   }
 
   private async send() {
+    if (this.transitioning || this.stopping || this.disposed) return;
+    if (!this.sittingActive) return this.sitting(this.kind);
     const message = this.input.value.trim();
     if (!message) return;
     this.input.value = '';
@@ -333,29 +410,109 @@ export class LearnView extends ItemView {
   private async prompt(message: string, shown: string | null) {
     const pi = this.ensurePi();
     if (shown !== null) this.bubble(shown);
+    const wasStreaming = this.streaming;
+    this.setStreaming(true);
     try {
-      await pi.command(
-        this.streaming ? { type: 'prompt', message, streamingBehavior: 'steer' } : { type: 'prompt', message },
+      const result = await pi.command(
+        wasStreaming ? { type: 'prompt', message, streamingBehavior: 'steer' } : { type: 'prompt', message },
       );
-      this.setStreaming(true);
+      if (result?.disposition === 'handled' && !wasStreaming) {
+        this.closing = false;
+        this.setStreaming(false);
+      }
+      return true;
     } catch (err) {
+      this.closing = false;
+      this.setStreaming(false);
       this.notice(`pi rejected the message: ${(err as Error).message}`, true);
+      return false;
     }
   }
 
-  private async abort() {
-    if (!this.pi?.running) return;
-    await this.pi.command({ type: 'abort' }).catch(() => undefined);
+  private confirmReset(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      let reset = false;
+      modal.titleEl.setText('Start a new sitting?');
+      modal.contentEl.createEl('p', { text: 'This sitting has not finished. Keep it and use Finish sitting to close it, or start fresh without completing its closing procedure. Notes already written remain.' });
+      const actions = modal.contentEl.createDiv({ cls: 'pi-learn-actions' });
+      const keep = actions.createEl('button', { text: 'Keep sitting', cls: 'mod-cta' });
+      keep.onclick = () => modal.close();
+      actions.createEl('button', { text: 'Start fresh' }).onclick = () => { reset = true; modal.close(); };
+      modal.onClose = () => {
+        if (this.resetModal === modal) this.resetModal = null;
+        resolve(reset);
+      };
+      this.resetModal = modal;
+      modal.open();
+      keep.focus();
+    });
+  }
+
+  private async finishSitting() {
+    if (!this.sittingActive || this.closing || this.transitioning || this.stopping) return;
+    this.transitioning = true;
+    this.paintControls();
+    try {
+      if ((this.streaming || this.dialogs.size) && !(await this.abort())) return;
+      if (this.disposed) return;
+      this.closing = true;
+      this.closeConfirmed = false;
+      this.closeFailed = false;
+      this.paintControls();
+      await this.prompt(
+        `Finish this ${this.kind} sitting using the active skill's Close procedure. Resolve any grading contest first; in practice, retest outstanding misses before closing. Complete the required claim review, note and learning-path updates, and Learning Log entry that apply to this sitting. Do not invent mastery or record a completed session when the closing checks or writes fail. Summarize what was saved and the next step. Only after the closing procedure and required writes succeed, end the final reply with ${CLOSED_MARKER}. If anything remains unfinished, ask for it and do not emit that marker.`,
+        'Finish sitting',
+      );
+    } catch (err) {
+      this.closing = false;
+      this.notice(`Could not finish the sitting: ${(err as Error).message}`, true);
+    } finally {
+      this.transitioning = false;
+      this.paintControls();
+    }
+  }
+
+  private async abort(): Promise<boolean> {
+    if (this.stopping) return false;
+    let stopped = false;
+    this.stopping = true;
+    this.closing = false;
+    this.closeConfirmed = false;
+    this.paintControls();
+    this.cancelDialogs();
+    try {
+      if (this.pi?.running) {
+        await this.pi.command({ type: 'clear_queue' });
+        await this.pi.command({ type: 'abort' });
+      }
+      stopped = true;
+    } catch (err) {
+      this.notice(`Could not stop pi: ${(err as Error).message}`, true);
+    } finally {
+      this.stopping = false;
+      if (stopped || !this.pi?.running) this.setStreaming(false);
+      else this.paintControls();
+    }
+    return stopped;
   }
 
   /* ───────────── events ───────────── */
 
   private onEvent(e: PiEvent) {
+    if (this.disposed) return;
     switch (e.type) {
       case 'agent_start':
         this.setStreaming(true);
         break;
       case 'agent_settled':
+        if (this.closing) {
+          if (this.closeConfirmed && !this.closeFailed && this.dialogs.size === 0) {
+            this.sittingActive = false;
+            this.divider('Sitting closed · choose Teach or Practice to start fresh');
+          }
+          this.closing = false;
+        }
         this.setStreaming(false);
         void this.paintMeter();
         break;
@@ -381,7 +538,10 @@ export class LearnView extends ItemView {
         this.toolStarted(e.toolName, e.args ?? {});
         break;
       case 'tool_execution_end':
-        if (e.isError) this.toolLine('alert-triangle', `${e.toolName} failed`, 'is-error');
+        if (e.isError) {
+          if (this.closing) this.closeFailed = true;
+          this.toolLine('alert-triangle', `${e.toolName} failed`, 'is-error');
+        }
         break;
       case 'extension_ui_request':
         void this.uiRequest(e);
@@ -417,8 +577,10 @@ export class LearnView extends ItemView {
     live.component.load();
     this.components[this.components.indexOf(old)] = live.component;
     live.el.empty();
-    await MarkdownRenderer.render(this.app, live.text, live.el, this.pathFile?.path ?? '', live.component);
-    this.scrollDown();
+    const component = live.component;
+    await MarkdownRenderer.render(this.app, live.text, live.el, this.pathFile?.path ?? '', component);
+    if (this.disposed || !this.components.includes(component)) component.unload();
+    else this.scrollDown();
   }
 
   private endAssistant(message: any) {
@@ -430,7 +592,11 @@ export class LearnView extends ItemView {
       .filter((c: any) => c.type === 'text')
       .map((c: any) => c.text)
       .join('\n\n');
-    if (final) live.text = final;
+    if (this.closing) {
+      if (message.stopReason === 'error' || message.stopReason === 'aborted') this.closeFailed = true;
+      if (message.stopReason === 'stop' && final.includes(CLOSED_MARKER)) this.closeConfirmed = true;
+    }
+    if (final) live.text = final.replaceAll(CLOSED_MARKER, '').trimEnd();
     if (message.stopReason === 'error' && message.errorMessage) live.text += `\n\n> [!error] ${message.errorMessage}`;
     if (!live.text.trim()) {
       live.el.remove();
@@ -466,13 +632,15 @@ export class LearnView extends ItemView {
   private async follow(rel: string) {
     if (!rel.endsWith('.md')) return;
     for (let i = 0; i < 20; i++) {
+      if (this.disposed) return;
       const f = this.app.vault.getAbstractFileByPath(rel);
-      if (f instanceof TFile) return this.openInMain(f);
+      if (f instanceof TFile) return this.disposed ? undefined : this.openInMain(f);
       await sleep(250);
     }
   }
 
   private async openInMain(file: TFile) {
+    if (this.disposed) return;
     const existing = this.app.workspace.getLeavesOfType('markdown').find((l) => (l.view as any).file?.path === file.path);
     if (existing) {
       this.app.workspace.revealLeaf(existing);
@@ -484,9 +652,30 @@ export class LearnView extends ItemView {
 
   /* ───────────── extension dialogs ───────────── */
 
+  private cancelDialogs() {
+    for (const [id, dialog] of this.dialogs) {
+      this.dialogs.delete(id);
+      if (dialog.pi.running) dialog.pi.respond(id, { cancelled: true });
+      dialog.controller.abort();
+    }
+  }
+
+  private replyDialog(id: string, dialog: PendingDialog, answer: DialogAnswer) {
+    if (this.dialogs.get(id) !== dialog) return;
+    this.dialogs.delete(id);
+    if (dialog.pi.running) dialog.pi.respond(id, answer);
+  }
+
   private async uiRequest(e: PiEvent) {
     const pi = this.pi;
-    if (!pi) return;
+    if (!pi || this.disposed) return;
+    const isDialog = ['select', 'confirm', 'input', 'editor'].includes(e.method);
+    if (isDialog && (this.stopping || this.dialogs.has(e.id))) {
+      if (!this.dialogs.has(e.id)) pi.respond(e.id, { cancelled: true });
+      return;
+    }
+    const dialog = isDialog ? { controller: new AbortController(), pi } : null;
+    if (dialog) this.dialogs.set(e.id, dialog);
     const md = (el: HTMLElement, text: string) => {
       const component = new Component();
       component.load();
@@ -500,23 +689,29 @@ export class LearnView extends ItemView {
       try {
         params = JSON.parse(e.prefill ?? '');
       } catch {
-        pi.respond(e.id, { cancelled: true });
+        this.replyDialog(e.id, dialog!, { cancelled: true });
         return;
       }
       const slot = this.streamEl.createDiv({ cls: 'pi-learn-slot' });
       this.setStatus('');
+      this.revealPending(slot);
+      try {
+        const signal = dialog!.controller.signal;
+        const result =
+          widget === 'quiz'
+            ? await quizCard(slot, params, md, signal)
+            : widget === 'quiz-review'
+              ? await reviewCard(slot, params, md, signal)
+              : widget === 'ask'
+                ? await askCard(slot, params, md, signal)
+                : null;
+        this.replyDialog(e.id, dialog!, result === null ? { cancelled: true } : { value: JSON.stringify(result) });
+      } catch (err) {
+        dialog!.controller.abort();
+        this.replyDialog(e.id, dialog!, { cancelled: true });
+        this.notice(`Could not display the question: ${(err as Error).message}`, true);
+      }
       this.scrollDown();
-      const result =
-        widget === 'quiz'
-          ? await quizCard(slot, params, md)
-          : widget === 'quiz-review'
-            ? await reviewCard(slot, params, md)
-            : widget === 'ask'
-              ? await askCard(slot, params, md)
-              : null;
-      this.scrollDown();
-      if (result === null) pi.respond(e.id, { cancelled: true });
-      else pi.respond(e.id, { value: JSON.stringify(result) });
       return;
     }
 
@@ -525,7 +720,7 @@ export class LearnView extends ItemView {
       case 'confirm':
       case 'input':
       case 'editor':
-        this.genericDialog(e, pi);
+        this.genericDialog(e, dialog!);
         break;
       case 'notify':
         this.notice(e.message ?? '', e.notifyType === 'error');
@@ -537,15 +732,25 @@ export class LearnView extends ItemView {
   }
 
   /** A plain inline dialog for every other extension request. */
-  private genericDialog(e: PiEvent, pi: PiRpc) {
+  private genericDialog(e: PiEvent, dialog: PendingDialog) {
     const card = this.streamEl.createDiv({ cls: 'pi-learn-card' });
+    this.revealPending(card);
     card.createDiv({ cls: 'pi-learn-card-label', text: e.title ?? '' });
     if (e.message) card.createDiv({ cls: 'pi-learn-context', text: e.message });
     const body = card.createDiv({ cls: 'pi-learn-card-body' });
-    const done = (answer: { value?: string; confirmed?: boolean; cancelled?: true }, label: string) => {
-      pi.respond(e.id, answer);
-      card.addClass('is-done');
-      body.empty();
+    const disable = () => {
+      card.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement>('button,input,textarea').forEach((el) => { el.disabled = true; });
+    };
+    const cancel = () => {
+      disable();
+      card.createDiv({ cls: 'pi-learn-card-summary', text: 'Cancelled' });
+    };
+    dialog.controller.signal.addEventListener('abort', cancel, { once: true });
+    const done = (answer: DialogAnswer, label: string) => {
+      if (this.dialogs.get(e.id) !== dialog) return;
+      dialog.controller.signal.removeEventListener('abort', cancel);
+      disable();
+      this.replyDialog(e.id, dialog, answer);
       card.createDiv({ cls: 'pi-learn-card-summary', text: label });
     };
     if (e.method === 'select') {
@@ -572,16 +777,8 @@ export class LearnView extends ItemView {
 
   private emptyState() {
     const empty = this.streamEl.createDiv({ cls: 'pi-learn-empty' });
-    const start = (kind: Kind, icon: string, title: string, sub: string) => {
-      const b = empty.createEl('button', { cls: 'pi-learn-start' });
-      setIcon(b.createSpan({ cls: 'pi-learn-start-icon' }), icon);
-      const words = b.createSpan();
-      words.createDiv({ cls: 'pi-learn-start-title', text: title });
-      words.createDiv({ cls: 'pi-learn-start-sub', text: sub });
-      b.onclick = () => void this.sitting(kind);
-    };
-    start('teach', 'book-open', 'Teach', 'Probe, plan, and learn the next step');
-    start('practice', 'repeat', 'Practice', 'Problems on what you already hold');
+    empty.createDiv({ cls: 'pi-learn-empty-title', text: 'Teach or practice' });
+    empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Choose above, or type a topic and press Enter.' });
     empty.createDiv({ cls: 'pi-learn-empty-note', text: 'Each sitting starts fresh. The notes carry what you learned.' });
   }
 
@@ -589,7 +786,7 @@ export class LearnView extends ItemView {
     this.badgeEl.empty();
     this.badgeEl.toggleClass('is-busy', this.streaming);
     this.badgeEl.createSpan({ cls: 'pi-learn-spinner' });
-    this.badgeEl.createSpan({ text: this.kind === 'teach' ? 'Teaching' : 'Practice' });
+    this.badgeEl.createSpan({ text: this.sittingActive ? this.kind === 'teach' ? 'Teaching' : 'Practice' : 'Ready' });
   }
 
   private bubble(text: string) {
@@ -612,13 +809,34 @@ export class LearnView extends ItemView {
   private grow() {
     this.input.style.height = 'auto';
     this.input.style.height = `${Math.min(this.input.scrollHeight, 240)}px`;
+    this.paintControls();
+  }
+
+  private paintControls() {
+    if (!this.sendBtn) return;
+    const locked = this.transitioning || this.stopping || this.disposed;
+    this.teachBtn.disabled = locked || this.closing;
+    this.practiceBtn.disabled = locked || this.closing;
+    this.teachBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'teach'));
+    this.practiceBtn.setAttr('aria-pressed', String(this.sittingActive && this.kind === 'practice'));
+    this.finishBtn.disabled = locked || !this.sittingActive || this.closing;
+    this.finishBtn.setAttr('title', !this.sittingActive ? 'Start a sitting first' : this.closing ? 'Complete any closing questions in the chat' : 'Complete the skill’s closing procedure and save its learning records');
+    this.finishBtn.setText(this.closing ? 'Finishing…' : 'Finish sitting');
+    this.sendBtn.disabled = locked;
+    const stop = this.streaming && !this.input.value.trim();
+    const label = stop ? 'Stop generating' : this.streaming ? 'Send steering message (Enter)' : this.sittingActive ? 'Send message (Enter)' : `Start ${this.kind === 'teach' ? 'teaching' : 'practice'} (Enter)`;
+    setIcon(this.sendBtn, stop ? 'square' : 'arrow-up');
+    this.sendBtn.setAttr('aria-label', label);
+    this.sendBtn.setAttr('title', label);
+    this.input.placeholder = this.sittingActive ? 'Answer or ask…' : 'Name a topic, or use the open note…';
   }
 
   private setStreaming(on: boolean) {
     this.streaming = on;
     this.contentEl.toggleClass('is-streaming', on);
-    this.badgeEl?.toggleClass('is-busy', on);
+    this.paintBadge();
     if (!on) this.setStatus('');
+    this.paintControls();
   }
 
   private setStatus(text: string) {
@@ -630,7 +848,14 @@ export class LearnView extends ItemView {
     new Notice(error ? `Learn: ${text}` : text, error ? 8000 : 4000);
   }
 
+  /** A blocking question takes the reader to it, even when an earlier passage was being read. */
+  private revealPending(el: HTMLElement) {
+    this.stickToBottom = true;
+    el.scrollIntoView?.({ block: 'nearest' });
+    this.scrollDown();
+  }
+
   private scrollDown() {
-    this.streamEl.scrollTop = this.streamEl.scrollHeight;
+    if (this.stickToBottom) this.streamEl.scrollTop = this.streamEl.scrollHeight;
   }
 }

@@ -50,7 +50,7 @@
 .pi-learn-title-name.is-none { color: var(--text-faint); cursor: default; }
 .pi-learn-title-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
-.pi-learn-chip {
+.pi-learn button.pi-learn-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -61,8 +61,13 @@
   box-shadow: none;
   border: 1px solid var(--background-modifier-border);
 }
-.pi-learn-chip:hover { color: var(--text-normal); border-color: var(--background-modifier-border-hover); }
-.pi-learn-chip.is-active { color: var(--text-accent); border-color: var(--text-accent); }
+.pi-learn button.pi-learn-chip:hover { color: var(--text-normal); border-color: var(--background-modifier-border-hover); background: transparent; }
+.pi-learn button.pi-learn-chip.is-active,
+.pi-learn button.pi-learn-chip[aria-pressed="true"] { color: var(--text-accent); border-color: var(--text-accent); }
+.pi-learn-sittings { display: flex; flex-wrap: wrap; gap: var(--size-4-2); margin-top: var(--size-4-2); }
+.pi-learn-sittings .pi-learn-chip { min-height: 28px; height: auto; }
+.pi-learn-sittings .pi-learn-chip:last-child { margin-left: auto; }
+.pi-learn-sittings button:disabled { opacity: 0.5; background: transparent; }
 .pi-learn-chip-icon { display: inline-flex; }
 .pi-learn-chip-icon svg { width: 12px; height: 12px; }
 
@@ -73,6 +78,7 @@
   border-radius: 50%;
   border: 1.5px solid var(--text-faint);
 }
+.pi-learn-badge:not(.is-busy) .pi-learn-spinner { display: none; }
 .pi-learn-badge.is-busy { color: var(--text-accent); }
 .pi-learn-badge.is-busy .pi-learn-spinner {
   border-color: var(--text-accent) transparent var(--text-accent) var(--text-accent);
@@ -83,7 +89,9 @@
 
 .pi-learn-dots { display: flex; flex-wrap: wrap; gap: 3px; margin-top: var(--size-4-2); }
 .pi-learn-dots:empty { display: none; }
-.pi-learn-dot { width: 7px; height: 7px; border-radius: 2px; border: 1px solid var(--background-modifier-border-hover); }
+.pi-learn-dot { width: 8px; height: 8px; border-radius: 2px; border: 1px solid var(--text-faint); opacity: 0.6; }
+.pi-learn-dot.is-held,
+.pi-learn-dot.is-current { opacity: 1; }
 .pi-learn-dot.is-held { background: var(--color-green); border-color: var(--color-green); }
 .pi-learn-dot.is-current { background: var(--color-yellow); border-color: var(--color-yellow); }
 
@@ -116,23 +124,8 @@
   gap: var(--pl-gap);
 }
 
-.pi-learn-empty { margin: auto 0; display: flex; flex-direction: column; gap: var(--size-4-2); }
-.pi-learn-start {
-  display: flex;
-  align-items: center;
-  gap: var(--size-4-3);
-  height: auto;
-  padding: var(--size-4-3);
-  text-align: left;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background: var(--background-primary-alt);
-  box-shadow: none;
-}
-.pi-learn-start:hover { border-color: var(--interactive-accent); }
-.pi-learn-start-icon { display: inline-flex; color: var(--text-accent); }
-.pi-learn-start-title { font-weight: var(--font-semibold); color: var(--text-normal); }
-.pi-learn-start-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); white-space: normal; }
+.pi-learn-empty { margin: auto 0; display: flex; flex-direction: column; gap: var(--size-4-1); text-align: center; }
+.pi-learn-empty-title { font-family: var(--font-interface); font-size: var(--font-ui-medium); font-weight: var(--font-semibold); color: var(--text-normal); }
 .pi-learn-empty-note { text-align: center; font-size: var(--font-ui-smaller); color: var(--text-faint); margin-top: var(--size-4-2); }
 
 .pi-learn-msg { font-size: var(--font-text-size); line-height: var(--line-height-normal); user-select: text; }
@@ -175,8 +168,9 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-l);
   background: var(--background-primary-alt);
-  outline: none;
 }
+.pi-learn-card:focus-visible,
+.pi-learn-card-archive > summary:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .pi-learn-card-label {
   display: flex;
   align-items: baseline;
@@ -195,7 +189,12 @@
 }
 .pi-learn-card-count { font-variant-numeric: tabular-nums; }
 .pi-learn-card-body { padding: var(--size-4-2) var(--pl-gap) var(--pl-gap); display: flex; flex-direction: column; gap: var(--size-4-3); }
-.pi-learn-card.is-done .pi-learn-card-body { display: none; }
+.pi-learn-item { display: flex; flex-direction: column; gap: var(--size-4-3); }
+.pi-learn-card-archive { border-top: 1px solid var(--background-modifier-border); padding-top: var(--size-4-2); }
+.pi-learn-card-archive > summary { cursor: pointer; font-size: var(--font-ui-small); color: var(--text-muted); }
+.pi-learn-card-archive[open] > summary { margin-bottom: var(--size-4-3); }
+.pi-learn-card-archive textarea:disabled { color: var(--text-normal); opacity: 1; }
+.pi-learn-card-archive .pi-learn-think-field { resize: vertical; }
 .pi-learn-card-summary { padding: var(--size-4-1) var(--pl-gap) var(--size-4-3); font-size: var(--font-ui-small); color: var(--text-muted); }
 
 .pi-learn-prompt { font-size: var(--font-text-size); font-weight: var(--font-medium); }
@@ -205,7 +204,7 @@
 .pi-learn-ask-title { font-weight: var(--font-semibold); }
 
 .pi-learn-options { display: flex; flex-direction: column; gap: var(--size-4-2); }
-.pi-learn-option {
+.pi-learn button.pi-learn-option {
   display: flex;
   align-items: flex-start;
   gap: var(--size-4-3);
@@ -222,7 +221,7 @@
   box-shadow: none;
   transition: border-color 100ms ease-out;
 }
-.pi-learn-option:hover:not(:disabled) { border-color: var(--background-modifier-border-focus); }
+.pi-learn button.pi-learn-option:hover:not(:disabled) { border-color: var(--background-modifier-border-focus); }
 .pi-learn-option.is-idk { border-style: dashed; color: var(--text-muted); font-family: var(--font-monospace); font-size: var(--font-ui-small); background: transparent; }
 .pi-learn-radio {
   flex: none;
@@ -284,7 +283,7 @@
   box-shadow: none !important;
   font-size: var(--font-ui-medium);
 }
-.pi-learn-think-row { display: flex; align-items: center; gap: var(--size-4-2); }
+.pi-learn-think-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size-4-2); }
 .pi-learn-hint { flex: 1; color: var(--text-faint); letter-spacing: 0; }
 
 .pi-learn-field { width: 100%; min-height: 2.6em; resize: none; font-size: var(--font-ui-small); }
@@ -301,7 +300,7 @@
 .pi-learn-verdict { font-weight: var(--font-semibold); }
 .pi-learn-review-facts { font-size: var(--font-ui-small); color: var(--text-muted); }
 
-.pi-learn-actions { display: flex; justify-content: flex-end; gap: var(--size-4-2); }
+.pi-learn-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--size-4-2); }
 .pi-learn-btn.mod-muted { background: transparent; box-shadow: none; color: var(--text-muted); }
 .pi-learn-btn.is-active { color: var(--text-warning); }
 
@@ -331,7 +330,7 @@
   box-shadow: none !important;
   font-size: var(--font-ui-medium);
 }
-.pi-learn-send {
+.pi-learn button.pi-learn-send {
   flex: none;
   width: 28px;
   height: 28px;
@@ -341,8 +340,8 @@
   color: var(--text-on-accent);
   box-shadow: none;
 }
-.pi-learn-send svg { width: 16px; height: 16px; }
-.pi-learn.is-streaming .pi-learn-send { background: var(--interactive-normal); color: var(--text-normal); }
+.pi-learn button.pi-learn-send svg { width: 16px; height: 16px; }
+.pi-learn.is-streaming button.pi-learn-send { background: var(--interactive-normal); color: var(--text-normal); }
 
 .pi-learn-foot { display: flex; align-items: center; gap: var(--size-4-2); margin-top: var(--size-4-2); }
 .pi-learn-select {
@@ -361,6 +360,6 @@
 .pi-learn-select + .pi-learn-select { max-width: 30%; }
 .pi-learn-meter { margin-left: auto; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.pi-learn-model { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; display: block; }
+.pi-learn button.pi-learn-model { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; display: block; text-align: left; }
 .pi-learn-suggest-name { font-family: var(--font-monospace); font-size: var(--font-ui-small); }
 .pi-learn-suggest-meta { font-size: var(--font-ui-smaller); color: var(--text-muted); }

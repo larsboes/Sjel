@@ -14,7 +14,15 @@ write. It runs on macOS, Linux and Windows.
   `Packs/knowledge/extensions/questions.ts` (`fromHost`) hands each widget to the plugin as JSON
   instead of falling back to plain text. A card returns the same result object as the terminal
   widget: answer, thinking, confidence, note and contest.
-- Opens the note pi writes or edits in the main pane (setting: Follow edits).
+- Holds Teach and Practice as persistent controls. Enter in an empty view starts the chosen kind
+  from the open note, path or typed topic. Starting over an unfinished sitting asks first.
+- Closes a sitting on request. **Finish sitting** stops any outstanding question and asks the
+  active skill to run its closing procedure; the sitting closes only after a complete reply with
+  no failed tool call, so a claim, path or Learning Log write cannot be assumed.
+- Keeps every answered card expandable with its question, choice, thinking, confidence and
+  feedback. A prediction is reported as explored, not scored.
+- Leaves the reader's scroll position alone while an answer streams, unless the reader is at the
+  bottom. The composer's button shows Stop while that is what it does.
 - Follows the open note. A path note is the path. Any other note is the focus, and its path is a
   learning path that links to it or that it links to. Teach and Practice start from that context:
   the path at the focus note, the path alone, or the note alone when no path holds it.
@@ -48,11 +56,19 @@ Then reload the plugin in Obsidian. `tools/obsidian-plugin.test.ts` fails when t
 installed copy is older than `src/`. `tools/pi-learn.test.ts` covers the path reader and the
 launch command per platform.
 
+`bun run check` in this directory typechecks `src/` and runs `tests/` against linkedom: the cards'
+keyboard and cancellation paths, sitting start, reset and finish, pending dialogs, and scroll
+position. Those tests use a stub for Obsidian, so they do not prove the view renders.
+
 ## Check
 
 The view needs Obsidian, so these checks are manual:
 
-1. Open a learning path note, open Learn from the ribbon, press Teach.
-2. A `quiz` card appears, takes thinking and confidence, and reveals the verdict.
+1. Open a learning path note, open Learn from the ribbon, type a topic and press Enter. Teach
+   starts, and the Teach, Practice and Finish controls stay visible after the first reply.
+2. A `quiz` card appears, takes thinking and confidence, and reveals the verdict. Its answered
+   question stays expandable after Next, and Stop works during the reveal.
 3. The concept note pi writes opens in the main pane, and an `interactive` figure in a reply
    renders.
+4. Press **Finish sitting**. The closing questions or summary arrive, and the controls report a
+   closed sitting only when the skill completed its writes.

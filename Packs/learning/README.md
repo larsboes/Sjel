@@ -38,8 +38,10 @@ npx skills add wheresryan22/anatomy -g -a pi claude-code
 ## Obsidian plugin
 
 [`plugins/pi-learn/`](plugins/pi-learn/README.md) runs teach and practice sittings with pi in
-Obsidian's sidebar, beside the notes they write. Build and install it with
-`tools/obsidian-plugin pi-learn install`.
+Obsidian's sidebar, beside the notes they write. It holds the sitting controls, keeps answered
+cards readable, and runs the skill's closing procedure on request. Build and install it with
+`tools/obsidian-plugin pi-learn install`; `bun run check` in the plugin directory typechecks it
+and runs its DOM tests.
 
 ## Activate
 

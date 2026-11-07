@@ -1,0 +1,16 @@
+{
+  "name": "sjel-pi-learn",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "check": "bun run typecheck && bun run test"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "linkedom": "0.16.11",
+    "obsidian": "1.14.4",
+    "typescript": "7.0.2"
+  }
+}

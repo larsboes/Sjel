@@ -1,5 +1,7 @@
 //! Render a synthetic calendar to PNG without showing a window or reading personal data.
 
+extern crate gpui_kit as gpui;
+
 use gpui::{prelude::*, px, size, App, Bounds, WindowBounds, WindowOptions};
 use gpui_kit::component::Root;
 use sjel_gpui_core::shell::{CalendarEntry, ShellError};

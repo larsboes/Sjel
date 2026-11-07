@@ -1,3 +1,6 @@
+// GPUI macros expand to `gpui::` paths. The Kit re-exports the GPUI it is built on.
+extern crate gpui_kit as gpui;
+
 use futures::StreamExt;
 use gpui_kit::component::Root;
 use gpui_kit::{

@@ -12,7 +12,6 @@ native-maps = ["dep:maplibre_native", "dep:metal"]
 [dependencies]
 sjel-gpui-core.workspace = true
 gpui-kit.workspace = true
-gpui.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -37,8 +36,7 @@ name = "native-map"
 required-features = ["native-maps"]
 
 [dev-dependencies]
-# Same crate gpui-kit resolves; the name `gpui` is what the #[gpui::test] macro expands to.
-gpui = { workspace = true, features = ["test-support"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
 # Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
 

@@ -14,6 +14,9 @@
 //! name> <port> <fingerprint>` asks to join (`ios/run-sim --join`), and `SJEL_PAIR` takes the QR
 //! code's text and claims its one-time code.
 
+// GPUI macros expand to `gpui::` paths. The Kit re-exports the GPUI it is built on.
+extern crate gpui_kit as gpui;
+
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;

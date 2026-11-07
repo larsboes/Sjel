@@ -13,7 +13,6 @@ crate-type = ["staticlib", "rlib"]
 sjel-gpui-core.workspace = true
 sjel-gpui-ui.workspace = true
 gpui-kit.workspace = true
-gpui.workspace = true
 device-auth = { path = "../../../crates/device-auth" }
 # `SJEL_DAY` names the calendar day a screenshot opens on (src/lib.rs, `launch_day`).
 chrono.workspace = true

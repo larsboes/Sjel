@@ -598,6 +598,10 @@ Stages, in order:
      Retained rendering skips a view whose state changed outside an entity, a global or list
      state without `cx.notify()`.
    Then the feature becomes the default, or the change is reverted and §9 records why.
+   Built 2026-11-07: the crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`
+   at each crate root), so the `gpui-fast` feature switches the backend for every page.
+   `SJEL_GPUI_FAST=1 apps/gpui/install` builds it. Tests and clippy give the same result with
+   and without the feature. Open: the bench and the page pass above.
 3. **NSH trial: the Documents reader on the phone.** It is a Priority 1 screen that does not
    exist on the phone yet (§2, Documents), so no working screen is rewritten. Build it in NSH's
    Rust mode, shown by an `NshAppView` in `ios/host` beside the GPUI view. Done when each of

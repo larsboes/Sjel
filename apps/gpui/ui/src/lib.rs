@@ -2,6 +2,9 @@
 //!
 //! Shared across macOS desktop and iOS mobile clients.
 
+// GPUI macros expand to `gpui::` paths. The Kit re-exports the GPUI it is built on.
+extern crate gpui_kit as gpui;
+
 pub mod accounts;
 pub mod agent_seat;
 pub mod ask;

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Stance {
     Hold,
@@ -15,7 +15,9 @@ pub enum Stance {
     Exit,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum IdeaStatus {
     #[default]
@@ -23,7 +25,7 @@ pub enum IdeaStatus {
     Closed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
     Above,
@@ -31,7 +33,7 @@ pub enum Direction {
 }
 
 /// A price level. `price` is a decimal with a point, such as `1200.50`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Trigger {
     pub direction: Direction,
     pub price: String,
@@ -39,7 +41,7 @@ pub struct Trigger {
 }
 
 /// What a caller sends to create or replace an idea.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct IdeaDraft {
     pub label: String,
     /// The market-data symbol. Empty when no provider quotes the instrument.

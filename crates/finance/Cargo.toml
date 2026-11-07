@@ -42,6 +42,7 @@ sjel-links = { path = "../links" }
 finance-api = { path = "../finance-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+schemars = "1.2.2"
 # The database, after PRD Q45 retired Postgres. Bundled so the deployment does not
 # depend on whichever SQLite the host ships; upstreams.toml [rusqlite] has the
 # measurement that settled it.

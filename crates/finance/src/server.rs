@@ -45,32 +45,36 @@ const ROUTES: &[route_manifest::Route] = &[
         "/api/ideas",
         "Every investment idea, newest edit first, with history, notes, the newest price for its instrument or ticker, and up to 8 comms feed items of the last 90 days that name its label, ticker symbol or keywords (research).",
     ),
-    r(
-        "POST",
-        "/api/ideas",
-        "Create an idea. Body: label, stance (hold|watch|enter|exit), optional ticker, instrument, thesis, keywords, triggers [{direction: above|below, price: \"1200.50\", currency}]. Response: id.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/ideas",
+        summary: "Create an idea. Body: label, stance (hold|watch|enter|exit), optional ticker, instrument, thesis, keywords, triggers [{direction: above|below, price: \"1200.50\", currency}]. Response: id.",
+        request_schema: Some(route_manifest::schema_of::<finance::ideas::IdeaDraft>),
+    },
     r("GET", "/api/ideas/{id}", "One idea with its history and notes."),
-    r(
-        "PUT",
-        "/api/ideas/{id}",
-        "Replace an idea with a new snapshot; the old one stays in its history. Body: as for POST /api/ideas, plus optional status (open|closed) and close_note.",
-    ),
-    r(
-        "POST",
-        "/api/ideas/{id}/notes",
-        "Append a note to an idea. Body: text.",
-    ),
+    route_manifest::Route {
+        method: "PUT",
+        path: "/api/ideas/{id}",
+        summary: "Replace an idea with a new snapshot; the old one stays in its history. Body: as for POST /api/ideas, plus optional status (open|closed) and close_note.",
+        request_schema: Some(route_manifest::schema_of::<finance::ideas::IdeaDraft>),
+    },
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/ideas/{id}/notes",
+        summary: "Append a note to an idea. Body: text.",
+        request_schema: Some(route_manifest::schema_of::<IdeaNoteBody>),
+    },
     r(
         "POST",
         "/api/ideas/{id}/review",
         "Ask the model for a review of one open idea now: a digest of its matched research and an enter, exit or hold proposal citing its sources. Sends name, ticker, stance, thesis, levels, notes, latest price and public feed text to the configured cloud role. Response: outcome.",
     ),
-    r(
-        "POST",
-        "/api/ideas/{id}/reviews/{review_id}/verdict",
-        "Record the verdict on a review once. Body: verdict (accepted|rejected), optional note.",
-    ),
+    route_manifest::Route {
+        method: "POST",
+        path: "/api/ideas/{id}/reviews/{review_id}/verdict",
+        summary: "Record the verdict on a review once. Body: verdict (accepted|rejected), optional note.",
+        request_schema: Some(route_manifest::schema_of::<ReviewVerdictBody>),
+    },
     r(
         "GET",
         "/api/links",
@@ -503,7 +507,7 @@ async fn replace_idea(
     write_idea(state, Some(id), draft).await
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct IdeaNoteBody {
     text: String,
 }
@@ -585,7 +589,7 @@ async fn review_idea(State(state): State<AppState>, Path(id): Path<String>) -> A
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ReviewVerdictBody {
     verdict: String,
     #[serde(default)]
@@ -3216,6 +3220,27 @@ mod tests {
             "served but undeclared: {:?}",
             route_manifest::undeclared_routes(include_str!("server.rs"), ROUTES)
         );
+    }
+
+    #[tokio::test]
+    async fn idea_write_routes_publish_request_schemas() {
+        let Json(manifest) = routes().await;
+        let routes = manifest["routes"].as_array().unwrap();
+        for (method, path) in [
+            ("POST", "/api/ideas"),
+            ("PUT", "/api/ideas/{id}"),
+            ("POST", "/api/ideas/{id}/notes"),
+            ("POST", "/api/ideas/{id}/reviews/{review_id}/verdict"),
+        ] {
+            let route = routes
+                .iter()
+                .find(|route| route["method"] == method && route["path"] == path)
+                .unwrap_or_else(|| panic!("missing route {method} {path}"));
+            assert!(
+                route["request_schema"].is_object(),
+                "route {method} {path} has no request schema"
+            );
+        }
     }
 
     #[test]

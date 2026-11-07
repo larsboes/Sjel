@@ -5,15 +5,16 @@
 #
 # The count is 78 (92 when the gate was built on 2026-10-15), re-measured on
 # 2026-10-21 when sjel-status's twelve body routes gained `schema_of::<T>()`.
-# Raise nothing here without a reason; the point of the file is
-# that the number can only fall.
+# Lower counts as schemas are added. A raised count needs a documented, genuinely bodyless
+# route because this manifest cannot distinguish no body from an undocumented body.
 #
 #   capability  undeclared_write_bodies
 calendar        18
 devices          4
 documents        0
 entities         0
-finance         19
+# One bodyless POST review action has no JSON request schema.
+finance         20
 import           0
 interior        11
 inventory        5

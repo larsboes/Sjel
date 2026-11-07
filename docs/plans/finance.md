@@ -41,8 +41,10 @@ has `label`, `ticker`, an optional held `instrument`, `stance` (`hold`, `watch`,
 `exit`), `thesis`, `keywords`, `triggers` and `status`. Routes: `GET`/`POST /api/ideas`,
 `GET`/`PUT /api/ideas/{id}` (`PUT` appends a full snapshot), `POST /api/ideas/{id}/notes`. An open
 idea's ticker without a held instrument joins the nightly Yahoo fetch under the ticker as its
-key. Checked live 2026-11-05: the three example ideas exist, an edit kept the earlier thesis
-in `history`, and `S68.SI` got a price, with SGD added to the ECB fetch.
+key. Create, replace, note, and review-verdict routes publish request schemas derived from the
+same serde request types they parse; the review action itself has no request body. Checked live
+2026-11-05: the three example ideas exist, an edit kept the earlier thesis in `history`, and
+`S68.SI` got a price, with SGD added to the ECB fetch.
 
 Open: the ideas in the app (section 6).
 

@@ -47,3 +47,6 @@ void sjel_ios_unlocked(bool ok);
 // ios/src/host.rs: a pinch on the page, its scale since it began, and whether it ended. The
 // terminal steps its font size with it.
 void sjel_ios_pinch(double scale, bool ended);
+// ios/src/host.rs: mounts the NSH trial screen into `container`, a UIView. false without the
+// `nsh-trial` feature.
+bool sjel_ios_nsh_mount(void *container);

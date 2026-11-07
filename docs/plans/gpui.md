@@ -632,6 +632,13 @@ Stages, in order:
    - On a real iPhone, text selection with the system menu and VoiceOver work in the reader.
    - The same screen runs in the Mac app through `nsh-platform-gpui` on the stage 2 GPUI Fast.
    - The iOS build links one GPUI copy at most, and it builds with stock Cargo.
+   Step 1 done 2026-11-07: `sjel-gpui-ios` with the `nsh-trial` feature links NSH 0.4.0 in Rust
+   mode (no JavaScript engine) beside `gpui-mobile`, with stock Cargo and one GPUI copy.
+   `SJEL_IOS_FEATURES=nsh-trial SIMCTL_CHILD_SJEL_NSH_TRIAL=1 apps/gpui/ios/run-sim` shows the
+   placeholder screen (`ios/src/nsh_trial.rs`) drawn with UIKit views over the GPUI view. The
+   NSH crates come from the `v0.4.0` git tag: the published `nsh-platform-ios` 0.4.0 includes a
+   file outside its package and does not build. Without the feature the app is unchanged.
+   Next: the reader itself, over `sjel-gpui-core`'s documents data.
 4. **After the trial.** If it passes: new phone screens are NSH screens, and existing phone
    screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
    `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android

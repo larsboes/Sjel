@@ -393,3 +393,25 @@ pub extern "C" fn gpui_ios_register_app() {
         });
     }));
 }
+
+/// Called by `host/App.swift` when the app starts with `SJEL_NSH_TRIAL=1`: mounts the NSH trial
+/// screen into `container`, a `UIView`. Returns `false` when the build has no `nsh-trial` feature.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
+#[unsafe(no_mangle)]
+pub extern "C" fn sjel_ios_nsh_mount(container: *mut std::ffi::c_void) -> bool {
+    #[cfg(feature = "nsh-trial")]
+    {
+        if container.is_null() {
+            return false;
+        }
+        // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
+        let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
+        crate::nsh_trial::mount(view)
+    }
+    #[cfg(not(feature = "nsh-trial"))]
+    {
+        let _ = container;
+        false
+    }
+}

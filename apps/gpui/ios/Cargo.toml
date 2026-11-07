@@ -25,5 +25,35 @@ tokio = { workspace = true, features = ["time"] }
 # Fork at the gpui-pre snapshot gpui-kit pins (upstreams.toml, gpui-mobile). camera and video_player: the crate uses both modules without their feature gates.
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/gpui-mobile", rev = "bbedd2d", default-features = false, features = ["camera", "video_player"] }
 
+[features]
+# The NSH trial (docs/plans/gpui.md §11, stage 3): screens drawn with UIKit views next to GPUI.
+nsh-trial = ["dep:nsh-core", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
+
+[target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
+git = "https://github.com/longbridge/nsh"
+tag = "v0.4.0"
+default-features = false
+optional = true
+
+[target.'cfg(target_os = "ios")'.dependencies.objc2]
+version = "0.6.5"
+optional = true
+
+[target.'cfg(target_os = "ios")'.dependencies.objc2-ui-kit]
+version = "0.3.2"
+default-features = false
+features = ["UIView", "UIResponder", "objc2-core-foundation"]
+optional = true
+
+[dependencies.nsh-core]
+git = "https://github.com/longbridge/nsh"
+tag = "v0.4.0"
+optional = true
+
+[dependencies.nsh-base]
+git = "https://github.com/longbridge/nsh"
+tag = "v0.4.0"
+optional = true
+
 [lints]
 workspace = true

@@ -84,6 +84,16 @@ final class SjelController: UIViewController {
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
         pinch.cancelsTouchesInView = false
         content.view.addGestureRecognizer(pinch)
+        // The NSH trial (docs/plans/gpui.md §11): its screen covers GPUI when the launch asks for it.
+        if ProcessInfo.processInfo.environment["SJEL_NSH_TRIAL"] == "1" {
+            let trial = UIView(frame: view.bounds)
+            trial.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            trial.backgroundColor = .systemBackground
+            view.addSubview(trial)
+            if !sjel_ios_nsh_mount(Unmanaged.passUnretained(trial).toOpaque()) {
+                trial.removeFromSuperview()
+            }
+        }
     }
 
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {

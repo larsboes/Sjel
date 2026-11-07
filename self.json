@@ -3524,6 +3524,10 @@
       "verdict": "inspiration"
     },
     {
+      "name": "octet",
+      "verdict": "evaluate"
+    },
+    {
       "name": "open-intelligent-ui",
       "verdict": "inspiration"
     },

@@ -63,6 +63,8 @@ mod identity;
 mod launch;
 mod nav;
 mod notify;
+#[cfg(feature = "nsh-trial")]
+mod nsh_trial;
 mod pairing;
 
 use host::*;

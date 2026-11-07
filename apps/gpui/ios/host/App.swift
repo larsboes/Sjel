@@ -86,10 +86,18 @@ final class SjelController: UIViewController {
         content.view.addGestureRecognizer(pinch)
         // The NSH trial (docs/plans/gpui.md §11): its screen covers GPUI when the launch asks for it.
         if ProcessInfo.processInfo.environment["SJEL_NSH_TRIAL"] == "1" {
-            let trial = UIView(frame: view.bounds)
-            trial.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.layoutIfNeeded()
+            let trial = UIView(frame: view.safeAreaLayoutGuide.layoutFrame)
             trial.backgroundColor = .systemBackground
             view.addSubview(trial)
+            trial.translatesAutoresizingMaskIntoConstraints = false
+            let guide = view.safeAreaLayoutGuide
+            NSLayoutConstraint.activate([
+                trial.topAnchor.constraint(equalTo: guide.topAnchor),
+                trial.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+                trial.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+                trial.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            ])
             if !sjel_ios_nsh_mount(Unmanaged.passUnretained(trial).toOpaque()) {
                 trial.removeFromSuperview()
             }

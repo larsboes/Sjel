@@ -638,7 +638,14 @@ Stages, in order:
    placeholder screen (`ios/src/nsh_trial.rs`) drawn with UIKit views over the GPUI view. The
    NSH crates come from the `v0.4.0` git tag: the published `nsh-platform-ios` 0.4.0 includes a
    file outside its package and does not build. Without the feature the app is unchanged.
-   Next: the reader itself, over `sjel-gpui-core`'s documents data.
+   Step 2 done 2026-11-07: the trial screen is the phone's Documents reader. A paired phone
+   lists the Mac's library through `shell::device_documents_page` and opens a document's
+   extracted text through `shell::device_document_detail` (`core/src/shell/documents.rs`, the
+   paths shared with the Mac's `Shell`). Rows are a native virtual list, and the reader's title
+   and text are selectable. Checked on the simulator: the unpaired state, inside the safe area.
+   Not checked: the list and the reader with data, because the simulator was not paired, and
+   text selection and VoiceOver on a device. The GPUI Documents page on the phone still has no
+   data source (`ios/src/lib.rs`, `ShellError::NotSetUp`).
 4. **After the trial.** If it passes: new phone screens are NSH screens, and existing phone
    screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
    `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android

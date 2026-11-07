@@ -218,6 +218,8 @@ impl Capabilities {
                                 seat.refresh_sessions(cx);
                             }
                         });
+                        #[cfg(feature = "nsh-trial")]
+                        crate::nsh_trial::connect(client.clone());
                         self.client = Some(client);
                     }
                     Err(error) => self.synced = Some(format!("Cannot sync: {error}").into()),

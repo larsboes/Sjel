@@ -1055,6 +1055,7 @@ pub(crate) fn error_text(body: &[u8]) -> Option<String> {
 }
 
 mod documents;
+pub use documents::{device_document_detail, device_documents_page};
 mod feed_mail;
 mod finance_inventory;
 mod people_calendar;

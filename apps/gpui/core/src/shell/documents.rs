@@ -28,12 +28,7 @@ impl Shell {
     ) -> ShellResult<usize> {
         let mut loaded = 0;
         loop {
-            let offset = loaded.to_string();
-            let mut pairs = vec![("limit", "500"), ("offset", offset.as_str())];
-            if let Some(query) = query {
-                pairs.push(("q", query));
-            }
-            let path = with_query("/documents/api/documents", &pairs);
+            let path = documents_path(loaded, query);
             let page: DocumentPage = self.json(Method::GET, &path, None, 10).await?;
             let page_len = page.documents.len();
             let total = page.total;
@@ -100,16 +95,10 @@ impl Shell {
     }
 
     pub async fn document_detail(&self, id: &str) -> ShellResult<DocumentDetail> {
-        if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        let Some(path) = document_path(id) else {
             return Err(ShellError::Refused(400, Some("Not a document id.".into())));
-        }
-        self.json(
-            Method::GET,
-            &format!("/documents/api/documents/{id}"),
-            None,
-            10,
-        )
-        .await
+        };
+        self.json(Method::GET, &path, None, 10).await
     }
 
     /// Re-run local extraction and read the updated page evidence.
@@ -290,5 +279,67 @@ impl Shell {
             .send_payload(Method::POST, &path, Some(Payload::Bytes(bytes)), 60)
             .await?;
         response.json().await.map_err(|_| ShellError::Unreadable)
+    }
+}
+
+/// One page of up to 500 metadata rows from `offset`, ranked by `query` when there is one.
+fn documents_path(offset: usize, query: Option<&str>) -> String {
+    let offset = offset.to_string();
+    let mut pairs = vec![("limit", "500"), ("offset", offset.as_str())];
+    if let Some(query) = query {
+        pairs.push(("q", query));
+    }
+    with_query("/documents/api/documents", &pairs)
+}
+
+/// The detail path of a document, or `None` when `id` is not a SHA-256 in hex.
+fn document_path(id: &str) -> Option<String> {
+    (id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| format!("/documents/api/documents/{id}"))
+}
+
+/// One page of document metadata through a paired phone's signed client.
+///
+/// # Errors
+/// The client's reason when the Mac refuses or cannot be reached.
+pub async fn device_documents_page(
+    client: &crate::device::DeviceClient,
+    offset: usize,
+) -> Result<DocumentPage, String> {
+    client.get(&documents_path(offset, None)).await
+}
+
+/// A document's extracted text and pages through a paired phone's signed client.
+///
+/// # Errors
+/// A refusal for an `id` that is not a document id, or the client's reason.
+pub async fn device_document_detail(
+    client: &crate::device::DeviceClient,
+    id: &str,
+) -> Result<DocumentDetail, String> {
+    let path = document_path(id).ok_or_else(|| "Not a document id.".to_string())?;
+    client.get(&path).await
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn paths_carry_paging_query_and_a_checked_id() {
+        assert_eq!(
+            documents_path(500, Some("tax 2025")),
+            "/documents/api/documents?limit=500&offset=500&q=tax+2025"
+        );
+        assert_eq!(
+            documents_path(0, None),
+            "/documents/api/documents?limit=500&offset=0"
+        );
+        let id = "a".repeat(64);
+        assert_eq!(
+            document_path(&id),
+            Some(format!("/documents/api/documents/{id}"))
+        );
+        assert_eq!(document_path("../etc"), None);
     }
 }

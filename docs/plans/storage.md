@@ -239,6 +239,9 @@ Each step is one commit with its own check.
 
 ### Also open
 
+- **Task fields on the phone.** The replay sends a task's done, priority and due only
+  (`apps/gpui/core/src/sync.rs`, `replay`), so the phone refuses a status, context or blocked-by
+  write (Work Package 30 in [`gpui.md`](gpui.md#open)). They join in step 5's domain shape.
 - **Search on the phone** over the store and the copy, so cached reads stay useful offline.
 - **Copy contents.** Which tables the copy carries as pages move to the phone, under the data
   rules above.

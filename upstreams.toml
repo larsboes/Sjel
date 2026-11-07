@@ -872,28 +872,22 @@ why = "The TLS library for the Mac's local-network listener and the phone's pinn
 
 [gpui]
 url = "https://github.com/zed-industries/zed/tree/main/crates/gpui"
-verdict = "watch"
+verdict = "adopt"
 license = "Apache-2.0"
-summary = "Zed's GPU-rendered Rust UI framework; the base for Sjel's native client"
-why = "Zed's GPU-rendered Rust UI framework, noted 2026-09-30 and the goal for every client: the base is the weekly `gpui-pre` snapshot of upstream Zed that gpui-kit depends on, not the crates.io release and not gpui-ce. The render half was measured and is not where Sjel waits -- a /context day switch settles in 26 ms in Chrome -- so the toolchain test in that decision is the audit that moves this row."
-revisit = "Audit it when the first resident keyboard surface, the command palette, is built on the pinned snapshot; until then no row change is earned."
-
+summary = "Zed's GPU-rendered Rust UI framework; the base of Sjel's one native app on Mac and iPhone"
+why = "Adopted when the dashboard retired and GPUI became the one app (PLAN.md decisions, 2026-10-22). The base is the weekly `gpui-pre` snapshot of upstream Zed that gpui-kit and gpui-mobile depend on, not the crates.io release and not gpui-ce; the three pins move together by hand (docs/plans/gpui.md section 6)."
 [gpui-kit]
 url = "https://github.com/longbridge/gpui-kit"
-verdict = "watch"
+verdict = "adopt"
 license = "Apache-2.0"
 summary = "Community GPUI component kit: inputs, menus, dialogs, virtual lists, themes"
-why = "A community component kit for GPUI -- inputs, menus, dialogs, virtual lists, themes -- noted 2026-10-09 and not read. Its pin has to match the framework snapshot the app builds against or the two copies do not link; v0.7.1 pulls `gpui-pre =0.3.8`, and its author reports 40-60% CPU while a complex view scrolls because every frame rebuilds from the root."
-revisit = "Read it when the command palette needs text input and lists, and measure the scroll cost on this machine before it becomes a dependency."
-
+why = "The app's inputs, lists and components on both devices (apps/gpui/Cargo.toml). Its pin has to match the `gpui-pre` snapshot or the two copies do not link, so a kit release waits for gpui-mobile to follow the same snapshot. Its author reported 40-60% CPU while a complex view scrolls, noted 2026-10-09; apps/gpui/bench-scroll measures this app's own cost."
 [gpui-mobile]
-url = "https://github.com/itsbalamurali/gpui-mobile"
-verdict = "watch"
+url = "https://github.com/longbridge/gpui-mobile"
+verdict = "adopt"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
-summary = "GPUI platform crate for iOS and Android; the candidate that puts the iPhone client on GPUI"
-why = "A GPUI platform crate for iOS and Android, noted 2026-10-11: its README claims iOS 13 and later through wgpu and Metal with touch, keyboard and safe areas, and says nothing about text input or accessibility. One maintainer, no release, and its Cargo.toml pins a Zed revision, so it has to move to the snapshot the rest of the app uses; Longbridge's compatibility fork is published as `gpui-pre-mobile` on that snapshot."
-revisit = "Decide at the first iPhone client port, starting from the Longbridge fork, and keep the SwiftUI client if text input and accessibility do not hold."
-
+summary = "Longbridge's GPUI platform crate for iOS and Android (`gpui-pre-mobile`); the iPhone app runs on it"
+why = "The phone client embeds it in a UIKit host with the scene life cycle (apps/gpui/ios/host/App.swift), pinned by git revision in apps/gpui/ios/Cargo.toml. It sets the pace for all three GPUI pins: on 2026-11-07 it followed gpui-pre 0.3.10 eight days after release (#45) and had not yet followed 0.3.11, released 2026-11-02. Most merged work since October is Android; iOS PRs #43 and #44 were open from 2026-10-21. #44 (scenes for the iOS 27 SDK) does not affect this host, which already uses scenes and embedded mode. The earlier candidate, itsbalamurali/gpui-mobile, pinned a Zed revision instead of the snapshot."
 [nimble]
 url = "https://ollama.com/library/nimble"
 verdict = "watch"

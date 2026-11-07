@@ -1017,7 +1017,7 @@ mod tests {
                 json!({"choices":[{"index":0,"delta":{"content":"The file was written."}}]}),
             ];
             let mut second_request = None;
-            for index in 0..responses.len() {
+            for (index, response) in responses.iter().enumerate() {
                 let (mut reader, length) = loop {
                     let (stream, _) = listener.accept().unwrap();
                     stream
@@ -1052,7 +1052,7 @@ mod tests {
                 if index == 1 {
                     second_request = Some(serde_json::from_slice::<Value>(&body).unwrap());
                 }
-                let sse = format!("data: {}\n\ndata: [DONE]\n\n", responses[index]);
+                let sse = format!("data: {response}\n\ndata: [DONE]\n\n");
                 write!(reader.get_mut(), "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{sse}", sse.len()).unwrap();
             }
             let request =

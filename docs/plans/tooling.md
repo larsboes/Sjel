@@ -10,6 +10,17 @@ covers it.
 
 ## Open
 
+- **A contained harness cannot be given a credential.** `sjel-contain` strips `*_KEY` and
+  `*_TOKEN` from the child environment and `--keep-env <NAME>` re-admits a name, but nothing
+  resolves the value from the Keychain: the caller has to export the secret before the run, so a
+  contained session on a provider that wants an environment key depends on a hand-typed
+  `security find-generic-password`. Workaround: run the launcher from the owner's own shell with
+  `DEEPSEEK_API_KEY="$(security find-generic-password -s inference-deepseek-api-key -w)"` in front
+  of it. An agent session cannot do that: the denial policy blocks `security` as B6, correctly.
+  Smallest change: `sjel-contain --credential <provider>` resolves `inference-<slug>-api-key`
+  through the same path `sjel provider` uses and injects it into the child environment, so the
+  value never appears in a command line, a shell history or the parent's environment.
+
 - **Stale path check after a move.** After the move to `crates/` and `services/`, nothing
   reported that `cv` and the gitleaks allowlist still named `capabilities/` paths. Workaround: a
   one-off script that rewrote `capabilities/<name>` where a crate or service of that name exists,

@@ -11,9 +11,9 @@ void gpui_ios_layout_view(void *window);
 bool gpui_ios_request_frame(void *window);
 void gpui_ios_did_become_active(void *app);
 void gpui_ios_will_resign_active(void *app);
-// ios/src/lib.rs: one browse answer from Discovery.swift, `{"nodes":[…],"denied":false}`.
+// ios/src/host.rs: one browse answer from Discovery.swift, `{"nodes":[…],"denied":false}`.
 void sjel_ios_nodes(const char *json);
-// ios/src/lib.rs: the text of a pairing code PairScanner.swift read, and why the camera could not
+// ios/src/host.rs: the text of a pairing code PairScanner.swift read, and why the camera could not
 // open when it could not. Both are NUL-terminated UTF-8, valid only for the call.
 void sjel_ios_scanned_pairing(const char *text);
 void sjel_ios_scan_failed(const char *text);
@@ -40,10 +40,10 @@ void sjel_ios_notifications_state(const char *json);
 void sjel_ios_notification_opened(const char *json);
 void sjel_ios_fare_alerts(const char *json);
 void sjel_ios_became_active(void);
-// ios/src/lib.rs: the scene entered the background, and the answer to the Face ID ask that
+// ios/src/host.rs: the scene entered the background, and the answer to the Face ID ask that
 // `sjel_ios_unlock` (host/App.swift) starts before a terminal opens.
 void sjel_ios_entered_background(void);
 void sjel_ios_unlocked(bool ok);
-// ios/src/lib.rs: a pinch on the page, its scale since it began, and whether it ended. The
+// ios/src/host.rs: a pinch on the page, its scale since it began, and whether it ended. The
 // terminal steps its font size with it.
 void sjel_ios_pinch(double scale, bool ended);

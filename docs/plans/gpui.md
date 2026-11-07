@@ -425,7 +425,10 @@ build was performed for this handoff.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
-   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. The agent controller moved to
+   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. The phone shell is split by
+   seam: `host.rs` (the Swift boundary both ways), `events.rs`, `nav.rs`, `edge.rs`,
+   `pairing.rs`, `launch.rs`; `lib.rs` keeps the view, its construction and `render`. The agent
+   controller moved to
    `ui/src/agent_seat.rs` over `Host` (`core/src/agent.rs`); the Mac finder and the phone edge
    draw the same seat. Still in `src/`: desktop shell
    orchestration and host window management (`workspace.rs`, `finder.rs`, `settings.rs`, `soundscape.rs`,
@@ -441,7 +444,7 @@ build was performed for this handoff.
    Agent`, `ios/src/lib.rs` and `ui/src/nav.rs`). Inbox capture lives on Today; Documents, People
    and Places open via 1-tap shortcuts and finder. A sixth tab needs a different bar, not a sixth
    item. The phone opens the Mac's destinations (`route::Target`) through
-   `phone_screen` and one `select_tab` (`ios/src/lib.rs`); a page it does not draw says it opens
+   `phone_screen` and one `select_tab` (`ios/src/nav.rs`); a page it does not draw says it opens
    on the Mac. An unknown path falls back to its first segment's page on both devices
    (`route::first_page`). Open: the host does not register the `sjel://` scheme yet, so only a
    reminder's link reaches `open_link`; that needs `CFBundleURLTypes` in `host/Info.plist` and an

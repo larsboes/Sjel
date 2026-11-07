@@ -262,7 +262,7 @@ delegate.
 The iOS app has no inbound token: it is a paired device (`core/src/device.rs`), signed with its
 Keychain key over TLS pinned to the Mac's LAN listener. The Mac is found over Bonjour:
 `host/Discovery.swift` browses `_sjel._tcp`, whose TXT record carries host, port and certificate
-fingerprint, and hands every result to `sjel_ios_nodes` in `ios/src/lib.rs`, which shows the card
+fingerprint, and hands every result to `sjel_ios_nodes` in `ios/src/host.rs`, which shows the card
 the person taps Join on. `SJEL_JOIN` and `SJEL_PAIR` stay as the fallbacks for a host that cannot
 browse and for the QR code. What does not exist yet is the camera scanner that would read that QR
 code on a phone.

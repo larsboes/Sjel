@@ -40,7 +40,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidEnterBackground(_ scene: UIScene) { sjel_ios_entered_background() }
 }
 
-/// `ios/src/lib.rs` asks for Face ID, or the passcode as its fallback, before a terminal on the
+/// `ios/src/edge.rs` asks for Face ID, or the passcode as its fallback, before a terminal on the
 /// Mac opens or reattaches. The answer goes back on the main queue.
 @_cdecl("sjel_ios_unlock")
 public func sjelIOSUnlock() {

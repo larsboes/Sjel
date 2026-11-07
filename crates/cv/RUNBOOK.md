@@ -13,9 +13,9 @@ The dashboard page `/cv` runs the same verbs.
 
 | var | value | notes |
 |-----|-------|-------|
-| `$CV` | `$SJEL_ROOT/capabilities/cv/cv` | launcher. `$CV` with no argument prints every verb. |
+| `$CV` | `$SJEL_ROOT/crates/cv/cv` | launcher. `$CV` with no argument prints every verb. |
 | `$DATA` | `$SJEL_PERSONAL_ROOT/data/cv` | personal data. Never copy it into the Sjel repo, a commit or this skill. |
-| `$MASTER` | `$DATA/master_cv.yaml` | the one source of CV facts. Shape: `capabilities/cv/master_cv.schema.yaml`. |
+| `$MASTER` | `$DATA/master_cv.yaml` | the one source of CV facts. Shape: `crates/cv/master_cv.schema.yaml`. |
 | `$APPS` | `$DATA/applications/<slug>.yaml` | one file per application. It is also the tracker. |
 
 ## Build a CV
@@ -94,5 +94,5 @@ with no change for 14 days.
 
 ## Verify
 
-Run `$SJEL_ROOT/capabilities/cv/check`. It runs every verb on a temporary overlay and prints
+Run `$SJEL_ROOT/crates/cv/check`. It runs every verb on a temporary overlay and prints
 `check: ok`.

@@ -885,12 +885,10 @@ fn enabled_set(ctx: &mut Ctx) {
     let mut requires: Vec<(String, Vec<String>)> = Vec::new();
     let mut all_present = true;
     for name in &enabled {
-        let root_dir = if ctx.root.join("crates").join(name).exists() {
-            ctx.root.join("crates").join(name)
-        } else if ctx.root.join("services").join(name).exists() {
+        let root_dir = if ctx.root.join("services").join(name).exists() {
             ctx.root.join("services").join(name)
         } else {
-            ctx.root.join("capabilities").join(name)
+            ctx.root.join("crates").join(name)
         };
         let overlay_cap = overlay_dir(ctx).join("capabilities").join(name);
         let dir = if root_dir.exists() {
@@ -1105,7 +1103,6 @@ fn boot_persistence(ctx: &mut Ctx) {
         // knows what depends on it. Name what it runs and do not suggest removing it.
         let managed = ctx.root.join("crates").join(cap).exists()
             || ctx.root.join("services").join(cap).exists()
-            || ctx.root.join("capabilities").join(cap).exists()
             || overlay_dir(ctx).join("capabilities").join(cap).exists();
         if managed {
             ctx.warn(format!(
@@ -1317,12 +1314,6 @@ fn env_templates(ctx: &mut Ctx) {
     if services.exists() {
         for name in sorted_dir_names(&services) {
             dirs_to_check.push((name.clone(), services.join(&name)));
-        }
-    }
-    let caps = ctx.root.join("capabilities");
-    if caps.exists() {
-        for name in sorted_dir_names(&caps) {
-            dirs_to_check.push((name.clone(), caps.join(&name)));
         }
     }
     if dirs_to_check.is_empty() {
@@ -1598,14 +1589,13 @@ fn bind_policy(ctx: &mut Ctx) {
     let roots = [
         (ctx.root.join("crates"), "crates"),
         (ctx.root.join("services"), "services"),
-        (ctx.root.join("capabilities"), "capabilities"),
         (
             overlay_dir(ctx).join("capabilities"),
             "overlay capabilities",
         ),
     ];
-    if !ctx.root.join("crates").exists() && !ctx.root.join("capabilities").exists() {
-        ctx.warn("no crates/ or capabilities/ dir");
+    if !ctx.root.join("crates").exists() {
+        ctx.warn("no crates/ dir");
         return;
     }
     let router = Regex::new(r"\bRouter::new\s*\(").expect("pattern");
@@ -2130,7 +2120,6 @@ fn port_uniqueness(ctx: &mut Ctx) {
     for (dir, label) in [
         (ctx.root.join("crates"), ""),
         (ctx.root.join("services"), ""),
-        (ctx.root.join("capabilities"), ""),
         (overlay_dir(ctx).join("capabilities"), "overlay:"),
     ] {
         if !dir.exists() {

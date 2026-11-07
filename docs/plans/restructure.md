@@ -12,6 +12,9 @@ seeded stack feeds `tools/demo-shots`. Open:
 
 - Done: Prose describing the retired dashboard swept across tracked READMEs and architecture docs.
 - Done: dashboard-only Svelte tooling was removed or updated after checking its remaining consumers.
+- Done: live `capabilities/` paths left by `7031b53f` (the `cv` template, the gitleaks allowlist,
+  the clipper homepage, the repo-root scans in doctor). About 700 comment and prose references
+  remain for the §2 sweep.
 
 ## 2. Sweep
 

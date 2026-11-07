@@ -22,6 +22,6 @@
 # derives the checked set from those lockfiles.
 
 [test]
-pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**", "crates/comms/clipper/**", "capabilities/comms/clipper/**"]
+pathIgnorePatterns = ["bazel-*/*", "Packs/*/pi-packages/**", "crates/comms/clipper/**"]
 # Builds sjel-cli once before collection; tools/lib/sjel-cli-preload.ts says why.
 preload = ["./tools/lib/sjel-cli-preload.ts"]

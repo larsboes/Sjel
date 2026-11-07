@@ -245,12 +245,7 @@ mod tests {
 
     #[test]
     fn committed_corpus_passes_fixed_gate() {
-        let runfiles_path = Path::new("capabilities/comms/eval/extraction-corpus.json");
-        let path = if runfiles_path.exists() {
-            runfiles_path.to_path_buf()
-        } else {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("eval/extraction-corpus.json")
-        };
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("eval/extraction-corpus.json");
         let report = evaluate_file(&path).expect("evaluate committed extraction corpus");
         assert!(report.passed, "{:#?}", report.fixtures);
     }

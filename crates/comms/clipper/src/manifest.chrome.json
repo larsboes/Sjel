@@ -2,7 +2,7 @@
 	"manifest_version": 3,
 	"default_locale": "en",
 	"name": "Sjel Clipper",
-	"homepage_url": "https://github.com/larsboes/Sjel/tree/main/capabilities/comms/clipper",
+	"homepage_url": "https://github.com/larsboes/Sjel/tree/main/crates/comms/clipper",
 	"version": "1.7.1",
 	"version_name": "1.7.1-sjel.1",
 	"description": "Save and highlight web pages into Sjel, on this Mac. Based on Obsidian Web Clipper 1.7.1.",

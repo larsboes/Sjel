@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/cv/cv — build CVs from the master file. Named after its capability, which puts
+# crates/cv/cv — build CVs from the master file. Named after its capability, which puts
 # this directory on PATH. Execs cv-cli; `cv` with no arguments prints usage.
 # Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
 set -euo pipefail

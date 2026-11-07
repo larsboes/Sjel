@@ -468,7 +468,7 @@ impl Master {
     pub fn to_yaml(&self) -> Result<String, String> {
         let body = yaml_serde::to_string(self).map_err(|e| e.to_string())?;
         Ok(format!(
-            "# CV master. Shape and field meanings: capabilities/cv/master_cv.schema.yaml.\n{body}"
+            "# CV master. Shape and field meanings: crates/cv/master_cv.schema.yaml.\n{body}"
         ))
     }
 

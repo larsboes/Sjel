@@ -9,6 +9,6 @@ regexes = ['''dGhlIHNhbXBsZSBub25jZQ==''']
 
 [[allowlists]]
 description = "The Sjel Clipper manifest's `key` is the public half of a key pair; Chrome derives the extension id from it."
-paths = ['''capabilities/comms/clipper/src/manifest\.chrome\.json$''']
+paths = ['''crates/comms/clipper/src/manifest\.chrome\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"key": "MII[A-Za-z0-9+/=]+",?$''']

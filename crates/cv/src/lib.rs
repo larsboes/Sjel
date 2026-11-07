@@ -38,7 +38,7 @@ impl Paths {
         Ok(Paths {
             data: overlay.join("data/cv"),
             overlay,
-            template: PathBuf::from(root).join("capabilities/cv/templates/cv.typ"),
+            template: PathBuf::from(root).join("crates/cv/templates/cv.typ"),
         })
     }
 
@@ -99,7 +99,7 @@ pub fn load_master(paths: &Paths) -> Res<Master> {
     let path = paths.master();
     if !path.exists() {
         return Err(format!(
-            "no master file at {}; copy capabilities/cv/master_cv.schema.yaml there and fill it in",
+            "no master file at {}; copy crates/cv/master_cv.schema.yaml there and fill it in",
             path.display()
         ));
     }

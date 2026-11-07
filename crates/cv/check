@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/cv/check — exercise every cv verb against a throwaway overlay built from the
+# crates/cv/check — exercise every cv verb against a throwaway overlay built from the
 # schema skeleton. Touches no real overlay and no network.
 set -euo pipefail
 

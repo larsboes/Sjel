@@ -12,7 +12,7 @@
 //! Resolution for everything else (a JSON file, mirroring comms/scouting):
 //!   1. `$SJEL_CALENDAR_CONFIG` (explicit override, full path)
 //!   2. `$SJEL_PERSONAL_ROOT/config/calendar.json` (the overlay)
-//!   3. `capabilities/calendar/calendar.config.json` (local, gitignored)
+//!   3. `crates/calendar/calendar.config.json` (local, gitignored)
 //!
 //! There is no file at all in the common case: Phases A–D need none, and
 //! `Config::load` returns working defaults for everything except the two

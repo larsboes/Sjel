@@ -2,7 +2,7 @@
 //! overlay at runtime. Resolution order mirrors scouting's config.rs:
 //!   1. `$SJEL_COMMS_CONFIG` (explicit override, full path to a JSON file)
 //!   2. `$SJEL_PERSONAL_ROOT/config/comms.json` (the overlay)
-//!   3. `capabilities/comms/comms.config.json` next to this source
+//!   3. `crates/comms/comms.config.json` next to this source
 //!      (local, gitignored -- dev fallback)
 //!
 //! See `comms.config.example.json` for the shape. Every field is optional;

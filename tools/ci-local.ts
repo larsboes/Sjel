@@ -19,6 +19,7 @@ Exit 0 = all passed, 1 = a check failed, 2 = usage or refused replay.`;
 
 interface Result { step: string; ok: boolean; ms: number }
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+const HEAVY_JOBS = new Set(["rust-quality", "cargo-tests", "bun-tests", "ui-check", "gpui-targets"]);
 
 function runStep(step: WorkflowStep, root: string): Result {
   const started = Bun.nanoseconds();
@@ -113,6 +114,17 @@ async function main(): Promise<number> {
     if (!job.steps.length) throw new Error(`job '${name}' has no run: steps — nothing would be checked.`);
     return job;
   });
+  // Jobs that compile or run suites ask the power profile first; gates and list do not.
+  const heavy = selected.filter((job) => HEAVY_JOBS.has(job.id));
+  if (heavy.length) {
+    const check = Bun.spawnSync(["bash", resolve(import.meta.dir, "local-build")], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    if (check.exitCode === 3) {
+      const reason = check.stderr.toString().trim();
+      console.error(`ci-local: ${heavy.map((job) => job.id).join(", ")} compile or test, and the runtime profile deferred them.${reason ? `\n  ${reason}` : ""}`);
+      return 2;
+    }
+  }
+
   const results: Result[] = [];
   const wallStart = Bun.nanoseconds();
   for (const job of selected) {

@@ -57,10 +57,24 @@ sjel_cli_exec() {
           exit 1
         fi
       else
-        echo "$sub: building sjel-cli (release)..." >&2
-        if ! cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2; then
-          [ -x "$bin" ] || exit 2
-          echo "$sub: the sjel-cli build failed — running the existing, older binary" >&2
+        # The build itself is the drain, so it asks the profile first.
+        . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/local-build.sh"
+        local admit=0
+        local_build_check || admit=$?
+        if [ "$admit" -eq 3 ]; then
+          if [ -x "$bin" ]; then
+            echo "$sub: a newer sjel-cli is deferred by the runtime profile — running the existing binary" >&2
+          else
+            echo "$sub: sjel-cli is missing and compiling it waits while the runtime profile is On the go." >&2
+            echo "     Plug in, or prefix this one command with SJEL_ALLOW_LOCAL_BUILD=1." >&2
+            exit 3
+          fi
+        else
+          echo "$sub: building sjel-cli (release)..." >&2
+          if ! cargo build --locked --release -p sjel-cli --manifest-path "$crate/../../Cargo.toml" >&2; then
+            [ -x "$bin" ] || exit 2
+            echo "$sub: the sjel-cli build failed — running the existing, older binary" >&2
+          fi
         fi
       fi
     fi

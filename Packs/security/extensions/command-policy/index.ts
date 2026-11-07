@@ -7,7 +7,8 @@
  *   block  card naming the rule: deny (the default) · allow once. Never a standing grant.
  *
  * Without a UI (print mode, a non-interactive subagent) ask and block both refuse: a card nobody
- * can answer must not turn into a yes.
+ * can answer must not turn into a yes. An allowed build or test is then asked of the runtime
+ * profile (rule P1): On the go refuses it with the one-command exception named.
  *
  * Secrets stay with secrets-guard (rule B6's main half); this extension does not duplicate it.
  *
@@ -19,6 +20,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, type Scope, type Verdict } from "./classify.ts";
+import { powerDeferral } from "./power.ts";
 
 function logDecision(entry: Record<string, unknown>): void {
   const overlay = process.env.SJEL_OVERLAY_ROOT ?? process.env.SJEL_PERSONAL_ROOT;
@@ -61,6 +63,16 @@ export default function commandPolicy(pi: ExtensionAPI) {
     const base = { tool: event.toolName, class: v.class, rule: v.rule, programs: v.programs };
 
     if (v.class === "allow") {
+      // Classify stays pure; the power profile is a separate question asked only of commands
+      // that would compile. An ask or a block keeps its own rule and message.
+      if (event.toolName === "bash" || event.toolName === "vault_exec") {
+        const command = String(input.command ?? input.cmd ?? "");
+        const deferred = powerDeferral(command, process.cwd());
+        if (deferred) {
+          logDecision({ ...base, rule: "P1", decision: "battery-deferred" });
+          return { block: true, reason: deferred };
+        }
+      }
       logDecision({ ...base, decision: "allow" });
       return undefined;
     }

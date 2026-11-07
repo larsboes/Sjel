@@ -13,12 +13,14 @@ enum Action {
     Status,
     Mode(Selection),
     Allow(Category, bool),
+    AdmitLocalBuild,
 }
 
 fn parse(args: &[String]) -> Result<Action, String> {
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
         ["status"] => Ok(Action::Status),
+        ["admit", "local-build"] => Ok(Action::AdmitLocalBuild),
         ["mode", mode] => serde_json::from_value(serde_json::json!(mode))
             .map(Action::Mode)
             .map_err(|_| "mode must be auto, normal or on-the-go".into()),
@@ -76,6 +78,8 @@ fn allow_update(
 fn run_action(root: &Path, action: Action) -> Result<ExitCode, String> {
     let body = match action {
         Action::Status => return Ok(call(root, "get", None)),
+        // A stopped status process must not decide that heavy work is allowed.
+        Action::AdmitLocalBuild => return Ok(admit_local_build()),
         Action::Mode(selection) => serde_json::json!({ "selection": selection }),
         Action::Allow(category, enabled) => {
             // Capture the existing caller's GET without duplicating its registry or auth rules.
@@ -112,6 +116,11 @@ fn run_action(root: &Path, action: Action) -> Result<ExitCode, String> {
     Ok(result)
 }
 
+fn defer(reason: String) -> ExitCode {
+    eprintln!("{reason}");
+    ExitCode::from(3)
+}
+
 pub fn run(root: &Path, args: &[String]) -> ExitCode {
     match parse(args).and_then(|action| run_action(root, action)) {
         Ok(code) => code,
@@ -119,6 +128,27 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
             eprintln!("sjel runtime: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Exit 3 is the contract `tools/lib/local-build.sh` reads: deferred, not broken.
+fn admit_local_build() -> ExitCode {
+    let files = match sjel_runtime::Files::from_deployment() {
+        Ok(files) => files,
+        Err(e) => return defer(format!("runtime profile unreadable: {e}")),
+    };
+    // No overlay is a fresh checkout or a container: there is no profile to obey.
+    let Some(files) = files else {
+        return ExitCode::SUCCESS;
+    };
+    // Probe now; a stale sample from a stopped status process would refuse docked work.
+    let _ = files.refresh_power();
+    match files.status() {
+        Ok(status) => match status.admit_local_build() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(deferred) => defer(deferred.0),
+        },
+        Err(e) => defer(format!("runtime profile unreadable: {e}")),
     }
 }
 
@@ -138,11 +168,14 @@ mod tests {
             vec!["mode", "normal"],
             vec!["mode", "on-the-go"],
             vec!["allow", "remote-models", "off"],
+            vec!["admit", "local-build"],
         ] {
             assert!(parse(&args(&words)).is_ok());
         }
         for words in [
             vec![],
+            vec!["admit"],
+            vec!["admit", "build"],
             vec!["mode", "battery"],
             vec!["status", "extra"],
             vec!["allow", "remote-models", "true"],

@@ -46,6 +46,21 @@ secret scanning or publication hygiene.
 Inspect the diff, `git diff --check` and `git status --short` before committing. Do not describe
 a skipped or unavailable check as passing.
 
+### On the go
+
+On battery, the runtime profile defers local compilation, Clippy and test suites. `tools/cargo-hermetic`,
+the CLI rebuild in `tools/lib/sjel-cli.sh`, `tools/ci-local run` and the pi command-policy
+extension refuse a start with the reason; nothing already running is killed. Profile and exceptions:
+`crates/runtime/README.md`. One command may proceed:
+
+~~~sh
+SJEL_ALLOW_LOCAL_BUILD=1 tools/cargo-hermetic test -p sjel-runtime --locked
+~~~
+
+Fast editing checks still run: formatting, publication hygiene and cheap repository gates compile
+nothing. A checkout with no built `sjel-cli` cannot consult the profile, says so, and admits the
+work; a `cargo` command typed outside these tools is also outside the guard.
+
 ### Change-aware CI
 
 `tools/ci-plan.ts` selects verification inputs for local checks and Actions. Rust selection

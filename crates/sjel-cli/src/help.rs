@@ -126,13 +126,17 @@ is that host's declaration to make, not a claim this machine may read as permiss
 pub const RUNTIME: &str = r#"Usage: sjel runtime <command>
 
   status                         Read selection, effective mode, power and exceptions
+  admit local-build              Exit 0 when local builds are admitted, 3 when deferred
   mode auto|normal|on-the-go      Save this device's runtime selection
   allow <category> on|off         Save an exception, applied only while On the go
 
 Categories: other-local-models, remote-models, bulk-indexing, transcription, media-conversion.
-Auto follows fresh power observations after the operator saves it. An unconfigured install
-stays Normal until a selection is saved. Exceptions persist but have no effect in Normal.
-Writes require owner credentials. Agent sessions keep their agent token and are refused."#;
+Local compilation, Clippy and test runs need Normal; while On the go they wait until the machine
+is plugged in, unless one command is prefixed with SJEL_ALLOW_LOCAL_BUILD=1. That exception is
+per command and is not saved. Auto follows fresh power observations after the operator saves it.
+An unconfigured install stays Normal until a selection is saved. Exceptions persist but have no
+effect in Normal. Writes require owner credentials. Agent sessions keep their agent token and
+are refused."#;
 
 pub const PROVIDER: &str = r#"Usage: sjel provider <command>
 

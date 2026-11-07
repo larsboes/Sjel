@@ -78,6 +78,19 @@ for arg in "$@"; do
   _prev="$arg"
 done
 
+
+# The power profile decides before cargo starts compiling. This tool never builds the binary
+# that answers; see tools/lib/local-build.sh.
+# shellcheck source=lib/local-build.sh
+. "$_here/lib/local-build.sh"
+if [ "${1:-}" != "--print-env" ]; then
+  _admit=0
+  local_build_check || _admit=$?
+  if [ "$_admit" -eq 3 ]; then
+    die "not compiling while the runtime profile is On the go. Plug in, or prefix this one command with SJEL_ALLOW_LOCAL_BUILD=1."
+  fi
+fi
+
 # Canonicalise a path that may not exist yet, WITHOUT creating it: walk up to the deepest
 # existing ancestor, resolve that, and re-attach the tail. `mkdir -p` first would create the
 # very directory inside the repository that the next check is about to refuse.

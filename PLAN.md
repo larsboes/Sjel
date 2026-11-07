@@ -29,8 +29,10 @@ Order inside Priority 1:
 
 1. The agent's tiers and command policy.
 2. Live validation of the agent and the terminal on a phone.
-3. Documents and Mail on the phone, then the new tab bar.
-4. Travel and Calendar UI.
+3. The UI stack ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)): the pins, GPUI Fast on the
+   Mac, then the NSH trial, which builds the phone's Documents reader.
+4. Mail on the phone, then the new tab bar, both on the stack the trial chose.
+5. Travel and Calendar UI.
 
 Work that Priority 1 needs from other areas (storage for offline reads, a missing write path)
 belongs to Priority 1.
@@ -85,6 +87,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Decision | Date |
 |---|---|
 | The dashboard retires. GPUI is the one app. | 2026-10-22 |
+| GPUI Fast renders the desktop. The phone runs a trial of NSH, with `gpui-mobile` as the bridge until it decides ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). | 2026-11-07 |
 | Target one database per capability or agent. | 2026-10-23 |
 | Knowledge stays in the vault until moving it hurts. | 2026-10-23 |
 | The model provider sets an agent's reach. Untrusted providers run sandboxed, before Priority 1. | 2026-10-31 |
@@ -98,6 +101,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | `c2` reaches the `trusted` ring (Claude, GPT) as `trusted_view` with full names. No harness reads raw overlay data. The data classes stay `c0`–`c3`. | 2026-11-03 |
 | The always-on host is a home server, a Mac mini. It runs collection and alerts, and a large local model for `c2` and `c3` work. Until it is bought, the Mac stands in. | 2026-11-03 |
 | Sjel never drives a consumer subscription itself. A subscription reaches Sjel through MCP when the user starts it; Sjel's own model calls use API keys. | 2026-11-03 |
+| Local compilation, Clippy and test suites wait while the runtime profile is On the go; one command may carry `SJEL_ALLOW_LOCAL_BUILD=1`. | 2026-11-07 |
 | Every change goes straight to `main` until this plan is done. Then `main` is tagged `v0.1.0`, and branches, worktrees and PRs start. | 2026-10-31 |
 
 ## Rules for this plan

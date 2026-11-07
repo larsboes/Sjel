@@ -1,0 +1,10 @@
+#!/bin/bash
+# tools/local-build — ask the power profile whether heavy local work is admitted.
+#
+# Exit 0 admitted, 3 deferred (the reason is printed), 2 undecidable. Agent guards call this
+# before a build or test command; the exit codes are the contract.
+set -u
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=lib/local-build.sh
+. "$_here/lib/local-build.sh"
+local_build_check

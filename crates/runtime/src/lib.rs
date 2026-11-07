@@ -142,6 +142,20 @@ impl Status {
         }
     }
 
+    /// Local compilation and test work, admitted only under the Normal profile.
+    ///
+    /// Deliberately not a category: allowing one budgeted run while unplugged is an exception
+    /// at the command, not a standing preference that outlives it.
+    pub fn admit_local_build(&self) -> Result<(), Deferred> {
+        if self.effective == Selection::Normal {
+            Ok(())
+        } else {
+            Err(Deferred(format!(
+                "{DEFERRED_PREFIX} local builds and tests wait while On the go; plug in, or prefix one command with SJEL_ALLOW_LOCAL_BUILD=1"
+            )))
+        }
+    }
+
     pub fn admit_model(&self, backend: &str, model: &str, local: bool) -> Result<(), Deferred> {
         if local && backend == "foundation-models" && model == "apple-foundationmodel" {
             return Ok(());
@@ -564,6 +578,29 @@ mod tests {
             resolve("test".into(), None, None, 200).effective,
             Selection::Normal
         );
+    }
+
+    #[test]
+    fn local_builds_are_admitted_only_under_the_normal_profile() {
+        let mut settings = Settings::default();
+        assert!(status(&settings, Power::Ac).admit_local_build().is_ok());
+        let deferred = status(&settings, Power::Battery)
+            .admit_local_build()
+            .unwrap_err();
+        assert!(is_deferred(&deferred.0));
+        assert!(deferred.0.contains("SJEL_ALLOW_LOCAL_BUILD=1"));
+        settings.allow.insert(Category::BulkIndexing);
+        assert!(status(&settings, Power::Battery)
+            .admit_local_build()
+            .is_err());
+        settings.selection = Selection::Normal;
+        settings.manual_power = Some(Power::Battery);
+        assert!(status(&settings, Power::Battery)
+            .admit_local_build()
+            .is_ok());
+        assert!(Status::unresolved("no profile")
+            .admit_local_build()
+            .is_err());
     }
 
     #[test]

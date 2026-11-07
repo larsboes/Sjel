@@ -14,7 +14,6 @@ be read. Why a per-candidate read is the wrong shape is in
 The GPUI Systems view offers Auto, Normal and On the go, plus persistent exceptions.
 The shell badge shows the effective mode and active exceptions. The operator CLI uses the same
 protected API:
-
 ```sh
 sjel runtime status
 sjel runtime mode auto
@@ -27,6 +26,23 @@ A fresh installation stays Normal until the operator saves a selection. Auto use
 battery and Normal on AC. A manual choice lasts until the next detected power-source change;
 category exceptions remain saved independently. Whole-set exception updates carry a revision so
 a stale tab or CLI cannot overwrite newer preferences.
+
+## Local builds
+
+Compilation, Clippy and test suites are admitted only under Normal. While On the go they wait,
+and the tool that was about to compile prints why. This is not a category: a standing allowance
+to drain the battery is not a preference worth saving. One command may carry an exception:
+
+```sh
+SJEL_ALLOW_LOCAL_BUILD=1 tools/cargo-hermetic test -p sjel-runtime --locked
+sjel runtime admit local-build   # exit 0 admitted · 3 deferred
+```
+
+The decision is read from the deployment and a fresh `pmset` probe, so a stopped status process
+neither permits heavy work nor refuses it while docked. A checkout with no overlay has no
+profile to obey and is admitted. `tools/cargo-hermetic`, `tools/lib/sjel-cli.sh` (before it
+rebuilds the CLI), `tools/ci-local run` and the pi command-policy extension ask; a compiler
+typed directly into a terminal, or another application's build, is outside this guard.
 
 While On the go, the default model allowance is the loopback `foundation-models` backend serving
 `apple-foundationmodel`. Other local and remote/peer models have separate exceptions. Heavy work
@@ -53,7 +69,8 @@ An Auto profile with a missing, unknown or more than 90-second-old sample restri
 than assuming AC. Detection is sampled, not instantaneous. Other operating systems support manual
 selection but have no battery automation in this implementation.
 
-This governs integrated Sjel requests, not external harnesses, arbitrary builds or an external
-server's resident model memory. It does not promise offline operation or a measured battery saving.
+This governs integrated Sjel requests and the guarded local build tools. It does not govern an
+external server's resident model memory, a compiler started outside those tools, or another
+application's build. It does not promise offline operation or a measured battery saving.
 
 Checks: `cargo test -p sjel-runtime -p sjel-inference -p sjel-summarize`.

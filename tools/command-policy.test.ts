@@ -1,10 +1,12 @@
 // Command policy (docs/plans/agent.md §3) for pi: every case in
 // Packs/security/extensions/command-policy/cases.toml, plus the extension's card behaviour.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classify, classifyWrite, type Scope } from "../Packs/security/extensions/command-policy/classify.ts";
 import commandPolicy from "../Packs/security/extensions/command-policy/index.ts";
+import { heavyCommand, powerDeferral } from "../Packs/security/extensions/command-policy/power.ts";
 
 const dir = join(import.meta.dir, "../Packs/security/extensions/command-policy");
 const table = Bun.TOML.parse(readFileSync(join(dir, "cases.toml"), "utf8")) as {
@@ -96,5 +98,43 @@ describe("command policy extension", () => {
   test("other tools pass untouched", async () => {
     const h = load();
     expect(await h({ toolName: "read", input: { path: "/etc/passwd" } }, ctx([]))).toBeUndefined();
+  });
+});
+
+describe("battery admission", () => {
+  test("recognises commands that compile, and nothing else", () => {
+    for (const [command, expected] of [
+      ["cargo test -q", "cargo test"],
+      ["cd crates/x && cargo clippy --all-targets", "cargo clippy"],
+      ["bun run build", "bun run"],
+      ["npm test", "npm test"],
+      ["FOO=1 xcodebuild -scheme Sjel", "xcodebuild"],
+      ["git status", null],
+      ["ls -la && rg cargo", null],
+      ["tools/cargo-hermetic test --workspace", null],
+      ["sjel test", null],
+    ] as const) {
+      expect(heavyCommand(command)).toBe(expected);
+    }
+  });
+
+  test("a command carrying the exception is never deferred", () => {
+    expect(powerDeferral("SJEL_ALLOW_LOCAL_BUILD=1 cargo test", "/nonexistent")).toBeNull();
+    expect(powerDeferral("git status", "/nonexistent")).toBeNull();
+  });
+
+  test("a deferred command is refused with the reason and the way out", () => {
+    const root = mkdtempSync(join(tmpdir(), "policy-power-"));
+    try {
+      mkdirSync(join(root, "tools"), { recursive: true });
+      writeFileSync(join(root, "tools/local-build"), "#!/bin/sh\necho 'deferred by runtime profile: On the go' >&2\nexit 3\n", { mode: 0o755 });
+      const reason = powerDeferral("cargo build", root);
+      expect(reason).toContain("cargo build is deferred");
+      expect(reason).toContain("SJEL_ALLOW_LOCAL_BUILD=1");
+      writeFileSync(join(root, "tools/local-build"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      expect(powerDeferral("cargo build", root)).toBeNull();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -41,6 +41,25 @@ unsafe extern "C" {
     fn sjel_ios_load_roomplan_archive();
     // Face ID before a terminal on the Mac opens; the answer is `sjel_ios_unlocked`.
     fn sjel_ios_unlock();
+    // Shows and hides the view NSH draws in (`host/App.swift`), on the main queue.
+    fn sjel_ios_nsh_show();
+    fn sjel_ios_nsh_hide();
+}
+
+/// Shows the NSH screens over the GPUI view.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+pub(crate) fn show_nsh() {
+    // SAFETY: no arguments; the host switches the view on the main queue.
+    unsafe { sjel_ios_nsh_show() }
+}
+
+/// Hides the NSH screens; the GPUI view under them shows again.
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+pub(crate) fn hide_nsh() {
+    // SAFETY: no arguments; the host switches the view on the main queue.
+    unsafe { sjel_ios_nsh_hide() }
 }
 
 #[cfg(target_os = "ios")]
@@ -394,22 +413,22 @@ pub extern "C" fn gpui_ios_register_app() {
     }));
 }
 
-/// Called by `host/App.swift` when the app starts with `SJEL_NSH_TRIAL=1`: mounts the NSH trial
-/// screen into `container`, a `UIView`. Returns `false` when the build has no `nsh-trial` feature.
+/// Called by `host/App.swift` at launch: mounts the NSH screens into `container`, a hidden
+/// `UIView`. Returns `false` when the build has no `nsh` feature.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)] // `no_mangle` is an unsafe attribute; the host links this symbol by name.
 #[unsafe(no_mangle)]
 pub extern "C" fn sjel_ios_nsh_mount(container: *mut std::ffi::c_void) -> bool {
-    #[cfg(feature = "nsh-trial")]
+    #[cfg(feature = "nsh")]
     {
         if container.is_null() {
             return false;
         }
         // SAFETY: the host passes an unretained `UIView` it keeps in its hierarchy for the call.
         let view = unsafe { &*container.cast::<objc2_ui_kit::UIView>() };
-        crate::nsh_trial::mount(view)
+        crate::nsh::mount(view)
     }
-    #[cfg(not(feature = "nsh-trial"))]
+    #[cfg(not(feature = "nsh"))]
     {
         let _ = container;
         false

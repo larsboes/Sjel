@@ -654,7 +654,14 @@ Stages, in order:
    keystroke). Checked on a paired iPhone: the list fills from the Mac. Checked: every build,
    core and ui tests, clippy. Not checked: the Mac window's content, text selection and
    VoiceOver on the iPhone.
-4. **After the trial.** If it passes: new phone screens are NSH screens, and existing phone
+   Result 2026-11-07: the trial passes on the phone. On a paired iPhone the list fills, text
+   selection opens the system menu and VoiceOver reads the list and the reader. The Mac window
+   opens; its content was not looked at.
+4. **After the trial.** Started 2026-11-07: NSH is a default feature of `sjel-gpui-ios`
+   (`nsh`). Documents on the phone is the NSH reader, shown over the GPUI view by
+   `host::show_nsh` from `select_tab` and from a `SJEL_TAB=documents` launch, and hidden by its
+   "Back". The GPUI Documents page is no longer reachable on the phone. Not checked: "Back" on a
+   device. If it passes: new phone screens are NSH screens, and existing phone
    screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
    `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android
    backend. If it fails: the phone stays on GPUI, and the choice is between keeping the

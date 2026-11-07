@@ -31,7 +31,7 @@ IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST="$IOS_DIR/host"
 BUNDLE_ID="dev.sjel.ios"
 
-# SJEL_IOS_FEATURES=nsh-trial builds the NSH trial in; SJEL_NSH_TRIAL=1 then shows it.
+# SJEL_IOS_FEATURES adds cargo features to the Rust library.
 (cd "$IOS_DIR" && cargo build --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
 target_dir="$(cd "$IOS_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
 rust_lib="$target_dir/aarch64-apple-ios-sim/debug/libsjel_gpui_ios.a"

@@ -8,8 +8,8 @@ description = "Shared GPUI design system, tokens, and primitives for Sjel deskto
 
 [features]
 native-maps = ["dep:maplibre_native", "dep:metal"]
-# The NSH trial (docs/plans/gpui.md §11): screens drawn by NSH on the phone and the Mac.
-nsh-trial = ["dep:nsh-core", "dep:nsh-base"]
+# Screens drawn by NSH: UIKit views on the phone, GPUI Fast on the Mac (docs/plans/gpui.md §11).
+nsh = ["dep:nsh-core", "dep:nsh-base"]
 
 [dependencies]
 sjel-gpui-core.workspace = true

@@ -48,9 +48,20 @@ pub(crate) fn launch_tab() -> Tab {
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
         "mail" => Tab::Mail,
-        "documents" => Tab::Documents,
+        "documents" => documents_tab(),
         _ => Tab::Today,
     }
+}
+
+/// Documents is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
+fn documents_tab() -> Tab {
+    #[cfg(all(target_os = "ios", feature = "nsh"))]
+    {
+        crate::host::show_nsh();
+        Tab::Today
+    }
+    #[cfg(not(all(target_os = "ios", feature = "nsh")))]
+    Tab::Documents
 }
 
 /// `SJEL_SIDEBAR=soundscape|activity` opens the right edge at launch on that seat. A phone never sets

@@ -26,8 +26,9 @@ tokio = { workspace = true, features = ["time"] }
 gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/gpui-mobile", rev = "bbedd2d", default-features = false, features = ["camera", "video_player"] }
 
 [features]
-# The NSH trial (docs/plans/gpui.md §11, stage 3): screens drawn with UIKit views next to GPUI.
-nsh-trial = ["sjel-gpui-ui/nsh-trial", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
+# Screens drawn by NSH with UIKit views next to GPUI (docs/plans/gpui.md §11).
+default = ["nsh"]
+nsh = ["sjel-gpui-ui/nsh", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
 
 [target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
 git = "https://github.com/longbridge/nsh"

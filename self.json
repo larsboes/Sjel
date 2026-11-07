@@ -3501,7 +3501,7 @@
     },
     {
       "name": "nsh",
-      "verdict": "evaluate"
+      "verdict": "adopt"
     },
     {
       "name": "nvidia-skills",

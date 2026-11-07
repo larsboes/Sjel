@@ -50,6 +50,19 @@ public func sjelIOSUnlock() {
     }
 }
 
+/// The view NSH draws in, over GPUI. `ios/src/host.rs` shows and hides it.
+private weak var nshScreens: UIView?
+
+@_cdecl("sjel_ios_nsh_show")
+public func sjelIOSNshShow() {
+    DispatchQueue.main.async { nshScreens?.isHidden = false }
+}
+
+@_cdecl("sjel_ios_nsh_hide")
+public func sjelIOSNshHide() {
+    DispatchQueue.main.async { nshScreens?.isHidden = true }
+}
+
 final class SjelController: UIViewController {
     private var gpuiWindow: UnsafeMutableRawPointer!
     private var content: UIViewController!
@@ -84,23 +97,24 @@ final class SjelController: UIViewController {
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
         pinch.cancelsTouchesInView = false
         content.view.addGestureRecognizer(pinch)
-        // The NSH trial (docs/plans/gpui.md §11): its screen covers GPUI when the launch asks for it.
-        if ProcessInfo.processInfo.environment["SJEL_NSH_TRIAL"] == "1" {
-            view.layoutIfNeeded()
-            let trial = UIView(frame: view.safeAreaLayoutGuide.layoutFrame)
-            trial.backgroundColor = .systemBackground
-            view.addSubview(trial)
-            trial.translatesAutoresizingMaskIntoConstraints = false
-            let guide = view.safeAreaLayoutGuide
-            NSLayoutConstraint.activate([
-                trial.topAnchor.constraint(equalTo: guide.topAnchor),
-                trial.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-                trial.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-                trial.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            ])
-            if !sjel_ios_nsh_mount(Unmanaged.passUnretained(trial).toOpaque()) {
-                trial.removeFromSuperview()
-            }
+        // NSH screens (docs/plans/gpui.md §11) cover GPUI while Rust shows them.
+        view.layoutIfNeeded()
+        let screens = UIView(frame: view.safeAreaLayoutGuide.layoutFrame)
+        screens.backgroundColor = .systemBackground
+        screens.isHidden = true
+        view.addSubview(screens)
+        screens.translatesAutoresizingMaskIntoConstraints = false
+        let guide = view.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            screens.topAnchor.constraint(equalTo: guide.topAnchor),
+            screens.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            screens.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+            screens.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+        ])
+        if sjel_ios_nsh_mount(Unmanaged.passUnretained(screens).toOpaque()) {
+            nshScreens = screens
+        } else {
+            screens.removeFromSuperview()
         }
     }
 

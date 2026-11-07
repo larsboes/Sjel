@@ -30,7 +30,7 @@ pub mod mail;
 pub mod media;
 pub mod music;
 pub mod nav;
-#[cfg(feature = "nsh-trial")]
+#[cfg(feature = "nsh")]
 pub mod nsh_documents;
 pub mod packs;
 pub mod pdf_kit;

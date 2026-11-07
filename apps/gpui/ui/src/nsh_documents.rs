@@ -23,6 +23,7 @@ struct Feed {
     tx: UnboundedSender<Update>,
     rx: Mutex<Option<UnboundedReceiver<Update>>>,
     source: Mutex<Option<Source>>,
+    close: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 fn feed() -> &'static Feed {
@@ -33,8 +34,25 @@ fn feed() -> &'static Feed {
             tx,
             rx: Mutex::new(Some(rx)),
             source: Mutex::new(None),
+            close: Mutex::new(None),
         }
     })
+}
+
+/// What "Back" does at the top of the list. Without it, the list has no "Back".
+pub fn set_close(close: impl Fn() + Send + 'static) {
+    *feed().close.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(close));
+}
+
+fn close() {
+    if let Some(close) = feed()
+        .close
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        close();
+    }
 }
 
 fn send(update: Update) {
@@ -122,8 +140,20 @@ pub fn DocumentsScreen() -> impl IntoElement {
             }
         });
     }
+    let closable = feed()
+        .close
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some();
     view()
         .flex_1()
+        .child(closable.then(|| {
+            button()
+                .px_4()
+                .pt_2()
+                .on_press(close)
+                .child(text("‹ Back").text_base())
+        }))
         .child(
             view()
                 .px_4()

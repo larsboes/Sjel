@@ -909,11 +909,10 @@ revisit = "Decide if the NSH trial in docs/plans/gpui.md section 11 fails."
 
 [nsh]
 url = "https://github.com/longbridge/nsh"
-verdict = "evaluate"
+verdict = "adopt"
 license = "Apache-2.0"
-summary = "Rust UI framework that renders with each platform's own views; trial renderer for the phone"
+summary = "Rust UI framework that renders with each platform's own views; the phone's renderer for new screens"
 why = "Renders with UIKit and Android views, embeds into an existing iOS app as NshAppView and into a GPUI app on the gpui-fast GPUI Kit selects, so one screen can serve the phone natively and the Mac. v0.4.0 on 2026-11-04, created 2026-10-14; evidence in research/ui-stack.md. Sjel pins a main rev: the published nsh-platform-ios 0.4.0 includes a file outside its package, and the v0.4.0 GPUI backend does not compile against gpui-fast 0.1.13 (both checked 2026-11-07)."
-revisit = "Decide at the end of stage 3 of docs/plans/gpui.md section 11, the Documents reader trial."
 
 [nimble]
 url = "https://ollama.com/library/nimble"

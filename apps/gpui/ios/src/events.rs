@@ -218,7 +218,7 @@ impl Capabilities {
                                 seat.refresh_sessions(cx);
                             }
                         });
-                        #[cfg(feature = "nsh-trial")]
+                        #[cfg(feature = "nsh")]
                         sjel_gpui_ui::nsh_documents::connect(
                             sjel_gpui_core::device::Source::Device(client.clone()),
                         );

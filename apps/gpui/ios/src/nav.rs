@@ -75,6 +75,12 @@ impl Capabilities {
     /// Shows `tab` and starts what it reads. Every way onto a tab comes through here: the bar,
     /// Today's shortcuts, a reminder and a link.
     pub(super) fn select_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
+        // Documents is an NSH screen over the GPUI view; the tab under it stays where it was.
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        if tab == Tab::Documents {
+            crate::host::show_nsh();
+            return;
+        }
         if self.active_tab == Tab::Travel && tab != Tab::Travel {
             self.travel.update(cx, |travel, _| travel.deactivate());
         }

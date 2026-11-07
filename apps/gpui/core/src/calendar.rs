@@ -32,6 +32,49 @@ pub use calendar_api::{
     TripDraft, TripDrafts, TripMaterialization, TripMaterializeRequest, UnclusteredTripEntry,
 };
 
+/// Status mark details for Google, iCloud, and device replica synchronization.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CalendarSyncStatus {
+    pub google_synced_at: Option<String>,
+    pub google_error: Option<String>,
+    pub icloud_synced_at: Option<String>,
+    pub icloud_error: Option<String>,
+    pub replica_synced_at: Option<String>,
+    pub replica_error: Option<String>,
+}
+
+impl CalendarSyncStatus {
+    /// True if any external provider or replica sync reported an error.
+    pub fn has_error(&self) -> bool {
+        self.google_error.is_some() || self.icloud_error.is_some() || self.replica_error.is_some()
+    }
+
+    /// A concise label for header / status marks.
+    pub fn label(&self) -> String {
+        if let Some(err) = self
+            .replica_error
+            .as_deref()
+            .or(self.google_error.as_deref())
+            .or(self.icloud_error.as_deref())
+        {
+            return format!("Sync error: {err}");
+        }
+        if self.replica_synced_at.is_some() {
+            return "Synced with Mac".to_string();
+        }
+        if self.google_synced_at.is_some() && self.icloud_synced_at.is_some() {
+            return "Google & iCloud in step".to_string();
+        }
+        if self.google_synced_at.is_some() {
+            return "Google in step".to_string();
+        }
+        if self.icloud_synced_at.is_some() {
+            return "iCloud in step".to_string();
+        }
+        "Sync status unavailable".to_string()
+    }
+}
+
 /// How binding an entry is: `possible` blocks nothing, `planned` soft-blocks, `committed`
 /// blocks the day.
 pub const COMMITMENTS: [(&str, &str); 3] = [
@@ -284,6 +327,14 @@ mod tests {
 
     fn day(s: &str) -> NaiveDate {
         parse_day(s).unwrap()
+    }
+
+    #[test]
+    fn missing_provider_and_replica_health_is_not_labelled_in_step() {
+        assert_eq!(
+            CalendarSyncStatus::default().label(),
+            "Sync status unavailable"
+        );
     }
 
     fn entry(starts_at: &str, ends_at: &str, all_day: bool) -> CalendarEntry {

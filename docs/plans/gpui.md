@@ -121,15 +121,30 @@ the Mac's last sync time. Calendar UX is done when overlap, overnight, all-day, 
 keyboard, drag, resize and Undo scenarios pass; Day focus and availability work on Mac and phone;
 and rendered views have been checked in both themes. Implemented, awaiting native acceptance:
 Day and Week placement, quarter-hour move and resize, time editing and Undo, compact details,
-availability-to-entry and desktop travel drafts, month overflow and all-day spans. Verified:
-13 core calendar tests, 8 calendar UI tests, desktop and iOS simulator type checks. The UI tests
-cover desktop drag and keyboard editing and a 375-point phone layout; replica tests cover queued
-move, resize and restoration. Long-press touch capture, quarter-hour move preview, edge resize,
-cancellation and invalid resize rejection have a headless gesture test. Open: sync-status mark,
-native gesture and sync acceptance, both themes, and scroll-cost measurement. The offscreen PNG example
+availability-to-entry and desktop travel drafts, month overflow, all-day spans, Google/iCloud/replica
+sync-status marks, and cross-capability navigation from Calendar to Comms/Mail and Travel. Verified: 32 core calendar and replica sync tests, 13 calendar UI tests, desktop
+and iOS simulator type checks. The UI tests cover desktop drag, keyboard editing, a 375-point phone
+layout, and desktop/mobile sync status marks and error handling. Provider health is not exposed by the
+export-opt-in endpoint, so desktop Google/iCloud status remains unknown rather than healthy; a failed
+Google status request is shown as an error. The time-undo test invokes the action
+directly and only checks the unavailable-shell failure; keyboard dispatch and successful restoration
+are not covered. Replica tests cover queued move,
+resize, restoration, and sync replay where a moved event updates the Mac and timestamps the sync mark.
+Long-press touch capture, quarter-hour move preview, edge resize, cancellation and invalid resize rejection
+have a headless gesture test. Open: native phone gesture acceptance on live device, and scroll-cost
+measurement. Native desktop Day, Week, Month and availability were reviewed in both themes through app control.
+Month overflow below the window was found and has a bounded-viewport regression test; native verification of
+that repair remains open. The offscreen PNG example
 (`cargo run --manifest-path apps/gpui/Cargo.toml -p sjel-gpui-ui --example calendar-preview -- /tmp/calendar.png week light`)
-compiled, but sandboxed AppKit pasteboard access failed before rendering. Native visual and
-device checks have not passed.
+compiled, but sandboxed AppKit pasteboard access failed before rendering. The app-control
+connector can inspect the installed app in the same session. Device checks have not passed.
+
+Desktop bundle replacement preserves the previous app until the incoming bundle moves into
+place and restores it if that move fails. Four checks cover preservation, an ordinary install
+failure, a partial-destination rollback, and successful replacement (`bash tools/replace-directory.test.sh`). The installer can
+package an existing release binary with `SJEL_DESKTOP_PREBUILT` and its matching
+`SJEL_DESKTOP_PREBUILT_COMMIT`; failed staging is retained for recovery. LaunchServices
+registration failure is reported separately from installation.
 
 ### Travel
 

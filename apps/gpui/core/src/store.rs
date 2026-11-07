@@ -1056,16 +1056,16 @@ impl TursoStore {
         Ok(self.cursor(DOMAIN_CALENDAR).await?.is_some())
     }
 
-    /// Where one domain's change feed was read to.
-    pub async fn cursor(&self, domain: &str) -> StoreResult<Option<String>> {
+    /// A metadata value from `_replica_meta`.
+    pub async fn meta(&self, key: &str) -> StoreResult<Option<String>> {
         let conn = self.connection().await?;
         let mut rows = conn
             .query(
                 "SELECT value FROM _replica_meta WHERE key = ?1",
-                libsql::params![format!("{CURSOR_PREFIX}{domain}")],
+                libsql::params![key],
             )
             .await
-            .map_err(|e| StoreError::Libsql(format!("read cursor failed: {e}")))?;
+            .map_err(|e| StoreError::Libsql(format!("read meta failed: {e}")))?;
         Ok(rows
             .next()
             .await
@@ -1074,17 +1074,42 @@ impl TursoStore {
             .and_then(|row| row.get::<String>(0).ok()))
     }
 
-    /// Records how far one domain's change feed has been read.
-    pub async fn set_cursor(&self, domain: &str, cursor: &str) -> StoreResult<()> {
+    /// Stores a metadata value in `_replica_meta`.
+    pub async fn set_meta(&self, key: &str, value: &str) -> StoreResult<()> {
         let conn = self.connection().await?;
         conn.execute(
             "INSERT INTO _replica_meta (key, value) VALUES (?1, ?2) \
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            libsql::params![format!("{CURSOR_PREFIX}{domain}"), cursor],
+            libsql::params![key, value],
         )
         .await
-        .map_err(|e| StoreError::Libsql(format!("write cursor failed: {e}")))?;
+        .map_err(|e| StoreError::Libsql(format!("write meta failed: {e}")))?;
         Ok(())
+    }
+
+    /// Where one domain's change feed was read to.
+    pub async fn cursor(&self, domain: &str) -> StoreResult<Option<String>> {
+        self.meta(&format!("{CURSOR_PREFIX}{domain}")).await
+    }
+
+    /// Records how far one domain's change feed has been read.
+    pub async fn set_cursor(&self, domain: &str, cursor: &str) -> StoreResult<()> {
+        self.set_meta(&format!("{CURSOR_PREFIX}{domain}"), cursor).await
+    }
+
+    /// Timestamp of the last successful sync for a domain.
+    pub async fn last_sync(&self, domain: &str) -> StoreResult<Option<String>> {
+        self.meta(&format!("sync:{domain}:last_successful")).await
+    }
+
+    /// Timestamp of the last successful global sync.
+    pub async fn last_global_sync(&self) -> StoreResult<Option<String>> {
+        self.meta("sync:last_successful").await
+    }
+
+    /// The last sync error message, if any.
+    pub async fn last_sync_error(&self) -> StoreResult<Option<String>> {
+        self.meta("sync:last_error").await
     }
 
     /// Moves an entry, and any write queued for it, to the id the Mac assigned on create.

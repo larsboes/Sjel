@@ -101,6 +101,8 @@ impl Host for DeviceClient {
         let method = match method {
             "GET" => reqwest::Method::GET,
             "POST" => reqwest::Method::POST,
+            "PATCH" => reqwest::Method::PATCH,
+            "DELETE" => reqwest::Method::DELETE,
             other => return Err(format!("this app sends no {other} to the Mac")),
         };
         let (status, body) = self.signed(method, path, body.unwrap_or_default()).await?;
@@ -190,15 +192,37 @@ impl Report {
 /// error: it is reported in [`Report::kept`], and the write stays queued.
 pub async fn run<H: Host>(store: &TursoStore, host: &H) -> Result<Report, String> {
     let mut report = Report::default();
-    // One push per domain, in a fixed order so a run is reproducible. Ordering only has to hold
-    // inside a domain, and a calendar write the Mac refuses must not hold up a note.
-    push(store, host, crate::store::DOMAIN_PROJECTS, &mut report).await?;
-    push(store, host, crate::store::DOMAIN_CALENDAR, &mut report).await?;
-    push(store, host, crate::store::DOMAIN_CAPTURES, &mut report).await?;
-    pull(store, host, &mut report).await?;
-    pull_calendar(store, host, &mut report).await?;
-    pull_captures(store, host, &mut report).await?;
-    Ok(report)
+    let outcome = async {
+        push(store, host, crate::store::DOMAIN_PROJECTS, &mut report).await?;
+        push(store, host, crate::store::DOMAIN_CALENDAR, &mut report).await?;
+        push(store, host, crate::store::DOMAIN_CAPTURES, &mut report).await?;
+        pull(store, host, &mut report).await?;
+        pull_calendar(store, host, &mut report).await?;
+        pull_captures(store, host, &mut report).await?;
+        Ok::<(), String>(())
+    }
+    .await;
+
+    match outcome {
+        Ok(()) if report.kept.is_empty() && report.refused.is_empty() => {
+            let stamp = chrono::Utc::now().to_rfc3339();
+            let _ = store.set_meta("sync:last_successful", &stamp).await;
+            let _ = store
+                .set_meta("sync:calendar:last_successful", &stamp)
+                .await;
+            let _ = store.set_meta("sync:last_error", "").await;
+            Ok(report)
+        }
+        Ok(()) => {
+            let message = format!("{} queued write(s) remain unsent", report.kept.len());
+            let _ = store.set_meta("sync:last_error", &message).await;
+            Ok(report)
+        }
+        Err(error) => {
+            let _ = store.set_meta("sync:last_error", &error).await;
+            Err(error)
+        }
+    }
 }
 
 // ---------------------------------------------------------------- push
@@ -1106,6 +1130,11 @@ mod tests {
             assert!(
                 report.refused[0].reason.contains("already exists"),
                 "the Mac's words, not ours: {report:?}"
+            );
+            assert_eq!(store.last_global_sync().await.unwrap(), None);
+            assert_eq!(
+                store.last_sync_error().await.unwrap().as_deref(),
+                Some("1 queued write(s) remain unsent")
             );
             assert!(
                 report.summary().contains("refused"),
@@ -2095,6 +2124,11 @@ mod tests {
                 "the reason travels with it: {report:?}"
             );
             assert!(report.summary().contains("Kept for later"));
+            assert_eq!(store.last_global_sync().await.unwrap(), None);
+            assert_eq!(
+                store.last_sync_error().await.unwrap().as_deref(),
+                Some("1 queued write(s) remain unsent")
+            );
             assert_eq!(store.pending_mutation_count().await.unwrap(), 2);
             assert!(
                 store.fetch_record("Inbox/One.md").await.unwrap().is_some(),
@@ -2407,6 +2441,71 @@ mod tests {
                 .await
                 .expect("pull");
             assert_eq!(report.pulled, 0, "the row already said this: {report:?}");
+        });
+    }
+
+    #[test]
+    fn a_moved_event_shows_the_new_time_on_the_mac_after_the_next_sync_and_the_mark_matches_last_sync_time(
+    ) {
+        runtime().block_on(async {
+            let store = TursoStore::in_memory().await.expect("store");
+            let id = "calendar:1f2e";
+            let mut original = local_entry(id, "Dentist");
+            original.starts_at = "2026-11-05T09:00:00".into();
+            original.ends_at = "2026-11-05T10:00:00".into();
+            store
+                .upsert_pulled_calendar(&original, "1761000001000")
+                .await
+                .expect("seed");
+
+            // Move event on phone by 1 hour (10:00)
+            let mut moved = original.clone();
+            moved.starts_at = "2026-11-05T10:00:00".into();
+            moved.ends_at = "2026-11-05T11:00:00".into();
+            store.save_calendar_entry(&moved).await.expect("save moved");
+
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 1);
+
+            let fake = Fake::default();
+            // Mac accepts PATCH and returns the updated event with new stamp
+            let moved_json = serde_json::json!({
+                "id": id,
+                "title": "Dentist",
+                "kind": "event",
+                "commitment": "planned",
+                "starts_at": "2026-11-05T10:00:00",
+                "ends_at": "2026-11-05T11:00:00",
+                "all_day": false,
+                "source": "manual",
+                "updated_at": "1761000005000"
+            });
+            fake.on(
+                "PATCH",
+                &format!("{ENTRIES}/{}", quote(id)),
+                200,
+                moved_json.clone(),
+            );
+            // Mac feed since 0
+            fake.on(
+                "GET",
+                &format!("{ENTRY_CHANGES}?since=0"),
+                200,
+                feed(vec![moved_json], &[], "1761000005000"),
+            );
+            fake.on("GET", PROJECTS, 200, serde_json::json!([]));
+            fake.on("GET", CAPTURES, 200, serde_json::json!([]));
+
+            let report = run(&store, &fake).await.expect("sync run");
+            assert_eq!(report.pushed, 1, "{report:?}");
+            assert_eq!(store.pending_mutation_count().await.unwrap(), 0);
+
+            let on_store = store.calendar_entry(id).await.unwrap().unwrap();
+            assert_eq!(on_store.starts_at, "2026-11-05T10:00:00");
+            assert_eq!(on_store.ends_at, "2026-11-05T11:00:00");
+
+            let mark = store.last_sync(DOMAIN_CALENDAR).await.unwrap();
+            assert!(mark.is_some(), "sync mark was stamped");
+            assert_eq!(mark, store.last_global_sync().await.unwrap());
         });
     }
 }

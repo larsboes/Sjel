@@ -16,11 +16,11 @@ use sjel_gpui_core::mirror::Mirror;
 use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
 
 use crate::data::{self, Press, Repo};
-use crate::theme::ThemeContext;
+use crate::theme::{tint, ThemeContext};
 use crate::{Density, Palette};
 
 use super::grid::CalendarDrag;
-use super::types::{CalendarEvent, Composer, DayViewMode, Origin};
+use super::types::{CalendarEvent, CalendarSyncStatus, Composer, DayViewMode, Origin};
 
 #[derive(Clone)]
 struct TouchEdit {
@@ -59,6 +59,7 @@ pub struct Calendar {
     pub(crate) saving: bool,
     /// A host's word about this copy, e.g. why a newer one could not be fetched.
     pub(crate) note: Option<SharedString>,
+    pub sync_status: Option<CalendarSyncStatus>,
     pub(crate) palette: Palette,
     pub(crate) palette_override: Option<Palette>,
     pub(crate) density: Density,
@@ -103,6 +104,7 @@ impl Calendar {
             confirm_delete: None,
             saving: false,
             note: None,
+            sync_status: None,
             palette: Palette::light(),
             palette_override: None,
             density,
@@ -191,31 +193,39 @@ impl Calendar {
         let store = self.store.clone();
         let copy = self.copy.clone();
         let work = shell::run(async move {
+            let sync_status = if let Some(store) = &store {
+                store.calendar_sync_status().await.ok()
+            } else {
+                None
+            };
             if let Some(store) = store {
                 if store.has_calendar().await {
                     let answer = store.fetch_calendar(&from, &to).await;
-                    return (Origin::Store, answer);
+                    return (Origin::Store, answer, sync_status);
                 }
             }
             if let Some(copy) = copy {
                 let answer = copy.calendar(&from, &to).await.map_err(ShellError::Store);
-                return (Origin::Copy, answer);
+                return (Origin::Copy, answer, sync_status);
             }
             (
                 Origin::Unread,
                 Err(ShellError::Store("The calendar was not read.".to_owned())),
+                sync_status,
             )
         });
         cx.spawn(async move |this, cx| {
-            let (origin, answer) = work.await.unwrap_or((
+            let (origin, answer, sync_status) = work.await.unwrap_or((
                 Origin::Unread,
                 Err(ShellError::Store("The calendar was not read.".to_owned())),
+                None,
             ));
             let _ = this.update(cx, |view, cx| {
                 if view.generation != generation {
                     return;
                 }
                 view.origin = origin;
+                view.sync_status = sync_status;
                 view.loading = false;
                 match answer {
                     Ok(entries) => {
@@ -266,7 +276,13 @@ impl Calendar {
 
     fn source_line(&self) -> Option<String> {
         match self.origin {
-            Origin::Store => None,
+            Origin::Store => {
+                if let Some(status) = &self.sync_status {
+                    Some(status.label())
+                } else {
+                    self.note.as_ref().map(|note| note.to_string())
+                }
+            }
             Origin::Copy => {
                 let note = self
                     .note
@@ -753,7 +769,18 @@ impl Calendar {
             .min_h(px(if self.density.is_mobile() { 56. } else { 44. }))
             .rounded(px(10.))
             .when(selected, |chip| chip.bg(rgb(palette.accent)))
-            .when(!selected, |chip| chip.bg(rgba(palette.surface)))
+            .when(!selected, |chip| {
+                chip.bg(rgba(palette.surface))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+            })
+            .hover(|chip| {
+                if !selected {
+                    chip.bg(rgba(palette.raised))
+                } else {
+                    chip
+                }
+            })
             .child(
                 div()
                     .text_xs()
@@ -998,8 +1025,14 @@ impl Calendar {
                     .left_0()
                     .right_0()
                     .h(px(hour_height / 4.))
-                    .when(quarter % 4 == 0, |slot| slot.border_t_1())
-                    .border_color(rgba(palette.border))
+                    .when(quarter % 4 == 0, |slot| {
+                        slot.border_t_1().border_color(rgba(palette.border))
+                    })
+                    .when(quarter % 4 == 2, |slot| {
+                        slot.border_t_1()
+                            .border_color(rgba(tint(palette.border, 0x40)))
+                    })
+                    .hover(|slot| slot.bg(rgba(tint(palette.accent, 0x0c))))
                     .text_xs()
                     .text_color(rgb(palette.muted))
                     .when(quarter % 4 == 0, |slot| {
@@ -1096,16 +1129,25 @@ impl Calendar {
         timeline = timeline.child(events);
         if day == Local::now().date_naive() {
             let now = Local::now().time();
+            let y = px((now.hour() * 60 + now.minute()) as f32 / 60. * hour_height);
             timeline = timeline.child(
                 div()
                     .absolute()
                     .left(px(48.))
                     .right_0()
-                    .top(px(
-                        (now.hour() * 60 + now.minute()) as f32 / 60. * hour_height
-                    ))
+                    .top(y)
                     .h(px(2.))
-                    .bg(rgb(palette.red)),
+                    .bg(rgb(palette.red))
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(-3.))
+                            .left(px(-4.))
+                            .w(px(8.))
+                            .h(px(8.))
+                            .rounded_full()
+                            .bg(rgb(palette.red)),
+                    ),
             );
         }
         div()
@@ -1341,8 +1383,22 @@ impl Render for Calendar {
                                     .child(day.format("%A, %-d %B").to_string()),
                             )
                             .when_some(source_line, |column, line| {
+                                let is_err = self
+                                    .sync_status
+                                    .as_ref()
+                                    .is_some_and(|status| status.has_error());
+                                let color = if is_err {
+                                    palette.red
+                                } else {
+                                    palette.muted
+                                };
                                 column.child(
-                                    div().text_xs().text_color(rgb(palette.muted)).child(line),
+                                    div()
+                                        .id("calendar-sync-status")
+                                        .debug_selector(|| "calendar-sync-status".into())
+                                        .text_xs()
+                                        .text_color(rgb(color))
+                                        .child(line),
                                 )
                             }),
                     )
@@ -1751,5 +1807,51 @@ mod tests {
             .expect("detail rendered");
         assert!(sheet.size.width <= px(375.));
         assert!(sheet.size.height <= px(320.));
+    }
+
+    #[gpui::test]
+    fn mobile_calendar_displays_sync_status_mark_and_errors(cx: &mut gpui::TestAppContext) {
+        cx.update(gpui_kit::init);
+        let page = cx.new(|_| {
+            let day = calendar::parse_day("2026-11-05").unwrap();
+            let mut page = Calendar::at(day, Density::Mobile);
+            page.origin = Origin::Store;
+            page.loaded = true;
+            page.sync_status = Some(CalendarSyncStatus {
+                google_synced_at: None,
+                google_error: None,
+                icloud_synced_at: None,
+                icloud_error: None,
+                replica_synced_at: Some("2026-11-05T22:00:00Z".into()),
+                replica_error: None,
+            });
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.simulate_resize(gpui::size(px(375.), px(812.)));
+        cx.run_until_parked();
+        let mark = cx
+            .debug_bounds("calendar-sync-status")
+            .expect("sync status rendered");
+        assert!(mark.size.width > px(0.));
+
+        page.update(cx, |page, cx| {
+            page.sync_status = Some(CalendarSyncStatus {
+                google_synced_at: None,
+                google_error: None,
+                icloud_synced_at: None,
+                icloud_error: None,
+                replica_synced_at: None,
+                replica_error: Some("connection refused".into()),
+            });
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let mark = cx
+            .debug_bounds("calendar-sync-status")
+            .expect("sync error rendered");
+        assert!(mark.size.width > px(0.));
     }
 }

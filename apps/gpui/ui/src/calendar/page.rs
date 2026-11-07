@@ -11,11 +11,11 @@ use gpui_kit::{
 use sjel_gpui_core::calendar::{
     self, entries_on, kind_color, kind_label, time_label, COMMITMENTS, KINDS,
 };
-use sjel_gpui_core::shell::{self, CalendarEntry, ShellError};
+use sjel_gpui_core::shell::{self, CalendarEntry, CalendarEntryDetail, ShellError};
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{key_bar, tone_chip};
-use crate::theme::{Density, Palette, ThemeContext};
+use crate::primitives::key_bar;
+use crate::theme::{tint, Density, Palette, ThemeContext};
 
 use super::types::CalendarIntent;
 use super::types::{muted, Form, View};
@@ -42,11 +42,14 @@ pub struct CalendarPage {
     pub(super) proposal_action: Option<String>,
     pub(super) proposal_confirm_remove: Option<String>,
     pub selected_entry: Option<String>,
+    pub(super) selected_detail: Option<(String, CalendarEntryDetail)>,
     pub(super) confirm_delete: Option<String>,
     pub(super) form: Option<Form>,
     pub write_error: Option<ShellError>,
+    pub sync_status: Option<super::types::CalendarSyncStatus>,
     side_scroll: ScrollHandle,
     pub(super) timeline_scroll: ScrollHandle,
+    pub(super) month_scroll: ScrollHandle,
     focus: FocusHandle,
     focus_next: bool,
     clock: Option<gpui::Task<()>>,
@@ -80,11 +83,14 @@ impl CalendarPage {
             proposal_action: None,
             proposal_confirm_remove: None,
             selected_entry: None,
+            selected_detail: None,
             confirm_delete: None,
             form: None,
             write_error: None,
+            sync_status: None,
             side_scroll: ScrollHandle::new(),
             timeline_scroll,
+            month_scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             focus_next: true,
             clock: None,
@@ -99,7 +105,10 @@ impl CalendarPage {
     }
 
     pub fn scroll_handle(&self) -> ScrollHandle {
-        self.side_scroll.clone()
+        match self.view {
+            View::Month => self.month_scroll.clone(),
+            View::Day | View::Week => self.timeline_scroll.clone(),
+        }
     }
 
     pub fn set_palette(&mut self, palette: Palette, cx: &mut Context<Self>) {
@@ -118,10 +127,16 @@ impl CalendarPage {
 
     pub fn open_day(&mut self, day: NaiveDate, entry_id: Option<String>, cx: &mut Context<Self>) {
         self.day = day;
-        self.selected_entry = entry_id;
+        self.selected_entry = None;
+        self.selected_detail = None;
+        self.confirm_delete = None;
         self.loaded = None;
         self.load(cx);
-        cx.notify();
+        if let Some(id) = entry_id {
+            self.select_entry(id, cx);
+        } else {
+            cx.notify();
+        }
     }
 
     pub(super) fn dates(&self) -> Vec<NaiveDate> {
@@ -153,6 +168,16 @@ impl CalendarPage {
         cx.notify();
         let (from, to) = window.clone();
         let work = shell::run(async move { shell.calendar(&from, &to).await });
+        let repo = self.repo.clone();
+        let status_work = shell::run(async move { repo.calendar_sync_status().await.ok() });
+        cx.spawn(async move |this, cx| {
+            let status = status_work.await.flatten();
+            let _ = this.update(cx, |view, cx| {
+                view.sync_status = status;
+                cx.notify();
+            });
+        })
+        .detach();
         cx.spawn(async move |this, cx| {
             let result = work.await.unwrap_or(Err(ShellError::Unreachable));
             let _ = this.update(cx, |view, cx| {
@@ -178,9 +203,33 @@ impl CalendarPage {
         if day != self.day {
             self.day = day;
             self.selected_entry = None;
+            self.selected_detail = None;
             self.confirm_delete = None;
         }
         self.load(cx);
+        cx.notify();
+    }
+
+    pub(super) fn select_entry(&mut self, id: String, cx: &mut Context<Self>) {
+        self.selected_entry = Some(id.clone());
+        self.selected_detail = None;
+        self.confirm_delete = None;
+        if let Ok(shell) = self.repo.shell() {
+            let entry_id = id.clone();
+            let query_id = id.clone();
+            let work = shell::run(async move { shell.calendar_entry(&query_id).await.ok() });
+            cx.spawn(async move |this, cx| {
+                if let Some(detail) = work.await.flatten() {
+                    let _ = this.update(cx, |page, cx| {
+                        if page.selected_entry.as_deref() == Some(&entry_id) {
+                            page.selected_detail = Some((entry_id.clone(), detail));
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .detach();
+        }
         cx.notify();
     }
 
@@ -493,6 +542,7 @@ impl CalendarPage {
                         view.form = None;
                         view.focus_next = true;
                         view.selected_entry = Some(entry.id);
+                        view.selected_detail = None;
                         view.refresh(cx);
                     }
                     Err(error) => view.write_error = Some(error),
@@ -514,6 +564,7 @@ impl CalendarPage {
                 match result {
                     Ok(()) => {
                         view.selected_entry = None;
+                        view.selected_detail = None;
                         view.refresh(cx);
                     }
                     Err(error) => view.write_error = Some(error),
@@ -547,14 +598,14 @@ impl CalendarPage {
                     .when(is_today, |el| {
                         el.child(
                             div()
-                                .px_1()
+                                .px_1p5()
                                 .py(px(1.))
-                                .rounded(px(3.))
+                                .rounded_full()
                                 .bg(rgb(palette.accent))
                                 .text_xs()
-                                .font_weight(FontWeight::BOLD)
+                                .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(rgb(0xffffff))
-                                .child("TODAY"),
+                                .child("Today"),
                         )
                     }),
             )
@@ -646,15 +697,60 @@ impl CalendarPage {
                 let time_str = time_label(&entry, self.day);
                 let kind_str = kind_label(&entry.kind).to_owned();
 
+                let (origin_item_id, importance_rationale, origin_cap, origin_source, plan_id) =
+                    if chosen {
+                        self.selected_detail
+                            .as_ref()
+                            .filter(|(detail_id, _)| {
+                                Some(detail_id.as_str()) == self.selected_entry.as_deref()
+                            })
+                            .and_then(|(_, detail)| detail.payload.as_ref())
+                            .map(|payload| {
+                                let origin = payload.get("origin").and_then(|o| o.as_object());
+                                let item_id = origin
+                                    .and_then(|o| o.get("item_id"))
+                                    .and_then(|i| i.as_str())
+                                    .map(str::to_string);
+                                let cap = origin
+                                    .and_then(|o| o.get("capability"))
+                                    .and_then(|c| c.as_str())
+                                    .map(str::to_string);
+                                let src = origin
+                                    .and_then(|o| o.get("source"))
+                                    .and_then(|s| s.as_str())
+                                    .map(str::to_string);
+                                let rationale = payload
+                                    .get("importance_rationale")
+                                    .and_then(|r| r.as_str())
+                                    .map(str::to_string);
+                                let plan_id = payload
+                                    .get("plan_id")
+                                    .and_then(|id| id.as_str())
+                                    .map(str::to_string);
+                                (item_id, rationale, cap, src, plan_id)
+                            })
+                            .unwrap_or((None, None, None, None, None))
+                    } else {
+                        (None, None, None, None, None)
+                    };
+
+                let is_comms = entry.source == "comms"
+                    || entry.source == "mail"
+                    || entry.source == "feed"
+                    || origin_cap.as_deref() == Some("comms")
+                    || origin_source.as_deref() == Some("mail");
+                let is_trips = entry.source == "trips" || origin_cap.as_deref() == Some("trips");
+
                 panel = panel.child(
                     div()
                         .id(("calendar-entry", i))
                         .flex()
                         .flex_col()
-                        .gap_1()
+                        .gap_1p5()
                         .py_2()
-                        .px_1()
-                        .border_b_1()
+                        .px_2p5()
+                        .rounded(px(6.))
+                        .border_1()
                         .border_color(if chosen {
                             rgb(palette.accent)
                         } else {
@@ -663,13 +759,18 @@ impl CalendarPage {
                         .bg(if chosen {
                             rgba(palette.raised)
                         } else {
-                            rgba(0x00000000)
+                            rgba(tint(color, 0x0c))
+                        })
+                        .hover(|el| {
+                            if !chosen {
+                                el.bg(rgba(tint(color, 0x1c)))
+                            } else {
+                                el
+                            }
                         })
                         .cursor_pointer()
                         .on_click(cx.listener(move |page, _, _, cx| {
-                            page.selected_entry = Some(id.clone());
-                            page.confirm_delete = None;
-                            cx.notify();
+                            page.select_entry(id.clone(), cx);
                         }))
                         .child(
                             div()
@@ -681,16 +782,30 @@ impl CalendarPage {
                                     div()
                                         .flex()
                                         .items_center()
-                                        .gap_1()
-                                        .when(chosen, |el| el.child(tone_chip(kind_str, color)))
+                                        .gap_1p5()
+                                        .child(
+                                            div()
+                                                .w(px(6.))
+                                                .h(px(6.))
+                                                .flex_none()
+                                                .rounded_full()
+                                                .bg(rgb(color)),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(rgb(color))
+                                                .child(kind_str),
+                                        )
                                         .when(
                                             entry.commitment == "tentative"
                                                 || entry.commitment == "possible",
                                             |el| {
                                                 el.child(
                                                     div()
-                                                        .px_1()
-                                                        .py(px(1.))
+                                                        .px_1p5()
+                                                        .py(px(0.5))
                                                         .rounded(px(3.))
                                                         .border_1()
                                                         .border_color(rgba(palette.border))
@@ -703,10 +818,34 @@ impl CalendarPage {
                                 )
                                 .child(
                                     div()
-                                        .text_xs()
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(rgb(palette.muted))
-                                        .child(time_str),
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .when(is_comms, |el| {
+                                            el.child(
+                                                div()
+                                                    .text_xs()
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb(palette.accent))
+                                                    .child("✉ Mail"),
+                                            )
+                                        })
+                                        .when(is_trips, |el| {
+                                            el.child(
+                                                div()
+                                                    .text_xs()
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb(palette.accent))
+                                                    .child("✈ Travel"),
+                                            )
+                                        })
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .text_color(rgb(palette.muted))
+                                                .child(time_str),
+                                        ),
                                 ),
                         )
                         .child(
@@ -736,11 +875,100 @@ impl CalendarPage {
                                 )
                             },
                         )
+                        .when(chosen && is_comms, |el| {
+                            let origin_id = origin_item_id.clone();
+                            el.child(
+                                div()
+                                    .mt_1()
+                                    .p_2p5()
+                                    .rounded(px(6.))
+                                    .bg(rgba(palette.surface))
+                                    .border_1()
+                                    .border_color(rgba(palette.border))
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1p5()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .justify_between()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(rgb(palette.accent))
+                                                    .child("Source: Mail / Comms"),
+                                            )
+                                            .child(
+                                                Button::new("calendar-open-source-mail")
+                                                    .xsmall()
+                                                    .primary()
+                                                    .label("Open in Mail ↗")
+                                                    .on_click(cx.listener(move |_, _, _, cx| {
+                                                        cx.emit(CalendarIntent::OpenMail {
+                                                            item_id: origin_id.clone(),
+                                                        });
+                                                    })),
+                                            ),
+                                    )
+                                    .when_some(importance_rationale, |card, reason| {
+                                        card.child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(rgb(palette.muted))
+                                                .child(reason),
+                                        )
+                                    }),
+                            )
+                        })
+                        .when(chosen && is_trips, |el| {
+                            let plan_id = plan_id.clone();
+                            el.child(
+                                div()
+                                    .mt_1()
+                                    .p_2p5()
+                                    .rounded(px(6.))
+                                    .bg(rgba(palette.surface))
+                                    .border_1()
+                                    .border_color(rgba(palette.border))
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(rgb(palette.accent))
+                                            .child("Source: Travel / Trips"),
+                                    )
+                                    .child(
+                                        Button::new("calendar-open-source-travel")
+                                            .xsmall()
+                                            .primary()
+                                            .label("View in Travel ↗")
+                                            .disabled(plan_id.is_none())
+                                            .on_click(cx.listener(move |_, _, _, cx| {
+                                                if let Some(plan_id) = &plan_id {
+                                                    cx.emit(CalendarIntent::OpenTrip {
+                                                        plan_id: plan_id.clone(),
+                                                    });
+                                                }
+                                            })),
+                                    ),
+                            )
+                        })
                         .when(
-                            chosen && !entry.source.is_empty() && entry.source != "manual",
+                            chosen
+                                && !entry.source.is_empty()
+                                && entry.source != "manual"
+                                && !is_comms
+                                && !is_trips,
                             |el| {
                                 el.child(
                                     div()
+                                        .mt_1()
                                         .text_xs()
                                         .text_color(rgb(palette.muted))
                                         .child(format!("From {}", entry.source)),
@@ -953,39 +1181,58 @@ impl Render for CalendarPage {
                     .mr_2()
                     .child(label),
             )
+            .when_some(self.sync_status.as_ref(), |header, status| {
+                header.child(super::types::sync_status_mark(status, palette))
+            })
             .child(
-                Button::new("calendar-prev")
-                    .small()
-                    .ghost()
-                    .label("Previous")
-                    .on_click(cx.listener(|page, _, _, cx| page.shift_page(false, cx))),
-            )
-            .child(
-                Button::new("calendar-today")
-                    .small()
-                    .ghost()
-                    .label("Today")
-                    .on_click(
-                        cx.listener(|page, _, _, cx| page.select(Local::now().date_naive(), cx)),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        Button::new("calendar-prev")
+                            .small()
+                            .ghost()
+                            .label("‹")
+                            .on_click(cx.listener(|page, _, _, cx| page.shift_page(false, cx))),
+                    )
+                    .child(
+                        Button::new("calendar-today")
+                            .small()
+                            .ghost()
+                            .label("Today")
+                            .on_click(cx.listener(|page, _, _, cx| {
+                                page.select(Local::now().date_naive(), cx)
+                            })),
+                    )
+                    .child(
+                        Button::new("calendar-next")
+                            .small()
+                            .ghost()
+                            .label("›")
+                            .on_click(cx.listener(|page, _, _, cx| page.shift_page(true, cx))),
                     ),
             )
-            .child(
-                Button::new("calendar-next")
-                    .small()
-                    .ghost()
-                    .label("Next")
-                    .on_click(cx.listener(|page, _, _, cx| page.shift_page(true, cx))),
-            )
             .child(div().flex_1())
-            .child(view_button("Day", View::Day, cx))
-            .child(view_button("Month", View::Month, cx))
-            .child(view_button("Week", View::Week, cx))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .p(px(2.))
+                    .rounded(px(6.))
+                    .bg(rgba(palette.surface))
+                    .border_1()
+                    .border_color(rgba(palette.border))
+                    .child(view_button("Day", View::Day, cx))
+                    .child(view_button("Week", View::Week, cx))
+                    .child(view_button("Month", View::Month, cx)),
+            )
             .when(self.undo_time.is_some(), |header| {
                 header.child(
                     Button::new("calendar-undo-time")
                         .small()
                         .ghost()
-                        .label("Undo time change")
+                        .label("Undo time change · ⌘Z")
                         .disabled(self.changing_time)
                         .on_click(cx.listener(|page, _, _, cx| page.undo_time(cx))),
                 )
@@ -1021,7 +1268,8 @@ impl Render for CalendarPage {
             .child(
                 Button::new("calendar-new")
                     .small()
-                    .label("New entry · N")
+                    .primary()
+                    .label("+ New entry · N")
                     .on_click(cx.listener(|page, _, window, cx| page.open_form(window, cx))),
             );
 
@@ -1043,7 +1291,7 @@ impl Render for CalendarPage {
                 .gap_4()
                 .flex_1()
                 .min_h_0()
-                .child(div().flex_1().min_w_0().child(grid))
+                .child(div().flex_1().min_w_0().min_h_0().child(grid))
                 .child(
                     div()
                         .id("calendar-side-panel")
@@ -1078,6 +1326,7 @@ impl Render for CalendarPage {
             .on_action(cx.listener(Self::on_next_entry))
             .on_action(cx.listener(Self::on_new_entry))
             .on_action(cx.listener(Self::on_delete_entry))
+            .on_action(cx.listener(Self::on_undo_time))
             .on_action(cx.listener(Self::on_confirm))
             .on_action(cx.listener(Self::on_cancel))
             .size_full()
@@ -1152,6 +1401,95 @@ mod tests {
     }
 
     #[gpui::test]
+    fn changing_keyboard_selection_or_open_day_cannot_reuse_stale_details(cx: &mut TestAppContext) {
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.selected_entry = Some("calendar:old".into());
+            page.selected_detail = Some((
+                "calendar:old".into(),
+                CalendarEntryDetail {
+                    payload: Some(serde_json::json!({
+                        "importance_rationale": "stale rationale",
+                        "origin": {"capability": "comms", "source": "mail"}
+                    })),
+                    ..Default::default()
+                },
+            ));
+            page
+        });
+        page.update(cx, |page, cx| {
+            page.select_entry("calendar:new".into(), cx);
+            assert_eq!(page.selected_entry.as_deref(), Some("calendar:new"));
+            assert!(page.selected_detail.is_none());
+            page.selected_detail = Some(("calendar:old".into(), CalendarEntryDetail::default()));
+            page.open_day(day("2026-11-06"), Some("calendar:next".into()), cx);
+            assert_eq!(page.selected_entry.as_deref(), Some("calendar:next"));
+            assert!(page.selected_detail.is_none());
+        });
+    }
+
+    #[gpui::test]
+    fn month_has_a_bounded_scroll_viewport_for_dense_weeks(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = day("2026-11-05");
+            page.entries.value = Some(
+                (0..8)
+                    .map(|i| CalendarEntry {
+                        id: format!("calendar:fixture{i}"),
+                        title: format!("All-day event {i}"),
+                        starts_at: "2026-10-26".into(),
+                        ends_at: "2026-12-01".into(),
+                        all_day: true,
+                        ..Default::default()
+                    })
+                    .collect(),
+            );
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.simulate_resize(gpui::size(px(1100.), px(700.)));
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("calendar-month-scroll")
+            .expect("month viewport");
+        assert!(bounds.size.height > px(0.));
+        assert!(bounds.bottom() < px(700.));
+        page.read_with(cx, |page, _| {
+            assert!(page.month_scroll.max_offset().y > px(0.))
+        });
+    }
+
+    #[gpui::test]
+    fn calendar_header_displays_sync_status_mark(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.sync_status = Some(crate::calendar::types::CalendarSyncStatus {
+                google_synced_at: Some("2026-11-05T20:00:00Z".into()),
+                google_error: None,
+                icloud_synced_at: Some("2026-11-05T20:00:00Z".into()),
+                icloud_error: None,
+                replica_synced_at: None,
+                replica_error: None,
+            });
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.simulate_resize(gpui::size(px(1100.), px(700.)));
+        cx.run_until_parked();
+        let bounds = cx
+            .debug_bounds("calendar-sync-status")
+            .expect("sync status mark rendered");
+        assert!(bounds.size.width > px(0.));
+    }
+
+    #[gpui::test]
     fn day_timeline_sizes_a_ninety_minute_event_and_edits_it_by_keyboard(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
         cx.update(bind_keys);
@@ -1205,6 +1543,35 @@ mod tests {
             assert_eq!(form.start.read(cx).value().as_str(), "09:00");
             assert_eq!(form.end.read(cx).value().as_str(), "10:30");
             assert!(form.editing.is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn undo_time_action_reverts_time_change(cx: &mut gpui::TestAppContext) {
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = day("2026-11-05");
+            let original = CalendarEntry {
+                id: "calendar:fixture".into(),
+                title: "Standup".into(),
+                starts_at: "2026-11-05T09:00:00".into(),
+                ends_at: "2026-11-05T09:30:00".into(),
+                kind: "event".into(),
+                commitment: "planned".into(),
+                ..Default::default()
+            };
+            let moved = CalendarEntry {
+                starts_at: "2026-11-05T10:00:00".into(),
+                ends_at: "2026-11-05T10:30:00".into(),
+                ..original.clone()
+            };
+            page.entries.value = Some(vec![moved.clone()]);
+            page.undo_time = Some((original, moved));
+            page
+        });
+        page.update(cx, |page, cx| {
+            page.undo_time(cx);
+            assert!(matches!(page.write_error, Some(ShellError::NotSetUp)));
         });
     }
 }

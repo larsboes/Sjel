@@ -192,7 +192,7 @@ pub fn write<C, T, F, Fut>(
     repo: &Repo,
     press: Press<C>,
     request: F,
-    then: fn(&mut C, Option<T>, &mut Context<C>),
+    then: impl FnOnce(&mut C, Option<T>, &mut Context<C>) + Send + 'static,
 ) where
     C: 'static,
     T: Send + 'static,
@@ -248,7 +248,7 @@ pub fn write_repo<C, T, F, Fut>(
     repo: &Repo,
     press: Press<C>,
     request: F,
-    then: fn(&mut C, Option<T>, &mut Context<C>),
+    then: impl FnOnce(&mut C, Option<T>, &mut Context<C>) + Send + 'static,
 ) where
     C: 'static,
     T: Send + 'static,

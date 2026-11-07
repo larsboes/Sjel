@@ -339,6 +339,19 @@ const POLL: Duration = Duration::from_secs(10);
 /// still ask at once.
 const UPDATE_CHECK: Duration = Duration::from_secs(300);
 
+fn restore_task_done(tasks: &mut [GlobalTask], path: &str, done: bool) {
+    if let Some(task) = tasks.iter_mut().find(|task| task.id == path) {
+        task.done = done;
+    }
+}
+
+fn calendar_trip_route(plan_id: String) -> sjel_gpui_core::travel::TravelRoute {
+    sjel_gpui_core::travel::TravelRoute::Trip {
+        id: plan_id,
+        section: sjel_gpui_core::travel::TripSection::Overview,
+    }
+}
+
 pub struct Workspace {
     pub page: Page,
     /// The tab each area shows, so ⌘1–⌘8 return to where you left an area.
@@ -475,6 +488,32 @@ impl Workspace {
                     workspace
                         .travel
                         .update(cx, |travel, cx| travel.plan_calendar_day(*day, window, cx));
+                }
+                sjel_gpui_ui::calendar::CalendarIntent::OpenTrip { plan_id } => {
+                    workspace.go(Page::Travel, cx);
+                    workspace.travel.update(cx, |travel, cx| {
+                        travel.open_route(calendar_trip_route(plan_id.clone()), cx);
+                    });
+                }
+                sjel_gpui_ui::calendar::CalendarIntent::OpenMail { item_id } => {
+                    if let Some(id) = item_id {
+                        workspace.open_target(
+                            sjel_gpui_core::route::Target::MailEntry(id.clone()),
+                            window,
+                            cx,
+                        );
+                    } else {
+                        workspace.open_target(
+                            sjel_gpui_core::route::Target::Feed(
+                                sjel_gpui_core::route::FeedTab::Mail,
+                            ),
+                            window,
+                            cx,
+                        );
+                    }
+                }
+                sjel_gpui_ui::calendar::CalendarIntent::OpenInbox => {
+                    workspace.go(Page::Inbox, cx);
                 }
             },
         );
@@ -848,6 +887,19 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Optimistic: the row reacts on the click, not on the shell's answer. Without a shell
+        // `data::write` refuses before the write, so there is nothing to undo later.
+        let previous_done = self
+            .repo
+            .shell()
+            .ok()
+            .and(self.focus_tasks.value.as_mut())
+            .and_then(|tasks| tasks.iter_mut().find(|t| t.id == path))
+            .map(|task| {
+                let previous = task.done;
+                task.done = done;
+                previous
+            });
         let repo = self.repo.clone();
         let id = path.clone();
         data::write(
@@ -861,15 +913,24 @@ impl Workspace {
                 "Task reopened."
             }),
             move |s| async move { s.set_task_done(&id, done).await },
-            |this, updated, cx| {
-                if let Some(task) = updated {
-                    if let Some(tasks) = &mut this.focus_tasks.value {
-                        if let Some(pos) = tasks.iter().position(|t| t.id == task.id) {
-                            if task.done {
-                                tasks.remove(pos);
-                            } else {
-                                tasks[pos] = task;
-                            }
+            move |this, updated, cx| {
+                let Some(task) = updated else {
+                    // Restore immediately; a failed recovery read must not leave optimistic state.
+                    if let (Some(previous), Some(tasks)) =
+                        (previous_done, this.focus_tasks.value.as_mut())
+                    {
+                        restore_task_done(tasks, &path, previous);
+                    }
+                    this.refresh(cx);
+                    cx.notify();
+                    return;
+                };
+                if let Some(tasks) = &mut this.focus_tasks.value {
+                    if let Some(pos) = tasks.iter().position(|t| t.id == task.id) {
+                        if task.done {
+                            tasks.remove(pos);
+                        } else {
+                            tasks[pos] = task;
                         }
                     }
                 }
@@ -2309,6 +2370,61 @@ mod tests {
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Home));
         cx.simulate_keystrokes("cmd-8");
         view.read_with(cx, |view, _| assert_eq!(view.page, Page::Packs));
+    }
+
+    #[test]
+    fn calendar_travel_action_opens_the_existing_plan_overview() {
+        assert_eq!(
+            calendar_trip_route("trip:existing".into()),
+            sjel_gpui_core::travel::TravelRoute::Trip {
+                id: "trip:existing".into(),
+                section: sjel_gpui_core::travel::TripSection::Overview,
+            }
+        );
+    }
+
+    #[test]
+    fn failed_task_write_restores_previous_state_without_a_recovery_read() {
+        let mut tasks = vec![GlobalTask {
+            fields: Default::default(),
+            id: "Inbox/Tasks/Task.md".into(),
+            kind: "task".into(),
+            title: "Task".into(),
+            priority: 1,
+            due: None,
+            done: true,
+            summary: None,
+            project: "Inbox".into(),
+        }];
+        tasks[0].done = false;
+        restore_task_done(&mut tasks, "Inbox/Tasks/Task.md", true);
+        assert!(tasks[0].done);
+    }
+
+    #[gpui::test]
+    fn failed_task_write_restores_state_when_the_shell_is_unreachable(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        let path = "Inbox/Tasks/Offline.md".to_owned();
+        view.update_in(cx, |view, window, cx| {
+            view.repo = Repo::new(shell::Shell::new("http://127.0.0.1:9").map(std::sync::Arc::new));
+            view.focus_tasks.value = Some(vec![GlobalTask {
+                fields: Default::default(),
+                id: path.clone(),
+                kind: "task".into(),
+                title: "Offline task".into(),
+                priority: 1,
+                due: None,
+                done: false,
+                summary: None,
+                project: "Inbox".into(),
+            }]);
+            view.toggle_task(path.clone(), true, window, cx);
+            assert!(view.focus_tasks.value.as_ref().unwrap()[0].done);
+        });
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| {
+            assert!(!view.focus_tasks.value.as_ref().unwrap()[0].done);
+        });
     }
 
     #[gpui::test]

@@ -34,6 +34,8 @@ actions!(
         NewEntry,
         /// Delete the selected entry, after confirming.
         DeleteEntry,
+        /// Undo the last moved or resized event.
+        UndoTime,
         /// Confirm the deletion that asked.
         Confirm,
         /// Close the form or the question.
@@ -60,6 +62,8 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("e", NextEntry, Some("CalendarGrid")),
         KeyBinding::new("n", NewEntry, Some("CalendarGrid")),
         KeyBinding::new("backspace", DeleteEntry, Some("CalendarGrid")),
+        KeyBinding::new("cmd-z", UndoTime, Some("CalendarGrid")),
+        KeyBinding::new("u", UndoTime, Some("CalendarGrid")),
         KeyBinding::new("enter", Confirm, Some("CalendarGrid")),
         KeyBinding::new("escape", Cancel, Some("CalendarGrid")),
         KeyBinding::new("escape", Cancel, Some("CalendarForm")),
@@ -128,12 +132,18 @@ impl CalendarPage {
             .selected_entry
             .as_ref()
             .and_then(|id| ids.iter().position(|i| i == id));
-        self.selected_entry = match at {
+        let next = match at {
             Some(i) => ids.get((i + 1) % ids.len()).cloned(),
             None => ids.first().cloned(),
         };
-        self.confirm_delete = None;
-        cx.notify();
+        if let Some(id) = next {
+            self.select_entry(id, cx);
+        } else {
+            self.selected_entry = None;
+            self.selected_detail = None;
+            self.confirm_delete = None;
+            cx.notify();
+        }
     }
 
     pub(super) fn on_new_entry(
@@ -153,6 +163,12 @@ impl CalendarPage {
     ) {
         self.confirm_delete = self.selected_entry.clone();
         cx.notify();
+    }
+
+    pub(super) fn on_undo_time(&mut self, _: &UndoTime, _: &mut Window, cx: &mut Context<Self>) {
+        if self.undo_time.is_some() && !self.changing_time {
+            self.undo_time(cx);
+        }
     }
 
     pub(super) fn on_confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {

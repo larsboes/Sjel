@@ -200,6 +200,15 @@ fn configured_db_path() -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
+fn record_google_export_status(
+    status: &mut crate::calendar::CalendarSyncStatus,
+    result: ShellResult<Vec<crate::shell::CalendarGoogleExportOptIn>>,
+) {
+    if let Err(error) = result {
+        status.google_error = Some(error.to_string());
+    }
+}
+
 impl Repo {
     pub fn new(shell: Result<Arc<Shell>, ShellError>) -> Self {
         Self {
@@ -467,6 +476,41 @@ impl Repo {
             Some(replica) => replica.store.has_calendar().await.unwrap_or(false),
             None => self.has_direct_db(),
         }
+    }
+
+    /// Sync status for calendar providers (Google, iCloud) and replica sync.
+    pub async fn calendar_sync_status(&self) -> ShellResult<crate::calendar::CalendarSyncStatus> {
+        if let Some(replica) = &self.replica {
+            let synced = replica
+                .store
+                .last_sync(crate::store::DOMAIN_CALENDAR)
+                .await
+                .unwrap_or(None);
+            let error = replica
+                .store
+                .last_sync_error()
+                .await
+                .unwrap_or(None)
+                .filter(|e| !e.is_empty());
+            return Ok(crate::calendar::CalendarSyncStatus {
+                google_synced_at: None,
+                google_error: None,
+                icloud_synced_at: None,
+                icloud_error: None,
+                replica_synced_at: synced,
+                replica_error: error,
+            });
+        }
+        let mut status = crate::calendar::CalendarSyncStatus::default();
+        match self.shell() {
+            Ok(shell) => {
+                // This endpoint is an export opt-in ledger, not provider health. Never promote an
+                // opt-in or its last push time to a healthy sync mark.
+                record_google_export_status(&mut status, shell.calendar_google_exports().await);
+            }
+            Err(error) => status.google_error = Some(error.to_string()),
+        }
+        Ok(status)
     }
 
     /// Writes one entry where this device writes.
@@ -792,6 +836,34 @@ impl Repo {
 mod tests {
     use super::*;
     use crate::store::DOMAIN_CALENDAR;
+
+    #[test]
+    fn calendar_opt_in_does_not_claim_provider_sync_health() {
+        let mut status = crate::calendar::CalendarSyncStatus::default();
+        record_google_export_status(
+            &mut status,
+            Ok(vec![crate::shell::CalendarGoogleExportOptIn {
+                entry_id: "calendar:1".into(),
+                google_calendar_id: "primary".into(),
+                google_event_id: None,
+                pushed_at: None,
+                created_at: "2026-11-06T00:00:00Z".into(),
+            }]),
+        );
+        assert_eq!(status.google_synced_at, None);
+        assert_eq!(status.google_error, None);
+        assert_eq!(status.icloud_synced_at, None);
+    }
+
+    #[test]
+    fn failed_google_status_request_is_visible() {
+        let mut status = crate::calendar::CalendarSyncStatus::default();
+        record_google_export_status(&mut status, Err(ShellError::Unreachable));
+        assert_eq!(
+            status.google_error.as_deref(),
+            Some("Sjel is not running on this Mac.")
+        );
+    }
 
     /// A fresh store and the phone's repo over it, for the calendar tests below.
     async fn replica() -> (Arc<TursoStore>, Repo) {

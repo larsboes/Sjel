@@ -77,6 +77,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | opencode | `~/.opencode/bin/opencode` | Per run (OpenCode Go, ...) | Same as pi. |
 | Copilot CLI | `~/.local/bin/copilot` | GitHub Copilot | Needs the GitHub hosts. Where its login token lives (keychain or file) is unverified. |
 | Antigravity | `~/.local/bin/agy` | Google Antigravity | An Electron IDE. Seatbelt on a GUI app and its helper processes is unverified. Last in order. |
+| octet | `~/.local/bin/octet`, not installed; a trial ran a pinned v0.10.0 artifact from a scratch directory | Per run | Needs `--safe-mode`: its default effect policy is `UnsafeHost`, which approves every tool call. The profile denies its credential store (`~/.octet/credentials`) and the Keychain, so a contained session takes a key by `--keep-env` or a local provider. Measured 2026-11-07: direct egress refused, the proxy admitting only the provider's hosts, and a read of the gcloud application-default credentials refused with `Operation not permitted`. Verdict and revisit condition in `upstreams.toml`. |
 
 ## 5. Order and done-when
 

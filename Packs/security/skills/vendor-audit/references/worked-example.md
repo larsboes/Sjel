@@ -26,10 +26,11 @@ signatures before upload** with the certificate identity pinned to the workflow 
 `segment`, `amplitude`, `datadog` across `crates/` and `extensions/`. The destinations are the
 provider API, `api.github.com` for an update check on every launch, `models.dev` for model
 metadata every six hours, and per-login OAuth hosts. No hostname, username, machine ID or git
-remote is collected into a request. No base-URL env override. But `update.rs` and `models_dev.rs`
-call `.no_proxy()` deliberately, so an egress proxy cannot constrain them — containment there
-needs a host firewall or DNS rule, which is a different design from the proxy the containment plan
-assumes.
+remote is collected into a request. No base-URL env override. `update.rs:167` and
+`models_dev.rs:135` call `.no_proxy()` deliberately, so an egress proxy cannot see those two —
+but the containment profile this machine uses renders `(deny default)`, so they are refused at the
+OS layer rather than reaching the network. An audit sentence that said this needed a DNS rule was
+wrong, and reading the profile is what corrected it.
 
 **Execution.** A genuinely careful effect broker — canonical intent hashing, single-use
 time-limited grants, fail-closed with no human attached, the model's own text never counted as
@@ -76,6 +77,11 @@ Seven claims were re-read in the source before they were reported, and one initi
 wrong in the direction of alarm: the `if` branch above the default selects the approval broker
 only under `--safe-mode`, not under an ordinary configuration. Reading the branch changed the
 sentence from "the default may be unsafe" to the exact conditional and its flag.
+
+A second claim did not survive the trial either: the `.no_proxy()` fetches were reported as needing
+a firewall rule, when the containment profile that runs this machine denies non-loopback sockets
+outright. The cause was reading the program's proxy behaviour without reading the boundary it would
+run inside — which is why `references/egress.md` now asks for both.
 
 ## What this pass could not tell you
 

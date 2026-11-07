@@ -53,10 +53,18 @@ never invoke the updater.
 grep -rn 'no_proxy\|NO_PROXY\|disable_proxy\|danger_accept_invalid_cert' --include=*.rs --include=*.py .
 ```
 
-This decides whether the thing can be contained. A background fetch that deliberately ignores the
-proxy environment variables cannot be constrained by an egress proxy, so containment needs a
-host firewall or DNS rule instead. Say which mechanism is required, because the difference is
-the entire containment design.
+This decides whether the thing can be contained, so it decides the containment design. A
+background fetch that deliberately ignores the proxy environment variables cannot be constrained
+by an egress proxy. Whether that breaks containment depends on the boundary underneath:
+
+- **Proxy-only containment** — the program is otherwise free to open sockets. The fetch escapes,
+  and a host firewall or DNS rule is required.
+- **OS-level containment** — a `(deny default)` seatbelt profile, seccomp, or a network namespace.
+  Non-loopback sockets are refused before the program's proxy settings are consulted, so
+  `.no_proxy()` is irrelevant. Read the profile rather than assuming it.
+
+Say which mechanism the run depends on, because "needs a firewall rule" and "already denied" are
+different amounts of work and only one of them is a finding.
 
 ## Data content
 

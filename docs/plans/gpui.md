@@ -646,6 +646,14 @@ Stages, in order:
    Not checked: the list and the reader with data, because the simulator was not paired, and
    text selection and VoiceOver on a device. The GPUI Documents page on the phone still has no
    data source (`ios/src/lib.rs`, `ShellError::NotSetUp`).
+   Step 3, 2026-11-07: the screen moved to `sjel-gpui-ui` (`ui/src/nsh_documents.rs`) and reads
+   through `device::Source`, the Mac's shell or the phone's client (moved from `travel.rs`).
+   The Mac app with `--features nsh-trial` and `SJEL_NSH_TRIAL=1` opens it in a window through
+   `nsh-platform-gpui` on the app's GPUI Fast. NSH comes from rev `cc38facfdd`: `v0.4.0`'s GPUI
+   backend does not compile against `gpui-fast` 0.1.13 (`KeyBinding::new` takes a static
+   keystroke). Checked on a paired iPhone: the list fills from the Mac. Checked: every build,
+   core and ui tests, clippy. Not checked: the Mac window's content, text selection and
+   VoiceOver on the iPhone.
 4. **After the trial.** If it passes: new phone screens are NSH screens, and existing phone
    screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
    `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android

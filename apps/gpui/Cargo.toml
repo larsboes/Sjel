@@ -37,6 +37,8 @@ native-maps = ["sjel-gpui-ui/native-maps"]
 default = ["gpui-fast"]
 # Draws with GPUI Fast instead of the gpui-pre snapshot. The iOS app does not enable it.
 gpui-fast = ["gpui-kit/gpui-fast"]
+# The NSH trial (docs/plans/gpui.md §11): NSH screens inside the Mac app, drawn by GPUI Fast.
+nsh-trial = ["gpui-fast", "sjel-gpui-ui/nsh-trial", "dep:nsh-platform-gpui", "dep:nsh-base"]
 
 [dependencies]
 sjel-gpui-core.workspace = true
@@ -54,6 +56,17 @@ libsql.workspace = true
 # the device without any C toolchain step -- on macOS it goes through objc2-audio-toolbox, not
 # bindgen.
 cpal = "0.18"
+
+[dependencies.nsh-platform-gpui]
+git = "https://github.com/longbridge/nsh"
+rev = "cc38facfdd"
+default-features = false
+optional = true
+
+[dependencies.nsh-base]
+git = "https://github.com/longbridge/nsh"
+rev = "cc38facfdd"
+optional = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "=0.6.5"

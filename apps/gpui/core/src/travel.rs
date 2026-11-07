@@ -1,10 +1,9 @@
 //! Native clients consume the trips HTTP contract and retain the last successful read locally.
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{device::DeviceClient, record::CapabilityLinks, shell::Shell};
+use crate::record::CapabilityLinks;
 
 pub mod around;
 pub mod connections;
@@ -12,6 +11,7 @@ mod details;
 pub mod edit;
 mod navigation;
 pub mod places;
+pub use crate::device::Source;
 pub use details::{
     details_cached, save_details, saved_details, sort_stay_candidates, Details, Item, SavedDetails,
 };
@@ -237,12 +237,6 @@ pub fn unseen_fare_lows(
             })
         })
         .collect()
-}
-
-#[derive(Clone)]
-pub enum Source {
-    Shell(Arc<Shell>),
-    Device(Arc<DeviceClient>),
 }
 
 impl Source {

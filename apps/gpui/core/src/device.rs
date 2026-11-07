@@ -15,6 +15,13 @@ use serde::{Deserialize, Serialize};
 /// Signs the bytes it gets with the device key and returns the 64-byte signature.
 pub type Signer = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, String> + Send + Sync>;
 
+/// Where a capability read goes: the Mac's own shell, or a paired phone's signed client.
+#[derive(Clone)]
+pub enum Source {
+    Shell(Arc<crate::shell::Shell>),
+    Device(Arc<DeviceClient>),
+}
+
 pub use devices_api::{
     comparison_code, node_base, pairing_qr_payload, parse_join_target, parse_pairing_qr,
     DeviceRecord, JoinResponse as JoinRequest, PairingQr, PROXY_ROUTE_PAIRING_CLAIMS as CLAIM_PATH,

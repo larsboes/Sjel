@@ -27,11 +27,11 @@ gpui-mobile = { package = "gpui-pre-mobile", git = "https://github.com/larsboes/
 
 [features]
 # The NSH trial (docs/plans/gpui.md §11, stage 3): screens drawn with UIKit views next to GPUI.
-nsh-trial = ["dep:nsh-core", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
+nsh-trial = ["sjel-gpui-ui/nsh-trial", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", "dep:objc2-ui-kit"]
 
 [target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
 git = "https://github.com/longbridge/nsh"
-tag = "v0.4.0"
+rev = "cc38facfdd"
 default-features = false
 optional = true
 
@@ -45,14 +45,9 @@ default-features = false
 features = ["UIView", "UIResponder", "objc2-core-foundation"]
 optional = true
 
-[dependencies.nsh-core]
-git = "https://github.com/longbridge/nsh"
-tag = "v0.4.0"
-optional = true
-
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-tag = "v0.4.0"
+rev = "cc38facfdd"
 optional = true
 
 [lints]

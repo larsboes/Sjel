@@ -298,27 +298,36 @@ fn document_path(id: &str) -> Option<String> {
         .then(|| format!("/documents/api/documents/{id}"))
 }
 
-/// One page of document metadata through a paired phone's signed client.
-///
-/// # Errors
-/// The client's reason when the Mac refuses or cannot be reached.
-pub async fn device_documents_page(
-    client: &crate::device::DeviceClient,
-    offset: usize,
-) -> Result<DocumentPage, String> {
-    client.get(&documents_path(offset, None)).await
-}
+impl crate::device::Source {
+    /// One page of up to 500 document metadata rows from `offset`.
+    ///
+    /// # Errors
+    /// The refusal or the transport failure, as text.
+    pub async fn documents_page(&self, offset: usize) -> Result<DocumentPage, String> {
+        let path = documents_path(offset, None);
+        match self {
+            Self::Shell(shell) => shell
+                .json(Method::GET, &path, None, 10)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
 
-/// A document's extracted text and pages through a paired phone's signed client.
-///
-/// # Errors
-/// A refusal for an `id` that is not a document id, or the client's reason.
-pub async fn device_document_detail(
-    client: &crate::device::DeviceClient,
-    id: &str,
-) -> Result<DocumentDetail, String> {
-    let path = document_path(id).ok_or_else(|| "Not a document id.".to_string())?;
-    client.get(&path).await
+    /// A document's extracted text and pages.
+    ///
+    /// # Errors
+    /// A refusal for an `id` that is not a document id, or the transport failure, as text.
+    pub async fn document_detail(&self, id: &str) -> Result<DocumentDetail, String> {
+        let path = document_path(id).ok_or_else(|| "Not a document id.".to_string())?;
+        match self {
+            Self::Shell(shell) => shell
+                .json(Method::GET, &path, None, 10)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
 }
 
 #[cfg(test)]

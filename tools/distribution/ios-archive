@@ -56,8 +56,10 @@ for dir in Assets.xcassets UITests; do
 done
 [ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
 target="$out/cargo-target"
+# SJEL_IOS_FEATURES=nsh-trial builds the NSH trial in (docs/plans/gpui.md §11). Never for a release.
 cargo build --locked --release --manifest-path "$root/apps/gpui/Cargo.toml" \
-  --package sjel-gpui-ios --target aarch64-apple-ios --target-dir "$target" --lib
+  --package sjel-gpui-ios --target aarch64-apple-ios --target-dir "$target" --lib \
+  ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"}
 rust_lib="$target/aarch64-apple-ios/release/libsjel_gpui_ios.a"
 [ -f "$rust_lib" ] || { echo "native Rust library was not produced" >&2; exit 1; }
 (cd "$host" && xcodegen generate --spec project.yml)

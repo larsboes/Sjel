@@ -46,6 +46,20 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
 | macOS seatbelt | `/usr/bin/sandbox-exec` | The mechanism. |
 
 Not in place: pi, opencode, `copilot` and `agy` run with full user access, with no wrapper.
+
+**Measured gap, 2026-11-07.** The profile grants `file-read-data` on the granted subpaths and
+`file-read-metadata` everywhere, which is enough for the kernel to resolve an absolute path. It is
+not enough for a program that opens each component itself: a hardened reader walks from `/` with
+`openat` to avoid symlink races, and the open of the first ancestor is refused. Inside the profile
+`ls /Users` returns `Operation not permitted` while `ls <project>` succeeds, and `stat /Users`
+succeeds. octet 0.10.0 reads its configuration this way and so cannot reach a file in its own
+project directory.
+
+Admitting each ancestor with `(allow file-read-data (literal <dir>))` fixes the walk, and it makes
+`$HOME` listable — names only, no file contents. `macos_sandbox_denies_reads_outside_the_project_and_still_builds`
+asserts the opposite on purpose, so the two cannot both hold and this is an open decision rather
+than a defect to fix in passing. Node-based harnesses are unaffected: `open(2)` on an absolute path
+resolves in the kernel, which is why pi and opencode never exposed the gap.
 Whether opencode or the Copilot CLI has a sandbox of its own is unverified.
 
 ## 3. The launcher

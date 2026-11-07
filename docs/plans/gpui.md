@@ -429,9 +429,14 @@ build was performed for this handoff.
    `ui/src/agent_seat.rs` over `Host` (`core/src/agent.rs`); the Mac finder and the phone edge
    draw the same seat. Still in `src/`: desktop shell
    orchestration and host window management (`workspace.rs`, `finder.rs`, `settings.rs`, `soundscape.rs`,
-   `sidebar.rs`, `header.rs`, `update.rs`, `home.rs`, `agent_run.rs`, `audio.rs`). A platform call goes
-   behind one small trait in the shell (keychain, open URL, audio, notifications, scanner), never as
-   a `cfg` in a page. Run `simplify` on each page as it moves.
+   `sidebar.rs`, `header.rs`, `update.rs`, `home.rs`, `agent_run.rs`, `audio.rs`). A page reaches the
+   platform through GPUI's own API (`cx.open_url`, the clipboard, `prompt_for_paths`). A service
+   only one shell has reaches the page as a handler the shell injects, as
+   `InventoryPage::set_cache_preview_handler` does for the RoomPlan preview (`src/roomplan.rs` on
+   the Mac, `host/` on the phone). Never a `cfg` in a page. No shared trait: each service has one
+   implementation per shell and no shared caller. The two `audio.rs` files are two device
+   backends over one engine (`core/src/soundscape`): cpal pushes on the Mac, `host/Audio.swift`
+   pulls on the phone. Run `simplify` on each page as it moves.
 3. **Phone tabs for moved pages.** The phone bar is five items (`Today | Mail | Calendar | Travel |
    Agent`, `ios/src/lib.rs` and `ui/src/nav.rs`). Inbox capture lives on Today; Documents, People
    and Places open via 1-tap shortcuts and finder. A sixth tab needs a different bar, not a sixth

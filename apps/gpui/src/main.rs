@@ -16,6 +16,8 @@ mod home;
 #[cfg(target_os = "macos")]
 mod macos_glass;
 mod permissions;
+#[cfg(target_os = "macos")]
+mod roomplan;
 mod script;
 mod selection;
 mod settings;

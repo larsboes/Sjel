@@ -79,7 +79,15 @@ impl Workspace {
     ) -> Entity<InventoryPage> {
         let repo = self.repo.clone();
         self.inventory_page
-            .get_or_insert_with(|| cx.new(|cx| InventoryPage::new(repo, cx)))
+            .get_or_insert_with(|| {
+                cx.new(|cx| {
+                    #[allow(unused_mut)]
+                    let mut page = InventoryPage::new(repo, cx);
+                    #[cfg(target_os = "macos")]
+                    page.set_cache_preview_handler(crate::roomplan::cache_preview, cx);
+                    page
+                })
+            })
             .clone()
     }
 

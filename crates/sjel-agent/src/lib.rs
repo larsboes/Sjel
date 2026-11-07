@@ -232,7 +232,12 @@ pub struct Agent {
     stop: Arc<AtomicBool>,
     /// One turn is one completion request. Stops a model that calls tools forever.
     pub max_turns: usize,
+    /// Read before every request, so a mode change also stops a running agent.
+    runtime: RuntimeSource,
 }
+
+/// Where an agent reads the device's runtime profile. Production uses `sjel_runtime::current`.
+pub type RuntimeSource = fn() -> Result<sjel_runtime::Status, sjel_runtime::Deferred>;
 
 impl Agent {
     /// `stop` is shared with whatever ends a run early, and with tools that must end with it
@@ -277,6 +282,7 @@ impl Agent {
             input: AgentInput::default(),
             stop,
             max_turns: 50,
+            runtime: sjel_runtime::current,
         })
     }
 
@@ -294,6 +300,11 @@ impl Agent {
 
     pub fn model(&self) -> &str {
         &self.role.model
+    }
+
+    /// Replace the profile source, so a test states the profile instead of reading the device's.
+    pub fn set_runtime(&mut self, runtime: RuntimeSource) {
+        self.runtime = runtime;
     }
 
     /// A cloneable handle for steering this agent or queueing a follow-up while it runs.
@@ -659,8 +670,9 @@ impl Agent {
                 "max_tokens"
             }] = json!(1024);
         }
+        let runtime = (self.runtime)().map_err(|e| AgentError::RequestRefused(e.to_string()))?;
         self.role
-            .admit_chat_request(&body)
+            .admit_chat_request_with(&runtime, &body)
             .map_err(AgentError::RequestRefused)?;
         let mut request = self
             .client
@@ -669,9 +681,6 @@ impl Agent {
         if let Some(key) = self.role.bearer_key() {
             request = request.bearer_auth(key);
         }
-        self.role
-            .admit_chat_request(&body)
-            .map_err(AgentError::RequestRefused)?;
         if self.role.is_cloud_endpoint() {
             cloud::admit_and_reserve(
                 &self.role,
@@ -769,6 +778,18 @@ mod tests {
         (port, requests)
     }
 
+    /// The device profile is not under test here; `tests/runtime.rs` reads a real overlay.
+    fn agent(
+        role: ResolvedRole,
+        tools: Vec<Box<dyn Tool>>,
+        extensions: impl IntoIterator<Item = Box<dyn Extension>>,
+        stop: Arc<AtomicBool>,
+    ) -> Result<Agent, AgentError> {
+        let mut agent = Agent::new(role, tools, extensions, stop)?;
+        agent.set_runtime(|| Ok(sjel_runtime::Status::normal("test")));
+        Ok(agent)
+    }
+
     fn role(port: u16) -> ResolvedRole {
         let config: sjel_inference::InferenceConfig = format!(
             r#"{{ "backends": {{ "local": {{ "api": "openai", "base_url": "http://127.0.0.1:{port}/v1" }} }},
@@ -781,7 +802,7 @@ mod tests {
 
     #[test]
     fn responses_api_request_uses_native_input_and_function_shapes() {
-        let mut agent = Agent::new(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let mut agent = agent(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         agent.role.backend.api = sjel_inference::Api::OpenAiResponses;
         agent.role.request_overrides = Some(json!({
             "reasoning": { "effort": "low" }, "store": true, "model": "override"
@@ -829,7 +850,7 @@ mod tests {
         cloud.max_requests_per_day = Some(10);
         cloud.max_input_tokens = Some(4096);
 
-        let agent = Agent::new(cloud, vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let agent = agent(cloud, vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "private note".into(),
         }];
@@ -870,7 +891,7 @@ mod tests {
         }
         let mut cloud = role(1);
         cloud.backend.base_url = "https://provider.example/v1".into();
-        let agent = Agent::new(cloud, vec![Box::new(PublicEcho)], [], Arc::default()).unwrap();
+        let agent = agent(cloud, vec![Box::new(PublicEcho)], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "public question".into(),
         }];
@@ -887,7 +908,7 @@ mod tests {
     fn public_cloud_mode_refuses_unclassified_tool_surfaces() {
         let mut cloud = role(1);
         cloud.backend.base_url = "https://provider.example/v1".into();
-        let agent = Agent::new(cloud, vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let agent = agent(cloud, vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "public question".into(),
         }];
@@ -908,7 +929,7 @@ mod tests {
     fn unencrypted_remote_backend_is_refused_before_model_egress() {
         let mut remote = role(1);
         remote.backend.base_url = "http://provider.example/v1".into();
-        let agent = Agent::new(remote, vec![], [], Arc::default()).unwrap();
+        let agent = agent(remote, vec![], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "question".into(),
         }];
@@ -959,7 +980,7 @@ mod tests {
         ]);
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let agent = Agent::new(
+        let agent = agent(
             role(port),
             vec![Box::new(Pause {
                 started: started_tx,
@@ -1014,7 +1035,7 @@ mod tests {
                 delta(json!({ "content": "ne" })),
             ],
         ]);
-        let agent = Agent::new(role(port), vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let agent = agent(role(port), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let mut messages = vec![Message::User {
             content: "ping".into(),
         }];
@@ -1091,7 +1112,7 @@ mod tests {
     fn read_only_tool_batches_bound_parallelism_and_preserve_order() {
         let active = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
-        let agent = Agent::new(
+        let agent = agent(
             role(1),
             vec![Box::new(ConcurrentEcho {
                 active,
@@ -1158,7 +1179,7 @@ mod tests {
         ]]);
         let stop = Arc::new(AtomicBool::new(false));
         let tools: Vec<Box<dyn Tool>> = vec![Box::new(Halt(Arc::clone(&stop))), Box::new(Echo)];
-        let agent = Agent::new(role(port), tools, [], stop).unwrap();
+        let agent = agent(role(port), tools, [], stop).unwrap();
         let mut messages = vec![Message::User {
             content: "go".into(),
         }];
@@ -1182,7 +1203,7 @@ mod tests {
 
     #[test]
     fn a_bad_call_becomes_text_for_the_model() {
-        let agent = Agent::new(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let agent = agent(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let call = |name: &str, arguments: &str| ToolCall {
             id: "c".into(),
             kind: function_kind(),
@@ -1270,7 +1291,7 @@ mod tests {
             vec![delta(echo)],
             vec![delta(json!({ "content": "done" }))],
         ]);
-        let agent = Agent::new(
+        let agent = agent(
             role(port),
             vec![Box::new(Echo)],
             [Box::new(Redactor) as Box<dyn Extension>],
@@ -1315,7 +1336,7 @@ mod tests {
             Arc::clone(&denier.systems),
             Arc::clone(&denier.requests),
         );
-        let agent = Agent::new(
+        let agent = agent(
             role(port),
             vec![Box::new(Echo)],
             [Box::new(denier) as Box<dyn Extension>],
@@ -1367,7 +1388,7 @@ mod tests {
 
     #[test]
     fn a_bare_run_sends_the_core_request_body() {
-        let agent = Agent::new(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
+        let agent = agent(role(1), vec![Box::new(Echo)], [], Arc::default()).unwrap();
         let body = agent.request_body(&[Message::User {
             content: "ping".into(),
         }]);
@@ -1418,7 +1439,7 @@ mod tests {
 
     #[test]
     fn two_tools_with_one_name_stop_the_startup() {
-        let err = Agent::new(
+        let err = agent(
             role(1),
             Vec::new(),
             [
@@ -1435,7 +1456,7 @@ mod tests {
 
         // Nor may an extension shadow a core tool: `echo` would stop being the tool the
         // operator can see.
-        let err = Agent::new(
+        let err = agent(
             role(1),
             vec![Box::new(Echo)],
             [Box::new(Carries("guard", "echo")) as Box<dyn Extension>],

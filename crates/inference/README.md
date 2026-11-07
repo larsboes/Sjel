@@ -211,3 +211,8 @@ a value to pass rather than an error path around every gate below it.
 
 `embed()` keeps its own resolution because `crates/scouting` calls it, and that is the rule
 rather than an exception: a caller with no status to hand keeps the signature it had.
+
+`sjel_agent::Agent` is the one caller that rereads the profile before every request, so a mode
+change stops a run already in progress. It reads through a `RuntimeSource`, which defaults to
+`sjel_runtime::current`. A test sets a fixed status with `Agent::set_runtime`, and
+`crates/assistant` passes the source down to the agent it builds.

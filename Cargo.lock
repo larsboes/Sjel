@@ -4790,6 +4790,7 @@ dependencies = [
  "sjel-extraction",
  "sjel-http",
  "sjel-inference",
+ "sjel-runtime",
  "sjel-skill-metadata",
  "thiserror 2.0.21",
  "toml",

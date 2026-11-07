@@ -28,6 +28,7 @@ path = "src/bin/eval.rs"
 sjel-http = { path = "../sjel-http" }
 sjel-extraction = { path = "../extraction", default-features = false }
 sjel-inference = { path = "../inference" }
+sjel-runtime = { path = "../runtime" }
 sjel-config = { path = "../sjel-config" }
 sjel-skill-metadata = { path = "../skill-metadata" }
 serde = { workspace = true, features = ["derive"] }

@@ -2323,6 +2323,16 @@
     },
     {
       "from": "sjel-agent",
+      "to": "runtime",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/sjel-agent/Cargo.toml"
+      ]
+    },
+    {
+      "from": "sjel-agent",
       "to": "sjel-config",
       "kinds": [
         "cargo-dep"

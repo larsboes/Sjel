@@ -965,6 +965,7 @@ fn run_ask(
         request,
         AgentInput::default(),
         Arc::default(),
+        sjel_runtime::current,
         |_| {},
     )
 }
@@ -975,12 +976,15 @@ fn run_ask_with_input(
     request: AskRequest,
     input: AgentInput,
     stop: Arc<AtomicBool>,
+    runtime: sjel_agent::RuntimeSource,
     mut emit: impl FnMut(Value),
 ) -> Result<AskResponse, (StatusCode, String)> {
     let ladder = match backend {
         Backend::Cloud(role) => {
-            let answer = attempt(&role, false, shell_url, &request, input, stop, &mut emit)
-                .map_err(AskFailure::into_pair)?;
+            let answer = attempt(
+                &role, false, shell_url, &request, input, stop, runtime, &mut emit,
+            )
+            .map_err(AskFailure::into_pair)?;
             return Ok(AskResponse {
                 text: answer.text,
                 model: role.model,
@@ -1002,6 +1006,7 @@ fn run_ask_with_input(
             &request,
             input.clone(),
             Arc::clone(&stop),
+            runtime,
             &mut emit,
         );
         match outcome {
@@ -1048,6 +1053,7 @@ fn run_ask_with_input(
 
 /// One request to one role: the whole conversation is rebuilt, because a failed attempt leaves
 /// its own messages behind and the next rung must start from what the caller actually sent.
+#[allow(clippy::too_many_arguments)]
 fn attempt(
     role: &sjel_inference::ResolvedRole,
     offered_tools: bool,
@@ -1055,6 +1061,7 @@ fn attempt(
     request: &AskRequest,
     input: AgentInput,
     stop: Arc<AtomicBool>,
+    runtime: sjel_agent::RuntimeSource,
     emit: &mut impl FnMut(Value),
 ) -> Result<Answer, AskFailure> {
     let cloud = role.is_cloud_endpoint();
@@ -1122,6 +1129,7 @@ fn attempt(
         })?;
     agent.max_turns = MAX_AGENT_TURNS;
     agent.set_input_queue(input);
+    agent.set_runtime(runtime);
 
     let mut tools = Vec::new();
     let mut streamed = String::new();
@@ -1342,11 +1350,19 @@ async fn ask_stream(
     tokio::spawn(async move {
         let worker_tx = events_tx.clone();
         let result = tokio::task::spawn_blocking(move || {
-            run_ask_with_input(backend, &shell_url, request, input, stop, |event| {
-                if let Ok(encoded) = serde_json::to_string(&event) {
-                    let _ = worker_tx.blocking_send(encoded);
-                }
-            })
+            run_ask_with_input(
+                backend,
+                &shell_url,
+                request,
+                input,
+                stop,
+                sjel_runtime::current,
+                |event| {
+                    if let Ok(encoded) = serde_json::to_string(&event) {
+                        let _ = worker_tx.blocking_send(encoded);
+                    }
+                },
+            )
         })
         .await;
         match result {
@@ -1890,6 +1906,7 @@ mod tests {
             },
             AgentInput::default(),
             Arc::default(),
+            || Ok(sjel_runtime::Status::normal("test")),
             |event| match event["type"].as_str() {
                 Some("tool_call") => activity.push(format!(
                     "call:{}",

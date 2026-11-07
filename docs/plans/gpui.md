@@ -425,7 +425,9 @@ build was performed for this handoff.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
-   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. Still in `src/`: desktop shell
+   `docs`, `accounts`, `selection`, `viz`) moved on 2026-11-03. The agent controller moved to
+   `ui/src/agent_seat.rs` over `Host` (`core/src/agent.rs`); the Mac finder and the phone edge
+   draw the same seat. Still in `src/`: desktop shell
    orchestration and host window management (`workspace.rs`, `finder.rs`, `settings.rs`, `soundscape.rs`,
    `sidebar.rs`, `header.rs`, `update.rs`, `home.rs`, `agent_run.rs`, `audio.rs`). A platform call goes
    behind one small trait in the shell (keychain, open URL, audio, notifications, scanner), never as

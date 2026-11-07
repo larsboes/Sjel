@@ -31,11 +31,12 @@ Order:
   `secrets/agent/approvals/`, so the Systems page, the Mac and the phone show one record. A
   session grant is keyed by tool and exact arguments. An unanswered call is denied after 15
   minutes.
-- **Clients.** The Mac finder has an `Agent` mode, and the run lives in the right-edge seat. The
-  iPhone lists and creates sessions, prompts, steers, follows streams, approves, denies and stops.
-  Both desktop Finder and iPhone agent seat support session tier selection (`sjel | project | account`)
-  and annotate gate approval cards with policy rule ID, displaying a distinct red border and single
-  override button for blocked commands (no session-wide grant).
+- **Clients.** One seat, `AgentSeat` (`apps/gpui/ui/src/agent_seat.rs`), holds the run on both
+  devices over `Host` (`apps/gpui/core/src/agent.rs`): the Mac's shell or the phone's
+  `DeviceClient`. It lists and creates sessions, prompts, steers, follows the stream with resume
+  after `truncated`, approves, denies and stops. The Mac finder's `Agent` mode and the phone's
+  edge each add only a text field. The seat offers the tier (`sjel | project | account`), and a
+  blocked call shows its rule ID, a red border and one override button (no session-wide grant).
 
 **Gap.** The capability assembles only `fs, graph, sjel, sql, guard, compaction`
 (`crates/agent/src/plugins.rs`). `web`, `subagents`, `mcp`, `skills` and `rust` exist in
@@ -371,7 +372,8 @@ blocked, see [`gpui.md`](gpui.md#open).
    the tailnet code. The tailnet ACL from the phone to port 8443 has not been tested. The seat
    lists saved and active sessions. Start a
    session on the phone and send a follow-up. The Mac shelf shows the same transcript.
-3. **Cross-device.** Follow a Mac run on the phone. Cut and restore the connection, then check
+3. **Cross-device.** Both clients run the same seat code, so a defect found on one is fixed on
+   both. Follow a Mac run on the phone. Cut and restore the connection, then check
    sequence resume and the transcript reload after `truncated`. Decide from each client in turn,
    and check that the other clears its card. Check deny, stop, session grants and re-pairing.
 4. **Boundary.** Every phone request is signed by `DeviceClient` and goes through the paired

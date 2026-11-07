@@ -1,11 +1,10 @@
 //! Search ranking, server querying, and record ingestion.
 use std::time::Instant;
 
-use gpui_kit::{div, prelude::*, px, rgb, rgba, Context, SharedString, Window};
+use gpui_kit::Context;
 use sjel_gpui_core::search::{self, Mode};
 
 use crate::shell::{self, GlobalNote, GlobalTask, ProjectSummary, ServerHit};
-use sjel_gpui_ui::theme::{tint, Palette};
 
 use super::types::{Hit, Open, SERVER_DEBOUNCE, SERVER_SHOWN, SHOWN};
 use super::Finder;
@@ -114,63 +113,6 @@ impl Finder {
     pub fn resolved(&self) -> Mode {
         self.mode.resolve(&self.query)
     }
-}
-
-pub(super) fn tier_chip(
-    label: &'static str,
-    active: bool,
-    palette: Palette,
-    on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
-) -> gpui::AnyElement {
-    let (bg, text_color, border_color) = if active {
-        (
-            rgba(tint(palette.accent, 0x24)),
-            rgb(palette.accent),
-            rgba(tint(palette.accent, 0x50)),
-        )
-    } else {
-        (
-            rgba(palette.raised),
-            rgb(palette.muted),
-            rgba(palette.border),
-        )
-    };
-    div()
-        .id(SharedString::from(format!("tier-{label}")))
-        .flex()
-        .items_center()
-        .px_2()
-        .py(px(1.5))
-        .rounded(px(4.))
-        .cursor_pointer()
-        .bg(bg)
-        .border_1()
-        .border_color(border_color)
-        .text_xs()
-        .font_weight(if active {
-            gpui::FontWeight::SEMIBOLD
-        } else {
-            gpui::FontWeight::NORMAL
-        })
-        .text_color(text_color)
-        .on_click(on_click)
-        .child(label)
-        .into_any_element()
-}
-
-/// The first `count` lines of a tool result, with a count when there is more.
-pub(super) fn first_lines(text: &str, count: usize) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut shown: String = lines
-        .iter()
-        .take(count)
-        .copied()
-        .collect::<Vec<_>>()
-        .join("\n");
-    if lines.len() > count {
-        shown.push_str(&format!("\n… {} more line(s)", lines.len() - count));
-    }
-    shown
 }
 
 /// A server row as a result. Its link is opened through the deep-link parser, so the server can

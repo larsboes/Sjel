@@ -152,7 +152,7 @@ impl Shell {
     }
 }
 
-/// The Mac a terminal view talks to: its own shell on the Mac, or the paired listener from the
+/// The Mac a terminal or agent view talks to: its own shell on the Mac, or the paired listener from the
 /// phone. Both reach the same capability routes, so the rules above them are written once.
 #[derive(Clone)]
 pub enum Host {

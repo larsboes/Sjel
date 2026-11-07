@@ -8,7 +8,6 @@
 //! conversation shows above the results while the text is a question. There is no Ask page.
 
 mod actions;
-mod agent;
 mod search;
 mod types;
 
@@ -19,8 +18,8 @@ use gpui_kit::{
     div, prelude::*, px, rgb, rgba, App, Context, Entity, EventEmitter, FocusHandle, Focusable,
     IntoElement, MouseButton, Render, SharedString, Subscription, Window,
 };
-use sjel_gpui_core::agent::AgentRun;
 use sjel_gpui_core::search::Mode;
+use sjel_gpui_ui::agent_seat::{AgentSeat, AgentSeatEvent, Host};
 use sjel_gpui_ui::ask::{Ask, Model};
 use sjel_gpui_ui::theme::{tint, ThemeContext};
 
@@ -51,14 +50,14 @@ pub struct Finder {
     pub(super) picked: bool,
     /// True once a question was sent from here: the conversation shows until it is cleared.
     pub(super) asked: bool,
-    /// The agent panel: its session, its rows, and the call waiting on an answer.
-    pub(super) agent: AgentRun,
-    pub(super) agent_scroll: gpui::ScrollHandle,
+    /// The agent seat: the run this finder starts or steers, drawn on the right edge.
+    pub agent: Entity<AgentSeat>,
     pub(super) thread_scroll: gpui::ScrollHandle,
     pub(super) open: bool,
     pub(super) focus_next: bool,
     pub(super) focus: FocusHandle,
     pub(super) _ask: Subscription,
+    _agent: Subscription,
 }
 
 impl EventEmitter<FinderEvent> for Finder {}
@@ -72,6 +71,22 @@ impl Finder {
             }
             cx.notify();
         });
+        let host = repo.shell().ok().map(Host::Shell);
+        let agent = cx.new(|_| {
+            AgentSeat::new(
+                host,
+                false,
+                "Sjel is not reachable, so the agent cannot start.",
+            )
+        });
+        let agent_events =
+            cx.subscribe(&agent, |view, _, event: &AgentSeatEvent, cx| match event {
+                AgentSeatEvent::Started => cx.emit(FinderEvent::AgentStarted),
+                AgentSeatEvent::NewSession => {
+                    view.mode = Mode::Agent;
+                    view.open(cx);
+                }
+            });
         Self {
             repo,
             ask,
@@ -87,13 +102,13 @@ impl Finder {
             cursor: 0,
             picked: false,
             asked: false,
-            agent: AgentRun::default(),
-            agent_scroll: gpui::ScrollHandle::new(),
+            agent,
             thread_scroll: gpui::ScrollHandle::new(),
             open: false,
             focus_next: false,
             focus: cx.focus_handle(),
             _ask: observe,
+            _agent: agent_events,
         }
     }
 
@@ -207,7 +222,7 @@ impl Render for Finder {
                     view.focus_next = true;
                     view.search_server_soon(cx);
                     if mode == Mode::Agent {
-                        view.agent_refresh_sessions(cx);
+                        view.agent.update(cx, |seat, cx| seat.refresh_sessions(cx));
                     }
                     cx.notify();
                 }))
@@ -450,7 +465,7 @@ impl Render for Finder {
                 view.mode = view.mode.next();
                 view.search_server_soon(cx);
                 if view.mode == Mode::Agent {
-                    view.agent_refresh_sessions(cx);
+                    view.agent.update(cx, |seat, cx| seat.refresh_sessions(cx));
                 }
                 cx.notify();
             }))

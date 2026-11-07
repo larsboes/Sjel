@@ -5,13 +5,15 @@
 //! can be attached from anywhere and resumed with `from`. That is the whole reason the phone and
 //! the Mac can watch one run: neither holds the conversation, the capability does.
 //!
-//! Nothing here draws. `apps/gpui/src/finder.rs` and `ui/src/agent/` render what this returns.
+//! Nothing here draws. `ui/src/agent_seat.rs` renders what this returns, on the Mac and the phone.
 
 use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::device::DeviceClient;
 use crate::shell::{spawn, Shell, ShellError, ShellResult};
+pub use crate::terminal::Host;
 
 pub use agent_api::{
     ApproveRequest, CreateSession, Event, PromptRequest, Session, SessionMeta, SteerRequest,
@@ -92,40 +94,7 @@ impl Shell {
                 STREAM_TIMEOUT,
             )
             .await?;
-        let (to, from_channel) = unbounded();
-        spawn(async move {
-            let mut response = response;
-            let mut buffer = Vec::new();
-            loop {
-                let chunk = match response.chunk().await {
-                    Ok(Some(chunk)) => chunk,
-                    Ok(None) | Err(_) => break,
-                };
-                buffer.extend_from_slice(&chunk);
-                while let Some(frame) = next_frame(&mut buffer) {
-                    // A `truncated` frame carries a body this client has no use for: the events
-                    // the reader asked for are gone, and it re-reads the transcript instead.
-                    if frame.event == "truncated" {
-                        let details =
-                            serde_json::from_str::<Event>(&frame.data).unwrap_or_default();
-                        let _ = to.unbounded_send(Event {
-                            kind: "truncated".into(),
-                            first_seq: details.first_seq,
-                            ..Event::default()
-                        });
-                        return;
-                    }
-                    let Ok(event) = serde_json::from_str::<Event>(&frame.data) else {
-                        continue;
-                    };
-                    let terminal = event.terminal();
-                    if to.unbounded_send(event).is_err() || terminal {
-                        return;
-                    }
-                }
-            }
-        });
-        Ok(from_channel)
+        Ok(events(response))
     }
 
     /// The owner's answer to one tool call. `for_session` allows this exact call for the rest of
@@ -197,6 +166,194 @@ impl Shell {
             .await?;
         Ok(stored.messages)
     }
+}
+
+/// Reads a run's event stream into a channel that ends after the terminal event.
+fn events(response: reqwest::Response) -> UnboundedReceiver<Event> {
+    let (to, from_channel) = unbounded();
+    spawn(async move {
+        let mut response = response;
+        let mut buffer = Vec::new();
+        loop {
+            let chunk = match response.chunk().await {
+                Ok(Some(chunk)) => chunk,
+                Ok(None) | Err(_) => break,
+            };
+            buffer.extend_from_slice(&chunk);
+            while let Some(frame) = next_frame(&mut buffer) {
+                // A `truncated` frame carries a body this client has no use for: the events
+                // the reader asked for are gone, and it re-reads the transcript instead.
+                if frame.event == "truncated" {
+                    let details = serde_json::from_str::<Event>(&frame.data).unwrap_or_default();
+                    let _ = to.unbounded_send(Event {
+                        kind: "truncated".into(),
+                        first_seq: details.first_seq,
+                        ..Event::default()
+                    });
+                    return;
+                }
+                let Ok(event) = serde_json::from_str::<Event>(&frame.data) else {
+                    continue;
+                };
+                let terminal = event.terminal();
+                if to.unbounded_send(event).is_err() || terminal {
+                    return;
+                }
+            }
+        }
+    });
+    from_channel
+}
+
+/// The agent routes from either side of the pairing: the Mac's own shell, or the phone's signed
+/// client. The panel above them is written once (`ui/src/agent_seat.rs`).
+impl Host {
+    pub async fn agent_sessions(&self) -> Result<Vec<Session>, String> {
+        #[derive(Deserialize)]
+        struct Listed {
+            #[serde(default)]
+            sessions: Vec<Session>,
+        }
+        match self {
+            Self::Shell(shell) => shell.agent_sessions().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client
+                .get::<Listed>(&format!("{BASE}/api/agent/sessions"))
+                .await
+                .map(|listed| listed.sessions),
+        }
+    }
+
+    pub async fn agent_create(&self, tier: &str) -> Result<Session, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .agent_create(None, Some(tier))
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = json!({ "tier": tier }).to_string();
+                client
+                    .post(&format!("{BASE}/api/agent/sessions"), body.as_bytes())
+                    .await
+            }
+        }
+    }
+
+    pub async fn agent_prompt(&self, id: &str, prompt: &str) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell
+                .agent_prompt(id, prompt)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = json!({ "prompt": prompt }).to_string();
+                post_device(
+                    client,
+                    &format!("{BASE}/api/agent/sessions/{id}/prompt"),
+                    &body,
+                )
+                .await
+            }
+        }
+    }
+
+    pub async fn agent_steer(&self, id: &str, message: &str) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell
+                .agent_steer(id, message)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = json!({ "message": message }).to_string();
+                post_device(
+                    client,
+                    &format!("{BASE}/api/agent/sessions/{id}/steer"),
+                    &body,
+                )
+                .await
+            }
+        }
+    }
+
+    pub async fn agent_approve(
+        &self,
+        id: &str,
+        approval: &str,
+        allow: bool,
+        for_session: bool,
+    ) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell
+                .agent_approve(id, approval, allow, for_session)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let scope = if for_session { "session" } else { "once" };
+                let body =
+                    json!({ "approval_id": approval, "allow": allow, "scope": scope }).to_string();
+                post_device(
+                    client,
+                    &format!("{BASE}/api/agent/sessions/{id}/approve"),
+                    &body,
+                )
+                .await
+            }
+        }
+    }
+
+    pub async fn agent_stop(&self, id: &str) -> Result<(), String> {
+        match self {
+            Self::Shell(shell) => shell.agent_stop(id).await.map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                post_device(
+                    client,
+                    &format!("{BASE}/api/agent/sessions/{id}/stop"),
+                    "{}",
+                )
+                .await
+            }
+        }
+    }
+
+    pub async fn agent_transcript(&self, id: &str) -> Result<Vec<Turn>, String> {
+        #[derive(Deserialize)]
+        struct Stored {
+            #[serde(default)]
+            messages: Vec<Turn>,
+        }
+        match self {
+            Self::Shell(shell) => shell.agent_transcript(id).await.map_err(|e| e.to_string()),
+            Self::Device(client) => client
+                .get::<Stored>(&format!("{BASE}/api/agent/sessions/{id}/transcript"))
+                .await
+                .map(|stored| stored.messages),
+        }
+    }
+
+    pub async fn agent_stream(
+        &self,
+        id: &str,
+        from: u64,
+    ) -> Result<UnboundedReceiver<Event>, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .agent_stream(id, from)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client
+                .streaming_get(&format!(
+                    "{BASE}/api/agent/sessions/{id}/stream?from={from}"
+                ))
+                .await
+                .map(events),
+        }
+    }
+}
+
+async fn post_device(client: &DeviceClient, path: &str, body: &str) -> Result<(), String> {
+    client
+        .post::<serde_json::Value>(path, body.as_bytes())
+        .await
+        .map(|_| ())
 }
 
 /// One server-sent event: its `event:` name (default `message`) and its joined `data:` lines.
@@ -306,37 +463,6 @@ pub enum Row {
     },
     /// A reason the run stopped, or a fact worth a line: usage, a stop, a truncated stream.
     Notice(String),
-}
-
-impl Row {
-    /// Compact single-line or block text representation for mobile/compact transcripts.
-    pub fn display(&self) -> String {
-        match self {
-            Self::Prompt(text) => format!("you: {text}"),
-            Self::Answer(text) => text.clone(),
-            Self::Tool {
-                name,
-                arguments,
-                result,
-                ..
-            } => {
-                let summary = tool_summary(name, arguments);
-                match result {
-                    Some(res) if !res.is_empty() => format!("{name} · {summary} → {res}"),
-                    _ if !summary.is_empty() => format!("{name} · {summary}"),
-                    _ => name.clone(),
-                }
-            }
-            Self::Decided { name, allowed, .. } => {
-                if *allowed {
-                    format!("Allowed · {name}")
-                } else {
-                    format!("Denied · {name}")
-                }
-            }
-            Self::Notice(text) => text.clone(),
-        }
-    }
 }
 
 /// The call the run is waiting on.

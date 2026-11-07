@@ -116,9 +116,7 @@ impl Workspace {
         }
         let seat = self.right_panel.seat();
         let body = match seat {
-            Seat::Agent => self
-                .finder
-                .update(cx, |finder, cx| finder.agent_panel_body(palette, cx)),
+            Seat::Agent => self.finder.read(cx).agent.clone().into_any_element(),
             Seat::Soundscape => div()
                 .p_4()
                 .text_sm()

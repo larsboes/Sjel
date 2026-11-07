@@ -21,13 +21,11 @@ use std::time::Duration;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::StreamExt;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::scroll::ScrollableElement;
 use serde::Deserialize;
 
 use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton, SharedString, Window,
 };
-use sjel_gpui_core::agent::{Event as AgentEvent, Session as AgentSession, Turn as AgentTurn};
 use sjel_gpui_core::data::Board;
 use sjel_gpui_core::data::Repo;
 use sjel_gpui_core::device::{self, DeviceClient, Node, Signer};
@@ -37,6 +35,7 @@ use sjel_gpui_core::notify as reminders;
 use sjel_gpui_core::shell::{self, NodeHealth};
 use sjel_gpui_core::sync::{self, Report};
 use sjel_gpui_core::terminal::Host;
+use sjel_gpui_ui::agent_seat::AgentSeat;
 use sjel_gpui_ui::calendar::{Calendar, CalendarEvent};
 use sjel_gpui_ui::inbox::{Inbox, InboxEvent};
 use sjel_gpui_ui::interior::RoomPlanHistory;
@@ -92,11 +91,6 @@ pub enum Tab {
 
 enum Event {
     Status(String),
-    AgentSessions(Vec<AgentSession>, Option<String>),
-    AgentPrompted(AgentSession),
-    AgentAttached(String, Vec<String>, u64),
-    AgentLine(String, AgentEvent),
-    AgentAction(String),
     /// What the last Bonjour browse found. Empty is a normal answer, not an error. Only an iOS
     /// host browses (`sjel_ios_nodes`), so the macOS build of this crate never constructs it.
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
@@ -153,12 +147,6 @@ enum Event {
     /// A pinch on the page: its scale since it began, and whether it ended (`host/App.swift`).
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     Pinch(f64, bool),
-}
-
-#[derive(Clone, Copy)]
-enum AgentControl {
-    Approve(bool, bool),
-    Stop,
 }
 
 /// A Mac that `host/Discovery.swift` found over Bonjour, from the TXT record the LAN listener
@@ -381,17 +369,10 @@ pub struct Capabilities {
     /// showing and which seat it is on. The soundscape is one seat; the phone's own activity is the
     /// other, and the agent's step stream lands there when a client has one to stream.
     sidebar: Sidebar,
-    agent_sessions: Vec<AgentSession>,
-    agent_rows: Vec<String>,
-    agent_selected: Option<String>,
-    agent_last_seq: u64,
-    agent_sessions_loading: bool,
-    agent_error: Option<String>,
-    agent_pending: Option<AgentEvent>,
+    /// The agent seat over the paired Mac (`sjel_gpui_ui::agent_seat`); the text field is the
+    /// phone's own.
+    agent: gpui::Entity<AgentSeat>,
     agent_input: Option<(gpui::Entity<InputState>, gpui::Subscription)>,
-    agent_busy: bool,
-    agent_text_streaming: bool,
-    agent_draft_tier: &'static str,
     /// The terminal seat, kept while the app stays in the foreground: closing the edge leaves the
     /// stream attached. Going to the background drops it, so a reattach asks for Face ID.
     terminal: Option<(gpui::Entity<TerminalDeck>, gpui::Subscription)>,
@@ -649,82 +630,6 @@ impl Capabilities {
                 let alive = this.update(cx, |view, cx| {
                     match event {
                         Event::Status(text) => view.status = text.into(),
-                        Event::AgentSessions(sessions, error) => {
-                            view.agent_sessions = sessions;
-                            view.agent_error = error;
-                            view.agent_sessions_loading = false;
-                        }
-                        Event::AgentPrompted(session) => {
-                            view.agent_busy = false;
-                            view.agent_sessions.retain(|item| item.id != session.id);
-                            view.agent_sessions.insert(0, session.clone());
-                            view.attach_agent_session(session, false);
-                        }
-                        Event::AgentAttached(id, rows, cursor) => {
-                            if view.agent_selected.as_deref() == Some(id.as_str()) {
-                                view.agent_rows = rows;
-                                view.agent_last_seq = cursor;
-                                view.agent_error = None;
-                                view.agent_pending = None;
-                                view.agent_text_streaming = false;
-                            }
-                        }
-                        Event::AgentLine(session_id, agent_event) => {
-                            if view.agent_selected.as_deref() != Some(session_id.as_str()) {
-                                return;
-                            }
-                            if agent_event.kind == "truncated" {
-                                view.agent_last_seq = agent_event.first_seq.saturating_sub(1);
-                                if let Some(session) = view
-                                    .agent_sessions
-                                    .iter()
-                                    .find(|session| session.id == session_id)
-                                    .cloned()
-                                {
-                                    view.attach_agent_session(session, true);
-                                }
-                                return;
-                            }
-                            let terminal = agent_event.terminal();
-                            view.agent_last_seq = view.agent_last_seq.max(agent_event.seq);
-                            match agent_event.kind.as_str() {
-                                "needs_approval" => view.agent_pending = Some(agent_event.clone()),
-                                "approved" | "denied" | "done" | "stopped" | "error" => {
-                                    view.agent_pending = None;
-                                }
-                                _ => {}
-                            }
-                            match agent_event.kind.as_str() {
-                                "reasoning" => view.agent_text_streaming = false,
-                                "text" => {
-                                    if view.agent_text_streaming {
-                                        if let Some(answer) = view.agent_rows.last_mut() {
-                                            answer.push_str(&agent_event.content);
-                                        }
-                                    } else {
-                                        view.agent_rows.push(agent_event.content.clone());
-                                    }
-                                    view.agent_text_streaming = true;
-                                }
-                                _ => {
-                                    view.agent_text_streaming = false;
-                                    view.agent_rows.push(
-                                        sjel_gpui_ui::agent_seat::format_agent_event(&agent_event),
-                                    );
-                                }
-                            }
-                            if terminal {
-                                view.refresh_agent_sessions();
-                            }
-                        }
-                        Event::AgentAction(message) => {
-                            view.agent_busy = false;
-                            if message.starts_with("Agent ") || message.starts_with("Stream ") {
-                                view.agent_error = Some(message);
-                            } else {
-                                view.agent_rows.push(message);
-                            }
-                        }
                         Event::StoreFailed(text) => view.store_error = Some(text.into()),
                         Event::Copy(outcome) => {
                             view.copying = false;
@@ -934,15 +839,17 @@ impl Capabilities {
                                             client.clone(),
                                         ))
                                     });
+                                    view.agent.update(cx, |seat, cx| {
+                                        seat.set_host(Some(Host::Device(client.clone())), cx);
+                                        if view.sidebar.is_open() && view.sidebar.seat() == Seat::Agent {
+                                            seat.refresh_sessions(cx);
+                                        }
+                                    });
                                     view.client = Some(client);
                                 }
                                 Err(error) => {
                                     view.synced = Some(format!("Cannot sync: {error}").into())
                                 }
-                            }
-                            if view.sidebar.is_open() && view.sidebar.seat() == Seat::Agent {
-                                view.agent_sessions_loading = true;
-                                view.refresh_agent_sessions();
                             }
                             view.maybe_sync(cx);
                             if view.client.is_some() {
@@ -1093,17 +1000,14 @@ impl Capabilities {
         drop(work);
         Self {
             status: "Connecting to the Mac…".into(),
-            agent_sessions: Vec::new(),
-            agent_rows: Vec::new(),
-            agent_selected: None,
-            agent_last_seq: 0,
-            agent_sessions_loading: false,
-            agent_error: None,
-            agent_pending: None,
+            agent: cx.new(|_| {
+                AgentSeat::new(
+                    None,
+                    true,
+                    "Pair this phone with the Mac to watch its agent runs.",
+                )
+            }),
             agent_input: None,
-            agent_busy: false,
-            agent_text_streaming: false,
-            agent_draft_tier: "project",
             terminal: None,
             terminal_unlocked: false,
             pinch_base: 1.0,
@@ -1167,16 +1071,6 @@ impl Capabilities {
         cx.notify();
     }
 
-    fn agent_new_session(&mut self, cx: &mut Context<Self>) {
-        self.agent_selected = None;
-        self.agent_rows.clear();
-        self.agent_last_seq = 0;
-        self.agent_pending = None;
-        self.agent_error = None;
-        self.agent_text_streaming = false;
-        cx.notify();
-    }
-
     /// Opens the right edge on `seat` (`ui/src/sidebar.rs`).
     ///
     /// The audio device is taken here and not at launch: claiming the audio route is a visible act,
@@ -1201,8 +1095,7 @@ impl Capabilities {
             notify::report();
         }
         if seat == Seat::Agent {
-            self.agent_sessions_loading = true;
-            self.refresh_agent_sessions();
+            self.agent.update(cx, |seat, cx| seat.refresh_sessions(cx));
         }
         if seat == Seat::Terminal {
             if self.terminal_unlocked {
@@ -1313,25 +1206,6 @@ impl Capabilities {
         self.appearance.apply_to_palette(base, is_dark)
     }
 
-    fn refresh_agent_sessions(&self) {
-        let (Some(client), events) = (self.client.clone(), self.events.clone()) else {
-            return;
-        };
-        shell::spawn(async move {
-            #[derive(Deserialize)]
-            struct Listed {
-                #[serde(default)]
-                sessions: Vec<AgentSession>,
-            }
-            let result = client.get::<Listed>("/agent/api/agent/sessions").await;
-            let event = match result {
-                Ok(listed) => Event::AgentSessions(listed.sessions, None),
-                Err(error) => Event::AgentSessions(Vec::new(), Some(error)),
-            };
-            let _ = events.unbounded_send(event);
-        });
-    }
-
     fn agent_input(
         &mut self,
         window: &mut Window,
@@ -1348,268 +1222,11 @@ impl Capabilities {
                     return;
                 }
                 input.update(cx, |input, cx| input.set_value("", window, cx));
-                view.agent_prompt(prompt, cx);
+                view.agent.update(cx, |seat, cx| seat.submit(prompt, cx));
             }
         });
         self.agent_input = Some((input.clone(), subscription));
         input
-    }
-
-    fn agent_prompt(&mut self, prompt: String, cx: &mut Context<Self>) {
-        if self.agent_busy {
-            return;
-        }
-        let Some(client) = self.client.clone() else {
-            self.agent_error =
-                Some("Pair this phone with the Mac before starting an agent run.".into());
-            cx.notify();
-            return;
-        };
-        let selected = self.agent_selected.clone();
-        let events = self.events.clone();
-        let draft_tier = self.agent_draft_tier;
-        self.agent_busy = true;
-        self.agent_error = None;
-        shell::spawn(async move {
-            let result: Result<Option<AgentSession>, String> = async {
-                let (id, active) = match selected {
-                    Some(id) => {
-                        let session = client
-                            .get::<AgentSession>(&format!("/agent/api/agent/sessions/{id}"))
-                            .await?;
-                        (id, session.active)
-                    }
-                    None => {
-                        let body = serde_json::to_vec(&serde_json::json!({ "tier": draft_tier }))
-                            .unwrap_or_default();
-                        let session = client
-                            .post::<AgentSession>("/agent/api/agent/sessions", &body)
-                            .await?;
-                        (session.id, false)
-                    }
-                };
-                let (path, body) = if active {
-                    (
-                        format!("/agent/api/agent/sessions/{id}/steer"),
-                        serde_json::json!({ "message": prompt }),
-                    )
-                } else {
-                    (
-                        format!("/agent/api/agent/sessions/{id}/prompt"),
-                        serde_json::json!({ "prompt": prompt }),
-                    )
-                };
-                let _: serde_json::Value =
-                    client.post(&path, &body.to_string().into_bytes()).await?;
-                if active {
-                    Ok(None)
-                } else {
-                    let session = client
-                        .get::<AgentSession>(&format!("/agent/api/agent/sessions/{id}"))
-                        .await?;
-                    Ok(Some(session))
-                }
-            }
-            .await;
-            match result {
-                Ok(Some(session)) => {
-                    let _ = events.unbounded_send(Event::AgentPrompted(session));
-                }
-                Ok(None) => {
-                    let _ = events.unbounded_send(Event::AgentAction(
-                        "Message queued for the next model step.".into(),
-                    ));
-                }
-                Err(error) => {
-                    let _ = events.unbounded_send(Event::AgentAction(format!(
-                        "Agent request failed: {error}"
-                    )));
-                }
-            }
-        });
-        cx.notify();
-    }
-
-    fn agent_control(&mut self, action: AgentControl, cx: &mut Context<Self>) {
-        let (Some(client), Some(id)) = (self.client.clone(), self.agent_selected.clone()) else {
-            return;
-        };
-        let pending = self.agent_pending.clone();
-        if matches!(action, AgentControl::Approve(_, _)) && pending.is_none() {
-            return;
-        }
-        if self.agent_busy {
-            return;
-        }
-        self.agent_busy = true;
-        let events = self.events.clone();
-        shell::spawn(async move {
-            let result = match action {
-                AgentControl::Approve(allow, for_session) => {
-                    let approval = pending.map(|event| event.approval).unwrap_or_default();
-                    let scope = if for_session { "session" } else { "once" };
-                    let body = serde_json::json!({ "approval_id": approval, "allow": allow, "scope": scope });
-                    client
-                        .post::<serde_json::Value>(
-                            &format!("/agent/api/agent/sessions/{id}/approve"),
-                            &body.to_string().into_bytes(),
-                        )
-                        .await
-                        .map(|_| {
-                            if allow {
-                                "Approval sent."
-                            } else {
-                                "Denial sent."
-                            }
-                        })
-                }
-                AgentControl::Stop => client
-                    .post::<serde_json::Value>(
-                        &format!("/agent/api/agent/sessions/{id}/stop"),
-                        b"{}",
-                    )
-                    .await
-                    .map(|_| "Stop requested."),
-            };
-            let message = result
-                .map(str::to_owned)
-                .unwrap_or_else(|error| format!("Agent action failed: {error}"));
-            let _ = events.unbounded_send(Event::AgentAction(message));
-        });
-        cx.notify();
-    }
-
-    fn attach_agent_session(&mut self, session: AgentSession, reload: bool) {
-        let Some(client) = self.client.clone() else {
-            self.agent_error = Some("Pair with the Mac to attach to its agent runs.".into());
-            return;
-        };
-        let events = self.events.clone();
-        let from = if self.agent_selected.as_deref() == Some(&session.id) {
-            self.agent_last_seq
-        } else {
-            0
-        };
-        let already_attached = self.agent_selected.as_deref() == Some(&session.id);
-        if !already_attached {
-            self.agent_selected = Some(session.id.clone());
-            self.agent_rows.clear();
-            self.agent_last_seq = 0;
-            self.agent_pending = None;
-        }
-        shell::spawn(async move {
-            #[derive(Deserialize)]
-            struct Stored {
-                #[serde(default)]
-                messages: Vec<AgentTurn>,
-            }
-            let path = format!("/agent/api/agent/sessions/{}/transcript", session.id);
-            let rows = if already_attached && !reload {
-                None
-            } else {
-                match client.get::<Stored>(&path).await {
-                    Ok(stored) => {
-                        let mut turns = stored.messages;
-                        if session.active
-                            && turns
-                                .last()
-                                .is_some_and(|turn| turn.role.as_str() == "user")
-                        {
-                            turns.pop();
-                        }
-                        Some(
-                            turns
-                                .into_iter()
-                                .filter_map(|turn| {
-                                    turn.content.map(|text| format!("{}: {text}", turn.role))
-                                })
-                                .collect(),
-                        )
-                    }
-                    Err(error) => {
-                        let _ =
-                            events.unbounded_send(Event::AgentSessions(vec![session], Some(error)));
-                        return;
-                    }
-                }
-            };
-            if let Some(rows) = rows {
-                let _ = events.unbounded_send(Event::AgentAttached(session.id.clone(), rows, from));
-            }
-            if !session.active {
-                return;
-            }
-            let mut cursor = from;
-            for attempt in 0..5 {
-                let path = format!(
-                    "/agent/api/agent/sessions/{}/stream?from={cursor}",
-                    session.id
-                );
-                let mut response = match client.streaming_get(&path).await {
-                    Ok(response) => response,
-                    Err(error) if attempt == 4 => {
-                        let _ = events.unbounded_send(Event::AgentAction(format!(
-                            "Stream reconnect failed: {error}. Tap the session to retry."
-                        )));
-                        return;
-                    }
-                    Err(_) => {
-                        tokio::time::sleep(Duration::from_secs(2)).await;
-                        continue;
-                    }
-                };
-                let mut buffer = Vec::new();
-                let mut ended = false;
-                while !ended {
-                    let chunk = match response.chunk().await {
-                        Ok(Some(chunk)) => chunk,
-                        Ok(None) | Err(_) => break,
-                    };
-                    buffer.extend_from_slice(&chunk);
-                    while let Some(end) = buffer.windows(2).position(|window| window == b"\n\n") {
-                        let frame: Vec<u8> = buffer.drain(..end + 2).collect();
-                        let frame_text = String::from_utf8_lossy(&frame);
-                        let frame_kind = frame_text
-                            .lines()
-                            .find_map(|line| line.strip_prefix("event: "))
-                            .unwrap_or_default();
-                        let data = frame_text
-                            .lines()
-                            .filter_map(|line| line.strip_prefix("data: "))
-                            .map(str::trim)
-                            .map(str::to_owned)
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        let Ok(mut event) = serde_json::from_str::<AgentEvent>(&data) else {
-                            continue;
-                        };
-                        if frame_kind == "truncated" {
-                            event.kind = "truncated".into();
-                        }
-                        if event.seq > cursor || event.kind == "truncated" {
-                            cursor = cursor.max(event.seq);
-                            let _ = events.unbounded_send(Event::AgentLine(
-                                session.id.clone(),
-                                event.clone(),
-                            ));
-                        }
-                        if event.terminal() || event.kind == "truncated" {
-                            ended = true;
-                            break;
-                        }
-                    }
-                }
-                if ended {
-                    return;
-                }
-                if attempt < 4 {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                }
-            }
-            let _ = events.unbounded_send(Event::AgentAction(
-                "Stream disconnected after five attempts. Tap the session to retry.".into(),
-            ));
-        });
     }
 
     /// Puts the edge away, and stops the sound with it: a panel that is not on screen is not a thing
@@ -1693,25 +1310,19 @@ impl Capabilities {
             .into_any_element()
     }
 
-    /// The paired phone can start, follow, and approve a run held by the Mac.
+    /// The paired phone can start, follow, and approve a run held by the Mac. The seat draws the
+    /// run; the phone adds its text field and a send button above it.
     fn agent_panel(
         &mut self,
         palette: Palette,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let paired = self.client.is_some();
-        let loading = self.agent_sessions_loading;
-        let sessions = self.agent_sessions.clone();
-        let rows = self.agent_rows.clone();
-        let selected = self.agent_selected.clone();
-        let error = self.agent_error.clone();
-        let pending = self.agent_pending.clone();
-        let busy = self.agent_busy;
-        let selected_active = selected
-            .as_ref()
-            .and_then(|id| self.agent_sessions.iter().find(|session| &session.id == id))
-            .is_some_and(|session| session.active);
+        let seat = self.agent.clone();
+        if !seat.read(cx).connected() {
+            return seat.into_any_element();
+        }
+        let running = seat.read(cx).run.running;
         let input = self.agent_input(window, cx);
         div()
             .id("agent-activity")
@@ -1719,288 +1330,41 @@ impl Capabilities {
             .min_h_0()
             .flex()
             .flex_col()
-            .gap_2()
-            .p_4()
-            .when(paired, |panel| {
-                panel.child(
-                    div()
-                        .id("phone-agent-refresh")
-                        .self_flex_end()
-                        .px_3()
-                        .py_2()
-                        .rounded(px(7.))
-                        .text_color(rgb(palette.muted))
-                        .child("Refresh sessions")
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|view, _, _, cx| {
-                                view.agent_sessions_loading = true;
-                                view.refresh_agent_sessions();
-                                cx.notify();
-                            }),
-                        ),
-                )
-            })
-            .when(paired && loading, |panel| {
-                panel.child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child("Loading agent sessions…"),
-                )
-            })
-            .when(
-                paired && !loading && sessions.is_empty() && error.is_none(),
-                |panel| {
-                    panel.child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(palette.muted))
-                            .child("No agent sessions yet."),
-                    )
-                },
-            )
-            .when(!paired, |panel| {
-                panel.child(
-                    div()
-                        .text_sm()
-                        .text_color(rgb(palette.muted))
-                        .child("Pair this phone with the Mac to watch its agent runs."),
-                )
-            })
-            .children(sessions.into_iter().map(|session| {
-                let active = selected.as_deref() == Some(session.id.as_str());
-                let session_for_click = session.clone();
-                sjel_gpui_ui::agent_seat::session_row(
-                    "phone-agent",
-                    &session,
-                    active,
-                    palette,
-                    cx.listener(move |view, _, _, _cx| {
-                        view.attach_agent_session(session_for_click.clone(), false)
-                    }),
-                )
-            }))
-            .when(paired, |panel| {
-                panel
-                    .when(selected.is_none(), |panel| {
-                        let draft_tier = self.agent_draft_tier;
-                        panel.child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .px_1()
-                                .py_1()
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child("Tier:"),
-                                )
-                                .child(sjel_gpui_ui::agent_seat::tier_pill(
-                                    "phone",
-                                    "sjel",
-                                    draft_tier == "sjel",
-                                    palette,
-                                    cx.listener(|view, _, _, cx| {
-                                        view.agent_draft_tier = "sjel";
-                                        cx.notify();
-                                    }),
-                                ))
-                                .child(sjel_gpui_ui::agent_seat::tier_pill(
-                                    "phone",
-                                    "project",
-                                    draft_tier == "project",
-                                    palette,
-                                    cx.listener(|view, _, _, cx| {
-                                        view.agent_draft_tier = "project";
-                                        cx.notify();
-                                    }),
-                                ))
-                                .child(sjel_gpui_ui::agent_seat::tier_pill(
-                                    "phone",
-                                    "account",
-                                    draft_tier == "account",
-                                    palette,
-                                    cx.listener(|view, _, _, cx| {
-                                        view.agent_draft_tier = "account";
-                                        cx.notify();
-                                    }),
-                                )),
-                        )
-                    })
-                    .child(div().child(Input::new(&input)))
-                    .child(
-                        div()
-                            .id("phone-agent-new")
-                            .px_3()
-                            .py_2()
-                            .rounded(px(7.))
-                            .text_color(rgb(palette.text))
-                            .child("New session")
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(|view, _, _, cx| view.agent_new_session(cx)),
-                            ),
-                    )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .p_3()
+                    .child(div().flex_1().child(Input::new(&input)))
                     .child(
                         div()
                             .id("phone-agent-send")
+                            .min_h(px(44.))
+                            .flex()
+                            .items_center()
                             .px_3()
-                            .py_2()
                             .rounded(px(7.))
                             .bg(rgba(palette.raised))
                             .text_color(rgb(palette.text))
-                            .child(if busy {
-                                "Working…"
-                            } else if selected_active {
-                                "Send guidance"
-                            } else {
-                                "Start run"
-                            })
-                            .when(!busy, |button| {
-                                button.on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(|view, _, window, cx| {
-                                        let prompt = view
-                                            .agent_input
-                                            .as_ref()
-                                            .map(|(input, _)| {
-                                                input.read(cx).value().trim().to_owned()
-                                            })
-                                            .unwrap_or_default();
-                                        if prompt.is_empty() {
-                                            return;
-                                        }
-                                        if let Some((input, _)) = &view.agent_input {
-                                            input.update(cx, |input, cx| {
-                                                input.set_value("", window, cx)
-                                            });
-                                        }
-                                        view.agent_prompt(prompt, cx);
-                                    }),
-                                )
-                            }),
-                    )
-            })
-            .when_some(pending, |panel, pending| {
-                let is_block = pending.class.as_deref() == Some("block")
-                    || pending.rule.as_ref().is_some_and(|r| r.starts_with('B'));
-                let preview = if pending.preview.is_empty() {
-                    pending.name.clone()
-                } else {
-                    pending.preview.clone()
-                };
-                let diff = pending.diff.clone();
-                let title = if is_block {
-                    match &pending.rule {
-                        Some(rule) => format!("Blocked by policy · rule {rule} · {}", pending.name),
-                        None => format!("Blocked by policy · {}", pending.name),
-                    }
-                } else {
-                    match &pending.rule {
-                        Some(rule) => format!("Approval · rule {rule} · {}", pending.name),
-                        None => format!("Approval · {}", pending.name),
-                    }
-                };
-                panel.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .rounded(px(8.))
-                        .bg(rgba(palette.raised))
-                        .border_1()
-                        .border_color(if is_block {
-                            rgb(palette.red)
-                        } else {
-                            rgba(palette.border)
-                        })
-                        .p_3()
-                        .text_color(rgb(palette.text))
-                        .child(
-                            div()
-                                .text_color(rgb(if is_block {
-                                    palette.red
-                                } else {
-                                    palette.accent
-                                }))
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(title),
-                        )
-                        .child(preview)
-                        .when_some(diff, |card, diff| card.child(div().text_xs().child(diff)))
-                        .child(
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(agent_action_button(
-                                    if is_block {
-                                        "Allow once (override)"
-                                    } else {
-                                        "Allow once"
-                                    },
-                                    "phone-agent-allow-once",
-                                    palette,
-                                    cx,
-                                    |view, cx| {
-                                        view.agent_control(AgentControl::Approve(true, false), cx)
-                                    },
-                                ))
-                                .when(!is_block, |actions| {
-                                    actions.child(agent_action_button(
-                                        "Allow session",
-                                        "phone-agent-allow-session",
-                                        palette,
-                                        cx,
-                                        |view, cx| {
-                                            view.agent_control(
-                                                AgentControl::Approve(true, true),
-                                                cx,
-                                            )
-                                        },
-                                    ))
-                                })
-                                .child(agent_action_button(
-                                    "Deny",
-                                    "phone-agent-deny",
-                                    palette,
-                                    cx,
-                                    |view, cx| {
-                                        view.agent_control(AgentControl::Approve(false, false), cx)
-                                    },
-                                )),
-                        ),
-                )
-            })
-            .when(selected_active, |panel| {
-                panel.when(!busy, |panel| {
-                    panel.child(agent_action_button(
-                        "Stop run",
-                        "phone-agent-stop",
-                        palette,
-                        cx,
-                        |view, cx| view.agent_control(AgentControl::Stop, cx),
-                    ))
-                })
-            })
-            .when_some(error, |panel, error| {
-                panel.child(div().text_sm().text_color(rgb(palette.red)).child(error))
-            })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scrollbar()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .children(
-                        rows.into_iter()
-                            .map(|row| div().text_sm().text_color(rgb(palette.text)).child(row)),
+                            .child(if running { "Guide" } else { "Start" })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|view, _, window, cx| {
+                                    let Some((input, _)) = &view.agent_input else {
+                                        return;
+                                    };
+                                    let prompt = input.read(cx).value().trim().to_owned();
+                                    if prompt.is_empty() {
+                                        return;
+                                    }
+                                    input.update(cx, |input, cx| input.set_value("", window, cx));
+                                    view.agent.update(cx, |seat, cx| seat.submit(prompt, cx));
+                                }),
+                            ),
                     ),
             )
+            .child(seat)
             .into_any_element()
     }
 
@@ -2536,27 +1900,6 @@ fn needs_mac(
                 ),
         )
         .into_any_element()
-}
-
-fn agent_action_button(
-    label: &'static str,
-    id: &'static str,
-    palette: Palette,
-    cx: &mut Context<Capabilities>,
-    action: impl Fn(&mut Capabilities, &mut Context<Capabilities>) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .px_3()
-        .py_2()
-        .rounded(px(7.))
-        .bg(rgba(palette.surface))
-        .text_color(rgb(palette.text))
-        .child(label)
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(move |view, _, _, cx| action(view, cx)),
-        )
 }
 
 /// The day a launch flag fixed, for a page that must not move under a screenshot. A phone never

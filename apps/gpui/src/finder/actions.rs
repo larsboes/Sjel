@@ -69,11 +69,11 @@ impl Finder {
             if text.is_empty() {
                 return;
             }
-            if self.agent.running {
-                self.agent_steer(text, window, cx);
-            } else {
-                self.agent_send(text, window, cx);
+            self.query.clear();
+            if let Some((input, _)) = &self.input {
+                input.update(cx, |input, cx| input.set_value("", window, cx));
             }
+            self.agent.update(cx, |seat, cx| seat.submit(text, cx));
             return;
         }
         let mut ask = self.resolved() == Mode::Ask && !self.picked;

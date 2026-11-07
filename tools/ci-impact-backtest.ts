@@ -1,9 +1,6 @@
 // tools/ci-impact-backtest.ts — test the Rust impact planner against CI's own history.
 //
-// For each completed CI run, take the change it tested, plan it with tools/ci-impact.ts as
-// that commit stood, and read which packages actually failed `cargo test`. A failed package
-// the plan left out is a miss: selective CI would have skipped a real failure. Enforcement
-// waits on zero misses.
+// Replay the current selector against archived CI inputs and observed package failures.
 //
 //   bun run tools/ci-impact-backtest.ts [--limit N] [--json]
 //
@@ -12,7 +9,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { changedFiles, failedPackages, rootPackages, rustImpact, targetMap } from "./ci-impact.ts";
+import { failedPackages, rootPackages, rustImpact, targetMap } from "./ci-impact.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 const JOB = "cargo test (hermetic)";
@@ -45,7 +42,7 @@ function backtest(run: any, previousPush: string | undefined): Row | null {
   if (!job || !["success", "failure"].includes(job.conclusion)) return null;
   const api = JSON.parse(sh(["gh", "api", `repos/{owner}/{repo}/actions/runs/${run.databaseId}`]));
   const head = run.headSha;
-  // A push can carry several commits, so its range starts at the previous push's head.
+  // Failed and cancelled pushes remain in scope until a successful ancestor covers them.
   let base = api.pull_requests?.[0]?.base?.sha ?? previousPush ?? "";
   sh(["git", "fetch", "-q", "origin", head]);
   if (!base) base = `${head}^`;
@@ -54,8 +51,10 @@ function backtest(run: any, previousPush: string | undefined): Row | null {
 
   const dir = mkdtempSync(join(tmpdir(), "sjel-backtest-"));
   try {
-    sh(["git", "worktree", "add", "-q", "--detach", dir, head]);
-    const { files, deleted } = changedFiles(dir, base, false);
+    sh(["bash", "-o", "pipefail", "-c", 'git archive "$1" | tar -x -C "$2"', "_", head, dir]);
+    const diff = (filter: string[]) => sh(["git", "diff", "--name-only", "-z", "--no-renames", ...filter, `${base}...${head}`]).split("\0").filter(Boolean);
+    const files = new Set(diff([]));
+    const deleted = new Set(diff(["--diff-filter=D"]));
     const packages = rootPackages(dir);
     const impact = rustImpact([...files].sort(), packages, [...deleted].sort());
     const failed = job.conclusion === "failure"
@@ -68,7 +67,6 @@ function backtest(run: any, previousPush: string | undefined): Row | null {
       failed, missed: failed.filter((p) => !selected.has(p)), headSha: head, baseSha,
     };
   } finally {
-    sh(["git", "worktree", "remove", "--force", dir]);
     rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -79,11 +77,10 @@ if (import.meta.main) {
   const runs = JSON.parse(sh(["gh", "run", "list", "--workflow", "ci.yml", "--status", "completed", "--limit", String(limit), "--json", "databaseId,headSha,event,conclusion"]));
   const rows: Row[] = [];
   const errors: string[] = [];
-  // A cancelled run tested nothing, so the range reaches back to the last push that finished.
-  const pushes = runs.filter((r: any) => r.event === "push" && ["success", "failure"].includes(r.conclusion)).sort((a: any, b: any) => b.databaseId - a.databaseId);
+  const pushes = runs.filter((r: any) => r.event === "push" && r.conclusion === "success").sort((a: any, b: any) => b.databaseId - a.databaseId);
   for (const run of runs) {
     try {
-      const previous = run.event === "push" ? pushes.find((p: any) => p.databaseId < run.databaseId && p.headSha !== run.headSha)?.headSha : undefined;
+      const previous = run.event === "push" ? pushes.find((p: any) => p.databaseId < run.databaseId && p.headSha !== run.headSha && Bun.spawnSync(["git", "merge-base", "--is-ancestor", p.headSha, run.headSha], { cwd: ROOT }).exitCode === 0)?.headSha : undefined;
       const row = backtest(run, previous);
       if (row) rows.push(row);
     } catch (error) {

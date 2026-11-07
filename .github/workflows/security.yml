@@ -1,43 +1,51 @@
 name: Security
 
-# The scanners that run whether or not the operator's machine is awake. tools/audit is the
-# local command over the two surfaces CI cannot reach cheaply; this is the other half.
-#
-# What is NOT here, deliberately:
-#   gitleaks  GitHub secret scanning with push protection already covers this public repo, and
-#             the private overlay — the surface with no free scanning — is unreachable from
-#             this repository's CI. tools/audit is where the overlay gets scanned.
-#   SARIF     nothing uploads here, so no job needs `security-events: write` and a fork pull
-#             request cannot fail on a permission it never gets. A source finding turns the
-#             `deps` job red and is read in its log; an IMAGE finding is report-only since
-#             Q77 and is read in the run summary (see the `images` job). Adding the
-#             code-scanning tab back is a later decision with a stated cost, not an omission.
-#
-# Both scanners install the LATEST release, which since Q77 (2026-09-02) is what every
-# dependency here does — this workflow simply got there first, because a scanner is judged by
-# whether its matcher and its database are current. upstreams.toml records verdicts and no
-# versions at all now. Neither install pipes a script into a shell, and neither writes outside
-# the runner's own temporary directory.
+# Dependency findings fail; image findings report without blocking merges.
 
 on:
   push:
     branches: [main]
   pull_request:
   schedule:
-    # Monday 05:41 UTC, deliberately clear of codeql.yml's "17 4 * * 1" — two scanners
-    # starting in the same minute makes one queue behind the other for nothing.
     - cron: "41 5 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: security-${{ github.ref }}
-  cancel-in-progress: true
+  group: security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
+  plan:
+    name: select security scans
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      deps: ${{ steps.plan.outputs.deps }}
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - name: Check out Sjel
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Plan and summarize
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun tools/ci-plan.ts --workflow security.yml --output "$RUNNER_TEMP/security-plan.json" --github-output "$GITHUB_OUTPUT"
+
   deps:
     name: osv-scanner (every lockfile)
+    needs: plan
+    if: needs.plan.outputs.deps == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out Sjel
@@ -61,20 +69,10 @@ jobs:
             --experimental-exclude node_modules \
             --experimental-exclude to-integrate .
 
-  # REPORT-ONLY about IMAGES, and that is the whole point of the job (Q77, 2026-09-02).
-  # Every declared image tracks a rolling tag now, so a CVE published against an upstream base
-  # layer turns this red through no change of Sjel's. Dependabot's pull requests auto-merge on
-  # the required checks (.github/workflows/dependabot-automerge.yml), and a dependency bump held
-  # back by somebody else's image is the exact failure the ruling was made to remove. The counts
-  # land in the run summary instead, where they are read on every run rather than only when
-  # something goes red.
-  #
-  # `continue-on-error` sits on the SCAN STEP and not on the job, because exactly one failure
-  # here is still Sjel's own and still has to be fatal: a discovery loop that matched no image
-  # scanned nothing while reporting success. That check is the last step, it has no
-  # continue-on-error, and it is why this job can still go red.
   images:
     name: grype (every declared image)
+    needs: plan
+    if: needs.plan.outputs.images == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out Sjel
@@ -92,9 +90,7 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/grype" version
       - name: Scan
-        # Ignored on purpose: a finding about somebody else's base layer is reported, never
-        # enforced. The step still exits non-zero so its own log reads honestly, and the run
-        # summary carries the counts.
+        # Findings and scanner outages are report-only; discovery failure is fatal below.
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -110,29 +106,19 @@ jobs:
             echo "|---|---:|---:|---|"
           } >> "$GITHUB_STEP_SUMMARY"
           for m in crates/*/service.toml services/*/service.toml capabilities/*/service.toml; do
+            [ -f "$m" ] || continue
             image=$(sed -n 's/^image *= *"\([^"]*\)".*/\1/p' "$m" | head -1)
             [ -n "$image" ] || continue
             tag=$(sed -n 's/^tag *= *"\([^"]*\)".*/\1/p' "$m" | head -1)
             ref="$image:${tag:-latest}"
-            # The discovery record the guard step reads. Written before the scan runs: the
-            # question that step asks is "did this loop find images", not "did they scan".
+            # Record discovery before scanning so an outage is not a zero-image failure.
             printf '%s\n' "$ref" >> "$RUNNER_TEMP/scanned.txt"
             echo "::group::$ref"
-            # registry: pulls straight from the registry — no container runtime and no daemon
-            # (grype's own help says so). Discovered from the manifests, never named here, so
-            # a capability added tomorrow is covered without an edit.
-            #
-            # --fail-on high AND -o json, because the exit code carries the one distinction a
-            # count cannot make: grype exits 2 when it FOUND something at or above the
-            # threshold and 1 when it could not scan at all. Collapsing those into "non-zero"
-            # is how an unreachable registry reads as a clean image, or as a critical one.
-            grype "registry:$ref" --fail-on high -o json > "$RUNNER_TEMP/grype.json" 2> "$RUNNER_TEMP/grype.err"
-            grc=$?
+            grc=0
+            grype "registry:$ref" --fail-on high -o json > "$RUNNER_TEMP/grype.json" 2> "$RUNNER_TEMP/grype.err" || grc=$?
+            # Exit 2 means findings; other failures are not a clean image verdict.
             case "$grc" in
               0|2)
-                # `|| echo ?` on both: an exit code of 0 or 2 says grype ran, not that it
-                # wrote parseable JSON, and a jq failure must not print an empty cell that
-                # reads as zero.
                 crit=$(jq '[.matches[] | select(.vulnerability.severity == "Critical")] | length' "$RUNNER_TEMP/grype.json" 2>/dev/null || echo '?')
                 high=$(jq '[.matches[] | select(.vulnerability.severity == "High")] | length' "$RUNNER_TEMP/grype.json" 2>/dev/null || echo '?')
                 if [ "$grc" -eq 0 ]; then
@@ -146,8 +132,6 @@ jobs:
                   "$RUNNER_TEMP/grype.json" | sort -u
                 ;;
               *)
-                # Not a verdict about the image. An unreachable registry, a rate limit, a
-                # manifest grype cannot read — say so instead of printing a zero.
                 crit="?"; high="?"
                 verdict="COULD NOT SCAN (grype exit $grc)"
                 rc=1
@@ -159,11 +143,7 @@ jobs:
           done
           exit "$rc"
       - name: The scan covered something
-        # A real defect in this job, not a finding about an image: the discovery loop matched
-        # nothing, so the scan covered nothing while reporting success. Its own step, with no
-        # continue-on-error, because the step above deliberately cannot fail the job and this
-        # must. It reads the file rather than a variable — a step boundary is what separates
-        # the two failure kinds, and nothing crosses it in memory.
+        # Never report a successful job when discovery matched no image.
         run: |
           set -euo pipefail
           if [ ! -s "$RUNNER_TEMP/scanned.txt" ]; then

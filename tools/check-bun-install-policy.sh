@@ -1,33 +1,5 @@
 #!/bin/bash
-# check-bun-install-policy.sh — the frontend install boundary must never execute lifecycle hooks,
-# and every tree that resolves dependencies must carry the npm-only adoption hold.
-#
-# ChainDrop used an npm preinstall hook, before the dependency tree had finished installing. Sjel's
-# frontend packages are fully resolved by committed Bun lockfiles, and nothing that installs them
-# needs lifecycle hooks. Keep that invariant in every place that performs or teaches a frontend
-# dependency install.
-#
-#
-# THE SECOND INVARIANT, added 2026-09-22 (Q109). Two settings belong in every tree that resolves
-# dependencies, and BOTH are per tree rather than repository-wide because Bun does not inherit a
-# parent directory's bunfig.toml — measured on 1.4.2 on 2026-09-22, an install run from a
-# subdirectory ignores ../bunfig.toml. The hold is a real control only where resolution happens:
-#
-#   [install] minimumReleaseAge = 86400            the npm-only 24h adoption hold
-#   [install.security] scanner = "@socketsecurity/bun-security-scanner"
-#                                                  the malicious-publish check, read at install
-#
-# So the set of trees is DERIVED from the committed lockfiles rather than listed, for the reason
-# bunfig.toml gives about test discovery: the moment this file names directories, a new tree's
-# coverage depends on somebody remembering to come here. A tree is "resolves dependencies" if it
-# has a committed package.json beside a bun.lock. Vendored trees are carved out — a copy of
-# another project is not this repository's configuration to set, the same carve-out the root
-# bunfig's [test] pathIgnorePatterns makes and for the same reason.
-#
-# What is NOT derived and cannot be: whether a scanner configured in bunfig is actually installed.
-# Bun enforces that itself — a configured scanner missing from node_modules is a hard
-# SecurityScannerNotInDependencies failure that stops the install (measured 2026-09-22), so the
-# dependency cannot drift away from the config silently. This script checks the config line.
+# Enforce script-free installs and per-package adoption/scanner settings.
 set -eu
 
 ROOT="${SJEL_BUN_INSTALL_POLICY_ROOT:-.}"
@@ -41,31 +13,20 @@ require() { # require <path> <literal>
   fi
 }
 
-require ".github/workflows/ci.yml" "bun install --frozen-lockfile --ignore-scripts"
-require ".github/workflows/ci.yml" "bun pm scan"
+if grep -Fq 'bun tools/ci-run.ts ui-check' "$ROOT/.github/workflows/ci.yml"; then
+  require ".github/workflows/ci.yml" "bun tools/ci-run.ts bun-tests"
+  require "tools/ci-run.ts" '["bun", "install", "--frozen-lockfile", "--ignore-scripts"]'
+  require "tools/ci-run.ts" '["bun", "pm", "scan"]'
+else
+  require ".github/workflows/ci.yml" "bun install --frozen-lockfile --ignore-scripts"
+  require ".github/workflows/ci.yml" "bun pm scan"
+fi
 if [ -f "$ROOT/crates/comms/clipper/README.md" ]; then
   require "crates/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
 else
   require "capabilities/comms/clipper/README.md" "bun install --frozen-lockfile --ignore-scripts"
 fi
 
-# Trees that resolve dependencies: a package.json with a committed bun.lock beside it.
-#
-# The prune list is derived trees, not an allow-list of our directories: node_modules and .git
-# are not this repository, target/ is cargo's output, .claude/worktrees/ is a scratch checkout of
-# this repository (a red gate there is a red gate nobody can act on), and bazel-* is the root
-# symlinks the root bunfig already ignores for tests. Upstream's `-path` prune is what carries the vendored carve-out,
-# because bash 3.2.57 — the stock macOS shell this repository targets (CONTRIBUTING.md#portable-shell)
-# — cannot PARSE a `case` statement inside a command substitution containing a pipeline: measured
-# 2026-09-22, `/bin/bash -c 'X="$(printf a | while read l; do case "$l" in a) ;; esac; done)"'`
-# is a syntax error on 3.2.57 and parses on bash 5. Writing the carve-out as a `case` in the
-# loop below would therefore have been a script that runs on the machine that edited it and
-# fails to parse on the machine that ships it.
-#
-# The accumulation is newline-separated and consumed by a `while read` on a heredoc, never a
-# `for` over an unquoted expansion: a checkout under a path with a space in it is otherwise two
-# trees that do not exist. Heredocs keep both loops in THIS shell, so the vendored-branch's
-# `continue` and the `fail` flag below are the same variable the rest of this script reads.
 trees=""
 while IFS= read -r pkg; do
   [ -n "$pkg" ] || continue

@@ -1,127 +1,108 @@
-// tools/lib/ci-workflow.ts — the pure half of tools/ci-local: what CI declares, and which
-// of it may be replayed on a machine that is not a disposable runner.
-//
-// Split out for the reason the self-model's pure half was (`tools/sjel-cli/src/self_model/
-// model.rs`): the launcher owns the I/O and the
-// process, this owns the decisions, and `bun test` can import this without the CLI running
-// itself on import.
-
-/**
- * One `run:` step of a job, with the name the workflow gives it.
- *
- * `uses:` steps have no script and are absent from this type entirely — see parseJobs.
- */
+/** One shell step, including its checkout-relative working directory. */
 export interface WorkflowStep {
   name: string;
   script: string;
-  /**
-   * The step's `working-directory:`, relative to the checkout, when it declares one.
-   *
-   * Carried because dropping it is not a harmless simplification: a step that declares it
-   * runs somewhere else in CI, so replaying that script from the checkout root runs
-   * something CI never runs. That is the same class of lie this tool exists to remove, and
-   * it bit for real on 2026-09-17 — a `bun install` step scoped to a vendored package
-   * failed locally with "could not find a package.json file" while CI would have been
-   * green, and the step looked broken rather than mis-run.
-   */
   workingDirectory?: string;
 }
 
+/** A workflow job and its fail-closed local replay verdict. */
 export interface WorkflowJob {
   id: string;
-  /** The job's `name:` in ci.yml, kept because that is the string a red check shows. */
   label: string;
   steps: WorkflowStep[];
-  /** Null when the job may run here; otherwise the reason it must not. */
   refusal: string | null;
 }
 
-/**
- * Jobs whose steps may run against this machine exactly as CI wrote them, and why.
- *
- * The reason is stored rather than implied. It is what a reader has to weigh when a step
- * is added to one of these jobs, and it is the one thing a job name does not carry.
- */
+/** Jobs whose commands have an explicit local safety classification. */
 export const RUNS_HERE: Record<string, string> = {
-  "repo-gates": "every step is a file-based gate: no network, no build, no write into the checkout",
-  "bun-tests": "installs locked dependencies in the checkout, then runs bun and shell tests",
+  "repo-gates": "file-based repository gates",
+  "bun-tests": "installs locked dependencies, then runs Bun and shell tests",
 };
 
-/**
- * Jobs this refuses to replay here, each with the damage it would do.
- *
- * A GitHub runner is disposable. This machine holds the operator's overlay, the live
- * SQLite file eleven services share, and an Obsidian vault three capabilities project
- * into, so two of CI's four remaining jobs are destructive here and one is merely
- * expensive in the same place.
- */
+/** Jobs that require a disposable runner or a separate hermetic command. */
 export const REFUSED: Record<string, string> = {
   "rust-quality":
-    "cargo against the shared target/ — a --release write there replaces a live service binary. Run: tools/cargo-hermetic clippy --workspace --all-targets --all-features --locked -- -D warnings",
+    "cargo against the shared target/ can replace a live service binary. Run: tools/cargo-hermetic clippy --workspace --all-targets --all-features --locked -- -D warnings",
   "cargo-tests":
-    "cargo against the shared target/, and the suite resolves projection roots from the real overlay. Run: tools/cargo-hermetic test --workspace --locked",
+    "cargo against the shared target/ and real overlay. Run: tools/cargo-hermetic test --workspace --locked",
   "ui-check":
-    "its first step overwrites $HOME/.axon-overlay/config/machine.toml, this machine's own capability declaration, and its later steps bun install from the network. Run: cd <package> && bun run check, then bun run build — the build is what compiles the templates",
+    "overwrites the machine.toml overlay configuration and installs dependencies. Run the package's check and build scripts separately",
 };
 
-/** What an unclassified job is told, so a new job in ci.yml is a decision and not a default. */
+/** A new job requires an explicit safety classification. */
 export const UNCLASSIFIED =
   "not classified — decide in tools/lib/ci-workflow.ts whether replaying it here is safe, and record why";
 
-/**
- * Every job in a workflow, with its `run:` steps and its local verdict.
- *
- * `uses:` steps are dropped on purpose and that is not a gap: checkout, the two cargo
- * caches and setup-bun are all ways of getting a runner into the state this machine is
- * already in. A step with neither `run:` nor `uses:` is a malformed workflow and throws,
- * because skipping it would silently under-report the job — which is the failure this
- * whole tool exists to remove one level up.
- *
- * Classification is fail-closed: a job named in neither table is refused as unclassified.
+const adapters: Record<string, { script: string; condition: string }> = {
+  "repo-gates": { script: "bun tools/ci-run.ts gates", condition: "needs.changes.outputs.gates == 'true'" },
+  "bun-tests": { script: "bun tools/ci-run.ts bun-tests", condition: "needs.changes.outputs.bun == 'true'" },
+};
+
+function isPlanTransfer(step: unknown): boolean {
+  if (!step || typeof step !== "object" || Object.keys(step).sort().join(",") !== "env,name,run") return false;
+  const transfer = step as { name: unknown; run: unknown; env: unknown };
+  if (!transfer.env || typeof transfer.env !== "object" || Object.keys(transfer.env).join(",") !== "GH_TOKEN") return false;
+  return transfer.name === "Read verification plan" &&
+    transfer.run === 'gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"' &&
+    (transfer.env as Record<string, unknown>).GH_TOKEN === "${{ github.token }}";
+}
+
+/** Parse replayable shell steps; reject unsupported execution semantics instead of dropping them.
+ * @throws If the workflow has no jobs or declares a step without run or uses.
  */
 export function parseJobs(yamlText: string): WorkflowJob[] {
   const doc = Bun.YAML.parse(yamlText) as {
     env?: unknown;
     defaults?: unknown;
-    jobs?: Record<
-      string,
-      {
-        name?: string;
-        env?: unknown;
-        defaults?: unknown;
-        if?: unknown;
-        steps?: Array<{ name?: string; run?: string; uses?: string; "working-directory"?: string; if?: unknown; env?: unknown; shell?: unknown; "continue-on-error"?: unknown }>;
-
-      }
-    >;
+    jobs?: Record<string, {
+      name?: string;
+      env?: unknown;
+      defaults?: unknown;
+      if?: unknown;
+      needs?: unknown;
+      strategy?: unknown;
+      container?: unknown;
+      services?: unknown;
+      "continue-on-error"?: unknown;
+      steps?: Array<{
+        name?: string; run?: string; uses?: string; "working-directory"?: string;
+        if?: unknown; env?: unknown; shell?: unknown; "continue-on-error"?: unknown;
+      }>;
+    }>;
   };
-  const jobs = doc?.jobs;
-  if (!jobs || typeof jobs !== "object") throw new Error("workflow declares no jobs");
-  return Object.entries(jobs).map(([id, job]) => {
+  if (!doc?.jobs || typeof doc.jobs !== "object") throw new Error("workflow declares no jobs");
+  return Object.entries(doc.jobs).map(([id, job]) => {
     const steps: WorkflowStep[] = [];
-    let unsupported = doc.env !== undefined || doc.defaults !== undefined || job.env !== undefined || job.defaults !== undefined || job.if !== undefined
-      ? "workflow or job environment, defaults, or condition cannot be replayed faithfully"
+    const adapter = adapters[id];
+    const wrapperIndex = adapter ? (job.steps ?? []).findIndex((s) => s.run === adapter.script && s["working-directory"] === undefined) : -1;
+    const wrapper = wrapperIndex >= 0;
+    const condition = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : job.if;
+    const changesOnly = job.needs === "changes" || (Array.isArray(job.needs) && job.needs.length === 1 && job.needs[0] === "changes");
+    const adaptedCondition = wrapper && changesOnly && condition === adapter.condition;
+    let unsupported = doc.env !== undefined || doc.defaults !== undefined || job.env !== undefined || job.defaults !== undefined ||
+      job.strategy !== undefined || job.container !== undefined || job.services !== undefined || job["continue-on-error"] !== undefined ||
+      ((job.if !== undefined || job.needs !== undefined) && !adaptedCondition)
+      ? "workflow or job execution settings cannot be replayed faithfully"
       : null;
-    for (const [i, step] of (job?.steps ?? []).entries()) {
+    for (const [i, step] of (job.steps ?? []).entries()) {
+      // A full local wrapper recomputes its plan without the CI artifact or token.
+      if (wrapper && i < wrapperIndex && isPlanTransfer(step)) continue;
+      if (step?.if !== undefined || step?.env !== undefined || step?.shell !== undefined || step?.["continue-on-error"] !== undefined ||
+        step?.run?.includes("${{") || (step?.["working-directory"] !== undefined && typeof step["working-directory"] !== "string")) {
+        unsupported = `step ${i + 1} has execution settings that cannot be replayed faithfully`;
+      }
       if (typeof step?.run === "string") {
-        if (step.if !== undefined || step.env !== undefined || step.shell !== undefined || step["continue-on-error"] !== undefined || step.run.includes("${{")) {
-          unsupported = `step ${i + 1} has execution settings that cannot be replayed faithfully`;
-        }
         const workingDirectory = step["working-directory"];
+        const script = adapter && step.run === adapter.script && workingDirectory === undefined
+          ? `${adapter.script} --full` : step.run;
         steps.push({
-          name: step.name ?? step.run.split("\n")[0],
-          script: step.run,
+          name: step.name ?? step.run.split("\n")[0], script,
           ...(typeof workingDirectory === "string" ? { workingDirectory } : {}),
         });
       } else if (typeof step?.uses !== "string") {
         throw new Error(`${id}: step ${i + 1} has neither run: nor uses:`);
       }
     }
-    return {
-      id,
-      label: job?.name ?? id,
-      steps,
-      refusal: id in RUNS_HERE ? unsupported : (REFUSED[id] ?? UNCLASSIFIED),
-    };
+    return { id, label: job.name ?? id, steps, refusal: id in RUNS_HERE ? unsupported : (REFUSED[id] ?? UNCLASSIFIED) };
   });
 }

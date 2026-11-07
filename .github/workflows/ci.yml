@@ -1,391 +1,179 @@
 name: CI
+run-name: CI ${{ (github.event_name == 'schedule' || github.event_name == 'release' || github.event_name == 'workflow_dispatch' || inputs.full) && 'full' || 'affected' }}
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
+  schedule:
+    - cron: "23 3 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run full verification
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      full:
+        description: Run full verification before preparing artifacts
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
-# Every job that needs Bun installs `latest` rather than a pinned literal. Patch first
-# (CONTRIBUTING.md#patch-first): the runtime CI tests against should be the one a contributor's
-# package manager just installed, and a version held in a workflow is a version nothing moves.
-# It was three literals plus tools/check-bun-pin.sh keeping them equal until 2026-09-02; with
-# no literal anywhere there is nothing left to diverge, so the class the gate caught (#40)
-# is structurally impossible rather than merely checked. upstreams.toml [bun] records the
-# version that entry's verdict was written against, which is a different fact from what CI
-# runs today. The cost is real and taken with eyes open: a bad Bun release can turn this red
-# for a reason unrelated to the code, which is the same trade .github/workflows/security.yml
-# makes for its scanners.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
-  # rust-toolchain.toml names the `stable` channel and these two components, so local
-  # contributor commands and CI lint with the same release rustup last fetched (Q77).
-  # It rolls rather than holding a literal, which is the same trade the Bun note above makes.
-  # Clippy compiles tests and feature-gated paths; running them is cargo-tests' job.
-  rust-quality:
-    name: cargo fmt + clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: cargo fmt --all --check
-        run: cargo fmt --all --check
-      - name: cargo clippy (strict workspace)
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-
-  cargo-tests:
-    name: cargo test (hermetic)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      # rust-cache keeps the registry and compiled dependencies, not the workspace's own crates.
-      # Only main saves, so pull requests restore without filling the repository's cache quota.
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # No skip, and no second job. The database suites are `db_tests::` since PRD
-      # Q45 (2026-08-27) moved every store onto one SQLite file: each test opens a
-      # temp file of its own, so the whole workspace is hermetic and this one run
-      # covers it. The split existed because those suites needed a server — they
-      # failed rather than skipped without one, which is what a `--skip` selector
-      # and a `services: postgres` job were both paying for.
-
-      # ExifTool is `required = "optional"` in toolchain.toml and this image does not carry it,
-      # so without this step a run here never spawns it: every media verb that reads capture
-      # dates takes its absent-tool branch instead, and `relabel` and `duplicates` are the two
-      # that call `capture_days` for real. Installing it makes CI cover the path a normal host
-      # takes. It is not what makes these tests pass — that was a bare ENOENT in `capture_days`,
-      # fixed where it was raised — so a future image without it costs fidelity, not a red run.
-      - name: Install ExifTool
-        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
-
-      # A pull request tests the packages tools/ci-impact.ts selects: owners of changed files,
-      # packages whose sources name them, and reverse dependencies. Main, and any planner
-      # doubt, tests the whole workspace (docs/plans/tooling.md).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: latest
-      - name: Select packages
-        id: plan
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ -n "$BASE" ]; then
-            bun run tools/ci-impact.ts --scope --base "$BASE" >> "$GITHUB_OUTPUT"
-          else
-            echo "scope=--workspace" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Compile Rust tests (resource baseline)
-        if: steps.plan.outputs.scope != ''
-        env:
-          SCOPE: ${{ steps.plan.outputs.scope }}
-        # $SCOPE is unquoted on purpose: it is a list of cargo arguments.
-        run: /usr/bin/time -v cargo test $SCOPE --locked --no-run
-
-      - name: Run Rust tests (resource baseline)
-        if: steps.plan.outputs.scope != ''
-        env:
-          SCOPE: ${{ steps.plan.outputs.scope }}
-        run: /usr/bin/time -v cargo test $SCOPE --locked --no-fail-fast
-
-      - name: No Rust package selected
-        if: steps.plan.outputs.scope == ''
-        run: echo "No Rust package owns or names a changed file, so no Rust test runs. Main runs the full suite."
-
-      - name: Report Rust build storage
-        if: always()
-        run: du -sh target 2>/dev/null || true
-
-  # One rootward `bun test`, not a list of directories. A list of directories let
-  # test files run nowhere. bun discovers *.test.ts itself and skips node_modules, so a
-  # test file added anywhere is gated by existing (Sjel#116). No install step: every one of
-  # these imports bun:test, node builtins and local sources only, which is what keeps a
-  # dependency-free runner honest.
-  bun-tests:
-    name: bun test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # tools/discover-ui-packages, the marketplace gate and several tests run sjel-cli, which
-      # builds itself in release on first use. These three jobs share one dependency cache so
-      # that build compiles sjel-cli alone; repo-gates is the one job that saves it.
-      - name: Cache cargo (sjel-cli release)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: sjel-cli-release
-          save-if: false
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: latest
-      - name: install local subagent dependencies
-        working-directory: Packs/harness/pi-packages/pi-subagents
-        run: bun install --frozen-lockfile --ignore-scripts
-      - name: install local web-access dependencies
-        working-directory: Packs/harness/pi-packages/pi-web-access
-        run: bun install --frozen-lockfile --ignore-scripts
-      - name: bun test
-        run: bun test
-
-      # Every tools/*.test.sh, discovered rather than listed — a hand-list is how a committed
-      # test comes to run nowhere (the Sjel#116 shape, again). They all drive real scripts
-      # against throwaway roots under /tmp, and this job has bun on PATH for the ones
-      # (service-runner, doctor-driving) that need it.
-      #
-      # No exclusions. A suite that passes unless it inherits the operator's environment has to
-      # call isolate_sjel_env (tools/lib/test-support.sh), not leave this list.
-      # In parallel, one per CPU. Each suite works in its own mktemp root; logs print in order after.
-      - name: shell tests
-        run: |
-          set -uo pipefail
-          logs="$(mktemp -d)"
-          jobs="$(getconf _NPROCESSORS_ONLN)"
-          printf '%s\n' tools/*.test.sh | xargs -P "$jobs" -I{} bash -c \
-            'n="$(basename "$1")"; bash "$1" > "$2/$n.log" 2>&1 || : > "$2/$n.failed"' _ {} "$logs"
-          failed=""
-          for t in tools/*.test.sh; do
-            n="$(basename "$t")"
-            echo "::group::$t"
-            cat "$logs/$n.log"
-            [ ! -e "$logs/$n.failed" ] || failed="$failed $t"
-            echo "::endgroup::"
-          done
-          if [ -n "$failed" ]; then
-            echo "shell tests FAILED:$failed" >&2
-            exit 1
-          fi
-
-  # UI checks are discovered from committed package metadata. Every checkable package enters
-  # this job without a manually maintained list.
-  ui-check:
-    name: bun run check (every discovered UI)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # tools/discover-ui-packages, the marketplace gate and several tests run sjel-cli, which
-      # builds itself in release on first use. These three jobs share one dependency cache so
-      # that build compiles sjel-cli alone; repo-gates is the one job that saves it.
-      - name: Cache cargo (sjel-cli release)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: sjel-cli-release
-          save-if: false
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: latest
-
-      # Package discovery and UI checks invoke sjel-cli, which reads the local capability
-      # registry. Give the runner the standard overlay shape with no capabilities enabled.
-      - name: Minimal overlay for the config read
-        run: |
-          mkdir -p "$HOME/.sjel-overlay/config"
-          cat > "$HOME/.sjel-overlay/config/machine.toml" <<'TOML'
-          os = "linux"
-          container_runtime = "docker"
-          capabilities = []
-          TOML
-
-      # Two calls on purpose: the first prints every package and its verdict into the log,
-      # including the skipped ones, so "not checked" is visible rather than absent. The
-      # second is the machine-readable set, and it emits nothing when the first found a
-      # violation — a refused package must not leave a loop reporting success over reduced
-      # coverage.
-      - name: Discover checkable UI packages
-        run: tools/discover-ui-packages
-
-      # Every package runs even after one fails: stopping at the first would hide how much
-      # of the repository is actually broken behind whichever directory sorted first.
-      - name: bun run check
-        run: |
-          set -uo pipefail
-          failed=""
-          for dir in $(tools/discover-ui-packages --dirs); do
-            echo "::group::$dir"
-            # A committed lockfile proves what we resolve, not that its lifecycle hooks are safe.
-            # UI checks do not need install scripts, so leave that attack surface closed in CI.
-            ok=1
-            (cd "$dir" && bun install --frozen-lockfile --ignore-scripts && bun run check) || ok=0
-
-            # Scan the committed dependency tree as a separate step. A fatal Socket advisory
-            # makes Bun return non-zero; the scanner is configured in the tree's bunfig and is a
-            # real devDependency, so a missing scanner is also a hard install error. Free mode
-            # needs no secret; SOCKET_API_KEY is optional and adds this organization's policy.
-            # The scanner is network-backed, so its availability and any API-side policy remain
-            # an explicit operational dependency rather than being mistaken for the lockfile.
-            if [ "$ok" -eq 1 ]; then
-              (cd "$dir" && bun pm scan) || ok=0
-            fi
-
-            if [ "$ok" -eq 1 ]; then
-              echo "$dir: ok"
-            else
-              failed="$failed $dir"
-            fi
-            echo "::endgroup::"
-          done
-          if [ -n "$failed" ]; then
-            echo "ui-check FAILED:$failed" >&2
-            exit 1
-          fi
-
-      # The check compiles nothing: `svelte-check` passes a .svelte file that `bun run build`
-      # cannot parse, so the build runs too.
-      #
-      # The package set is still tools/discover-ui-packages', never a list here. A `build` script
-      # is optional, so a package that declares only a check is named as skipped rather than
-      # failing. Dependencies are already installed by the step above.
-      - name: bun run build (every discovered UI that declares one)
-        run: |
-          set -uo pipefail
-          failed=""
-          for dir in $(tools/discover-ui-packages --dirs); do
-            echo "::group::$dir"
-            script=""
-            if ! script=$(cd "$dir" && bun -e 'import {readFileSync} from "node:fs"; const pkg = JSON.parse(readFileSync("package.json", "utf8")); process.stdout.write(String(pkg.scripts?.build ?? ""))'); then
-              # Fail closed: an unreadable package.json means the build is not known to have run,
-              # and silence here would read as a pass.
-              echo "$dir: could not read package.json, so its build was not run"
-              failed="$failed $dir"
-              echo "::endgroup::"
-              continue
-            fi
-            if [ -z "$script" ]; then
-              echo "$dir: no build script declared — nothing to compile"
-              echo "::endgroup::"
-              continue
-            fi
-            echo "$script"
-            (cd "$dir" && bun run build) || failed="$failed $dir"
-            echo "::endgroup::"
-          done
-          if [ -n "$failed" ]; then
-            echo "ui build FAILED:$failed" >&2
-            exit 1
-          fi
-
-  # Repo-level gates, run directly rather than through tools/doctor (Sjel#41).
-  #
-  # Why the scripts and not `doctor`: most of doctor's checks are machine-level — overlay
-  # reachability, machine.toml, declared state mounts, upstream network — and a fresh clone
-  # has none of them. Invoking the gate scripts is the same source of truth without that
-  # baggage; doctor delegates to these identical scripts locally, so there is still one
-  # implementation per rule.
-  #
-  # tools/self check runs here now. It used to read `tools/capability.sh registry`, which merges
-  # this machine's machine.toml overrides and hard-fails without one -- so its answer was
-  # machine-specific by construction and it stayed a doctor-only check (Sjel#7). It reads the
-  # service.toml manifests directly since, which makes the committed artifact reproducible from a
-  # fresh clone and this the right place for it. Bun is set up for that one step; the other two
-  # gates are pure shell.
-  repo-gates:
-    name: repo gates (labels, tracked inputs)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # tools/discover-ui-packages, the marketplace gate and several tests run sjel-cli, which
-      # builds itself in release on first use. These three jobs share one dependency cache so
-      # that build compiles sjel-cli alone; repo-gates is the one job that saves it.
-      - name: Cache cargo (sjel-cli release)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: sjel-cli-release
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Generator inputs are tracked
-        run: tools/check-generator-inputs-tracked.sh
-      - name: ARCHITECTURE.md is fresh
-        run: tools/check-architecture-fresh.sh
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: latest
-      - name: Plugin marketplace is fresh
-        run: tools/check-marketplace-fresh.sh
-      - name: service.toml manifests are well-formed
-        run: tools/check-service-tomls.sh
-      - name: No capability gained an undeclared write body
-        run: tools/check-route-schemas.sh
-      - name: Manifest requires= references resolve
-        run: tools/check-manifest-integrity.sh
-      - name: No document cites its own path
-        run: tools/check-doc-self-references.sh
-      - name: Every authored SKILL.md passes the metadata validator
-        run: tools/check-skill-metadata.sh
-      - name: The metadata gate fails the bad cases and passes the real tree
-        run: tools/check-skill-metadata.test.sh
-      - name: The presentations palette contract holds
-        run: tools/check-presentations-theme-contract.sh
-      - name: The palette gate fails a divergent pair and passes the real pack
-        run: tools/check-presentations-theme-contract.test.sh
-      # The SUITES, not the runs. Executing an eval costs model calls and is nondeterministic,
-      # so it can never be a gate — a gate that flakes teaches people to ignore gates. What is
-      # checkable for free is that every suite is well-formed: canonical keys, unique ids,
-      # assertions that can actually fail, fixtures that exist. See tools/skill-eval.ts.
-      - name: Skill eval suites are well-formed
-        run: tools/skill-eval check --all
-      - name: Publication hygiene
-        run: tools/check-publication-hygiene.sh
-      - name: Bun dependency installs do not run lifecycle hooks
-        run: tools/check-bun-install-policy.sh
-      - name: No capability begins a deferred transaction
-        run: tools/check-store-transactions.sh
-      - name: Obsidian plugins are read-only, discovered and mobile-safe
-        run: tools/check-obsidian-plugins.sh
-      - name: self.json is current
-        run: tools/self check
-      # Runs here rather than behind a step-level wrapper: it drives the whole tools/doctor, so
-      # it needs the real checkout to answer at all.
-      - name: doctor reports orphan units, and only orphan units
-        run: tools/persistence-orphans.test.sh
-
-  # Decides the path-selective jobs below. tools/ci-changes derives the GPUI inputs from cargo
-  # metadata and the crates' sources; a push to main, or any doubt, runs everything.
   changes:
     name: which checks the change needs
     runs-on: ubuntu-latest
     outputs:
-      gpui: ${{ steps.decide.outputs.gpui }}
+      full: ${{ steps.plan.outputs.full }}
+      quality: ${{ steps.plan.outputs.quality }}
+      rust: ${{ steps.plan.outputs.rust }}
+      bun: ${{ steps.plan.outputs.bun }}
+      ui: ${{ steps.plan.outputs.ui }}
+      gates: ${{ steps.plan.outputs.gates }}
+      gpui: ${{ steps.plan.outputs.gpui }}
+      gpui_matrix: ${{ steps.plan.outputs.gpui_matrix }}
     steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
-      - name: Decide
-        id: decide
+      - name: Plan verification
+        id: plan
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: tools/ci-changes --base "$BASE" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+          FULL: ${{ inputs.full }}
+        run: |
+          args=()
+          if [ "$FULL" = true ]; then args+=(--full); fi
+          bun tools/ci-plan.ts --workflow ci.yml "${args[@]}" \
+            --output "$RUNNER_TEMP/sjel-ci-plan.json" --github-output "$GITHUB_OUTPUT"
+      - name: Retain verification plan
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verification-plan
+          path: ${{ runner.temp }}/sjel-ci-plan.json
+          retention-days: 14
 
-  # The GPUI app is its own workspace (apps/gpui/Cargo.toml), so nothing above builds it. Each
-  # platform checks natively: a cross check from one host needs every target's C toolchain
-  # (aws-lc-sys, libsql). Linux and Windows also check the desktop shell, apps/gpui/src.
+  rust-quality:
+    name: cargo fmt + clippy
+    needs: changes
+    if: needs.changes.outputs.quality == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts rust-quality
+
+  cargo-tests:
+    name: cargo test (hermetic)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install ExifTool
+        run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts cargo-tests
+      - name: Report Rust build storage
+        if: always()
+        run: du -sh target 2>/dev/null || true
+
+  bun-tests:
+    name: bun test
+    needs: changes
+    if: needs.changes.outputs.bun == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: sjel-cli-release
+          save-if: false
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts bun-tests
+
+  ui-check:
+    name: bun run check (affected UI)
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: sjel-cli-release
+          save-if: false
+      - name: Minimal overlay for the config read
+        run: |
+          mkdir -p "$HOME/.sjel-overlay/config"
+          printf 'os = "linux"\ncontainer_runtime = "docker"\ncapabilities = []\n' > "$HOME/.sjel-overlay/config/machine.toml"
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts ui-check
+
+  repo-gates:
+    name: repo gates (labels, tracked inputs)
+    needs: changes
+    if: needs.changes.outputs.gates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: sjel-cli-release
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts gates
+
   gpui-targets:
     name: gpui cargo check (${{ matrix.name }})
     needs: changes
@@ -393,42 +181,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macos + ios
-            os: macos-latest
-            target: aarch64-apple-ios
-            check: cargo check --locked --workspace --exclude sjel-gpui-ios --all-targets && cargo check --locked -p sjel-gpui-ios --target aarch64-apple-ios
-          - name: linux
-            os: ubuntu-latest
-            target: ""
-            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui -p sjel-gpui --all-targets
-          - name: windows
-            os: windows-latest
-            target: ""
-            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --all-targets
-          - name: windows shell
-            os: windows-latest
-            target: ""
-            check: cargo check --locked -p sjel-gpui --all-targets
-          - name: android
-            os: ubuntu-latest
-            target: aarch64-linux-android
-            check: cargo check --locked -p sjel-gpui-core -p sjel-gpui-ui --target aarch64-linux-android
+      matrix: ${{ fromJSON(needs.changes.outputs.gpui_matrix) }}
     defaults:
       run:
         shell: bash
         working-directory: apps/gpui
     steps:
-      - name: Check out Sjel
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/gpui
           key: ${{ matrix.name }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Linux libraries GPUI's build scripts look for
+      - name: Linux libraries for GPUI build scripts
         if: runner.os == 'Linux'
         run: >
           sudo apt-get update && sudo apt-get install -y pkg-config clang libxkbcommon-dev
@@ -436,7 +201,9 @@ jobs:
           libfontconfig-dev libfreetype-dev libssl-dev libasound2-dev
       - name: Add the target
         if: matrix.target != ''
-        run: rustup target add ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: rustup target add "$TARGET"
       - name: Point the Android target at the runner's NDK
         if: matrix.target == 'aarch64-linux-android'
         run: |
@@ -455,22 +222,44 @@ jobs:
     env:
       CHANGES: ${{ needs.changes.result }}
       RUST_QUALITY: ${{ needs.rust-quality.result }}
+      RUST_QUALITY_SELECTED: ${{ needs.changes.outputs.quality }}
       CARGO_TESTS: ${{ needs.cargo-tests.result }}
+      CARGO_TESTS_SELECTED: ${{ needs.changes.outputs.rust }}
       BUN_TESTS: ${{ needs.bun-tests.result }}
+      BUN_TESTS_SELECTED: ${{ needs.changes.outputs.bun }}
       UI_CHECK: ${{ needs.ui-check.result }}
+      UI_CHECK_SELECTED: ${{ needs.changes.outputs.ui }}
       REPO_GATES: ${{ needs.repo-gates.result }}
+      REPO_GATES_SELECTED: ${{ needs.changes.outputs.gates }}
       GPUI: ${{ needs.gpui-targets.result }}
       GPUI_SELECTED: ${{ needs.changes.outputs.gpui }}
     steps:
       - name: Verify job results
         run: |
-          for result in "$CHANGES" "$RUST_QUALITY" "$CARGO_TESTS" "$BUN_TESTS" "$UI_CHECK" "$REPO_GATES"; do
-            if [ "$result" != success ]; then
-              echo "A required job did not succeed: $result" >&2
-              exit 1
-            fi
+          if [ "$CHANGES" != success ]; then
+            echo "Verification planning did not succeed: $CHANGES" >&2
+            exit 1
+          fi
+          for job in RUST_QUALITY CARGO_TESTS BUN_TESTS UI_CHECK REPO_GATES GPUI; do
+            selected="${job}_SELECTED"
+            case "${!selected}:${!job}" in
+              true:success|false:skipped) ;;
+              *) echo "$job selection/result mismatch: ${!selected}:${!job}" >&2; exit 1 ;;
+            esac
           done
-          case "$GPUI_SELECTED:$GPUI" in
-            true:success|false:skipped) ;;
-            *) echo "GPUI selection/result mismatch: $GPUI_SELECTED:$GPUI" >&2; exit 1 ;;
-          esac
+
+  full-verification:
+    name: full verification result
+    needs: [changes, verification]
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record full verification
+        env:
+          COMMIT: ${{ github.sha }}
+        run: printf '%s\n' "$COMMIT" > "$RUNNER_TEMP/full-verification.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: full-verification
+          path: ${{ runner.temp }}/full-verification.txt
+          retention-days: 90

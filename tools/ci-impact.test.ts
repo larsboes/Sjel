@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedFiles, bunDiscovers, failedPackages, fastPlan, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
+import { changedFiles, bunDiscovers, failedPackages, namedPaths, rustImpact, testScope, type Package } from "./ci-impact.ts";
 import { decide } from "./ci-changes.ts";
 
 const packages: Package[] = [
@@ -115,6 +115,8 @@ test("aggregate fails for a failed, missing or unexpectedly skipped job", async 
   const good = {
     CHANGES: "success", RUST_QUALITY: "success", CARGO_TESTS: "success", BUN_TESTS: "success",
     UI_CHECK: "success", REPO_GATES: "success", GPUI_SELECTED: "true", GPUI: "success",
+    RUST_QUALITY_SELECTED: "true", CARGO_TESTS_SELECTED: "true", BUN_TESTS_SELECTED: "true",
+    UI_CHECK_SELECTED: "true", REPO_GATES_SELECTED: "true",
   };
   const run = (overrides: Record<string, string>) => Bun.spawnSync(["bash", "-e", "-c", script], {
     env: { ...process.env, ...good, ...overrides },
@@ -123,38 +125,12 @@ test("aggregate fails for a failed, missing or unexpectedly skipped job", async 
   expect(run({})).toBe(0);
   expect(run({ GPUI_SELECTED: "false", GPUI: "skipped" })).toBe(0);
   expect(run({ BUN_TESTS: "failure" })).toBe(1);
+  expect(run({ BUN_TESTS_SELECTED: "false", BUN_TESTS: "skipped" })).toBe(0);
+  expect(run({ BUN_TESTS_SELECTED: "true", BUN_TESTS: "skipped" })).toBe(1);
+  expect(run({ BUN_TESTS_SELECTED: "false", BUN_TESTS: "success" })).toBe(1);
   expect(run({ CHANGES: "skipped" })).toBe(1);
   expect(run({ GPUI_SELECTED: "true", GPUI: "skipped" })).toBe(1);
   expect(run({ GPUI_SELECTED: "", GPUI: "skipped" })).toBe(1);
-});
-
-test("fast plan: docs-only change skips clippy, Rust change scopes it, deletion widens it", () => {
-  const none = () => false;
-  const names = (p: ReturnType<typeof fastPlan>) => p.checks.map((c) => c.name);
-  expect(names(fastPlan(["docs/x.md"], [], packages, none))).toEqual(["cargo fmt", "repo gates"]);
-  expect(names(fastPlan(["libs/base/src/lib.rs"], [], packages, none))).toContain("cargo test");
-  const scoped = fastPlan(["libs/base/src/lib.rs"], [], packages, none).checks.find((c) => c.name === "clippy")!;
-  expect(scoped.cmd).toContain("-p");
-  expect(scoped.cmd).not.toContain("--workspace");
-  expect(fastPlan(["Cargo.lock"], [], packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
-  expect(fastPlan(["libs/gone/src/lib.rs"], ["libs/gone/src/lib.rs"], packages, none).checks.find((c) => c.name === "clippy")!.cmd).toContain("--workspace");
-  expect(names(fastPlan(["apps/gpui/src/main.rs"], [], packages, none))).not.toContain("clippy");
-});
-
-test("fast plan: picks tests beside changed files", () => {
-  const exists = (p: string) => ["tools/x.test.ts", "tools/x.test.sh"].includes(p);
-  const plan = fastPlan(["tools/x.ts", "tools/x"], [], packages, exists);
-  expect(plan.checks.find((c) => c.name === "bun test")!.cmd).toEqual(["bun", "test", "./tools/x.test.ts"]);
-  expect(plan.checks.map((c) => c.name)).toContain("tools/x.test.sh");
-});
-
-test("fast plan: a test Bun's discovery ignores is skipped by name, not run", () => {
-  const exists = (p: string) => p === "capabilities/comms/clipper/src/x.test.ts";
-  const plan = fastPlan(["capabilities/comms/clipper/src/x.ts", "capabilities/comms/clipper/src/x.test.ts"], [], packages, exists, () => false);
-  expect(plan.checks.map((c) => c.name)).not.toContain("bun test");
-  const skip = plan.skipped.find((s) => s.includes("capabilities/comms/clipper/src/x.test.ts"))!;
-  expect(skip.match(/x\.test\.ts/g)).toHaveLength(1);
-  expect(plan.skipped.join("\n")).not.toContain("none beside a changed file");
 });
 
 test("bunDiscovers reads bunfig's pathIgnorePatterns and matches at any depth", () => {

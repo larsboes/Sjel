@@ -112,12 +112,10 @@ gate() {
   fi
   # The commit's CI result, not this machine's doctor: host state such as a stale backup says
   # nothing about the tree being tagged.
-  local sha ci
+  local sha
   sha="$(git -C "$SJEL_ROOT" rev-parse HEAD)"
-  ci="$(cd "$SJEL_ROOT" && gh run list --workflow CI --commit "$sha" --json conclusion \
-    --jq '[.[] | .conclusion] | if index("success") then "success" else (.[0] // "none" | if . == "" then "pending" else . end) end' 2>/dev/null || echo unknown)"
-  if [ "$ci" != success ]; then
-    echo "release: CI on ${sha:0:8} is '$ci', not 'success' — wait for it, or re-run with --force (knowingly)." >&2; fail=1
+  if ! (cd "$SJEL_ROOT" && bun tools/ci-plan.ts --require-full "$sha"); then
+    echo "release: full CI has not passed for ${sha:0:8}." >&2; fail=1
   fi
   return "$fail"
 }

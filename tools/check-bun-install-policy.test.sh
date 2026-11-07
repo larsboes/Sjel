@@ -1,6 +1,5 @@
 #!/bin/bash
-# Planted-tree regression tests for the install policy: lifecycle scripts stay off, and every
-# tree that resolves dependencies keeps the npm-only hold and its scanner (Q109).
+# Planted-tree regression tests for dependency install safeguards.
 set -uo pipefail
 
 CHECK="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-bun-install-policy.sh"
@@ -9,11 +8,6 @@ SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 fails=0
 
-# The compliant parts of a planted tree: the two workflows and the two operator READMEs the
-# script requires, plus ONE tree that resolves dependencies — a package.json beside a bun.lock
-# beside a bunfig with both settings. A tree that is missing any of those three is the thing
-# each planted failure below removes; keeping the default complete is what makes the difference
-# between the cases the missing file rather than the missing directory.
 plant() { # plant <name> <ci-install> [<mode>]
   local root="$SCRATCH/$1" mode="${3:-full}"
   mkdir -p "$root/.github/workflows" "$root/ui" "$root/crates/comms/clipper"
@@ -58,13 +52,27 @@ expect() { # expect <name> <status> <root>
 expect "safe installs pass" 0 "$(plant safe 'bun install --frozen-lockfile --ignore-scripts')"
 expect "CI install without hook protection fails" 1 "$(plant unsafe 'bun install --frozen-lockfile')"
 
-# The hold and the scanner are two settings, and a tree can lose either one alone. Both planted
-# cases keep everything else — workflows, READMEs, lockfile — so the exit status can only be
-# about the setting that went missing.
 expect "a resolving tree with no bunfig fails" 1 \
   "$(plant no-hold 'bun install --frozen-lockfile --ignore-scripts' no-bunfig)"
 expect "a tree that keeps the hold but loses the scanner fails" 1 \
   "$(plant no-scanner 'bun install --frozen-lockfile --ignore-scripts' hold-only)"
+
+runner_plant() {
+  local root
+  root="$(plant "$1" 'bun tools/ci-run.ts ui-check')"
+  printf 'bun tools/ci-run.ts bun-tests\n' >> "$root/.github/workflows/ci.yml"
+  mkdir -p "$root/tools"
+  printf '%s\n' "$2" '["bun", "pm", "scan"]' > "$root/tools/ci-run.ts"
+  printf '%s' "$root"
+}
+
+expect "shared runner preserves install protections" 0 \
+  "$(runner_plant runner-safe '["bun", "install", "--frozen-lockfile", "--ignore-scripts"]')"
+expect "shared runner without hook protection fails" 1 \
+  "$(runner_plant runner-unsafe '["bun", "install", "--frozen-lockfile"]')"
+runner="$(runner_plant runner-no-scan '["bun", "install", "--frozen-lockfile", "--ignore-scripts"]')"
+printf '%s\n' '["bun", "install", "--frozen-lockfile", "--ignore-scripts"]' > "$runner/tools/ci-run.ts"
+expect "shared runner without a dependency scan fails" 1 "$runner"
 
 if [ "$fails" -ne 0 ]; then
   echo "bun install policy test: $fails check(s) failed" >&2

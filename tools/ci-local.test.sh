@@ -1,71 +1,54 @@
 #!/bin/bash
-# End-to-end tests for tools/ci-local, over planted checkouts.
-#
-# The tool's job is to say the same thing about this tree that CI will say about the push.
-# So the case that matters is the red one: a gate that fails must come back as a failure
-# here, named, with the rest of the job still measured. A runner that answers the same for
-# a known-bad input as for a known-good one is measuring something other than the gates —
-# the sixth silent failure in PRD §13.1.
-#
-# Every case builds its own checkout under /tmp with its own .github/workflows/ci.yml, so
-# nothing here needs a failing gate to exist in the real repository. That is what --root is
-# for.
+# Replay and pre-push behavior against disposable checkouts.
 set -uo pipefail
 
-TOOL="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/ci-local"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
-
+TOOL="$REPO/tools/ci-local"
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
-
 fails=0
 
-checkout() { # checkout <case-name> -> echoes a fresh checkout root with a .github tree
+checkout() {
   local root="$SCRATCH/$1"
-  rm -rf "$root"
   mkdir -p "$root/.github/workflows" "$root/tools"
   printf '%s' "$root"
 }
 
-run() { # run <root> <args...> -> combined output in $out, exit status in $status
+run() {
   local root="$1"
   shift
   out=$("$TOOL" --root "$root" "$@" 2>&1)
   status=$?
 }
 
-expect_status() { # expect_status <description> <wanted> <root> <args...>
+expect_status() {
   local what="$1" want="$2"
   shift 2
   run "$@"
   if [ "$status" -ne "$want" ]; then
     echo "FAIL: $what — wanted exit $want, got $status:"
-    printf '%s\n' "$out" | sed 's/^/    /'
+    printf '%s\n' "$out"
     fails=$((fails + 1))
     return 1
   fi
-  return 0
 }
 
-expect_says() { # expect_says <description> <substring>   (reads the last run's $out)
+expect_says() {
   if ! printf '%s' "$out" | grep -qF "$2"; then
     echo "FAIL: $1 — output does not name '$2':"
-    printf '%s\n' "$out" | sed 's/^/    /'
+    printf '%s\n' "$out"
     fails=$((fails + 1))
   fi
 }
 
-two_step_workflow() { # two_step_workflow <root> <first-command> <second-command>
+two_step_workflow() {
   cat > "$1/.github/workflows/ci.yml" <<EOF
 name: CI
 on: [push]
 jobs:
   repo-gates:
-    name: repo gates
-    runs-on: ubuntu-latest
     steps:
-      - name: Check out Sjel
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
       - name: first gate
         run: $2
       - name: second gate
@@ -73,134 +56,188 @@ jobs:
 EOF
 }
 
-# --- the green path: both gates pass ---------------------------------------
-
 root=$(checkout all-green)
-cat > "$root/tools/first.sh" <<'SH'
-echo "first gate passed"
-SH
-cat > "$root/tools/second.sh" <<'SH'
-echo "second gate passed"
-SH
-chmod +x "$root/tools/first.sh" "$root/tools/second.sh"
-two_step_workflow "$root" "tools/first.sh" "tools/second.sh"
-if expect_status "a job whose gates all pass" 0 "$root" run repo-gates; then
-  expect_says "the green run reports its own step count" "2 steps passed"
-  expect_says "a gate's own stdout reaches the operator" "first gate passed"
+two_step_workflow "$root" "echo first gate passed" "echo second gate passed"
+if expect_status "all gates pass" 0 "$root" run repo-gates; then
+  expect_says "correct step count" "2 steps passed"
+  expect_says "step stdout is preserved" "first gate passed"
 fi
-
-# --- the red path, which is the whole reason this file exists ---------------
-#
-# Same tree, same runner, one planted failing gate. The verdict must invert, the failing
-# step must be named, and the step AFTER it must still have run: stopping at the first
-# failure hides how much of the repository is broken behind whichever gate sorts first.
 
 root=$(checkout one-red)
-cat > "$root/tools/first.sh" <<'SH'
-echo "planted failure: this gate refuses" >&2
-exit 1
-SH
-cat > "$root/tools/second.sh" <<'SH'
-echo "second gate passed"
-SH
-chmod +x "$root/tools/first.sh" "$root/tools/second.sh"
-two_step_workflow "$root" "tools/first.sh" "tools/second.sh"
-if expect_status "a planted failing gate turns the run red" 1 "$root" run repo-gates; then
-  expect_says "the failing step is named in the summary" "first gate"
-  expect_says "the count separates failures from the total" "1 of 2 steps FAILED"
-  expect_says "the gate's own reason is not swallowed" "planted failure"
-  expect_says "the step after the failure still ran" "second gate passed"
+two_step_workflow "$root" "echo planted failure >&2; exit 1" "echo second gate passed"
+if expect_status "a failing gate blocks" 1 "$root" run repo-gates; then
+  expect_says "failed step is named" "first gate"
+  expect_says "failure count" "1 of 2 steps FAILED"
+  expect_says "failure reason is preserved" "planted failure"
+  expect_says "later steps still run" "second gate passed"
 fi
 
-# A step that fails only through a pipe: `bash -e` alone would let this pass, and CI runs
-# these with pipefail. The runner has to reproduce the shell CI uses, not a friendlier one.
 root=$(checkout red-through-a-pipe)
 cat > "$root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
 jobs:
   repo-gates:
     steps:
-      - name: piped gate
-        run: |
+      - run: |
           set -uo pipefail
           false | cat
 EOF
-expect_status "a failure on the left of a pipe is still a failure" 1 "$root" run repo-gates
+expect_status "pipefail is preserved" 1 "$root" run repo-gates
 
-# --- fail-closed refusals --------------------------------------------------
+root=$(checkout working-directory)
+mkdir "$root/package"
+printf 'package fixture\n' > "$root/package/input"
+cat > "$root/.github/workflows/ci.yml" <<'EOF'
+jobs:
+  bun-tests:
+    steps:
+      - run: test -f input
+        working-directory: package
+EOF
+expect_status "working directory is honored" 0 "$root" run bun-tests
 
 root=$(checkout refused-job)
 cat > "$root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
 jobs:
   ui-check:
     steps:
-      - name: Minimal overlay for the config read
-        run: echo "this would write into the operator's overlay"
+      - run: echo unsafe
 EOF
-if expect_status "a job that would write into the real overlay is refused" 2 "$root" run ui-check; then
-  expect_says "the refusal says what the damage would be" "machine.toml"
+if expect_status "destructive jobs refuse" 2 "$root" run ui-check; then
+  expect_says "refusal names the damage" "machine.toml"
 fi
 
 root=$(checkout unclassified-job)
 cat > "$root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
 jobs:
   brand-new-job:
     steps:
-      - name: whatever this is
-        run: echo hello
+      - run: echo hello
 EOF
-if expect_status "a job nobody has classified is refused, not run" 2 "$root" run brand-new-job; then
-  expect_says "the refusal says what to do about it" "not classified"
+if expect_status "unknown jobs refuse" 2 "$root" run brand-new-job; then
+  expect_says "classification is required" "not classified"
 fi
 
-# A job made only of `uses:` steps does no work. Reporting it green would be the
-# empty-sweep failure tools/check-store-transactions.sh guards against on its own input.
 root=$(checkout no-run-steps)
 cat > "$root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
 jobs:
   repo-gates:
     steps:
-      - name: Check out Sjel
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
 EOF
-if expect_status "a job with nothing to run is refused, not passed" 2 "$root" run repo-gates; then
-  expect_says "the empty job says why it is not a pass" "nothing would be checked"
+if expect_status "empty work refuses" 2 "$root" run repo-gates; then
+  expect_says "empty job explanation" "nothing would be checked"
 fi
 
 root=$(checkout no-such-job)
 two_step_workflow "$root" "true" "true"
-expect_status "a job name that is not in ci.yml is an error" 2 "$root" run cargo-tests
-
+expect_status "unknown job name errors" 2 "$root" run cargo-tests
 root=$(checkout no-workflow)
 rm -rf "$root/.github"
-expect_status "a checkout with no ci.yml is an error, not an empty pass" 2 "$root" run repo-gates
+expect_status "missing workflow errors" 2 "$root" run repo-gates
 
-# --- against the real workflow ---------------------------------------------
-#
-# `list` reads .github/workflows/ci.yml and never runs anything, so it is safe to point at
-# the real checkout. This is what proves the parse works on the file that matters, rather
-# than only on the fixtures above.
+root=$(checkout full-adapters)
+cat > "$root/tools/ci-run.ts" <<'EOF'
+console.log(process.argv.slice(2).join(" "));
+if (!process.argv.includes("--full")) process.exit(1);
+EOF
+cat > "$root/.github/workflows/ci.yml" <<'EOF'
+jobs:
+  repo-gates:
+    needs: changes
+    if: needs.changes.outputs.gates == 'true'
+    steps:
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts gates
+  bun-tests:
+    needs: changes
+    if: needs.changes.outputs.bun == 'true'
+    steps:
+      - name: Read verification plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name verification-plan --dir "$RUNNER_TEMP"
+      - run: bun tools/ci-run.ts bun-tests
+EOF
+if expect_status "owned conditional wrappers replay full" 0 "$root" run repo-gates bun-tests; then
+  expect_says "gates force full" "gates --full"
+  expect_says "tests force full" "bun-tests --full"
+fi
+cat > "$root/.github/workflows/ci.yml" <<'EOF'
+jobs:
+  repo-gates:
+    needs: changes
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - run: bun tools/ci-run.ts gates
+EOF
+expect_status "unknown wrapper conditions still refuse" 2 "$root" run repo-gates
 
-out=$("$TOOL" --root "$REPO" list 2>&1)
+root=$(checkout pre-push)
+git -C "$root" init -q
+mkdir "$root/bin"
+cat > "$root/bin/gitleaks" <<'EOF'
+#!/bin/sh
+printf 'gitleaks %s\n' "$*" >> calls
+exit "${LEAK_EXIT:-0}"
+EOF
+cat > "$root/bin/bun" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat > "$root/tools/check-publication-hygiene.sh" <<'EOF'
+#!/bin/sh
+printf 'publication\n' >> calls
+exit "${PUBLICATION_EXIT:-0}"
+EOF
+cat > "$root/tools/ci-local" <<'EOF'
+#!/bin/sh
+printf 'ci-local %s\n' "$*" >> calls
+exit 0
+EOF
+chmod +x "$root/bin/gitleaks" "$root/bin/bun" "$root/tools/check-publication-hygiene.sh" "$root/tools/ci-local"
+hook() {
+  (cd "$root" && printf '%s\n' 'refs/heads/main 1111111111111111111111111111111111111111 refs/heads/main 0000000000000000000000000000000000000000' |
+    PATH="$root/bin:$PATH" LEAK_EXIT="$1" PUBLICATION_EXIT="$2" SJEL_SKIP_PUSH_CHECKS="$3" bash "$REPO/tools/githooks/pre-push") > "$root/output" 2>&1
+  status=$?
+  out=$(< "$root/calls")
+}
+hook 0 0 0
+[ "$status" -eq 0 ] || { echo "FAIL: pre-push success"; fails=$((fails + 1)); }
+expect_says "gitleaks stays redacted and scoped" "gitleaks git --redact --no-banner --exit-code 1 --log-opts=1111111111111111111111111111111111111111 --not --remotes"
+expect_says "publication safeguard runs" "publication"
+expect_says "hook uses only fast" "ci-local fast"
+: > "$root/calls"
+hook 1 0 0
+[ "$status" -eq 1 ] || { echo "FAIL: gitleaks failure must block push"; fails=$((fails + 1)); }
+if printf '%s' "$out" | grep -qF 'ci-local'; then echo "FAIL: checks ran after secret failure"; fails=$((fails + 1)); fi
+: > "$root/calls"
+hook 0 1 1
+[ "$status" -eq 1 ] || { echo "FAIL: skip must not bypass publication failure"; fails=$((fails + 1)); }
+: > "$root/calls"
+hook 0 0 1
+[ "$status" -eq 0 ] || { echo "FAIL: explicit skip"; fails=$((fails + 1)); }
+expect_says "skip retains publication" "publication"
+if printf '%s' "$out" | grep -qF 'ci-local'; then echo "FAIL: skip still ran fast"; fails=$((fails + 1)); fi
+
+out=$("$TOOL" --root "$REPO" list --json 2>&1)
 status=$?
 if [ "$status" -ne 0 ]; then
-  echo "FAIL: list against the real checkout — exit $status:"
-  printf '%s\n' "$out" | sed 's/^/    /'
+  echo "FAIL: real workflow list: $out"
   fails=$((fails + 1))
-else
-  expect_says "the real repo-gates job is listed as runnable here" "repo-gates"
-  expect_says "the real bun-tests job is listed as runnable here" "bun-tests"
-  expect_says "the cargo job is listed as refused" "cargo-hermetic"
+elif ! printf '%s' "$out" | bun -e '
+  const jobs = await Bun.stdin.json();
+  for (const id of ["repo-gates", "bun-tests"]) {
+    const job = jobs.find(j => j.id === id);
+    if (!job || job.refusal !== null || !job.steps.length || job.steps.some(s => s.script.includes("gh run download"))) process.exit(1);
+  }
+  if (!jobs.find(j => j.id === "cargo-tests")?.refusal?.includes("cargo-hermetic")) process.exit(1);
+'; then
+  echo "FAIL: real gates/Bun adapters must run, cargo replay must refuse: $out"
+  fails=$((fails + 1))
 fi
-
-# ---------------------------------------------------------------------------
 
 if [ "$fails" -ne 0 ]; then
   echo "ci-local.test.sh: $fails case(s) FAILED" >&2

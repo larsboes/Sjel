@@ -1,31 +1,49 @@
 name: Pages
 
-# Publish the public site from tracked files (website/build): the landing page, the docs from
-# website/content, one reference page per unit and the self-model page. No capability runs here, and the payload gate at the end
-# refuses a build that carries anything it should not.
+# Publish tracked site inputs; the payload gate rejects private content.
 
 on:
   push:
     branches: [main]
-  # Build on a pull request too, and deploy nothing: a broken build fails on the branch. The
-  # `deploy` job is gated on the event, so a fork PR cannot reach the Pages environment.
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# One deployment at a time, and never cancel one mid-flight: a cancelled deploy can leave Pages
-# serving a half-published state, which is worse than serving the previous page a minute longer.
-# Pull-request builds get their own group per branch, so two of them do not serialise behind
-# each other and neither queues in front of a real deployment.
+# Keep main deployments non-cancellable; obsolete pending runs can coalesce.
 concurrency:
   group: pages-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  plan:
+    name: select Pages build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      pages: ${{ steps.plan.outputs.pages }}
+    steps:
+      - name: Check out Sjel
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Plan and summarize
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun tools/ci-plan.ts --workflow pages.yml --output "$RUNNER_TEMP/pages-plan.json" --github-output "$GITHUB_OUTPUT"
+
   build:
     name: build the page
+    needs: plan
+    if: needs.plan.outputs.pages == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -35,10 +53,9 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest   # patch first, as in ci.yml — CONTRIBUTING.md#patch-first
+          bun-version: latest
 
-      # paths.sh resolves the overlay before anything else runs; with no sjel.local.toml it falls
-      # back to sjel.toml's shipped default. Same minimal seed ci.yml uses.
+      # Path resolution needs an overlay, not enabled capabilities.
       - name: Minimal overlay for path resolution
         run: |
           mkdir -p "$HOME/.sjel-overlay/config"
@@ -53,9 +70,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # The gate. A stale self.json means the page would describe a tree that no longer exists.
-      # Deliberately before the build, so a stale input costs a fast failure rather than a
-      # published lie.
+      # Reject stale inputs before assembling the site.
       - name: self.json is current
         run: tools/self check
 
@@ -67,20 +82,19 @@ jobs:
         run: tools/check-site-payload.sh site
 
       - name: Configure Pages
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload artifact
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
   deploy:
     name: deploy to Pages
-    needs: build
-    # A pull request builds and is gated; it never publishes.
-    if: github.event_name != 'pull_request'
+    needs: [plan, build]
+    if: needs.plan.outputs.pages == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       pages: write

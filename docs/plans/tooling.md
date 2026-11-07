@@ -151,24 +151,24 @@ covers it.
   every relative Markdown link with a shell loop. No gate checks that a link target or its
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
-- **Selective verification and build resources.** `tools/ci-impact.ts` plans the root Cargo
-  workspace's packages for a change: the owner of each changed file, every package whose sources
-  name the file's path (runtime reads, modeled from path literals), and their reverse
-  dependencies. Workspace-wide inputs select every package. A file that no package owns or names
-  selects none (decided 2026-10-29). `fastPlan` in the same file drives
-  `sjel check` and the pre-push hook. On a pull request, the `cargo test` job tests only the
-  selected packages; main and any planner error test the whole workspace.
-  `tools/ci-impact-backtest.ts` replays CI history and reports a failing package a plan skipped. `bun-tests`, `ui-check` and
-  `repo-gates` share a `sjel-cli-release` cache, and CI runs `tools/*.test.sh` in parallel.
-  Open work:
-  1. Run the backtest after a few weeks of enforced pull requests. A main run that fails in a
-     package the pull request's plan skipped is a miss: repair the planner, or widen.
-  2. Extend the planner to the GPUI workspace, Bun and shell tests, UI packages and repository
-     gates.
-  3. Measure local target-directory growth and cache transfer, and benchmark bounded local
-     parallelism. Set defaults only from measurements.
-  Done when local and CI use the same validated planner, full main checks remain green, and
-  measurements show the cost and savings.
+- **Selective verification and build resources.** The shared planner, selected runners,
+  daily/release full verification and local format receipts are implemented in the working tree;
+  the policy and commands live in `CONTRIBUTING.md#change-aware-ci`. Decided 2026-11-07:
+  ordinary pushes select affected work; full verification runs daily and before release artifacts.
+  Open acceptance checks:
+  1. Observe selective Actions runs, a daily full run and distribution preflight after publication.
+     Live Actions execution, native platform builds and full workspace tests have not run for
+     this change; `actionlint` was unavailable. Local gate replay found concurrent architecture
+     and self-model freshness failures, plus missing install-policy settings in the unrelated
+     learning plugin. These files remain outside this change. A full failure must remain visible
+     in subsequent plan summaries.
+  2. Continue `bun tools/ci-impact-backtest.ts` against history containing failing Rust tests.
+     The current 20-run sample yielded 19 usable runs and no failing Rust job, so its zero misses
+     do not establish failure-detection coverage.
+  3. Measure target-directory growth, cache transfer and runner time before expanding successful
+     result reuse beyond local formatting. Set resource defaults only from measurements.
+  Done when local and CI share the same planner, live full verification passes, and measurements
+  establish the cost and savings.
 - **Backup runs from the CLI.** To find why six backups were overdue, the agent read receipt
   files in `<overlay>/backup/receipts/` and grepped `sjel-status`'s stderr for `[backup]` lines.
   `GET /api/sjel-status/backup/runs` has the answer, but no `sjel` verb reads it. Smallest change:

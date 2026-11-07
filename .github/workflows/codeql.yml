@@ -1,53 +1,7 @@
 name: CodeQL
 
-# Static analysis over the code in this tree. Dependabot already covers known-vulnerable
-# dependencies and says nothing about what is written here (#13).
-#
-# WHAT IS ANALYSED, and what is not. This list is the point of the workflow: a scanner whose
-# coverage nobody wrote down reads as "the repository is scanned" when most of it is not.
-#
-#   rust                  1.22 MB, the largest surface. build-mode: none — see the note below.
-#   javascript-typescript 0.51 MB of .ts plus 0.04 MB of .js
-#   python                0.32 MB, the vendored + adapted scanners under Packs/
-#   actions               these workflow files themselves
-#
-# NOT analysed, and why:
-#
-#   Shell   0.44 MB, all of tools/ — the largest hand-written surface here and CodeQL has no
-#           shell extractor at all. It is not an option that was declined; it does not exist.
-#           Whether that gap earns a shellcheck gate is a separate decision (#13 says so too).
-#   Svelte  0.56 MB across 51 files. Not a CodeQL language. The javascript extractor does not
-#           claim .svelte, so the <script> blocks in those components are unscanned — the
-#           single biggest thing this workflow does NOT cover, stated here rather than left to
-#           be inferred from a green check.
-#   Swift   0.01 MB: two eval scripts under crates/comms/eval/. CodeQL supports Swift,
-#           but only on a macOS runner and only with a real build. That is a whole matrix leg
-#           and a paid runner for 13 KB of throwaway evaluation code. Declined deliberately;
-#           revisit if Swift ever becomes a shipped surface here.
-#
-# The supported-language list was read from the pinned action's own src/languages/builtin.json
-# rather than from documentation, so it describes the version actually running:
-#   actions cpp csharp go java javascript python ruby rust swift
-#
-# On Rust: every language here runs `build-mode: none`, which extracts from source instead of
-# observing a build — no build system is invoked, so none can fail to be invoked. The extractor
-# discovers the root Cargo workspace and its member manifests recursively.
-#
-# What the first run actually measured, because "the job is green" is not the same claim:
-#
-#   10 manifests found · 0 extraction errors · 2159 extraction warnings · 82 files, of which the
-#   metric counts 71 as "extracted with errors" — meaning at least one warning, not a failure to
-#   extract. Every file is in the database.
-#
-#   2153 of those warnings are one thing: a macro CodeQL's Rust extractor cannot expand.
-#   assert_eq 683 · format 504 · assert 299 · println (format_args_nl) 299 · json 219+17 · vec 90
-#
-#   Roughly 46% of them are test assertions, where losing expression detail costs nothing. The two
-#   that matter are `format!` and `json!`: string and JSON construction is exactly where injection
-#   dataflow lives, and expressions inside those macros are not in the database, so dataflow
-#   through them is not analysed. That is a limitation of a comparatively young extractor, not
-#   something this workflow can configure away — recorded here so the Rust check is not read as
-#   more coverage than it is.
+# Source-only analysis; shell, Svelte components and Swift are outside this matrix.
+# Rust macro expansion limits dataflow coverage; a green scan is not complete coverage.
 
 on:
   push:
@@ -55,33 +9,55 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Mondays ~04:17 UTC, an hour nobody else schedules (upstream-watch, its old sibling, retired 2026-08-28 with B12). A schedule
-    # earns its place here for a reason a push trigger cannot cover: CodeQL's query packs change,
-    # so unchanged code gets newly-known findings without anyone touching it.
+    # Refresh query coverage even when source files have not changed.
     - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: codeql-${{ github.ref }}
-  cancel-in-progress: true
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
-  analyze:
-    name: analyze (${{ matrix.language }})
+  plan:
+    name: select CodeQL languages
     runs-on: ubuntu-latest
     permissions:
-      # Writing the results IS the output of this workflow; without it the run is a no-op that
-      # reports success. `actions: read` lets the analysis resolve workflow runs for the
-      # `actions` language.
+      contents: read
+      actions: read
+    outputs:
+      codeql: ${{ steps.plan.outputs.codeql }}
+      codeql_run: ${{ steps.plan.outputs.codeql_run }}
+    steps:
+      - name: Check out Sjel
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+      - name: Plan and summarize
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun tools/ci-plan.ts --workflow codeql.yml --output "$RUNNER_TEMP/codeql-plan.json" --github-output "$GITHUB_OUTPUT"
+
+  analyze:
+    name: analyze (${{ matrix.language }})
+    needs: plan
+    # Evaluate before expanding a possibly empty matrix.
+    if: needs.plan.outputs.codeql_run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
       security-events: write
       actions: read
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        language: [rust, javascript-typescript, python, actions]
+      matrix: ${{ fromJSON(needs.plan.outputs.codeql) }}
 
     steps:
       - name: Check out Sjel
@@ -89,45 +65,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Rust is the slow language. Skip it when the change touches no Rust source, manifest or
-      # this workflow. The weekly schedule, a new branch, and any doubt run it.
-      - name: Decide whether the change reaches ${{ matrix.language }}
-        id: scope
-        env:
-          LANGUAGE: ${{ matrix.language }}
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ "$LANGUAGE" != rust ] || [ "$EVENT" = schedule ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null \
-            || git diff --name-only "$BASE" HEAD | grep -qE '\.rs$|(^|/)Cargo\.(toml|lock)$|^rust-toolchain\.toml$|^\.github/workflows/codeql\.yml$'; then
-            echo run=true >> "$GITHUB_OUTPUT"
-          else
-            echo run=false >> "$GITHUB_OUTPUT"
-          fi
-
-      # Pinned by commit sha like every other action here, and the comment names the release the
-      # sha belongs to so a bump is reviewable as a version change rather than as a hash swap.
       - name: Initialize CodeQL
-        if: steps.scope.outputs.run == 'true'
         uses: github/codeql-action/init@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
-          # Extended rather than the default suite (#46). The default one reports zero findings
-          # across this tree while demonstrably not firing on `eval(sys.argv[1])` or on
-          # `requests.get(..., verify=False)` — both planted and both missed — so "zero" was never
-          # a clean bill of health, it was a quiet suite.
-          #
-          # The trade is a higher false-positive rate for a repository that is pushed in bursts
-          # rather than daily, which makes runtime the cheap side of the ledger. The expensive
-          # side would be findings nobody triages: a permanently-noisy gate is the failure #38
-          # removed from the since-retired upstream-checker (deleted 2026-08-28, PRD Q41 — read
-          # it at that commit), and if this becomes that, the honest move is to revert
-          # these two lines rather than to start ignoring the tab.
           queries: security-extended
 
       - name: Analyze
-        if: steps.scope.outputs.run == 'true'
         uses: github/codeql-action/analyze@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         with:
           category: "/language:${{ matrix.language }}"

@@ -38,12 +38,37 @@ configuration where a machine contract is required.
 
 ## Validate the changed boundary
 
-Run `sjel check` (`tools/ci-local fast`) before you push; the pre-push hook runs it too. It runs
-the quick subset of CI for the current change in parallel: `cargo fmt`, the repo gates, clippy and
-`cargo test` on the affected crates, and the tests beside changed files.
-`SJEL_SKIP_PUSH_CHECKS=1` skips it for one push. CI still runs the full suite. Then inspect the
-diff, `git diff --check` and `git status --short`, and commit. Do not describe a skipped or
-unavailable check as passing.
+Run `sjel check` (`tools/ci-local fast`) before pushing; the pre-push hook runs it too. It checks
+formatting in affected Rust workspaces, publication hygiene and affected cheap repository gates.
+Tests, Clippy and builds run in CI rather than being repeated in the push hook.
+`SJEL_SKIP_PUSH_CHECKS=1` skips formatting and selected gates for one push, but does not skip
+secret scanning or publication hygiene.
+Inspect the diff, `git diff --check` and `git status --short` before committing. Do not describe
+a skipped or unavailable check as passing.
+
+### Change-aware CI
+
+`tools/ci-plan.ts` selects verification inputs for local checks and Actions. Rust selection
+includes package owners, runtime-path readers and reverse dependencies. Bun and UI selection
+follows imports and package dependencies; unresolved runtime inputs widen coverage. Repository
+gates declare their input boundaries in `tools/lib/ci-inputs.ts`. Every plan retains publication
+hygiene. `tools/ci-run.ts` executes selected tests, gates and package builds.
+
+A main push compares against the last successful ancestor run of its workflow, not the previous
+push. Failed or cancelled pushes therefore remain in the next comparison. A missing base,
+planner change or selection failure selects full verification. Actions summaries record the
+base, selected and skipped surfaces, reasons and recent full-verification history.
+
+The CI workflow runs full verification daily at 03:23 UTC, on published releases and on manual
+dispatch. Distribution preparation calls full CI at the caller revision before building
+artifacts. `tools/release` requires a successful full-verification result for the exact commit;
+an ordinary selective success is insufficient. Security and CodeQL retain weekly full scans
+because advisory databases and query packs change independently of source files.
+
+Successful local format checks can be reused when checkout contents, the command and modeled
+toolchain inputs match. Publication checks, tests and builds are never reused as format receipts.
+`tools/ci-local fast --full` bypasses reuse; it still defers tests and compilation to CI.
+`bun tools/ci-plan.ts --base origin/main --local` prints the current selection without running it.
 
 ### Rust
 

@@ -28,9 +28,17 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  preflight:
+    name: full CI at the caller revision
+    uses: ./.github/workflows/ci.yml
+    with:
+      full: true
+
   prepare:
+    needs: preflight
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     env:

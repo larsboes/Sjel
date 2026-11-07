@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { firstHit, gpuiInputs } from "./ci-changes.ts";
 
@@ -43,7 +43,6 @@ export function rustImpact(files: string[], packages: Package[], deleted: string
     if (owner) {
       selected.add(owner.name);
       reasons.push(`${file}: owned by ${owner.name}`);
-      continue;
     }
     if (file.endsWith(".rs") && deleted.includes(file)) {
       return { mode: "all", packages: all, skipped: [], reasons: [`${file}: deleted Rust source with no owner`] };
@@ -107,56 +106,10 @@ export interface FastCheck {
 export function bunDiscovers(root: string): (testPath: string) => boolean {
   const path = join(root, "bunfig.toml");
   if (!existsSync(path)) return () => true;
-  const ignored = (Bun.TOML.parse(readFileSync(path, "utf8")).test?.pathIgnorePatterns ?? []) as string[];
+  const config = Bun.TOML.parse(readFileSync(path, "utf8")) as { test?: { pathIgnorePatterns?: string[] } };
+  const ignored = config.test?.pathIgnorePatterns ?? [];
   const globs = ignored.map((p) => new Bun.Glob(p));
   return (testPath) => !globs.some((g) => g.match(testPath));
-}
-
-/**
- * The local subset of CI for a change. Full CI still runs on every push; this only
- * catches the cheap failures before it. Every doubt about Rust widens clippy to the workspace.
- */
-export function fastPlan(files: string[], deleted: string[], packages: Package[], exists: (path: string) => boolean, discovers: (testPath: string) => boolean = () => true) {
-  const checks: FastCheck[] = [
-    { name: "cargo fmt", cmd: ["cargo", "fmt", "--all", "--check"], reason: "always: one second" },
-    { name: "repo gates", cmd: ["tools/ci-local", "run", "repo-gates"], reason: "always: file-based, about a minute" },
-  ];
-  const skipped: string[] = [];
-
-  const impact = rustImpact(files, packages, deleted);
-  if (impact.mode === "candidate" && impact.packages.length === 0) {
-    skipped.push("clippy and cargo test: no Rust package owns or names a changed file");
-  } else {
-    const scope = impact.mode === "all" ? ["--workspace"] : impact.packages.flatMap((p) => ["-p", p]);
-    const reason = impact.mode === "all" ? `workspace: ${impact.reasons[0]}` : impact.packages.join(", ");
-    checks.push({
-      name: "clippy",
-      cmd: ["tools/cargo-hermetic", "clippy", ...scope, "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"],
-      reason,
-    });
-    checks.push({ name: "cargo test", cmd: ["tools/cargo-hermetic", "test", ...scope, "--locked"], reason });
-  }
-
-  // Tests named after a changed file: x.test.ts beside x.ts, tools/x.test.sh beside tools/x.
-  const bun = new Set<string>();
-  const shell = new Set<string>();
-  const outsideBun = new Set<string>();
-  for (const file of files) {
-    const stem = file.replace(/\.test\.(ts|sh)$/, "").replace(/\.(ts|sh)$/, "");
-    if (exists(`${stem}.test.ts`)) {
-      if (discovers(`${stem}.test.ts`)) bun.add(`./${stem}.test.ts`);
-      else outsideBun.add(`${stem}.test.ts`);
-    }
-    if (exists(`${stem}.test.sh`)) shell.add(`${stem}.test.sh`);
-  }
-  if (bun.size) checks.push({ name: "bun test", cmd: ["bun", "test", ...[...bun].sort()], reason: `${bun.size} test file(s) beside changed files` });
-  if (outsideBun.size) skipped.push(`bun test: ${[...outsideBun].sort().join(", ")} beside a changed file, outside Bun's discovery (bunfig.toml [test] pathIgnorePatterns) — those run under their package's own runner`);
-  for (const t of [...shell].sort()) checks.push({ name: t, cmd: ["bash", t], reason: "beside a changed file" });
-  if (!bun.size && !shell.size && !outsideBun.size) skipped.push("bun and shell tests: none beside a changed file");
-
-  if (files.some((f) => f.startsWith("apps/gpui/"))) skipped.push("gpui: CI's platform matrix checks it");
-  skipped.push("ui-check: CI runs it in full");
-  return { checks, skipped };
 }
 
 /** Cargo package arguments for an impact: `--workspace`, `-p` per package, or "" for none. */
@@ -166,11 +119,12 @@ export function testScope(impact: Impact): string {
 }
 
 /** The root workspace's packages, their in-workspace dependencies and the paths they name. */
-export function rootPackages(root: string): Package[] {
-  const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1"], root));
+export function rootPackages(root: string, manifest = "Cargo.toml"): Package[] {
+  root = realpathSync(root);
+  const metadata = JSON.parse(command(["cargo", "metadata", "--no-deps", "--format-version", "1", "--manifest-path", manifest], root));
   const members = new Set<string>(metadata.workspace_members);
   const workspace = metadata.packages.filter((p: any) => members.has(p.id));
-  const namesByDir = new Map<string, string>(workspace.map((p: any) => [dirname(p.manifest_path), p.name]));
+  const namesByDir = new Map<string, string>(metadata.packages.map((p: any) => [dirname(p.manifest_path), p.name]));
   const topLevel = new Set(readdirSync(root).filter((n) => n !== ".git" && n !== "target"));
   return workspace.map((p: any) => {
     const dir = relative(root, dirname(p.manifest_path));
@@ -183,7 +137,7 @@ export function rootPackages(root: string): Package[] {
     return {
       name: p.name,
       dir,
-      dependencies: p.dependencies.flatMap((d: any) => d.path && namesByDir.has(d.path) ? [namesByDir.get(d.path)] : []),
+      dependencies: p.dependencies.flatMap((d: any) => d.path ? [namesByDir.get(d.path) ?? d.name] : []),
       reads: [...reads].sort(),
     };
   });
@@ -268,7 +222,7 @@ function main() {
     shadow = { failed, missed };
     if (missed.length) console.error(`ci-impact: MISS — the plan skipped failing package(s): ${missed.join(", ")}`);
   }
-  console.log(JSON.stringify({ shadow: true, base: base ?? null, local, files: changed, rust: impact, gpui, ...shadow, note: "Rust is a candidate only; full CI remains required. Runtime reads are modeled from path literals in package sources." }, null, 2));
+  console.log(JSON.stringify({ base: base ?? null, local, files: changed, rust: impact, gpui, ...shadow, note: "Rust runtime reads are modeled from path literals. tools/ci-plan.ts owns the complete verification plan." }, null, 2));
 }
 
 // --scope: the `cargo test` package arguments for $GITHUB_OUTPUT. Any error, and a missing
@@ -292,7 +246,7 @@ if (import.meta.main) {
     console.log(`scope=${out.scope}`);
   } else {
     try { main(); } catch (error) {
-      console.error(`ci-impact: ${error}; full checks remain required`);
+      console.error(`ci-impact: ${error}; run full verification`);
       process.exitCode = 1;
     }
   }

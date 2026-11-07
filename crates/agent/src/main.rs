@@ -1010,31 +1010,49 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
         let thread = std::thread::spawn(move || {
-            let mut second_request = None;
-            for (index, response) in [
+            let responses = [
                 // A dynamic redirect target is the one write that still asks (A1), so the turn
                 // reaches the approval gate and writes the file once it is allowed.
                 json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_write","type":"function","function":{"name":"bash","arguments":r#"{"command":"out=result.txt; printf 'written by tool' > \"$out\""}"#}}]}}]}),
                 json!({"choices":[{"index":0,"delta":{"content":"The file was written."}}]}),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let (stream, _) = listener.accept().unwrap();
-                let mut reader = BufReader::new(stream);
-                let mut length = 0usize;
-                loop {
-                    let mut line = String::new();
-                    reader.read_line(&mut line).unwrap();
-                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                        length = value.trim().parse().unwrap();
+            ];
+            let mut second_request = None;
+            for index in 0..responses.len() {
+                let (mut reader, length) = loop {
+                    let (stream, _) = listener.accept().unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut reader = BufReader::new(stream);
+                    let mut length = 0usize;
+                    // A connection that closes before headers is not a model request.
+                    let mut complete = false;
+                    loop {
+                        let mut line = String::new();
+                        match reader.read_line(&mut line) {
+                            Ok(0) | Err(_) => break,
+                            Ok(_) => {}
+                        }
+                        if let Some(value) =
+                            line.to_ascii_lowercase().strip_prefix("content-length:")
+                        {
+                            length = value.trim().parse().unwrap();
+                        }
+                        if line == "\r\n" {
+                            complete = true;
+                            break;
+                        }
                     }
-                    if line == "\r\n" { break; }
-                }
+                    if complete {
+                        break (reader, length);
+                    }
+                };
                 let mut body = vec![0; length];
                 reader.read_exact(&mut body).unwrap();
-                if index == 1 { second_request = Some(serde_json::from_slice::<Value>(&body).unwrap()); }
-                let sse = format!("data: {response}\n\ndata: [DONE]\n\n");
+                if index == 1 {
+                    second_request = Some(serde_json::from_slice::<Value>(&body).unwrap());
+                }
+                let sse = format!("data: {}\n\ndata: [DONE]\n\n", responses[index]);
                 write!(reader.get_mut(), "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{sse}", sse.len()).unwrap();
             }
             let request =
@@ -1076,10 +1094,17 @@ mod tests {
                 if event["type"] == "needs_approval" {
                     return event["approval_id"].as_str().unwrap().to_owned();
                 }
+                if event["type"] == "error" {
+                    panic!(
+                        "turn failed before the approval gate: {}",
+                        event["message"].as_str().unwrap_or("unknown error")
+                    );
+                }
             }
             assert!(
                 Instant::now() < deadline,
-                "tool never reached the approval gate"
+                "tool never reached the approval gate; events: {:?}",
+                event_types(session)
             );
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -1097,7 +1122,7 @@ mod tests {
         result
     }
 
-    fn start_turn(session: Arc<Session>) -> std::thread::JoinHandle<()> {
+    fn start_turn(session: Arc<Session>) -> std::thread::JoinHandle<Result<(), String>> {
         session.push_user("write result.txt".into());
         session
             .log
@@ -1113,10 +1138,14 @@ mod tests {
         });
         // `run_turn` is the same blocking worker the capability starts after accepting a prompt.
         std::thread::spawn(move || {
-            run_turn(&state, &session, AgentInput::default(), stop).unwrap();
+            if let Err(error) = run_turn(&state, &session, AgentInput::default(), stop) {
+                session.log.push(json!({"type":"error", "message":error}));
+                return Err(error);
+            }
             session.log.push(json!({"type":"done"}));
-            session.persist().unwrap();
+            session.persist().map_err(|error| error.to_string())?;
             session.log.finish();
+            Ok(())
         })
     }
 
@@ -1146,7 +1175,7 @@ mod tests {
         )
         .await
         .unwrap();
-        worker.join().unwrap();
+        worker.join().unwrap().unwrap();
         model.join().unwrap();
 
         assert_eq!(
@@ -1193,7 +1222,7 @@ mod tests {
         })
         .join()
         .unwrap();
-        worker.join().unwrap();
+        worker.join().unwrap().unwrap();
         model.join().unwrap();
 
         assert!(

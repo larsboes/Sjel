@@ -59,8 +59,8 @@ pub fn render(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::types::uptime;
+    use super::*;
     use crate::data::Remote;
     use crate::shell::{NodeHealth, ShellError};
     use gpui_kit::WindowAppearance;

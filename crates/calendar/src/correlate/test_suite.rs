@@ -1101,10 +1101,18 @@ mod cluster_tests {
         let earlier = plan("p:old", "London", "2025-12-05", "2025-12-08");
         let ends_the_day_before = plan("p:before", "London", "2026-12-01", "2026-12-04");
         assert_eq!(
-            suggest_plan(&draft, &[london.clone(), berlin, earlier, ends_the_day_before]).as_deref(),
+            suggest_plan(
+                &draft,
+                &[london.clone(), berlin, earlier, ends_the_day_before]
+            )
+            .as_deref(),
             Some("p:london")
         );
         let twice = plan("p:again", "London", "2026-12-06", "2026-12-07");
-        assert_eq!(suggest_plan(&draft, &[london, twice]), None, "two plans: owner decides");
+        assert_eq!(
+            suggest_plan(&draft, &[london, twice]),
+            None,
+            "two plans: owner decides"
+        );
     }
 }

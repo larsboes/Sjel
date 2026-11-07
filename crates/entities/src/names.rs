@@ -219,7 +219,11 @@ mod tests {
             r.withheld.contains(&"aus".to_string()) && r.withheld.contains(&"Events".to_string())
         );
         assert!(!r.tokens.iter().any(|t| t == "Bonn"), "{:?}", r.tokens);
-        assert_eq!(r.full_names, ["Events Team Hamburg"], "a qualifier ends the name");
+        assert_eq!(
+            r.full_names,
+            ["Events Team Hamburg"],
+            "a qualifier ends the name"
+        );
         assert!(r.withheld.contains(&"Bonn".to_string()));
         // A real name typed in lowercase still redacts: a leak costs more than a wrong match.
         assert!(r.tokens.contains(&"eliah".to_string()));
@@ -250,12 +254,23 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let store = EntitiesStore::open(&dir.join("entities.db")).unwrap();
         let none = std::collections::BTreeMap::new();
-        store.create("self", "Max Muster", None, &none, "operator").unwrap();
-        store.create("person", "Erika Beispiel", None, &none, "operator").unwrap();
+        store
+            .create("self", "Max Muster", None, &none, "operator")
+            .unwrap();
+        store
+            .create("person", "Erika Beispiel", None, &none, "operator")
+            .unwrap();
         let registry = from_store(&store).unwrap();
         assert_eq!(registry.self_tokens, ["Max", "Muster"]);
-        assert_eq!(registry.full_names, ["Erika Beispiel"], "the operator's is left out");
-        assert!(registry.tokens.iter().any(|t| t == "Max"), "redaction keeps it");
+        assert_eq!(
+            registry.full_names,
+            ["Erika Beispiel"],
+            "the operator's is left out"
+        );
+        assert!(
+            registry.tokens.iter().any(|t| t == "Max"),
+            "redaction keeps it"
+        );
         assert!(registry.tokens.iter().any(|t| t == "Erika"));
         let _ = std::fs::remove_dir_all(dir);
     }

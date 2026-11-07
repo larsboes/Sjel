@@ -901,7 +901,10 @@ pub(crate) mod db_tests {
     /// it, and a request that gets through comes back `http_error`.
     pub(crate) fn closing_backend() -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free loopback port");
-        let base = format!("http://{}/v1", listener.local_addr().expect("a bound address"));
+        let base = format!(
+            "http://{}/v1",
+            listener.local_addr().expect("a bound address")
+        );
         std::thread::spawn(move || listener.incoming().for_each(drop));
         base
     }

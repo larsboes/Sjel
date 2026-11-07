@@ -277,7 +277,10 @@ mod tests {
             r#"{"tokens":["John","Miller"],"full_names":["John Miller","Solo"]}"#,
         );
         assert_eq!(r.full, ["john miller"], "a one-word entry is no full name");
-        assert!(!names_in(&r.full, "38 avenue John F. Kennedy, L-1855 Luxemburg"));
+        assert!(!names_in(
+            &r.full,
+            "38 avenue John F. Kennedy, L-1855 Luxemburg"
+        ));
         assert!(names_in(&r.full, "Ein Paket für\nJOHN  Miller, Bonn"));
         assert!(!names_in(&r.full, "Johnny Millerson"));
     }

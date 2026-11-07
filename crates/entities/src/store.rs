@@ -1025,9 +1025,17 @@ mod tests {
     fn one_person_becomes_self_and_keeps_its_person_fields() {
         let (store, dir) = scratch("self");
         let me = store
-            .create("person", "Max", None, &values(&[("emails", json!(["max@example.org"]))]), "operator")
+            .create(
+                "person",
+                "Max",
+                None,
+                &values(&[("emails", json!(["max@example.org"]))]),
+                "operator",
+            )
             .unwrap();
-        let other = store.create("person", "Erika", None, &values(&[]), "operator").unwrap();
+        let other = store
+            .create("person", "Erika", None, &values(&[]), "operator")
+            .unwrap();
         let me = store.make_self(&me.id).unwrap();
         assert_eq!(me.kind, "self");
         assert_eq!(me.values["emails"].value, json!(["max@example.org"]));
@@ -1041,9 +1049,17 @@ mod tests {
                 expected_revision: None,
             },
         );
-        assert!(patched.is_ok(), "a person field still validates: {patched:?}");
-        assert!(matches!(store.make_self(&other.id), Err(StoreError::Invalid(m)) if m.contains("already self")));
-        assert!(matches!(store.make_self("ent:none"), Err(StoreError::NotFound(_))));
+        assert!(
+            patched.is_ok(),
+            "a person field still validates: {patched:?}"
+        );
+        assert!(
+            matches!(store.make_self(&other.id), Err(StoreError::Invalid(m)) if m.contains("already self"))
+        );
+        assert!(matches!(
+            store.make_self("ent:none"),
+            Err(StoreError::NotFound(_))
+        ));
         let _ = std::fs::remove_dir_all(dir);
     }
 

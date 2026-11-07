@@ -1222,7 +1222,12 @@ async fn materialize_trip(
             }
             // Every entry, not only the added ones: a link made before items existed gets its
             // item now, and trips updates an existing one in place.
-            let items = anchor_items(&client, &base, &plan_id, &entries.iter().collect::<Vec<_>>())?;
+            let items = anchor_items(
+                &client,
+                &base,
+                &plan_id,
+                &entries.iter().collect::<Vec<_>>(),
+            )?;
             if added.is_empty() {
                 return Ok(json!({
                     "plan_id": plan_id,
@@ -1297,7 +1302,12 @@ async fn materialize_trip(
             .ok_or("trips accepted the plan but returned no id")?
             .to_string();
 
-        let items = anchor_items(&client, &base, &plan_id, &entries.iter().collect::<Vec<_>>())?;
+        let items = anchor_items(
+            &client,
+            &base,
+            &plan_id,
+            &entries.iter().collect::<Vec<_>>(),
+        )?;
         // Only now, after trips confirmed it exists.
         store
             .record_trip_materialization(&body.entry_ids, &plan_id)

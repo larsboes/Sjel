@@ -1094,7 +1094,8 @@ impl TursoStore {
 
     /// Records how far one domain's change feed has been read.
     pub async fn set_cursor(&self, domain: &str, cursor: &str) -> StoreResult<()> {
-        self.set_meta(&format!("{CURSOR_PREFIX}{domain}"), cursor).await
+        self.set_meta(&format!("{CURSOR_PREFIX}{domain}"), cursor)
+            .await
     }
 
     /// Timestamp of the last successful sync for a domain.

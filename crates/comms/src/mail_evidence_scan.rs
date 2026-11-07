@@ -614,10 +614,7 @@ const BODY_RETRY_PAUSES: [std::time::Duration; 2] = [
 ];
 
 /// [`google::thread_message_bodies`], read again after a pause when the failure was not a limit.
-fn read_bodies(
-    token: &str,
-    id: &str,
-) -> crate::Result<Option<Vec<google::ThreadMessageBody>>> {
+fn read_bodies(token: &str, id: &str) -> crate::Result<Option<Vec<google::ThreadMessageBody>>> {
     let mut result = google::thread_message_bodies(token, id);
     for pause in BODY_RETRY_PAUSES {
         match &result {
@@ -651,7 +648,10 @@ mod tests {
 
     #[test]
     fn only_a_failure_that_is_not_a_limit_is_retried() {
-        assert_eq!(body_failure_stage("thread body failed with HTTP 429"), "mail_body");
+        assert_eq!(
+            body_failure_stage("thread body failed with HTTP 429"),
+            "mail_body"
+        );
         assert_eq!(
             body_failure_stage("thread message exceeds text limit"),
             "mail_body_too_long"

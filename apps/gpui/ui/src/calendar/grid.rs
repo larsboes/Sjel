@@ -51,10 +51,15 @@ impl CalendarPage {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .when(idx > 0, |el| el.border_l_1().border_color(rgba(palette.border)))
+                    .when(idx > 0, |el| {
+                        el.border_l_1().border_color(rgba(palette.border))
+                    })
                     .when(is_today, |el| el.bg(rgba(tint(palette.accent, 0x06))))
             }));
-        let mut strip = div().relative().h(px((lanes as f32 * 24.).max(8.))).child(bg);
+        let mut strip = div()
+            .relative()
+            .h(px((lanes as f32 * 24.).max(8.)))
+            .child(bg);
         for span in spans {
             let entry = &entries[span.entry_index];
             let id = entry.id.clone();
@@ -121,7 +126,9 @@ impl CalendarPage {
                             .items_center()
                             .gap_1()
                             .cursor_pointer()
-                            .when(idx > 0, |el| el.border_l_1().border_color(rgba(palette.border)))
+                            .when(idx > 0, |el| {
+                                el.border_l_1().border_color(rgba(palette.border))
+                            })
                             .on_click(cx.listener(move |page, _, _, cx| {
                                 page.select(day, cx);
                             }))
@@ -154,11 +161,7 @@ impl CalendarPage {
                                     } else {
                                         FontWeight::MEDIUM
                                     })
-                                    .text_color(rgb(if is_today {
-                                        0xffffff
-                                    } else {
-                                        palette.text
-                                    }))
+                                    .text_color(rgb(if is_today { 0xffffff } else { palette.text }))
                                     .child(day.day().to_string()),
                             )
                     })),
@@ -210,7 +213,9 @@ impl CalendarPage {
                 .flex_1()
                 .min_w_0()
                 .h(px(hours * 24.))
-                .when(idx > 0, |el| el.border_l_1().border_color(rgba(palette.border)))
+                .when(idx > 0, |el| {
+                    el.border_l_1().border_color(rgba(palette.border))
+                })
                 .when(is_today, |el| el.bg(rgba(tint(palette.accent, 0x06))))
                 .on_drag_move(cx.listener(
                     move |page, event: &gpui::DragMoveEvent<CalendarDrag>, _, cx| {
@@ -314,9 +319,7 @@ impl CalendarPage {
                         .top(px(block.start as f32 / 60. * hours))
                         .left(gpui::relative(block.column as f32 / block.columns as f32))
                         .w(gpui::relative(1. / block.columns as f32))
-                        .h(px(
-                            ((block.end - block.start) as f32 / 60. * hours).max(18.),
-                        ))
+                        .h(px(((block.end - block.start) as f32 / 60. * hours).max(18.)))
                         .overflow_hidden()
                         .rounded(px(4.))
                         .border_l_3()
@@ -498,9 +501,7 @@ impl CalendarPage {
                     } else {
                         rgba(palette.surface)
                     })
-                    .hover(|el| {
-                        el.bg(rgba(tint(palette.raised, 0x80)))
-                    })
+                    .hover(|el| el.bg(rgba(tint(palette.raised, 0x80))))
                     .cursor_pointer()
                     .on_click(cx.listener(move |page, _, _, cx| page.select(day, cx)))
                     .child(

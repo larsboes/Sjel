@@ -130,6 +130,8 @@ fn profile_prevents_probes_and_requests_until_explicitly_enabled() {
         while std::time::Instant::now() < until {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // On macOS an accepted socket inherits the listener's non-blocking mode.
+                    stream.set_nonblocking(false).unwrap();
                     stream
                         .set_read_timeout(Some(std::time::Duration::from_secs(2)))
                         .unwrap();

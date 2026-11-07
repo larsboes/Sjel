@@ -94,8 +94,7 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
      predecessor: an archive and a stored item are records, not settings.
    - `<!-- axon:begin -->` / `<!-- axon:projection -->` markers: read, rewritten as `sjel:` the
      first time a note is written. No note in the vault carries one.
-   - `axon-clip`: a live browser extension with a stored `captured_via` tag, superseded by
-     `crates/comms/clipper` rather than by a rename ([`data.md`](data.md)).
+   - `captured_via = "axon-clip"`: a stored tag on clips the retired extension saved.
    - `bazel-*`: not the retired build, but the symlinks it left at the root of a checkout that
      once ran it. `.gitignore`, `bunfig.toml`, `audit.rs` and the install-policy prune each
      carry one line for that. The remaining build-dependency verdict lives in `upstreams.toml`.

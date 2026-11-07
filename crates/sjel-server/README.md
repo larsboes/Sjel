@@ -82,8 +82,8 @@ and twelve injections in every client that fans out across capabilities — sjel
 `/routes` aggregation does exactly that.
 
 A capability may still pass its own token to `InboundAuth::resolve`, and it wins. comms'
-`api_secret_file` is the one caller that does, because the browser extension and `axon-clip`
-already hold that value. A deployment converges the two by
+`api_secret_file` is the one caller that does, because the browser extension
+already holds that value. A deployment converges the two by
 pointing both references at one file.
 
 ### Why the loopback rule is now a type

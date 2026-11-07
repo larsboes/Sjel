@@ -175,11 +175,7 @@ source, excluding its trademarks and marketing assets. Its documented features i
 selection capture, persistent highlights, Reader, templates, variables, filters, logic and the
 optional Interpreter. `comms` already accepts captures and `/ingest` accepts submitted content,
 title, author and client provenance. Neither interface establishes full clipper parity. Defuddle
-is already recorded in `upstreams.toml`. `capabilities/comms/axon-clip` already captures a rendered
-page, selection or link into `/ingest` on Chromium browsers, with a popup, shortcuts and context
-menus. It does not provide the upstream reader, highlights or templates. The extension stores its
-configured bearer secret in browser-local storage; a replacement must review that credential
-boundary rather than assume it satisfies the current keychain policy. The clipper is recorded as
+is already recorded in `upstreams.toml`. The clipper is recorded as
 `watch` in `upstreams.toml`; audit it before adopting code.
 
 Initial upstream inspection: main resolved to `6d56d618b00bd970aa738d6a7a61edee27783e81`
@@ -284,7 +280,7 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
    vault when the result is knowledge. Clips stay `c2` and unenriched until then.
 7. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts
    and a dry run; keep the originals.
-8. **Retire `axon-clip`** after the new extension carries daily use.
+8. Done: `axon-clip` retired; Sjel Clipper carries daily use.
 9. **Prompt outbox.** An agent drafts a prompt for the user to paste into another tool, for
    example AI Studio with Search grounding (the `research` skill). Built 2026-11-03: the
    `comms_prompt_drafts` table, the clip-socket requests `drafts`, `draft_add` and `draft_take`,

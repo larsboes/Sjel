@@ -7,8 +7,6 @@ templates, variables, filters, logic, the template editor and Interpreter are up
 The audit and the full list of deltas are in [`upstreams.toml`](../../../upstreams.toml)
 (`[obsidian-web-clipper]`).
 
-`../axon-clip` remains in service until this extension has replaced it in daily use.
-
 ## What a save does
 
 The main button is **Add to Sjel**. Copy to clipboard and Save file (Markdown) stay as secondary

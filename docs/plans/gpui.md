@@ -78,11 +78,12 @@ Documents and People open directly from Today 1-tap shortcuts, finder, and links
 ### Documents
 
 1. Done: `Documents` (`ui/src/documents.rs`) and Core Graphics PDF rendering (`ui/src/pdf_kit.rs`)
-   live in `sjel-gpui-ui` for both macOS and iOS, wired on the phone behind `Today` with single-pane
-   mobile layout and pinch zoom.
-2. The phone lists documents from `GET /api/documents` with cursor paging (§7), and opens the
-   hash-verified original at fit width with pinch zoom.
-3. "Keep offline" stores the original and its metadata on the phone (rule 2).
+   on the Mac. The phone no longer reaches this GPUI page: its Documents is the NSH reader.
+2. Built as the NSH reader (§11): the phone lists documents from `GET /api/documents` in pages of
+   500, and opens the original in PDFKit at fit width after checking its SHA-256 against the
+   library's. Open: cursor paging (§7).
+3. Built (§11): "Keep offline" stores the original and its detail in a folder with
+   `NSFileProtectionComplete` (rule 2), and kept documents list and open without the Mac.
 4. Then [#245](https://github.com/larsboes/Sjel/issues/245) (filing and side-by-side compare),
    [#247](https://github.com/larsboes/Sjel/issues/247) (reviewable proposals) and
    [#246](https://github.com/larsboes/Sjel/issues/246) (durable duplicate and split decisions).
@@ -593,83 +594,59 @@ Open:
 
 ## 11. UI stack
 
-Decided 2026-11-07: GPUI Fast is the renderer on the desktop. The phone gets a trial of
-[NSH](https://github.com/longbridge/nsh), which renders with UIKit and Android views and embeds
-into a GPUI app. `gpui-mobile` stays only as the bridge that keeps the current phone app building
-until the trial decides. The evidence is in
-[`research/ui-stack.md`](../../research/ui-stack.md).
+Decided 2026-11-07: GPUI Fast draws the Mac app, and [NSH](https://github.com/longbridge/nsh)
+draws new phone screens with UIKit views. GPUI draws every pixel itself, which suits the desktop.
+On the phone it has to rebuild text selection, input methods and accessibility that UIKit already
+has. NSH's GPUI backend runs on the same `gpui-fast` the Mac app uses, so one NSH screen also
+opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-stack.md).
 
-The reason: GPUI draws every pixel itself. That suits the desktop. On the phone it has to rebuild
-text selection, input methods and accessibility that the platform already has, and the current
-phone app shows it. NSH's GPUI backend pins the same `gpui-fast` 0.1.13 that GPUI Kit 0.9.0
-selects, so one NSH screen can run natively on the phone and inside the Mac app.
+### Built
 
-Stages, in order:
+| What | Where | Commit |
+|---|---|---|
+| Pins: `gpui-kit` 0.9.0, `gpui-pre` 0.3.11, `gpui-mobile` fork | §6 item 1 | `d2970986` |
+| Crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`) | each crate root | `21966ff8` |
+| GPUI Fast is the Mac default; `--no-default-features` builds `gpui-pre` | `apps/gpui/Cargo.toml` | `fdf3f6cb` |
+| Frame cost on both renderers | §9 | `c28ffb23` |
+| NSH Documents reader, one screen for phone and Mac | `ui/src/nsh_documents.rs` | `62145b47` |
+| `device::Source`: the Mac's shell or the phone's client, one read path | `core/src/device.rs` | `62145b47` |
+| Documents on the phone is the NSH reader; "Back" returns to GPUI | `ios/src/nsh.rs`, `nav.rs`, `launch.rs` | `a71af504` |
+| Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | this section's commit |
 
-1. **Pins.** Done 2026-11-07 (§6 item 1).
-2. **GPUI Fast on the Mac.** A `gpui-fast` feature on the `sjel-gpui` binary that forwards to
-   `gpui-kit/gpui-fast`. The iOS build does not enable it. Done when:
-   - `apps/gpui/bench-scroll` runs on systems, inventory, documents, packs and feed with and
-     without the feature, and both tables are in §9.
-   - Systems is under 8.3 ms p50 with the feature.
-   - A pass through every Mac page finds no view that stays stale after its data changes.
-     Retained rendering skips a view whose state changed outside an entity, a global or list
-     state without `cx.notify()`.
-   Then the feature becomes the default, or the change is reverted and §9 records why.
-   Built 2026-11-07: the crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`
-   at each crate root), so the `gpui-fast` feature switches the backend for every page.
-   `apps/gpui/install` builds it. Tests and clippy give the same result with
-   and without the feature. Bench done (§9): the Systems criterion holds on both builds, and
-   GPUI Fast is faster on four of five pages. The page pass found no stale view. Done
-   2026-11-07: `gpui-fast` is a default feature of `sjel-gpui`. `--no-default-features` builds
-   the `gpui-pre` variant for a comparison. Not checked: the Linux and Windows legs on GPUI Fast,
-   which CI builds.
-3. **NSH trial: the Documents reader on the phone.** It is a Priority 1 screen that does not
-   exist on the phone yet (§2, Documents), so no working screen is rewritten. Build it in NSH's
-   Rust mode, shown by an `NshAppView` in `ios/host` beside the GPUI view. Done when each of
-   these holds, or one fails and the failure is recorded here:
-   - It reads its data through `sjel-gpui-core`, with no second copy of the data code.
-   - On a real iPhone, text selection with the system menu and VoiceOver work in the reader.
-   - The same screen runs in the Mac app through `nsh-platform-gpui` on the stage 2 GPUI Fast.
-   - The iOS build links one GPUI copy at most, and it builds with stock Cargo.
-   Step 1 done 2026-11-07: `sjel-gpui-ios` with the `nsh-trial` feature links NSH 0.4.0 in Rust
-   mode (no JavaScript engine) beside `gpui-mobile`, with stock Cargo and one GPUI copy.
-   `SJEL_IOS_FEATURES=nsh-trial SIMCTL_CHILD_SJEL_NSH_TRIAL=1 apps/gpui/ios/run-sim` shows the
-   placeholder screen (`ios/src/nsh_trial.rs`) drawn with UIKit views over the GPUI view. The
-   NSH crates come from the `v0.4.0` git tag: the published `nsh-platform-ios` 0.4.0 includes a
-   file outside its package and does not build. Without the feature the app is unchanged.
-   Step 2 done 2026-11-07: the trial screen is the phone's Documents reader. A paired phone
-   lists the Mac's library through `shell::device_documents_page` and opens a document's
-   extracted text through `shell::device_document_detail` (`core/src/shell/documents.rs`, the
-   paths shared with the Mac's `Shell`). Rows are a native virtual list, and the reader's title
-   and text are selectable. Checked on the simulator: the unpaired state, inside the safe area.
-   Not checked: the list and the reader with data, because the simulator was not paired, and
-   text selection and VoiceOver on a device. The GPUI Documents page on the phone still has no
-   data source (`ios/src/lib.rs`, `ShellError::NotSetUp`).
-   Step 3, 2026-11-07: the screen moved to `sjel-gpui-ui` (`ui/src/nsh_documents.rs`) and reads
-   through `device::Source`, the Mac's shell or the phone's client (moved from `travel.rs`).
-   The Mac app with `--features nsh-trial` and `SJEL_NSH_TRIAL=1` opens it in a window through
-   `nsh-platform-gpui` on the app's GPUI Fast. NSH comes from rev `cc38facfdd`: `v0.4.0`'s GPUI
-   backend does not compile against `gpui-fast` 0.1.13 (`KeyBinding::new` takes a static
-   keystroke). Checked on a paired iPhone: the list fills from the Mac. Checked: every build,
-   core and ui tests, clippy. Not checked: the Mac window's content, text selection and
-   VoiceOver on the iPhone.
-   Result 2026-11-07: the trial passes on the phone. On a paired iPhone the list fills, text
-   selection opens the system menu and VoiceOver reads the list and the reader. The Mac window
-   opens; its content was not looked at.
-4. **After the trial.** Started 2026-11-07: NSH is a default feature of `sjel-gpui-ios`
-   (`nsh`). Documents on the phone is the NSH reader, shown over the GPUI view by
-   `host::show_nsh` from `select_tab` and from a `SJEL_TAB=documents` launch, and hidden by its
-   "Back". The GPUI Documents page is no longer reachable on the phone. Not checked: "Back" on a
-   device. If it passes: new phone screens are NSH screens, and existing phone
-   screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
-   `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android
-   backend. If it fails: the phone stays on GPUI, and the choice is between keeping the
-   `gpui-mobile` fork and moving the host to Zed's `gpui_ios`, which owns the app lifecycle and
-   would call the Swift features through FFI.
-5. **A smaller `ui/`.** Open, not designed. A page that moves to NSH or is touched for GPUI Fast
-   loses dead code and duplicated layout in the same change. Done-when checks come with the
-   design.
+Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
+text opens the system menu, and VoiceOver reads the list and the reader.
 
-The Mac's own pages stay GPUI pages. Moving them to NSH is not decided: it is a separate
-decision after stage 4.
+### How the phone shows an NSH screen
+
+`host/App.swift` mounts one hidden NSH view over the GPUI view at launch (`sjel_ios_nsh_mount`).
+`host::show_nsh` and `host::hide_nsh` switch it. `select_tab` shows it for `Tab::Documents`, and
+the reader's "Back" hides it (`nsh_documents::set_close`). Native views come from the host as NSH
+native components: `sjel.pdf` is a PDFKit `PDFView` (`host/Documents.swift`, registered in
+`ios/src/nsh.rs`). A new NSH screen goes in `ui/src` behind the `nsh` feature, reads through
+`device::Source`, and gets its own show path from `select_tab`.
+
+Run it: `apps/gpui/ios/run-sim` (add `SIMCTL_CHILD_SJEL_TAB=documents` to land on the reader),
+`apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPhone. The Mac window:
+`cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1`.
+
+NSH comes from git rev `cc38facfdd` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
+build for this app.
+
+### Open, in order
+
+1. **Device check of everything since `a71af504`.** On a paired iPhone: Documents opens from
+   Today and "Back" returns; "Original" opens a PDF at fit width with pinch zoom; "Keep offline"
+   then airplane mode, and the kept document lists and opens. Not run yet.
+2. **Documents done-when (§2).** A real multi-page PDF opens at fit width, a kept document opens
+   with the Mac unreachable, and the phone's original matches the library's SHA-256. Built; the
+   check is item 1. Still open from §2: cursor paging (`GET /api/documents` reads 500 rows a
+   page), and #245–#247.
+3. **Mail on the phone as an NSH screen** (Priority 1 item 4), on the same pattern.
+4. **The new tab bar** after Mail. The bar is GPUI today (`ios/src/lib.rs`); with two NSH
+   screens, decide whether the bar itself moves to NSH (`nsh_base` tabs). Not decided.
+5. **Retire the phone's GPUI pages** as each is next changed. `ios/src`'s GPUI shell and
+   `gpui-mobile` go when the last one has moved. Android comes from NSH's Android backend.
+6. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to
+   NSH is not decided.
+7. **A smaller `ui/`.** Not designed. A page that moves to NSH drops its GPUI version in the same
+   change.

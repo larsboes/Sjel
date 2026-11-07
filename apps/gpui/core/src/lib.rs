@@ -45,6 +45,7 @@ pub mod inventory;
 pub mod mail;
 pub mod media;
 pub mod mirror;
+pub mod originals;
 pub mod notify;
 pub mod packs;
 pub mod people;

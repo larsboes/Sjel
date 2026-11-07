@@ -314,6 +314,29 @@ impl crate::device::Source {
         }
     }
 
+    /// The stored original's bytes, up to the size the Mac app also accepts.
+    ///
+    /// # Errors
+    /// A refusal for an `id` that is not a document id or an original that is too large, or the
+    /// transport failure, as text.
+    pub async fn document_original(&self, id: &str) -> Result<Vec<u8>, String> {
+        let bytes = match self {
+            Self::Shell(shell) => shell
+                .document_original(id)
+                .await
+                .map_err(|e| e.to_string())?,
+            Self::Device(client) => {
+                let path = super::document_original_path(id)
+                    .ok_or_else(|| "Not a document id.".to_string())?;
+                client.get_bytes(&path).await?
+            }
+        };
+        if bytes.len() > super::MAX_DOCUMENT_BYTES {
+            return Err(super::too_large().to_string());
+        }
+        Ok(bytes)
+    }
+
     /// A document's extracted text and pages.
     ///
     /// # Errors

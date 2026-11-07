@@ -1335,6 +1335,7 @@ mod tests {
     fn summary(id: &str, category: Option<&str>, filename: &str) -> DocumentSummary {
         DocumentSummary {
             id: id.into(),
+            sha256: String::new(),
             filename: filename.into(),
             media_type: "application/pdf".into(),
             byte_len: 1,
@@ -1390,6 +1391,7 @@ mod tests {
     fn filters_match_document_statuses() {
         let mut row = DocumentSummary {
             id: "id".into(),
+            sha256: String::new(),
             filename: "document.pdf".into(),
             media_type: "application/pdf".into(),
             byte_len: 1,

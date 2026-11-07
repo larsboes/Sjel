@@ -21,17 +21,17 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 | The Sjel agent | Sessions, prompts, steering, approvals and stop on the right edge. A session has one of three access tiers, and every command is blocked, asked about or allowed by a rule set. Not tested on a device. | Live validation on a phone, then the Block card | [`agent.md`](docs/plans/agent.md) |
 | Other agents (Claude Code, Codex, Pi) | Terminal on the Mac behind Face ID, opens a login shell. Not tested on a device. | Live validation, then a preset and directory picker | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
 | Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
-| Documents | Nothing (reader planned) | The native reader, offline, from the hash-verified original (#245) | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
-| Mail | Nothing (Feed is Mac-only) | Read and triage mail on the phone | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
+| Documents | NSH reader: list, text, PDF original checked by SHA-256, keep offline. Not checked on a device since `a71af504`. | Device check, cursor paging, then #245–#247 | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
+| Mail | Nothing (Feed is Mac-only) | Read and triage mail on the phone, as an NSH screen | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Calendar | Tab, reads and writes the replica | A time grid and quick rescheduling | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 
 Order inside Priority 1:
 
 1. The agent's tiers and command policy.
 2. Live validation of the agent and the terminal on a phone.
-3. The UI stack ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)): the pins, GPUI Fast on the
-   Mac, then the NSH trial, which builds the phone's Documents reader.
-4. Mail on the phone, then the new tab bar, both on the stack the trial chose.
+3. The UI stack ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)): built. Open: the device
+   check of the Documents reader (§11 "Open", item 1).
+4. Mail on the phone as an NSH screen, then the new tab bar.
 5. Travel and Calendar UI.
 
 Work that Priority 1 needs from other areas (storage for offline reads, a missing write path)

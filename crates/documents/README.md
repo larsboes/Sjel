@@ -34,7 +34,7 @@ documents verify                                               # verify blob dig
 
 The `documents` service binds loopback on `SJEL_DOCUMENTS_PORT` (default 8104) behind Sjel's inbound authentication:
 
-- `GET /api/documents` — paginated metadata listing with derived `workflow_stage`, token-prefix query search (`q`), and status filtering.
+- `GET /api/documents` — paginated metadata listing with derived `workflow_stage`, the original's `sha256`, token-prefix query search (`q`), and status filtering.
 - `GET /api/documents/{id}` — record metadata, page evidence, split suggestions, child documents, and proposal review history.
 - `POST /api/documents?filename=...` — idempotent raw-byte upload.
 - `GET /api/documents/{id}/original` — hash-verified raw bytes (inline for PDF, download for other formats).

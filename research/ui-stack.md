@@ -83,10 +83,19 @@ This is well below the 73 to 88 percent in the GPUI Fast README. Sjel's pages al
 rows per frame after the virtual-list work in `gpui.md` §9, so less work was left to retain. That
 explanation is an estimate, not measured. Tests and clippy give the same result on both builds.
 
+## The phone trial
+
+On 2026-11-07 the phone's Documents reader was built in NSH and run on a paired iPhone 14 Pro
+([`gpui.md` §11](../docs/plans/gpui.md#11-ui-stack)). The list filled from the Mac, a long press
+on the text opened the system menu, and VoiceOver read the list and the reader. NSH and
+`gpui-mobile` linked into one library with stock Cargo. Two NSH defects were found on the way:
+the published `nsh-platform-ios` 0.4.0 includes a file outside its package, and the `v0.4.0` GPUI
+backend does not compile against `gpui-fast` 0.1.13. NSH's main branch had fixed the second the
+same day.
+
 ## What the sources do not show
 
-- How NSH behaves on Sjel's screens and on a real iPhone. Text selection, VoiceOver and scrolling
-  are claims of the NSH documentation, not measurements.
+- How NSH behaves on screens other than Documents, and its scrolling and memory cost on a phone.
 - Whether an NSH view and the GPUI view run well side by side in one iOS app, in memory and
   startup time.
 - Whether NSH's API holds still. It went from v0.1.1 to v0.4.0 in 17 days

@@ -133,6 +133,9 @@ impl Partition {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default, schemars::JsonSchema)]
 pub struct DocumentSummary {
     pub id: String,
+    /// SHA-256 of the stored original, in lowercase hex.
+    #[serde(default)]
+    pub sha256: String,
     pub filename: String,
     pub media_type: String,
     pub byte_len: i64,

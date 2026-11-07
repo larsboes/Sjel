@@ -28,7 +28,7 @@ const EVENTS_PATH: &str = "/api/sjel-status/events";
 /// The ceiling on one original, matching `MAX_BYTES` in `crates/documents/src/server.rs`.
 /// A reader holds one document at a time, and this is the most it can be asked to hold; the two
 /// numbers are one edit apart on purpose.
-const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
+pub(crate) const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
 
 pub use status_api::{
     default_kept_running, AgentCall, AgentGate, AgentView, Approval, CapabilityHealth, Liveness,
@@ -127,7 +127,7 @@ fn is_sha256(id: &str) -> bool {
 
 /// The reader route for one document's original, or `None` for an id that is not a digest. The
 /// check runs before any request, so a malformed id never reaches the capability.
-fn document_original_path(id: &str) -> Option<String> {
+pub(crate) fn document_original_path(id: &str) -> Option<String> {
     is_sha256(id).then(|| format!("/documents/api/documents/{id}/original"))
 }
 

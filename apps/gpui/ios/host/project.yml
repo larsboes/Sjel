@@ -14,6 +14,7 @@ targets:
       - path: App.swift
       - path: Audio.swift
       - path: DeviceIdentity.swift
+      - path: Documents.swift
       - path: Discovery.swift
       - path: Notifications.swift
       - path: PairScanner.swift

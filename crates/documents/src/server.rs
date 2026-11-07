@@ -128,6 +128,7 @@ fn summary_from_document(
 ) -> Summary {
     Summary {
         id: document.id.clone(),
+        sha256: document.sha256.clone(),
         filename: document.filename.clone(),
         media_type: document.media_type.clone(),
         byte_len: document.byte_len,

@@ -888,7 +888,7 @@ url = "https://github.com/longbridge/gpui-fast"
 verdict = "evaluate"
 license = "Apache-2.0"
 summary = "GPUI fork with retained rendering and scroll layers; the planned renderer for the Mac"
-why = "Its README reports 73-88% less main-thread CPU per frame than gpui-pre, measured by Longbridge on Linux, and Sjel's Systems page misses the 8.3 ms budget on every frame (docs/plans/gpui.md section 9). It has no published iOS path: gpui-fast-platform 0.1.13 pulls gpui-pre-ios on iOS."
+why = "Its README reports 73-88% less main-thread CPU per frame than gpui-pre, measured by Longbridge on Linux, and Sjel's Systems page misses the 8.3 ms budget on every frame (docs/plans/gpui.md section 9). It has no published iOS path: gpui-fast-platform 0.1.13 pulls gpui-pre-ios on iOS. Measured 2026-11-07 on Sjel's Mac app: p50 28-41% lower on three of five pages, Packs p50 about a third higher, frames over budget 58 down to at most 12 (gpui.md section 9)."
 revisit = "Decide after stage 2 of docs/plans/gpui.md section 11: adopt if bench-scroll shows Systems under 8.3 ms p50 and no page stays stale, otherwise reject with the numbers."
 
 [gpui-mobile]

@@ -527,6 +527,23 @@ is 8.3 ms a frame. Release build, 2026-11-02:
 An empty page costs about 1.6 ms, so almost all of the figure above is the page's own rows: a rich
 Feed row costs about 0.2 ms to build, layout and paint.
 
+GPUI Fast against `gpui-pre`, release build, 2026-11-07 (`apps/gpui/bench-scroll <page>`, CPU
+from render to paint in ms, frames over 8.3 ms). `gpui-pre` 0.3.11 shows its second run: the first
+painted 61 and 81 frames on systems and documents and is dropped. GPUI Fast 0.1.13 shows both runs.
+
+| page | `gpui-pre` p50 / p95 / over | GPUI Fast p50 / p95 / over |
+|---|---|---|
+| systems | 2.01 / 2.32 / 0 | 1.16–1.20 / 1.29–1.59 / 0 |
+| inventory | 3.11 / 4.41 / 0 | 2.23–2.24 / 3.14 / 0 |
+| documents | 3.57 / 8.65 / 25 | 3.27–3.55 / 6.49–6.76 / 4–6 |
+| packs | 3.67 / 10.34 / 26 | 4.89–5.10 / 5.52–5.71 / 0–1 |
+| feed | 4.37 / 7.66 / 7 | 2.71–2.87 / 5.42–5.80 / 5 |
+
+GPUI Fast lowers p50 by 28 to 41 percent on systems, inventory and feed, and cuts the frames over
+budget from 58 to at most 12. Packs is the exception: p50 rises by about a third while p95 halves.
+The 73 to 88 percent in the GPUI Fast README are not reproduced here. Systems no longer misses
+the budget on either build, so the 2026-11-02 table above is out of date for that page.
+
 ### Done
 
 | # | What | Result |
@@ -601,7 +618,8 @@ Stages, in order:
    Built 2026-11-07: the crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`
    at each crate root), so the `gpui-fast` feature switches the backend for every page.
    `SJEL_GPUI_FAST=1 apps/gpui/install` builds it. Tests and clippy give the same result with
-   and without the feature. Open: the bench and the page pass above.
+   and without the feature. Bench done (§9): the Systems criterion holds on both builds, and
+   GPUI Fast is faster on four of five pages. Open: the page pass above, then the default.
 3. **NSH trial: the Documents reader on the phone.** It is a Priority 1 screen that does not
    exist on the phone yet (§2, Documents), so no working screen is rewritten. Build it in NSH's
    Rust mode, shown by an `NshAppView` in `ios/host` beside the GPUI view. Done when each of

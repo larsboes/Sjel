@@ -36,6 +36,9 @@ if [ -d "$shared_target" ] && [ -z "${CARGO_TARGET_DIR:-}" ]; then
 fi
 
 commit="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
+if [ -n "${SJEL_DESKTOP_PREBUILT:-}" ]; then
+  commit="${SJEL_DESKTOP_PREBUILT_COMMIT:?Set the commit of the prebuilt binary}"
+fi
 # The app reads compiler errors as records (`--message-format=json-render-diagnostics`); a terminal
 # run keeps cargo's own rendering, which is what a person expects to see scrolling past.
 cargo_args=(build --release)
@@ -45,16 +48,21 @@ fi
 if [ -n "${SJEL_BUILD_MESSAGE_FORMAT:-}" ]; then
   cargo_args+=("--message-format=$SJEL_BUILD_MESSAGE_FORMAT")
 fi
-if [ "$native_maps" = 1 ]; then
+if [ -n "${SJEL_DESKTOP_PREBUILT:-}" ]; then
+  binary="$SJEL_DESKTOP_PREBUILT"
+  [ -x "$binary" ] || { echo "apps/gpui/install: prebuilt binary is not executable" >&2; exit 1; }
+elif [ "$native_maps" = 1 ]; then
   (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" MLN_PRECOMPILE=1 cargo "${cargo_args[@]}")
 else
   (cd "$APP_DIR" && SJEL_BUILD_COMMIT="$commit" cargo "${cargo_args[@]}")
 fi
-target_dir="$(cd "$APP_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
-binary="$target_dir/release/sjel-gpui"
+if [ -z "${SJEL_DESKTOP_PREBUILT:-}" ]; then
+  target_dir="$(cd "$APP_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+  binary="$target_dir/release/sjel-gpui"
+fi
 
-staging="$(mktemp -d)"
-trap 'rm -rf "$staging"' EXIT
+staging="$(mktemp -d /private/tmp/sjel-desktop.XXXXXX)"
+trap 'status=$?; if [ "$status" -eq 0 ]; then rm -rf "$staging"; else echo "apps/gpui/install: staged bundle retained at $staging" >&2; fi' EXIT
 bundle="$staging/Sjel Desktop.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$binary" "$bundle/Contents/MacOS/Sjel Desktop"
@@ -112,10 +120,12 @@ if is_running; then
   for _ in $(seq 50); do is_running || break; sleep 0.1; done
 fi
 mkdir -p "$(dirname "$DEST")"
-rm -rf "$DEST"
-mv "$bundle" "$DEST"
+. "$APP_DIR/../../tools/lib/replace-directory.sh"
+sjel_replace_directory "$bundle" "$DEST"
 # Re-register so LaunchServices picks up the new LSEnvironment.
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1
+if ! /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1; then
+  echo "apps/gpui/install: installed; LaunchServices registration failed" >&2
+fi
 if $was_running; then
   open "$DEST"
   echo "apps/gpui/install: installed and restarted $DEST"

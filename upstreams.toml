@@ -880,14 +880,41 @@ why = "Adopted when the dashboard retired and GPUI became the one app (PLAN.md d
 url = "https://github.com/longbridge/gpui-kit"
 verdict = "adopt"
 license = "Apache-2.0"
-summary = "Community GPUI component kit: inputs, menus, dialogs, virtual lists, themes"
-why = "The app's inputs, lists and components on both devices (apps/gpui/Cargo.toml). Its pin has to match the `gpui-pre` snapshot or the two copies do not link, so a kit release waits for gpui-mobile to follow the same snapshot. Its author reported 40-60% CPU while a complex view scrolls, noted 2026-10-09; apps/gpui/bench-scroll measures this app's own cost."
+summary = "Community GPUI component kit: inputs, menus, dialogs, virtual lists, themes; Sjel's GPUI dependency"
+why = "Sjel's app builds on it (`apps/gpui/Cargo.toml`) and pins it with the `gpui-pre` snapshot it requires. Its `gpui-fast` feature selects GPUI Fast without a patch, which is how the desktop moves to retained rendering (docs/plans/gpui.md section 11)."
+
+[gpui-fast]
+url = "https://github.com/longbridge/gpui-fast"
+verdict = "evaluate"
+license = "Apache-2.0"
+summary = "GPUI fork with retained rendering and scroll layers; the planned renderer for the Mac"
+why = "Its README reports 73-88% less main-thread CPU per frame than gpui-pre, measured by Longbridge on Linux, and Sjel's Systems page misses the 8.3 ms budget on every frame (docs/plans/gpui.md section 9). It has no published iOS path: gpui-fast-platform 0.1.13 pulls gpui-pre-ios on iOS."
+revisit = "Decide after stage 2 of docs/plans/gpui.md section 11: adopt if bench-scroll shows Systems under 8.3 ms p50 and no page stays stale, otherwise reject with the numbers."
+
 [gpui-mobile]
 url = "https://github.com/longbridge/gpui-mobile"
-verdict = "adopt"
+verdict = "fork"
 license = "GPL-3.0-or-later OR AGPL-3.0-or-later OR Apache-2.0"
-summary = "Longbridge's GPUI platform crate for iOS and Android (`gpui-pre-mobile`); the iPhone app runs on it"
-why = "The phone client embeds it in a UIKit host with the scene life cycle (apps/gpui/ios/host/App.swift), pinned by git revision in apps/gpui/ios/Cargo.toml. It sets the pace for all three GPUI pins: on 2026-11-07 it followed gpui-pre 0.3.10 eight days after release (#45) and had not yet followed 0.3.11, released 2026-11-02. Most merged work since October is Android; iOS PRs #43 and #44 were open from 2026-10-21. #44 (scenes for the iOS 27 SDK) does not affect this host, which already uses scenes and embedded mode. The earlier candidate, itsbalamurali/gpui-mobile, pinned a Zed revision instead of the snapshot."
+summary = "GPUI platform crate for iOS and Android that a Swift or Kotlin host embeds; Sjel's current phone renderer"
+why = "Only GPUI platform for a Swift-hosted app: Zed's gpui_ios owns the app lifecycle. GPUI Kit 0.9.0 needs gpui-pre 0.3.11, and the Longbridge compatibility fork was on 0.3.10 on 2026-11-07, so Sjel pins a fork at 0.3.11 and sends the bump upstream. It is a bridge until the NSH trial decides the phone (docs/plans/gpui.md section 11)."
+revisit = "Return to the upstream rev when it reaches the snapshot GPUI Kit pins. Remove the dependency when the last phone screen leaves GPUI."
+
+[gpui-pre-ios]
+url = "https://github.com/zed-industries/zed/tree/main/crates/gpui_ios"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Zed's own iOS platform for GPUI, published as gpui-pre-ios; the fallback if the NSH trial fails"
+why = "Maintained in the Zed repository with native UIKit text input, and published at 0.3.11 since 2026-10-19. It owns UIApplication and the scene delegate, so Sjel's Swift host would invert: Rust starts the app and calls RoomPlan, audio and pairing through FFI."
+revisit = "Decide if the NSH trial in docs/plans/gpui.md section 11 fails."
+
+[nsh]
+url = "https://github.com/longbridge/nsh"
+verdict = "evaluate"
+license = "Apache-2.0"
+summary = "Rust UI framework that renders with each platform's own views; trial renderer for the phone"
+why = "Renders with UIKit and Android views, embeds into an existing iOS app as NshAppView and into a GPUI app on the gpui-fast GPUI Kit selects, so one screen can serve the phone natively and the Mac. v0.4.0 on 2026-11-04, created 2026-10-14; evidence in research/ui-stack.md."
+revisit = "Decide at the end of stage 3 of docs/plans/gpui.md section 11, the Documents reader trial."
+
 [nimble]
 url = "https://ollama.com/library/nimble"
 verdict = "watch"

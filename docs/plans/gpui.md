@@ -2,7 +2,8 @@
 
 The native GPUI client ([`apps/gpui`](../../apps/gpui/README.md)) is the one Sjel app on macOS and
 iOS, with Linux, Windows and Android later. A rule the Mac and the phone share goes into a
-capability or `apps/gpui/core`.
+capability or `apps/gpui/core`. The renderer for each platform is decided in §11: GPUI Fast on the
+desktop, and a trial of NSH on the phone.
 
 Lane A in [`PLAN.md`](../../PLAN.md). Lane B, the agent, has priority when the two compete. The agent seat (Work Package 22) is in
 [`agent.md`](agent.md), RoomPlan and the other scanners are in [`scanning.md`](scanning.md), and
@@ -417,11 +418,12 @@ build was performed for this handoff.
 
 ## 6. One UI crate, every platform
 
-1. **GPUI pins.** Done: `gpui-kit =0.8.1`, `gpui-pre =0.3.10` (`apps/gpui/Cargo.toml`) and
-   `gpui-mobile` rev `7548ebc4b2` (`ios/Cargo.toml`), one matching set. Open: gpui-kit 0.9.0
-   requires `gpui-pre =0.3.11`, so it waits until `gpui-mobile` moves to 0.3.11. The three move
-   together by hand in one commit, with `cargo test` on core and ui and `ios/run-sim` before and
-   after. Dependabot ignores them (`.github/dependabot.yml`).
+1. **GPUI pins.** Done 2026-11-07: `gpui-kit =0.9.0` and `gpui-pre =0.3.11`
+   (`apps/gpui/Cargo.toml`) with the `gpui-mobile` fork `larsboes/gpui-mobile` rev `bbedd2d`
+   (`ios/Cargo.toml`), one matching set. The three move together by hand in one commit, with
+   `cargo test` on core and ui and `ios/run-sim` before and after. Dependabot ignores them
+   (`.github/dependabot.yml`). Open: the fork's change as a PR to `longbridge/gpui-mobile`, and a
+   return to the upstream rev once it carries 0.3.11. Android was not built.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
@@ -452,7 +454,8 @@ build was performed for this handoff.
 4. **Linux, Windows, Android.** The Mac shell checks on Linux (`4cd60961`), and CI checks every
    leg (`578e6948`). Linux credentials use the Secret Service (`37adf658`). Open: a Windows
    keychain crate, a PDF renderer off macOS, a launch on a real Linux desktop, packaging, and an
-   Android host like `ios/host`. The pinned `gpui-mobile` already has an Android backend.
+   Android host like `ios/host`. The pinned `gpui-mobile` already has an Android backend. If the
+   NSH trial in §11 passes, the Android phone app comes from NSH's Android backend instead.
 5. **Lints.** Clippy is clean for `apps/gpui` at `--all-targets`
    (`sjel cargo clippy --manifest-path apps/gpui/Cargo.toml --all-targets --locked`). The
    remaining warnings were a manual counter loop, manual prefix slicing, a reversed-key sort,
@@ -569,3 +572,49 @@ Open:
    Documents page and the reader in `sjel demo app`.
 2. **Phone on the dev node.** Needs the LAN listener and the `devices` capability in the demo
    stack (also blocks the iPhone screenshots in [`restructure.md`](restructure.md)).
+
+## 11. UI stack
+
+Decided 2026-11-07: GPUI Fast is the renderer on the desktop. The phone gets a trial of
+[NSH](https://github.com/longbridge/nsh), which renders with UIKit and Android views and embeds
+into a GPUI app. `gpui-mobile` stays only as the bridge that keeps the current phone app building
+until the trial decides. The evidence is in
+[`research/ui-stack.md`](../../research/ui-stack.md).
+
+The reason: GPUI draws every pixel itself. That suits the desktop. On the phone it has to rebuild
+text selection, input methods and accessibility that the platform already has, and the current
+phone app shows it. NSH's GPUI backend pins the same `gpui-fast` 0.1.13 that GPUI Kit 0.9.0
+selects, so one NSH screen can run natively on the phone and inside the Mac app.
+
+Stages, in order:
+
+1. **Pins.** Done 2026-11-07 (§6 item 1).
+2. **GPUI Fast on the Mac.** A `gpui-fast` feature on the `sjel-gpui` binary that forwards to
+   `gpui-kit/gpui-fast`. The iOS build does not enable it. Done when:
+   - `apps/gpui/bench-scroll` runs on systems, inventory, documents, packs and feed with and
+     without the feature, and both tables are in §9.
+   - Systems is under 8.3 ms p50 with the feature.
+   - A pass through every Mac page finds no view that stays stale after its data changes.
+     Retained rendering skips a view whose state changed outside an entity, a global or list
+     state without `cx.notify()`.
+   Then the feature becomes the default, or the change is reverted and §9 records why.
+3. **NSH trial: the Documents reader on the phone.** It is a Priority 1 screen that does not
+   exist on the phone yet (§2, Documents), so no working screen is rewritten. Build it in NSH's
+   Rust mode, shown by an `NshAppView` in `ios/host` beside the GPUI view. Done when each of
+   these holds, or one fails and the failure is recorded here:
+   - It reads its data through `sjel-gpui-core`, with no second copy of the data code.
+   - On a real iPhone, text selection with the system menu and VoiceOver work in the reader.
+   - The same screen runs in the Mac app through `nsh-platform-gpui` on the stage 2 GPUI Fast.
+   - The iOS build links one GPUI copy at most, and it builds with stock Cargo.
+4. **After the trial.** If it passes: new phone screens are NSH screens, and existing phone
+   screens move to NSH when they are next changed. The GPUI phone shell (`ios/src`) and
+   `gpui-mobile` retire when the last phone screen has moved. Android comes from NSH's Android
+   backend. If it fails: the phone stays on GPUI, and the choice is between keeping the
+   `gpui-mobile` fork and moving the host to Zed's `gpui_ios`, which owns the app lifecycle and
+   would call the Swift features through FFI.
+5. **A smaller `ui/`.** Open, not designed. A page that moves to NSH or is touched for GPUI Fast
+   loses dead code and duplicated layout in the same change. Done-when checks come with the
+   design.
+
+The Mac's own pages stay GPUI pages. Moving them to NSH is not decided: it is a separate
+decision after stage 4.

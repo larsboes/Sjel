@@ -22,8 +22,8 @@ unsafe_code = "deny"
 [workspace.dependencies]
 sjel-gpui-core = { path = "core" }
 sjel-gpui-ui = { path = "ui" }
-gpui-kit = { version = "=0.8.1", default-features = false, features = ["component"] }
-gpui = { package = "gpui-pre", version = "=0.3.10", default-features = false }
+gpui-kit = { version = "=0.9.0", default-features = false, features = ["component"] }
+gpui = { package = "gpui-pre", version = "=0.3.11", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 futures = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }

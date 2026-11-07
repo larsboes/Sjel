@@ -275,7 +275,10 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
      nested node repeated. 248 extension tests pass and `dist/` is rebuilt. The reloaded
      extension saved `clip:9da3fba4` the same day: 142 KB, 4 pairs, 38 table rows, 61 links, no
      repeated prose line. Open: the clip's `description` is AI Studio's site tagline, not the
-     conversation. The GPUI compile was not run in this check.
+     conversation. The GPUI compile was not run in this check. Open, seen on 2026-11-07: the
+     Markdown keeps AI Studio's grounding links as `vertexaisearch.cloud.google.com` redirects,
+     although `unwrap_google_redirect` exists (`apps/gpui/core/src/clipper.rs`). Two saves of
+     one conversation two minutes apart stored two `create` documents of identical size.
 6. **Review and routing.** Clip documents to owning capabilities with provenance, and into the
    vault when the result is knowledge. Clips stay `c2` and unenriched until then.
 7. **Historical clippings.** Import `Clippings/` from the unsorted archive intake with counts

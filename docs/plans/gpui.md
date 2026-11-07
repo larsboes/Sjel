@@ -467,6 +467,10 @@ build was performed for this handoff.
    ([`tooling.md`](tooling.md#open)). `apps/gpui/src/sidebar/mod.rs` and
    `apps/gpui/ui/src/theme/settings.rs` were already unformatted at `d07edc16` and stay out of
    this change.
+6. **Failing desktop test.** `failed_task_write_restores_state_when_the_shell_is_unreachable`
+   (`src/workspace/mod.rs`) fails at `315fa7ee` and after: the task stays done after a write to an
+   unreachable shell. Not investigated; the write runs on the HTTP runtime, which
+   `run_until_parked` does not wait for, so the test may assert before the restore lands.
 
 ## 7. UI and UX roadmap
 

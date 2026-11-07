@@ -58,7 +58,8 @@ out="$(run "$home" 2>&1)" || fail "a clean migration exited non-zero: $out"
 [ -e "$home/overlay/data/axon" ] && fail "the old data directory is still there"
 [ "$(sqlite3 "$home/overlay/data/sjel/sjel.db" "select body from a;")" = "kept" ] \
   || fail "the moved database lost its rows"
-[ -e "$home/overlay/data/sjel/sjel.db-wal" ] || fail "the WAL sidecar did not follow the database"
+# Opening the database can checkpoint and delete the WAL; one that survives carries the new name.
+[ -e "$home/overlay/data/sjel/axon.db-wal" ] && fail "the WAL sidecar kept the old database name"
 [ -e "$home/overlay/data/sjel/sjel.db.pre-turso-backup" ] || fail "the historical backup was not renamed"
 [ -e "$home/overlay/data/sjel/axon.db.pre-turso-backup" ] && fail "the historical backup kept the old name"
 [ -e "$home/overlay/data/sjel/axon-local-abc.lock" ] && fail "a stale admission lock was carried across"

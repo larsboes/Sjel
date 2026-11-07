@@ -1090,3 +1090,11 @@ verdict = "adopt"
 license = "Apache-2.0"
 summary = "VT parser and grid model the app's terminal view draws from"
 why = "The VT emulator and grid model the app's terminal view draws from -- `vte::ansi::Processor::advance` feeds bytes into a `Term` that holds the screen, where writing an emulator is years of escape sequences with a near-miss showing as a screen that is almost right. Cost measured before adopting: 0.26.0 resolves fifteen crates and links pty helpers the client never calls, and a program that asks for red still means red, so the ANSI 16 are fixed in ui/src/terminal.rs while the window's colours come from the app's palette."
+
+[octet]
+url = "https://github.com/skaft-software/octet"
+verdict = "evaluate"
+license = "MIT"
+summary = "Native Rust terminal coding agent, candidate harness and idea source for the Sjel agent"
+why = "Audited 2026-11-07 against v0.10.0, with the method in `Packs/security/skills/vendor-audit`. The strengths are real and measurable: 338 lock entries with zero git dependencies and zero `[patch]` sections, both `build.rs` inert, CI builds `--locked`, cosign-signs every artifact and verifies its own signatures before upload with the certificate identity pinned to the workflow commit, every `uses:` SHA-pinned, no `postinstall`, and no telemetry of any kind. The verdict is not adopt because of three findings: the effect broker -- canonical intent hashing, single-use grants, fail-closed without a human, model text never counted as consent -- ships off (`cli.rs` falls through to `EffectPolicy::UnsafeHost`, which `effect.rs` maps to allow), so plain `octet` prompts for nothing and leaves the file tools unconfined; the updater pipes a fetched shell script to `sh`, outside the Sigstore chain that protects the binary; and credentials are plaintext files rather than keychain items. Extensions have no isolation and the Pi adapter declares `filesystem = \"unrestricted\"` with `builtin_tool_overrides` including `bash`."
+revisit = "Decide after a contained trial through `sjel-contain` on a non-trusted provider: adopt if `--safe-mode` holds the broker for a real session, extensions and the updater can stay off, and the two `.no_proxy()` fetches are handled by a DNS rule; otherwise mine the source for ports into `libs/agent/src/ext/` and record reject for running it."

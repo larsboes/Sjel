@@ -68,6 +68,21 @@ and NSH ([contributors](https://github.com/longbridge/nsh/graphs/contributors)).
    lines) use GPUI's state model in 1,057 places, counted with
    `grep -c "cx.notify\|Entity<\|impl Render" -r apps/gpui/ui/src`.
 
+## What was measured
+
+On 2026-11-07, Sjel's Mac app was built twice in release mode, once on `gpui-pre` 0.3.11 and once
+on GPUI Fast 0.1.13, and `apps/gpui/bench-scroll` scrolled five pages on each build. The table is
+in [`gpui.md` §9](../docs/plans/gpui.md#9-frame-cost).
+
+- On systems, inventory and feed, the median frame costs 28 to 41 percent less CPU on GPUI Fast.
+- On documents the median is about equal, and the slow tail is shorter.
+- On packs the median rises by about a third, and p95 halves.
+- Frames over the 8.3 ms budget fall from 58 to at most 12 across the five pages.
+
+This is well below the 73 to 88 percent in the GPUI Fast README. Sjel's pages already draw few
+rows per frame after the virtual-list work in `gpui.md` §9, so less work was left to retain. That
+explanation is an estimate, not measured. Tests and clippy give the same result on both builds.
+
 ## What the sources do not show
 
 - How NSH behaves on Sjel's screens and on a real iPhone. Text selection, VoiceOver and scrolling
@@ -79,7 +94,8 @@ and NSH ([contributors](https://github.com/longbridge/nsh/graphs/contributors)).
 - Whether an embedded NSH build needs Longbridge's Cargo fork. The NSH CLI is built with
   [huacnlee/cargo](https://github.com/huacnlee/cargo). Plain `cargo run` and `cargo test` drive a
   Rust app ([rust.md](https://nsh.dev/docs/rust.md)).
-- GPUI Fast's effect on Sjel's own pages. The README figures are Longbridge's, on Linux.
+- GPUI Fast's effect on Linux and Windows builds of Sjel, on the phone, and on pages outside the
+  five measured.
 - How much of `ui/src` ports to NSH by translation. NSH reuses GPUI's style vocabulary
   (`view().px_4()`) but runs a component once and updates through signals, so state wiring is a
   rewrite. An estimate, not measured.

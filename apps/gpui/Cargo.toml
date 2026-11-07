@@ -34,6 +34,7 @@ zeroize = "=1.9.1"
 
 [features]
 native-maps = ["sjel-gpui-ui/native-maps"]
+default = ["gpui-fast"]
 # Draws with GPUI Fast instead of the gpui-pre snapshot. The iOS app does not enable it.
 gpui-fast = ["gpui-kit/gpui-fast"]
 

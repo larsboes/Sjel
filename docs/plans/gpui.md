@@ -422,8 +422,9 @@ build was performed for this handoff.
    (`apps/gpui/Cargo.toml`) with the `gpui-mobile` fork `larsboes/gpui-mobile` rev `bbedd2d`
    (`ios/Cargo.toml`), one matching set. The three move together by hand in one commit, with
    `cargo test` on core and ui and `ios/run-sim` before and after. Dependabot ignores them
-   (`.github/dependabot.yml`). Open: the fork's change as a PR to `longbridge/gpui-mobile`, and a
-   return to the upstream rev once it carries 0.3.11. Android was not built.
+   (`.github/dependabot.yml`). Open: a return to the upstream rev once it carries 0.3.11.
+   `longbridge/gpui-mobile` #46 makes the same change and was checked on Android. #47, from the
+   fork, duplicates it.
 2. **Pages into `ui/`.** Twelve Mac pages moved to `ui/` on 2026-10-24 (`b2fb5246`, `2ce818de`), and
    seventeen more modules (`documents`, `pdf_kit`, `feed`, `scout`, `clipper`, `context`,
    `people::page`, `calendar::page`, `inbox::triage`, `import`, `music`, `ask`, `capabilities`,
@@ -617,9 +618,12 @@ Stages, in order:
    Then the feature becomes the default, or the change is reverted and §9 records why.
    Built 2026-11-07: the crates reach GPUI only through the Kit (`extern crate gpui_kit as gpui;`
    at each crate root), so the `gpui-fast` feature switches the backend for every page.
-   `SJEL_GPUI_FAST=1 apps/gpui/install` builds it. Tests and clippy give the same result with
+   `apps/gpui/install` builds it. Tests and clippy give the same result with
    and without the feature. Bench done (§9): the Systems criterion holds on both builds, and
-   GPUI Fast is faster on four of five pages. Open: the page pass above, then the default.
+   GPUI Fast is faster on four of five pages. The page pass found no stale view. Done
+   2026-11-07: `gpui-fast` is a default feature of `sjel-gpui`. `--no-default-features` builds
+   the `gpui-pre` variant for a comparison. Not checked: the Linux and Windows legs on GPUI Fast,
+   which CI builds.
 3. **NSH trial: the Documents reader on the phone.** It is a Priority 1 screen that does not
    exist on the phone yet (§2, Documents), so no working screen is rewritten. Build it in NSH's
    Rust mode, shown by an `NshAppView` in `ios/host` beside the GPUI view. Done when each of

@@ -45,10 +45,6 @@ cargo_args=(build --release)
 if [ "$native_maps" = 1 ]; then
   cargo_args+=(--locked --features native-maps)
 fi
-# SJEL_GPUI_FAST=1 builds the app on GPUI Fast (docs/plans/gpui.md §11).
-if [ "${SJEL_GPUI_FAST:-0}" = 1 ]; then
-  cargo_args+=(--features gpui-fast)
-fi
 if [ -n "${SJEL_BUILD_MESSAGE_FORMAT:-}" ]; then
   cargo_args+=("--message-format=$SJEL_BUILD_MESSAGE_FORMAT")
 fi

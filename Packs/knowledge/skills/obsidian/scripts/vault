@@ -45,7 +45,7 @@ def overlay_root() -> Path:
         # pulled and re-run tools/install.sh yet still has only those.
         for candidate in (
             Path.home() / "Developer/Sjel/sjel.local.toml",
-            Path.home() / "Developer/Sjel/sjel.local.toml",
+            Path.home() / "Developer/Sjel/axon.local.toml",
             Path.home() / "Developer/Axon/axon.local.toml",
         ):
             if candidate.exists():

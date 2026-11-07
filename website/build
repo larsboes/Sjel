@@ -37,7 +37,16 @@ bun "$_here/scripts/reference.ts" --out "$OUT"
 bun "$_here/scripts/self-model.ts" --out "$OUT"
 bun "$_here/scripts/roadmap.ts" --out "$OUT"
 cp "$_here/assets/favicon.svg" "$OUT/favicon.svg"
-cp "$SJEL_ROOT/.github/assets/sjel-hedgehog.png" "$OUT/hedgehog.png"
+if [ -f "$_here/assets/hedgehog.svg" ]; then
+  cp "$_here/assets/hedgehog.svg" "$OUT/hedgehog.svg"
+else
+  cp "$SJEL_ROOT/brand/sjel-hedgehog.svg" "$OUT/hedgehog.svg"
+fi
+if [ -f "$_here/assets/hedgehog.png" ]; then
+  cp "$_here/assets/hedgehog.png" "$OUT/hedgehog.png"
+else
+  cp "$SJEL_ROOT/.github/assets/sjel-hedgehog.png" "$OUT/hedgehog.png"
+fi
 
 # GitHub Pages runs Jekyll unless told not to, and Jekyll drops directories that begin with `_`.
 touch "$OUT/.nojekyll"

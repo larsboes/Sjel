@@ -30,7 +30,7 @@ const ACTIVE_ITEMS: Item[] = [
   {
     title: "Agent Containment & Privacy Gates",
     badge: "Security",
-    desc: "Isolating coding agents by provider trust. Sandboxing untrusted providers, capping data access, and automatically pseudonymizing sensitive facts up to data class c2.",
+    desc: "Isolating coding agents by provider trust. Sandboxing untrusted providers, capping data access, and limiting hosted-model inputs to public data or admitted pseudonymized derivatives. Data classes c2 and c3 have no cloud representation.",
     href: "../docs/architecture/security.html",
   },
   {

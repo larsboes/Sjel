@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Sjel. The hedgehog mark on the brand tile, from brand/sjel-icon.svg. -->
+  <!-- Sjel brand favicon: signature teal tile with cream hedgehog mark. -->
   <defs><clipPath id="tile"><rect width="32" height="32" rx="7"/></clipPath></defs>
   <g clip-path="url(#tile)">
     <rect width="32" height="32" fill="#16748D"/>

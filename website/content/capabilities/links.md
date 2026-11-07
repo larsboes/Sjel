@@ -1,8 +1,6 @@
 # Typed Ids & `/api/links`
 
-The join contract every capability serves. Sjel is one shell over the capabilities, and its
-reason to exist is the joins between them; this contract lets the shell read a join without
-knowing which capability holds the other half.
+This contract lets the shell read a join without knowing which capability holds the other half.
 
 Crate: `sjel-links` (`libs/links`). It holds the id type, the response type and the query check.
 It does not depend on axum — each capability writes its own few-line handler, so the response
@@ -25,8 +23,8 @@ Every linkable id is typed `<kind>:<rest>`:
 
 `Sjel-links` parses `<kind>:<rest>` and refuses an id with no `:` or an empty kind. A finance
 row without a `source_id` has no linkable id: `/api/links` does not serve it, and the response
-counts what it left out (`unlinkable`), so a short list is never a silent one. The positional
-`fin` projection `id` stays as the row key and is never linked to.
+reports how many rows it left out in `unlinkable`. The positional `fin` projection `id` stays as
+the row key and is never linked to.
 
 Inventory reference IDs encode 1–256 UTF-8 bytes. Longer existing item IDs remain available
 through the raw-ID API but cannot be linked through this contract. Projects verifies the selected

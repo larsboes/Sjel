@@ -41,9 +41,7 @@ and lets the user dismiss that feature/topic suggestion. Dismissals are stored l
 config directory; prompt text is neither persisted nor sent to the catalog service.
 
 Do not upload usage history to rank features. Do not install or enable a feature automatically.
-The user can dismiss a suggestion; the manager records that choice locally and stops repeating the
-same suggestion until its evidence changes. A recommendation is guidance, not an assertion that
-the user needs the feature.
+A recommendation is guidance, not an assertion that the user needs the feature.
 
 Each catalog entry declares recommendation topics and prerequisites. Matching and ranking stay
 deterministic and local. A recommendation must name its evidence, such as “You asked to plan a trip;

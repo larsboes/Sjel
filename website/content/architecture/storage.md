@@ -32,27 +32,15 @@ fail immediately when it upgrades a read lock, even with a busy timeout configur
 Migrations run once per database file and table prefix in each process, through
 `sjel_store::migrate_once`. The migration transaction also takes the write lock first.
 
-## Embedded replicas
+## LibSQL integration
 
-A device can read from a local copy of a remote Turso primary instead of the shared file. The copy
-holds the primary's write-ahead log, so reads are local and writes are forwarded to the primary.
-[`sjel-turso`](../../../libs/sjel-turso/README.md) owns the open call, the first pull before the DDL,
-and the background interval. The replica engine is a default feature rather than an opt-in one,
-because following a primary has to be configuration: an opt-in feature meant editing a Cargo.toml per
-capability, which is the one thing a machine's setup cannot do for itself.
+[`sjel-turso`](../../../crates/sjel-turso/README.md) opens local libSQL databases and owns connection
+setup and migrations. The current Sjel integration does not use embedded replicas; that support was
+removed before it was used.
 
-Freshness is a configured promise, not a guarantee. A capability that publishes health reports the
-replica's `seconds_since_success` against its interval, and a surface that must be exact calls
-`sync_now` before reading. One file is either the shared local database or a replica, never both,
-and a replica file that already holds local writes is refused rather than converted.
-
-`sjel setup plan turso` is where a deployment finds out what it still needs: the URL, the
-credential, and which capabilities would restart to read them. It writes nothing; `apply --confirm`
-records the settings in the private overlay and restarts the followers.
-
-The settings reach a process because `tools/service-runner.sh` passes the overlay's deployment
-settings into everything it starts. A deployment-wide setting has one home, and a capability's own
-`[capability.<n>] env` entry overrides one name when a machine needs that.
+Each binary links either `sjel-store` (rusqlite) or `sjel-turso` (libSQL), never both. Both engines
+currently use the shared database file. The engine choice does not split capability data into
+separate files.
 
 ## Path indirection & state mounts
 

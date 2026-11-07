@@ -270,7 +270,7 @@ it already contains.
 
 Measured on 2026-10-17, existing local artifacts occupied 13.77 MiB for `sjel-status` and 13.75 MiB
 for `sjel-cli`: **27.52 MiB combined**. This is a core runtime artifact inventory, not an
-artifact inventory, not an independently installable package or a minimum disk requirement.
+independently installable package or a minimum disk requirement.
 It excludes the source checkout, host tools and libraries, helper binaries, private configuration,
 database, logs, backups and any selected domain services, models or container images. Artifact
 versions may differ from the current source until rebuilt.

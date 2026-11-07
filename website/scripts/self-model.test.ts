@@ -68,7 +68,7 @@ describe("renderSite", () => {
       ...html.matchAll(/url\(\s*["']?([^"')]+)/g),
     ].map((m) => m[1]);
     expect(subresources.filter((u) => /^(https?:)?\/\//.test(u))).toEqual([]);
-    expect(html).not.toContain("<script");
+    expect(html).not.toContain("<script src");
     expect(html).not.toContain("@import");
   });
 

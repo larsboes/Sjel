@@ -135,9 +135,9 @@ capability declares `proxy_api_only`, so the shell proxies only `/media/api` wit
 stripped and keeps `/media` as its own page. A reader reaches the routes above as
 `/media/api/status` and never dials the port.
 
-**Nothing is derived at rest.** The surface renders what the ledger holds at request time; there is
-no cache and no materialized view, so it cannot disagree with the tables a verb wrote. A slow query
-runs on `spawn_blocking` rather than stalling the listener.
+**The HTTP surface does not cache or materialize derived data.** It renders ledger contents at
+request time, so its response reflects the tables written by each verb. A slow query runs on
+`spawn_blocking` rather than stalling the listener.
 
 ## 4. Invariants
 

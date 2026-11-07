@@ -95,4 +95,4 @@ names the date and origin it compared. Neither commits to the overlay's git.
 
 A CSV export is a snapshot from a manual download, not a live read, and its domains do not all
 match [`DOMAINS`]: it carries no certifications, projects or honors. `import` is the fallback
-while `pull`'s token is unset up; open work: none recorded.
+when `pull`'s token is not set; no open work is recorded.

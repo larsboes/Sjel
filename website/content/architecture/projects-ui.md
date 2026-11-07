@@ -60,7 +60,7 @@ The following external projects inform Sjel's UI/UX:
 - **[Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui)**:
   Open-source implementation of ChatGPT's Intelligent UI built on [OpenUI](https://openui.com). Defines declarative primitives: Layout (`Col`, `Row`, `Box`, `Card`, `Grid`, `Carousel`), Inputs (`Button`, `Slider`, `SegmentedControl` with `$variables`), Data (`Table`, `Chart`, `Map`), and pure `@functions`.
 - **[OpenAI GPT-6 Intelligent UI](https://openai.com/de-DE/index/gpt-6-for-everyone/)**:
-  Paradigm shift where model responses transition from static text output to dynamic, interactive, context-aware graphic widgets.
+  Describes model responses as dynamic, interactive, context-aware graphic widgets rather than static text.
 - **[Intelligent UI for Claude Code](https://github.com/razorback16/cc-intelligent-ui)**:
   Terminal-based Intelligent UI using Typst, CeTZ, and fletcher to render typeset markdown, charts, math, and diagrams directly in terminal emulators (Ghostty, kitty, iTerm2).
 - **[GPUI Kit](https://gpui-kit.com/)**:

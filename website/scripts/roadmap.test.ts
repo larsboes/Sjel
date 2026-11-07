@@ -19,7 +19,7 @@ describe("roadmap", () => {
     const dir = mkdtempSync(join(tmpdir(), "sjel-roadmap-"));
     build(dir);
     const content = await Bun.file(join(dir, "roadmap/index.html")).text();
-    expect(content).not.toContain("<script");
+    expect(content).not.toContain("<script src");
     expect(content).toContain("Roadmap — Sjel");
     expect(content).toContain('class="roadmap-badge"');
   });

@@ -8,9 +8,8 @@ instead of an error.
 
 ## 0. The order the capabilities are asked in
 
-Five capabilities answer five different questions, and the order decides whether the answer is
-worth anything. This table and the order below were `Packs/travel`'s agent skill until 2026-10-24;
-they are the workflow, so they live beside the capabilities they describe.
+Five capabilities answer different questions. Later steps use results from earlier ones, so order
+matters. The table summarizes each capability's role in the workflow.
 
 | Capability | Owns | Worth knowing |
 |---|---|---|

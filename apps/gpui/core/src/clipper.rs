@@ -3,7 +3,7 @@
 //!
 //! Everything goes over comms' owner-only clip socket (`libs/clip-socket`), not through
 //! sjel-status: clip content is `c2` and stays on this Mac. Templates keep upstream's shape
-//! (`capabilities/comms/clipper/src/types/types.ts`); the app edits the fields people change and
+//! (`crates/comms/clipper/src/types/types.ts`); the app edits the fields people change and
 //! carries every other field through unchanged.
 
 use crate::inline::Inline;

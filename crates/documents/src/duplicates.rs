@@ -2,7 +2,7 @@
 //! or deletes.
 //!
 //! Exact SHA-256 equality is the only authoritative rule, as in
-//! `capabilities/media/src/perceptual.rs`. Rescans of the same paper and parts
+//! `crates/media/src/perceptual.rs`. Rescans of the same paper and parts
 //! split out of a longer scan have different bytes, so they are found by overlap
 //! of extracted text and are proposals for a human to review.
 

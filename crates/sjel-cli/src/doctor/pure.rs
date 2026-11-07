@@ -768,7 +768,7 @@ pub fn classify_archive_at_target(
 /// A failed attempt is reported even while the last good receipt still looks fresh.
 /// Whether a later success retires a recorded failed attempt.
 ///
-/// The attempt file exists so a failure outlives its log (`capabilities/backup/src/runner.rs`),
+/// The attempt file exists so a failure outlives its log (`crates/backup/src/runner.rs`),
 /// and that runner clears it when a run succeeds. Nothing clears it when the success arrives by
 /// another road: `tools/backup-all.sh` is the documented manual path on this machine, it writes a
 /// fresh receipt and no attempt, so a stale `attempts/<capability>.json` kept doctor red for a

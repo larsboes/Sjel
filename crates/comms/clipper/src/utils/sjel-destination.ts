@@ -1,5 +1,5 @@
 // Sjel destination: replaces the obsidian:// handoff with a native messaging save into
-// the comms clip store (capabilities/comms/src/web_clip_socket.rs). A clip that cannot
+// the comms clip store (crates/comms/src/web_clip_socket.rs). A clip that cannot
 // reach Sjel stays in a local queue under its retry key until a later attempt lands it.
 import browser from './browser-polyfill';
 import { Template } from '../types/types';

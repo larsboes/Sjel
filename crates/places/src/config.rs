@@ -18,7 +18,7 @@ pub struct Config {
 impl Config {
     pub fn load() -> Self {
         // 8093 mirrors service.toml here; SJEL_PORT (the runner's contract) wins.
-        // Not 8091 (capabilities/foundation-models/service.toml owns it) and not
+        // Not 8091 (services/foundation-models/service.toml owns it) and not
         // 8092 (the private overlay's interior capability owns it — a repo-only
         // port sweep misses overlay service.tomls) — the scouting/vaultwarden
         // 8080 collision class, libs/sjel-config.

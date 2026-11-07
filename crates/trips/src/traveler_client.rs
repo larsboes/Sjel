@@ -2,7 +2,7 @@
 //!
 //! The default flight origin used to live in this capability's own overlay config
 //! (`trips.json` → `travel.home_airport`). That made it the **second** home for a
-//! fact `capabilities/traveler` now owns, and the practical consequence was worse
+//! fact `crates/traveler` now owns, and the practical consequence was worse
 //! than the duplication: the airports the operator actually named were invisible
 //! to every flight route, because nothing read them.
 //!

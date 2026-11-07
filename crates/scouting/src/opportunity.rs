@@ -15,8 +15,8 @@ pub enum OpportunityType {
     Housing,
     Project,
     Literature,
-    /// A scored train-fare journey (`capabilities/transit`'s HAFAS
-    /// fare-search wired in as a source -- see `capabilities/store/README.md`
+    /// A scored train-fare journey (`crates/transit`'s HAFAS
+    /// fare-search wired in as a source -- see `services/store/README.md`
     /// Phase 2 and `adapters/transit_fare.rs`).
     Trip,
 }

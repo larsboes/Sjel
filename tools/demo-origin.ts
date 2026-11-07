@@ -219,7 +219,7 @@ function planJourneys(
 }
 
 /** dbnav's shape: `produktGattung`, `mitteltext`, offset-carrying stamps, `evaNr` on the stop.
- *  Copied from the capture `capabilities/transit/src/hafas.rs` parses in its own tests, so the
+ *  Copied from the capture `crates/transit/src/hafas.rs` parses in its own tests, so the
  *  parser meets the field names it was written against. */
 function dbnavResponse(journeys: PlannedJourney[], date: string): unknown {
   const ort = (s: (typeof VOCABULARY.stations)[number]) => ({
@@ -321,7 +321,7 @@ function orteResponse(query: string): unknown {
 
 /** Nominatim's `/search?format=jsonv2` shape, for the demo cities only. Places reads `lat` and
  *  `lon` as strings, `display_name`, `name`, `address.country_code` and `addresstype`
- *  (capabilities/places/src/geocode.rs). The osm ids are a synthetic block. */
+ *  (crates/places/src/geocode.rs). The osm ids are a synthetic block. */
 export function nominatimResponse(query: string): unknown[] {
   const needle = query.split(",")[0].trim().toLowerCase();
   const hits = VOCABULARY.cities.filter((c) => needle !== "" && c.name.toLowerCase() === needle);
@@ -339,7 +339,7 @@ export function nominatimResponse(query: string): unknown[] {
 
 // ─── Gmail ────────────────────────────────────────────────────────────────────
 //
-// The Gmail API v1 shapes comms reads (capabilities/comms/src/google.rs): the inbox page, one
+// The Gmail API v1 shapes comms reads (crates/comms/src/google.rs): the inbox page, one
 // thread as metadata or full, labels, and the three thread actions. comms calls these through
 // SJEL_COMMS_GMAIL_URL, set by tools/demo-up, and sends a placeholder token while it is set.
 

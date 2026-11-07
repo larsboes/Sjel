@@ -10,7 +10,7 @@
 //! state change. From then on the series is authoritative and the frontmatter is
 //! not re-read for those fields, because a series cannot be reconstructed from the
 //! single mutable number it replaced. The notes live in the `projects` store since
-//! 2026-10-20 (`capabilities/projects/README.md`, "Why this shape") and are read over its
+//! 2026-10-20 (`crates/projects/README.md`, "Why this shape") and are read over its
 //! HTTP surface.
 //!
 //! Writing is the other: one whole file per subscription under the overlay's

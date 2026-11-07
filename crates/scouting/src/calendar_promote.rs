@@ -1,4 +1,4 @@
-//! Promotes saved Luma events into `capabilities/calendar` entries.
+//! Promotes saved Luma events into `crates/calendar` entries.
 //!
 //! This is the last leg of calendar's Phase A: discovery (scouting) →
 //! availability annotation (calendar). It reads opportunities the operator
@@ -31,7 +31,7 @@ use crate::store::{RankedRow, Store};
 
 /// Calendar's default loopback address. Overridable via `scouting.json`'s
 /// `calendar_base_url` or `--calendar-url`; the default matches
-/// `capabilities/calendar`'s `SJEL_CALENDAR_PORT` default of 8087.
+/// `crates/calendar`'s `SJEL_CALENDAR_PORT` default of 8087.
 pub const DEFAULT_CALENDAR_BASE_URL: &str = "http://127.0.0.1:8087";
 
 /// Calendar kind for a promoted event. Calendar treats kinds as open data,

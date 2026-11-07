@@ -5,7 +5,7 @@
 //! grains with different factors, which is why the profile carries a second
 //! weight block rather than more fields on the first.
 //!
-//! Over HTTP, never by linking `capabilities/traveler`: a capability depends on
+//! Over HTTP, never by linking `crates/traveler`: a capability depends on
 //! another's contract, not its code. This module is the whole dependency and it
 //! is one-way — `traveler` knows nothing about transit.
 //!
@@ -35,7 +35,7 @@ use serde::Deserialize;
 
 use crate::travel::{Journey, JourneyRanking, RankFactor};
 
-/// Where traveler-server listens. Mirrors `capabilities/traveler/service.toml`'s
+/// Where traveler-server listens. Mirrors `crates/traveler/service.toml`'s
 /// port, the same one-duplication `punctuality::DEFAULT_BASE_URL` carries and for
 /// the same reason: the honest fix is the runner exporting a declared sibling's
 /// port, and building that convention for one consumer would be inventing it

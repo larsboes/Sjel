@@ -1,5 +1,5 @@
 //! Persistence under the table prefix `scouting` in the one shared SQLite file
-//! (PRD Q45) — see `capabilities/store/README.md`'s correlation section,
+//! (PRD Q45) — see `services/store/README.md`'s correlation section,
 //! Phase 2 and this crate's own README's Verdict section. This capability
 //! shipped a SQLite version first (single-user tool, avoid unnecessary
 //! machinery), then moved to a Postgres schema on a shared instance once

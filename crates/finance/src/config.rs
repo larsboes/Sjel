@@ -254,7 +254,7 @@ pub fn ideas_project() -> String {
 /// rather than linking its crate is the direction `CONTRIBUTING.md#schemas-and-dependency-direction`
 /// asks for, and the port is the deployment's, so the overlay may override it.
 const DEFAULT_COMMS_BASE_URL: &str = "http://127.0.0.1:8083";
-/// projects' loopback port (`capabilities/projects/service.toml`), for the same reason.
+/// projects' loopback port (`crates/projects/service.toml`), for the same reason.
 const DEFAULT_PROJECTS_BASE_URL: &str = "http://127.0.0.1:8103";
 
 fn file_config() -> Option<FinanceFileConfig> {

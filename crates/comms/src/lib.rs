@@ -1,14 +1,14 @@
 //! Sjel doctrine: this crate is public. No personal value (sender names, email
 //! addresses, personal classification rules) lives here -- those come from the
 //! private overlay at runtime (`$SJEL_PERSONAL_ROOT/config/comms.json` +
-//! `comms.env`). Mirrors `capabilities/scouting`'s split exactly.
+//! `comms.env`). Mirrors `crates/scouting`'s split exactly.
 //!
 //! Gmail sweeps are read-only. The only Gmail writes are explicit authenticated
 //! archive or move-to-Trash actions for a stored proposal. Permanent deletion,
 //! sending, and arbitrary label changes are outside this capability.
 
 // The readers moved to `libs/extraction` at the second real consumer
-// (CONTRIBUTING.md#schemas-and-dependency-direction; `capabilities/transit` is the
+// (CONTRIBUTING.md#schemas-and-dependency-direction; `crates/transit` is the
 // other one). Re-exported under the name every call site here already uses, so
 // the promotion cost no `crate::extraction::…` path a rewrite.
 pub use content_item;

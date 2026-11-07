@@ -6,7 +6,7 @@ A shared library, not a capability: no domain of its own, no CLI
 (CONTRIBUTING.md#three-architectural-nouns). Consumers declare an `sjel-store` path dependency in the
 workspace.
 
-**This is no longer the only way in.** `capabilities/operator-profile` and `capabilities/projects`
+**This is no longer the only way in.** `crates/operator-profile` and `crates/projects`
 open the same file through `libs/sjel-turso` (LibSQL) since 2026-10-21, the first two capabilities
 cut over (PLAN.md Phase 4). A binary links one engine or the other, never both — each bundles its
 own SQLite and the C symbols collide — so the sections below describe the `rusqlite` path the
@@ -27,7 +27,7 @@ instance existed at all, and it is the one that could not be traded away.
 
 Where the file lives is not this crate's decision — `sjel_config::database_path` owns that
 (`SJEL_DB_PATH`, else `<overlay>/data/sjel/sjel.db`), because it is overlay knowledge. Nor is
-how it is kept: `capabilities/store` declares that, in the one manifest that owns the file
+how it is kept: `services/store` declares that, in the one manifest that owns the file
 (`kind = "data"`, `backup_sqlite_online`). A capability opens the database; it does not own it.
 
 ## The canonical timestamp
@@ -182,7 +182,7 @@ conditional update, in one transaction (`crates/scouting/src/store.rs::propose_s
 
 **A data-modifying CTE.** `WITH x AS (INSERT … RETURNING …) SELECT …` has no SQLite form at all:
 INSERT is not allowed inside a WITH clause. It becomes the read and the write as two statements
-in one transaction, which is what the CTE was buying — `capabilities/comms/src/store/cloud.rs`
+in one transaction, which is what the CTE was buying — `crates/comms/src/store/cloud.rs`
 queues a cloud job that way, still refusing a hash no review approved.
 
 **A constraint name in an error.** Postgres named a CHECK and quoted the name back; SQLite

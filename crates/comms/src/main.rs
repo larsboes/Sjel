@@ -1019,7 +1019,7 @@ fn fixtures_len(corpus: &serde_json::Value) -> usize {
 ///
 /// It writes into the OVERLAY, never into this repository. The rows carry real subjects and
 /// snippets — already redacted for c2 and c3 at intake, which is why they may be written at
-/// all — and `capabilities/comms/eval/README.md` names the destination.
+/// all — and `crates/comms/eval/README.md` names the destination.
 fn cmd_mail_evidence(args: &[String], cfg: &Config) {
     let mut cfg = cfg.clone();
     if let Some(url) = arg_after(args, "--projects") {

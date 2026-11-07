@@ -2,7 +2,7 @@
 //!
 //! The capability stores an all-day entry as `YYYY-MM-DD` with an exclusive end, and a timed
 //! one as local `YYYY-MM-DDTHH:MM:SS`; a day window is `[from, to)`
-//! (`capabilities/calendar/src/store.rs`, `list_entries`). Kinds and commitments were the
+//! (`crates/calendar/src/store.rs`, `list_entries`). Kinds and commitments were the
 //! dashboard's (`dashboard/src/lib/calendar/types.ts`); this module owns them now.
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};

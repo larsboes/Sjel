@@ -1,8 +1,8 @@
 //! backup: what a run did, what a target proved, and when the next one is due.
 //!
-//! A library, not a process. `capabilities/sjel-status` is the surface — it already lists
+//! A library, not a process. `crates/sjel-status` is the surface — it already lists
 //! backup age and already triggers a backup, and it already links a capability's store
-//! module (`capabilities/devices`) for its own gate. A second process serving the same
+//! module (`crates/devices`) for its own gate. A second process serving the same
 //! job would be a second trigger and a second truth for one thing.
 //!
 //! Mechanism stays in `tools/`: `tools/backup.sh` moves and checks the bytes, and this

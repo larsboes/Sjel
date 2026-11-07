@@ -1,7 +1,7 @@
 //! UTC instant → naive local wall time, for the calendar promotion.
 //!
 //! Luma reports every event as a UTC instant (`2026-07-30T16:00:00.000Z`)
-//! plus a separate IANA zone. `capabilities/calendar` stores naive local wall
+//! plus a separate IANA zone. `crates/calendar` stores naive local wall
 //! time in the operator's one home zone and explicitly refuses to guess
 //! schedule metadata (its README § Sources). Something has to bridge those,
 //! and this is it.
@@ -9,7 +9,7 @@
 //! **Why a hand-rolled zone instead of `chrono-tz`:** the promotion needs
 //! exactly one zone — the operator's — and pulling a full tz database to answer
 //! one question is the machinery this repo keeps
-//! declining. `capabilities/calendar/src/date.rs` already hand-rolls the same
+//! declining. `crates/calendar/src/date.rs` already hand-rolls the same
 //! civil-date arithmetic. The cost of that choice is a closed set of
 //! supported zones, so an unsupported one is a hard error: the promotion
 //! refuses rather than silently writing a wrong wall time, which is the same
@@ -134,7 +134,7 @@ fn parse_fixed_offset(text: &str) -> Option<i32> {
 }
 
 /// Howard Hinnant's civil-from-days pair, same algorithm
-/// `capabilities/calendar/src/date.rs` uses. Duplicated rather than shared:
+/// `crates/calendar/src/date.rs` uses. Duplicated rather than shared:
 /// the two crates have no dependency edge, and this is 20 lines of arithmetic
 /// with a fixed definition.
 fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {

@@ -69,8 +69,8 @@ meaning of a full cutover — the schema, the store, the handlers and the CLI mo
 `rusqlite` leaves that binary's dependency graph. `cargo tree -p <capability> -e normal | grep
 rusqlite` answers whether one is still there.
 
-The first capability to finish that move is `capabilities/operator-profile` (2026-10-21), and
-`capabilities/projects` followed it the same day. Their tables are still in the same shared file;
+The first capability to finish that move is `crates/operator-profile` (2026-10-21), and
+`crates/projects` followed it the same day. Their tables are still in the same shared file;
 only the engine differs.
 
 ## Embedded replicas: removed 2026-10-22

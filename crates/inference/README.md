@@ -203,7 +203,7 @@ lost 14 tests to a laptop on battery and not one of them was about the profile.
 
 So each gate has two spellings. The `*_with` variants take a `&sjel_runtime::Status` the caller
 already resolved, and `model_reachable`, `rerank` and `embed_mixed` take it outright, because
-this crate's only caller outside it is `capabilities/comms`. A unit of work resolves once at its
+this crate's only caller outside it is `crates/comms`. A unit of work resolves once at its
 edge — a handler or a drain calls `sjel_runtime::current()` and passes the value down — and a
 test states `sjel_runtime::Status::normal("test")` instead of reading the operator's overlay.
 `Status::unresolved(reason)` is the answer for a deployment that cannot be read, so a caller has

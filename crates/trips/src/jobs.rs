@@ -1,6 +1,6 @@
 //! The in-process job map behind `POST /api/plan-search`.
 //!
-//! Ported from `capabilities/interior/src/api.rs` (`Auftraege`), with its
+//! Ported from `crates/interior/src/api.rs` (`Auftraege`), with its
 //! reasons kept because they are the reasons here too:
 //!
 //! - **Nothing is evicted while it runs.** A running job still has its writer

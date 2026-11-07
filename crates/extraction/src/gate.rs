@@ -1,7 +1,7 @@
 //! The frozen DE/EN corpus gate: what an OCR engine has to clear to enter.
 //!
 //! This is the same instrument that decided the embedding and reranking
-//! adoptions, pointed at a different job. `capabilities/comms/eval/README.md`
+//! adoptions, pointed at a different job. `crates/comms/eval/README.md`
 //! states the rule it runs on, and the rule is the valuable part:
 //!
 //! > Add or revise a judgement from its meaning and rationale before looking at

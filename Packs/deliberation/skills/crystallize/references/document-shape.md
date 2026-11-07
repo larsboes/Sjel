@@ -102,7 +102,7 @@ with line numbers where they exist:
 | Source | Cited for |
 |---|---|
 | `libs/content-item/src/lib.rs` L318, L405, L499 | The shipped class vocabulary, escalation rule, processing policy |
-| `capabilities/comms/src/store/migrations.rs` L279–290 | The egress ledger |
+| `crates/comms/src/store/migrations.rs` L279–290 | The egress ledger |
 ```
 
 This is what makes the document maintainable by someone else — and by you, in six months, when the

@@ -279,7 +279,7 @@ A harness is an adapter (operating value 6), so a swap must keep everything belo
 
 | Must survive | Where it lives |
 |---|---|
-| The operator's preferences and principles | `capabilities/operator-profile` |
+| The operator's preferences and principles | `crates/operator-profile` |
 | Long-term memory | The vault |
 | Skills and know-how | `Packs/` |
 | Tool contracts | `schemas/` and capability manifests |
@@ -402,7 +402,7 @@ adopted: runtime, idea, architecture, algorithm, code or asset. A local clone or
 never durable provenance.
 
 **The register records no version.** Every dependency tracks its upstream's latest release:
-`capabilities/host-patch` moves brew, uv and rustup nightly, `capabilities/container-refresh`
+`services/host-patch` moves brew, uv and rustup nightly, `services/container-refresh`
 moves the images daily, Dependabot moves the Cargo and Bun manifests, and the workflows install
 `latest`. An audit date belongs in the `why`.
 
@@ -416,8 +416,8 @@ moves the images daily, Dependabot moves the Cargo and Bun manifests, and the wo
 | Is there a secret in this repository? | GitHub secret scanning, with push protection — and `gitleaks` in `tools/audit`, which reads history the push protection never saw |
 | Is there a secret in the private overlay? | `tools/audit` alone. GitHub charges for secret scanning on a private repository, and this repository's CI cannot reach the overlay, so this is the one scan that has to be local |
 | Is there a flaw in the code as written? | CodeQL — `.github/workflows/codeql.yml`, `security-extended` over rust, javascript-typescript, python and actions |
-| Is a host package behind? | `sjel update` — every class of software installed outside this checkout, with the owner of each named and the stale ones listed. `capabilities/host-patch` moves `brew`, `uv` and `rustup` daily; `sjel update apply` moves the two classes nothing else owns (`cargo install`ed crates, global npm packages) |
-| Is a running container behind its channel? | Nothing asks. `capabilities/container-refresh` pulls every declared image every day and recreates what moved |
+| Is a host package behind? | `sjel update` — every class of software installed outside this checkout, with the owner of each named and the stale ones listed. `services/host-patch` moves `brew`, `uv` and `rustup` daily; `sjel update apply` moves the two classes nothing else owns (`cargo install`ed crates, global npm packages) |
+| Is a running container behind its channel? | Nothing asks. `services/container-refresh` pulls every declared image every day and recreates what moved |
 
 `upstreams.toml` is documentation. No script enforces or reads its fields, except `tools/self`,
 which publishes each name and verdict into `self.json`. A human reads a verdict before adopting a

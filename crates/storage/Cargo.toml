@@ -9,20 +9,20 @@ publish = false
 
 # sjel-storage, not storage: tools/storage/storage is the launcher that execs this, and
 # two things called `storage` on PATH is the collision the prefix avoids. Same reasoning
-# as capabilities/host-net's host-net-cli.
+# as crates/host-net's host-net-cli.
 [[bin]]
 name = "sjel-storage"
 path = "src/main.rs"
 
 [dependencies]
-# The overlay's location, read from SJEL_PERSONAL_ROOT exactly as capabilities/host-net
+# The overlay's location, read from SJEL_PERSONAL_ROOT exactly as crates/host-net
 # reads its own policy. Zero external dependencies of its own
 # (libs/sjel-config/Cargo.toml), so this stays a four-crate build.
 sjel-config = { path = "../sjel-config" }
 
 # --json, the policy file, and target/.rustc_info.json. All three were already resolved in
 # the workspace lock before this crate existed (serde 1.0.229, serde_json 1.0.151, toml
-# 0.8.23 via capabilities/host-net and capabilities/interior), so adding this tool resolves
+# 0.8.23 via crates/host-net and crates/interior), so adding this tool resolves
 # no new external crate.
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -32,7 +32,7 @@ toml.workspace = true
 # with an inode set, and the policy's glob contract is a single `*` in one path segment.
 # Both are smaller than the argument for adding a dependency to carry them.
 #
-# No clap, for the reason capabilities/host-net/Cargo.toml already states: four verbs and
+# No clap, for the reason crates/host-net/Cargo.toml already states: four verbs and
 # six flags is a match statement, and the workspace has no clap today.
 
 [lints]

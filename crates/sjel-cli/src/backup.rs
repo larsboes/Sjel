@@ -1,5 +1,5 @@
 //! `sjel backup policy`: the backup timer's interval per target, the same store and checks as
-//! `POST /api/sjel-status/backup/policy` (`capabilities/sjel-status/src/status/backup.rs`).
+//! `POST /api/sjel-status/backup/policy` (`crates/sjel-status/src/status/backup.rs`).
 
 use std::path::Path;
 use std::process::ExitCode;

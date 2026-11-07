@@ -7,7 +7,7 @@
 //! `wall_time` for import, `rfc3339` for export.
 //!
 //! **Why a hand-rolled zone instead of `chrono-tz`.** Same call
-//! `capabilities/scouting/src/localtime.rs` made and for the same reason: the
+//! `crates/scouting/src/localtime.rs` made and for the same reason: the
 //! operator has exactly one home zone, and pulling a full tz database to
 //! answer one question is machinery this repo keeps declining —
 //! `src/date.rs` already hand-rolls the civil-date arithmetic. The cost is a

@@ -3,7 +3,7 @@
 //! One session is one conversation with one remote evaluator: every value it replaced, the
 //! token it issued, and the way back. A token's number depends on what the session has
 //! already seen, so anything that must hash the same way twice — a cloud derivative preview
-//! (`capabilities/comms/src/cloud_derivative.rs`, `prepare_pseudonymized`) — starts from a
+//! (`crates/comms/src/cloud_derivative.rs`, `prepare_pseudonymized`) — starts from a
 //! fresh session.
 
 use aho_corasick::{AhoCorasick, MatchKind};

@@ -30,7 +30,7 @@ two owners of one binary is a failure this deployment has already paid for: a `~
 `--dump-json` kept working (PRD §13). If `bun` should stay put on this machine, that is a
 `brew pin`, not a special case in the script — one owner, one mechanism.
 
-Container images are neither pulled nor scanned here. `capabilities/container-refresh` is the
+Container images are neither pulled nor scanned here. `services/container-refresh` is the
 pull, on the hosts that run containers; `grype` is the scan, in
 `.github/workflows/security.yml`, which installs it itself and runs whether or not this Mac is
 awake.
@@ -77,7 +77,7 @@ tools/service-runner.sh install-persistence host-patch
 
 In that order. Enabling first is what makes the rendered unit owned: skip it and `tools/doctor`
 reports the unit as an orphan and advises `remove-persistence`, which is the exact wrong advice
-recorded in `capabilities/backup/service.toml`.
+recorded in `crates/backup/service.toml`.
 
 ## Done looks like
 

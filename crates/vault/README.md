@@ -148,13 +148,13 @@ for one where none is, which is an instrument that cannot be wrong.
 | `GET /routes` | This manifest, as data. |
 
 `GET /api/tasks` served band 620 from 2026-08-27 (PRD Q48) to 2026-10-18. It
-retired when `capabilities/projects` became the owner of tasks and the vault's
-`Projects/` moved into Sjel (capabilities/projects/README.md).
+retired when `crates/projects` became the owner of tasks and the vault's
+`Projects/` moved into Sjel (crates/projects/README.md).
 
 `GET /api/people` and `GET /api/journal-health` served what the Journal knew about
 each person and which Journal health keys had a producer. They retired on
 2026-10-20 with the CLI's `people`, `journal`, `names` and `fields` verbs, when
-`Atlas/People` and `Journal/` left the vault. `capabilities/entities` computes
+`Atlas/People` and `Journal/` left the vault. `crates/entities` computes
 `last_contact` from the Journal in `projects` now (`src/journal.rs`). Git history
 holds the rules those modules recorded (Q106, D2).
 
@@ -191,7 +191,7 @@ moment, and are made to agree or made to explain.** The second one is
 own three rungs, deliberately not the crate's. Run both and compare:
 
 ```
-python3 capabilities/vault/acceptance/link-counts.py <vault-root>
+python3 crates/vault/acceptance/link-counts.py <vault-root>
 vault links --root <vault-root>
 ```
 
@@ -259,4 +259,4 @@ carries a hand-written compatibility shim.
 
 - `libs/markdown-root` — containment-checked vault access, recursive walk, the
   byte-addressable frontmatter this crate reads, and the wikilink parser the link
-  checker shares with `capabilities/entities`.
+  checker shares with `crates/entities`.

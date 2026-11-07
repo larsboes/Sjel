@@ -183,7 +183,7 @@ impl PlacesStore {
             );
 
             -- source_id is the finance journal's SHA-256 candidate fingerprint
-            -- (capabilities/finance/src/import.rs), the one identity that
+            -- (crates/finance/src/import.rs), the one identity that
             -- survives projection rebuilds (README D2). One link per
             -- transaction: the PRIMARY KEY makes a venue link and a later city
             -- guess mutually exclusive without any code having to check.

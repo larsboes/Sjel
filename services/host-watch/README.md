@@ -41,10 +41,10 @@ once you are already looking.
 
 **Outdated tailscaled.** Delegated to `host-net tailnet --json`, once for each tailscaled on
 the host. One finding keyed `net:tailscale-outdated` names every node whose running daemon is
-older than the newest release. See `capabilities/host-net/README.md` ("How host-watch uses it").
+older than the newest release. See `crates/host-net/README.md` ("How host-watch uses it").
 
 **Unexpected network exposure.** Delegated whole to `host-net check --json`, the same shape
-the disk half already has: `capabilities/host-net` owns the scope rule, the netstat parsing and
+the disk half already has: `crates/host-net` owns the scope rule, the netstat parsing and
 the overlay policy of expected wildcard listeners, and this reads its verdict and adds nothing.
 A wildcard bind is reachable from loopback, the local network, the tailnet and any container
 bridge the host grows later, so it is the one scope worth an interrupt; a loopback listener is
@@ -69,7 +69,7 @@ that has never fired manufactures alerts rather than information.
 ## How it reports
 
 It writes a row into `host_watch_findings` — its own table in the shared store
-(`capabilities/store`) — and nothing else. No new notification machinery: core Sjel has
+(`services/store`) — and nothing else. No new notification machinery: core Sjel has
 never had a notifier and does not grow one here; the precedent is stated in
 `tools/sjel-cli/src/sparpreis_watch/mod.rs`'s own header.
 
@@ -139,7 +139,7 @@ name and no number (CONTRIBUTING.md#public-core-and-private-overlays). Shape:
 `schemas/host-watch-policy.toml.example`.
 
 The network half reads a second file, `<overlay>/config/host-net-policy.toml`, which belongs
-to `capabilities/host-net` and is documented there. Nothing in this capability parses it.
+to `crates/host-net` and is documented there. Nothing in this capability parses it.
 
 The allowlist is meant to stay short. Every name on it is a process this watcher can
 never warn about again, so an allowlist grown to silence noise is how the check quietly

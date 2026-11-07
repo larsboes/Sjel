@@ -881,7 +881,7 @@ mod unit_tests {
 }
 
 /// Database-backed; named for the selector CI splits on — see
-/// `capabilities/scouting/src/store.rs` for why the name is the contract.
+/// `crates/scouting/src/store.rs` for why the name is the contract.
 #[cfg(test)]
 pub(crate) mod db_tests {
     use super::*;

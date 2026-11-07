@@ -8,7 +8,7 @@
 # R1 — NO BROWSER-CONTEXT HTTP. `fetch()` from a plugin runs in Obsidian's renderer and
 #      carries `Origin: app://obsidian.md`. The origin guard admits that exact origin
 #      (libs/sjel-server/src/origin.rs, `origin_allowed_by`), but admission is not the
-#      whole path: sjel-status carries no CORS layer (capabilities/sjel-status/src/main.rs,
+#      whole path: sjel-status carries no CORS layer (crates/sjel-status/src/main.rs,
 #      `build_router`), so the renderer withholds the registry's reply and discovery fails.
 #      `requestUrl` is issued by Electron's main process and sends no Origin, so it needs
 #      neither the allowance nor a CORS header; it is the allowed path. The two spellings
@@ -18,7 +18,7 @@
 #      an editor's autocomplete makes.
 #
 # R2 — READ-ONLY. vault computes the people facts and does not write them
-#      (capabilities/vault/src/people.rs); trips owns its projections and overwrites them
+#      (crates/vault/src/people.rs); trips owns its projections and overwrites them
 #      whole. A plugin that also wrote would be a second writer of the same keys with no
 #      shared refusal path. A plugin that must write is a design change, not an edit —
 #      reopen this rule then. `create` is not in the list: it refuses a path that already

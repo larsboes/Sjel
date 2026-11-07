@@ -1,6 +1,6 @@
 //! Data models and pure reductions for the Media ledger and ingest gate (`/media`).
 //!
-//! Replaces the dashboard's `/media` route. Backed by `capabilities/media` via
+//! Replaces the dashboard's `/media` route. Backed by `crates/media` via
 //! `GET /media/api/status`, `GET /media/api/ingests`, and `GET /media/api/ingests/{id}`.
 
 pub use media_api::*;

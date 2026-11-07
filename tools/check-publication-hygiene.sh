@@ -69,7 +69,7 @@ done < <(git grep --cached -a -l -E "${private_path}" || true)
 
 legacy_tooling_path='~/Developer/'"Tooling"
 # Each marker must be followed by a non-identifier character or end of line, so a name that
-# merely BEGINS with one does not match. capabilities/finance/src/allocation.rs names a journal
+# merely BEGINS with one does not match. crates/finance/src/allocation.rs names a journal
 # tag `axon-personal-cents`, which is a field name in a ledger format and exposes nothing — and
 # it turned this gate red on every push to main from the commit that introduced it. A marker
 # exists to catch a deployment being named, not a string starting with the same letters.

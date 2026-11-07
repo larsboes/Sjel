@@ -150,7 +150,7 @@ impl FinanceStore {
 
             -- The nullable raw location columns are preserved from the export for
             -- the places capability, which reads candidates to link spend to venues
-            -- (capabilities/places/README.md, D1/D2).
+            -- (crates/places/README.md, D1/D2).
             CREATE TABLE IF NOT EXISTS {prefix}_transaction_candidates (
                 id TEXT PRIMARY KEY,
                 fingerprint TEXT NOT NULL UNIQUE,
@@ -272,7 +272,7 @@ impl FinanceStore {
                 ON {prefix}_fx_rates(base, quote, observed_on);
 
             -- Every attempt, successful or not. Modelled on
-            -- capabilities/places/src/store.rs's geocode cache status column: a
+            -- crates/places/src/store.rs's geocode cache status column: a
             -- miss or a refusal is a recorded row, so the question of why an
             -- instrument is stale has an answer that is not somebody's memory.
             -- `detail` carries a bounded reason -- an HTTP status, a note that
@@ -1474,7 +1474,7 @@ impl FinanceStore {
     /// stamp it was written with. The whole body of `GET /__sjel/freshness`.
     ///
     /// `status = 'ok'` and nothing else, for the reason
-    /// `capabilities/comms/src/store/source_state.rs` gives for reading
+    /// `crates/comms/src/store/source_state.rs` gives for reading
     /// `last_success_at` rather than `last_run_at`: an attempt that refused
     /// still ran, so a run column stays fresh while nothing arrives. `refused`
     /// is Yahoo answering a gate page and `error` is a dead route, and neither
@@ -1938,7 +1938,7 @@ fn row_to_decision_event(row: &Row) -> rusqlite::Result<Option<(String, StoredDe
 /// run of this same code, and `CREATE TABLE IF NOT EXISTS` never revisits an
 /// installed table. So this is the table-rebuild dance SQLite's own documentation
 /// prescribes, behind a probe of what the file actually holds. The precedent is
-/// `capabilities/comms/src/store/migrations.rs`, which does the same for the
+/// `crates/comms/src/store/migrations.rs`, which does the same for the
 /// C0-C3 class vocabulary.
 ///
 /// Unlike that one, this runs INSIDE the migration transaction and does not turn

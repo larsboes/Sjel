@@ -51,7 +51,7 @@ applies it before declaring a root.
 
 ## Writing back: the marked region
 
-`region.rs` is the other half, added for #138. `capabilities/trips/README.md`
+`region.rs` is the other half, added for #138. `crates/trips/README.md`
 specified it in prose a month earlier and nothing implemented it: regenerate only
 a marked Sjel-owned section, preserve everything outside it, and record a conflict
 rather than choosing between two changed revisions.

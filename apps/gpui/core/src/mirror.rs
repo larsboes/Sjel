@@ -1,7 +1,7 @@
 //! The read-only copy of the Mac's data on the phone, and the fetch that keeps it current.
 //!
 //! `sjel mirror build` writes the copy on the Mac and `GET /api/sjel-status/mirror` serves it with
-//! a manifest beside it (`capabilities/sjel-status/src/status/mirror.rs`, route R1 in
+//! a manifest beside it (`crates/sjel-status/src/status/mirror.rs`, route R1 in
 //! `research/offline-on-the-phone.md`). This module is the phone's half: read the manifest, fetch
 //! the copy only when its digest differs from the one already on disk, check the bytes against the
 //! digest before they replace anything, then read the copy locally.
@@ -37,7 +37,7 @@ pub const REBUILD_PATH: &str = "/api/sjel-status/mirror/rebuild";
 /// The copy's file name inside its directory, and the manifest beside it.
 const COPY_FILE: &str = "mirror.db";
 const MANIFEST_FILE: &str = "manifest.json";
-/// Where the day's entries are read from in the copy (`capabilities/calendar/src/store.rs`).
+/// Where the day's entries are read from in the copy (`crates/calendar/src/store.rs`).
 const ENTRIES: &str = "calendar_entries";
 /// The contact registry, and the values that make a person a contact card.
 const ENTITIES: &str = "entities_entities";
@@ -209,7 +209,7 @@ impl Mirror {
     }
 
     /// The day's entries: `[from, to)` in the copy's own words, exactly the window the calendar
-    /// capability uses (`plain_day_window` in `capabilities/calendar/src/store.rs`).
+    /// capability uses (`plain_day_window` in `crates/calendar/src/store.rs`).
     ///
     /// A copy taken without `calendar_entries` answers an empty list rather than an error: the
     /// phone is showing a real absence, and the page says which copy it is reading.
@@ -370,7 +370,7 @@ impl Mirror {
     }
 }
 
-/// One value as the registry stores it: the text of a JSON value (`capabilities/entities/src/store.rs`
+/// One value as the registry stores it: the text of a JSON value (`crates/entities/src/store.rs`
 /// writes `value.to_string()`). A row that does not parse is kept as the text it is, so an
 /// unfamiliar value shows up in the card instead of vanishing from it.
 fn json_value(text: &str) -> serde_json::Value {
@@ -406,7 +406,7 @@ pub async fn refresh(host: &impl Host, dir: &Path) -> Result<Refreshed, String> 
 /// Asks the Mac to rebuild its copy and answers the manifest it produced.
 ///
 /// This is a request, not a demand: the route runs `sjel mirror build` on the operator surface and
-/// a paired device can be refused it (`capabilities/sjel-status/src/status/mirror.rs`). A caller
+/// a paired device can be refused it (`crates/sjel-status/src/status/mirror.rs`). A caller
 /// that is refused still has [`refresh`], which takes whatever copy the Mac already holds.
 pub async fn rebuild(host: &impl Host) -> Result<Manifest, String> {
     let reply = host.send("POST", REBUILD_PATH, Some(b"{}")).await?;

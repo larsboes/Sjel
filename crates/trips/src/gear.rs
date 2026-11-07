@@ -7,7 +7,7 @@
 //! column for any of the seven fields below, so an imported row was
 //! indistinguishable from a sofa and `--apply` was refused by naming what it was
 //! waiting for. B51 shipped the columns and widened the CHECK
-//! (`capabilities/interior/src/store.rs`), so the refusal is lifted: without a
+//! (`crates/interior/src/store.rs`), so the refusal is lifted: without a
 //! flag this still only reads and proposes, and `--apply` writes.
 //!
 //! ## Idempotent by construction
@@ -17,7 +17,7 @@
 //! columns exist, `--apply` will POST each proposal to interior's own
 //! `POST /api/items`, which answers 409 for an id that is already there and is
 //! therefore idempotent for free — never by SQL, which is Q73's write-path rule
-//! and the direction `capabilities/calendar` already takes into trips.
+//! and the direction `crates/calendar` already takes into trips.
 //!
 //! ## Nothing from the overlay lives in this file
 //!

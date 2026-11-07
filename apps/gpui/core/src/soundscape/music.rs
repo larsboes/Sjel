@@ -1,6 +1,6 @@
 //! What each preset is made of, and how a scape changes over an hour.
 //!
-//! This is the browser engine's own tables (`capabilities/soundscape/ui/src/lib/symphony/
+//! This is the browser engine's own tables (`crates/soundscape/ui/src/lib/symphony/
 //! audioEngine.ts`), moved to Rust so the plugin and the dashboard play the same piece. The
 //! material is not invented here: chord voicings, motif, scales, roots, the six drift LFOs and
 //! the arrangement arc are all the dashboard's, and a change to one without the other makes two

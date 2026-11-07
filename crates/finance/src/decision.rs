@@ -15,7 +15,7 @@
 //! its note is the one fact in this capability that no re-import and no re-run
 //! reproduces, and PRD:234 calls the database "a rebuildable index, never the
 //! only copy". `finance decisions export` is the copy a human runs when the
-//! server is down, exactly as `capabilities/trips/src/bin/trips-cli.rs` describes
+//! server is down, exactly as `crates/trips/src/bin/trips-cli.rs` describes
 //! its own role -- never the only writer.
 //!
 //! **Class c1, validated at every write site.** PRD:1201-1202: C1 is "My notes,

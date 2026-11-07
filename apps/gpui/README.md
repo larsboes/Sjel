@@ -35,7 +35,7 @@ Media filter, newest day first and the best-ranked entry first within a day. The
 dashboard's: j and k move, s keeps, d dismisses, u undoes, Enter or o opens the reader, ⇧O opens the
 original, and Escape goes back. Decisions go through `POST /comms/feed/:id/status` only, which
 records them for the ranking model. The shell exchanges the app's deployment token for comms'
-own credential (`capabilities/sjel-status/src/proxy.rs`). The Reading list draws one row per item
+own credential (`crates/sjel-status/src/proxy.rs`). The Reading list draws one row per item
 on screen and keeps its place when a decision removes a row, so a month of entries scrolls as
 cheaply as a day of them (`ListState` in `src/feed.rs`). Digests, cloud processing, the review
 queue and the library are planned for native views. Feed's **Clips** tab lists the pages saved with
@@ -183,7 +183,7 @@ which that script puts on the item's access list. The token stays in the app pro
 reaches the browser or the log.
 
 `GET /api/sjel-status/events` pushes the health and agent answers when they change
-(`capabilities/sjel-status/src/status/events.rs`), so the open window reads them once and then
+(`crates/sjel-status/src/status/events.rs`), so the open window reads them once and then
 listens: one held connection and one calendar read per 10 seconds, instead of three reads. A shell
 without that stream keeps the timer.
 
@@ -380,7 +380,7 @@ Two things this tab taught about the copy and the registry. The phone set did no
 `entities_values` (phones, emails, birthday, last_contact, company, relation) or `places_people` (the
 operator's decision for a person's name), so a page over it had 294 names and no contact card; both
 are in `PHONE_SET` now, and the copy is 2,493 rows in 11.3 MB instead of 1,878 in 11.1 MB. And
-`Person::from_record` looked for `email` and `phone` while `capabilities/entities` writes `emails`
+`Person::from_record` looked for `email` and `phone` while `crates/entities` writes `emails`
 and `phones` as arrays, so no contact card on either client had ever shown an email or a phone
 number; the parser accepts both spellings now, which is a Mac fix as much as a phone one.
 
@@ -444,7 +444,7 @@ music is showing.
 
 ### Why there is a synthesizer in this app
 
-The dashboard makes this sound in the browser, and `capabilities/soundscape/README.md` explains why
+The dashboard makes this sound in the browser, and `crates/soundscape/README.md` explains why
 that split is right for a page: the conductor owns *what* should be playing, the browser owns
 oscillators and the clock. A native app has an audio device, so the same contract lands differently
 -- the conductor still owns intent (preset, parameters, layers, seed, session), and
@@ -557,7 +557,7 @@ editor only; the table always writes.
 
 ## Running it
 
-The default endpoint comes from `capabilities/sjel-status/service.toml`. `SJEL_STATUS_URL` can point
+The default endpoint comes from `crates/sjel-status/service.toml`. `SJEL_STATUS_URL` can point
 to another loopback port. The app refuses any endpoint that is not `http` on 127.0.0.1 or
 localhost. `SJEL_INBOUND_TOKEN_FILE` reads the token from a file instead of the Keychain.
 `tools/demo-shots` uses both to run the app against a demo node on synthetic data.

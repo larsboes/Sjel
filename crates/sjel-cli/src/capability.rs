@@ -7,7 +7,7 @@
 //! cannot show it, the property the bash `-H @<(...)` gave.
 //!
 //! Where to poll mirrors `probe_url` and `readiness_url` in
-//! capabilities/sjel-status/src/status/registry.rs. What the answer means (`up`, `off`,
+//! crates/sjel-status/src/status/registry.rs. What the answer means (`up`, `off`,
 //! `down`) is this CLI's own, argued at [`state`].
 
 use std::io::Write as _;

@@ -1,4 +1,4 @@
-//! `cv-cli`: the binary `capabilities/cv/cv` execs. Run `cv` with no arguments for usage.
+//! `cv-cli`: the binary `crates/cv/cv` execs. Run `cv` with no arguments for usage.
 
 use cv::model::{Application, Lang, Master, Status};
 use cv::{linkedin, Built, NewApp, Paths, Res, Saved, Target};

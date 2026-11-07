@@ -388,7 +388,7 @@ fn parse_fields(block: &str) -> HashMap<String, String> {
 // ---------------------------------------------------------------------------
 // Whole-root traversal and byte-addressable frontmatter.
 //
-// Added for `capabilities/vault`, which asks two questions the pattern-based
+// Added for `crates/vault`, which asks two questions the pattern-based
 // API above cannot answer. First: what is EVERY note in this root? The glob
 // shapes exist because a config declared them, and widening those would widen
 // what an operator asked for — but a vault-wide lint has no pattern to widen,
@@ -543,7 +543,7 @@ pub fn frontmatter_spanned(md: &str) -> Result<Frontmatter, String> {
 ///
 /// Embeds (`![[x]]`) count: an embed that does not resolve renders as nothing,
 /// which is exactly the failure a link check exists to catch. The flag is `true` for a link
-/// that sits before `body_start`, in the frontmatter. Moved here from `capabilities/vault`'s
+/// that sits before `body_start`, in the frontmatter. Moved here from `crates/vault`'s
 /// link checker on 2026-10-20, so every capability that counts links counts the same ones.
 pub fn wikilink_targets(text: &str, body_start: usize) -> Vec<(String, bool)> {
     let bytes = text.as_bytes();

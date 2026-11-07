@@ -1,11 +1,11 @@
 # people-registry
 
-Rung 0's known-person registry, refreshed from `capabilities/entities` every six hours.
+Rung 0's known-person registry, refreshed from `crates/entities` every six hours.
 
-`capabilities/comms/src/people_registry.rs` consults a list of the names this operator actually
+`crates/comms/src/people_registry.rs` consults a list of the names this operator actually
 knows, because rung 1's person detector only fires after a salutation and misses a bare first
 name. The agent gate's pseudonymizer reads the same file (`crates/sjel-server/src/agent.rs`). The
-list is every person in `capabilities/entities` and the operator's own entity, with their
+list is every person in `crates/entities` and the operator's own entity, with their
 `aliases` (`entities-server names`, `src/names.rs`), and goes stale the moment a person is added.
 Until 2026-10-20 it came from the vault's `Atlas/People` notes through `vault names`.
 
@@ -16,7 +16,7 @@ rung 0.
 
 ## Why this is a capability and not a LaunchAgent
 
-Same reason as `capabilities/backup`, and with one concrete gain. The hand-written unit carried an
+Same reason as `crates/backup`, and with one concrete gain. The hand-written unit carried an
 explicit `SJEL_PERSONAL_ROOT` with a comment explaining that launchd gives a job none of the
 shell's exports. True — and unnecessary once the job runs through `tools/service-runner.sh`, which
 sources `tools/lib/paths.sh`, which exports it. One fewer machine-local value copied by hand into

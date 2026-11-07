@@ -4,9 +4,9 @@
 // demonstrated without a hand-written fixture, and that only holds while what it serves is
 // still the shape those three parse. Each assertion below names the consumer it protects:
 //
-//   the feed          capabilities/scouting/src/sources/rss.rs reads four tags per <item>
-//   the article       capabilities/comms extracts a real page, so it has to look like one
-//   dbnav / dbweb     capabilities/transit/src/hafas.rs, two different field vocabularies
+//   the feed          crates/scouting/src/sources/rss.rs reads four tags per <item>
+//   the article       crates/comms extracts a real page, so it has to look like one
+//   dbnav / dbweb     crates/transit/src/hafas.rs, two different field vocabularies
 //
 // The one that matters most is the LAST: dbweb names a regional train by its bare number and
 // carries no label, which is why a dbweb regional leg cannot be scored at all. A stub that

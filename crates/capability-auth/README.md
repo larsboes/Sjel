@@ -6,7 +6,7 @@ resolves the deployment-wide inbound token and prints it as one request header.
 
 The crate is `sjel-capability-auth`, a member of the root Cargo workspace. It calls
 `InboundAuth::from_deployment().bearer_header()` (`crates/sjel-server/src/auth.rs:209`, `:304`),
-the same call `capabilities/sjel-status/src/status/health.rs:192` and the `trips`, `finance`
+the same call `crates/sjel-status/src/status/health.rs:192` and the `trips`, `finance`
 and `vault` clients make. The token rule stays in one place.
 
 ## Behaviour

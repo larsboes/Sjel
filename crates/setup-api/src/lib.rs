@@ -218,7 +218,7 @@ pub struct SetupApplyRequest {
     pub token: Option<String>,
 }
 
-/// The node's Same-Wi-Fi listener (`capabilities/sjel-status/src/lan.rs`).
+/// The node's Same-Wi-Fi listener (`crates/sjel-status/src/lan.rs`).
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct LanInfo {
     pub port: u16,

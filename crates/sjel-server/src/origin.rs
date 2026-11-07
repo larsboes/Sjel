@@ -1,6 +1,6 @@
 //! Is this browser origin allowed to talk to this capability at all?
 //!
-//! Moved here verbatim from `capabilities/places/src/server.rs`, where it was
+//! Moved here verbatim from `crates/places/src/server.rs`, where it was
 //! written for the companion register (places README D4). It moved
 //! because a second capability needs it: `trips` serves plan-search results
 //! that carry the operator's feasible calendar windows and a companion hint,
@@ -13,7 +13,7 @@
 //!
 //! A request with no `Origin` header is not a browser cross-origin call (curl,
 //! the runner's health probes, same-origin GETs, and every server-to-server
-//! caller such as `capabilities/calendar/src/server.rs`'s POST into trips) and
+//! caller such as `crates/calendar/src/server.rs`'s POST into trips) and
 //! passes. With one, the allowed set mirrors how the dashboard itself is
 //! reached (`dashboard/vite.config.ts`, `allowedHosts`): the loopback dev
 //! origin, or a tailnet name.
@@ -35,8 +35,8 @@
 //! `.layer(from_fn_with_state("places", refuse_foreign_origins))` silently
 //! loses this guard, and a test that exercises [`origin_allowed_by`] alone
 //! still passes. Each consumer therefore drives its wired `Router` with a
-//! foreign `Origin` in its own test; see `capabilities/places/src/server.rs`
-//! and `capabilities/trips/src/server.rs`.
+//! foreign `Origin` in its own test; see `crates/places/src/server.rs`
+//! and `crates/trips/src/server.rs`.
 
 use axum::extract::{Request, State};
 use axum::http::{header, StatusCode};

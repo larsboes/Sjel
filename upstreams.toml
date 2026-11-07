@@ -593,7 +593,7 @@ summary = "Desktop learning harness for probing, teaching, practice, and graphs 
 why = "Read 2026-10-28; its predecessor is what Packs/knowledge/skills/teach started from. Three ideas taken and paraphrased -- the predict-teach-check cycle with thinking and confidence on every answer, propositions plus reasoning chains as the vault's claim notes, and the practice doctrine -- while its Electron app and JSONL graph store were not adopted, because the vault is the store."
 
 # --- home-server container dependencies ------------------------------------
-# Floating tags, pulled daily by capabilities/container-refresh. A version tag is never a byte pin:
+# Floating tags, pulled daily by services/container-refresh. A version tag is never a byte pin:
 # Docker Hub rebuilds under the same tag, and the digest is the only identity.
 
 [home-assistant]
@@ -709,7 +709,7 @@ license = "renders arXiv submissions; each paper keeps the licence its authors c
 summary = "Older arXiv HTML source that comms uses for full text when arxiv.org has no HTML"
 why = "The second HTML source for arXiv full text in capabilities/comms, consulted only when arxiv.org/html answers 404, measured 2026-08-04 as serving all three newest-paper misses plus a 2007 paper with real body text. It is a labs-grade host with wide LaTeXML backfill, which is why it is the fallback and never the first request, and its response goes through the same extraction trait as every other page."
 
-# --- local semantic relevance (capabilities/comms) --------------------------
+# --- local semantic relevance (crates/comms) --------------------------
 
 [multilingual-e5-small-mlx]
 url = "https://huggingface.co/mlx-community/multilingual-e5-small-mlx"

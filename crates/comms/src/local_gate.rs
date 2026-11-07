@@ -291,7 +291,7 @@ mod tests {
     /// that reason.
     ///
     /// The selector is one string in one workflow, so the module name IS the suite
-    /// membership — see `capabilities/scouting/src/store.rs`.
+    /// membership — see `crates/scouting/src/store.rs`.
     mod db_tests {
         use super::*;
 

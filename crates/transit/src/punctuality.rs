@@ -1,4 +1,4 @@
-//! Filling `Journey.delay_risk_score` from `capabilities/punctuality`.
+//! Filling `Journey.delay_risk_score` from `crates/punctuality`.
 //!
 //! Over HTTP, never by linking that crate: a capability depends on another's contract,
 //! not its code (CONTRIBUTING.md#schemas-and-dependency-direction). This module is the whole dependency, and it is a

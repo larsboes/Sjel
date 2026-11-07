@@ -2,10 +2,10 @@
 //!
 //! `region.rs` above solves the same problem for the *body*: a marked span a
 //! machine regenerates inside a file a human owns. This module does it for one
-//! top-level frontmatter key. Its first caller is `capabilities/vault`, which
+//! top-level frontmatter key. Its first caller is `crates/vault`, which
 //! writes `last_contact` and `met_at` on People notes because an Obsidian Base
 //! computes its "lost touch" view from `last_contact`, and a `.base` cannot call
-//! HTTP (`capabilities/vault/src/fields.rs`).
+//! HTTP (`crates/vault/src/fields.rs`).
 //!
 //! ## Why this is not `region.rs` with a different delimiter
 //!
@@ -31,7 +31,7 @@
 //!
 //! **It has no opinion about whether the write is a good idea.** Whether a
 //! stored value may be replaced at all is a policy question with a real answer
-//! and no mechanical one; `capabilities/vault/src/fields.rs` holds it, together
+//! and no mechanical one; `crates/vault/src/fields.rs` holds it, together
 //! with the list of keys Sjel writes.
 //!
 //! ## What it deliberately is not

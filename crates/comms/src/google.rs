@@ -84,7 +84,7 @@ fn client() -> Result<reqwest::blocking::Client> {
 }
 
 /// The credential ID of comms' Google grant (Gmail and Calendar) in the overlay catalog, as
-/// `capabilities/comms/service.toml` declares it. Calendar reads the same grant.
+/// `crates/comms/service.toml` declares it. Calendar reads the same grant.
 pub const GRANT_ID: &str = "google-comms";
 
 /// An access token for comms' grant: the keychain first, `env_path` while the grant has not

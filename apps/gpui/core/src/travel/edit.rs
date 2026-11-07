@@ -1,4 +1,4 @@
-//! Request bodies for `capabilities/trips`, checked before they leave. The capability does not
+//! Request bodies for `crates/trips`, checked before they leave. The capability does not
 //! check a date's shape, so that check is here.
 use chrono::NaiveDate;
 use serde_json::{json, Map, Value};
@@ -15,7 +15,7 @@ pub const STAGE_STATUSES: &[(&str, &str)] = &[
     ("completed", "Done"),
 ];
 
-/// `TransportMode` in `capabilities/trips/src/store.rs`, in the order a trip uses them most.
+/// `TransportMode` in `crates/trips/src/store.rs`, in the order a trip uses them most.
 pub const TRANSPORT_MODES: &[(&str, &str)] = &[
     ("train", "Train"),
     ("flight", "Flight"),
@@ -127,7 +127,7 @@ impl TripDraft {
 type Booking = (String, Option<String>, Map<String, Value>);
 
 /// The booking form, as typed. `provider` and `order_ref` are what the capability requires
-/// (`DECLARED_PAYLOADS` in `capabilities/trips/src/store.rs`).
+/// (`DECLARED_PAYLOADS` in `crates/trips/src/store.rs`).
 #[derive(Clone, Debug, Default)]
 pub struct BookingDraft {
     pub title: String,
@@ -137,7 +137,7 @@ pub struct BookingDraft {
     /// `"49,90"` or `"49.90"`, in `currency`.
     pub amount: String,
     pub currency: String,
-    /// The calendar turns this into a deadline entry (`capabilities/calendar/src/server.rs`).
+    /// The calendar turns this into a deadline entry (`crates/calendar/src/server.rs`).
     pub free_cancellation_until: String,
 }
 
@@ -238,7 +238,7 @@ impl BookingDraft {
 }
 
 /// The stay candidate form, as typed. `check_in`, `check_out`, `latitude`, and `longitude`
-/// are required by `DECLARED_PAYLOADS` in `capabilities/trips/src/store.rs`.
+/// are required by `DECLARED_PAYLOADS` in `crates/trips/src/store.rs`.
 #[derive(Clone, Debug, Default)]
 pub struct StayDraft {
     pub title: String,

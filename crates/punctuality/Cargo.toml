@@ -11,15 +11,15 @@ publish = false
 name = "punctuality"
 path = "src/lib.rs"
 
-# punctuality-cli, not punctuality: capabilities/punctuality/punctuality is the shell
+# punctuality-cli, not punctuality: crates/punctuality/punctuality is the shell
 # entry point this capability puts on PATH (CONTRIBUTING.md#placement-guide), and it is that
 # script which execs this binary. Two things named `punctuality` on PATH is the collision
-# the suffix avoids. Same reason capabilities/comms names its binary comms-cli.
+# the suffix avoids. Same reason crates/comms names its binary comms-cli.
 [[bin]]
 name = "punctuality-cli"
 path = "src/main.rs"
 
-# punctuality-server: the HTTP contract capabilities/transit reads this through, since a
+# punctuality-server: the HTTP contract crates/transit reads this through, since a
 # capability depends on another's surface and never its code (CONTRIBUTING.md#schemas-and-dependency-direction). The one
 # place in this crate that needs an async runtime -- ingest and the CLI are batch jobs.
 [[bin]]
@@ -37,7 +37,7 @@ punctuality-api = { path = "../punctuality-api" }
 route-manifest = { path = "../route-manifest" }
 # arrow-rs (upstreams.toml [arrow-rs]) -- the parquet reader. Pure Rust, which is the
 # reason it is here rather than an embedded database: see
-# capabilities/punctuality/README.md.
+# crates/punctuality/README.md.
 parquet = "=60.1.0"
 arrow = "=60.1.0"
 
@@ -51,7 +51,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true
 
-# punctuality-server only. Same versions capabilities/transit pins for transit-server.
+# punctuality-server only. Same versions crates/transit pins for transit-server.
 # Not `full`: these are the drivers this crate reaches for, verified with a lone
 # `cargo check -p <crate> --all-targets`, which is the only build where a missing
 # tokio feature is visible (a workspace build unifies them away).

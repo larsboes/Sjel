@@ -730,7 +730,7 @@ async function writeSubscriptionNotes(record: string): Promise<void> {
  *
  *  The checkout path arrives as `$1`, never as script text. Interpolating it into the
  *  `-c` string made a checkout directory containing `"` or `$(` a command -- the rule the
- *  Rust half already states (capabilities/comms/src/media.rs: argument arrays only, never
+ *  Rust half already states (crates/comms/src/media.rs: argument arrays only, never
  *  a shell string). CodeQL js/shell-command-injection-from-environment reported it. */
 export function activeOverlay(pathsSh: string = join(SJEL_ROOT, "tools/lib/paths.sh")): string {
   const out = execFileSync(

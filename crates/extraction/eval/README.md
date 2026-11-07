@@ -4,7 +4,7 @@
 
 That rule is not new and this directory is not a new idea. It is the instrument that decided
 Sjel's embedding and reranking adoptions, pointed at a different job:
-`capabilities/comms/eval/README.md` holds the original and states the discipline that makes it
+`crates/comms/eval/README.md` holds the original and states the discipline that makes it
 worth anything.
 
 > Add or revise a judgement from its meaning and rationale before looking at a model's score.
@@ -17,7 +17,7 @@ their failing runs are still on disk. The corpus was not weakened to accommodate
 ## Why the gate lives here and not in a capability
 
 It judges an **engine**, not a capability, and both consumers of `libs/extraction` have to be
-able to cite it. `capabilities/comms/eval/` keeps its own corpus and keeps it for a different
+able to cite it. `crates/comms/eval/` keeps its own corpus and keeps it for a different
 reason: that one scores the extractor→normalizer seam, which is a comms judgement about comms
 text. This one scores whether a reader can read a page at all.
 
@@ -62,7 +62,7 @@ Written from the `.typ` sources before any engine ran, per fixture:
   both sides, because an engine's line breaks are a fact about the renderer's line width and
   not about the characters it read.
 - **`must_not_survive`** — strings that must NOT appear. Empty on the prose pages, and that is
-  deliberate rather than lazy: `capabilities/comms/eval/`'s copy of this field catches page
+  deliberate rather than lazy: `crates/comms/eval/`'s copy of this field catches page
   furniture, and a rendered page has none. Here it carries a recorded misreading instead.
 - **`forbidden_confusions`** — ordered pairs, `{"expected": "=", "read_as": "-"}`. Reported only
   where the corpus can prove it: the judged string is absent AND the same string with the

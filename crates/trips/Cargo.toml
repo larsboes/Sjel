@@ -51,7 +51,7 @@ tower-http = { workspace = true, features = ["cors"] }
 schemars = "1.2.2"
 # Was loopback-only with no TLS backend; the Kiwi flight adapter (kiwi.rs)
 # speaks HTTPS to mcp.kiwi.com, so the default TLS stack is back in. Version
-# matched to capabilities/calendar and transit so the workspace resolves one reqwest.
+# matched to crates/calendar and transit so the workspace resolves one reqwest.
 reqwest = { workspace = true, features = ["blocking", "json"] }
 # Flight-segment times arrive naive airport-local; station-time resolves them
 # to UTC via country + island-airport lookups (PRD X1/F2).

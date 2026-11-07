@@ -90,7 +90,7 @@ export SJEL_TRANSIT_ORTE_URL="$DEMO_ORIGIN/orte"
 # Places geocodes the companions' cities. Same rule: never the real Nominatim.
 export SJEL_PLACES_NOMINATIM_URL="$DEMO_ORIGIN/nominatim/search"
 # Comms reads mail from the origin's Gmail stand-in. While this is set, comms reads no real
-# credential (capabilities/comms/src/google.rs, access_token).
+# credential (crates/comms/src/google.rs, access_token).
 export SJEL_COMMS_GMAIL_URL="$DEMO_ORIGIN/gmail"
 
 # Scouting's source declaration is generated rather than tracked: it contains the origin's
@@ -112,7 +112,7 @@ write_comms_config() {
   export SJEL_DEMO_COMMS_TOKEN
   # Comms refuses to fetch a URL that resolves inside this machine — an ingested
   # link would otherwise drive any loopback-bound Sjel API (Q74, see
-  # capabilities/comms/src/media.rs check_destination). Every URL this demo seeds
+  # crates/comms/src/media.rs check_destination). Every URL this demo seeds
   # is exactly that, on purpose: the origin is loopback so the published corpus
   # depends on no host anybody else owns. So the demo names its one origin here,
   # read from demo.toml rather than repeated, and the guard stays on for the

@@ -211,7 +211,7 @@ is the first consumer and reaches it over HTTP, never by linking this crate (CON
 `/health` reports coverage and the last ingest timestamp on purpose. A server that answers
 but has never ingested is up and useless, and without the window or timestamp "no data for
 that train" reads the same as "that train is never late". The scheduled producer is
-`capabilities/punctuality-ingest`, which runs the incremental ingest daily.
+`services/punctuality-ingest`, which runs the incremental ingest daily.
 
 `/lookup` answers `null` for a stop it knows nothing about, and for any cell thinner
 than 30 observations. It never falls back to a neighbouring hour or a station average:
@@ -261,7 +261,7 @@ thing, so it lives with that thing (CONTRIBUTING.md#decisions-live-with-their-ow
 
 ## Decision
 
-`capabilities/punctuality` aggregates ~120M published stop records with the `parquet`
+`crates/punctuality` aggregates ~120M published stop records with the `parquet`
 crate (`upstreams.toml` [arrow-rs]) in a plain Rust binary, and writes the ~400k-row
 result into the shared store. No embedded analytics engine is added to Sjel, at any layer.
 

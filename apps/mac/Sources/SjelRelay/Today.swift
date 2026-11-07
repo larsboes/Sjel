@@ -1,7 +1,7 @@
 import Foundation
 
 /// One calendar entry as `GET /calendar/api/entries` serves it (`CalendarEntry` in
-/// `capabilities/calendar`). Only the fields the menu bar shows.
+/// `crates/calendar`). Only the fields the menu bar shows.
 public struct CalendarEntry: Sendable, Equatable, Decodable, Identifiable {
     public let id: String
     public let title: String
@@ -45,7 +45,7 @@ public enum Today {
     }
 
     /// The query range for today and tomorrow. `to` is exclusive
-    /// (`capabilities/calendar/src/store.rs`, `list_entries`), so it is the day after tomorrow.
+    /// (`crates/calendar/src/store.rs`, `list_entries`), so it is the day after tomorrow.
     /// The 2026-10-08 reading that it was inclusive came from all-day entries, which the window
     /// let through by mistake until 2026-10-22; timed entries on `to` were always left out.
     public static func range(now: Date, calendar: Calendar = .current) -> (from: String, to: String) {

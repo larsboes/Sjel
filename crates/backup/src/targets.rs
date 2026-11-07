@@ -3,7 +3,7 @@
 //! "Which capabilities are backed up, and to where" is answered by
 //! `tools/backup-all.sh --list` and `--targets-json`. That script derives the set from the
 //! capability registry, so re-deriving it here would be a second definition of the same
-//! fact — the drift this repository refuses everywhere else (`capabilities/store/README.md`
+//! fact — the drift this repository refuses everywhere else (`services/store/README.md`
 //! "import, never redefine").
 
 use std::path::{Path, PathBuf};

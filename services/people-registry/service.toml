@@ -1,4 +1,4 @@
-# Rung-0 known-person registry refresh from capabilities/entities.
+# Rung-0 known-person registry refresh from crates/entities.
 kind         = "process"
 name         = "people-registry"
 command      = ["tools/people-registry-refresh.sh"]

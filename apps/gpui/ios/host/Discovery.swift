@@ -2,7 +2,7 @@ import Foundation
 import Network
 
 // Finds Sjel nodes on the local network (PRD Q119). The Mac advertises `_sjel._tcp` with its host,
-// port and certificate fingerprint in the TXT record (capabilities/sjel-status/src/lan.rs), so a
+// port and certificate fingerprint in the TXT record (crates/sjel-status/src/lan.rs), so a
 // browse result is enough to connect: no service resolution, no connection from here.
 //
 // Every result goes to Rust through `sjel_ios_nodes`, the entry point ios/src/lib.rs documents; the view there

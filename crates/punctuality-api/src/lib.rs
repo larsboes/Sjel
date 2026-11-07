@@ -102,7 +102,7 @@ pub struct HealthResponse {
 // ============================================================================
 
 /// The dataset writes EVA numbers zero-padded to eight digits (`08000044`); HAFAS, and
-/// therefore `capabilities/transit`, returns them unpadded (`8000044`).
+/// therefore `crates/transit`, returns them unpadded (`8000044`).
 pub fn normalize_eva(eva: &str) -> String {
     let digits = eva.trim_start_matches('0');
     format!("{digits:0>8}")

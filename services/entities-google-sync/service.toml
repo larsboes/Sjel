@@ -1,4 +1,4 @@
-# Inbound Google Contacts sync for capabilities/entities.
+# Inbound Google Contacts sync for crates/entities.
 kind     = "process"
 name     = "entities-google-sync"
 command  = ["target/release/entities-server", "sync-google"]

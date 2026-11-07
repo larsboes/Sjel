@@ -26,7 +26,7 @@ sjel-config = { path = "../sjel-config" }
 # `/routes` neben `/health`, wie jede andere Capability mit HTTP-Oberflaeche.
 route-manifest = { path = "../route-manifest" }
 schemars = "1.2.2"
-# Die Zeilen sind eine Tabelle, die `capabilities/inventory` besitzt, und diese
+# Die Zeilen sind eine Tabelle, die `crates/inventory` besitzt, und diese
 # Capability liest sie aus derselben Datei — ohne sie ist kein Layout zu rechnen. Der eigene
 # Praefix traegt nur noch `interior_placement`. libs/sjel-store/README.md hat das Warum.
 sjel-store = { path = "../sjel-store" }
@@ -63,7 +63,7 @@ rayon.workspace = true
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, damit der Origin-Test den verdrahteten Router ohne Listener und
-# ohne Port fahren kann. Dasselbe Muster nutzt capabilities/sjel-status bereits.
+# ohne Port fahren kann. Dasselbe Muster nutzt crates/sjel-status bereits.
 tower = { workspace = true, features = ["util"] }
 
 [lints]

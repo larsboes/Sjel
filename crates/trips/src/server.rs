@@ -1854,11 +1854,11 @@ const CAPABILITY: &str = "trips";
 /// companion hint derived from the C2 register, and `CorsLayer::permissive()`
 /// makes every route above it readable by any page open in the operator's
 /// browser. That is the attack `places` refuses by hand for the same data
-/// (`capabilities/places/src/server.rs`, the `build_router` note). Applying it
+/// (`crates/places/src/server.rs`, the `build_router` note). Applying it
 /// to the whole router rather than to the new routes alone also closes an
 /// existing leak: `GET /api/flights/when` returns calendar entry titles in
 /// `collisions` (`trips::windows::rank`). A request with no `Origin` passes, so
-/// `capabilities/calendar`'s server-to-server POST into trips is unaffected.
+/// `crates/calendar`'s server-to-server POST into trips is unaffected.
 fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/routes", get(routes))

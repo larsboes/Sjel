@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # InboundAuth::from_deployment().bearer_header() is what sjel-status, trips, finance and vault
-# already call to reach a sibling (capabilities/sjel-status/src/status/health.rs:192). A fourth
+# already call to reach a sibling (crates/sjel-status/src/status/health.rs:192). A fourth
 # reader of deployment.env would be a fourth place for the token rule to drift.
 sjel-server = { path = "../sjel-server" }
 # `enroll`: the overlay root, a random token and key, and the hash the server stores.

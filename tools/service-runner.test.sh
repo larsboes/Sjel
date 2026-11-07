@@ -409,7 +409,7 @@ case "$dk_run_line" in
 esac
 
 # --- kind = "data": a file, not a process (PRD Q45) -----------------------------------------
-# capabilities/store declares the shared SQLite database so ONE manifest owns its backup
+# services/store declares the shared SQLite database so ONE manifest owns its backup
 # contract. Nothing starts it, and the two ways that could go wrong are opposite: a lifecycle
 # verb falling through to the container path and reporting a missing image as a broken
 # capability, or the whole-machine fan-out calling `stop` on it and turning `down`'s exit

@@ -43,7 +43,7 @@ const STRUCTURAL_KEYS: &[&str] = &[
     "tier",
     "data_class",
     "date",
-    // A task's own schedule (`capabilities/projects`). The text ladder reads `2026-10-23` as a
+    // A task's own schedule (`crates/projects`). The text ladder reads `2026-10-23` as a
     // phone number; free-text dates stay redacted, because there a date can be a birth date.
     "due",
     "scheduled",

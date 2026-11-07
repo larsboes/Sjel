@@ -20,7 +20,7 @@ TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 
 # Three modes, one derivation. `--list` and `--targets-json` exist for
-# capabilities/backup, which drives one run per capability and needs to know
+# crates/backup, which drives one run per capability and needs to know
 # which capabilities declare what. The set is derived HERE and read there, so
 # there is still exactly one definition of "which capabilities are backed up".
 MODE="run"

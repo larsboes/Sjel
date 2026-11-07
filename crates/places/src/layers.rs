@@ -375,7 +375,7 @@ pub fn travel_layer_in(
     let mut routes: Vec<Value> = Vec::new();
 
     // Trip destinations: PlaceRef JSON serialized by trips' store
-    // (capabilities/trips/src/store.rs); only refs that carry a coordinate can
+    // (crates/trips/src/store.rs); only refs that carry a coordinate can
     // be drawn.
     {
         let conn = store.conn()?;

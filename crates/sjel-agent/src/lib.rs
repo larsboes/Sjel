@@ -13,7 +13,7 @@
 
 pub mod cloud;
 // The first-party extensions are part of the library, not only of the CLI binary: a capability
-// that hosts the loop (`capabilities/agent`) assembles its plugin set from these names, and a
+// that hosts the loop (`crates/agent`) assembles its plugin set from these names, and a
 // second copy of them in `src/main.rs` would be two modules to keep in step.
 pub mod ext;
 pub mod extension;
@@ -566,7 +566,7 @@ impl Agent {
                 .collect();
             object.insert("tools".into(), Value::Array(tools));
         }
-        // Same pass-through as capabilities/assistant: the role decides template arguments and
+        // Same pass-through as crates/assistant: the role decides template arguments and
         // extra fields, but never the fields this loop owns.
         if let Some(kwargs) = &self.role.chat_template_kwargs {
             object.insert("chat_template_kwargs".into(), kwargs.clone());

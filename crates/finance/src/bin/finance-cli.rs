@@ -4,13 +4,13 @@
 //! work behind it and no HTTP route, on purpose: a scheduled job that reaches a
 //! capability through its own binary needs no port, and
 //! `tools/check-service-tomls.sh` refuses `port` and `schedule` in one manifest.
-//! `capabilities/finance-prices/service.toml` is what runs it.
+//! `services/finance-prices/service.toml` is what runs it.
 //!
 //! `decisions export` writes the safety copy Principle 8 asks for. The server
 //! already re-renders the month file on every verdict and every run, so this is
 //! not the only writer and must never become it -- it is the copy a human can
 //! take when the server is down, which is exactly when a copy matters. That is
-//! the role `capabilities/trips/src/bin/trips-cli.rs` describes for itself, in
+//! the role `crates/trips/src/bin/trips-cli.rs` describes for itself, in
 //! its own words, and this follows it.
 //!
 //! `decisions run` opens the store directly and is safe beside a running server

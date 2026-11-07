@@ -31,7 +31,7 @@ fn default_pivot_nights() -> u8 {
 pub struct TravelPrefs {
     /// Cities where sleeping is free or wanted, and how many nights.
     ///
-    /// `home_airport` used to sit here too. It moved to `capabilities/traveler`'s
+    /// `home_airport` used to sit here too. It moved to `crates/traveler`'s
     /// profile on 2026-09-23, because the default origin is a fact about the
     /// traveller rather than about this capability — and because two homes for it
     /// meant the profile's airports were read by nothing. A pivot stays: its

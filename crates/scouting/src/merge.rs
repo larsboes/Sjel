@@ -1,6 +1,6 @@
 //! Multi-source merge ranking: one unified ranked list from N per-source
 //! result blocks (see the merge-ranking notes in
-//! `capabilities/scouting/README.md` — multi-source
+//! `crates/scouting/README.md` — multi-source
 //! orchestration is config-driven; this module is the merge layer on top).
 //!
 //! Score normalization: **per-source min-max within the batch.** Each

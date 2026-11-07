@@ -33,7 +33,7 @@ const PHONE_SET: &[&str] = &[
     "entities_facts",
     "places_places",
     "places_person_places",
-    // One decision per person name (`capabilities/places/src/people.rs`), so a name on a place
+    // One decision per person name (`crates/places/src/people.rs`), so a name on a place
     // resolves to the same entity it does on the Mac.
     "places_people",
 ];

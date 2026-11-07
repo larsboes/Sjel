@@ -10,7 +10,7 @@
 //!   1. `$SJEL_SCOUTING_CONFIG` (explicit override, full path to a JSON file)
 //!   2. `$SJEL_PERSONAL_ROOT/config/scouting.json` (the overlay; exported by
 //!      `tools/lib/paths.sh` / `~/.zshrc`)
-//!   3. `capabilities/scouting/scouting.config.json` next to this crate's
+//!   3. `crates/scouting/scouting.config.json` next to this crate's
 //!      source (local, gitignored -- dev fallback)
 //!
 //! See `scouting.config.example.json` for the shape.
@@ -119,7 +119,7 @@ pub struct Config {
     pub opp_embeddings_path: Option<PathBuf>,
     /// HTTP port for `scout-server` (was the `SCOUTING_PORT` env var).
     pub port: u16,
-    /// Base URL of `capabilities/calendar` for the Luma → calendar promotion
+    /// Base URL of `crates/calendar` for the Luma → calendar promotion
     /// (`calendar_promote`). Loopback by default and expected to stay that
     /// way — calendar binds through `libs/sjel-server`'s `serve_local`.
     pub calendar_base_url: String,

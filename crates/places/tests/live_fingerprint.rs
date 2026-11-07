@@ -3,7 +3,7 @@
 //!
 //! `libs/candidate-fingerprint` replaced two byte-identical copies of the hash
 //! on 2026-08-28. The unit tests in that crate and in
-//! `capabilities/places/src/backfill.rs` pin the algorithm against golden
+//! `crates/places/src/backfill.rs` pin the algorithm against golden
 //! values, but they do it with synthetic rows. This one re-derives the real
 //! ones and checks them against what is actually stored, because the failure
 //! this guards against is silent: a fingerprint that changed would not raise an

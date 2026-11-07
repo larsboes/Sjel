@@ -84,7 +84,7 @@ argument expired, so the keys followed it.
 
 Arrival is the newest `finance_price_fetches` row with `status = 'ok'` — not the
 newest attempt, and not the newest observation date. `newest_price_arrival` in
-`capabilities/finance/src/store.rs` carries that reasoning, including why an
+`crates/finance/src/store.rs` carries that reasoning, including why an
 idempotent night that writes no row is still an arrival.
 
 **The contract will fail on a machine where this job is not installed, and that is

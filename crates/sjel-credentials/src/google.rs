@@ -382,7 +382,7 @@ const ENV_KEYS: [&str; 3] = [
 /// The question a caller with a schedule actually has: "should I run at all on this machine?"
 /// It is not `env_path.is_file()`, and that difference cost a day of mail collection. Measured
 /// 2026-10-24: the `google-comms` grant had moved into the OS keychain (`in_keychain: true`,
-/// `env_file: false`), while `capabilities/comms` still gated its hourly inbox sweep on the env
+/// `env_file: false`), while `crates/comms` still gated its hourly inbox sweep on the env
 /// file existing. The gate was true before the migration and false after it, so every tick
 /// returned "nothing to do" with no failure, no log line and a `last_success_at` frozen at the
 /// last manual sweep. A file check cannot see a keychain item; this can.
@@ -513,7 +513,7 @@ pub fn access_token(id: &str, env_fallback: &Path) -> Result<String, String> {
     )
     .map_err(|_| "could not prepare the Google token refresh".to_owned())?;
     // Repeated on a transport failure: a refresh mints a token and withdraws none, and a dark
-    // wake once cut the first request off (capabilities/entities, measured 2026-10-18).
+    // wake once cut the first request off (crates/entities, measured 2026-10-18).
     let response = sjel_http::send(
         || {
             http.post(TOKEN_URL).form(&[

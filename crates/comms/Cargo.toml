@@ -16,7 +16,7 @@ name = "comms"
 path = "src/main.rs"
 
 # comms-server: async (tokio + axum) HTTP surface consumed by a dashboard
-# panel. Mirrors capabilities/scouting's scout-server split -- the CLI (`comms`)
+# panel. Mirrors crates/scouting's scout-server split -- the CLI (`comms`)
 # carries no async runtime, only this bin does. See
 # dashboard/README.md.
 [[bin]]

@@ -186,7 +186,7 @@ pub fn fits_context(source_chars: usize, shape: Shape, context_tokens: u32) -> b
 
 /// The same question for a caller whose reply ceiling is not a [`Shape`].
 ///
-/// The feed-summary prefill in `capabilities/comms/src/media.rs` asks for a
+/// The feed-summary prefill in `crates/comms/src/media.rs` asks for a
 /// fixed 800 tokens rather than climbing this ladder, and it has to decide
 /// whether a small model can hold the job for exactly the same reason. Two
 /// arithmetics for one question is how one of them ends up sizing only the
@@ -608,7 +608,7 @@ pub fn digest(target: Option<&Target>, text: &str, directive: &Directive, reach:
 /// reaches `ask` without having asked [`fits_window`] first will be told by the
 /// server, as an error it then has to remember not to count.
 ///
-/// `capabilities/comms` reaches this only through `quiet::Rung::Light`, which
+/// `crates/comms` reaches this only through `quiet::Rung::Light`, which
 /// `quiet::rung` returns only when `fits_window` said yes, and
 /// `mail_model::tests::ask_is_only_reached_through_a_light_rung` pins it.
 pub fn ask(target: Option<&Target>, prompt: &str, reply_tokens: u32, reach: Reach) -> Outcome {

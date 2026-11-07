@@ -31,7 +31,7 @@ sjel-links = { path = "../links" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 rusqlite.workspace = true
-# Blocking, inside spawn_blocking, like capabilities/trips: the geocode call to places
+# Blocking, inside spawn_blocking, like crates/trips: the geocode call to places
 # runs beside the store write it feeds.
 reqwest = { workspace = true, features = ["blocking", "json", "form", "query"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }

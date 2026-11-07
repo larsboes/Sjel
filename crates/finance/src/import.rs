@@ -64,7 +64,7 @@ pub struct CsvMapping {
 
 /// Raw location columns preserved from the export for the places capability,
 /// which links spend to venues through these fields
-/// (`capabilities/places/README.md`, D1: forward imports must stop discarding
+/// (`crates/places/README.md`, D1: forward imports must stop discarding
 /// them). Every column is optional because exports differ: the Amex shape keeps
 /// the city inside the street column's second line.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,7 +221,7 @@ pub struct TransactionCandidate {
     /// Stored verbatim from the export, embedded newlines included, so the
     /// places capability can geocode the exact text the bank printed. Never
     /// part of the fingerprint: venue links key on fingerprints minted before
-    /// these fields existed (`capabilities/places/README.md`, D2).
+    /// these fields existed (`crates/places/README.md`, D2).
     #[serde(default)]
     pub location_street: Option<String>,
     #[serde(default)]

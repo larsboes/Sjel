@@ -33,7 +33,7 @@ pub(crate) struct Service {
     pub(crate) backup_sqlite: String,
     /// The same data, copied while it is open — `sqlite3 .backup`, no service hold. It is
     /// the field above's counter-example and is why `holds_service` keys on that one
-    /// alone: capabilities/store's file is read by every capability at once, so there is
+    /// alone: services/store's file is read by every capability at once, so there is
     /// no single service whose stopping would make the copy cold. Projected outward with
     /// the rest of the row, because a surface that offers a run should be able to say
     /// which of the two it is about to take.

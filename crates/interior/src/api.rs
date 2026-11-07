@@ -1828,7 +1828,7 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/api/placements/{flat}/{item}/history",
             get(api_placement_history),
         )
-        // The item surface lives in `capabilities/inventory`. One item route stays: the impact preview,
+        // The item surface lives in `crates/inventory`. One item route stays: the impact preview,
         // which computes against clearance rules and layouts and writes nothing.
         .route("/api/items/{id}/impact", post(api_item_impact))
         .route("/api/placements/{flat}/{item}", put(api_put_placement))

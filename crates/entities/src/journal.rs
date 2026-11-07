@@ -1,7 +1,7 @@
 //! `last_contact`, computed from the Journal in `projects`.
 //!
 //! A dated Journal entry that links a person's name counts as contact on that day. Until
-//! 2026-10-20 `capabilities/vault` computed this from the vault's `Journal/` and the
+//! 2026-10-20 `crates/vault` computed this from the vault's `Journal/` and the
 //! `Atlas/People` notes (`vault/src/people.rs`), and the Obsidian adapter carried it here. Both
 //! folders left the vault that day: the Journal for the `projects` store, the people for this
 //! capability. The rule is the same: the entry's date is the first ten characters of its file

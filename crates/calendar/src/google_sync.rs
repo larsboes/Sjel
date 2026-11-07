@@ -6,7 +6,7 @@
 //! sequencing, deliberately thin.
 //!
 //! **Credentials.** Read from a plain `KEY=value` file in the private overlay,
-//! the same shape and the same three keys `capabilities/comms` uses:
+//! the same shape and the same three keys `crates/comms` uses:
 //! `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`. No
 //! value is ever read from this repo, and none is ever logged — not in an
 //! error, not in a report, not in a failed-refresh body (Google puts token

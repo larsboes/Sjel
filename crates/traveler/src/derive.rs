@@ -3,7 +3,7 @@
 //! Thirteen real plans, their dates, their companions and their interests were
 //! being captured and read by nothing. This is the read. It is a projection over
 //! rows another capability owns, computed on demand and stored nowhere — the
-//! same shape `capabilities/places/src/layers.rs` uses for the travel layer, and
+//! same shape `crates/places/src/layers.rs` uses for the travel layer, and
 //! for the same reason: the facts belong to `trips`, and a second copy would be
 //! a second thing to keep true.
 //!
@@ -294,7 +294,7 @@ enum CompanyShape {
     Group,
 }
 
-/// Canonical lookup key matching `capabilities/trips/src/people.rs`:
+/// Canonical lookup key matching `crates/trips/src/people.rs`:
 /// trimmed, lowercase, internal whitespace collapsed to one space.
 fn name_key(raw: &str) -> String {
     raw.split_whitespace()

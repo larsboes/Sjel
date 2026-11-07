@@ -1,11 +1,11 @@
 //! Sjel doctrine: this crate is public. No personal value (a home/default
 //! station pair) lives here -- that comes from the private overlay at
-//! runtime, if set at all. Mirrors `capabilities/scouting/src/config.rs`'s
+//! runtime, if set at all. Mirrors `crates/scouting/src/config.rs`'s
 //! `Config::load()` resolution exactly:
 //!   1. `$SJEL_TRANSIT_CONFIG` (explicit override, full path to a JSON file)
 //!   2. `$SJEL_PERSONAL_ROOT/config/transit.json` (the overlay; exported by
 //!      `tools/lib/paths.sh` / `~/.zshrc`)
-//!   3. `capabilities/transit/transit.config.json` next to this crate's
+//!   3. `crates/transit/transit.config.json` next to this crate's
 //!      source (local, gitignored -- dev fallback)
 //!
 //! See `transit.config.example.json` for the shape.

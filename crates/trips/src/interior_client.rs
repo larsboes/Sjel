@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-/// Where the inventory listens. `capabilities/inventory/service.toml` declares 8101.
+/// Where the inventory listens. `crates/inventory/service.toml` declares 8101.
 ///
 /// Bis 2026-10-05 zeigte das auf `interior` (8092), und das war der Defekt: `interior`
 /// ist on-demand, weil es einen Grundriss und private Fotos ausliefert, also verlor

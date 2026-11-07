@@ -1,6 +1,6 @@
 //! Native Feed: triage the comms feed and read one entry.
 //!
-//! Comms owns the data (`capabilities/comms/src/server/content.rs`); this page reads
+//! Comms owns the data (`crates/comms/src/server/content.rs`); this page reads
 //! `GET /comms/feed` and writes decisions only through `POST /comms/feed/:id/status`, the route
 //! that records the ledger row with them. The keys are the dashboard's
 //! (`dashboard/src/routes/feed/+page.svelte`, "Keyboard triage"), so the two surfaces agree.

@@ -148,7 +148,7 @@ registration failure is reported separately from installation.
 
 ### Travel
 
-0. **A destination has a coordinate.** Shipped: `capabilities/trips/src/place_resolve.rs`
+0. **A destination has a coordinate.** Shipped: `crates/trips/src/place_resolve.rs`
    resolves one on save (registry by exact name, then the geocoder) and stores it on the plan's
    origin, destinations and stages, so the map, climate, distance joins and the accommodation
    anchor all have one. Rule 2 below draws nothing for an upcoming trip without it: before this
@@ -207,7 +207,7 @@ branches". A second trip planned this way shows whether the model needs it.
 
 The dashboard and its desktop shell are deleted. GPUI has no browser handoff: a path no page
 answers opens the page of its first segment. No rule lives only in TypeScript:
-`merge-candidate` is `capabilities/entities/src/duplicates.rs`, `who-is-around` is
+`merge-candidate` is `crates/entities/src/duplicates.rs`, `who-is-around` is
 `core/src/travel/around.rs`, `mail-model-proposal` is `ModelVerdict::proposes_change` in
 `core/src/mail.rs`. The previous client's Foundation Models feature is retired.
 
@@ -279,7 +279,7 @@ reads People or Finance records. It uses source, planted fixtures and synthetic 
 | 25 | Scouting and Discover in Feed: sources, scans, saved opportunities, status, calendar promotion with provenance | `/scout` and Discover links stay in GPUI. Scan, save, dismiss, restore and promote work. |
 | 26 | Inventory and wishlist create, edit with the read revision, state changes, state history (`GET /inventory/api/items/{id}/state`), and layout impact preview (`POST /interior/api/items/{id}/impact`). Inventory stays the only writer. | Both views refresh without restart. A stale edit is refused and the entry reloads. State history and layout impact preview render in the edit form. |
 | 27 | Low-fare alerts on the iPhone: rule in `core/src/travel.rs`, unseen `sparpreis-low:` notes through the local notification host, ten-minute throttle, works from saved trips offline | A new low notifies once. A repeat check does not. It works offline. |
-| 28 | Wish comparison. Built: a wish group's candidates carry numeric specs (`inventory specs`, `PUT /api/items/{id}/specs`), the group carries needs (`inventory needs`), and each candidate has dated price observations, one per source and day (`inventory price`, `POST /api/items/{id}/prices`). `GET /api/wish-comparison` reads it all. The daily job [`wish-prices`](../../capabilities/wish-prices/README.md) runs `inventory prices refresh`. It reads only geizhals product pages, never a search page, which geizhals' `robots.txt` disallows. It identifies itself as Sjel, never as a browser, and takes the page's `og:price:amount`. The first price at or below `cost_max_cents` is the alert. The wishlist tab shows, for the selected group, price against a chosen spec with the need and limit lines, a price history, and per candidate the latest price, fit to needs, and € per unit of each spec. The rules are in `core/src/inventory_compare.rs`. A wish group marked as alternatives (`inventory alternatives`, the "Pick one" button) counts only its cheapest member in every budget. | Built: a daily run adds one observation per candidate, and a second run on the same day adds none. A search URL is refused as a source. A price at the limit alerts once (`capabilities/inventory/tests/compare.rs`). Not run: the manual check in the app with three priced candidates. |
+| 28 | Wish comparison. Built: a wish group's candidates carry numeric specs (`inventory specs`, `PUT /api/items/{id}/specs`), the group carries needs (`inventory needs`), and each candidate has dated price observations, one per source and day (`inventory price`, `POST /api/items/{id}/prices`). `GET /api/wish-comparison` reads it all. The daily job [`wish-prices`](../../capabilities/wish-prices/README.md) runs `inventory prices refresh`. It reads only geizhals product pages, never a search page, which geizhals' `robots.txt` disallows. It identifies itself as Sjel, never as a browser, and takes the page's `og:price:amount`. The first price at or below `cost_max_cents` is the alert. The wishlist tab shows, for the selected group, price against a chosen spec with the need and limit lines, a price history, and per candidate the latest price, fit to needs, and € per unit of each spec. The rules are in `core/src/inventory_compare.rs`. A wish group marked as alternatives (`inventory alternatives`, the "Pick one" button) counts only its cheapest member in every budget. | Built: a daily run adds one observation per candidate, and a second run on the same day adds none. A search URL is refused as a source. A price at the limit alerts once (`crates/inventory/tests/compare.rs`). Not run: the manual check in the app with three priced candidates. |
 | 30 | Task statuses and the cross-project task table. A task is `open`, `doing`, `waiting`, `blocked`, `done` or `cancelled` (`TASK_STATUSES` in `crates/projects-api`). `done` and `cancelled` set `done: true`; the others set `done: false`. The All Tasks table filters by status (`Active` hides closed tasks), sorts by any column, groups by project, and edits status, due and priority in the row. A click on a title opens a side panel for status, priority, due, context, blocked-by and the remaining frontmatter, with a link to the note. Open: the phone replica shows statuses but refuses a status, context or blocked-by write, because `core/src/sync.rs` replays only done, priority and due. | Built: `tasks::tests` and `projects::tests::all_tasks_panel_opens_on_a_task_and_draws_beside_the_table` in `sjel-gpui-ui`, and `set_property_checks_schema_keys_and_status_drives_done` in `sjel-projects`. Not run: the manual check in the installed app, which sets each status, sorts, groups and edits from the panel. |
 
 ### Notes editor: live preview (open)
@@ -362,7 +362,7 @@ this order:
 4. **Validate rename separately.** In the app, click the title and confirm Enter moves the file
    and updates `[[links]]`; Esc and blur revert. Check a non-round-tripping note, a hub note and
    the phone's read-only title. Build the iOS target and verify on the phone; neither has run
-   since the rename change. Rename spans `capabilities/projects/src/{ops,record,store}.rs`,
+   since the rename change. Rename spans `crates/projects/src/{ops,record,store}.rs`,
    `apps/gpui/core/src/{shell.rs,data/repo.rs}` and `apps/gpui/ui/src/{projects,editor}.rs`.
 
 After the installation precondition is met, substitute the selected note path:
@@ -405,7 +405,7 @@ build was performed for this handoff.
 - **Finder (⌘K).** One input for search or a prompt. Modes are `Auto | Ask | Search | Agent`.
   The Ask page is gone. The finder draws the conversation, and the model choice is a footer chip.
   Local results show at once. Server results come from `GET /api/sjel-status/search`
-  (`capabilities/sjel-status/src/status/search.rs`), five rows per source.
+  (`crates/sjel-status/src/status/search.rs`), five rows per source.
 - **Open: search quality.** `LIKE` folds ASCII case only ("Ä" does not find "ä"), and document
   text is not searched, only titles. An FTS5 index fixes both. Do it when a missed result costs
   something.
@@ -477,7 +477,7 @@ inside this list is by use.
 
 ## 8. Rules for a session that takes a work package
 
-1. Do not touch or stage files under `capabilities/documents/src/`. Another session owns them.
+1. Do not touch or stage files under `crates/documents/src/`. Another session owns them.
 2. Run the tests before and after:
    `cargo test --manifest-path apps/gpui/core/Cargo.toml` and
    `cargo test --manifest-path apps/gpui/Cargo.toml`.

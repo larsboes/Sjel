@@ -2,8 +2,8 @@
 
 A coding and operations agent written in Rust. It runs on the Mac, and the user controls it
 from the GPUI app on the Mac or the paired iPhone. The loop is `libs/agent`. The capability that
-serves it is `capabilities/agent`. The reasoning for that shape is in
-[`capabilities/agent/README.md`](../../capabilities/agent/README.md).
+serves it is `crates/agent`. The reasoning for that shape is in
+[`crates/agent/README.md`](../../capabilities/agent/README.md).
 
 Lane B in [`PLAN.md`](../../PLAN.md), the top priority (2026-10-25). Beside the Sjel
 agent, the phone gets a terminal on the Mac (§6), so Claude Code and every other CLI agent run
@@ -23,10 +23,10 @@ Order:
   `find`), sessions in the overlay, steering, cloud calls with a data-class check.
 - **Extensions in `libs/agent/src/ext/`.** `guard` (secrets, on by default), `web`, `subagents`,
   `mcp`, `skills`, `rust`, `graph`, `sjel`, `compaction`.
-- **Capability.** `capabilities/agent` serves sessions, prompts, steering, a resumable event
+- **Capability.** `crates/agent` serves sessions, prompts, steering, a resumable event
   stream, approvals and stop, on `Reach::Loopback`. The phone reaches it through the paired-device
   listener.
-- **Approval gate.** `capabilities/agent/src/gate.rs`. Every call that is not read-only asks. The
+- **Approval gate.** `crates/agent/src/gate.rs`. Every call that is not read-only asks. The
   card shows a real diff for `edit` and `write`. A decision is a file in
   `secrets/agent/approvals/`, so the Systems page, the Mac and the phone show one record. A
   session grant is keyed by tool and exact arguments. An unanswered call is denied after 15
@@ -38,7 +38,7 @@ Order:
   override button for blocked commands (no session-wide grant).
 
 **Gap.** The capability assembles only `fs, graph, sjel, sql, guard, compaction`
-(`capabilities/agent/src/plugins.rs`). `web`, `subagents`, `mcp`, `skills` and `rust` exist in
+(`crates/agent/src/plugins.rs`). `web`, `subagents`, `mcp`, `skills` and `rust` exist in
 the library but no session can use them.
 
 ## 2. Access tiers
@@ -56,7 +56,7 @@ The tier is set when the session starts and does not change (A3). A higher tier 
 session. This keeps a grant from one tier out of another. The phone may start a session in any
 tier (A4).
 
-Built (bc1ec6bc): `capabilities/agent/src/tier.rs` holds the three tiers, each naming its plugin
+Built (bc1ec6bc): `crates/agent/src/tier.rs` holds the three tiers, each naming its plugin
 set and the directory it reaches. `POST /api/agent/sessions` takes a `tier`, defaults to
 `project`, refuses a name it does not carry, refuses a `project` or `account` root outside
 `$HOME`, and accepts `plugins` only as a narrowing of the tier's own set — so a client cannot
@@ -123,7 +123,7 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 ### Where it lives and how it is tested
 
 - `libs/agent/src/ext/policy.rs`: the classifier, so the CLI and the capability share one rule
-  set. `capabilities/agent/src/gate.rs` reads the class: Allow skips the card, Ask shows it, and
+  set. `crates/agent/src/gate.rs` reads the class: Allow skips the card, Ask shows it, and
   Block shows the separate card with the rule ID.
 - `Packs/security/extensions/command-policy/cases.toml`: the one table both implementations are
   held to — a case per rule ID, the evasions that must never be Allow (`r''m -rf x`, `\rm -rf
@@ -145,7 +145,7 @@ so writes inside the scope, unknown programs and interpreters run without one.
 directory and writable roots (`with_home`, `with_writable`) instead of the machine's, and
 `libs/agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
 rules to drift from. All 115 command cases and 5 write cases pass in both. The second table
-(`libs/agent/tests/policy_cases.toml`) is deleted. `capabilities/agent/src/gate.rs` says what the
+(`libs/agent/tests/policy_cases.toml`) is deleted. `crates/agent/src/gate.rs` says what the
 three classes now cost a run — a read, a build and an in-scope write run without a card — and its
 approval fixture asks through a redirect whose target is computed at run time (A1), which is the
 write that still reaches a card.
@@ -154,7 +154,7 @@ A local small model may classify A6 commands later, only after a measurement sho
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
 Built (6622b21e): `libs/agent/src/ext/policy.rs` holds the classifier and the rule table, and
-`capabilities/agent/src/gate.rs` reads the class: Allow runs without a card, Block is refused
+`crates/agent/src/gate.rs` reads the class: Allow runs without a card, Block is refused
 before any card, Ask is the card as before, and each decision is logged with its rule ID on the
 call log. Open: §5's separate Block card that can allow one call, the A6 classifier for unknown
 programs, and the measures below, none of which have run.
@@ -205,14 +205,14 @@ Code, Codex, Pi or any other CLI agent then runs on the Mac and is driven from t
 agent keeps its native UI. Every other agent uses the terminal.
 
 Facts (2026-10-25): Tailscale SSH is off on this Mac. The node advertises no SSH host keys, and
-`capabilities/host-net` only reports the `RunSSH` flag. tmux is not installed. No PTY or
+`crates/host-net` only reports the `RunSSH` flag. tmux is not installed. No PTY or
 terminal-emulator crate is in the workspace; `portable-pty` is now (see `upstreams.toml`). Decided
 2026-10-25: build the native terminal first. The SSH path is the fallback, not a first step.
 
 Steps:
 
-1. **PTY sessions on the Mac** in `capabilities/agent` (A5), behind the routes below. Built
-   (`833c571d`): `capabilities/agent/src/terminal.rs`, with `[terminal.presets]` in
+1. **PTY sessions on the Mac** in `crates/agent` (A5), behind the routes below. Built
+   (`833c571d`): `crates/agent/src/terminal.rs`, with `[terminal.presets]` in
    `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
    left from this step: nothing.
 2. **One terminal view for Mac and phone**, specified below. Built for the Mac: `⌘K › Terminal`
@@ -278,7 +278,7 @@ to interactive keystrokes, so access is the control.
 
 - The agent token never reaches these routes. `AgentRoutes::closed`
   (`libs/sjel-server/src/agent_policy.rs`) is checked in the gate before the token is admitted, so a
-  closed route answers 401 with the same shape an unknown token gets. `capabilities/agent` lists
+  closed route answers 401 with the same shape an unknown token gets. `crates/agent` lists
   every terminal route there, and `every_terminal_route_is_closed_to_an_agent_token` reads the
   manifest instead of restating the list, so a later route added without closing it fails the test
   rather than opening a shell.
@@ -333,9 +333,9 @@ to interactive keystrokes, so access is the control.
 ### Shell integration
 
 - The `shell` preset starts zsh with `ZDOTDIR` pointing at a shim
-  (`capabilities/agent/assets/shell/zsh/zshenv`) that restores the user's own `ZDOTDIR` and emits
+  (`crates/agent/assets/shell/zsh/zshenv`) that restores the user's own `ZDOTDIR` and emits
   OSC 133 `A`/`B`/`C`/`D;<exit>` marks. `alacritty_terminal` 0.26 drops OSC 133, so
-  `capabilities/agent/src/terminal/marks.rs` reads them from the raw stream. The stream sends a
+  `crates/agent/src/terminal/marks.rs` reads them from the raw stream. The stream sends a
   `command` event when the marks change, and the Mac status line shows `live · running` or
   `live · exit <code>`. Unit-tested only: not run against a live zsh, and not tried on the phone
   either.
@@ -359,7 +359,7 @@ to interactive keystrokes, so access is the control.
 
 Work Package 22 is code-complete. Host checks pass: `sjel cargo check --manifest-path
 apps/gpui/ios/Cargo.toml --locked`, the `aarch64-apple-ios-sim` check, the desktop check, and
-`cargo check --manifest-path capabilities/agent/Cargo.toml --locked --offline`. CoreSimulator was
+`cargo check --manifest-path crates/agent/Cargo.toml --locked --offline`. CoreSimulator was
 unavailable and no phone was connected, so nothing ran on a device. The desktop release build is
 blocked, see [`gpui.md`](gpui.md#open).
 
@@ -482,4 +482,4 @@ All decided 2026-10-25.
 | A2 | Which web search providers to port from `pi-web-access`? | All of them. DuckDuckGo stays the keyless default. |
 | A3 | Can a tier change inside a session? | No. A new session per tier. |
 | A4 | Can the phone start a `project` or `account` session? | Yes. Every Ask and Block decision still needs a card. |
-| A5 | Where do PTY sessions live? | `capabilities/agent`, because it already has the session, stream and device plumbing. Split into a `terminal` capability only if the two grow apart. |
+| A5 | Where do PTY sessions live? | `crates/agent`, because it already has the session, stream and device plumbing. Split into a `terminal` capability only if the two grow apart. |

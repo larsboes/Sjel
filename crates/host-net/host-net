@@ -1,5 +1,5 @@
 #!/bin/bash
-# capabilities/host-net/host-net — what this host exposes to the network, read without sudo.
+# crates/host-net/host-net — what this host exposes to the network, read without sudo.
 # Named after its capability, which is what puts this directory on PATH
 # (tools/shell/init.zsh).
 # Portable shell only (CONTRIBUTING.md#portable-shell) — no bash-4-only syntax.
@@ -10,7 +10,7 @@ _dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 source "$_dir/../../tools/lib/paths.sh"
 
 # The workspace target dir, which is where cargo puts every member's binaries. Same path
-# shape capabilities/punctuality/punctuality uses. CARGO_TARGET_DIR is honoured because a
+# shape crates/punctuality/punctuality uses. CARGO_TARGET_DIR is honoured because a
 # relocated target dir is how build output is kept out of the checkout; see
 # tools/storage/storage, which has done this since it replaced the TypeScript.
 BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/host-net-cli"
@@ -20,7 +20,7 @@ BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/host-net-cli"
 #
 # tools/host-watch calls the BINARY directly and never this script, so an hourly job can
 # never trigger a cargo build. That is a decision, not an accident: see
-# capabilities/host-net/README.md.
+# crates/host-net/README.md.
 if [ ! -x "$BIN" ]; then
   echo "host-net: building (first run)…" >&2
   (cd "$SJEL_ROOT" && cargo build --locked --release --bin host-net-cli) >&2

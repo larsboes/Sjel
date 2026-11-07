@@ -13,10 +13,10 @@ with two weeks of nothing.
 
 ## Shape: a library here, the surface in sjel-status
 
-This directory holds a **library**. `capabilities/sjel-status` is the **surface**, because it
+This directory holds a **library**. `crates/sjel-status` is the **surface**, because it
 already listed backup age and already triggered a backup: a second process would have been a second
 trigger and a second truth for one job. The capability owns the tables, the runner, the verifiers
-and the timing policy; sjel-status links it the way it already links `capabilities/devices`.
+and the timing policy; sjel-status links it the way it already links `crates/devices`.
 
 | Route (on sjel-status) | What it answers |
 |---|---|

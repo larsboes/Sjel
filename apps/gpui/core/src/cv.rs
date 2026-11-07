@@ -1,6 +1,6 @@
 //! Data models and pure reductions for CV and career applications (`/cv`).
 //!
-//! Replaces the dashboard's `/cv` route. Backed by `capabilities/cv/cv` through
+//! Replaces the dashboard's `/cv` route. Backed by `crates/cv/cv` through
 //! `GET /api/sjel-status/cv` and `POST /api/sjel-status/cv`.
 
 pub use status_api::{

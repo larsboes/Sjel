@@ -1,4 +1,4 @@
-//! The known-person registry: rung 0 of the redaction ladder in `capabilities/comms`.
+//! The known-person registry: rung 0 of the redaction ladder in `crates/comms`.
 //!
 //! Rung 1 (`comms/src/cloud_derivative.rs`) matches shapes, and its person detector fires only
 //! after a salutation, so a bare first name passes it. Rung 0 is a lookup over the names this

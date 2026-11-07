@@ -96,7 +96,7 @@ export function addDays(iso: string, days: number): string {
  * Deliberately NOT RFC3339. The calendar capability parses `YYYY-MM-DD` or
  * `YYYY-MM-DDTHH:MM[:SS]` and accepts no zone suffix at all — a trailing `Z` lands in its
  * seconds field, fails an integer parse, and comes back as "starts_at must be a date or local
- * time". Its model is local wall-clock time on purpose (capabilities/calendar/src/date.rs), so
+ * time". Its model is local wall-clock time on purpose (crates/calendar/src/date.rs), so
  * an instant with a zone on it would be a different kind of value, not a formatting variant.
  */
 export function at(iso: string, hour: number, minute = 0): string {
@@ -411,7 +411,7 @@ export const VOCABULARY = {
    *  documentation domain through email(), `noreply` swaps the local part, so the vocabulary
    *  holds no address. `daysAgo` dates the thread. `unsubscribe` adds List-Unsubscribe, which
    *  the rules read. An `invitation` body carries the labels comms reads without a model
-   *  (capabilities/comms/src/mail_events/tickets.rs), so Calendar gets a proposal. Streams
+   *  (crates/comms/src/mail_events/tickets.rs), so Calendar gets a proposal. Streams
    *  noted here are what comms' rules decide, plus the two overlay rules tools/demo-up writes. */
   mail: [
     { sender: "Mara Velten", subject: "Photos from Kraków", snippet: "Finally sorted them. The one at the river is my favourite.", daysAgo: 0 }, // aktiv

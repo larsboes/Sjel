@@ -90,7 +90,7 @@ git -C "$SCRATCH" add instance.txt
 expect_fail_with "named deployment marker" "instance.txt"
 
 # A compound identifier that merely starts with a marker is not a deployment being named.
-# `axon-personal-cents` is a journal tag in capabilities/finance and exposes nothing; it failed
+# `axon-personal-cents` is a journal tag in crates/finance and exposes nothing; it failed
 # this gate on every push to main until the marker gained a trailing-character guard.
 printf '%s\n' 'let tag = "axon-personal-cents";' > "$SCRATCH/instance.txt"
 git -C "$SCRATCH" add instance.txt

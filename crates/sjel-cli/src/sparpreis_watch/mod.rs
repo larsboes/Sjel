@@ -1,7 +1,7 @@
 //! `tools/sparpreis-watch` — one pass of the Sparpreis price watch, then exit.
 //!
 //! Ported from `tools/sparpreis-watch.ts` on 2026-10-04, its pure half to `pure.rs` and its test
-//! with it. `capabilities/sparpreis-watch/service.toml` names this binary directly, so the
+//! with it. `services/sparpreis-watch/service.toml` names this binary directly, so the
 //! twelve-hourly job starts neither an interpreter nor a shell.
 //!
 //! ## Why the watch exists
@@ -39,7 +39,7 @@
 //! ## Differences from the TypeScript, all deliberate
 //!
 //! The deployment credential is put on each request by `sjel_server::InboundAuth::with_loopback_auth`
-//! — the same helper `capabilities/calendar` and every other Rust caller of a loopback capability
+//! — the same helper `crates/calendar` and every other Rust caller of a loopback capability
 //! uses — instead of the TypeScript's own `authorizedLoopbackRequest`. Every request carries a
 //! 300-second timeout through `sjel_http::client`, where the TypeScript used the platform's `fetch`
 //! default, which is to say none; that is also where the user-agent and the redirect policy come

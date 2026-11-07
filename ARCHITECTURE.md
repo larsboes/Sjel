@@ -64,8 +64,8 @@ See the [engineering doctrine](CONTRIBUTING.md#engineering-doctrine) this genera
 | `web-links` | A local-first launcher for web destinations the operator returns to: social accounts, communities, work tools and service pages. | — | `8109` |
 | `archive` | The archive holds unsorted source material awaiting import into its owning capabilities. | — | — |
 | `container-refresh` | The daily pull of every image this machine declares, and the recreate for the ones whose digest moved. | — | — |
-| `entities-google-sync` | The scheduled Google Contacts sync for [`capabilities/entities`](services/entities-google-sync/../entities/). | — | — |
-| `entities-sync` | The scheduled Journal sync for [`capabilities/entities`](services/entities-sync/../entities/). | — | — |
+| `entities-google-sync` | The scheduled Google Contacts sync for [`crates/entities`](services/entities-google-sync/../entities/). | — | — |
+| `entities-sync` | The scheduled Journal sync for [`crates/entities`](services/entities-sync/../entities/). | — | — |
 | `feed-sweep` | The scheduled source collector for [`crates/comms`](services/feed-sweep/../../crates/comms/). | — | — |
 | `finance-prices` | The nightly market-price fetch. | — | — |
 | `foundation-models` | Apple's on-device model, served over the OpenAI chat-completions shape on loopback. | — | `8091` |
@@ -74,8 +74,8 @@ See the [engineering doctrine](CONTRIBUTING.md#engineering-doctrine) this genera
 | `knowledge-base` | The vault, as a thing that gets backed up. | — | — |
 | `macmon` | Apple Silicon hardware metrics served by the adopted [`macmon`](https://github.com/vladkens/macmon) binary. | — | `9911` |
 | `packs` | What Sjel has deployed into each agent harness on this machine, and the proof that it did. | — | — |
-| `people-registry` | Rung 0's known-person registry, refreshed from `capabilities/entities` every six hours. | — | — |
-| `punctuality-ingest` | The scheduled producer for [`capabilities/punctuality`](services/punctuality-ingest/../punctuality/). | — | — |
+| `people-registry` | Rung 0's known-person registry, refreshed from `crates/entities` every six hours. | — | — |
+| `punctuality-ingest` | The scheduled producer for [`crates/punctuality`](services/punctuality-ingest/../punctuality/). | — | — |
 | `sparpreis-watch` | The Sparpreis price watch (travel PRD R4). | — | — |
 | `sqld` | The database server other devices hold an [embedded replica](services/sqld/../../libs/sjel-turso/README.md) of. | — | `8089` |
 | `storage-reclaim` | The scheduled reclaim pass for [`crates/storage`](services/storage-reclaim/../../crates/storage/README.md). | — | — |
@@ -141,7 +141,7 @@ schemas/machine.toml.example.
 | `pi-agent` | project | yes | Minimal open-source coding agent, extendable from core; one of three swappable harness targets for Packs/skills. |
 | `opencode` | platform | yes | Open-source coding agent CLI (MIT); third swappable harness alongside Claude Code and pi, and a Packs/skills port target. |
 | `knowledge-base` | project | yes | Private knowledge store with its own sync lifecycle, connected through explicit capability contracts rather than treated as an Sjel-wide database. |
-| `obsidian-local-rest-api` | service | yes | Obsidian plugin (MIT) serving the open vault over loopback HTTP; the only route by which capabilities/vault writes into the vault. URL and key file come from the overlay's config/knowledge.toml. |
+| `obsidian-local-rest-api` | service | yes | Obsidian plugin (MIT) serving the open vault over loopback HTTP; the only route by which crates/vault writes into the vault. URL and key file come from the overlay's config/knowledge.toml. |
 | `mach-mono` | project | yes | Swift monorepo of macOS/iOS quality-of-life utilities; plugin-first, extendable from core. |
 | `lifeos` | platform | yes | Personalization and tooling layer under the agent runtime, and the ancestor of Sjel's public-core-plus-private-overlay shape. Sjel consumes nothing from it now; upstreams.toml's [lifeos] entry owns the verdict. |
 | `ollama` | tool | yes | Portable local-model runner holding the `embedding` and `summarization` inference roles. It loads chat models at 4096 tokens and silently truncates an over-window prompt from the front, so a chat role must name a model built with an explicit `PARAMETER num_ctx` covering `sjel_summarize::worst_case_prompt_tokens()`. |

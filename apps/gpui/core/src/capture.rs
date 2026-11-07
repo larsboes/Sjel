@@ -15,7 +15,7 @@ pub use feed_api::{
 /// The phone has one line and no triage screen, so the parsing that the capability does on arrival
 /// is done here instead: `#buy` in the text sets the tag, a lone URL becomes the URL rather than the
 /// text, and the preview says where the Mac will put it. The Mac re-reads all of it — nothing here
-/// is trusted over the capability's own rules (`capabilities/comms/src/store/captures.rs`).
+/// is trusted over the capability's own rules (`crates/comms/src/store/captures.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Draft {
     pub text: Option<String>,

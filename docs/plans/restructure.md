@@ -13,8 +13,9 @@ seeded stack feeds `tools/demo-shots`. Open:
 - Done: Prose describing the retired dashboard swept across tracked READMEs and architecture docs.
 - Done: dashboard-only Svelte tooling was removed or updated after checking its remaining consumers.
 - Done: live `capabilities/` paths left by `7031b53f` (the `cv` template, the gitleaks allowlist,
-  the clipper homepage, the repo-root scans in doctor). About 700 comment and prose references
-  remain for the §2 sweep.
+  the clipper homepage, the repo-root scans in doctor) and 537 lines of comments and prose.
+  Open: 134 `capabilities/` strings in code and test fixtures across 40 files, and names with no
+  crate or service of that name (`agentbox`, `postgres`, `cargo-trim`).
 
 ## 2. Sweep
 
@@ -61,7 +62,7 @@ Tracked files, `git grep`, 2026-10-23 and 2026-10-25:
   rename's five commits, of which 447 are the compatibility reads listed in §2 Order.
 - 78 sites in `libs/`, `capabilities/` and `tools/` cited IDs of the retired `ISA.md` (for example
   "ISA F10", "ISA.md C4"); 0 remain in those directories, `apps/`, `schemas/`, `website/` and the root config.
-- Over 800 lines: `capabilities/comms/README.md`, `capabilities/calendar/README.md`.
+- Over 800 lines: `crates/comms/README.md`, `crates/calendar/README.md`.
 
 ### Order
 
@@ -113,12 +114,12 @@ open work goes to the owning area plan or an issue (`on-documentation.md`, Plans
 
 Found 2026-10-25 by heading and by dated lines (resolved in 2026-11-03 sweep):
 
-- Done: "Not built" sections in `capabilities/inventory`, `entities`, `software`, `people-registry`,
+- Done: "Not built" sections in `crates/inventory`, `entities`, `software`, `people-registry`,
   `scouting`, `agent`, and `libs/agent` were removed or migrated to `## Considered and declined`.
-- Done: `capabilities/trips/decisions/travel-seams-not-built.md` moved to `capabilities/trips/README.md`
+- Done: `crates/trips/decisions/travel-seams-not-built.md` moved to `crates/trips/README.md`
   (`## Considered and declined`) and the decisions directory removed.
 - Done: `places` ("Deliberately not built") moved to `## Considered and declined`.
-- Done: `capabilities/trips/README.md`, `capabilities/transit/README.md`, `tools/sjel-cli/README.md`, `capabilities/documents/README.md`, `capabilities/finance/README.md`, `capabilities/scouting/README.md`, `capabilities/agentbox/README.md`, `capabilities/comms/README.md`, and `capabilities/calendar/README.md` swept to standard shape (`## Why this shape:`, `## Considered and declined`, no dated narratives or migration logs).
+- Done: `crates/trips/README.md`, `crates/transit/README.md`, `tools/sjel-cli/README.md`, `crates/documents/README.md`, `crates/finance/README.md`, `crates/scouting/README.md`, `capabilities/agentbox/README.md`, `crates/comms/README.md`, and `crates/calendar/README.md` swept to standard shape (`## Why this shape:`, `## Considered and declined`, no dated narratives or migration logs).
 - Most dated lines in READMEs remaining: none above baseline.
 - Most dated lines in TOML: `profiles.toml` (35), `toolchain.toml` (13). Review dates in
   `upstreams.toml` and waiver dates in `osv-scanner*.toml` are data, not history, and stay.
@@ -310,4 +311,4 @@ Done:
 
 - Finance draws key hints without overlapping the last visible row (fixed with bounded flex-1, scroll containers, and bottom padding in `apps/gpui/ui/src/finance.rs`).
 - Seeded calendar events during trips carry the destination city and guarantee at least two events per trip, allowing Calendar to cluster trip drafts (`tools/demo-seed.ts`).
-- `POST /places/api/places` validates `kind` upfront and maps CHECK constraint failures to 400 Bad Request (`capabilities/places/src/server.rs`).
+- `POST /places/api/places` validates `kind` upfront and maps CHECK constraint failures to 400 Bad Request (`crates/places/src/server.rs`).

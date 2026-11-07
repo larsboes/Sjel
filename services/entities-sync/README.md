@@ -1,13 +1,13 @@
 # entities-sync
 
-The scheduled Journal sync for [`capabilities/entities`](../entities/). Every 6 hours it runs
+The scheduled Journal sync for [`crates/entities`](../entities/). Every 6 hours it runs
 `entities-server sync-journal`, which reads the Journal through the `projects` HTTP surface and
 sets each person's `last_contact` to the latest dated entry that links their name. The date only
 moves forward, so a later day typed on the People page stays.
 
 The job is separate because `entities` is an always-on HTTP service, and Sjel refuses a manifest
 that declares both `autostart` and `schedule`. `entities` owns the data and the rule
-(`capabilities/entities/src/journal.rs`). This manifest only schedules the run.
+(`crates/entities/src/journal.rs`). This manifest only schedules the run.
 
 Run it by hand, without writing:
 

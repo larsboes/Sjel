@@ -1,7 +1,7 @@
 //! `tools/feed-sweep` — one pass of the Feed source collector, then exit.
 //!
 //! Ported from `tools/feed-sweep.ts` on 2026-10-04, so the six-hourly job starts neither an
-//! interpreter nor a shell: `capabilities/feed-sweep/service.toml` names the built binary
+//! interpreter nor a shell: `services/feed-sweep/service.toml` names the built binary
 //! directly, the shape `host-watch` and every Rust capability already use.
 //!
 //! ## Why the job exists
@@ -207,7 +207,7 @@ pub fn run(argv: &[String]) -> ExitCode {
 /// No `offset`, deliberately: the route reads the last page's cursor and hands back the NEXT
 /// hundred rows, so the nightly schedule walks the corpus a page at a time and wraps at the end.
 /// Sending `offset: 0` would pin the sweep to the newest hundred rows, which is what it did until
-/// 2026-09-08 — see `page_offset` in capabilities/comms/src/server/feed.rs.
+/// 2026-09-08 — see `page_offset` in crates/comms/src/server/feed.rs.
 ///
 /// A failure here is reported and does NOT fail the run. The scan already succeeded and its result
 /// is what the schedule exists to produce; refusing to record that because a ranking pass fell

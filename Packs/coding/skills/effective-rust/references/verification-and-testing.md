@@ -47,7 +47,7 @@ fn test_concurrent_counter() {
 ```
 
 ## 3. Fuzz Testing (`cargo-fuzz`)
-For external data ingest points (e.g. `capabilities/transit` Hafas parsing, `capabilities/finance` CSV import, or `capabilities/comms` mail parsing), set up `cargo-fuzz` targets to stress-test memory safety and reject malformed inputs without crashing.
+For external data ingest points (e.g. `crates/transit` Hafas parsing, `crates/finance` CSV import, or `crates/comms` mail parsing), set up `cargo-fuzz` targets to stress-test memory safety and reject malformed inputs without crashing.
 
 ## 4. Verification Command Matrix
 Before concluding changes, run the appropriate verification rungs:

@@ -6,7 +6,7 @@
 //! so an unrecorded one is gone rather than merely unwritten. The rule it ruled is
 //! that a capability holding only-copy rows projects them to files.
 //!
-//! `capabilities/trips/README.md` had already specified the shape a month earlier
+//! `crates/trips/README.md` had already specified the shape a month earlier
 //! and nothing implemented it: one file per plan, carrying the trip id, the schema and
 //! the revision in frontmatter. Q31 (2026-08-23) put the folder in the vault, under
 //! `Resources/Sjel/`, and Q49 (2026-08-27) supplied the mechanism, which is why the
@@ -150,7 +150,7 @@ pub fn render(details: &PlanDetails) -> String {
     let plan = &details.plan;
     let mut out = String::new();
 
-    // Frontmatter, as `capabilities/trips/README.md` specified it: the trip id, the
+    // Frontmatter, as `crates/trips/README.md` specified it: the trip id, the
     // schema and the revision. `sjel_revision` is the plan's `updated_at`, which is
     // the revision the store already uses as its optimistic-concurrency token
     // (`expected_updated_at`) — a second notion of "which revision is this" would be

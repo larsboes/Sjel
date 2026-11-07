@@ -530,7 +530,7 @@ reset_run
   || fail "archive stream did not contain the overridden source"
 
 # --- backup_sqlite_online: the copy taken while every reader still has the file open -------
-# capabilities/store's contract (PRD Q45). The two properties that separate it from the cold
+# services/store's contract (PRD Q45). The two properties that separate it from the cold
 # one above are asserted directly, because getting either wrong is silent: it must NOT stop
 # anything, and it must take the copy through sqlite3 rather than reading the file itself.
 mkdir -p "$FIXTURE/capabilities/store" "$OVERLAY/data/sjel" "$SCRATCH/remote/store"
@@ -620,7 +620,7 @@ reset_run
 expect_fail_with "contradictory contracts are refused" "declare one" "$BACKUP" store
 
 # --- backup_paths naming a single FILE ------------------------------------------------
-# capabilities/finance's contract. Its canonical truth is one journal directory plus two
+# crates/finance's contract. Its canonical truth is one journal directory plus two
 # individual files, and neither file has a directory of its own that would not also drag
 # in every other capability's configuration. Before this, a declared file made rsync fail
 # with "Not a directory" after mkdir -p had already created a directory with the file's

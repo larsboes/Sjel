@@ -139,14 +139,14 @@ pub fn normalize_legacy_headers(headers: &mut HeaderMap) {
 }
 
 /// The largest body the gate buffers to check a device signature. Same ceiling as the shell's
-/// proxy (`capabilities/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
+/// proxy (`crates/sjel-status/src/proxy.rs`, `forward`), which buffers it anyway.
 const MAX_SIGNED_BODY_BYTES: usize = 8 * 1024 * 1024;
 
 /// Checks one `sjel-device-auth/v1` signed request against the device registry. The verifier
 /// accepts the pre-rename protocol string too, so a phone paired before the rename stays paired.
 ///
 /// A trait rather than a dependency because the registry is a capability
-/// (`capabilities/devices`) and this crate is under every capability. The shell supplies the
+/// (`crates/devices`) and this crate is under every capability. The shell supplies the
 /// implementation; a server without one never admits on a device key.
 pub trait DeviceVerifier: Send + Sync {
     /// `Ok(device_id)` when the signature, the device and the nonce are all valid, else the
@@ -171,7 +171,7 @@ pub struct AdmittedDevice(pub String);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdmittedPairingClaim;
 
-/// The pairing claim as the shell mounts it (`capabilities/devices/README.md`, Contract).
+/// The pairing claim as the shell mounts it (`crates/devices/README.md`, Contract).
 pub const PAIRING_CLAIM_PATH: &str = "/devices/api/pairing/claims";
 /// A device's request to join, and its state under `/<id>`, as the shell mounts them.
 pub const PAIRING_REQUESTS_PATH: &str = "/devices/api/pairing/requests";
@@ -407,7 +407,7 @@ impl InboundAuth {
 
     /// Whether `headers` present this deployment's own token, compared in constant time. The
     /// shell's proxy asks this to exchange the token for comms' credential, which comms requires
-    /// instead (`capabilities/sjel-status/src/proxy.rs`).
+    /// instead (`crates/sjel-status/src/proxy.rs`).
     pub fn presents_token(&self, headers: &HeaderMap) -> bool {
         match (self.token.as_deref(), presented_token(headers)) {
             (Some(expected), Some(presented)) => {
@@ -758,10 +758,10 @@ pub fn token_from_file(path: &Path) -> Option<String> {
 
 /// The token comms' own `api_secret_file` names, or none.
 ///
-/// comms still holds its own token (`capabilities/comms/src/server/main.rs`, `inbound_auth`), so
+/// comms still holds its own token (`crates/comms/src/server/main.rs`, `inbound_auth`), so
 /// a caller that reaches comms needs this value, not the deployment's. Two callers do:
 /// sjel-status's proxy and `tools/capability-auth`. Neither depends on comms, so the path rule is
-/// re-derived here once, in comms' own order (`capabilities/comms/src/config.rs`, `config_path`):
+/// re-derived here once, in comms' own order (`crates/comms/src/config.rs`, `config_path`):
 /// `SJEL_COMMS_CONFIG`, then `<overlay>/config/comms.json`, then the in-repo example path.
 ///
 /// Two hops, because `comms.json` NAMES the token file rather than holding the token. Handing

@@ -10,7 +10,7 @@
 //!
 //! Until 2026-10-20 `people`, `journal`, `names` and `fields` read `Atlas/People` and
 //! `Journal/`, and `fields --apply` wrote two keys back. Both folders left the vault that day;
-//! `capabilities/entities/src/journal.rs` computes `last_contact` from the Journal now.
+//! `crates/entities/src/journal.rs` computes `last_contact` from the Journal now.
 //!
 //! ## Why this exists as a binary rather than a skill
 //!

@@ -5,7 +5,7 @@
 # exits, and nothing watches it in between — so it cannot be "down". It simply stops producing, and
 # every other surface goes on saying fine. The capabilities that declare a `schedule` are that
 # shape. The backup was one of them until 2026-09-29, when its timer moved into sjel-status's
-# stored policy (commit ced02ae5) and capabilities/backup/service.toml was deleted. It is a library
+# stored policy (commit ced02ae5) and crates/backup/service.toml was deleted. It is a library
 # now and declares no `schedule`, so it is watched by the backup contract section instead. This
 # section is the thing that asks; this file is the thing that watches it answer wrongly on purpose.
 #

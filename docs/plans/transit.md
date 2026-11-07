@@ -23,18 +23,18 @@ Three horizons, in this order:
 
 ## 1. Facts (checked 2026-10-27)
 
-**Live times.** `capabilities/transit/src/hafas.rs` queries bahn.de's undocumented web API and
+**Live times.** `crates/transit/src/hafas.rs` queries bahn.de's undocumented web API and
 reads scheduled and realtime (`ez*`) times. That realtime value is DB's own reactive prognosis:
 a delay already observed, carried downstream.
 
-**History.** `capabilities/punctuality` folds
+**History.** `crates/punctuality` folds
 [piebro/deutsche-bahn-data](https://github.com/piebro/deutsche-bahn-data) (DB Timetables API,
 sampled four times a day, published monthly as parquet) into one 128-bucket delay histogram per
-`CellKey { eva, train_type, hour, weekend }` (`capabilities/punctuality/src/ingest.rs`).
+`CellKey { eva, train_type, hour, weekend }` (`crates/punctuality/src/ingest.rs`).
 `punctuality-ingest` refreshes it daily. Publication lags a journey by up to five weeks
-(`capabilities/punctuality/README.md`).
+(`crates/punctuality/README.md`).
 
-**Journey score.** `capabilities/transit/src/punctuality.rs` `compose_reliability` multiplies,
+**Journey score.** `crates/transit/src/punctuality.rs` `compose_reliability` multiplies,
 per transfer, P(arriving train's delay < scheduled buffer), read off the histogram at that exact
 buffer, and the final leg's P(delay < 6 min). An unscorable leg leaves the journey unscored
 rather than guessed.
@@ -120,7 +120,7 @@ flowchart TD
    and models a missed transfer as a wait for the next departure (headway from the timetable).
    The result is a distribution of arrival times, not one number.
 6. **Decision.** The objective is P(arrival before the deadline), with the deadline taken from
-   the calendar entry the journey serves. The traveller profile (`capabilities/traveler`) sets
+   the calendar entry the journey serves. The traveller profile (`crates/traveler`) sets
    the risk tolerance: a cautious profile optimises a high quantile, a relaxed one the median.
    The advice is a plan with decision points, not one chain of legs: "take the S19; at Siegburg,
    switch to the alternative if the 66 is more than X minutes late". A route with cheap fallbacks

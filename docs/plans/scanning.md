@@ -9,7 +9,7 @@ clothing, and paper documents.
 
 ## 1. The shape every scanner follows
 
-RoomPlan already proves this flow (`libs/roomplan-contract`, `capabilities/interior`,
+RoomPlan already proves this flow (`libs/roomplan-contract`, `crates/interior`,
 `apps/gpui/ios/host`):
 
 ```mermaid
@@ -49,7 +49,7 @@ starts from working code.
 |---|---|---|---|---|
 | Rooms | RoomPlan | `interior` | Most of the flow, see §3 | Device validation, Gemini |
 | Paper documents | `VNDocumentCameraViewController` | `documents` | Hash-verified PDF library, import | The phone mode and an upload route |
-| Owned objects and clothing | Photo plus barcode | `inventory` | Intake from a link (`inventory add <url>`) | Intake from the object ("not built", `capabilities/inventory/README.md`). Clothing fields such as size, colour and season. |
+| Owned objects and clothing | Photo plus barcode | `inventory` | Intake from a link (`inventory add <url>`) | Intake from the object ("not built", `crates/inventory/README.md`). Clothing fields such as size, colour and season. |
 | Grocery barcodes | EAN/UPC on device, then a product lookup | `inventory`, `pantry` domain (P1) | Nothing | The pantry domain, a product source |
 | Receipts | Text recognition on device | `finance` | Candidate review in GPUI (Work Package 24) | Receipt to candidate. A link from grocery lines to pantry restock. |
 
@@ -59,7 +59,7 @@ barcode, which is c0.
 
 ## 3. Rooms (RoomPlan)
 
-`capabilities/interior` owns measurements, clearances, layouts and placement writes. The phone
+`crates/interior` owns measurements, clearances, layouts and placement writes. The phone
 captures with Apple RoomPlan ([Apple's guide](https://developer.apple.com/documentation/roomplan)).
 
 **Built.**
@@ -85,7 +85,7 @@ captures with Apple RoomPlan ([Apple's guide](https://developer.apple.com/docume
    capture quality, alignment against the measured flat, and the Files export and import.
    Simulator checks cannot cover this. The previous phone client is retired; this check is open
    in [`gpui.md`](gpui.md#3-what-retiring-the-dashboard-still-takes).
-2. **Gemini interior ideas.** Groundwork exists in `capabilities/assistant/src/main.rs`: a typed
+2. **Gemini interior ideas.** Groundwork exists in `crates/assistant/src/main.rs`: a typed
    request and response, a per-request consent flag, bounded JPEG and geometry checks, paid-role
    admission, a daily usage ledger. Missing: the route, the provider review, a paid role pointed
    at the existing `inference-gemini` keychain credential, the phone consent and frame sampling

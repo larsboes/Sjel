@@ -25,7 +25,7 @@
 //! operator's friends, family and colleagues, which is precisely the class §6
 //! of the PRD says never leaves the host in raw form. It belongs in the private
 //! overlay and must never be committed to this repository. Nothing here writes
-//! it; `entities-server names` produces it (capabilities/entities/src/names.rs),
+//! it; `entities-server names` produces it (crates/entities/src/names.rs),
 //! run by tools/people-registry-refresh.sh.
 //!
 //! ## Absent is not empty

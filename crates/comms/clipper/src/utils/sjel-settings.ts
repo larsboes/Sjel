@@ -1,4 +1,4 @@
-// Settings Sjel owns: the templates and the Interpreter model (capabilities/comms
+// Settings Sjel owns: the templates and the Interpreter model (crates/comms
 // store/clipper_settings.rs). The extension reads them over native messaging and locks
 // its own editors for them. Until Sjel holds templates, the first sync seeds Sjel with
 // the ones this browser has.

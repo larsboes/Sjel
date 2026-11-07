@@ -224,7 +224,7 @@ Three rules keep reclaim safe, all tested:
    the same tree. The report subtracts the inner one from `reclaimable` and says so, so the number
    a reader acts on is not an overstatement.
 
-The overlay is resolved through `SJEL_PERSONAL_ROOT`, the same way `capabilities/host-net`
+The overlay is resolved through `SJEL_PERSONAL_ROOT`, the same way `crates/host-net`
 resolves its own policy. The `sjel.local.toml` → `sjel.toml` order stays owned by
 `tools/lib/paths.sh` and `libs/overlay/overlay.ts`, and the launcher sources `paths.sh`.
 

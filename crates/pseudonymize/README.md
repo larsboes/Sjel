@@ -5,7 +5,7 @@ Reversible bidirectional session tokenization for cloud evaluators and agents (P
 ## Why this exists
 
 Destructive one-way redaction (`[person]`, `[link]`) was built for static feed and mail triage
-(`capabilities/comms/src/cloud_derivative.rs`). It protects privacy by erasing identity.
+(`crates/comms/src/cloud_derivative.rs`). It protects privacy by erasing identity.
 That erasure is fatal for interactive assistants and cloud evaluators: if a trip query scrubs
 "Karlsruhe" and "Munich" both to `[place]`, an external routing model or Jev cannot reason over
 origin vs. destination, and Sjel cannot re-hydrate the resulting travel legs upon return.
@@ -25,7 +25,7 @@ The ladder is PRD §6.2's, applied in `session.rs` (`tokenize_text`):
 1. **Rung 1, shapes (`pattern.rs`).** Word-level predicates for links, email addresses, IBANs,
    phone numbers, token-like secrets and any word with six or more digits. Hand-written
    predicates, not regular expressions and not a port of Presidio's catalog. They are the same
-   functions the destructive path in `capabilities/comms/src/cloud_derivative.rs` calls, so the
+   functions the destructive path in `crates/comms/src/cloud_derivative.rs` calls, so the
    two transformations cannot drift apart.
 2. **Rung 0, known names (`registry.rs`).** An Aho-Corasick dictionary over a folded copy of
    the text: Unicode lowercase plus `ß`→`ss`, `ä`→`ae`, `ö`→`oe`, `ü`→`ue`. A hyphenated compound

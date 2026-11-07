@@ -343,7 +343,7 @@ pub fn migrate_once(
 /// because another writer may already have changed what this one read.
 ///
 /// That reasoning was never migration-specific, and the rest of the workspace
-/// did not get it. `capabilities/comms/src/store/feed.rs` set a feed item's
+/// did not get it. `crates/comms/src/store/feed.rs` set a feed item's
 /// status inside a deferred transaction whose first statement is a `SELECT` —
 /// deliberately, so a second press of `u` does not append a decision that never
 /// happened — and every one of those is an upgrade. Eleven services share one

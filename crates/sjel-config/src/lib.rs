@@ -54,7 +54,7 @@ pub fn overlay_data_dir(capability: &str) -> Option<PathBuf> {
 ///
 /// There is one file for every capability, not one per capability. Cross-schema
 /// joins were the reason the shared Postgres instance existed
-/// (`capabilities/store/README.md`), and a file per capability would have
+/// (`services/store/README.md`), and a file per capability would have
 /// dropped them. So this takes no capability argument: there is nothing to vary.
 ///
 /// The last resort is deliberately a scratch path rather than a plausible one.

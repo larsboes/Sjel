@@ -134,7 +134,7 @@ async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
 
     let result = tokio::task::spawn_blocking(move || -> Option<DiscoverResponse> {
         // Config::load() and the adapter/store construction below all do
-        // sync file/DB I/O (matches capabilities/transit's server.rs — same
+        // sync file/DB I/O (matches crates/transit's server.rs — same
         // spawn_blocking discipline, see its handle_health comment for why
         // this matters under #[tokio::main]).
         let cfg = Config::load();

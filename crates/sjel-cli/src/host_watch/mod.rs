@@ -2,7 +2,7 @@
 //! listener, once per run, and write what it found into the shared store.
 //!
 //! Ported from `tools/host-watch.ts` on 2026-10-04, its test with it. The launcher keeps the path
-//! the docs name; `capabilities/host-watch/service.toml` names the built binary directly, so the
+//! the docs name; `services/host-watch/service.toml` names the built binary directly, so the
 //! hourly launchd job starts neither an interpreter nor a shell.
 //!
 //! ## Notice, then hand off
@@ -290,7 +290,7 @@ fn run_storage(root: &Path) -> Option<StorageReport> {
 /// host-net is invoked rather than reimplemented, the same call storage gets above: it owns the
 /// netstat parsing, the scope rule and the overlay policy.
 ///
-/// The built BINARY, never `capabilities/host-net/host-net`. That launcher builds on first use,
+/// The built BINARY, never `crates/host-net/host-net`. That launcher builds on first use,
 /// and an hourly scheduled job with the ability to start a cargo build is a surprise nobody asked
 /// for. A host that has never built it files nothing and says so once.
 fn run_host_net(root: &Path) -> Option<NetReport> {

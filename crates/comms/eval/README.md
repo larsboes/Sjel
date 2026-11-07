@@ -17,7 +17,7 @@ extractor class into normalization. Its synthetic stored-page snapshots cover an
 article, repository, paper, client-rendered page, captured page and PDF text. Each
 fixture names exact text that must survive and exact boilerplate that must not.
 
-Run it from `capabilities/comms`:
+Run it from `crates/comms`:
 
 ```sh
 cargo run --bin comms-extraction-eval -- eval/extraction-corpus.json
@@ -47,13 +47,13 @@ corpus contains only synthetic text and explicit human judgements.
 Run it from the Sjel root:
 
 ```sh
-bun capabilities/comms/eval/run-relevance.ts
+bun crates/comms/eval/run-relevance.ts
 ```
 
 The cross-encoder candidate is gated against the same corpus and unchanged judgements:
 
 ```sh
-bun capabilities/comms/eval/run-reranking.ts
+bun crates/comms/eval/run-reranking.ts
 ```
 
 That runner calls the loopback `/v1/rerank` route once per lens and validates the returned index
@@ -78,7 +78,7 @@ An explicit first argument selects another schema-compatible corpus. Private rea
 and their results stay in the private overlay and are never copied into this directory:
 
 ```sh
-bun capabilities/comms/eval/run-relevance.ts "$SJEL_PERSONAL_ROOT/config/private-corpus.json"
+bun crates/comms/eval/run-relevance.ts "$SJEL_PERSONAL_ROOT/config/private-corpus.json"
 ```
 
 A query may provide named `text_variants`. Setting
@@ -91,7 +91,7 @@ queries, so one real Feed snapshot can be judged independently against multiple 
 Apple's built-in sentence embeddings run against the same corpus:
 
 ```sh
-xcrun swift capabilities/comms/eval/run-apple-nlembedding.swift
+xcrun swift crates/comms/eval/run-apple-nlembedding.swift
 ```
 
 For every query, the runner chooses Apple's German or English sentence model and asks that
@@ -105,7 +105,7 @@ cross-language ordering.
 Apple's shared Latin contextual model is the executable native comparison:
 
 ```sh
-xcrun swift capabilities/comms/eval/run-apple-contextual.swift
+xcrun swift crates/comms/eval/run-apple-contextual.swift
 ```
 
 It declares [both German and English in one Latin vector space](https://developer.apple.com/documentation/naturallanguage/nlcontextualembedding/languages).
@@ -116,7 +116,7 @@ gate. Missing system assets are never downloaded implicitly; an intentional firs
 macOS for them:
 
 ```sh
-xcrun swift capabilities/comms/eval/run-apple-contextual.swift --request-assets
+xcrun swift crates/comms/eval/run-apple-contextual.swift --request-assets
 ```
 
 If Command Line Tools and the active Swift SDK do not match, select the installed full Xcode

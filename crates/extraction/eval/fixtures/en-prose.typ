@@ -1,6 +1,6 @@
 // Frozen corpus page: English prose. Rendered to en-prose.png by render.sh.
 // The second half of the DE/EN balance the relevance corpus set as the house
-// rule (capabilities/comms/eval/README.md, "Why this shape").
+// rule (crates/comms/eval/README.md, "Why this shape").
 #set page(width: 150mm, height: auto, margin: 14mm, fill: white)
 #set text(size: 11pt, lang: "en")
 #set par(justify: true)

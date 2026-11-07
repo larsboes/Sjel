@@ -3,7 +3,7 @@
 //! Parses and organizes entity records of kind `person` into structured contact profiles,
 //! initials, contact links, and custom properties.
 //!
-//! The field names are the registry's, not this module's: `capabilities/entities` writes the
+//! The field names are the registry's, not this module's: `crates/entities` writes the
 //! Google-managed keys `emails` and `phones` (plural, and an array of strings), so a parser that
 //! only looked for `email` and `phone` found neither and drew no contact row for anybody. Both
 //! spellings are accepted here because the registry has written both: the values table is text, and
@@ -20,7 +20,7 @@ pub mod edit;
 /// The value behind one key in `EntityRecord::values`.
 ///
 /// Two shapes reach this: the registry's API serves `{ value, source, updated_at }` per key
-/// (`capabilities/entities/src/model.rs`), while the Mac's mirrored copy holds the bare value. A
+/// (`crates/entities/src/model.rs`), while the Mac's mirrored copy holds the bare value. A
 /// parser that knew only the second showed no email, phone, company or place for anybody on the
 /// Mac, because every value there is an object and was skipped.
 pub fn field_value(raw: &serde_json::Value) -> Option<&serde_json::Value> {
@@ -204,7 +204,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     /// The shape the registry actually writes: `emails` and `phones` as arrays, from
-    /// `capabilities/entities/src/google.rs`. Before this was the key set, every person's email and
+    /// `crates/entities/src/google.rs`. Before this was the key set, every person's email and
     /// phone were `None` and the contact card drew no row for either.
     #[test]
     fn the_registrys_own_field_names_reach_the_contact_card() {

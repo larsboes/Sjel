@@ -284,7 +284,7 @@ pub(super) async fn cloud_queue_handler(
 /// The HTTP shell around `cloud_run::run_job`.
 ///
 /// The roster walk, the budget claim and the tier checks moved into
-/// `capabilities/comms/src/cloud_run.rs` when the digest drain became a second
+/// `crates/comms/src/cloud_run.rs` when the digest drain became a second
 /// caller of the same path. Keeping a copy here would have meant two
 /// implementations of the five-call cap and the `preview_hash` pin.
 pub(super) async fn cloud_run_handler(Path(job_id): Path<String>) -> HttpResponse {

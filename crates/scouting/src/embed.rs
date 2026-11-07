@@ -17,7 +17,7 @@
 //! wrong, nothing logged, no error anywhere. So the cache names its producer
 //! and a mismatch recomputes.
 //!
-//! See `capabilities/scouting/README.md`.
+//! See `crates/scouting/README.md`.
 
 use std::collections::HashMap;
 use std::path::Path;

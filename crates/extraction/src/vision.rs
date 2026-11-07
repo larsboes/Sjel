@@ -6,7 +6,7 @@
 //! which wraps `VNRecognizeTextRequest` over the OS framework
 //! (`systems.toml [apple-vision]`).
 //!
-//! A subprocess and not a linked framework, for the reason `capabilities/transit`
+//! A subprocess and not a linked framework, for the reason `crates/transit`
 //! already gives for xberg: a process boundary keeps a platform SDK out of every
 //! consumer's Cargo build, and this crate is linked by two capabilities that must
 //! keep compiling on a machine that has never seen Xcode. Arguments and paths go
@@ -45,7 +45,7 @@ use crate::{cap, Document, Extraction, ExtractionError, Extractor, InputClass, R
 /// What this rung records as `producer`, and what it calls itself in an error.
 pub const ENGINE: &str = "apple-vision";
 
-/// Where to find the reader. Mirrors `capabilities/transit`'s `xberg_bin`: a
+/// Where to find the reader. Mirrors `crates/transit`'s `xberg_bin`: a
 /// bare name resolved on `PATH`, overridable for a build that is not installed.
 const BINARY_ENV: &str = "SJEL_VISOCR_BIN";
 const DEFAULT_BINARY: &str = "visocr";
@@ -265,7 +265,7 @@ fn parse_records(stdout: &str) -> Vec<(String, String)> {
 /// A file handed to a subprocess has to exist somewhere.
 ///
 /// Removed on drop, including on unwind. The same reasoning as
-/// `capabilities/transit`'s copy: the bytes are somebody's document, and a
+/// `crates/transit`'s copy: the bytes are somebody's document, and a
 /// panic must not leave it in the system temp directory.
 struct TempFile(PathBuf);
 

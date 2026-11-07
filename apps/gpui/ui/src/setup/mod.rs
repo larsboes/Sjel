@@ -1,6 +1,6 @@
 //! Node Setup & Device Pairing: Probed machine requirements, Turso replica setup, and device pairing.
 //!
-//! Replaces the dashboard `/setup` route. Backed by `capabilities/sjel-status` and `capabilities/devices`.
+//! Replaces the dashboard `/setup` route. Backed by `crates/sjel-status` and `crates/devices`.
 
 pub mod devices;
 pub mod machine;

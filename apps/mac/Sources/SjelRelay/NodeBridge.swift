@@ -2,7 +2,7 @@ import Foundation
 
 /// What the shell says about itself and every capability with a health surface
 /// (`GET /api/sjel-status/health`, `SjelStatusHealth` in
-/// `capabilities/sjel-status/src/status/registry.rs`).
+/// `crates/sjel-status/src/status/registry.rs`).
 public struct NodeHealth: Sendable, Equatable, Decodable {
     public struct Capability: Sendable, Equatable, Decodable {
         public let up: Bool
@@ -114,7 +114,7 @@ public final class NodeBridge: Sendable {
     private let session: URLSession
     private let token: CachedToken
 
-    /// sjel-status, the shell (`capabilities/sjel-status/service.toml`). This said 8080, where
+    /// sjel-status, the shell (`crates/sjel-status/service.toml`). This said 8080, where
     /// nothing listens, so the menu showed "offline" whatever the shell's state.
     public init(baseURL: URL = URL(string: "http://127.0.0.1:8082")!, token: CachedToken = CachedToken()) {
         self.baseURL = baseURL
@@ -148,7 +148,7 @@ public final class NodeBridge: Sendable {
     }
 
     /// Starts or stops one capability through the shell
-    /// (`capabilities/sjel-status/src/status/lifecycle.rs`). Start is `resume`, so it also
+    /// (`crates/sjel-status/src/status/lifecycle.rs`). Start is `resume`, so it also
     /// clears the hold a stop leaves. Returns nil on success, or the words to show.
     public func setRunning(_ name: String, _ running: Bool) async -> String? {
         await performLifecycle(name, action: running ? "start" : "stop", label: running ? "Start" : "Stop")

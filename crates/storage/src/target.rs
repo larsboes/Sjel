@@ -128,7 +128,7 @@ pub fn target_dir(repo_root: &Path) -> (PathBuf, &'static str) {
 ///
 /// The repo's own `target/` is deliberately never one of them. That directory is not an
 /// escapee — it is where a workspace build puts the binaries the supervisor runs
-/// (`capabilities/calendar/service.toml` names `target/release/calendar-server`), which is why
+/// (`crates/calendar/service.toml` names `target/release/calendar-server`), which is why
 /// `tools/cargo-hermetic` refuses to point `CARGO_TARGET_DIR` at anything inside the checkout.
 /// Reporting it as reclaimable would invite exactly the mistake that guard exists to prevent.
 /// What this is for is a *nested* workspace: `apps/gpui/target` is a second target dir

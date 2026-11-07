@@ -3,7 +3,7 @@
 High-performance data systems (like Polars, Ripgrep, and Arrow) maximize cache locality, eliminate redundant heap allocations, and assist LLVM with autovectorization.
 
 ## 1. Struct of Arrays (SoA) vs. Array of Structs (AoS)
-For batch query engines, analytics, and bulk scanning (such as `capabilities/finance` projections or `libs/candidate-fingerprint` searches):
+For batch query engines, analytics, and bulk scanning (such as `crates/finance` projections or `libs/candidate-fingerprint` searches):
 * **AoS (Array of Structs)**: `Vec<Record>` interleaves all fields in cache lines. A query filtering only `timestamp` drags unrelated fields into L1/L2 cache, degrading memory bandwidth.
 * **SoA (Struct of Arrays)**: Separate contiguous buffers per column/field:
   ```rust

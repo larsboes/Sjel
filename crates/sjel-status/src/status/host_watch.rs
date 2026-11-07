@@ -13,7 +13,7 @@ use super::*;
 /// The precedent is next door: `/api/sjel-status/backups` publishes receipts written by
 /// `tools/backup.sh`, which is also a job with no server. Reading across a capability
 /// boundary inside the one shared file is what that file is for
-/// (`capabilities/store/README.md`, "cross-schema joins within one database are a single
+/// (`services/store/README.md`, "cross-schema joins within one database are a single
 /// connection").
 ///
 /// Ownership does not move with the surface. `host-watch` owns the finding's content,

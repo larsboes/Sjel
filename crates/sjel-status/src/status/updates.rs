@@ -123,7 +123,7 @@ fn spawn_background_refresh() {
 /// The classes a caller may ask `apply` to move.
 ///
 /// Every entry is an id `tools/updates` knows, and the list is narrower than `SURFACES` on
-/// purpose: `containers` belongs to `capabilities/container-refresh`, `checkout` to
+/// purpose: `containers` belongs to `services/container-refresh`, `checkout` to
 /// `tools/update.sh`, and `vendor` to the vendor. Offering them here would put a second mover
 /// behind a button for something that already has one — the two-owners failure `tools/host-patch.sh`
 /// names. `brew`, `uv` and `rustup` ARE here because asking for them delegates straight back to

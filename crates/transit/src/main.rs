@@ -147,7 +147,7 @@ fn sample_dates(date_from: i64, date_to: i64, step_days: i64, max_points: usize)
 ///
 /// This is the constrained half of the sampler: instead of guessing which days
 /// in a window are worth a fare search, the caller states them. The intended
-/// producer is `capabilities/calendar`, whose feasible-windows endpoint derives
+/// producer is `crates/calendar`, whose feasible-windows endpoint derives
 /// exactly this list from the operator's real availability -- transit stays
 /// unaware of that capability and just honours the days it is handed (see the
 /// README's fuzzy-trip-search section).
@@ -355,7 +355,7 @@ fn main() {
 }
 
 /// `transit plan` -- the fuzzy/triggered trip-search session
-/// (`capabilities/store/README.md` driving query #2: "in September I feel
+/// (`services/store/README.md` driving query #2: "in September I feel
 /// like a trip"). See `print_usage`
 /// for the flags. Three modes share this entry:
 ///   - `--show <session-id>`: re-list an existing session's ranked trips

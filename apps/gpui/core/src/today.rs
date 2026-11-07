@@ -223,7 +223,7 @@ pub fn build(
 /// The project a record is filed under.
 ///
 /// The record's own `project` field wins, because a path's first segment is not the project: the
-/// vault files `Archive/Soma/Tasks/Reopen.md` under `Soma` (`capabilities/projects`). A record
+/// vault files `Archive/Soma/Tasks/Reopen.md` under `Soma` (`crates/projects`). A record
 /// written by this app's `Board::task_path` is `<project>/Task-<seconds>.md`, so for those the
 /// first segment is the same answer, and it is the fallback when no project travelled.
 pub fn project_of(record: &ProjectRecord) -> String {

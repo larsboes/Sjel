@@ -1,7 +1,7 @@
 //! Finance's database-backed suite, kept out of CI's hermetic run by the name every
 //! test in it carries: `db_tests::`. That is the one selector the database-backed
 //! modules in comms, places, scouting and transit are also named by, so CI names
-//! a filter and never a list of capabilities — see `capabilities/scouting/src/store.rs`.
+//! a filter and never a list of capabilities — see `crates/scouting/src/store.rs`.
 //! A temp file per test is the whole fixture: the store is one SQLite file.
 //!
 //! An integration test rather than a `#[cfg(test)]` module because it links the library from
@@ -584,7 +584,7 @@ mod db_tests {
 
     /// The freshness contract's whole body, and the case it exists to refuse.
     ///
-    /// `capabilities/finance/service.toml` declares `freshness_stale_hours`, so
+    /// `crates/finance/service.toml` declares `freshness_stale_hours`, so
     /// doctor calls finance stale when this stops moving. A run in which every
     /// provider refused still WROTE rows to `finance_price_fetches`, and if
     /// those rows answered here, a machine whose price fetch has been failing

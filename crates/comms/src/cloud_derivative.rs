@@ -82,7 +82,7 @@ pub struct RedactionFinding {
 pub struct LocalOnlyRefused;
 
 /// The refusal's exact wording, because three handlers in
-/// `capabilities/comms/src/server/cloud.rs` recognise it by string: the error
+/// `crates/comms/src/server/cloud.rs` recognise it by string: the error
 /// crosses a `spawn_blocking` boundary as a `String` and the type does not
 /// survive. A constant rather than a literal in four places, since a reworded
 /// sentence would silently turn a 400 into a 500.

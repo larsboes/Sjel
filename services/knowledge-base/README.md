@@ -98,6 +98,6 @@ confirmation that the earlier eleven were cosmetic.
 `plugin/sjel-lens/` was an Obsidian pane that compared two kinds of note with what Sjel computed:
 `Atlas/People` notes against `vault`'s `/api/people`, and the `trips` plan copies in
 `Resources/Sjel/Trips/` against `/api/plans`. On 2026-10-20 the vault became knowledge only
-(capabilities/projects/README.md, "Why this shape"): the people moved into `entities`, and the plan
+(crates/projects/README.md, "Why this shape"): the people moved into `entities`, and the plan
 copies into the overlay. With both adapters gone the pane had nothing to show, so it was removed.
 `tools/check-obsidian-plugins.sh` still gates every other Obsidian plugin in the repository.

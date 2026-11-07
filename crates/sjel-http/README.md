@@ -41,7 +41,7 @@ browser string because the site refuses anything else.
 ## Retrying an attempt that never got an answer
 
 `send(request, idempotent)` repeats a transport failure. Its first caller is
-`capabilities/entities`' Google sync, which lost a whole run on 2026-10-18: the
+`crates/entities`' Google sync, which lost a whole run on 2026-10-18: the
 00:01 slot fired at 00:06:18 on a two-second `DarkWake from Deep Idle`, the first
 HTTPS request went out as the network stack tore down, no response arrived, and a
 single `?` made that fatal.

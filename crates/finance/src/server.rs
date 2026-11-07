@@ -2485,8 +2485,8 @@ async fn prices_status(State(state): State<AppState>) -> ApiResponse {
 /// `GET /__sjel/freshness` — when this capability last took delivery of data.
 ///
 /// The shared shape behind `freshness_advise_hours` / `freshness_stale_hours` in
-/// `capabilities/finance/service.toml`, and the same one
-/// `capabilities/comms/src/server/source_handlers.rs` serves: one integer,
+/// `crates/finance/service.toml`, and the same one
+/// `crates/comms/src/server/source_handlers.rs` serves: one integer,
 /// `last_arrival_at`, epoch seconds, or `null` if nothing has ever arrived.
 /// `tools/doctor` compares it against the two declared hours; anything else this
 /// endpoint might usefully say belongs to `GET /api/prices/status`, which is the
@@ -2495,7 +2495,7 @@ async fn prices_status(State(state): State<AppState>) -> ApiResponse {
 /// ARRIVAL, not the newest observation date. A market that was shut on Friday is
 /// quiet, not broken, and a contract keyed on `observed_on` would call a long
 /// weekend a fault and teach the reader to skim past it. What this exists to
-/// catch is a producer that stopped — `capabilities/finance-prices`, whose 24h
+/// catch is a producer that stopped — `services/finance-prices`, whose 24h
 /// schedule is the only unattended caller of `finance-cli prices fetch`.
 ///
 /// A parse failure is a 500 and never a `null`. `null` is the specific claim
@@ -2811,7 +2811,7 @@ async fn run_decisions(
 /// classifies at or below `c1`. Four fields is a bound on VOLUME; the bound the
 /// doctrine asks for is on CLASS, and it is not this call site's to choose:
 /// `comms_feed_items.data_class` admits all four classes and comms serves
-/// `POST /feed/{id}/data-class` so a human can raise one (capabilities/comms/src/
+/// `POST /feed/{id}/data-class` so a human can raise one (crates/comms/src/
 /// server/main.rs:324). A title raised to c2 because it names a person, copied
 /// into a `c1` decision row, is a de-escalation no human asked for --
 /// `content_item::admit_reclassification` (libs/content-item/src/lib.rs:393)

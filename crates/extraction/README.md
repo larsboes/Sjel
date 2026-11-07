@@ -9,7 +9,7 @@ verdict of its own (CONTRIBUTING.md#three-architectural-nouns). Consumers declar
 
 ## Why it exists
 
-It was `capabilities/comms/src/extraction.rs` until a second capability needed the same job.
+It was `crates/comms/src/extraction.rs` until a second capability needed the same job.
 
 `crates/transit` reads a ticket file into text plus optional Markdown, and had grown its
 own `Document` / `DocumentBackend` vocabulary for it — the same job under a second set of names,
@@ -51,7 +51,7 @@ changing the source PDF.
 `Builtin` deliberately keeps HTML. xberg returns more text on every URL in the recorded
 benchmark and is still not the right reader for the class: it is an extractor and not a
 readability cleaner, so navigation and share widgets survive it. Swapping the HTML path is a
-change with a scorecard already in place — the `html` class of `capabilities/comms/eval/` — not
+change with a scorecard already in place — the `html` class of `crates/comms/eval/` — not
 a side effect of wanting PDFs (#77).
 
 A page with **no** text layer is the one case that needs a walk instead of a lookup, because
@@ -135,5 +135,5 @@ table.
 `thiserror` and `sjel-inference`, plus `serde`/`serde_json` for the corpus, plus `xberg` and
 `tokio` behind the feature above. Nothing else. Every consumer inherits this surface, so it
 stays small enough to read — and `sjel-inference` was checked against that rule rather than
-assumed: it adds no crate to `capabilities/comms` or `crates/transit` that each did not
+assumed: it adds no crate to `crates/comms` or `crates/transit` that each did not
 already declare directly.

@@ -9,7 +9,7 @@
 //! - **Who may call.** The gate runs in [`crate::auth::LanPolicy::DevicesOnly`]: a request needs a
 //!   valid device signature. The one exception is the pairing claim, which a device sends before
 //!   it has a registered key; it is protected by the one-time code instead
-//!   (`capabilities/devices`, ten minutes, 50 bits).
+//!   (`crates/devices`, ten minutes, 50 bits).
 //!
 //! Opt-in per deployment: `SJEL_LAN_PORT` (or its earlier name `SJEL_LAN_PORT`) in
 //! `<overlay>/config/deployment.env`.

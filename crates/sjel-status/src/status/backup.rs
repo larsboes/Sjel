@@ -145,7 +145,7 @@ pub(crate) static BACKUP_RUNS: OnceLock<Mutex<HashMap<String, BackupRun>>> = Onc
 /// panic, so one panic anywhere under this guard would make `GET /api/sjel-status/backups`
 /// answer 500 for the life of the process, and every later `POST .../backup` with it — a
 /// backup page that reports nothing, forever, because something once panicked while it was
-/// being drawn. `capabilities/scouting/src/config.rs`'s `env_lock` made the same call for
+/// being drawn. `crates/scouting/src/config.rs`'s `env_lock` made the same call for
 /// the same reason: refusing "would turn one failure into every later [call] failing for a
 /// different reason".
 ///

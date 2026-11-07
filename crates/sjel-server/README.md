@@ -150,7 +150,7 @@ therefore drives its **wired** `Router` with a foreign `Origin` in its own test 
 `places::server::tests::a_foreign_origin_cannot_read_people_presence` and
 `trips::server::origin_tests::a_foreign_origin_cannot_read_a_plan_search_result`.
 
-This module was moved out of `capabilities/places/src/server.rs` on 2026-09-05, when a
+This module was moved out of `crates/places/src/server.rs` on 2026-09-05, when a
 second capability needed it (PRD Q91). A second copy of a security predicate is drift; one
 home is the point. Applying it to the whole trips router closed an existing leak as a side
 effect: `GET /api/flights/when` had been serving calendar entry titles cross-origin.

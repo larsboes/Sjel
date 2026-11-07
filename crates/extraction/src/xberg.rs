@@ -85,7 +85,7 @@ impl Extractor for Xberg {
             title: document.metadata.title.filter(|t| !t.trim().is_empty()),
             text: cap(document.content),
             // xberg can emit Markdown, but this rung is not asked for it: the
-            // consumer that needs layout (`capabilities/transit`) drives the
+            // consumer that needs layout (`crates/transit`) drives the
             // xberg CLI itself and asks for both formats there.
             markdown: None,
             producer,

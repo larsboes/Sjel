@@ -1,7 +1,7 @@
 //! A destination's coordinate, resolved once and stored on the plan.
 //!
 //! A typed destination was a name and nothing else: `place:<slug>` with null
-//! latitude and longitude, which `capabilities/places`' travel layer skips
+//! latitude and longitude, which `crates/places`' travel layer skips
 //! ("only refs that carry a coordinate can be drawn"). So an upcoming trip drew
 //! nothing on the map, had no anchor for an accommodation search, no distance to
 //! a scouting candidate and no climate for its stage. The coordinate is derived
@@ -12,7 +12,7 @@
 //! `GET /api/places?q=<name>` answers from the registry places already holds,
 //! which for a city visited before is instant, offline and free of a new
 //! upstream call. `POST /api/geocode` reaches Nominatim at one request per
-//! second (`MIN_REQUEST_SPACING` in `capabilities/places/src/geocode.rs`) and
+//! second (`MIN_REQUEST_SPACING` in `crates/places/src/geocode.rs`) and
 //! writes a registry row, so it is the second rung and not the first.
 //!
 //! The registry rung requires an **exact** name. `search_places` is a `LIKE

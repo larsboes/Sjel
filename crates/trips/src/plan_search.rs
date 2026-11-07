@@ -34,7 +34,7 @@ use crate::store::{PlaceRef, TransportMode};
 
 /// Bumped when a weight, a factor or the scoring arithmetic changes, so two
 /// responses are never silently compared across a change. Same mechanism, and
-/// the same reason, as `EVALUATOR_REVISION` in `capabilities/comms/src/evaluation.rs`.
+/// the same reason, as `EVALUATOR_REVISION` in `crates/comms/src/evaluation.rs`.
 ///
 /// v3 (2026-09-24): weights are clamped to zero or above, and a measured weight
 /// total of zero falls back to the default weights. The default weights are v2's.
@@ -55,7 +55,7 @@ pub const WEIGHT_RETROSPECTIVE: f64 = 0.10;
 /// `PLAN_SEARCH_REVISION` is `plan-search-v2`.
 pub const FACTOR_RETROSPECTIVE: (&str, &str) = ("retrospective", "How the last trip here went");
 
-/// The soft ranking weights, matching `capabilities/traveler` profile's `soft` section.
+/// The soft ranking weights, matching `crates/traveler` profile's `soft` section.
 pub use traveler_api::SoftWeights;
 
 /// The longest span a search may cover — the same bound `flight_when` already
@@ -65,10 +65,10 @@ pub const MAX_WINDOW_DAYS: i64 = 42;
 /// How far from a destination an opportunity still counts as "at" it.
 ///
 /// A third home for great-circle distance in this repo, and deliberately not a
-/// dependency: `capabilities/places/src/backfill.rs` (`haversine_km`) and
+/// dependency: `crates/places/src/backfill.rs` (`haversine_km`) and
 /// `dashboard/src/lib/travel/travel-candidates.ts` hold the other two, and a
 /// capability does not link another capability's crate
-/// (`capabilities/places/Cargo.toml` states that rule for the fingerprint lib).
+/// (`crates/places/Cargo.toml` states that rule for the fingerprint lib).
 pub const EVENT_RADIUS_KM: f64 = 75.0;
 
 /// Default and bound for how many destinations get a fare probe. Pricing is the
@@ -247,7 +247,7 @@ pub fn expand_month(month: &str) -> Option<(String, String)> {
 
 /// A run of days travel is possible in, as calendar serves it.
 ///
-/// A deliberate subset of `capabilities/calendar/src/correlate/events.rs`'s
+/// A deliberate subset of `crates/calendar/src/correlate/events.rs`'s
 /// `FeasibleWindow`, and deliberately NOT a shared type: there is no field here
 /// that could hold a calendar entry title, so no future edit to the producer can
 /// carry one across this boundary by accident.
@@ -1219,7 +1219,7 @@ pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
 ///
 /// Money is integer minor units, which is this writer's whole vocabulary. It is
 /// not the only writer of an `option_set` row: `tools/sparpreis-watch` posts
-/// one every 12 hours (`capabilities/sparpreis-watch/service.toml`) carrying the
+/// one every 12 hours (`services/sparpreis-watch/service.toml`) carrying the
 /// older float `total_price` and no `revision`, and rows in that shape already
 /// exist. `schemas/trip-plan.schema.json` describes both.
 ///

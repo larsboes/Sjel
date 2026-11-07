@@ -145,7 +145,7 @@ struct RoomPlanGuidancePosition {
 }
 
 /// The read-only Sjel capability tools, from `libs/agent`. Never includes `bash`, a file tool or
-/// a write: that is what `capabilities/agent` exists for, and the rule is enforced by what this
+/// a write: that is what `crates/agent` exists for, and the rule is enforced by what this
 /// returns rather than by a comment.
 fn sjel_tools(shell_url: &str) -> Vec<Box<dyn Tool>> {
     sjel_agent::ext::sjel::SjelTools::new(

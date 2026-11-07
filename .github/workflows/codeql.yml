@@ -20,7 +20,7 @@ name: CodeQL
 #           claim .svelte, so the <script> blocks in those components are unscanned — the
 #           single biggest thing this workflow does NOT cover, stated here rather than left to
 #           be inferred from a green check.
-#   Swift   0.01 MB: two eval scripts under capabilities/comms/eval/. CodeQL supports Swift,
+#   Swift   0.01 MB: two eval scripts under crates/comms/eval/. CodeQL supports Swift,
 #           but only on a macOS runner and only with a real build. That is a whole matrix leg
 #           and a paid runner for 13 KB of throwaway evaluation code. Declined deliberately;
 #           revisit if Swift ever becomes a shipped surface here.

@@ -176,7 +176,7 @@ pub(crate) fn flagged<'a>(
     items
 }
 
-/// The dashboard's names for comms' signal keys (`capabilities/comms/src/quality.rs`).
+/// The dashboard's names for comms' signal keys (`crates/comms/src/quality.rs`).
 pub(crate) fn signal_label(signal: &str) -> String {
     match signal {
         "content_status" => "Content",

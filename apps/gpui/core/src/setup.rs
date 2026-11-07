@@ -1,7 +1,7 @@
 //! Data models and pure reductions for Sjel Machine Setup & Device Pairing (`/setup`).
 //!
-//! Replaces the dashboard's `/setup` route. Backed by `capabilities/sjel-status` (`/api/sjel-status/setup*`,
-//! `/api/sjel-status/lan`) and `capabilities/devices` (`/api/devices`, `/api/pairing/*`).
+//! Replaces the dashboard's `/setup` route. Backed by `crates/sjel-status` (`/api/sjel-status/setup*`,
+//! `/api/sjel-status/lan`) and `crates/devices` (`/api/devices`, `/api/pairing/*`).
 
 use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};

@@ -1,6 +1,6 @@
 //! punctuality-server — the contract other capabilities read this through.
 //!
-//! `capabilities/transit` needs these numbers and must not reach into this crate to get
+//! `crates/transit` needs these numbers and must not reach into this crate to get
 //! them (CONTRIBUTING.md#schemas-and-dependency-direction): a capability depends on another's HTTP surface and schema,
 //! never its code. This is that surface.
 //!

@@ -18,7 +18,7 @@
 //! is additive, not a schema break.
 //!
 //! It is filled now, one layer up: `transit::punctuality` asks
-//! `capabilities/punctuality` for measured lateness and enriches the journeys
+//! `crates/punctuality` for measured lateness and enriches the journeys
 //! this module returns. Deliberately not done inside this module -- HAFAS
 //! parsing should stay a pure function of the HAFAS response, and the tests
 //! below assert exactly that by checking the field is still `None` on the way
@@ -149,7 +149,7 @@ pub fn is_regional_leg(category: &str, train_name: &str) -> bool {
 
 // Spoofed real-browser UA sent to bahn.de -- kept deliberately, not
 // genericized to a self-identifying "Sjel-Transit/0.1" string. This mirrors
-// `capabilities/scouting/src/adapters/meetup.rs`'s precedent, not the
+// `crates/scouting/src/adapters/meetup.rs`'s precedent, not the
 // self-identifying-UA one (source.rs/cfp_conferences/luma): this endpoint is
 // undocumented and ungated only because it looks like normal browser
 // traffic. A self-identifying UA here would plausibly just get blocked
@@ -1389,7 +1389,7 @@ pub fn parse_journeys_from_response(body: &Value) -> Vec<Journey> {
                 ranking: None,
                 // The real bahn.de response field is "tripId", not "id" --
                 // found via live verification while wiring this adapter into
-                // scouting (capabilities/store/README.md, Phase 2): every journey in a
+                // scouting (services/store/README.md, Phase 2): every journey in a
                 // real response was silently getting id="" and collapsing
                 // into one upserted row downstream. The fixture this parser
                 // was tested against used "id" too (same wrong assumption in

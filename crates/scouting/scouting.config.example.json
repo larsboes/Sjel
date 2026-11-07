@@ -12,7 +12,7 @@
 
   "_comment_embedding_backend": "Nothing about embedding lives in this file. Interest-profile vectors come from the 'embedding' role in the overlay's inference.json (backend, model, query/document prefixes), read through libs/inference; a machine that declares no such role falls back to hash embedding. See libs/inference/README.md and src/embed.rs.",
 
-  "_comment_sources": "Declared opportunity sources (supersedes events_dir/interest_profile_dir). Each entry declares an adapter type and location. The pipeline runs all enabled sources when no --adapter flag is given. See capabilities/scouting/README.md.",
+  "_comment_sources": "Declared opportunity sources (supersedes events_dir/interest_profile_dir). Each entry declares an adapter type and location. The pipeline runs all enabled sources when no --adapter flag is given. See crates/scouting/README.md.",
   "_comment_data_class": "data_class declares what a source's opportunities are worth protecting: c0 public, c1 mine, c2 others, c3 secret (PRD Axon.md §6.1). GET /opportunities publishes it on every row and GET /sources publishes each declaration. OMITTING IT IS SAFE AND MEANS c1: the class is never guessed, and c0 is reachable only by saying so — the same rule comms applies to its feed sources. A value outside c0..c3 is refused down to c1 and reported at load, because a typo must not be more permissive than silence. Every hardcoded adapter (luma, meetup, cfp, euro_hackathons, transit_fare) has no entry here and is therefore c1.",
   "_comment_profile_path": "profiles_glob resolves under 'path' by default — the form every entry used before 'profile_path' existed, still working unchanged. Declare 'profile_path' when the matching profile does not belong in the store the opportunities come from: a profile is a consumer input, your own predicate about what is worth surfacing, and the two systems have separate sync lifecycles. Either way the read stays bounded by whichever root declared it; a glob climbing out with '..' is refused rather than followed.",
   "sources": [
@@ -68,7 +68,7 @@
   "_comment_sources_rss_once": "An entry like this would enable RSS-based scouting:",
   "_comment_sources_rss_demo": "{\"id\": \"conference-rss\", \"adapter\": \"rss\", \"url\": \"https://example.com/feed.xml\", \"enabled\": true}",
 
-  "_comment_calendar_base_url": "Base URL of capabilities/calendar for `scout --promote-calendar`. Loopback only — calendar binds through libs/sjel-server's serve_local. Defaults to http://127.0.0.1:8087, calendar's own default port.",
+  "_comment_calendar_base_url": "Base URL of crates/calendar for `scout --promote-calendar`. Loopback only — calendar binds through libs/sjel-server's serve_local. Defaults to http://127.0.0.1:8087, calendar's own default port.",
   "calendar_base_url": "http://127.0.0.1:8087",
 
   "_comment_home_timezone": "Your home timezone, used to turn Luma's UTC instants into the naive local wall time calendar stores. DECLARE IT ONCE, in the overlay's config/deployment.env as SJEL_HOME_TIMEZONE (schemas/deployment.env.example) — calendar needs the same value, and two independent copies agree until one is edited. Setting it here still overrides, but a value that disagrees with the deployment declaration is an error naming both files. NO DEFAULT either way: promoting without one would silently write the wrong hour, so --promote-calendar refuses until it resolves (or --timezone is passed). Accepts UTC, a fixed ±HH:MM offset, or one of the supported IANA zones listed in src/localtime.rs.",

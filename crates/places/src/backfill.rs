@@ -7,7 +7,7 @@
 //! projection carries and the one identity a location link can safely hang on
 //! (README D2).
 //!
-//! The algorithm was a deliberate copy of `capabilities/finance/src/import.rs`
+//! The algorithm was a deliberate copy of `crates/finance/src/import.rs`
 //! until 2026-08-28. It is now `libs/candidate-fingerprint`, which both call:
 //! two copies of a hash that 263 live links depend on is a divergence waiting
 //! to happen, and the divergence would be silent — every row would simply stop
@@ -33,7 +33,7 @@ const AMEX_CITY_COLUMN: &str = "Stadt";
 const AMEX_POSTAL_COLUMN: &str = "PLZ";
 const AMEX_COUNTRY_COLUMN: &str = "Land";
 
-/// Where transit's suggest surface answers (`capabilities/transit/service.toml`
+/// Where transit's suggest surface answers (`crates/transit/service.toml`
 /// port 3000, `GET /api/suggest`). Overridable for tests and odd deployments.
 pub fn transit_url() -> String {
     sjel_config::env_var("SJEL_PLACES_TRANSIT_URL")
@@ -969,7 +969,7 @@ pub fn traveler_names(travelers: &str) -> Vec<String> {
 }
 
 /// The first destination `PlaceRef` that carries coordinates
-/// (`capabilities/trips/src/store.rs` serializes `id, name, kind, latitude,
+/// (`crates/trips/src/store.rs` serializes `id, name, kind, latitude,
 /// longitude`). Returns `(name, registry kind, latitude, longitude)`; `None`
 /// when no destination can be drawn.
 pub fn first_located_destination(destinations: &str) -> Option<(String, String, f64, f64)> {
@@ -2114,7 +2114,7 @@ mod tests {
     #[test]
     fn the_recomputed_fingerprint_matches_finances_algorithm() {
         // Cross-checked against an independent SHA-256 implementation over the
-        // exact tuple capabilities/finance/src/import.rs hashes: parts
+        // exact tuple crates/finance/src/import.rs hashes: parts
         // separated by 0xff, reference empty, EUR implied.
         assert_eq!(
             amex_fingerprint(

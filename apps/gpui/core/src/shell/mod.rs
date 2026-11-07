@@ -1,4 +1,4 @@
-//! Client for the Sjel shell (`capabilities/sjel-status`), authenticated with the inbound token.
+//! Client for the Sjel shell (`crates/sjel-status`), authenticated with the inbound token.
 //!
 //! The same contracts and token as the menu-bar app (`apps/mac/Sources/SjelRelay`): the token
 //! comes from the login Keychain item that `tools/setup-inbound-auth.sh` writes, through
@@ -20,12 +20,12 @@ use serde::{Deserialize, Serialize};
 
 use futures::channel::mpsc::UnboundedReceiver;
 
-/// The default shell endpoint, from `capabilities/sjel-status/service.toml`.
+/// The default shell endpoint, from `crates/sjel-status/service.toml`.
 pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8082";
 const KEYCHAIN_SERVICE: &str = "sjel-inbound-token";
 const EVENTS_PATH: &str = "/api/sjel-status/events";
 
-/// The ceiling on one original, matching `MAX_BYTES` in `capabilities/documents/src/server.rs`.
+/// The ceiling on one original, matching `MAX_BYTES` in `crates/documents/src/server.rs`.
 /// A reader holds one document at a time, and this is the most it can be asked to hold; the two
 /// numbers are one edit apart on purpose.
 const MAX_DOCUMENT_BYTES: usize = 128 * 1024 * 1024;
@@ -42,7 +42,7 @@ pub use status_api::{
     ROUTE_STATUS_STORAGE_HISTORY, ROUTE_STATUS_UPDATES, ROUTE_STATUS_UPDATES_APPLY,
 };
 
-/// `GET /calendar/api/entries` (`Entry` in `capabilities/calendar/src/store.rs`). Home's
+/// `GET /calendar/api/entries` (`Entry` in `crates/calendar/src/store.rs`). Home's
 pub use calendar_api::{
     CalendarEntry, CalendarEntryDetail, ExportOptIn as CalendarGoogleExportOptIn,
     ExportOutcome as CalendarGoogleExportOutcome, ExportReport as CalendarGoogleExportReport,
@@ -80,7 +80,7 @@ pub use software_api::{SoftwareApp, SoftwareApps};
 
 pub use status_api::{BackupRun, BackupStatus, Backups};
 
-/// `GET /projects/api/projects` (`ProjectSummary` in `capabilities/projects/src/server.rs`).
+/// `GET /projects/api/projects` (`ProjectSummary` in `crates/projects/src/server.rs`).
 pub use projects_api::{
     decode_item_ref, inventory_reference, project_ref, status_closes, GlobalTask,
     InventoryIdentity, ProjectInventoryLink, ProjectKind, ProjectLinkRecord, ProjectMailDecision,

@@ -32,7 +32,7 @@ tag      = "stable"                       # REQUIRED, and it names a CHANNEL, no
                                           # (Q77, 2026-09-02). Prefer the publisher's own
                                           # rolling tag — "stable", "latest", "alpine" — so the
                                           # capability takes each upstream release the day it
-                                          # exists. capabilities/container-refresh pulls every
+                                          # exists. services/container-refresh pulls every
                                           # declared image daily and recreates the container when
                                           # the digest moves.
                                           #
@@ -93,7 +93,7 @@ env_file = "config/example.env"           # relative to the selected overlay; re
 # the pinned image identity. tools/restore.sh verifies that identity and restores only
 # into an isolated destination; the active overlay is never a valid restore target.
 # Overlay-relative host paths. A directory is copied by contents; a single FILE is
-# copied as itself, which capabilities/finance needs — its canonical truth is one
+# copied as itself, which crates/finance needs — its canonical truth is one
 # journal directory plus config/finance.json and a reviewed-holdings snapshot, and
 # neither file has a directory of its own that would not also drag in every other
 # capability's configuration.
@@ -105,7 +105,7 @@ backup_sqlite = "data/example/data/db.sqlite3"  # a SQLite DB owned by the conta
 # backup_sqlite_online = "data/sjel/sjel.db"
                                           # the same file copied OPEN, with `sqlite3 .backup`, and no service hold. Use this
                                           # one only when the readers are host processes on this machine — then every
-                                          # connection IS on one host and the rule above is satisfied. capabilities/store
+                                          # connection IS on one host and the rule above is satisfied. services/store
                                           # declares it because nine capabilities read that file at once: stopping all of
                                           # them to take a cold copy is an outage, not a backup. Mutually exclusive with
                                           # backup_sqlite; a UI reads which one is declared to say whether a run stops
@@ -279,7 +279,7 @@ freshness_stale_hours  = "24"             # past this age nothing is arriving, a
 # `port`, `autostart` and `schedule` here, because nothing starts a file.
 #
 # It exists so that a file with several readers still has exactly ONE owner for the
-# one question a file's owner has to answer: how is it backed up. capabilities/store
+# one question a file's owner has to answer: how is it backed up. services/store
 # is the case that created the kind — the shared SQLite database that replaced the
 # Postgres container (PRD Q45, 2026-08-27) is read by nine capabilities, so no single
 # capability could carry its contract without claiming the other eight's data.

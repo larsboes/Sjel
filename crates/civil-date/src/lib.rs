@@ -2,9 +2,9 @@
 //!
 //! Public domain, from "chrono-Compatible Low-Level Date Algorithms"
 //! (<https://howardhinnant.github.io/date_algorithms.html>). Four capabilities had
-//! copied it: `capabilities/places/src/lib.rs`, `capabilities/finance/src/clock.rs`,
-//! `capabilities/calendar/src/date.rs` and `capabilities/trips/src/windows.rs`, with
-//! a fifth copy inlined inside `capabilities/trips/src/intent.rs`. Three of the five
+//! copied it: `crates/places/src/lib.rs`, `crates/finance/src/clock.rs`,
+//! `crates/calendar/src/date.rs` and `crates/trips/src/windows.rs`, with
+//! a fifth copy inlined inside `crates/trips/src/intent.rs`. Three of the five
 //! were the same twelve lines to the character.
 //!
 //! Every one of them explained itself the same way — no date dependency for a
@@ -15,7 +15,7 @@
 //! # Two scales, and the bridge between them
 //!
 //! Hinnant's algorithm counts days from a **proleptic year 0**, not from Unix.
-//! `capabilities/trips/src/windows.rs` calls that a *day number* and records what
+//! `crates/trips/src/windows.rs` calls that a *day number* and records what
 //! happens when the two are mixed: a raw Unix day count fed to the inverse returns a
 //! well-formed date that is nearly two thousand years wrong, so nothing downstream
 //! can tell it went wrong. [`UNIX_EPOCH_DAY`] is the only bridge, and every name here
@@ -24,7 +24,7 @@
 /// The day number of 1970-01-01 on the proleptic-year-0 scale.
 ///
 /// Anything converting between a Unix day count and a [`day_number_of_iso`] result
-/// adds or subtracts this. `capabilities/trips/src/windows.rs` named the constant
+/// adds or subtracts this. `crates/trips/src/windows.rs` named the constant
 /// after a copy that did not, and was off by 1,969 years while still returning a
 /// well-formed date.
 pub const UNIX_EPOCH_DAY: i64 = 719_468;
@@ -34,7 +34,7 @@ pub const UNIX_EPOCH_DAY: i64 = 719_468;
 /// No validation: February 30th converts to March 2nd, the way the algorithm
 /// defines it. [`unix_day_of_iso`] range-checks its input; a caller that needs
 /// "is this a real date" round-trips through [`unix_day_to_ymd`], which is what
-/// `capabilities/calendar/src/date.rs::parse_date` does.
+/// `crates/calendar/src/date.rs::parse_date` does.
 pub fn ymd_to_unix_day(year: i64, month: u32, day: u32) -> i64 {
     let y = if month <= 2 { year - 1 } else { year };
     let era = if y >= 0 { y } else { y - 399 } / 400;
@@ -69,8 +69,8 @@ pub fn iso_of_unix_day(days: i64) -> String {
 /// like a date.
 ///
 /// Shape, not calendar: the month must be 1..=12 and the day 1..=31, so `2026-13-01`
-/// is refused and `2026-02-30` is not. That is what `capabilities/places` has always
-/// done here, and `capabilities/finance/src/clock.rs` gets the stricter answer by
+/// is refused and `2026-02-30` is not. That is what `crates/places` has always
+/// done here, and `crates/finance/src/clock.rs` gets the stricter answer by
 /// running its own `valid_iso_date` first. A caller wanting the strict form without
 /// finance's helper round-trips through [`unix_day_to_ymd`].
 ///
@@ -90,7 +90,7 @@ pub fn unix_day_of_iso(iso: &str) -> Option<i64> {
 
 /// Days since proleptic year 0 as `YYYY-MM-DD`.
 ///
-/// The scale `capabilities/trips/src/windows.rs` does its window arithmetic on.
+/// The scale `crates/trips/src/windows.rs` does its window arithmetic on.
 pub fn iso_of_day_number(z: i64) -> String {
     iso_of_unix_day(z - UNIX_EPOCH_DAY)
 }
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(unix_day_of_iso("not a date"), None);
     }
 
-    /// From `capabilities/calendar/src/date.rs`, which asserted the tuple form.
+    /// From `crates/calendar/src/date.rs`, which asserted the tuple form.
     #[test]
     fn epoch_is_zero_and_the_tuple_form_agrees_with_the_string_form() {
         assert_eq!(ymd_to_unix_day(1970, 1, 1), 0);
@@ -162,7 +162,7 @@ mod tests {
         }
     }
 
-    /// From `capabilities/calendar/src/date.rs`: steps of 97 days cross every
+    /// From `crates/calendar/src/date.rs`: steps of 97 days cross every
     /// February 29th and every century boundary without an exhaustive loop.
     #[test]
     fn civil_round_trips_across_leap_boundaries() {
@@ -174,7 +174,7 @@ mod tests {
         }
     }
 
-    /// From `capabilities/trips/src/windows.rs`. The trap the named constant exists
+    /// From `crates/trips/src/windows.rs`. The trap the named constant exists
     /// to prevent: the year-0 inverse on a raw Unix day count returns a well-formed
     /// date that is nearly two thousand years wrong.
     #[test]
@@ -186,7 +186,7 @@ mod tests {
     }
 
     /// The shape check is a shape check. February 30th is arithmetic, not a refusal;
-    /// `capabilities/finance/src/clock.rs` layers `valid_iso_date` on top for the
+    /// `crates/finance/src/clock.rs` layers `valid_iso_date` on top for the
     /// stricter answer.
     #[test]
     fn the_shape_check_refuses_an_impossible_month_but_not_an_impossible_day() {

@@ -1,4 +1,4 @@
-//! The CV page's backend. Every read and write shells `capabilities/cv/cv`, the same launcher
+//! The CV page's backend. Every read and write shells `crates/cv/cv`, the same launcher
 //! the CLI and the `cv-builder` skill drive, so the page cannot disagree with them.
 
 use super::*;

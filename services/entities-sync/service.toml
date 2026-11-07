@@ -1,4 +1,4 @@
-# Inbound journal last_contact sync for capabilities/entities.
+# Inbound journal last_contact sync for crates/entities.
 kind     = "process"
 name     = "entities-sync"
 command  = ["target/release/entities-server", "sync-journal"]

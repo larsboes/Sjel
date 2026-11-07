@@ -23,7 +23,7 @@ pub use trips_api::{
 
 /// Present-and-null becomes `Some(None)`; an absent key stays `None`.
 ///
-/// Copied from `capabilities/calendar/src/model.rs:162-168`, which needed the
+/// Copied from `crates/calendar/src/model.rs:162-168`, which needed the
 /// same distinction for the same reason: a PATCH that cannot express "clear it"
 /// makes a field write-once by accident.
 fn present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
@@ -55,7 +55,7 @@ pub struct UpdatePlan {
     /// JSON null ("clear it") are different edits: with a plain `Option` a
     /// budget could be set and never removed, and the editor sends null for an
     /// empty field. Same shape and same reason as `UpdateEntry.location`
-    /// (capabilities/calendar/src/model.rs:183-190).
+    /// (crates/calendar/src/model.rs:183-190).
     #[serde(
         default,
         deserialize_with = "present_nullable",
@@ -521,7 +521,7 @@ impl TripsStore {
 
     /// A pooled connection for `crate::pack`.
     ///
-    /// The same escape hatch `capabilities/interior`'s store exposes as
+    /// The same escape hatch `crates/interior`'s store exposes as
     /// `borrow_connection`, for the same reason: the tables belong to this
     /// capability, and the queries belong beside the shape that reads them.
     pub fn borrow_connection(
@@ -2042,7 +2042,7 @@ mod tests {
 }
 
 /// Database-backed; named for the selector CI splits on — see
-/// `capabilities/scouting/src/store.rs` for why the name is the contract.
+/// `crates/scouting/src/store.rs` for why the name is the contract.
 ///
 /// New here. Under Postgres this capability had no store suite at all: every
 /// statement needed a running server, so the twenty of them were only ever

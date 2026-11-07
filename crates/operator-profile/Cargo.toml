@@ -37,7 +37,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, so the router test drives the wired handlers with no listener and no
-# port. The same pattern capabilities/transit and capabilities/sjel-status use.
+# port. The same pattern crates/transit and crates/sjel-status use.
 tower = { workspace = true, features = ["util"] }
 reqwest = { workspace = true, features = ["json"] }
 

@@ -2,7 +2,7 @@
 //!
 //! Every other column is derived from those two, so a store rebuilt from the rendered files
 //! equals the live store. The selection rules are the ones the retired vault task reader applied
-//! (`capabilities/vault/src/tasks.rs` in git history before 2026-10-18), so a task kept its meaning
+//! (`crates/vault/src/tasks.rs` in git history before 2026-10-18), so a task kept its meaning
 //! across the import.
 
 use std::collections::HashMap;

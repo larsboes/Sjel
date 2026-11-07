@@ -5,7 +5,7 @@
 //! an email address or a phone number are almost always one person, and two with the same
 //! name usually are. Those need no model. The unclear case is a first name alone against a
 //! full name ("Ron" from a note, "Ron Mustermann" from Google) with nothing else shared. Only
-//! those go to the on-device model (`capabilities/foundation-models`, loopback), which may
+//! those go to the on-device model (`services/foundation-models`, loopback), which may
 //! see C2 because it never leaves the machine (PRD §6.1). The model advises; the operator
 //! decides every merge.
 

@@ -4,10 +4,10 @@
 //! their own `reqwest::blocking::Client`. Three things went wrong there, and all three
 //! are the kind a reader only finds by reading all 33:
 //!
-//! 1. **Seven had no timeout at all.** `capabilities/scouting/src/http.rs`,
+//! 1. **Seven had no timeout at all.** `crates/scouting/src/http.rs`,
 //!    `adapters/luma.rs`, `adapters/meetup.rs`, `adapters/splash_hub.rs`,
-//!    `src/calendar_promote.rs`, `capabilities/comms/src/google.rs` and
-//!    `capabilities/calendar/src/google_sync/auth.rs`. A `reqwest` client with no
+//!    `src/calendar_promote.rs`, `crates/comms/src/google.rs` and
+//!    `crates/calendar/src/google_sync/auth.rs`. A `reqwest` client with no
 //!    timeout waits forever, which is how a scheduled job becomes a stuck process.
 //! 2. **The user-agent disagreed with itself.** `axon-places/0.1`, `AxonComms/0.1`,
 //!    `Sjel-Comms/0.1`, `AxonCalendar/0.1.0`, `Sjel-Scouting/0.1-rss`,
@@ -26,7 +26,7 @@
 //! a redirect policy — [`builder`] hands back the same starting point unbuilt.
 //!
 //! [`guard`] holds the other half of the same door: what a URL has to prove before a
-//! request is made. It was `capabilities/comms/src/media.rs`, the only place in the
+//! request is made. It was `crates/comms/src/media.rs`, the only place in the
 //! workspace that checked an outbound destination, and it belongs beside the client
 //! that would otherwise fetch it.
 //!
@@ -166,7 +166,7 @@ fn pool() -> &'static Pool {
 /// **Not for use from an async runtime worker.** A blocking client driven from inside
 /// a Tokio worker panics at run time. Every caller in Sjel is either a CLI or inside
 /// `tokio::task::spawn_blocking`, whose threads are not runtime workers.
-/// `capabilities/finance/src/price.rs` states the same rule at its own call site.
+/// `crates/finance/src/price.rs` states the same rule at its own call site.
 ///
 /// The error is `reqwest`'s own, because the only way this fails is TLS backend
 /// initialisation and the caller already has a shape for reporting that.

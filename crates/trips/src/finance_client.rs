@@ -31,7 +31,7 @@ const TIMEOUT: Duration = Duration::from_secs(3);
 /// differ and that difference IS the shared-cost surface. A single
 /// `spent_cents` answers "was it worth it" wrongly.
 ///
-/// Field names are finance's own (`capabilities/finance/src/analytics.rs`,
+/// Field names are finance's own (`crates/finance/src/analytics.rs`,
 /// `TripSpendingSummary`), read at the TOP LEVEL of the response body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TripSpending {
@@ -82,7 +82,7 @@ pub fn trip_spending(plan_id: &str) -> Result<TripSpending, Unreachable> {
 /// env.
 ///
 /// `places::climate::fetch_normals` takes its URL the same way, for the reason
-/// `capabilities/places/src/geocode.rs:555-557` records: tests mutating one
+/// `crates/places/src/geocode.rs:555-557` records: tests mutating one
 /// process-global variable under cargo's thread-parallel harness is a flake, not
 /// a test.
 pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, Unreachable> {
@@ -93,7 +93,7 @@ pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, U
     // `without_url` before the message is built: reqwest prints the full request
     // URL in its Display, and this reason is served in the cost body and printed
     // verbatim in the card's footer. Same rule, same reason, as
-    // `capabilities/places/src/climate.rs` applies to the provider error there.
+    // `crates/places/src/climate.rs` applies to the provider error there.
     let response = request.send().map_err(|error| {
         Unreachable::new(format!("finance is not reachable: {}", error.without_url()))
     })?;

@@ -854,7 +854,7 @@ mod tests {
     /// The two tests that need a real Postgres. Their own module because the module
     /// name is what CI splits on: the hermetic job runs `--skip db_tests::`
     /// and the store job runs `db_tests::` — see
-    /// `capabilities/scouting/src/store.rs`.
+    /// `crates/scouting/src/store.rs`.
     #[cfg(test)]
     mod db_tests {
         use super::*;

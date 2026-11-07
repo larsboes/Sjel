@@ -112,7 +112,7 @@ Transit persists data in the shared SQLite database (`sjel_config::database_path
 ## Considered and declined
 
 - **No ONNX delay model in transit.** Machine learning inference models with static weights are declined
-  in favor of empirical delay distributions queried live from `capabilities/punctuality`.
+  in favor of empirical delay distributions queried live from `crates/punctuality`.
 - **No automated ticket purchasing.** Sjel stores booking confirmations and links to carrier interfaces,
   but does not execute monetary transactions or hold payment credentials.
 - **No reverse coupling to scouting.** Transit remains an independent transport search and persistence

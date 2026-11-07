@@ -1,7 +1,7 @@
 //! Rung 1 and rung 2 of the redaction ladder (PRD §6.2): the shape detectors and the
 //! contextual person cues, as word-level predicates.
 //!
-//! **This is the only copy.** `capabilities/comms/src/cloud_derivative.rs` (the destructive
+//! **This is the only copy.** `crates/comms/src/cloud_derivative.rs` (the destructive
 //! `prepare` path, `REDACTION_VERSION`) and [`crate::session`] (the reversible path,
 //! `PSEUDONYMIZE_VERSION`, PRD §6.2c) both call these functions. Two copies drifted once
 //! already: the reversible path's number rule accepted only digits, dashes and spaces and

@@ -340,10 +340,10 @@ door that was already open.
 **What replaces it is speed and reporting, not silence.** Four things move on their own, and each
 one leaves something a check can read:
 
-- `capabilities/host-patch` runs `tools/host-patch.sh` every 24 hours — `brew update`, `brew
+- `services/host-patch` runs `tools/host-patch.sh` every 24 hours — `brew update`, `brew
   upgrade --formula`, `brew upgrade --cask --greedy`, `brew cleanup`, one `uv tool upgrade` per
   installed tool, `rustup update`, then `tools/audit`.
-- `capabilities/container-refresh` runs `tools/container-refresh.sh` every 24 hours on a host
+- `services/container-refresh` runs `tools/container-refresh.sh` every 24 hours on a host
   that runs containers: it pulls every image a `service.toml` declares and recreates the ones
   whose digest moved.
 - `.github/dependabot.yml` opens the repository half daily. Cargo and github-actions carry
@@ -390,7 +390,7 @@ working.
 
 **Container images track a channel.** A `service.toml` `tag` names the publisher's rolling tag —
 `:stable` for Home Assistant, `:latest` for Pi-hole, `:alpine` for Vaultwarden — and
-`capabilities/container-refresh` pulls every declared image every 24 hours, recreating the
+`services/container-refresh` pulls every declared image every 24 hours, recreating the
 container when the digest moves. `tools/check-service-tomls.sh` refused `latest` until 2026-09-02;
 it was defending a reproducibility a tag never gave, since publishers rebuild under the same
 literal. The digest is what identifies a running image.

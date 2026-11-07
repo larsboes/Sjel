@@ -66,7 +66,7 @@ sjel run <harness> --provider <name> --project <dir>
 5. `exec` the harness under `sandbox-exec`. Child processes inherit the profile.
 
 Placement: the profile generator and the proxy go in one library that `sjel run` and
-`capabilities/agent` share, so the agent's `project` tier gets the same boundary (A1). Rust,
+`crates/agent` share, so the agent's `project` tier gets the same boundary (A1). Rust,
 no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stack.
 
 ## 4. Harnesses
@@ -104,7 +104,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    process can still connect to any loopback port directly, so the live node is closed by its
    token alone; denying the live ports in the profile is the second layer.
 4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1.
-5. **`capabilities/agent` `project` tier** on the same library. Closes A1.
+5. **`crates/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
    reviewed entry with a ring. The review (`why`, `reviewed_at`) is a human task.
    - **One entry per variant.** A subscription and an API key from the same company have

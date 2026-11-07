@@ -1,4 +1,4 @@
-//! Room measurements and RoomPlan revisions owned by `capabilities/interior`.
+//! Room measurements and RoomPlan revisions owned by `crates/interior`.
 
 use std::sync::Arc;
 

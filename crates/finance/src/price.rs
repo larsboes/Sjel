@@ -14,7 +14,7 @@
 //!
 //! **A per-instrument failure is a recorded row, never a fatal run.** Every
 //! attempt writes a `finance_price_fetches` row with a status, modelled on
-//! `capabilities/places/src/store.rs`'s geocode cache. One instrument refusing
+//! `crates/places/src/store.rs`'s geocode cache. One instrument refusing
 //! must not cost the other twelve their prices.
 //!
 //! A fetched price is **never** written back into the reviewed holdings

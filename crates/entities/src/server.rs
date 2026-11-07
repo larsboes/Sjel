@@ -1,6 +1,6 @@
 //! entities HTTP surface (port 8097), and the `sync-journal` / `sync-google` commands.
 //!
-//! Same shape as `capabilities/traveler`: blocking store work in `spawn_blocking`, `/ready`
+//! Same shape as `crates/traveler`: blocking store work in `spawn_blocking`, `/ready`
 //! proves the database, `/routes` serves the manifest the tests check against this file.
 //! No CORS: this serves C2, and the shared origin guard refuses a foreign browser origin.
 

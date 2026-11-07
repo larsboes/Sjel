@@ -42,7 +42,7 @@ TARGET_FLAG=""
 SOURCE_FLAG=""
 CAP=""
 # A flag loop rather than the fixed-arity `case` this replaced, because
-# `--target` is a third axis: capabilities/backup drives one run per capability
+# `--target` is a third axis: crates/backup drives one run per capability
 # and names the target itself, which is what makes the target a per-run choice
 # instead of one overlay role for the whole machine.
 while [ $# -gt 0 ]; do
@@ -238,7 +238,7 @@ if [ -f "$SJEL_MACHINE_TOML" ]; then
 fi
 
 # `--target` is the per-RUN choice and outranks both the manifest and the
-# machine's own override: capabilities/backup resolved it for this run, and a
+# machine's own override: crates/backup resolved it for this run, and a
 # flag that silently lost to a config file would be worse than no flag at all.
 if [ -n "$TARGET_FLAG" ]; then TARGET_ID="$TARGET_FLAG"; fi
 
@@ -246,7 +246,7 @@ if [ "$STREAM" -eq 0 ]; then
   [ -n "$TARGET_ID" ] || { echo "backup.sh: $CAP has no backup_target in service.toml" >&2; exit 1; }
 fi
 # A capability declares its data as host paths, paths read from inside the container, a
-# live database copy, or a mix. capabilities/store declares only the third: its file has no
+# live database copy, or a mix. services/store declares only the third: its file has no
 # containing directory worth tarring and no container to read it from.
 [ "${#PATHS[@]}" -gt 0 ] || [ "${#CPATHS[@]}" -gt 0 ] || [ -n "$SQLITE_ONLINE_REL" ] || {
   echo "backup.sh: $CAP declares no backup_paths, backup_container_paths or backup_sqlite_online in service.toml" >&2; exit 1; }
@@ -446,7 +446,7 @@ stage_host_paths() {
   for p in "${PATHS[@]}"; do
     src="$SRC_ROOT/$p"
     dest="$STAGE/$p"; mkdir -p "$(dirname "$dest")"
-    # A declared path may be a single FILE, not only a directory. `capabilities/finance`
+    # A declared path may be a single FILE, not only a directory. `crates/finance`
     # is the case that needed it: its canonical truth is one journal directory plus two
     # individual files (config/finance.json and the reviewed-holdings snapshot), and
     # neither has a directory of its own to declare — config/ holds every other
@@ -959,7 +959,7 @@ contents=""
 # answers "what was IN the archive that landed", which is the question a
 # later verification needs: retention must check an archive against the digest
 # recorded when it was produced, never against one recomputed from bytes that
-# may already have changed. capabilities/backup records one run row per
+# may already have changed. crates/backup records one run row per
 # archive and reads these; the store iCloud gate already writes them for its
 # own target, which is why an identical pre-existing file is accepted and a
 # conflicting one is fatal rather than silently replaced.

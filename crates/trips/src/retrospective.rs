@@ -17,7 +17,7 @@
 //! falsified by "a person name in its output". `by_destination` adds
 //! no exposure, because `GET /api/plans` already serves `destinations` over the
 //! same permissive layer. The three preconditions for bringing the companion
-//! half back are written down in `capabilities/trips/README.md`.
+//! half back are written down in `crates/trips/README.md`.
 
 use serde::{Deserialize, Serialize};
 

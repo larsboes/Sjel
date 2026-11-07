@@ -17,10 +17,10 @@
 //!
 //! ## The 250 ms pause is this file's, not transit's
 //!
-//! `capabilities/transit/src/hafas.rs` sets a 15 s client timeout on the search
+//! `crates/transit/src/hafas.rs` sets a 15 s client timeout on the search
 //! and carries no inter-request pause; the `std::thread::sleep(250)` in that
 //! file sits inside the split-ticket `for i / for j` loop. The fan-out cadence
-//! is transit's own CLI rule (`capabilities/transit/README.md`, the fan-out
+//! is transit's own CLI rule (`crates/transit/README.md`, the fan-out
 //! section), so a caller that fans out over the HTTP route has to keep it
 //! itself. Fares are a scrape behind a spoofed user agent; eight sequential
 //! searches per plan search is a new traffic pattern against an undocumented
@@ -47,7 +47,7 @@ const SUGGEST_TIMEOUT: Duration = Duration::from_secs(5);
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Keys per climate request. The producer's own bound (`MAX_CLIMATE_KEYS` in
-/// `capabilities/places/src/server.rs`), kept here so a shortlist longer than
+/// `crates/places/src/server.rs`), kept here so a shortlist longer than
 /// eight is chunked rather than refused.
 const CLIMATE_BATCH_KEYS: usize = 8;
 
@@ -199,7 +199,7 @@ impl HttpSources {
     ///
     /// `GET /api/search` takes EVA codes only, and `places` carries `eva:<code>`
     /// on its station rows only, so a city has to be resolved. This extends a
-    /// path that already exists: `capabilities/places/src/backfill.rs` resolves
+    /// path that already exists: `crates/places/src/backfill.rs` resolves
     /// bare codes through the same surface.
     fn eva_for(&self, name: &str) -> Result<Option<String>, String> {
         if let Some(hit) = self.eva_cache.borrow().get(name) {
@@ -332,7 +332,7 @@ impl Sources for HttpSources {
     /// is correct with zero climate calls.
     ///
     /// It is chunked because the producer refuses more than
-    /// `MAX_CLIMATE_KEYS` = 8 keys per request (`capabilities/places`, handler
+    /// `MAX_CLIMATE_KEYS` = 8 keys per request (`crates/places`, handler
     /// `climate`) while this search shortlists up to [`MAX_MAX_CANDIDATES`]
     /// = 20. One oversized call would answer 400 and lose the factor for every
     /// candidate.
@@ -442,7 +442,7 @@ impl Sources for HttpSources {
 ///
 /// One shape, the producer's: `{best_months_rule, attribution, results:[{key,
 /// resolved_by, matched_place, months:[{month, best_month, ...}]}]}`
-/// (`capabilities/places/src/server.rs`, handler `climate`). `key` is the id
+/// (`crates/places/src/server.rs`, handler `climate`). `key` is the id
 /// this search asked about and the id the rest of the search keys by, so it is
 /// preferred over `matched_place.id`, which is the place the producer resolved
 /// it to.
@@ -567,7 +567,7 @@ mod tests {
 
     /// The producer's real envelope, read by `key` and scored from
     /// `months[].best_month`. Written against the body
-    /// `capabilities/places`' `GET /api/climate` handler builds.
+    /// `crates/places`' `GET /api/climate` handler builds.
     #[test]
     fn a_climate_batch_is_read_by_the_key_the_search_asked_about() {
         let body = json!({

@@ -21,7 +21,7 @@ reference, short supporting excerpt and extracted fields. Do not persist full ma
 existing data-class boundaries: c2 stays local and c3 never enters a prompt. The owner validates,
 stages and reviews each proposal, and applies approved changes through its own contract. Retain
 provenance, protect against stale target revisions and make repeated scans idempotent across
-messages and multi-item orders. The existing task watch in `capabilities/comms/src/task_links.rs`
+messages and multi-item orders. The existing task watch in `crates/comms/src/task_links.rs`
 writes directly and is not the review queue.
 
 **Done when:** an existing-mail backfill and subsequent sweeps surface reviewable project and
@@ -92,7 +92,7 @@ applies the rest locally. Measure local alignment on real mail that matches an e
 project first; build this only if local matching fails. It needs two decisions: whether the
 owner's own name as recipient keeps a mail `c1` instead of `c2`, and whether an automatic
 title-only derivative may skip the per-document preview approval of
-`capabilities/comms/src/cloud_derivative.rs`. Class gate: `content_item::cloud_admission`.
+`crates/comms/src/cloud_derivative.rs`. Class gate: `content_item::cloud_admission`.
 
 ## 1. Import
 
@@ -222,7 +222,7 @@ must be resolved before enabling automatic processing for browser-provided mater
 
 Decided 2026-10-28: a vendored, detached fork of upstream; native messaging as the only
 transport; versioned clip documents for the template behaviors; Chrome first, Safari next.
-Shipped in `31efb1e2`: the Sjel Clipper (`capabilities/comms/clipper`, README there), the clip
+Shipped in `31efb1e2`: the Sjel Clipper (`crates/comms/clipper`, README there), the clip
 store and socket in `comms`, `comms clips`, and `tools/clipper`. Upstream's 218 tests and five
 destination tests pass; one upstream fixture fails at the pinned revision and is skipped. A
 native-messaging ping reaches the live `comms-server`. Open, in order:
@@ -244,7 +244,7 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
    and compose multi-turn LLM sessions (`Prompt 1` / `Text 1`, `Prompt 2` / `Text 2`, …) with
    verified link and footnote preservation across both the Chrome Clipper and `Feed › Clips` in
    GPUI.
-   - **Browser extension (`capabilities/comms/clipper`).** Added recursive shadow DOM traversal
+   - **Browser extension (`crates/comms/clipper`).** Added recursive shadow DOM traversal
      in `flatten-shadow-dom.js` and custom extractor in `src/utils/ai-studio-extractor.ts` to capture
      turns, thoughts, and grounding citations (`[N](url)`) on Google AI Studio (`aistudio.google.com`).
      Integrated into `parseForClip`, `getPageContent`, `copyMarkdownToClipboard`, and `saveMarkdownToFile`.
@@ -258,7 +258,7 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
      saving over `libs/clip-socket`. Added **Citation & Link Audit** chip strip in both composer turn cards
      and document reader view. Enabled clickable links in `doc_view.rs`.
    - **Verified with:** (a) 337 passing unit tests in `apps/gpui/core` (`cargo test`); (b) 227 passing
-     unit tests in `capabilities/comms/clipper` (`bun run check`); (c) clean compilation of GPUI desktop
+     unit tests in `crates/comms/clipper` (`bun run check`); (c) clean compilation of GPUI desktop
      app (`cargo check --manifest-path apps/gpui/Cargo.toml`); and (d) successful production build of
      the Chrome extension (`bun run build`).
    - **Large clip reading and lifecycle (working tree).** Comms supports deleting one clip document
@@ -375,7 +375,7 @@ battery profile still admits oMLX.
 Features should adapt to what the user actually does. Not designed yet. Inputs that
 exist:
 
-- `capabilities/operator-profile` and `capabilities/traveler`: preferences and derived patterns.
+- `crates/operator-profile` and `crates/traveler`: preferences and derived patterns.
   Profile proposals are served on `GET /api/profile/proposals`, and pseudonymous companion
   patterns on `GET /api/profile/derived`. Open: the offered-versus-chosen half. 28 `option_set`
   items exist on one plan, and one plan is one observation, not a preference.
@@ -424,7 +424,7 @@ Open items that belong to one capability and to no priority yet.
 - **Mail authenticity.** Decided 2026-11-03: a deterministic header rung, a body rung for links
   and forwards, and a local-model rung. The verdict is a flag only, and a forward is checked
   against the sender its quoted header names. All three rungs: built
-  (`capabilities/comms/README.md`, "Mail authenticity"). A live sweep of 200 inbox threads
+  (`crates/comms/README.md`, "Mail authenticity"). A live sweep of 200 inbox threads
   gave 194 `verified`, 4 `unverified` (all forwards) and 2 `suspicious`, before the
   sending-platform exemption. A body audit of 45 mails found one false positive (a brand
   redirect domain), which the authenticated-sender rule now handles. Open: measure the model
@@ -450,7 +450,7 @@ Open items that belong to one capability and to no priority yet.
   raised the alert for `mac-mini-m4-pro` at €1,401.02 against a €1,500 limit.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.
-- **Web Links launcher (in progress, Mac-first; implementation is in the uncommitted working tree).** Build a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `capabilities/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `capabilities/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `libs/links` capability contract continues to own typed record references (`website/content/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
+- **Web Links launcher (in progress, Mac-first; implementation is in the uncommitted working tree).** Build a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `crates/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `crates/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `libs/links` capability contract continues to own typed record references (`website/content/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
 
   - A record represents a destination, not just a hostname: e.g. `reddit.com/r/rust` and `reddit.com/r/golang` can be independently opened and pinned. Normalize scheme and host, remove fragments, and preserve query parameters on manually entered URLs; history candidates drop query and fragment data. Group by normalized host, then apply explicit per-host tenant rules. Users can rename, regroup and pin or unpin destinations; dismissed history candidates stay dismissed. Derived suggestions never silently move or delete operator-curated records.
   - Seed through an explicit Chrome and Safari history scan, bounded to a user-selected 30-, 90- or 180-day range and a minimum of three visits. Read-only sources are snapshotted before query; candidates are staged locally, and only an explicit keep decision saves them. Manual add and paste remain available.

@@ -1,6 +1,6 @@
 //! CV: Profile variations, PDF builds, application ledger, and LinkedIn synchronization.
 //!
-//! Replaces the dashboard `/cv` route. Backed by `capabilities/cv/cv` via sjel-status.
+//! Replaces the dashboard `/cv` route. Backed by `crates/cv/cv` via sjel-status.
 
 pub mod applications;
 pub mod builder;

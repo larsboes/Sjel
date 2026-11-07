@@ -97,7 +97,7 @@ row type in the backlog view.
 |---|---|
 | `<overlay>/data/sjel/sjel.db` | the database. Resolved by `sjel_config::database_path()`; `SJEL_DB_PATH` overrides it, and is the one variable that moves a deployment |
 | `<overlay>/data/sjel/sjel.db-wal`, `-shm` | SQLite's own sidecars. WAL mode is set on every connection open (`libs/sjel-store`), not stored in this repo |
-| `<overlay>/data/sjel/sjel-local-*.lock` | cross-process admission locks, one file per inference backend (`capabilities/comms/src/local_gate.rs`). Not state, and deliberately not backed up |
+| `<overlay>/data/sjel/sjel-local-*.lock` | cross-process admission locks, one file per inference backend (`crates/comms/src/local_gate.rs`). Not state, and deliberately not backed up |
 | `service.toml` | `kind = "data"`: the backup contract, and the only manifest that owns this file |
 
 There is no env template and no password. A file has no connection string, which is most of the

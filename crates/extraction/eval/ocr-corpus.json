@@ -1,5 +1,5 @@
 {
-  "_note": "Judgements were written from the .typ sources in fixtures/, before any engine was run against the rendered pages. Revise a judgement from what the page SAYS, never to turn a failing engine green (capabilities/comms/eval/README.md, 'Why this shape: judgements before scores').",
+  "_note": "Judgements were written from the .typ sources in fixtures/, before any engine was run against the rendered pages. Revise a judgement from what the page SAYS, never to turn a failing engine green (crates/comms/eval/README.md, 'Why this shape: judgements before scores').",
   "_matching": "Every string below is matched after collapsing each run of whitespace to one space, on both sides. An OCR engine's line breaks are a fact about the renderer's line width, not about the characters it read, and this corpus judges the characters.",
   "acceptance": {
     "minimum_must_survive_percent": 100.0,

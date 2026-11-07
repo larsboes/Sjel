@@ -1,6 +1,6 @@
 //! Persistence for `transit_trips`/`transit_trip_legs` -- the "own
 //! trips/trip_legs tables" half of Phase 2 (defined in
-//! `capabilities/store/README.md`) --
+//! `services/store/README.md`) --
 //! plus `transit_trip_sessions` (Phase 3: fuzzy/triggered trip-search
 //! sessions). Same shared file as every other store-owning capability, under
 //! this one's table prefix: PRD Q45 (2026-08-27) retired Postgres, and the
@@ -369,7 +369,7 @@ impl TransitStore {
     // (candidate x sampled date) and records every found journey into the
     // existing `trips`/`trip_legs` tables tagged `trigger_reason = "session"`
     // with `session_id` set back to this row. Same store, different query
-    // path than the background scan -- see `capabilities/store/README.md`
+    // path than the background scan -- see `services/store/README.md`
     // driving query #2 and the module doc above.
 
     /// Upserts a session row keyed on `id`. `id` is expected to be the
@@ -847,7 +847,7 @@ mod unit_tests {
 }
 
 /// Database-backed; named for the selector CI splits on — see
-/// `capabilities/scouting/src/store.rs` for why the name is the contract. It
+/// `crates/scouting/src/store.rs` for why the name is the contract. It
 /// was `postgres_tests` until PRD Q45.
 #[cfg(test)]
 mod db_tests {

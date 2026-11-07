@@ -1,4 +1,4 @@
-//! A coordinate for a place name, from `capabilities/places`.
+//! A coordinate for a place name, from `crates/places`.
 //!
 //! Places owns geocoding: the provider, its rate limit and the permanent cache. So this asks
 //! places over HTTP rather than calling the provider itself. Only the place text is sent,
@@ -48,7 +48,7 @@ pub fn resolve(places_url: &str, place: &str) -> Resolved {
     parse(&body)
 }
 
-/// The geocode reply as `capabilities/places/src/server.rs` writes it.
+/// The geocode reply as `crates/places/src/server.rs` writes it.
 pub fn parse(body: &Value) -> Resolved {
     let place = &body["place"];
     match (place["latitude"].as_f64(), place["longitude"].as_f64()) {

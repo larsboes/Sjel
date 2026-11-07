@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use super::{Item, Stage};
 
-/// The disclosure radius of `capabilities/places` (README, D4).
+/// The disclosure radius of `crates/places` (README, D4).
 pub const AROUND_RADIUS_KM: f64 = 50.0;
 
 /// One person's place on a day (`GET /entities/api/located`).

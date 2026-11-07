@@ -162,7 +162,7 @@ pub(super) struct FeedListItem {
     ///
     /// On the LIST, not only on the reader, because the one consumer that needs
     /// it reads the list: finance's `item_is_quotable`
-    /// (`capabilities/finance/src/server.rs`) copies a feed item's title and URL
+    /// (`crates/finance/src/server.rs`) copies a feed item's title and URL
     /// into a `c1` decision row only when comms states a class no stricter than
     /// that row's own, and it fails CLOSED. While this field was absent, every
     /// item was dropped and a decision shipped with no reading attached. The

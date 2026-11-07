@@ -22,15 +22,15 @@ path = "src/gate_main.rs"
 # The PDF rung is a feature, not a fact about this crate.
 #
 # Enabling it links the `xberg` crate, whose surface `upstreams.toml [xberg]`
-# measures at 320 unique crates with html+pdf on. `capabilities/transit` pays a
+# measures at 320 unique crates with html+pdf on. `crates/transit` pays a
 # subprocess boundary specifically to keep that out of its build
-# (capabilities/transit/src/document.rs, "Shells out to the xberg CLI"), and it
+# (crates/transit/src/document.rs, "Shells out to the xberg CLI"), and it
 # is a consumer of this crate now. A dependency that arrived by promotion would
 # override a decision that capability made deliberately, so the consumer says
 # whether it wants the rung.
 #
 # On by default because a consumer that says nothing wants the whole ladder;
-# `capabilities/transit` is the one that opts out.
+# `crates/transit` is the one that opts out.
 default = ["xberg"]
 xberg = ["dep:xberg", "dep:tokio"]
 
@@ -41,7 +41,7 @@ thiserror.workspace = true
 # home; a second answer is the defect that library exists to end. Not optional
 # and not feature-gated, unlike `xberg` below: this adds no crate to either
 # consumer's build that it did not already have (`sjel-inference` links serde,
-# serde_json and reqwest, and `capabilities/comms` and `capabilities/transit`
+# serde_json and reqwest, and `crates/comms` and `crates/transit`
 # each declare all three directly).
 sjel-inference = { path = "../inference" }
 # The corpus gate reads its judgements from `eval/ocr-corpus.json` and writes a
@@ -50,7 +50,7 @@ sjel-inference = { path = "../inference" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 xberg = { version = "=1.3.10", features = ["html", "pdf"], optional = true }
-# `full` because that is what `capabilities/comms` carried when this code lived
+# `full` because that is what `crates/comms` carried when this code lived
 # there: `extract_blocking` calls `enable_all()`, which enables whichever
 # drivers are compiled in, so trimming the feature set here would silently give
 # xberg a runtime with fewer drivers than the one it was measured on.

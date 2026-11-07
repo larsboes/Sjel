@@ -31,7 +31,7 @@ sjel-http = { path = "../sjel-http" }
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }
-# The candidate identity, shared with capabilities/places, which re-derives it.
+# The candidate identity, shared with crates/places, which re-derives it.
 # One implementation because 263 live venue links resolve only while the two
 # agree byte for byte.
 candidate-fingerprint = { path = "../candidate-fingerprint" }
@@ -60,12 +60,12 @@ sha2.workspace = true
 # Its own dependencies are serde and serde_json only; calendar and comms already take it.
 content-item = { path = "../content-item" }
 # The loopback feed lookup and the two networked price providers. The literal is
-# matched to capabilities/trips so the workspace resolves one reqwest.
+# matched to crates/trips so the workspace resolves one reqwest.
 reqwest = { workspace = true, features = ["blocking", "json", "cookies"] }
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, so the origin test drives the wired Router with no listener
-# and no port. The same pattern capabilities/sjel-status already uses.
+# and no port. The same pattern crates/sjel-status already uses.
 tower = { workspace = true, features = ["util"] }
 
 [lints]

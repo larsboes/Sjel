@@ -1,5 +1,5 @@
 //! The places register and the people it links to: `places_places` and `places_person_places`
-//! (`capabilities/places/src/store.rs`).
+//! (`crates/places/src/store.rs`).
 //!
 //! Two tables, one question — "who is this, and where have we been together" — so this module owns
 //! both the place row and the link, and the rules that join them. The link stores a person's *name*,

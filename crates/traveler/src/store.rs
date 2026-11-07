@@ -109,7 +109,7 @@ impl TravelerStore {
     /// Add the journey weight block to a table that predates it.
     ///
     /// SQLite can add a column but cannot alter one, so this is the easy half of
-    /// the migration `capabilities/trips` needed for `not_taken`: no rebuild, no
+    /// the migration `crates/trips` needed for `not_taken`: no rebuild, no
     /// copy, no temporary table. The default is `{}`, which `JourneyWeights`'s
     /// `#[serde(default)]` reads as the built-in values — so an existing row keeps
     /// working and its basis still says `default`, which is the truth: nobody has
@@ -178,7 +178,7 @@ impl TravelerStore {
     ///
     /// The revision check happens inside the write transaction, not before it.
     /// Read-then-write outside a transaction is the lost-update race the
-    /// dashboard already has to avoid by hand (`capabilities/trips` states the
+    /// dashboard already has to avoid by hand (`crates/trips` states the
     /// same rule for `expected_updated_at`), and an agent holds a read across
     /// turns while it calls other capabilities, which is exactly the window this
     /// closes.
@@ -256,7 +256,7 @@ impl TravelerStore {
 /// A table prefix is interpolated into SQL rather than bound, because SQLite has
 /// no placeholder for an identifier. So it is checked here, once, on the way in.
 ///
-/// Same rule and same reason as `capabilities/places/src/store.rs`: the prefix
+/// Same rule and same reason as `crates/places/src/store.rs`: the prefix
 /// arrives from configuration, and a value that reaches `format!` unchecked is
 /// how a config typo becomes SQL.
 pub(crate) fn validate_prefix(prefix: &str) -> Fallible<()> {

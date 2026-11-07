@@ -817,7 +817,7 @@ pub fn verbatim_cloud_allowed(data_class: &str) -> bool {
 /// and a local model is still a log, a context window and a cache.
 ///
 /// This is what makes `processing_policy(..).local_processing` mechanical rather
-/// than declared: `capabilities/comms`'s digest and media prompt-builders ask
+/// than declared: `crates/comms`'s digest and media prompt-builders ask
 /// this function before they build a prompt (T3).
 pub fn local_prompt_allowed(data_class: &str) -> bool {
     matches!(data_class, "c0" | "c1" | "c2")
@@ -834,7 +834,7 @@ pub fn local_prompt_allowed(data_class: &str) -> bool {
 /// [`DATA_CLASSES`] × [`CLOUD_DATA_TIERS`] clears [`cloud_admission`]. That is
 /// the whole point of exporting it: a caller who only needs this coarse answer
 /// would otherwise write the two admitted class names out again beside the
-/// policy, free to disagree with it. `capabilities/comms`'s
+/// policy, free to disagree with it. `crates/comms`'s
 /// `cloud_derivative::prepare` did exactly that, and it is the *first* gate a
 /// cloud lane passes, so its copy narrowing later than this one would build an
 /// approvable preview of a document with no lane (T3).

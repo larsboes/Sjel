@@ -1,6 +1,6 @@
 //! A marked region a machine may regenerate, inside a file a human owns.
 //!
-//! `capabilities/trips/README.md` specified this in prose a month before anything
+//! `crates/trips/README.md` specified this in prose a month before anything
 //! implemented it: regenerate only a marked Sjel-owned section, preserve
 //! everything outside it, and record a conflict rather than choosing between two
 //! changed revisions. Every capability that wants to write back to a knowledge

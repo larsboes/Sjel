@@ -98,7 +98,7 @@ refuses the row.
 `c3` is refused every local prompt too, and that is now a gate rather than a declaration:
 `content_item::local_prompt_allowed` answers `false` for `c3` and for any unrecognized value, both
 prompt-builders that read stored text ask it before they build a prompt —
-`capabilities/comms/src/digest.rs` (digest, diagram and chart) and `capabilities/comms/src/media.rs`
+`crates/comms/src/digest.rs` (digest, diagram and chart) and `crates/comms/src/media.rs`
 (`summarize`) — and `processing_policy(..).local_processing` is derived from the same function. A
 refused item gets a `local_refused` row that says so, not a missing one. Embed and rerank
 (`libs/inference`) stay class-blind and loopback-or-nothing.
@@ -106,7 +106,7 @@ refused item gets a `local_refused` row that says so, not a missing one. Embed a
 A refusal is missing evidence, never a free pass. A ranker that redistributes a refused factor's
 weight over the surviving factors promotes exactly what the gate refused, so the refused share is
 withheld instead and the weights sum below 1.0 on purpose (PRD Q89, 2026-09-05; measured on the
-mail band in `capabilities/comms/README.md`).
+mail band in `crates/comms/README.md`).
 
 Data may select an allow-listed behavior but may not become executable code.
 

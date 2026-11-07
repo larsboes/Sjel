@@ -214,7 +214,7 @@ fn repo_root() -> Result<PathBuf, String> {
 
 /// The overlay's policy file.
 ///
-/// Resolved through `sjel_config::overlay_root`, exactly as `capabilities/host-net` resolves
+/// Resolved through `sjel_config::overlay_root`, exactly as `crates/host-net` resolves
 /// its own policy — so `SJEL_PERSONAL_ROOT` is the one input, and the sjel.local.toml →
 /// sjel.toml order stays owned by `tools/lib/paths.sh` and `libs/overlay/overlay.ts`. A
 /// third copy of that order in Rust is what this avoids; the launcher sources `paths.sh`.

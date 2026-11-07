@@ -167,7 +167,7 @@ pub fn undeclared_routes(source: &str, routes: &[Route]) -> Vec<String> {
 /// URL — and the routes it could then miss are exactly what this exists to
 /// catch. So the cost lands on prose instead. A comment that spells the mount
 /// call out byte for byte reads as a served path; write about it without
-/// quoting it, the way `capabilities/sjel-status/src/main.rs` does at the two
+/// quoting it, the way `crates/sjel-status/src/main.rs` does at the two
 /// mounts that occasioned this.
 fn served_paths(source: &str) -> Vec<String> {
     const MARKER: &str = ".route(";

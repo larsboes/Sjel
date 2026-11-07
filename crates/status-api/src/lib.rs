@@ -68,7 +68,7 @@ impl CapabilityHealth {
     }
 }
 
-/// `GET /api/sjel-status/health` (`SjelStatusHealth` in `capabilities/sjel-status/src/status/registry.rs`).
+/// `GET /api/sjel-status/health` (`SjelStatusHealth` in `crates/sjel-status/src/status/registry.rs`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct NodeHealth {
     #[serde(default)]
@@ -270,7 +270,7 @@ pub struct BackupStatus {
     pub attempt: Option<BackupRunAttemptRecord>,
 }
 
-/// `GET /api/sjel-status/backups` (`backups_handler` in `capabilities/sjel-status/src/status/backup.rs`).
+/// `GET /api/sjel-status/backups` (`backups_handler` in `crates/sjel-status/src/status/backup.rs`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Backups {
     pub backups: Vec<BackupStatus>,
@@ -288,7 +288,7 @@ impl Backups {
 
 // --- Search Hit ---
 
-/// One server search result (`capabilities/sjel-status/src/status/search.rs`).
+/// One server search result (`crates/sjel-status/src/status/search.rs`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ServerHit {
     pub kind: String,

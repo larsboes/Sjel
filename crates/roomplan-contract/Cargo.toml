@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-# The capture body's request schema in the routes manifest (`capabilities/interior`).
+# The capture body's request schema in the routes manifest (`crates/interior`).
 schemars = "1.2.2"
 
 [dev-dependencies]

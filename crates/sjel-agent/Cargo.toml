@@ -24,7 +24,7 @@ path = "src/bin/eval.rs"
 
 [dependencies]
 # Outbound HTTP goes through one factory (libs/sjel-http), and it is blocking: an async caller
-# such as capabilities/assistant runs the loop inside `spawn_blocking`.
+# such as crates/assistant runs the loop inside `spawn_blocking`.
 sjel-http = { path = "../sjel-http" }
 sjel-extraction = { path = "../extraction", default-features = false }
 sjel-inference = { path = "../inference" }

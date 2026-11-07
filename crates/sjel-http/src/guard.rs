@@ -1,9 +1,9 @@
 //! What an outbound URL has to prove before a request is made.
 //!
-//! Promoted from `capabilities/comms/src/media.rs`, which was the only place in the
+//! Promoted from `crates/comms/src/media.rs`, which was the only place in the
 //! workspace that validated an outbound URL's destination — `rg` found no equivalent
-//! anywhere else, while `capabilities/scouting` fetches URLs that come from adapter
-//! config and remote feeds and `capabilities/places` fetches from a configured
+//! anywhere else, while `crates/scouting` fetches URLs that come from adapter
+//! config and remote feeds and `crates/places` fetches from a configured
 //! geocoder base. The guard belongs on the way in to `client.get(url)`, which is
 //! this crate, so one lib owns both halves of the same door.
 //!
@@ -239,7 +239,7 @@ pub const MAX_REDIRECTS: usize = 10;
 /// ## Why a default and not an option
 ///
 /// [`check_destination`] checks the URL the caller handed over, and the caller is the
-/// one place a redirect is invisible. `capabilities/comms/src/media/http.rs` wrote this
+/// one place a redirect is invisible. `crates/comms/src/media/http.rs` wrote this
 /// out first — "checking only the URL the caller handed over leaves
 /// `302 -> http://169.254.169.254/` as a complete bypass" — and then hand-rolled the
 /// policy for itself, which left it as one capability's habit rather than the crate's
@@ -255,7 +255,7 @@ pub const MAX_REDIRECTS: usize = 10;
 /// A hop is refused when it leaves the public internet for this machine or this
 /// network. A chain that started inside stays free to move inside: eight call sites in
 /// this workspace point a client at `http://127.0.0.1:<port>` on purpose, because that
-/// is how one capability calls another (`capabilities/trips/src/finance_client.rs`,
+/// is how one capability calls another (`crates/trips/src/finance_client.rs`,
 /// `interior_client.rs`, `places/src/backfill.rs`, calendar's trips client), and a
 /// policy that refused a private destination outright would break them the first time
 /// axum answered a 307. The pivot is the attack; a loopback caller reaching loopback is
@@ -627,7 +627,7 @@ mod wired_tests {
     use std::net::TcpListener;
 
     /// `Connection: close` on every reply, matching the stub
-    /// `capabilities/places/src/geocode.rs` already uses. Without it hyper keeps the
+    /// `crates/places/src/geocode.rs` already uses. Without it hyper keeps the
     /// connection alive, this one-request-per-socket loop drops it, and the client
     /// reports `IncompleteMessage` for a response that was in fact complete — measured
     /// while writing these two tests.

@@ -3,7 +3,7 @@
 //! database, and `GET /routes` serves the manifest the coverage test below
 //! checks against this file's own source.
 //!
-//! No permissive CORS, following `capabilities/places` rather than `trips`. This
+//! No permissive CORS, following `crates/places` rather than `trips`. This
 //! serves personal state — where the traveller lives, when they refuse to
 //! travel, what they are interested in — and will serve companion patterns. The
 //! shared guard refuses a foreign browser origin outright rather than only

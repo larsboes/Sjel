@@ -5,7 +5,7 @@
 //! runs in both directions over the same signed connection the app already has:
 //!
 //! 1. **Push.** Each queued write is replayed, oldest first, through the routes the Mac already
-//!    has for the web dashboard (`capabilities/projects/README.md`). A write replays in order and
+//!    has for the web dashboard (`crates/projects/README.md`). A write replays in order and
 //!    the queue stops at the first refusal, because two edits of one note are a sequence: applying
 //!    the older one last would move the note backwards. A record the Mac has never had is created
 //!    there with its project, since a record cannot live in a project that does not exist.
@@ -37,7 +37,7 @@ const TASKS_DONE: &str = "/projects/api/tasks/done";
 const RECORD_PROPERTY: &str = "/projects/api/record/property";
 const RECORD_REMOVE: &str = "/projects/api/record/remove";
 /// The calendar's entries: a create on the collection, a change and a delete by id, and a change
-/// feed that answers what moved since a cursor (`capabilities/calendar/src/server.rs`).
+/// feed that answers what moved since a cursor (`crates/calendar/src/server.rs`).
 const CAPTURES: &str = "/comms/captures";
 
 const ENTRIES: &str = "/calendar/api/entries";
@@ -71,7 +71,7 @@ impl Reply {
     ///
     /// The phrasings are the capability's own, measured against a live shell: `no record "…"` from
     /// a save, `no task "…"` from a done toggle, `no live project named "…"` where the project is
-    /// checked first (`capabilities/projects/src/ops.rs`).
+    /// checked first (`crates/projects/src/ops.rs`).
     fn missing(&self) -> bool {
         if !matches!(self.status, 400 | 404) {
             return false;
@@ -830,7 +830,7 @@ async fn pull_calendar<H: Host>(
 }
 
 /// One entry out of the calendar capability's JSON (`Entry` in
-/// `capabilities/calendar/src/model.rs`), with the stamp this replica records it at.
+/// `crates/calendar/src/model.rs`), with the stamp this replica records it at.
 fn entry_from_json(value: &Value) -> Option<(CalendarEntry, String)> {
     let stamp = value["updated_at"].as_str().unwrap_or_default().to_owned();
     let entry = CalendarEntry {

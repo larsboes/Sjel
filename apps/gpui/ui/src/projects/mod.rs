@@ -586,7 +586,7 @@ impl Projects {
     /// the click lands in; otherwise this reads it first, because a list read carries no content.
     /// The open note's title: a field while it is being typed, else a heading that opens one.
     ///
-    /// A title is the record's file name (`capabilities/projects`), so renaming moves the file.
+    /// A title is the record's file name (`crates/projects`), so renaming moves the file.
     /// The phone and its replica keep it read-only: a move there would arrive at the Mac as a new
     /// note beside the old one.
     fn note_title(

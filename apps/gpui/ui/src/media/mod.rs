@@ -1,6 +1,6 @@
 //! Media: Exact-byte ingest gate, volume integrity ledger, and run inspection.
 //!
-//! Replaces the dashboard `/media` route. Backed by `capabilities/media` via sjel-status.
+//! Replaces the dashboard `/media` route. Backed by `crates/media` via sjel-status.
 
 pub mod inspector;
 pub mod runs;

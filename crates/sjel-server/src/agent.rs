@@ -68,7 +68,7 @@ const MAX_WRITE_BODY_BYTES: usize = 8 * 1024 * 1024;
 const SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// Larger responses are refused rather than buffered: the view needs the whole body.
 const MAX_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
-/// Overlay-relative, shared with comms' loader (`capabilities/comms/src/people_registry.rs`).
+/// Overlay-relative, shared with comms' loader (`crates/comms/src/people_registry.rs`).
 const PEOPLE_REGISTRY_REL: &str = "data/vault/people-registry.json";
 /// Registry entries shorter than this are skipped, as in comms (`MIN_NAME_CHARS`).
 const MIN_NAME_CHARS: usize = 3;

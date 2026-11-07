@@ -1,10 +1,10 @@
 //! `vault-server` — the vault's read-only HTTP surface.
 //!
 //! Readiness only, today: is the vault folder there. Open tasks were served here until
-//! 2026-10-18, when `capabilities/projects` became their owner. What the Journal knows about each
+//! 2026-10-18, when `crates/projects` became their owner. What the Journal knows about each
 //! person (`/api/people`) and which Journal health keys have a producer (`/api/journal-health`)
 //! were served until 2026-10-20, when `Atlas/People` and `Journal/` left the vault
-//! (capabilities/projects/README.md, "Why this shape").
+//! (crates/projects/README.md, "Why this shape").
 //!
 //! ## Read-only, and not by omission
 //!
@@ -238,7 +238,7 @@ mod route_manifest_tests {
 /// `origin_allowed_by` and still answers a hostile page.
 ///
 /// Driven with `tower::ServiceExt::oneshot` rather than over a loopback listener
-/// (the pattern `capabilities/places` uses), because this crate has no HTTP
+/// (the pattern `crates/places` uses), because this crate has no HTTP
 /// client and reqwest would pull a whole TLS stack into a test build to send one
 /// request to itself. `tower` is already in the graph under axum.
 #[cfg(test)]

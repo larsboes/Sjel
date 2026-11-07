@@ -1,7 +1,7 @@
 //! The `backup_` tables in the shared store: targets, runs, verifications, timing policy.
 //!
 //! Writes stay inside this prefix. Reading another prefix is a plain
-//! SELECT, the same usage `capabilities/store/README.md` chose one database for.
+//! SELECT, the same usage `services/store/README.md` chose one database for.
 //!
 //! Every timestamp is TEXT in `sjel_store::NOW`'s one canonical format, because two widths
 //! in one column stop `ORDER BY` being time order. Where the *maths* needs seconds —

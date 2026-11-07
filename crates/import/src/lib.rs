@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 pub use route::Route;
 
 const PREFIX: &str = "import";
-/// documents refuses larger uploads (`capabilities/documents/src/library.rs` `MAX_BYTES`).
+/// documents refuses larger uploads (`crates/documents/src/library.rs` `MAX_BYTES`).
 const DOCUMENTS_MAX_BYTES: u64 = 128 * 1024 * 1024;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;

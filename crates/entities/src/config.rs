@@ -8,14 +8,14 @@ use sjel_config::{database_path, resolve_port};
 pub struct Config {
     pub database_path: PathBuf,
     pub port: u16,
-    /// `capabilities/places`, for turning a city into a coordinate. Same variable and
-    /// default as `capabilities/trips/src/upstream.rs`.
+    /// `crates/places`, for turning a city into a coordinate. Same variable and
+    /// default as `crates/trips/src/upstream.rs`.
     pub places_url: String,
-    /// `capabilities/foundation-models`, the on-device model that advises on unclear
+    /// `services/foundation-models`, the on-device model that advises on unclear
     /// duplicates. Loopback only: C2 goes to it (PRD §6.1).
     pub model_url: String,
-    /// `capabilities/projects`, where the Journal lives since 2026-10-20 (`journal.rs`). Same
-    /// variable and default as `capabilities/finance`.
+    /// `crates/projects`, where the Journal lives since 2026-10-20 (`journal.rs`). Same
+    /// variable and default as `crates/finance`.
     pub projects_url: String,
 }
 

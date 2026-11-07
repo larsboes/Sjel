@@ -1,7 +1,7 @@
 //! `sjel credentials`: the declared credentials and their keychain presence, and the two ways a
 //! Google grant gets into the keychain. The same calls the desktop app's Settings › Accounts
 //! page makes (`libs/sjel-credentials/src/google.rs`), for a Mac without the app. It replaces
-//! `capabilities/comms/auth/get-refresh-token.ts`, which wrote plaintext overlay env files.
+//! `crates/comms/auth/get-refresh-token.ts`, which wrote plaintext overlay env files.
 
 use std::path::Path;
 use std::process::ExitCode;

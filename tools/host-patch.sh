@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/host-patch.sh — take the patch, every day, on this machine.
 #
-# The job capabilities/host-patch runs (kind = "process", schedule = "24h"). Q74 deleted the
+# The job services/host-patch runs (kind = "process", schedule = "24h"). Q74 deleted the
 # adoption cooldown; this is what stands in its place. Nothing here decides WHETHER to upgrade —
 # the package manager owns that, and one binary has one owner.
 #

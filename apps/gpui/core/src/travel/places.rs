@@ -6,7 +6,7 @@
 //! `trips draft-intent` does the same on purpose (`website/content/capabilities/travel.md` §1). Every
 //! coordinate-dependent view downstream then degrades without saying so: the map falls back
 //! to a world overview and each stop reads "Coordinates not available"
-//! (`capabilities/trips/src/store.rs`, `list_places`).
+//! (`crates/trips/src/store.rs`, `list_places`).
 //!
 //! Resolution happens in the client that needs the coordinate, not in the stored record: the
 //! capability keeps what was typed, and the answer lands in `places.json` beside the plan
@@ -50,7 +50,7 @@ pub struct PlaceCoords {
 /// The lookup key: the display name alone, so the same city referenced by a plan, a stage and
 /// a detail read resolves once. Case and whitespace runs fold; umlauts do not, because
 /// München and Munchen are two queries a geocoder answers differently
-/// (`capabilities/trips/src/store.rs`, `normalize_place_name`).
+/// (`crates/trips/src/store.rs`, `normalize_place_name`).
 pub fn key(place: &Place) -> String {
     place
         .name
@@ -190,7 +190,7 @@ pub type Answer = (String, Result<Option<Coordinate>, String>);
 /// Resolves pending `(key, query)` pairs one at a time and answers for every one of them.
 ///
 /// Sequential on purpose: `places` throttles its own provider requests to one at a time
-/// (`capabilities/places/src/geocode.rs`, `throttle`), so parallelism here would only
+/// (`crates/places/src/geocode.rs`, `throttle`), so parallelism here would only
 /// queue up inside the capability while spending this client's whole HTTP pool on it. A
 /// failure answers for one name and does not hide the rest.
 pub async fn resolve(source: Source, pending: Vec<(String, String)>) -> Vec<Answer> {

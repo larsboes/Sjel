@@ -5,7 +5,7 @@
 //! adapter type, a location (path or URL), and what it provides (events, profiles, or both).
 //! The factory below creates the right `SourceAdapter` for each declared type.
 //!
-//! See `capabilities/scouting/README.md` for the architecture call.
+//! See `crates/scouting/README.md` for the architecture call.
 //! See `scouting.config.example.json` for the config shape.
 //!
 //! Currently shipped adapters:

@@ -7,7 +7,7 @@
 //! at, because a capture that looks sent and is not is worse than one that says it is waiting.
 //!
 //! Triage is not here. What the Mac does with a capture — a wishlist item, a feed source, a place —
-//! is `capabilities/comms`'s decision, and the preview under the field only says where it will land.
+//! is `crates/comms`'s decision, and the preview under the field only says where it will land.
 
 use std::sync::Arc;
 

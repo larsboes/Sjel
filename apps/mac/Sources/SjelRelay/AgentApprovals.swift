@@ -38,7 +38,7 @@ public struct AgentCallRecord: Sendable, Equatable, Decodable, Identifiable {
 /// The parts of `GET /api/sjel-status/agent` the menu bar shows.
 public struct AgentView: Sendable, Equatable {
     public var pending: [AgentApproval] = []
-    /// Newest first, at most 50 (`recent_calls(50)` in `capabilities/sjel-status/src/status/agent.rs`).
+    /// Newest first, at most 50 (`recent_calls(50)` in `crates/sjel-status/src/status/agent.rs`).
     public var calls: [AgentCallRecord] = []
 
     public init(pending: [AgentApproval] = [], calls: [AgentCallRecord] = []) {

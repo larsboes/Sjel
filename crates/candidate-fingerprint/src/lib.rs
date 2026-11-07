@@ -2,16 +2,16 @@
 //!
 //! A candidate fingerprint is the SHA-256 of the tuple that makes an imported
 //! row that row and no other: when it was booked, what it moved, what it said,
-//! and which account it moved on. `capabilities/finance` mints it at import
+//! and which account it moved on. `crates/finance` mints it at import
 //! time and writes it into the journal as the `source-id` tag; the projection
-//! carries it; `capabilities/places` re-derives it from the raw export to hang
-//! a venue on a transaction it never stored (`capabilities/places/README.md`,
+//! carries it; `crates/places` re-derives it from the raw export to hang
+//! a venue on a transaction it never stored (`crates/places/README.md`,
 //! D2).
 //!
 //! # Why this is a crate and not a copy
 //!
-//! It was two copies until 2026-08-28 — `capabilities/finance/src/import.rs`
-//! and `capabilities/places/src/backfill.rs` — and one of them wrote so:
+//! It was two copies until 2026-08-28 — `crates/finance/src/import.rs`
+//! and `crates/places/src/backfill.rs` — and one of them wrote so:
 //! "The algorithm is a deliberate copy". Measured that day against the live
 //! store, 263 rows of `places_transaction_places` resolve only while the two
 //! agree byte for byte. A divergence would not raise an error. It would
@@ -43,7 +43,7 @@ const FIELD_END: u8 = 0xff;
 /// lowercase hex.
 ///
 /// Public because the holdings ledger in
-/// `capabilities/finance/src/investment.rs` identifies its rows with the same
+/// `crates/finance/src/investment.rs` identifies its rows with the same
 /// primitive over a different tuple. It is deliberately not the interface for
 /// the candidate identity — use [`CandidateKey`] for that, so the field order
 /// is stated in one place instead of at each call.
@@ -142,7 +142,7 @@ mod tests {
     /// table, so a change that moves them is a change that orphans real data.
     ///
     /// The inputs are synthetic. The live proof runs against the real store in
-    /// `capabilities/places/tests/live_fingerprint.rs`, which reads its golden
+    /// `crates/places/tests/live_fingerprint.rs`, which reads its golden
     /// values at run time rather than publishing anyone's transactions here.
     #[test]
     fn the_candidate_identity_is_frozen() {

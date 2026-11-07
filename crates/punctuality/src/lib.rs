@@ -3,7 +3,7 @@
 //! What this capability owns: how reliable a train actually is, measured rather than
 //! predicted. It folds Deutsche Bahn's own published stop history (`upstreams.toml`
 //! [deutsche-bahn-data]) into per-station statistics and serves them to whoever asks —
-//! today `punctuality stats`, next `capabilities/transit`, which carries a
+//! today `punctuality stats`, next `crates/transit`, which carries a
 //! `delay_risk_score` field that has been `None` since the port.
 //!
 //! It is deliberately the bottom rung of the intelligence ladder (CONTRIBUTING.md#implementation-languages-and-intelligence). A

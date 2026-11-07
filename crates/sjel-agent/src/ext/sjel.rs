@@ -1,6 +1,6 @@
 //! The `sjel` plugin: read-only answers about Sjel's own data, through the shell proxy.
 //!
-//! Lifted from `capabilities/assistant/src/main.rs`, where it was written for the assistant's
+//! Lifted from `crates/assistant/src/main.rs`, where it was written for the assistant's
 //! read-only loop. Both front ends pass the same five tools, so the code lives here and each
 //! caller supplies the base URL and the credential: a capability holds the deployment token
 //! (`sjel_server::InboundAuth`), and this crate must not depend on `sjel-server` to reach it.

@@ -46,7 +46,7 @@ power-loss test at each durable write, and any check of a started primary.
 - **No embedded replicas.** `sjel-turso` dropped them on 2026-10-22 (`libs/sjel-turso/README.md`,
   "Embedded replicas: removed"). That also removed the ten advisories they pulled in: the CI
   Security job passes on `main` (runs for `8ebd667d`, `6ee15b19`, `b6bf56c8`).
-- **Left over from the replica path.** `capabilities/sqld` runs a primary that holds no data and
+- **Left over from the replica path.** `services/sqld` runs a primary that holds no data and
   is backed up daily. `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs` and the
   `SJEL_TURSO_URL` handling in `tools/sjel-cli/src/runner.rs` and `apps/gpui/core/src/setup.rs`
   serve only that primary.
@@ -59,12 +59,12 @@ power-loss test at each durable write, and any check of a started primary.
   purpose.
 - **Three readers that go around the owners.** Each reads another capability's tables in the
   shared file, and each breaks when the file splits:
-  1. `capabilities/sjel-status/src/status/search.rs` (the finder's server search).
+  1. `crates/sjel-status/src/status/search.rs` (the finder's server search).
   2. `apps/gpui/core/src/data/repo.rs`: the desktop app reads `projects_records` and
      `calendar_entries` from `sjel.db` directly.
   3. `sjel mirror build`, which copies tables out of the shared file.
 
-**Docs to correct when the split starts.** `capabilities/store/README.md` and
+**Docs to correct when the split starts.** `services/store/README.md` and
 `website/content/architecture/storage.md` justify one file with cross-schema joins. Only one statement in all
 capabilities spans two table prefixes, and it is a migration helper.
 
@@ -256,7 +256,7 @@ migrations").
    whether the `turso` crate brings an offline sync engine that could replace the custom outbox
    in §3. Answered: it does not (§3).
 2. **Remove the replica leftovers** unless step 1 brings replicas back: stop and delete
-   `capabilities/sqld`, `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs`, the
+   `services/sqld`, `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs`, the
    `SJEL_TURSO_URL` handling, `tools/install-sqld.sh`, and the `[libsql-server]` and `[sqld]`
    entries. One fewer daemon and one fewer daily backup.
 3. **Cut the three bypassing readers** (§1). The finder's search asks each capability's search
@@ -281,8 +281,8 @@ migrations").
 
 ## 5. Backups
 
-`capabilities/backup` owns the contracts. The timer runs inside `sjel-status` and starts a
-target once its last successful backup is older than its interval (`capabilities/backup/src/policy.rs`).
+`crates/backup` owns the contracts. The timer runs inside `sjel-status` and starts a
+target once its last successful backup is older than its interval (`crates/backup/src/policy.rs`).
 
 Open:
 

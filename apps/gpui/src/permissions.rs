@@ -1,7 +1,7 @@
 //! The macOS privacy grants Sjel needs from the person, and where each one is given.
 //!
 //! The shell runs under launchd through the signed `sjel-fda-launcher`
-//! (`tools/fda-launcher`, `full_disk_access` in `capabilities/sjel-status/service.toml`), so
+//! (`tools/fda-launcher`, `full_disk_access` in `crates/sjel-status/service.toml`), so
 //! every process it starts, the storage report included, reads guarded folders such as the
 //! Photos library and the Music folder under that one grant. Full Disk Access never prompts:
 //! the person adds the launcher with + in System Settings.

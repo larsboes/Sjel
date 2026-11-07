@@ -1,4 +1,4 @@
-//! A paired device's way into Sjel (`capabilities/devices/README.md`, "Guided pairing").
+//! A paired device's way into Sjel (`crates/devices/README.md`, "Guided pairing").
 //!
 //! The Mac's Devices panel shows a QR code with the node's LAN listener and a one-time code. The
 //! device claims the code with its public key and from then on signs every request

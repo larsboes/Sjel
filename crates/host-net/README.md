@@ -108,7 +108,7 @@ never flagged.
 
 ## Why this shape: read-only, netstat-first, no manifest
 
-<!-- asserts-absent: capabilities/host-net/service.toml -->
+<!-- asserts-absent: crates/host-net/service.toml -->
 
 **No `service.toml`, and the schema proves it is the right answer rather than a shortcut.**
 `tools/check-service-tomls.sh` requires a `port` for `kind = "process"` without a `schedule`,

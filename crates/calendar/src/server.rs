@@ -326,7 +326,7 @@ struct ChangesQuery {
 /// literals — most of them tests — carry a value none of them decides.
 ///
 /// The VALUE only, matching comms' feed list
-/// (`capabilities/comms/src/server/contracts.rs:174`). The rationale and the
+/// (`crates/comms/src/server/contracts.rs:174`). The rationale and the
 /// method are not repeated on every row of a window that routinely holds
 /// hundreds; they are one fetch away on `GET /content/calendar/{id}`, which
 /// serves the whole `DataClass`.

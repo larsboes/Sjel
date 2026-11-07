@@ -3,7 +3,7 @@
 //!
 //! The conversion pair itself is `libs/civil-date` — no chrono there either, for
 //! the reason this module recorded first: the dependency set stays identical to
-//! capabilities/trips (no new `upstreams.toml` verdicts), and the algorithm is a
+//! crates/trips (no new `upstreams.toml` verdicts), and the algorithm is a
 //! few lines with round-trip tests. What stays here is what is calendar's own:
 //! weekday tokens, the strict `parse_date` gate, and `parse_instant`.
 

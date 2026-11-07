@@ -176,12 +176,12 @@ Each number names the command that reproduces it.
 |---|---|---|
 | Pseudonymizer recall, reversible path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | `cargo run -p sjel-comms --bin comms-redaction-eval -- --pseudonymized <corpus>` |
 | Redaction recall, destructive path | 48/48 (100.0%), gate ≥ 91.7%, measured 2026-09-27 | the same command without `--pseudonymized` |
-| Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun capabilities/comms/eval/run-relevance.ts`, result in `capabilities/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
+| Feed ranking (bge-m3) | 0.941 pairwise, 0.994 mean nDCG, 6/6 useful top-1 | `bun crates/comms/eval/run-relevance.ts`, result in `crates/comms/eval/results/2026-08-30-bge-m3-ollama.md` |
 | Mac app start and memory | First frame under 10 ms, about 100 MB resident | `SJEL_GPUI_FRAMES` and `ps -o rss=`, see `apps/gpui/src/frames.rs` |
 
 The redaction corpus (24 fixtures) lives in the private settings, so its two rows cannot be re-run
 from a public clone. The relevance corpus is public
-(`capabilities/comms/eval/relevance-corpus.json`) and needs a local bge-m3. The Mac app numbers
+(`crates/comms/eval/relevance-corpus.json`) and needs a local bge-m3. The Mac app numbers
 have no recorded date. Offline use and pairing time are not measured yet.
 
 Run `sjel test` and `cargo test --workspace --locked` for current test results. This page does
@@ -195,7 +195,7 @@ shows the ones on this machine.
 
 | Part | Contents |
 |---|---|
-| Core | `capabilities/entities`, `capabilities/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server` |
+| Core | `crates/entities`, `crates/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server` |
 | Apps | `apps/gpui` (Mac and iPhone, Rust and GPUI), `apps/mac` (Swift menu bar and CloudKit relay) |
 | Agent | `agent`, `assistant`, `agentbox`, `packs` |
 | Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |

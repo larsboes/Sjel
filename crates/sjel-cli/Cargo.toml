@@ -70,7 +70,7 @@ sjel-agent = { path = "../sjel-agent" }
 # sparpreis-watch to trips and transit. `sjel-http` owns the blocking client, its user-agent, the
 # timeout no caller can forget and the redirect policy; `sjel-server` owns `InboundAuth`, which is
 # the one implementation of "put the deployment credential on a loopback request and nowhere else"
-# (used by capabilities/calendar, transit, comms, places and scouting the same way). Reimplementing
+# (used by crates/calendar, transit, comms, places and scouting the same way). Reimplementing
 # either here would be the second copy of a security rule this workspace keeps in one place.
 #
 # The cost, measured on this Mac: sjel-cli goes from 7.3 MB to 14.1 MB, because `sjel-server`

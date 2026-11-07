@@ -102,7 +102,7 @@ for svc in "$SJEL_ROOT"/crates/*/service.toml "$SJEL_ROOT"/services/*/service.to
       ;;
     data)
       # State with no process: a file this machine owns and backs up, and nothing to run.
-      # The one that exists is capabilities/store (the shared SQLite database, PRD Q45).
+      # The one that exists is services/store (the shared SQLite database, PRD Q45).
       #
       # A backup contract is REQUIRED, not optional. A container or a process is worth
       # declaring for its own sake; a manifest that neither runs anything nor says how its

@@ -1,7 +1,7 @@
 //! The entity core: who and what Sjel knows about, as typed data (PRD Q117).
 //!
 //! `model.rs` carries the kinds, the field registry and the rules. `store.rs` carries the
-//! tables. `places.rs` asks `capabilities/places` for a coordinate. `server.rs` is the
+//! tables. `places.rs` asks `crates/places` for a coordinate. `server.rs` is the
 //! binary and its HTTP surface.
 
 pub mod config;

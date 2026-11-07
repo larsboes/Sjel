@@ -33,7 +33,7 @@ DEST="$WORK/destination"
 mkdir -p "$FAKE_HOME/Library/LaunchAgents" "$OVERLAY/config" "$OVERLAY/backup/receipts" "$DEST/packs"
 
 # `packs` is a real Sjel capability with a real backup contract — advise 1 day, stale 2
-# (capabilities/packs/service.toml). Using it rather than a synthetic manifest keeps the test on
+# (services/packs/service.toml). Using it rather than a synthetic manifest keeps the test on
 # the same registry path doctor uses, so a change to how a contract is declared reaches here.
 cat > "$OVERLAY/config/machine.toml" <<'EOF'
 os = "macos"

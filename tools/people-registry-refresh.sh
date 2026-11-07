@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Regenerate rung 0's known-person registry from capabilities/entities.
+# Regenerate rung 0's known-person registry from crates/entities.
 #
-# Rung 0 (capabilities/comms/src/people_registry.rs) consults a list of the
+# Rung 0 (crates/comms/src/people_registry.rs) consults a list of the
 # names this operator actually knows, because rung 1's person detector only
 # fires after a salutation and therefore misses a bare first name. The list is
-# every person in capabilities/entities with their aliases (src/names.rs), and goes
+# every person in crates/entities with their aliases (src/names.rs), and goes
 # stale the moment a person is added. It came from the vault's Atlas/People notes
 # until 2026-10-20, when they moved into entities.
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$TOOLS_DIR/lib/paths.sh"
 
-# The binary capabilities/people-registry/service.toml declares as its build_output, which the
+# The binary services/people-registry/service.toml declares as its build_output, which the
 # service runner rebuilds before each run. A CARGO_TARGET_DIR copy is only the fallback: it is
 # whatever a developer last built there and can predate the `names` command.
 BIN="$SJEL_ROOT/target/release/entities-server"

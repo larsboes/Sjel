@@ -1,5 +1,5 @@
-//! Wires `capabilities/transit`'s HAFAS fare-search in as a scored
-//! `Opportunity` source (`capabilities/store/README.md`'s correlation section, Phase 2: "wire its
+//! Wires `crates/transit`'s HAFAS fare-search in as a scored
+//! `Opportunity` source (`services/store/README.md`'s correlation section, Phase 2: "wire its
 //! fare-search in as a scored source feeding opportunities, not just an
 //! on-demand CLI answer"). One-directional dependency -- scouting depends on
 //! transit, never the reverse (see Cargo.toml).

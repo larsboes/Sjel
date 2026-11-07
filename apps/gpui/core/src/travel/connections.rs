@@ -1,5 +1,5 @@
 //! Train connections from transit: station lookup, the direct search, and the split-ticket
-//! calculation for the same route. The wire types follow `capabilities/transit/src/travel.rs`;
+//! calculation for the same route. The wire types follow `crates/transit/src/travel.rs`;
 //! only what the page draws is read. The web page this replaces is
 //! `dashboard/src/routes/travel/connections/+page.svelte`.
 
@@ -274,7 +274,7 @@ mod tests {
         assert!(!journeys.is_empty());
     }
 
-    /// A split as transit serializes it (`capabilities/transit/src/travel.rs`), with the fields
+    /// A split as transit serializes it (`crates/transit/src/travel.rs`), with the fields
     /// this page does not read left in.
     #[test]
     fn reads_transit_s_split_with_fields_it_ignores() {

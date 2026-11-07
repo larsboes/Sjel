@@ -14,7 +14,7 @@ drifting copies.
   pi, copilot, sjel-agent and antigravity. Claude Code, Codex, opencode and copilot get
   materialized copies. pi gets registry entries (`pi_settings.rs`).
 - **Ledgers.** One per harness under `~/.local/state/sjel/pack-deployments/`, owned and backed up by
-  `capabilities/packs`. A ledger records each unit, its Pack and the installed digest.
+  `services/packs`. A ledger records each unit, its Pack and the installed digest.
 - **Profiles.** `profiles.toml` defines the available profiles and `[harness_profile]` bindings.
   `tools/harnesses apply` reconciles each installed harness to its binding; `use <profile>` is an
   explicit override. `[unit_hold]` keeps named units off named harnesses. Claude Code, Codex,

@@ -1,7 +1,7 @@
 //! Planted fixtures for the unit tests.
 //!
 //! `std::env::temp_dir()` plus the process id, which is the idiom the workspace already
-//! uses (capabilities/calendar/src/store.rs, capabilities/punctuality/src/store.rs). No
+//! uses (crates/calendar/src/store.rs, crates/punctuality/src/store.rs). No
 //! `tempfile` dependency: it is in `Cargo.lock` transitively, but no workspace member
 //! declares it, and one function is cheaper than becoming the crate that starts.
 

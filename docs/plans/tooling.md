@@ -125,7 +125,7 @@ covers it.
 - **Installed-software route for the dashboard and `ask`.** `sjel storage installed` walks every
   app bundle and its `~/Library` data and takes about 30 s on this machine, so it stays CLI-only,
   the same reason `report --where` is not served. Smallest change: sample it daily into the store
-  `capabilities/sjel-status/src/storage_history.rs` already owns, and serve the last snapshot from
+  `crates/sjel-status/src/storage_history.rs` already owns, and serve the last snapshot from
   `/api/sjel-status/storage-installed`, so the panel and an agent read a number instead of waiting
   for a walk.
 - **Local inference server admin.** To cap oMLX's SSD cache at 4 GB, lower `max_concurrent_requests`

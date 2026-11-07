@@ -3,12 +3,12 @@
 //! `tools/storage report` answers "what is filling the disk right now". It cannot answer
 //! "was it filling faster last week", because a report is a point and growth is a slope.
 //! The machine already had the measurement — `host-watch` reads it every hour — but kept no
-//! record of it: `capabilities/host-watch/README.md` states its contract as "most runs print
+//! record of it: `services/host-watch/README.md` states its contract as "most runs print
 //! one line and write nothing, and that silence is the product". So the record is kept here,
 //! by the one surface that is always up, on its own hourly timer.
 //!
 //! The tables are `storage_samples`, `storage_absent` and `storage_classes` in the shared
-//! database, under this capability's own prefix (`capabilities/store/README.md`, "one file,
+//! database, under this capability's own prefix (`services/store/README.md`, "one file,
 //! table prefixes"). This file owns the prefix, the sampler is their only writer, and
 //! `status/storage.rs` reads them back.
 //!

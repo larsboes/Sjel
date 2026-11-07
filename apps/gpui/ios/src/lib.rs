@@ -1,7 +1,7 @@
 //! The iOS app's GPUI content. UIKit owns the window, the navigation bar and the safe areas
 //! (`host/App.swift`); GPUI draws inside them (`../README.md`, "GPUI for every client").
 //!
-//! The app is a paired device (`capabilities/devices/README.md`): it claims the one-time code
+//! The app is a paired device (`crates/devices/README.md`): it claims the one-time code
 //! from the Mac's pairing QR code, then signs every request with its Keychain key
 //! (`host/DeviceIdentity.swift`) over TLS pinned to the Mac's LAN listener.
 //!
@@ -58,7 +58,7 @@ mod notify;
 
 const HEALTH: &str = "/api/sjel-status/health";
 /// How often a waiting join asks whether the owner decided. A request expires after ten minutes
-/// (`capabilities/devices/README.md`), so the wait ends there at the latest.
+/// (`crates/devices/README.md`), so the wait ends there at the latest.
 const JOIN_POLL: Duration = Duration::from_secs(2);
 /// The size a new terminal starts at, before the grid measures itself and resizes the pty.
 const TERMINAL_COLS: usize = 48;
@@ -162,7 +162,7 @@ enum AgentControl {
 }
 
 /// A Mac that `host/Discovery.swift` found over Bonjour, from the TXT record the LAN listener
-/// advertises (`capabilities/sjel-status/src/lan.rs`).
+/// advertises (`crates/sjel-status/src/lan.rs`).
 #[derive(Clone, Debug, Deserialize)]
 pub struct Found {
     /// The Bonjour instance name, "Sjel on <mac>".

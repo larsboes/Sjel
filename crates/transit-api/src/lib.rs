@@ -332,7 +332,7 @@ impl SplitResult {
     }
 }
 
-/// The presets transit knows (`capabilities/transit/src/ranking.rs`, `PRIORITIES`): the id is the
+/// The presets transit knows (`crates/transit/src/ranking.rs`, `PRIORITIES`): the id is the
 /// contract, the label and hint are for display.
 pub const PRIORITIES: [(&str, &str, &str); 5] = [
     ("balanced", "Balanced", "no term dominates"),

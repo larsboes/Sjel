@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 use crate::shell::EntityField;
 
-/// The two predicates `capabilities/entities` accepts, with the words the form shows.
+/// The two predicates `crates/entities` accepts, with the words the form shows.
 pub const FACT_PREDICATES: [(&str, &str); 2] = [("home_base", "Home base"), ("away", "Away")];
 
 /// A field being edited: its key, the label to show, and how the value is shaped.

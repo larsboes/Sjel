@@ -1,6 +1,6 @@
 //! The shell's device verifier: a paired device's signature admits a request (PRD Q119).
 //!
-//! The protocol and the registry belong to `capabilities/devices`; this file only adapts
+//! The protocol and the registry belong to `crates/devices`; this file only adapts
 //! `DevicesStore::authenticate_scoped` to `sjel_server::DeviceVerifier`. The nonce is consumed in
 //! the `shell` scope, so a request the shell admits to `/devices/api/devices/me` is not refused
 //! there as a replay.

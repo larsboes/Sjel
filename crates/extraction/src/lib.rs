@@ -20,7 +20,7 @@
 //! ## Why this is a lib and not a comms module
 //!
 //! It was one, until a second capability needed the same job.
-//! `capabilities/transit` reads a ticket file into text plus optional Markdown
+//! `crates/transit` reads a ticket file into text plus optional Markdown
 //! and had grown its own `Document`/`DocumentBackend` vocabulary for it — the
 //! same job under a second set of names, already diverged. CONTRIBUTING.md#schemas-and-dependency-direction
 //! promotes code to `libs/` at the second real consumer, provided it owns no
@@ -142,7 +142,7 @@ pub struct Extraction {
     ///
     /// `None` is a real answer, not a missing one: it means no structure was
     /// recovered, and a caller must not treat `text` as though rows survived
-    /// in it. This is `capabilities/transit`'s reason for existing at all — a
+    /// in it. This is `crates/transit`'s reason for existing at all — a
     /// DB confirmation puts the journey in a table, and a flattened table
     /// parses into two legs running from "Bahnhof" to "Bahnhof Zug Gleis"
     /// while reporting success.
@@ -218,7 +218,7 @@ pub trait Extractor: Sync {
 ///
 /// First match wins, so this order is policy rather than convenience.
 /// [`Builtin`] keeps HTML: it is measured by the corpus gate
-/// (`capabilities/comms/eval/`) and produces the line structure `normalize`
+/// (`crates/comms/eval/`) and produces the line structure `normalize`
 /// needs, and xberg is an extractor rather than a readability cleaner (#77).
 /// xberg owns what nothing here could read.
 ///

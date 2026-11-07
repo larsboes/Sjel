@@ -936,7 +936,7 @@ mod tests {
 
     /// The list states a class for every item, under the exact key finance reads.
     ///
-    /// `item_is_quotable` (`capabilities/finance/src/server.rs`) fails closed on a
+    /// `item_is_quotable` (`crates/finance/src/server.rs`) fails closed on a
     /// missing `data_class`, so a rename or a drop here would not break a test in
     /// finance -- it would silently empty the decision inbox's feed evidence, which
     /// is what happened before this field existed. Asserting the serialized key,

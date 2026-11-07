@@ -6,7 +6,7 @@ moved. `Q77` (2026-09-02) turned every `service.toml` `tag` into a rolling chann
 the registry and nothing on the host notices, because `docker run` resolved the digest once, at
 creation. This capability is what makes the channel real.
 
-It is the container half of `capabilities/host-patch`: that one moves `brew`, `uv` and `rustup`
+It is the container half of `services/host-patch`: that one moves `brew`, `uv` and `rustup`
 every 24 hours, this one moves the images, and both write a receipt `tools/doctor` reads.
 
 ## Why this shape
@@ -67,7 +67,7 @@ tools/capability.sh enable container-refresh
 tools/service-runner.sh install-persistence container-refresh
 ```
 
-In that order, for the reason `capabilities/host-patch/README.md` gives: enabling second leaves
+In that order, for the reason `services/host-patch/README.md` gives: enabling second leaves
 `tools/doctor` calling the rendered unit an orphan and advising `remove-persistence`, which is the
 wrong advice.
 

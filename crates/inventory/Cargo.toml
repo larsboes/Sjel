@@ -49,7 +49,7 @@ thiserror = "2.0"
 
 [dev-dependencies]
 # `ServiceExt::oneshot`, damit `revision_tests` den verdrahteten Router ohne Listener und
-# ohne Port fahren kann — dasselbe Muster wie in `capabilities/interior` und `sjel-status`.
+# ohne Port fahren kann — dasselbe Muster wie in `crates/interior` und `sjel-status`.
 tower = { workspace = true, features = ["util"] }
 
 [lints]

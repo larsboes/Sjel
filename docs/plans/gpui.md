@@ -440,7 +440,12 @@ build was performed for this handoff.
 3. **Phone tabs for moved pages.** The phone bar is five items (`Today | Mail | Calendar | Travel |
    Agent`, `ios/src/lib.rs` and `ui/src/nav.rs`). Inbox capture lives on Today; Documents, People
    and Places open via 1-tap shortcuts and finder. A sixth tab needs a different bar, not a sixth
-   item. Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).
+   item. The phone opens the Mac's destinations (`route::Target`) through
+   `phone_screen` and one `select_tab` (`ios/src/lib.rs`); a page it does not draw says it opens
+   on the Mac. An unknown path falls back to its first segment's page on both devices
+   (`route::first_page`). Open: the host does not register the `sjel://` scheme yet, so only a
+   reminder's link reaches `open_link`; that needs `CFBundleURLTypes` in `host/Info.plist` and an
+   `onOpenURL` call into Rust. Next on the phone: Inventory and Wishlist, then People writes (D3 in [`PLAN.md`](../../PLAN.md)).
 4. **Linux, Windows, Android.** The Mac shell checks on Linux (`4cd60961`), and CI checks every
    leg (`578e6948`). Linux credentials use the Secret Service (`37adf658`). Open: a Windows
    keychain crate, a PDF renderer off macOS, a launch on a real Linux desktop, packaging, and an

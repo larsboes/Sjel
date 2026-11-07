@@ -218,6 +218,19 @@ pub enum Target {
     Unknown(String),
 }
 
+/// The page an unknown path falls back to: its first segment's, so `/calendar/2026-10-15` still
+/// lands on Calendar. `None` when no page has that segment.
+pub fn first_page(path: &str) -> Option<Page> {
+    let first = format!(
+        "/{}",
+        path.trim_start_matches('/')
+            .split(['/', '?'])
+            .next()
+            .unwrap_or("")
+    );
+    Page::ALL.into_iter().find(|page| page.href() == first)
+}
+
 /// `sjel://calendar/2026-10-15` → the unknown path `/calendar/2026-10-15`. `sjel://` and
 /// `sjel://home` are Home. `sjel://ask` opens the finder; `sjel://ask?q=…` (or `sjel://?ask=…`)
 /// also asks the prompt. Travel also recognizes its trip subpages. Retired capability panel

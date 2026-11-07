@@ -1149,23 +1149,11 @@ impl Workspace {
                 .finder
                 .update(cx, |finder, cx| finder.ask(question, cx)),
             Target::Terminal => self.open_terminal(window, cx),
-            Target::Unknown(path) => {
-                // The first segment's page, so `/calendar/2026-10-15` still lands on Calendar.
-                let first = format!(
-                    "/{}",
-                    path.trim_start_matches('/')
-                        .split(['/', '?'])
-                        .next()
-                        .unwrap_or("")
-                );
-                match Page::ALL.into_iter().find(|page| page.href() == first) {
-                    Some(page) => self.go(page, cx),
-                    None => window.push_notification(
-                        Notification::error(format!("No page answers {path}.")),
-                        cx,
-                    ),
-                }
-            }
+            Target::Unknown(path) => match route::first_page(&path) {
+                Some(page) => self.go(page, cx),
+                None => window
+                    .push_notification(Notification::error(format!("No page answers {path}.")), cx),
+            },
         }
     }
 

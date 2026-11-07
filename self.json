@@ -3353,14 +3353,22 @@
     },
     {
       "name": "gpui",
-      "verdict": "watch"
+      "verdict": "adopt"
+    },
+    {
+      "name": "gpui-fast",
+      "verdict": "evaluate"
     },
     {
       "name": "gpui-kit",
-      "verdict": "watch"
+      "verdict": "adopt"
     },
     {
       "name": "gpui-mobile",
+      "verdict": "fork"
+    },
+    {
+      "name": "gpui-pre-ios",
       "verdict": "watch"
     },
     {
@@ -3490,6 +3498,10 @@
     {
       "name": "nominatim-api",
       "verdict": "adopt"
+    },
+    {
+      "name": "nsh",
+      "verdict": "evaluate"
     },
     {
       "name": "nvidia-skills",

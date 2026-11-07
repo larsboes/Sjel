@@ -8,8 +8,9 @@ drifting copies.
 
 ## 1. Facts (checked 2026-10-28)
 
-- **Sources.** 27 skill directories across 9 Packs (`ls Packs/*/skills`). Each Pack has a
-  `pack.toml` (`schemas/pack.toml.example`).
+- **Sources.** 32 skill directories across 13 Packs (`ls Packs/*/skills`), measured 2026-11-07;
+  27 across 9 when this section was written. Each Pack has a `pack.toml`
+  (`schemas/pack.toml.example`).
 - **Harnesses.** `tools/sjel-cli/src/harnesses/registry.rs` enumerates claude, codex, opencode,
   pi, copilot, sjel-agent and antigravity. Claude Code, Codex, opencode and copilot get
   materialized copies. pi gets registry entries (`pi_settings.rs`).
@@ -126,6 +127,7 @@ precedes installer hardening. Anatomy remains unchanged until the external-skill
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
 | P6 | Done in `cf6563d9`, with failure rollback in `f0538875`: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
 | P7 | Manage approved external skills per harness (defect 3) from a content-pinned store (decision 4.4). Built in `095960fc`: `tools/skills store` and `verify`, the store as a Pack root in `harnesses/registry.rs`, drift in `tools/skills audit`. Open: the live Anatomy move below, re-storing as the only update path, and application-owned skill links. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
+| P8 | Done in `5ddc2049`: `vendor-audit`, the four-lens method for vetting third-party software before it runs, plus the octet v0.10.0 pass as its worked example. Method only, deliberately: `tools/audit` keeps its inward scope and the verdict lands in `upstreams.toml`. | `tools/check-skill-metadata.sh` passes with it included; a later audit of a differently-shaped program (a Node CLI, a Python daemon) reaches a verdict without leaving a lens unrun. |
 
 Verification: all 408 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy and `rustfmt
 --check` pass. A parallel rerun hit a managed-settings lock failure in

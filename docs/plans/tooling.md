@@ -10,6 +10,12 @@ covers it.
 
 ## Open
 
+- **Stale path check after a move.** After the move to `crates/` and `services/`, nothing
+  reported that `cv` and the gitleaks allowlist still named `capabilities/` paths. Workaround: a
+  one-off script that rewrote `capabilities/<name>` where a crate or service of that name exists,
+  in Markdown and comment lines only. Smallest change: a doctor check that fails on a
+  repository-relative path in tracked code or config that does not exist.
+
 - **Unpaired and per-tab phone screenshots.** `ios/run-sim` installs on the first simulator and
   takes one screenshot of the launch tab. Workaround: run it with `SJEL_IOS_SIM` set to a never
   paired simulator, then loop `simctl launch` with `SIMCTL_CHILD_SJEL_TAB` and

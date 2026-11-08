@@ -230,8 +230,10 @@ covers it.
 
 ## Done
 
-- `sjel-contain --credential <provider>` resolves a provider key from the private catalogue and
-  hands it to the contained child as its environment variable (`crates/containment/src/provider_key.rs`).
+- `sjel-contain --credential <provider>|<entry>=<VAR>` resolves a provider key from the private
+  catalogue and hands it to the contained child as its environment variable
+  (`crates/containment/src/provider_key.rs`). The `<entry>=<VAR>` form serves a harness whose own
+  variable no inference slug spells, for example `copilot-github=COPILOT_GITHUB_TOKEN`.
 
 - `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a
   project's records and attachments into or out of `Archive/`, after checking every target path.

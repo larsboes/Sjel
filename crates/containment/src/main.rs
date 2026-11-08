@@ -24,7 +24,7 @@ async fn main() -> ExitCode {
     let own = args.iter().take_while(|a| *a != "--");
     if args.is_empty() || own.into_iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--env <NAME=VALUE>]... [--credential <provider>]... [-- <harness-args...>]"
+            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--env <NAME=VALUE>]... [--credential <provider>|<entry>=<VAR>]... [-- <harness-args...>]"
         );
         return ExitCode::from(2);
     }

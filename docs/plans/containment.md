@@ -87,9 +87,11 @@ sjel run <harness> --provider <name> --project <dir>
    registries and the Sjel gateway. A request to any other host is refused and logged.
 4. Remove inherited secrets from the environment (`SSH_AUTH_SOCK`, `*_TOKEN`, `*_KEY`, cloud
    credentials). Set `HTTPS_PROXY` and the agent token for the provider's ring. `--env
-   <NAME=VALUE>` and `--credential <provider>` add only values the caller names: the first
-   passes one it writes itself (pi's contained home, below), the second reads
-   `inference-<provider>` from the private catalogue.
+   <NAME=VALUE>` and `--credential <provider>|<entry>=<VAR>` add only values the caller names:
+   the first passes one it writes itself (pi's contained home, below), the second reads a
+   catalogue entry and hands it over as one variable. `deepseek` is the short form for
+   `inference-deepseek` into `DEEPSEEK_API_KEY`; `copilot-github=COPILOT_GITHUB_TOKEN` names both
+   halves, for a harness whose own variable no slug spells.
 5. `exec` the harness under `sandbox-exec`. Child processes inherit the profile.
 
 `tools/contain/pi` runs the one harness that needs a prepared config: it writes a pi home in
@@ -153,8 +155,9 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    and reaches GitHub through the proxy (the update check answers; `api.github.com` and
    `release-assets.githubusercontent.com` are the hosts seen). A model call does not start: its
    sign-in is out of reach inside the profile, as `gh auth status` shows for the same store. So
-   the open path is a token handed to the run, and the `providers.toml` entry with its hosts.
-   Both are §5 item 6's review, which is a human task.
+   the open path is `--credential copilot-github=COPILOT_GITHUB_TOKEN` (built, C3a), which waits
+   on the catalogue entry and token the owner stores, and on the `providers.toml` entry with its
+   hosts. Both are §5 item 6's review, which is a human task.
 5. **`crates/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
    reviewed entry with a ring. The review (`why`, `reviewed_at`) is a human task.
@@ -202,7 +205,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. Amended 2026-11-04: the trusted ring keeps the overlay, and every other provider gets the demo node only (§1). |
 | C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Decided 2026-11-04: an explicit `ring = "trusted"` field (`crates/containment/src/ring.rs`). Deriving it from `c2` would make every `c2` provider trusted without a separate review. `openai` and `anthropic` set it; every other entry in `providers.toml` runs contained. |
 | C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Decided 2026-11-08: yes, the deny rules are gone. Measured the same day: opening the broker is not enough, because an item is readable only by the application its ACL trusts — `gh auth status` reads its keyring token outside the sandbox and calls it invalid inside. So the working path for a harness login is a token handed to the run (C3a). |
-| C3a | How does a contained harness get a token, given the ACL wall? | Open. `--credential <provider>` resolves a catalogue key, and its variable name is derived from the slug; a GitHub token wants `COPILOT_GITHUB_TOKEN` or `GH_TOKEN`, so the flag needs a way to name the variable, and the catalogue needs an entry, which the owner writes. |
+| C3a | How does a contained harness get a token, given the ACL wall? | Decided 2026-11-08, built: `--credential <entry>=<VAR>` reads that catalogue entry and sets that variable, so a harness sign-in no longer goes through the Keychain. `(entry)=<VAR>` is refused for a malformed entry or variable. Open: the owner adds `copilot-github` to the overlay's `credentials.toml` — `[[credentials]]` with `id`, `label` and `[credentials.reference] provider = "keychain" account = "copilot-github"` — and stores a GitHub token under that item. The keychain service is `com.sjel.credential.copilot-github`. |
 | C7 | A contained run has no TLS roots: this machine's roots live in the Keychain, and the profile denied it. Copilot failed with "no trust roots available for proxy TLS", while curl reached `api.deepseek.com` without help. | Decided 2026-11-08: the launcher exports them. `crates/containment/src/roots.rs` reads the login keychain and the system roots (194 certificates), writes a 0600 bundle beside the run, grants the run read on it, sets `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `GIT_SSL_CAINFO` and `NODE_EXTRA_CA_CERTS`, and removes it after the child exits. Measured: with only the login keychain's 36 certificates pi answered "Connection error"; with the system roots added the same run answers a model call. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
 | C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Decided 2026-11-04: an unclassified row is withheld, rows above the cap are dropped, and a single item above the cap or without a class is refused. Built (§5 item 3). |

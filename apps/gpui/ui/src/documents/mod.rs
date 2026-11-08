@@ -1051,15 +1051,16 @@ impl Documents {
         else {
             return div().into_any_element();
         };
-        let mut item = div().flex().flex_col();
+        let mut item = div().w_full().flex().flex_col();
         if let Some((group, count)) = &entry.group {
             item = item.child(
                 div()
+                    .w_full()
                     .pt_3()
                     .pb_1()
-                    .px_3()
+                    .px(self.density.pad_x())
                     .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
+                    .font_weight(FontWeight::SEMIBOLD)
                     .text_color(rgb(palette.muted))
                     .child(format!("{group} · {count}")),
             );
@@ -1093,14 +1094,24 @@ impl Documents {
         item.child(
             div()
                 .id(("document-row", ix))
+                .w_full()
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_3()
                 .min_h(self.density.row_height())
-                .px_3()
-                .rounded(px(5.))
-                .when(chosen, |el| el.bg(rgba(palette.raised)))
-                .hover(move |style| style.bg(rgba(palette.raised)))
+                .px(self.density.pad_x())
+                .py_1p5()
+                .rounded(px(6.))
+                .border_b_1()
+                .border_color(rgba(tint(palette.border, 0x15)))
+                .when(chosen, |el| {
+                    el.bg(rgba(tint(palette.accent, 0x18)))
+                        .border_l_2()
+                        .border_color(rgb(palette.accent))
+                })
+                .when(!chosen, |el| {
+                    el.hover(|style| style.bg(rgba(tint(palette.raised, 0x22))))
+                })
                 .cursor_pointer()
                 .on_click(cx.listener(move |view, _, _, cx| {
                     if view.selected.as_deref() == Some(id.as_str()) {
@@ -1115,7 +1126,19 @@ impl Documents {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .child(div().truncate().text_sm().child(primary_title))
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .truncate()
+                                .text_sm()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(if chosen {
+                                    rgb(palette.accent)
+                                } else {
+                                    rgb(palette.text)
+                                })
+                                .child(primary_title),
+                        )
                         .when(show_filename_sub, |column| {
                             column.child(
                                 div()
@@ -1143,7 +1166,7 @@ impl Documents {
                             column.child(
                                 div()
                                     .text_xs()
-                                    .text_color(rgb(palette.muted))
+                                    .text_color(rgb(palette.accent))
                                     .child(format!("Matches on page {pages}")),
                             )
                         }),
@@ -1152,6 +1175,7 @@ impl Documents {
                     cells.child(
                         div()
                             .w(px(category_w))
+                            .flex_none()
                             .truncate()
                             .text_xs()
                             .text_color(rgb(palette.muted))
@@ -1164,6 +1188,10 @@ impl Documents {
                 .child(
                     div()
                         .w(px(status_w))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_start()
                         .child(status_chip(&row.status, palette)),
                 )
                 .when(!narrow, |cells| {
@@ -1224,152 +1252,207 @@ impl Render for Documents {
         let search = self.search_field(window, cx);
         let page_search = self.page_search_field(window, cx);
         let split_input = self.split_range_field(window, cx);
+        let uploading = self.uploading;
         table = table.child(
             div()
                 .flex()
-                .flex_wrap()
                 .items_center()
+                .justify_between()
                 .gap_2()
                 .mb_2()
-                .child(filter_pill(
-                    "Inbox",
-                    inbox,
-                    self.filter == Filter::Inbox,
-                    palette,
-                    cx.listener(|view, _, _, cx| view.set_filter(Filter::Inbox, cx)),
-                ))
-                .child(filter_pill(
-                    "Filed",
-                    filed,
-                    self.filter == Filter::Filed,
-                    palette,
-                    cx.listener(|view, _, _, cx| view.set_filter(Filter::Filed, cx)),
-                ))
-                .child(filter_pill(
-                    "All",
-                    active,
-                    self.filter == Filter::All,
-                    palette,
-                    cx.listener(|view, _, _, cx| view.set_filter(Filter::All, cx)),
-                ))
-                .child(filter_pill(
-                    "Needs review",
-                    next,
-                    self.filter == Filter::NeedsReview,
-                    palette,
-                    cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
-                ))
-                .child(
-                    Button::new("documents-category-filter")
-                        .small()
-                        .label(category_label)
-                        .on_click(cx.listener(|view, _, _, cx| view.cycle_category_filter(cx))),
-                )
-                .child(
-                    Button::new("documents-grouping")
-                        .small()
-                        .label(self.grouping.label())
-                        .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
-                )
-                .when(self.total_filtered > 500, |bar| {
-                    let start = (self.page_offset / 500) * 500;
-                    let display_start = start + 1;
-                    let end = (start + 500).min(self.total_filtered);
-                    let total = self.total_filtered;
-                    bar.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                Button::new("documents-page-prev")
-                                    .xsmall()
-                                    .label("‹ Prev 500")
-                                    .disabled(start == 0)
-                                    .on_click(cx.listener(|view, _, _, cx| view.prev_page(cx))),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child(format!("{display_start}–{end} of {total}")),
-                            )
-                            .child(
-                                Button::new("documents-page-next")
-                                    .xsmall()
-                                    .label("Next 500 ›")
-                                    .disabled(end >= total)
-                                    .on_click(cx.listener(|view, _, _, cx| view.next_page(cx))),
-                            ),
-                    )
-                })
-                .child(div().flex_1())
-                .when(!narrow, |bar| {
-                    bar.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(div().w(px(220.)).child(Input::new(&search).small()))
-                            .child(
-                                Button::new("documents-search-text")
-                                    .small()
-                                    .label("Search")
-                                    .on_click(
-                                        cx.listener(|view, _, _, cx| view.search_documents(cx)),
-                                    ),
-                            ),
-                    )
-                })
-                .when(!narrow, |bar| {
-                    let (sort_col, sort_order) = self.sort;
-                    bar.child(
-                        Button::new("documents-sort")
-                            .small()
-                            .label(sort_col.button_label(sort_order))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                let next = match view.sort {
-                                    (DocSort::Added, SortOrder::Descending) => {
-                                        (DocSort::Name, SortOrder::Ascending)
-                                    }
-                                    (DocSort::Name, SortOrder::Ascending) => {
-                                        (DocSort::Pages, SortOrder::Descending)
-                                    }
-                                    _ => (DocSort::Added, SortOrder::Descending),
-                                };
-                                view.sort = next;
-                                view.order_rev = view.order_rev.wrapping_add(1);
-                                cx.notify();
-                            })),
-                    )
-                })
                 .child(
                     div()
-                        .max_w(px(170.))
-                        .truncate()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .when(!narrow, |count| {
-                            count.child(format!("{total} documents · local only"))
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .gap_2()
+                        .child(filter_pill(
+                            "Inbox",
+                            inbox,
+                            self.filter == Filter::Inbox,
+                            palette,
+                            cx.listener(|view, _, _, cx| view.set_filter(Filter::Inbox, cx)),
+                        ))
+                        .child(filter_pill(
+                            "Filed",
+                            filed,
+                            self.filter == Filter::Filed,
+                            palette,
+                            cx.listener(|view, _, _, cx| view.set_filter(Filter::Filed, cx)),
+                        ))
+                        .child(filter_pill(
+                            "All",
+                            active,
+                            self.filter == Filter::All,
+                            palette,
+                            cx.listener(|view, _, _, cx| view.set_filter(Filter::All, cx)),
+                        ))
+                        .child(filter_pill(
+                            "Needs review",
+                            next,
+                            self.filter == Filter::NeedsReview,
+                            palette,
+                            cx.listener(|view, _, _, cx| view.set_filter(Filter::NeedsReview, cx)),
+                        ))
+                        .child(
+                            Button::new("documents-category-filter")
+                                .small()
+                                .ghost()
+                                .label(category_label)
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.cycle_category_filter(cx)),
+                                ),
+                        )
+                        .child(
+                            Button::new("documents-grouping")
+                                .small()
+                                .ghost()
+                                .label(self.grouping.label())
+                                .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            Button::new("documents-import")
+                                .small()
+                                .primary()
+                                .label(if uploading > 0 {
+                                    format!("Importing ({uploading})…")
+                                } else {
+                                    "+ Import…".to_owned()
+                                })
+                                .disabled(uploading > 0)
+                                .on_click(cx.listener(Self::prompt_import)),
+                        )
+                        .when(!narrow, |actions| {
+                            actions.child(
+                                Button::new("documents-duplicate-review")
+                                    .small()
+                                    .ghost()
+                                    .label("Review duplicates")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.set_duplicate_mode(true, cx)
+                                    })),
+                            )
                         }),
                 ),
         );
-        if narrow {
-            table = table.child(
-                div()
-                    .flex()
-                    .gap_1()
-                    .mb_2()
-                    .child(div().flex_1().child(Input::new(&search).small()))
-                    .child(
-                        Button::new("documents-search-text-narrow")
-                            .small()
-                            .label("Search")
-                            .on_click(cx.listener(|view, _, _, cx| view.search_documents(cx))),
-                    ),
-            );
-        }
         let (sort_col, sort_order) = self.sort;
+        table = table.child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .mb_2p5()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .when(!narrow, |row| {
+                            row.child(div().w(px(240.)).child(Input::new(&search).small()))
+                                .child(
+                                    Button::new("documents-search-text")
+                                        .small()
+                                        .ghost()
+                                        .label("Search")
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.search_documents(cx)),
+                                        ),
+                                )
+                        })
+                        .when(narrow, |row| {
+                            row.child(div().w(px(160.)).child(Input::new(&search).small()))
+                                .child(
+                                    Button::new("documents-search-text-narrow")
+                                        .small()
+                                        .ghost()
+                                        .label("Search")
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.search_documents(cx)),
+                                        ),
+                                )
+                        })
+                        .child(
+                            Button::new("documents-sort")
+                                .small()
+                                .ghost()
+                                .label(sort_col.button_label(sort_order))
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    let next = match view.sort {
+                                        (DocSort::Added, SortOrder::Descending) => {
+                                            (DocSort::Name, SortOrder::Ascending)
+                                        }
+                                        (DocSort::Name, SortOrder::Ascending) => {
+                                            (DocSort::Pages, SortOrder::Descending)
+                                        }
+                                        _ => (DocSort::Added, SortOrder::Descending),
+                                    };
+                                    view.sort = next;
+                                    view.order_rev = view.order_rev.wrapping_add(1);
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .when(self.total_filtered > 500, |bar| {
+                            let start = (self.page_offset / 500) * 500;
+                            let display_start = start + 1;
+                            let end = (start + 500).min(self.total_filtered);
+                            let total = self.total_filtered;
+                            bar.child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(
+                                        Button::new("documents-page-prev")
+                                            .xsmall()
+                                            .ghost()
+                                            .label("‹ Prev 500")
+                                            .disabled(start == 0)
+                                            .on_click(
+                                                cx.listener(|view, _, _, cx| view.prev_page(cx)),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .child(format!("{display_start}–{end} of {total}")),
+                                    )
+                                    .child(
+                                        Button::new("documents-page-next")
+                                            .xsmall()
+                                            .ghost()
+                                            .label("Next 500 ›")
+                                            .disabled(end >= total)
+                                            .on_click(
+                                                cx.listener(|view, _, _, cx| view.next_page(cx)),
+                                            ),
+                                    ),
+                            )
+                        })
+                        .when(!narrow, |bar| {
+                            bar.child(
+                                div()
+                                    .truncate()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!("{total} documents · local only")),
+                            )
+                        }),
+                ),
+        );
         let sort_state = |column: DocSort| (sort_col == column).then_some(sort_order);
         let mut header_cols =
             vec![SortableColumn::flex("name", "DOCUMENT").sorted(sort_state(DocSort::Name))];
@@ -1919,7 +2002,6 @@ impl Render for Documents {
 
         let show_table = !(mobile && reader.is_some());
         let upload_notice = self.upload_notice.clone();
-        let uploading = self.uploading;
         div()
             .size_full()
             .flex()
@@ -1935,57 +2017,6 @@ impl Render for Documents {
                     .border_1()
                     .border_color(rgba(palette.accent))
             })
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .flex()
-                            .items_baseline()
-                            .gap_3()
-                            .child(
-                                div()
-                                    .text_xl()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Documents"),
-                            )
-                            .when(!mobile, |el| {
-                                el.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(rgb(palette.muted))
-                                        .child("Drop files anywhere to import"),
-                                )
-                            }),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Button::new("documents-import")
-                                    .small()
-                                    .label(if uploading > 0 {
-                                        format!("Importing ({uploading})…")
-                                    } else {
-                                        "+ Import…".to_owned()
-                                    })
-                                    .disabled(uploading > 0)
-                                    .on_click(cx.listener(Self::prompt_import)),
-                            )
-                            .child(
-                                Button::new("documents-duplicate-review")
-                                    .small()
-                                    .label("Review duplicates")
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.set_duplicate_mode(true, cx)
-                                    })),
-                            ),
-                    ),
-            )
             .when_some(upload_notice, |el, (is_error, message)| {
                 let tone = if is_error { palette.red } else { palette.green };
                 el.child(
@@ -2123,9 +2154,11 @@ fn status_chip(status: &str, palette: Palette) -> AnyElement {
         .items_center()
         .justify_center()
         .px_2()
-        .py(px(2.))
-        .rounded(px(4.))
-        .bg(rgba(tint(color, 0x22)))
+        .py_0p5()
+        .rounded_full()
+        .bg(rgba(tint(color, 0x18)))
+        .border_1()
+        .border_color(rgba(tint(color, 0x30)))
         .text_color(rgb(color))
         .text_xs()
         .font_weight(FontWeight::MEDIUM)

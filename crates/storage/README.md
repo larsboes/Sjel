@@ -217,6 +217,23 @@ the route that would serve it needs the cached snapshot `storage-history` alread
 without keeping a record. The record is kept by the surface that is always up, which samples this
 report into the shared database and serves the trend; see that capability's own README.
 
+## Container cache ownership
+
+Docker owns image and build-cache accounting. A container VM's filesystem allocation also holds
+containers and volumes, so it is not a cache-only policy path. Inspect and reclaim through the
+engine's native commands:
+
+```sh
+docker system df
+docker buildx prune --filter until=24h
+docker image prune --all --filter until=24h
+```
+
+The [build-cache filter](https://docs.docker.com/reference/cli/docker/buildx/prune/) retains
+recently used records. The [image filter](https://docs.docker.com/reference/cli/docker/image/prune/)
+selects older images that no container references. These commands do not prune containers or
+volumes. Engine size rows can share layers; host free-space measurements remain separate.
+
 ## The policy contract
 
 Every path, threshold and reclaim command is a deployment fact and lives in the overlay at

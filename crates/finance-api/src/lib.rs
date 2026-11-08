@@ -251,6 +251,31 @@ pub struct FinanceDashboardProjection {
     pub trend: Vec<FinanceTrendPoint>,
     #[serde(default)]
     pub portfolio: Option<FinancePortfolio>,
+    /// The planning report's parts a client renders; `crates/finance/src/planning.rs`.
+    #[serde(default)]
+    pub planning: Option<FinancePlanningView>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinancePlanningView {
+    #[serde(default)]
+    pub spend_goals: Vec<FinanceSpendGoal>,
+}
+
+/// Progress toward a spend target over a date window (`SpendGoalProgress` in finance).
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+pub struct FinanceSpendGoal {
+    pub id: String,
+    pub label: String,
+    pub start: String,
+    pub end: String,
+    pub currency: String,
+    pub target_cents: i64,
+    pub spent_cents: i64,
+    pub remaining_cents: i64,
+    pub days_left: i64,
+    pub needed_per_day_cents: i64,
+    pub met: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]

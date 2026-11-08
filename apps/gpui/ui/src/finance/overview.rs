@@ -5,7 +5,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
+    AnyElement, Context, Entity, FontWeight, SharedString, Window, div, prelude::*, px, rgb, rgba,
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{format_exact_money, parse_personal_cents};
@@ -267,6 +267,46 @@ impl FinancePage {
                     palette.text
                 } else {
                     palette.amber
+                },
+                palette,
+            ));
+        }
+        // A spend goal, such as a card's welcome offer: spent against target, and what the
+        // remaining days need (`planning.spend_goals`, crates/finance/src/planning.rs).
+        for goal in projection
+            .and_then(|p| p.planning.as_ref())
+            .map(|planning| planning.spend_goals.as_slice())
+            .unwrap_or_default()
+        {
+            let detail = if goal.met {
+                "Target reached".to_owned()
+            } else if goal.days_left == 0 {
+                format!(
+                    "Window closed · {} short",
+                    format_money(goal.remaining_cents, &goal.currency)
+                )
+            } else {
+                format!(
+                    "{} left · {}/day · until {}",
+                    format_money(goal.remaining_cents, &goal.currency),
+                    format_money(goal.needed_per_day_cents, &goal.currency),
+                    goal.end
+                )
+            };
+            cards.push(stat_card(
+                goal.label.to_uppercase(),
+                format!(
+                    "{} / {}",
+                    format_money(goal.spent_cents, &goal.currency),
+                    format_money(goal.target_cents, &goal.currency)
+                ),
+                Some(detail.into()),
+                if goal.met {
+                    palette.green
+                } else if goal.days_left == 0 {
+                    palette.red
+                } else {
+                    palette.text
                 },
                 palette,
             ));
@@ -958,7 +998,9 @@ mod overview_tests {
         let months: Vec<_> = window.iter().map(|(month, _)| month.as_str()).collect();
         assert_eq!(
             months,
-            ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
+            [
+                "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"
+            ]
         );
         assert!(window[1].1.is_none());
         assert!(window[5].1.is_some());

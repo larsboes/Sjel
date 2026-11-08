@@ -69,11 +69,11 @@
     "timeout_ms": 2000
   },
 
-  "_comment_vault_link_sources": "Explicit Markdown files that may supply Feed links. Never point this at the vault root. heading limits a messy note such as Scratchpad.md to one deliberate section and stops at the next heading of the same or higher level. A missing heading returns zero candidates. Fenced code, frontmatter and credential-looking URLs are ignored.",
-  "vault_link_sources": [
+  "_comment_markdown_link_sources": "Explicit Markdown files that may supply Feed links. Never point this at a whole notes directory. heading limits a messy note such as Scratchpad.md to one deliberate section and stops at the next heading of the same or higher level. A missing heading returns zero candidates. Fenced code, frontmatter and credential-looking URLs are ignored.",
+  "markdown_link_sources": [
     {
       "id": "reading-list",
-      "path": "~/path/to/vault/Links.md",
+      "path": "~/path/to/notes/Links.md",
       "heading": null,
       "enabled": false
     }

@@ -13,7 +13,7 @@ this file actually inside the root that was declared?
 ## Why it exists
 
 The answer used to be "assume so". `crates/scouting/src/score.rs` and
-`crates/scouting/src/sources/obsidian_md.rs` each carried their own
+`crates/scouting/src/sources/markdown_notes.rs` each carried their own
 `root.join(pattern)` resolver. They had already diverged — one handled an exact
 file, the other only a directory — and neither checked containment, so a pattern
 of `../../.ssh` resolved happily and a symlink pointing out of the vault was

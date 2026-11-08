@@ -1,19 +1,20 @@
-//! Explicit Obsidian link-source scanner.
+//! Explicit Markdown link-source scanner.
 //!
-//! This reads only configured Markdown files. A source may name one heading;
-//! when that heading is absent, the scan returns no links. Fenced code,
-//! frontmatter and credential-looking URLs are excluded before anything can be
-//! handed to the network-facing media importer.
+//! This reads only the Markdown files a source names, in whatever directory the
+//! operator configures. A source may name one heading; when that heading is
+//! absent, the scan returns no links. Fenced code, frontmatter and
+//! credential-looking URLs are excluded before anything can be handed to the
+//! network-facing media importer.
 
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use crate::config::VaultLinkSourceConfig;
+use crate::config::MarkdownLinkSourceConfig;
 use crate::store::{canonical_url, feed_id};
 
 #[derive(Debug, Clone)]
-pub struct VaultLinkCandidate {
+pub struct MarkdownLinkCandidate {
     pub id: String,
     pub source_id: String,
     pub source_ref: String,
@@ -21,7 +22,7 @@ pub struct VaultLinkCandidate {
     pub url: String,
 }
 
-pub fn scan(sources: &[VaultLinkSourceConfig]) -> Vec<VaultLinkCandidate> {
+pub fn scan(sources: &[MarkdownLinkSourceConfig]) -> Vec<MarkdownLinkCandidate> {
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
     for source in sources.iter().filter(|source| source.enabled) {
@@ -37,7 +38,7 @@ pub fn scan(sources: &[VaultLinkSourceConfig]) -> Vec<VaultLinkCandidate> {
     candidates
 }
 
-fn scan_source(source: &VaultLinkSourceConfig) -> Vec<VaultLinkCandidate> {
+fn scan_source(source: &MarkdownLinkSourceConfig) -> Vec<MarkdownLinkCandidate> {
     let path = Path::new(&source.path);
     if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
         return Vec::new();
@@ -102,14 +103,14 @@ fn scan_source(source: &VaultLinkSourceConfig) -> Vec<VaultLinkCandidate> {
             if !safe_http_url(&url) {
                 continue;
             }
-            candidates.push(VaultLinkCandidate {
+            candidates.push(MarkdownLinkCandidate {
                 id: feed_id(&url),
                 source_id: source.id.clone(),
                 source_ref: format!(
                     "{}:{}",
                     path.file_name()
                         .and_then(|name| name.to_str())
-                        .unwrap_or("vault-note.md"),
+                        .unwrap_or("note.md"),
                     index + 1
                 ),
                 label,
@@ -268,7 +269,7 @@ mod tests {
     #[test]
     fn missing_required_heading_does_not_scan_the_whole_note() {
         let path = std::env::temp_dir().join(format!(
-            "axon-vault-links-{}-{}.md",
+            "axon-markdown-links-{}-{}.md",
             std::process::id(),
             std::thread::current().name().unwrap_or("test")
         ));
@@ -277,7 +278,7 @@ mod tests {
             "https://outside.example.org/\n## Other\nhttps://also.example.org/",
         )
         .expect("write fixture");
-        let source = VaultLinkSourceConfig {
+        let source = MarkdownLinkSourceConfig {
             id: "scratchpad".into(),
             path: path.to_string_lossy().into_owned(),
             heading: Some("Feed Inbox".into()),

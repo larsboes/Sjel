@@ -164,9 +164,10 @@ State on 2026-11-08, after a pass over code and overlay config:
 | `finance`, `trips` | Done before this decision: subscription notes live in `projects` (2026-10-20), plan copies in `<overlay>/data/trips/plans/` (`crates/trips/src/projection.rs:13`). Stale comments in `plan_search.rs` fixed. |
 | Overlay config | Done: scouting's two vault sources and the dead `obsidian` blocks in trips, finance and interior removed. `knowledge.toml` and the vault state mount stay for Learning. |
 | `README.md`, `CONTRIBUTING.md`, `Packs/knowledge`, `ARCHITECTURE.md` | Done: they describe the vault as learning only. |
-| `crates/comms` (`vault_links.rs`, `server/vault.rs`) | Open. No link source is configured, so the scanner reads nothing. Retire it or rename it to a generic markdown link source after the open `comms` edits in the primary checkout land. |
-| `crates/scouting` (`sources/obsidian_md.rs`) | Open, rename only. The adapter reads any configured directory; the name and README still say Obsidian. |
-| Relevance profiles (`comms-relevance-shadow.json`) | Open, owner decision. Three `profile_path`s point at an iCloud vault path that no longer exists. Reconcile with `operator-profile`, as above. |
+| `crates/comms` (`markdown_links.rs`, `server/markdown_links.rs`) | Done: the scanner, its two routes and the `markdown_link_sources` config key are named for Markdown rather than the vault. No link source is configured, so it still reads nothing. |
+| `crates/scouting` (`sources/markdown_notes.rs`) | Done, rename only: file, type, factory key (`markdown-notes`), README and example config. The opportunity id namespace and the stored `obsidian_markdown` source keep their values, because rows already carry them. |
+| `crates/scouting` (`vault_linker.rs`) | Open, rename only. It matches opportunities against any configured events directory; the name still says vault. Found in the same pass and not in the count above. |
+| Relevance profiles (`comms-relevance-shadow.json`) | Done: the three dead `profile_path`s are gone and the frozen `text_variants` remain. Restoring personal lenses stays `operator-profile`'s call. |
 | `obsidian` as a record source in `entities`, `places`, `scouting`, `trips` | Keep. It records where historic rows came from. |
 
 ## 3. Phone standalone

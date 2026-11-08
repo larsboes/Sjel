@@ -126,7 +126,7 @@ fn a_declared_source_runs_end_to_end_and_scores_against_its_own_profile_root() {
 
     let source = manifest(serde_json::json!({
         "id": "chain-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "Applications/*.md",
         "profile_path": profiles.path().to_string_lossy(),
@@ -166,8 +166,8 @@ fn a_declared_source_runs_end_to_end_and_scores_against_its_own_profile_root() {
     // with the declared source id -- that was fixed once already, because
     // `store::record_run` keys the cursor row on it and two declared feeds
     // shared one. `Opportunity.source` did not get the same treatment: it is
-    // hardcoded to the adapter *type* in sources/obsidian_md.rs. So two
-    // obsidian-markdown sources are one string in the stored column and one
+    // hardcoded to the adapter *type* in sources/markdown_notes.rs. So two
+    // markdown-notes sources are one string in the stored column and one
     // chip in the dashboard, which is the same class of collision one layer
     // over. Not changed under an issue about test coverage: the column has
     // rows in it already, and rewriting what they mean is its own decision.
@@ -198,7 +198,7 @@ fn a_directory_glob_reaches_its_own_directory_and_no_sibling() {
 
     let source = manifest(serde_json::json!({
         "id": "scope-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "Applications/*.md",
     }));
@@ -239,7 +239,7 @@ fn an_exact_profile_file_does_not_pull_in_its_siblings() {
 
     let source = manifest(serde_json::json!({
         "id": "exact-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "Applications/*.md",
         "profile_path": profiles.path().to_string_lossy(),
@@ -269,7 +269,7 @@ fn a_typed_source_ignores_a_note_of_another_type_in_the_same_directory() {
 
     let source = manifest(serde_json::json!({
         "id": "typed-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "Applications/*.md",
         "opportunity_type": "event",
@@ -315,7 +315,7 @@ fn an_existing_note_is_cross_referenced_and_the_note_is_never_written_to() {
 
     let source = manifest(serde_json::json!({
         "id": "linker-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "Applications/*.md",
     }));
@@ -352,7 +352,7 @@ fn a_glob_that_escapes_the_root_fails_the_run_instead_of_finding_nothing() {
 
     let source = manifest(serde_json::json!({
         "id": "escape-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": vault.path().to_string_lossy(),
         "opportunities_glob": "../../*.md",
     }));
@@ -382,7 +382,7 @@ fn a_source_root_that_is_gone_refuses_to_build_an_adapter() {
 
     let source = manifest(serde_json::json!({
         "id": "gone-probe",
-        "adapter": "obsidian-markdown",
+        "adapter": "markdown-notes",
         "path": missing.to_string_lossy(),
         "opportunities_glob": "*.md",
     }));

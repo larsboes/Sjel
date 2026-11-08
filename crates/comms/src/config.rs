@@ -142,10 +142,10 @@ impl Default for ProjectsContextConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct VaultLinkSourceConfig {
+pub struct MarkdownLinkSourceConfig {
     /// Stable provenance id, for example `scratchpad-to-read`.
     pub id: String,
-    /// Exact Markdown file. Comms never walks the vault recursively.
+    /// Exact Markdown file. Comms never walks a directory recursively.
     pub path: String,
     /// Optional exact Markdown heading text. Only links below that heading and
     /// before the next heading of the same or higher level are candidates.
@@ -154,7 +154,7 @@ pub struct VaultLinkSourceConfig {
     pub enabled: bool,
 }
 
-impl Default for VaultLinkSourceConfig {
+impl Default for MarkdownLinkSourceConfig {
     fn default() -> Self {
         Self {
             id: String::new(),
@@ -289,7 +289,7 @@ struct FileConfig {
     projects_context: Option<ProjectsContextConfig>,
     inventory_context: Option<InventoryContextConfig>,
     #[serde(default)]
-    vault_link_sources: Vec<VaultLinkSourceConfig>,
+    markdown_link_sources: Vec<MarkdownLinkSourceConfig>,
     feed_sources: Option<Vec<FeedSourceConfig>>,
     quality_flags: Option<QualityFlagConfig>,
     #[serde(default)]
@@ -410,9 +410,10 @@ pub struct Config {
     pub finance_context: FinanceContextConfig,
     pub projects_context: ProjectsContextConfig,
     pub inventory_context: InventoryContextConfig,
-    /// Explicit Markdown link sources. This is intentionally not a vault root:
-    /// Scratchpad and other notes can contain credentials and admin URLs.
-    pub vault_link_sources: Vec<VaultLinkSourceConfig>,
+    /// Explicit Markdown link sources. This is intentionally not a whole notes
+    /// directory: Scratchpad and other notes can contain credentials and admin
+    /// URLs.
+    pub markdown_link_sources: Vec<MarkdownLinkSourceConfig>,
     /// General awareness sources. `None` in a file uses the public, non-personal
     /// defaults; an explicit empty array disables them all.
     pub feed_sources: Vec<FeedSourceConfig>,
@@ -555,8 +556,8 @@ impl Config {
             .into_iter()
             .map(|path| expand_tilde(&path).to_string_lossy().into_owned())
             .collect();
-        let vault_link_sources = file
-            .vault_link_sources
+        let markdown_link_sources = file
+            .markdown_link_sources
             .into_iter()
             .map(|mut source| {
                 source.path = expand_tilde(&source.path).to_string_lossy().into_owned();
@@ -616,7 +617,7 @@ impl Config {
             finance_context,
             projects_context,
             inventory_context,
-            vault_link_sources,
+            markdown_link_sources,
             feed_sources,
             quality_flags,
             mail_model,
@@ -800,7 +801,7 @@ mod tests {
         assert!(cfg.rules.is_empty());
         assert!(cfg.inference.roles.is_empty());
         assert!(cfg.relevance.profile_paths.is_empty());
-        assert!(cfg.vault_link_sources.is_empty());
+        assert!(cfg.markdown_link_sources.is_empty());
         assert_eq!(cfg.feed_sources.len(), 2);
         assert_eq!(cfg.quality_flags.minimum_total_retention_percent, 39.0);
         assert_eq!(cfg.quality_flags.maximum_total_retention_percent, 90.0);

@@ -8,7 +8,7 @@
 //! operator declared?*
 //!
 //! Before this existed the answer was "assume so". `scouting/src/score.rs` and
-//! `scouting/src/sources/obsidian_md.rs` each held their own `root.join(pattern)`
+//! `scouting/src/sources/markdown_notes.rs` each held their own `root.join(pattern)`
 //! resolver, already diverged (one handled an exact file, the other did not),
 //! and neither checked containment: a pattern of `../../.ssh` resolved happily,
 //! as would a symlink pointing out of the vault. Calendar's importer would have

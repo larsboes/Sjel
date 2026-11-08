@@ -877,7 +877,7 @@ mod tests {
     ) -> SourceManifest {
         let json = serde_json::json!({
             "id": "events-radar",
-            "adapter": "obsidian-markdown",
+            "adapter": "markdown-notes",
             "path": path.map(|p| p.to_string_lossy().into_owned()),
             "profile_path": profile_path.map(|p| p.to_string_lossy().into_owned()),
             "profiles_glob": glob,

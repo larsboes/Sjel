@@ -1,6 +1,6 @@
 //! `comms-server` — HTTP surface for the general Feed.
 //!
-//! Feed persistence, TELOS relevance, explicit Vault-link discovery and reader
+//! Feed persistence, TELOS relevance, explicit Markdown-link discovery and reader
 //! payloads live here. Scouting remains a separate opportunity engine. Network
 //! fetches and embedding calls run in spawn_blocking; the server binds only to
 //! loopback because ingest is allowed to fetch external URLs.
@@ -46,7 +46,6 @@ use comms::store::{
     StreamWrite, TriageItem,
 };
 use comms::travel;
-use comms::vault_links;
 
 mod background;
 mod captures;
@@ -55,9 +54,9 @@ mod content;
 mod contracts;
 mod error;
 mod feed;
+mod markdown_links;
 mod source_handlers;
 mod triage;
-mod vault;
 
 use background::*;
 use captures::*;
@@ -66,9 +65,9 @@ use content::*;
 use contracts::*;
 use error::*;
 use feed::*;
+use markdown_links::*;
 use source_handlers::*;
 use triage::*;
-use vault::*;
 
 /// What this capability answers, served as data beside `/health`.
 /// Required query parameters are named in the summary: a path alone cannot tell
@@ -306,13 +305,13 @@ const ROUTES: &[route_manifest::Route] = &[
     ),
     r(
         "POST",
-        "/vault-links/scan",
-        "Vault notes that could be linked to feed entries.",
+        "/markdown-links/scan",
+        "Markdown notes that could be linked to feed entries.",
     ),
     r(
         "POST",
-        "/vault-links/import",
-        "Link scanned vault notes to their entries.",
+        "/markdown-links/import",
+        "Link scanned Markdown notes to their entries.",
     ),
     // feed-personalization 2026-09-03. Appended rather than filed beside the
     // other /feed rows: a second stream appends to this table tonight, and one
@@ -500,8 +499,8 @@ fn build_router(dashboard_origin: &str) -> Router {
         .route("/triage/{id}/gmail-job", post(triage_gmail_job_handler))
         .route("/triage/reconcile", post(triage_reconcile_handler))
         .route("/ingest", post(ingest_handler))
-        .route("/vault-links/scan", post(vault_scan_handler))
-        .route("/vault-links/import", post(vault_import_handler))
+        .route("/markdown-links/scan", post(markdown_link_scan_handler))
+        .route("/markdown-links/import", post(markdown_link_import_handler))
         .route("/sources/scan", post(source_scan_handler))
         // Appended at the end of the chain on purpose: three streams edit this
         // router tonight, and a tail append is the hunk git merges.

@@ -20,7 +20,7 @@ What runs is declared. Nothing polls unless declared in overlay configuration (`
 
 Candidate sources discovered during secondary workflows land in `proposed_sources` (`src/store.rs`) with provenance details. Candidates stay inert until an operator promotes them into `sources[]`. Discovery earns an inbox proposal, never an automatic recurring fetch.
 
-Adapter types are a closed enum handled in `src/sources/mod.rs` (`obsidian-markdown`, `rss`, `luma-calendar`, `splash-hub`). Format support is small and typed; compile-time match arms eliminate dynamic plugin loading overhead.
+Adapter types are a closed enum handled in `src/sources/mod.rs` (`markdown-notes`, `rss`, `luma-calendar`, `splash-hub`). Format support is small and typed; compile-time match arms eliminate dynamic plugin loading overhead.
 
 ## Why this shape: Decoupled interest profiles and opportunity storage
 
@@ -46,7 +46,7 @@ Execution state tracking (`scouting_source_state`) is keyed per declared source 
 
 ## Why this shape: Fail-closed scholarship qualification before scoring
 
-Scholarship discovery enforces a strict frontmatter qualification contract in `src/sources/obsidian_md.rs`. An opportunity note is excluded from actionable ranking unless it declares active status, `eligibility: eligible`, `employment_compatible: yes`, a valid deadline, and a canonical URL.
+Scholarship discovery enforces a strict frontmatter qualification contract in `src/sources/markdown_notes.rs`. An opportunity note is excluded from actionable ranking unless it declares active status, `eligibility: eligible`, `employment_compatible: yes`, a valid deadline, and a canonical URL.
 
 Ineligible, incomplete, or incompatible notes remain in the knowledge base for audit history and are never surfaced by semantic fit scoring alone.
 

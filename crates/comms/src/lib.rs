@@ -38,6 +38,7 @@ pub mod mail_evidence_scan;
 pub mod mail_model;
 pub mod mail_model_eval;
 pub mod mail_receipts;
+pub mod markdown_links;
 pub mod media;
 pub mod normalize;
 pub mod people_registry;
@@ -51,7 +52,6 @@ pub mod sources;
 pub mod store;
 pub mod task_links;
 pub mod travel;
-pub mod vault_links;
 pub mod web_clip_socket;
 
 use thiserror::Error;

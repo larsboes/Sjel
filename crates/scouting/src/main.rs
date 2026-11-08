@@ -725,10 +725,10 @@ fn main() {
         return;
     }
 
-    // --from-file: deprecated in favor of the obsidian-markdown source adapter.
+    // --from-file: deprecated in favor of the markdown-notes source adapter.
     if let Some(ref ff) = from_file {
         eprintln!(
-            "note: --from-file is deprecated. Add an obsidian-markdown source to scouting.json's \
+            "note: --from-file is deprecated. Add a markdown-notes source to scouting.json's \
              `sources` array instead (see scouting.config.example.json)."
         );
         run_from_file(ff, &cfg, &limit, &opp_emb_path, &database_path, &no_store);

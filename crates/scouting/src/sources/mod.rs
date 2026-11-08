@@ -9,7 +9,7 @@
 //! See `scouting.config.example.json` for the config shape.
 //!
 //! Currently shipped adapters:
-//!   - `obsidian-markdown` — reads markdown event files from a vault directory
+//!   - `markdown-notes` — reads markdown opportunity notes from any configured directory
 //!   - `rss` — any RSS/Atom feed
 //!   - `luma-calendar` — one Luma calendar's future events, by `cal-…` api id
 //!   - `splash-hub` — one Splash That brand event hub's upcoming events, by
@@ -18,7 +18,7 @@
 //! Adding a new adapter type: add an arm to `create_adapter()`, implement `SourceAdapter`,
 //! register the module. That's it — no changes to `main.rs`, `server.rs`, or the pipeline.
 
-pub mod obsidian_md;
+pub mod markdown_notes;
 pub mod rss;
 
 use std::path::PathBuf;
@@ -40,12 +40,12 @@ pub struct SourceEntry {
     /// and the display name in `--list-sources`.
     pub id: String,
 
-    /// Adapter type: `"obsidian-markdown"`, `"rss"` or `"luma-calendar"` —
+    /// Adapter type: `"markdown-notes"`, `"rss"` or `"luma-calendar"` —
     /// the `create_adapter()` arms; anything else is `UnknownAdapter`.
     /// Must match an arm in `create_adapter()`.
     pub adapter: String,
 
-    /// Root path — for file-based sources (vaults, JSON dumps).
+    /// Root path — for file-based sources (notes directories, JSON dumps).
     /// Supports `~/` expansion.
     #[serde(default)]
     pub path: Option<String>,
@@ -261,11 +261,11 @@ impl SourceManifest {
 #[derive(Debug, thiserror::Error)]
 pub enum SourceFactoryError {
     #[error(
-        "unknown adapter type '{0}' — valid types: obsidian-markdown, rss, luma-calendar, splash-hub"
+        "unknown adapter type '{0}' — valid types: markdown-notes, rss, luma-calendar, splash-hub"
     )]
     UnknownAdapter(String),
-    #[error("obsidian-markdown adapter: {0}")]
-    ObsidianMd(String),
+    #[error("markdown-notes adapter: {0}")]
+    MarkdownNote(String),
     #[error("source '{id}': {detail}")]
     Config { id: String, detail: String },
     #[error("{0}")]
@@ -286,20 +286,20 @@ pub fn create_adapter(
     manifest: &SourceManifest,
 ) -> Result<Box<dyn SourceAdapter>, SourceFactoryError> {
     match manifest.adapter.as_str() {
-        "obsidian-markdown" => {
+        "markdown-notes" => {
             let root = manifest
                 .root_path
                 .as_ref()
                 .ok_or_else(|| SourceFactoryError::Config {
                     id: manifest.id.clone(),
-                    detail: "obsidian-markdown adapter requires a 'path'".into(),
+                    detail: "markdown-notes adapter requires a 'path'".into(),
                 })?;
             let opportunities_glob = manifest
                 .opportunities_glob
                 .clone()
                 .or_else(|| manifest.events_glob.clone())
                 .unwrap_or_else(|| "*.md".into());
-            Ok(Box::new(obsidian_md::ObsidianMarkdownSource::new(
+            Ok(Box::new(markdown_notes::MarkdownNoteSource::new(
                 manifest.id.clone(),
                 root.clone(),
                 opportunities_glob,

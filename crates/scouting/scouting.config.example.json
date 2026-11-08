@@ -1,5 +1,5 @@
 {
-  "_note": "Public template. Copy to sjel-overlay/config/scouting.json and fill real values there — never here. Replace <knowledge-base-root> with that deployment's absolute or home-relative knowledge-store path before enabling either Obsidian source. scouting resolves config from $SJEL_PERSONAL_ROOT/config/scouting.json at runtime (see src/config.rs Config::load). Every field is optional; the tool runs against empty/local dirs with zero config.",
+  "_note": "Public template. Copy to sjel-overlay/config/scouting.json and fill real values there — never here. Replace <knowledge-base-root> with that deployment's absolute or home-relative notes path before enabling either markdown-notes source. scouting resolves config from $SJEL_PERSONAL_ROOT/config/scouting.json at runtime (see src/config.rs Config::load). Every field is optional; the tool runs against empty/local dirs with zero config.",
 
   "_comment_interest_profile": "Directory of markdown files describing what you're interested in (one file per focus area). Convention: 'summary:' / 'current_focus:' frontmatter lines plus a '> [!quote] Charter' blockquote paragraph — score.rs parses this generically, it does not have to be an Obsidian vault. A file named exactly 'Focus.md' is treated as a hub/lens and skipped, not scored. Superseded by source entries with profiles_glob.",
   "interest_profile_dir": "",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "id": "knowledge-base",
-      "adapter": "obsidian-markdown",
+      "adapter": "markdown-notes",
       "path": "<knowledge-base-root>",
       "events_glob": "Atlas/Events/*.md",
       "profiles_glob": "TELOS/Focus/*.md",
@@ -28,7 +28,7 @@
     {
       "_comment": "The split form: opportunities come out of the knowledge store, the profile scoring them lives wherever this deployment keeps its own profile state. Same source id, same stable opportunity ids — only where the predicate is read from changes.",
       "id": "events-radar",
-      "adapter": "obsidian-markdown",
+      "adapter": "markdown-notes",
       "path": "<knowledge-base-root>",
       "opportunities_glob": "Projects/Life-Plan/Applications/*.md",
       "profile_path": "<profile-root>",
@@ -37,7 +37,7 @@
     },
     {
       "id": "scholarship-radar",
-      "adapter": "obsidian-markdown",
+      "adapter": "markdown-notes",
       "path": "<knowledge-base-root>",
       "opportunities_glob": "Projects/Life-Plan/Applications/*.md",
       "opportunity_type": "scholarship",
@@ -55,7 +55,7 @@
       "enabled": false
     },
     {
-      "_comment_data_class": "A public event hub, fetched anonymously: no session of the operator's decides what it returns, which is the argument comms already makes for the GitHub Trending page. The obsidian-markdown entries above deliberately declare nothing — a note in a knowledge store is the operator's, and c1 is what silence already means.",
+      "_comment_data_class": "A public event hub, fetched anonymously: no session of the operator's decides what it returns, which is the argument comms already makes for the GitHub Trending page. The markdown-notes entries above deliberately declare nothing — a note in a knowledge store is the operator's, and c1 is what silence already means.",
       "id": "claude-community",
       "adapter": "luma-calendar",
       "url": "cal-TOpA5LAFfuDeFpu",

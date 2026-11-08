@@ -1,11 +1,11 @@
-//! Obsidian markdown adapter — reads typed opportunity notes from a directory
+//! Markdown note adapter — reads typed opportunity notes from a directory
 //! or one exact markdown file.
 //!
 //! This replaces the retired Python event extractor: instead of a separate script writing
 //! intermediate JSON, the Rust pipeline reads event files directly. The convention
-//! (frontmatter fields, directory structure) is the same as the original TELOS/Atlas vault
-//! convention, but nothing here references "atlas" or "vault" as a hardcoded name — it's
-//! "a directory of markdown files with frontmatter."
+//! (frontmatter fields, directory structure) follows the original TELOS/Atlas note
+//! convention, but nothing here names a particular notes application — it is "a directory
+//! of markdown files with frontmatter."
 //!
 //! Frontmatter fields read:
 //!   - `type`           → must match the configured opportunity type
@@ -18,8 +18,8 @@
 //!
 //! Scholarship notes are fail-closed: only `eligibility: eligible` enters the
 //! actionable ranking, and the four timing fields which prevent intake/payment
-//! confusion must all be present. Incomplete or ineligible notes remain visible
-//! in the Obsidian Base, but are not surfaced by the scouting pipeline.
+//! confusion must all be present. Incomplete or ineligible notes stay visible
+//! where the notes live, but are not surfaced by the scouting pipeline.
 //!
 //! Description is extracted from the `## About` section of the body, or the first
 //! non-heading paragraph if no `## About` exists.
@@ -31,14 +31,14 @@ use crate::source::{SearchQuery, SourceAdapter, SourceError};
 use markdown_root::MarkdownRoot;
 
 #[allow(dead_code)]
-pub struct ObsidianMarkdownSource {
+pub struct MarkdownNoteSource {
     id: String,
     root: MarkdownRoot,
     opportunities_glob: String,
     opportunity_type: OpportunityType,
 }
 
-impl ObsidianMarkdownSource {
+impl MarkdownNoteSource {
     pub fn new(
         id: String,
         root: PathBuf,
@@ -58,7 +58,7 @@ impl ObsidianMarkdownSource {
     }
 }
 
-impl SourceAdapter for ObsidianMarkdownSource {
+impl SourceAdapter for MarkdownNoteSource {
     fn name(&self) -> &str {
         &self.id
     }
@@ -177,6 +177,8 @@ fn parse_opportunity_file(
         OpportunityType::Literature => "literature",
         OpportunityType::Trip => "trip",
     };
+    // The id namespace and the stored source value stay as they are: both are
+    // persisted identity, and rows already carry them.
     let opportunity_id = format!("{prefix}:obsidian:{stem}");
 
     let opp = Opportunity {
@@ -393,7 +395,7 @@ mod tests {
 
     #[test]
     fn skips_non_event_types() {
-        let dir = std::env::temp_dir().join("sjel_obsidian_test_skip");
+        let dir = std::env::temp_dir().join("sjel_markdown_notes_test_skip");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,
@@ -401,7 +403,7 @@ mod tests {
             "---\ntype: moc\nsummary: \"Hub\"\n---\n\nLinks.",
         );
 
-        let source = ObsidianMarkdownSource::new(
+        let source = MarkdownNoteSource::new(
             "test".into(),
             dir.clone(),
             "*.md".into(),
@@ -415,7 +417,7 @@ mod tests {
 
     #[test]
     fn reads_event_files() {
-        let dir = std::env::temp_dir().join("sjel_obsidian_test_read");
+        let dir = std::env::temp_dir().join("sjel_markdown_notes_test_read");
         fs::create_dir_all(&dir).unwrap();
 
         write_test_event(&dir, "2026-07-berlin-ai-hack.md",
@@ -426,7 +428,7 @@ mod tests {
             "---\nsummary: \"Munich Tech Meetup\"\nstart: \"2026-08-01\"\nlocation: \"Munich, DE\"\ncategory: \"meetup\"\ntype: event\nsources: \"https://meetup.com/xyz\"\n---\n\n## About\nMonthly meetup."
         );
 
-        let source = ObsidianMarkdownSource::new(
+        let source = MarkdownNoteSource::new(
             "test".into(),
             dir.clone(),
             "*.md".into(),
@@ -463,11 +465,11 @@ mod tests {
     fn extracts_about_section() {
         let md = "---\nsummary: Test\n---\n\n## About\nThis is the description.\nMore lines.\n\n## Other\nNot included.";
 
-        let dir = std::env::temp_dir().join("sjel_obsidian_test_about");
+        let dir = std::env::temp_dir().join("sjel_markdown_notes_test_about");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(&dir, "test.md", md);
 
-        let source = ObsidianMarkdownSource::new(
+        let source = MarkdownNoteSource::new(
             "test".into(),
             dir.clone(),
             "*.md".into(),
@@ -488,7 +490,7 @@ mod tests {
 
     #[test]
     fn scholarship_requires_completed_hard_filter_review() {
-        let dir = std::env::temp_dir().join("sjel_obsidian_test_scholarship");
+        let dir = std::env::temp_dir().join("sjel_markdown_notes_test_scholarship");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,
@@ -523,7 +525,7 @@ mod tests {
              payment_start: 2027-10-01\n---\n",
         );
 
-        let source = ObsidianMarkdownSource::new(
+        let source = MarkdownNoteSource::new(
             "scholarships".into(),
             dir.clone(),
             "*.md".into(),
@@ -550,7 +552,7 @@ mod tests {
 
     #[test]
     fn supports_one_exact_markdown_file() {
-        let dir = std::env::temp_dir().join("sjel_obsidian_test_exact_file");
+        let dir = std::env::temp_dir().join("sjel_markdown_notes_test_exact_file");
         fs::create_dir_all(&dir).unwrap();
         write_test_event(
             &dir,
@@ -563,7 +565,7 @@ mod tests {
             "---\ntype: event\nsummary: \"Ignored event\"\n---\n",
         );
 
-        let source = ObsidianMarkdownSource::new(
+        let source = MarkdownNoteSource::new(
             "test".into(),
             dir.clone(),
             "one.md".into(),

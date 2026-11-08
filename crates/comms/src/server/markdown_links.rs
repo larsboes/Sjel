@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Debug, Serialize)]
-pub(super) struct VaultCandidateOut {
+pub(super) struct MarkdownLinkCandidateOut {
     id: String,
     source_id: String,
     source_ref: String,
@@ -10,52 +10,55 @@ pub(super) struct VaultCandidateOut {
     imported: bool,
 }
 
-pub(super) async fn vault_scan_handler() -> HttpResponse {
-    let result = tokio::task::spawn_blocking(move || -> Result<Vec<VaultCandidateOut>, String> {
-        let cfg = Config::load();
-        let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
-        vault_links::scan(&cfg.vault_link_sources)
-            .into_iter()
-            .map(|candidate| {
-                let imported = store
-                    .get_feed_status(&candidate.id)
-                    .map_err(|error| error.to_string())?
-                    .is_some();
-                Ok(VaultCandidateOut {
-                    id: candidate.id,
-                    source_id: candidate.source_id,
-                    source_ref: candidate.source_ref,
-                    label: candidate.label,
-                    url: candidate.url,
-                    imported,
+pub(super) async fn markdown_link_scan_handler() -> HttpResponse {
+    let result =
+        tokio::task::spawn_blocking(move || -> Result<Vec<MarkdownLinkCandidateOut>, String> {
+            let cfg = Config::load();
+            let store = Store::open(&cfg.database_path).map_err(|error| error.to_string())?;
+            comms::markdown_links::scan(&cfg.markdown_link_sources)
+                .into_iter()
+                .map(|candidate| {
+                    let imported = store
+                        .get_feed_status(&candidate.id)
+                        .map_err(|error| error.to_string())?
+                        .is_some();
+                    Ok(MarkdownLinkCandidateOut {
+                        id: candidate.id,
+                        source_id: candidate.source_id,
+                        source_ref: candidate.source_ref,
+                        label: candidate.label,
+                        url: candidate.url,
+                        imported,
+                    })
                 })
-            })
-            .collect()
-    })
-    .await;
+                .collect()
+        })
+        .await;
 
     match result {
         Ok(Ok(candidates)) => (StatusCode::OK, Json(json!(candidates))),
         _ => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "vault link scan failed" })),
+            Json(json!({ "error": "markdown link scan failed" })),
         ),
     }
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct VaultImportBody {
+pub(super) struct MarkdownLinkImportBody {
     source_id: String,
     url: String,
 }
 
-pub(super) async fn vault_import_handler(Json(body): Json<VaultImportBody>) -> HttpResponse {
+pub(super) async fn markdown_link_import_handler(
+    Json(body): Json<MarkdownLinkImportBody>,
+) -> HttpResponse {
     let result = tokio::task::spawn_blocking(move || -> Result<FeedFullItem, String> {
         let cfg = Config::load();
-        let candidate = vault_links::scan(&cfg.vault_link_sources)
+        let candidate = comms::markdown_links::scan(&cfg.markdown_link_sources)
             .into_iter()
             .find(|candidate| candidate.source_id == body.source_id && candidate.url == body.url)
-            .ok_or_else(|| "link is not in a configured Vault source".to_string())?;
+            .ok_or_else(|| "link is not in a configured Markdown link source".to_string())?;
         let mut item = media::fetch(&candidate.url).map_err(|error| error.to_string())?;
         if item.title.is_none() {
             item.title = candidate.label.clone();

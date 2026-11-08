@@ -163,6 +163,12 @@ enum Event {
     /// A pinch on the page: its scale since it began, and whether it ended (`host/App.swift`).
     #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
     Pinch(f64, bool),
+    /// Host or NSH tab navigation request.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    SelectTab(Tab),
+    /// Host or NSH edge seat opening request.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    OpenEdge(Seat),
 }
 
 pub struct Capabilities {

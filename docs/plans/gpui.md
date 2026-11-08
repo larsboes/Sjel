@@ -699,8 +699,11 @@ backdrop caching, and zip 9 bump in updater), passing `tools/audit` cleanly.
    `mail_detail`, `mail_action`, `mail_gmail_job`), wired through `NshHostScreen` on both iOS
    (`Tab::Mail`) and the Mac trial (`SJEL_NSH_TRIAL=mail`). Not run yet: device check on a paired
    iPhone.
-4. **The new tab bar** after Mail. The bar is GPUI today (`ios/src/lib.rs`); with two NSH
-   screens, decide whether the bar itself moves to NSH (`nsh_base` tabs). Not decided.
+4. **The new tab bar** after Mail. Built (2026-11-08): `NshHostScreen` (`ui/src/nsh_documents.rs`)
+   carries a native NSH bottom tab bar (`Today | Mail | Documents | Calendar | Travel | Agent`)
+   with zero-cost in-NSH navigation between Mail and Documents, and coordinated host switching
+   (`docs::set_switch_tab` -> `Event::SelectTab` / `Event::OpenEdge` in `ios/src/nsh.rs`, `events.rs`)
+   for GPUI views. Open: device check on paired iPhone.
 5. **Retire the phone's GPUI pages** as each is next changed. `ios/src`'s GPUI shell and
    `gpui-mobile` go when the last one has moved. Android comes from NSH's Android backend.
 6. **The Mac window's content** was not looked at (`SJEL_NSH_TRIAL=1`). Whether Mac pages move to

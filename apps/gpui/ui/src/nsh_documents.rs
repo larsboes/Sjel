@@ -98,6 +98,7 @@ struct Feed {
     source: Mutex<Option<Source>>,
     originals: Mutex<Option<Originals>>,
     close: Mutex<Option<Box<dyn Fn() + Send>>>,
+    switch_tab: Mutex<Option<Box<dyn Fn(&str) + Send>>>,
     pdf_viewer: AtomicBool,
 }
 
@@ -113,6 +114,7 @@ fn feed() -> &'static Feed {
         source: Mutex::new(None),
         originals: Mutex::new(None),
         close: Mutex::new(None),
+        switch_tab: Mutex::new(None),
         pdf_viewer: AtomicBool::new(false),
     })
 }
@@ -149,6 +151,24 @@ fn send(update: Update) {
 /// What "Back" does at the top of the list. Without it, the list has no "Back".
 pub fn set_close(close: impl Fn() + Send + 'static) {
     *feed().close.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(close));
+}
+
+/// Allows host tab switching when navigating away from NSH screens.
+pub fn set_switch_tab(switch: impl Fn(&str) + Send + 'static) {
+    *feed().switch_tab.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(switch));
+}
+
+fn switch_tab_target(target: &str) {
+    if let Some(sw) = feed()
+        .switch_tab
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        sw(target);
+    } else {
+        close();
+    }
 }
 
 fn close() {
@@ -366,6 +386,43 @@ pub fn NshHostScreen() -> impl IntoElement {
                 .text_xs(),
             )
     };
+    let tab_item =
+        move |label: &'static str, target_page: Option<NshPage>, route_name: &'static str| {
+            let is_active = move || target_page.map(|tp| page.get() == tp).unwrap_or(false);
+            button()
+                .flex_1()
+                .py_2()
+                .on_press(move || {
+                    if let Some(tp) = target_page {
+                        set_nsh_page(tp);
+                    } else {
+                        switch_tab_target(route_name);
+                    }
+                })
+                .child(
+                    text(move || {
+                        if is_active() {
+                            format!("{label} •")
+                        } else {
+                            label.to_owned()
+                        }
+                    })
+                    .text_xs(),
+                )
+        };
+    let bottom_tab_bar = view()
+        .flex_row()
+        .items_center()
+        .px_2()
+        .pt_1()
+        .pb_2()
+        .child(tab_item("Today", None, "today"))
+        .child(tab_item("Mail", Some(NshPage::Mail), "mail"))
+        .child(tab_item("Documents", Some(NshPage::Documents), "documents"))
+        .child(tab_item("Calendar", None, "calendar"))
+        .child(tab_item("Travel", None, "travel"))
+        .child(tab_item("Agent", None, "agent"));
+
     view()
         .flex_1()
         .child((!closable).then(|| {
@@ -377,10 +434,11 @@ pub fn NshHostScreen() -> impl IntoElement {
                 .child(page_chip(NshPage::Documents, "Documents"))
                 .child(page_chip(NshPage::Mail, "Mail"))
         }))
-        .child(dynamic(move || match page.get() {
+        .child(view().flex_1().child(dynamic(move || match page.get() {
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
-        }))
+        })))
+        .child(closable.then(|| bottom_tab_bar))
 }
 
 #[component]
@@ -702,5 +760,13 @@ mod tests {
         assert_eq!(nsh_page(), NshPage::Mail);
         set_nsh_page(NshPage::Documents);
         assert_eq!(nsh_page(), NshPage::Documents);
+
+        let switched = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let sw_clone = switched.clone();
+        set_switch_tab(move |target| {
+            *sw_clone.lock().unwrap() = target.to_string();
+        });
+        switch_tab_target("calendar");
+        assert_eq!(*switched.lock().unwrap(), "calendar");
     }
 }

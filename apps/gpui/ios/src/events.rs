@@ -355,6 +355,8 @@ impl Capabilities {
                 // a reminder that fired while the phone was away is gone from it.
                 notify::report();
             }
+            Event::SelectTab(tab) => self.select_tab(tab, cx),
+            Event::OpenEdge(seat) => self.open_edge(seat, cx),
         }
     }
 }

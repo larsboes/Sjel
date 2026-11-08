@@ -83,6 +83,16 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     set_ui_sets(vec![nsh_base::registry()]);
     docs::set_close(crate::host::hide_nsh);
     mail::set_close(crate::host::hide_nsh);
+    docs::set_switch_tab(|target| {
+        crate::host::hide_nsh();
+        match target {
+            "today" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Today)),
+            "calendar" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Calendar)),
+            "travel" => crate::host::announce(crate::Event::SelectTab(crate::Tab::Travel)),
+            "agent" => crate::host::announce(crate::Event::OpenEdge(crate::Seat::Agent)),
+            _ => crate::host::announce(crate::Event::SelectTab(crate::Tab::Today)),
+        }
+    });
     if let Some(originals) = originals() {
         docs::set_originals(originals);
         docs::set_pdf_viewer();

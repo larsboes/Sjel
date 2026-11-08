@@ -32,13 +32,15 @@ covers it.
   Done when one read-only command reports every owned dependency surface without
   changing lockfiles or installing packages.
 
-- **Full local CI replay remains unverified.** Explicit Bun environment isolation fixes
-  initial root test collection. Focused planner tests and the backup-receipt and
-  service-runner protocol regressions pass. Full replay still encounters child
-  subprocess failures in the restricted host checkout. Smallest change: reproduce
-  the remaining failures in a clean committed checkout and compare with Actions
-  before attributing them to production code. Native macOS sandbox integration
-  tests also require an unrestricted host; their security assertions remain intact.
+- **Full local CI replay remains unverified.** A clean committed checkout passes
+  497 Bun tests (12 skipped), and all repository gates pass. The full shell replay
+  still cannot rebuild the CLI in the restricted host's shared Cargo target.
+  Four native macOS sandbox integration tests require an unrestricted host;
+  their security assertions remain intact. The same revision's
+  [full Actions run](https://github.com/larsboes/Sjel/actions/runs/42511020140)
+  passes Rust tests, Bun/shell tests, UI checks and all five platform compile checks.
+  Smallest change: let the replay use the isolated Cargo runner consistently,
+  then verify the native integrations on an unrestricted host.
 
 - **Pre-push checks mix committed and unfinished changes.** `ci-local fast --committed`
   selects committed inputs but executes formatting and gates against the current
@@ -197,16 +199,15 @@ covers it.
   `#anchor` exists. Smallest change: a `tools/check-doc-links.sh` beside
   `check-doc-self-references.sh`, in the same CI repo gates.
 - **Selective verification and build resources.** The shared planner, selected runners,
-  daily/release full verification and local format receipts are implemented in the working tree;
-  the policy and commands live in `CONTRIBUTING.md#change-aware-ci`. Decided 2026-11-07:
-  ordinary pushes select affected work; full verification runs daily and before release artifacts.
+  daily/release full verification and local format receipts are published; commands
+  live in `CONTRIBUTING.md#change-aware-ci`. Ordinary pushes select affected work;
+  full verification runs daily and before release artifacts.
   Open acceptance checks:
-  1. Observe selective Actions runs, a daily full run and distribution preflight after publication.
-     Live Actions execution, native platform builds and full workspace tests have not run for
-     this change; `actionlint` was unavailable. Local gate replay found concurrent architecture
-     and self-model freshness failures, plus missing install-policy settings in the unrelated
-     learning plugin. These files remain outside this change. A full failure must remain visible
-     in subsequent plan summaries.
+  1. Observe a selective Actions run, a scheduled daily full run and distribution
+     preflight. A [push-triggered full run](https://github.com/larsboes/Sjel/actions/runs/42511020140)
+     passes Rust tests, formatting/Clippy, Bun/shell tests, repository gates, UI
+     checks and all five platform compile jobs. Native device acceptance remains
+     separate from compilation.
   2. Continue `bun tools/ci-impact-backtest.ts` against history containing failing Rust tests.
      The current 20-run sample yielded 19 usable runs and no failing Rust job, so its zero misses
      do not establish failure-detection coverage.

@@ -22,6 +22,9 @@ and all five configured Bun security scans pass. Publication hygiene and archite
 freshness pass. Follow-up strict root and GPUI core/UI Clippy checks pass.
 The travel consolidation passes 380 core and 185 UI tests (`cba9a059`).
 Local verification isolation and portable CI fixtures were repaired (`da81a3a1`).
+The [full CI run at `8e1bc933`](https://github.com/larsboes/Sjel/actions/runs/42511020140)
+passes Rust tests, Bun/shell tests, repository gates, UI checks and all five platform
+compile checks. A clean local checkout passes 497 Bun tests, with 12 skipped.
 The full root Rust suite retains four macOS sandbox integration failures in the
 restricted session; device services were unavailable. Full CI replay is tracked in
 [`tooling.md`](../docs/plans/tooling.md). Frame-time benchmarking was not run. No frame-rate improvement

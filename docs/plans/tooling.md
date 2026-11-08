@@ -32,12 +32,13 @@ covers it.
   Done when one read-only command reports every owned dependency surface without
   changing lockfiles or installing packages.
 
-- **Full local CI replay remains unverified.** The dependency-install replay succeeds
-  for all five Bun trees, but root-level `bun test` exits with `EPERM` on this host
-  before collection, and the shell replay has failures including backup receipts
-  and the service-runner protocol. Focused planner and Pi adaptation tests pass
-  from `tools/`. Smallest change: isolate the root discovery failure, then reproduce
-  each remaining shell failure independently before claiming a green baseline.
+- **Full local CI replay remains unverified.** Explicit Bun environment isolation fixes
+  initial root test collection. Focused planner tests and the backup-receipt and
+  service-runner protocol regressions pass. Full replay still encounters child
+  subprocess failures in the restricted host checkout. Smallest change: reproduce
+  the remaining failures in a clean committed checkout and compare with Actions
+  before attributing them to production code. Native macOS sandbox integration
+  tests also require an unrestricted host; their security assertions remain intact.
 
 - **Pre-push checks mix committed and unfinished changes.** `ci-local fast --committed`
   selects committed inputs but executes formatting and gates against the current
@@ -47,13 +48,6 @@ covers it.
   scan and publication gate while skipping its duplicate worktree checks.
   Smallest change: let `ci-local fast --revision <sha>` verify an immutable snapshot
   and bind a successful receipt to that revision.
-
-- **Skill-install rollback regression fails.** The full `sjel-cli` unit suite passes 414
-  tests and fails `intake::skills::tests::a_failed_second_layout_restores_the_first`:
-  reading the first destination after rollback returns `NotFound` at
-  `crates/sjel-cli/src/intake/skills.rs:988`. Reproduced with one test thread in the isolated
-  Cargo runner. Smallest change: correct rollback so the existing destination survives a
-  failure at the second destination, and make the regression pass. No workaround was applied.
 
 - **A contained harness cannot be given a credential.** Shipped as `sjel-contain --credential
   <provider>`: the slug resolves through the private catalogue `sjel provider` reads and reaches
@@ -279,9 +273,8 @@ covers it.
 - Trusted MCP text preserves known licence labels and compact ISO date intervals; pseudonymized free-text dates remain protected (`26f1313b`).
 
 Verification for these fixes: 46 pseudonymization tests, two CLI unit tests, the CLI process
-integration test and scoped Clippy with warnings denied passed. The full CLI unit suite has
-the rollback failure listed above. The workspace suite, live capability rebuilds and restarts,
-and a live MCP response check did not run. The shared build cache refused temporary archive
+integration test and scoped Clippy with warnings denied passed. The rollback regression also passes with isolated XDG state. Live capability rebuilds and
+restarts and a live MCP response check did not run. The shared build cache refused temporary archive
 cleanup; verification used the isolated Cargo runner with a writable scratch target.
 
 - `sjel-contain --credential <provider>|<entry>=<VAR>` resolves a provider key from the private

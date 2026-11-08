@@ -12,7 +12,7 @@ printf 'overlay = "%s"\n' "$tmp/overlay" > "$root/sjel.toml"
 printf '[package]\nname = "fixture"\n' > "$root/tools/sjel-cli/Cargo.toml"
 
 # Both fakes record execution; only the new one implements the protocol.
-printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'exit 1' > "$tmp/old"
+printf '%s\n' '#!/bin/bash' 'if [ "${1:-}" = runtime ]; then exit 0; fi' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'exit 1' > "$tmp/old"
 printf '%s\n' '#!/bin/bash' 'printf "%s\n" "$*" >> "$TEST_LOG"' 'if [ "${1:-}" = --service-runner-protocol ]; then printf "%s\n" sjel-service-runner-sqld-rotation-v1; fi' 'exit 0' > "$tmp/new"
 chmod +x "$tmp/old" "$tmp/new"
 export TEST_LOG="$tmp/log" SJEL_OVERLAY_ROOT="$tmp/overlay"

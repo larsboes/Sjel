@@ -92,13 +92,15 @@ struct Snapshot {
     status: String,
 }
 
+type SwitchTab = Box<dyn Fn(&str) + Send>;
+
 struct Feed {
     tx: Mutex<Option<UnboundedSender<Update>>>,
     snapshot: Mutex<Snapshot>,
     source: Mutex<Option<Source>>,
     originals: Mutex<Option<Originals>>,
     close: Mutex<Option<Box<dyn Fn() + Send>>>,
-    switch_tab: Mutex<Option<Box<dyn Fn(&str) + Send>>>,
+    switch_tab: Mutex<Option<SwitchTab>>,
     pdf_viewer: AtomicBool,
 }
 
@@ -438,7 +440,7 @@ pub fn NshHostScreen() -> impl IntoElement {
             NshPage::Documents => documents_screen().into_element(),
             NshPage::Mail => mail_screen().into_element(),
         })))
-        .child(closable.then(|| bottom_tab_bar))
+        .child(closable.then_some(bottom_tab_bar))
 }
 
 #[component]

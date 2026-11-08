@@ -12,7 +12,7 @@ export function localChecks(plan: CIPlan): FastCheck[] {
   if (plan.gpui.include.length) checks.push({ name: "gpui fmt", cmd: ["cargo", "fmt", "--manifest-path", "apps/gpui/Cargo.toml", "--all", "--check"], reason: "affected GPUI packages" });
   checks.push({ name: "publication hygiene", cmd: ["tools/check-publication-hygiene.sh"], reason: "always; never reused" });
   const ids = plan.gates.filter((id) => GATES[id]?.cheap && !GATES[id].cmd.includes("tools/check-publication-hygiene.sh"));
-  if (ids.length) checks.push({ name: "repo gates", cmd: ["bun", "tools/ci-run.ts", "gates", "--ids", ids.join(",")], reason: ids.join(", ") });
+  if (ids.length) checks.push({ name: "repo gates", cmd: ["bun", "--no-env-file", "tools/ci-run.ts", "gates", "--ids", ids.join(",")], reason: ids.join(", ") });
   return checks;
 }
 
@@ -92,7 +92,7 @@ async function main() {
       for (const dir of bunInstallDirs(root)) {
         if (!run(root, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"], join(root, dir))) ok = false;
       }
-      if (ok && !run(root, ["bun", "test", ...plan.bun.map((file) => `./${file}`)])) ok = false;
+      if (ok && !run(root, ["bun", "test", "--no-env-file", ...plan.bun.map((file) => `./${file}`)])) ok = false;
     }
     if (!await shellTests(root, plan.shell)) ok = false;
   } else if (job === "ui-check") {

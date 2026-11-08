@@ -821,8 +821,10 @@ mod tests {
 
     #[test]
     fn a_denial_and_a_stop_both_end_the_wait() {
-        let mut run = AgentRun::default();
-        run.running = true;
+        let mut run = AgentRun {
+            running: true,
+            ..Default::default()
+        };
         run.apply(Event {
             approval: "abc".into(),
             name: "write".into(),
@@ -846,8 +848,10 @@ mod tests {
     #[test]
     fn every_terminal_event_leaves_the_panel_idle() {
         for kind in ["done", "stopped", "error", "truncated"] {
-            let mut run = AgentRun::default();
-            run.running = true;
+            let mut run = AgentRun {
+                running: true,
+                ..Default::default()
+            };
             run.apply(Event {
                 approval: "abc".into(),
                 ..event("needs_approval")

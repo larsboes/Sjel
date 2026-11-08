@@ -57,8 +57,11 @@ fn seatbelt_profile_contains_deny_default_and_project_paths() {
     assert!(profile.contains("(remote ip \"localhost:*\")"));
     // Each ancestor is a literal, so a walk with openat resolves and no file below one is read.
     assert!(profile.contains("(allow file-read-data (literal \"/\"))"));
-    assert!(profile.contains("(allow file-read-data (literal \"/private\"))"));
-    assert!(!profile.contains("(allow file-read* (subpath \"/private\"))"));
+    let project = std::fs::canonicalize(&tmp).unwrap();
+    for ancestor in project.ancestors().skip(1) {
+        assert!(profile.contains(&format!("(allow file-read-data (literal {ancestor:?}))")));
+        assert!(!profile.contains(&format!("(allow file-read* (subpath {ancestor:?}))")));
+    }
 }
 
 #[test]

@@ -16,7 +16,7 @@ source "$_lib/paths.sh"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
-MARKETPLACE_OUT_ROOT="$scratch" bun "$SJEL_ROOT/tools/generate-marketplace.ts" >/dev/null
+MARKETPLACE_OUT_ROOT="$scratch" bun --no-env-file "$SJEL_ROOT/tools/generate-marketplace.ts" >/dev/null
 
 fail=0
 

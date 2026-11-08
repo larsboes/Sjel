@@ -158,7 +158,7 @@ pub fn cycle_column_width(
     let current = column_width(widths, id, default);
     let medium = (default * 1.35).round();
     let wide = (default * 1.70).round();
-    let next = if (current - default).abs() < 1.0 {
+    if (current - default).abs() < 1.0 {
         widths.insert(id, medium);
         medium
     } else if (current - medium).abs() < 1.0 {
@@ -167,8 +167,7 @@ pub fn cycle_column_width(
     } else {
         widths.remove(id);
         default
-    };
-    next
+    }
 }
 
 /// Specification of a column in [`sortable_table_header`] and [`resizable_table_header`].

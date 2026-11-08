@@ -120,6 +120,7 @@ expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CA
 
 POISON="/nowhere/sjel-poison/Knowledge-Base"
 out=$(SJEL_PERSONAL_ROOT="/nowhere/sjel-poison/overlay" \
+      XDG_STATE_HOME="/nowhere/sjel-poison/state" \
       SJEL_OVERLAY_ROOT="/nowhere/sjel-poison/overlay" \
       SJEL_DB_PATH="/nowhere/sjel-poison/overlay/data/sjel/sjel.db" \
       SJEL_COMMS_CONFIG="/nowhere/sjel-poison/overlay/config/comms.json" \
@@ -127,7 +128,7 @@ out=$(SJEL_PERSONAL_ROOT="/nowhere/sjel-poison/overlay" \
       SJEL_FINANCE_DECISIONS_ROOT="$POISON" \
       "$TOOL" --print-env 2>&1); status=$?
 expect_ok "--print-env answers under a poisoned environment"
-for var in SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
+for var in XDG_STATE_HOME SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL_COMMS_CONFIG \
            SJEL_TRIPS_EXPORT_ROOT \
            SJEL_FINANCE_DECISIONS_ROOT; do
   expect_not_under "an inherited $var does not survive" "$var" "/nowhere/sjel-poison"

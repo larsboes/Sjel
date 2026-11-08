@@ -136,7 +136,7 @@ isolate_sjel_env
 
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/sjel-cargo-hermetic.XXXXXX")"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault" "$SANDBOX/decisions"
+mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault" "$SANDBOX/decisions" "$SANDBOX/state"
 
 # An empty JSON object, not an absent file: comms resolves $SJEL_COMMS_CONFIG first and only
 # then the overlay and then a gitignored dev config next to its source. Pointing it at a file
@@ -145,6 +145,7 @@ mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault"
 echo '{}' > "$SANDBOX/comms.json"
 
 export CARGO_TARGET_DIR="$TARGET"
+export XDG_STATE_HOME="$SANDBOX/state"
 export SJEL_PERSONAL_ROOT="$SANDBOX/overlay"
 export SJEL_OVERLAY_ROOT="$SANDBOX/overlay"
 export SJEL_DB_PATH="$SANDBOX/overlay/data/sjel/sjel.db"
@@ -159,7 +160,7 @@ export SJEL_FINANCE_DECISIONS_ROOT="$SANDBOX/decisions"
 if [ "${1:-}" = "--print-env" ]; then
   # The sandbox is torn down on exit, so these paths are what the run WOULD use, not
   # somewhere to go and look afterwards. Printed in a stable order for the test.
-  for var in CARGO_TARGET_DIR SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH \
+  for var in CARGO_TARGET_DIR XDG_STATE_HOME SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH \
              SJEL_COMMS_CONFIG SJEL_TRIPS_EXPORT_ROOT \
              SJEL_FINANCE_DECISIONS_ROOT; do
     eval "printf '%s=%s\n' \"\$var\" \"\$$var\""

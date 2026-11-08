@@ -19,6 +19,7 @@ set -uo pipefail
 
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 source "$_root/tools/lib/test-support.sh"
+source "$_root/tools/lib/toml.sh"
 isolate_sjel_env
 
 WORK="$(mktemp -d)"
@@ -32,9 +33,11 @@ OVERLAY="$WORK/overlay"
 DEST="$WORK/destination"
 mkdir -p "$FAKE_HOME/Library/LaunchAgents" "$OVERLAY/config" "$OVERLAY/backup/receipts" "$DEST/packs"
 
-# `packs` is a real Sjel capability with a real backup contract — advise 1 day, stale 2
-# (services/packs/service.toml). Using it rather than a synthetic manifest keeps the test on
-# the same registry path doctor uses, so a change to how a contract is declared reaches here.
+# Exercise a real backup contract through the registry.
+stale_days="$(toml_get backup_stale_days "$_root/services/packs/service.toml")"
+case "$stale_days" in
+  ''|*[!0-9]*) echo "FAIL: packs needs a numeric backup_stale_days" >&2; exit 1 ;;
+esac
 cat > "$OVERLAY/config/machine.toml" <<'EOF'
 os = "macos"
 container_runtime = "docker"
@@ -112,10 +115,10 @@ says "the archive holds 40 bytes, the receipt recorded 2361" \
 head -c 2361 /dev/zero > "$DEST/packs/$ARCHIVE"
 
 # --- the backup stopped happening --------------------------------------------------------------
-OLD="$(days_ago_stamp 5)"
+OLD="$(days_ago_stamp "$((stale_days + 1))")"
 write_receipt "$OLD" "$ARCHIVE" 2361
 report
-says "past its 2d stale threshold" || fail "a five-day-old daily backup was not reported overdue"
+says "past its ${stale_days}d stale threshold" || fail "a backup beyond its declared stale threshold was not reported overdue"
 
 # --- nothing has ever landed ---------------------------------------------------------------------
 rm -f "$OVERLAY/backup/receipts/packs.json"

@@ -4,4 +4,4 @@
 # tools/lib/toml.sh's single-line grep/sed contract cannot express and which no shell
 # should try. Mirrors the tools/doctor and tools/self launcher pattern.
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/ci-local.ts" "$@"
+exec bun --no-env-file "$_here/ci-local.ts" "$@"

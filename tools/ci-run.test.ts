@@ -93,6 +93,7 @@ esac
 `, { mode: 0o755 });
     const sha = "a".repeat(40);
     const run = (runs: unknown[], jobs: unknown[]) => Bun.spawnSync(["bun", join(import.meta.dir, "ci-plan.ts"), "--root", root, "--require-full", sha], {
+      cwd: root,
       env: { PATH: `${bin}:${process.env.PATH}`, HOME: root, GITHUB_REPOSITORY: "example/fixture", RUNS: JSON.stringify({ workflow_runs: runs }), JOBS: JSON.stringify({ jobs }) },
       stdout: "pipe", stderr: "pipe",
     });

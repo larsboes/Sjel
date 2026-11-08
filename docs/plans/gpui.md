@@ -99,8 +99,9 @@ Mac unreachable, and the original's SHA-256 on the phone equals the library's.
 2. Built: triage actions (`Dismiss`, `Waiting`, `Archive`, `Trash`, `Secret (c3)`, category moves,
    model verdict `Accept`, and Gmail job `Retry`/`Cancel`) run through `POST /comms/triage/bulk`
    (`Source::mail_action`), with inline confirmation before archive, trash or class-raising moves.
-3. Open: offline caching of opened mails (rule 2), outbox queueing when the Mac is unreachable
-   (rule 3), and attachment handoff into the document reader.
+3. Built: offline caching of opened mail threads and detail (`MailOffline::cache_thread`), and outbox
+   queueing (`MailOffline::queue_action`, `replay_outbox`) when the Mac is unreachable, replaying
+   automatically on reconnect. Open: attachment handoff into the document reader.
 
 Done when the phone triages ten mails with the Mac reachable and the Mac shows the same state, an
 action taken offline applies once on reconnect, and an attachment opens in the reader.

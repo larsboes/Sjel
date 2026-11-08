@@ -11,7 +11,8 @@ use nsh_base::{button, text_view as nsh_markdown_view, TextViewLinks};
 use nsh_core::prelude::*;
 use sjel_gpui_core::device::Source;
 use sjel_gpui_core::mail::{
-    self, category_label, BulkResult, MailAction, MailProposal, StatusFilter, CATEGORIES,
+    self, category_label, BulkResult, MailAction, MailOffline, MailProposal, StatusFilter,
+    CATEGORIES,
 };
 use sjel_gpui_core::shell::{self, FeedContentDetail};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
@@ -43,6 +44,7 @@ struct Feed {
     tx: Mutex<Option<UnboundedSender<Update>>>,
     snapshot: Mutex<Snapshot>,
     source: Mutex<Option<Source>>,
+    offline: Mutex<Option<MailOffline>>,
     close: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
@@ -55,6 +57,7 @@ fn feed() -> &'static Feed {
             status: String::from("Waiting for mail triage…"),
         }),
         source: Mutex::new(None),
+        offline: Mutex::new(None),
         close: Mutex::new(None),
     })
 }
@@ -97,16 +100,65 @@ fn close() {
     }
 }
 
+/// Where opened mail threads and offline outbox actions live on this device.
+pub fn set_offline(offline: MailOffline) {
+    let cached = offline.cached_threads();
+    let outbox = offline.outbox_entries();
+    let count = cached.len();
+    let outbox_count = outbox.len();
+    *feed().offline.lock().unwrap_or_else(|e| e.into_inner()) = Some(offline);
+    if count > 0 || outbox_count > 0 {
+        let mut status = format!("{count} mail thread(s) kept on this phone");
+        if outbox_count > 0 {
+            status.push_str(&format!(" · {outbox_count} action(s) waiting in outbox"));
+        }
+        send(Update::Status(status));
+        if !cached.is_empty() {
+            send(Update::Rows(cached));
+        }
+    }
+}
+
 /// Connects the NSH Mail screen to `source` (the Mac's shell or the paired phone's client) and
-/// fetches the current triage proposals.
+/// fetches the current triage proposals, replaying any queued outbox actions first.
 pub fn connect(source: Source) {
-    *feed().source.lock().unwrap_or_else(|e| e.into_inner()) = Some(source);
+    *feed().source.lock().unwrap_or_else(|e| e.into_inner()) = Some(source.clone());
+    if let Some(offline) = locked(&feed().offline) {
+        if !offline.outbox_entries().is_empty() {
+            shell::spawn(async move {
+                match offline.replay_outbox(&source).await {
+                    Ok(n) if n > 0 => {
+                        send(Update::Status(format!(
+                            "Replayed {n} queued outbox action(s)."
+                        )));
+                    }
+                    Ok(_) => {}
+                    Err(err) => {
+                        send(Update::Status(format!("Outbox replay note: {err}")));
+                    }
+                }
+                refresh();
+            });
+            return;
+        }
+    }
     refresh();
 }
 
-/// Reloads the mail proposals from the connected [`Source`].
+/// Reloads the mail proposals from the connected [`Source`], falling back to kept offline threads.
 pub fn refresh() {
     let Some(source) = locked(&feed().source) else {
+        if let Some(offline) = locked(&feed().offline) {
+            let cached = offline.cached_threads();
+            let count = cached.len();
+            let outbox = offline.outbox_entries().len();
+            let mut status = format!("{count} cached mail thread(s)");
+            if outbox > 0 {
+                status.push_str(&format!(" · {outbox} waiting in outbox"));
+            }
+            send(Update::Rows(cached));
+            send(Update::Status(status));
+        }
         return;
     };
     send(Update::Status("Reading mail triage on the Mac…".into()));
@@ -118,38 +170,69 @@ pub fn refresh() {
                 send(Update::Status(status));
             }
             Err(reason) => {
-                send(Update::Status(format!("The Mac did not answer: {reason}")));
+                let mut status = format!("The Mac did not answer: {reason}");
+                if let Some(offline) = locked(&feed().offline) {
+                    let cached = offline.cached_threads();
+                    if !cached.is_empty() {
+                        status.push_str(&format!(". Showing {} cached offline.", cached.len()));
+                        send(Update::Rows(cached));
+                    }
+                }
+                send(Update::Status(status));
             }
         }
     });
 }
 
-fn open_detail(id: String) {
+fn open_detail(id: String, proposal: Option<MailProposal>) {
+    if let Some(offline) = locked(&feed().offline) {
+        if let Some(cached) = offline.cached_detail_of(&id) {
+            send(Update::Detail {
+                id: id.clone(),
+                detail: Box::new(cached),
+            });
+            if locked(&feed().source).is_none() {
+                return;
+            }
+        }
+    }
     let Some(source) = locked(&feed().source) else {
         return;
     };
     shell::spawn(async move {
         match source.mail_detail(&id).await {
-            Ok(detail) => send(Update::Detail {
-                id,
-                detail: Box::new(detail),
-            }),
+            Ok(detail) => {
+                if let Some(offline) = locked(&feed().offline) {
+                    if let Some(p) = proposal.as_ref() {
+                        let _ = offline.cache_thread(p, Some(&detail));
+                    }
+                }
+                send(Update::Detail {
+                    id,
+                    detail: Box::new(detail),
+                });
+            }
             Err(error) => send(Update::DetailError { id, error }),
         }
     });
 }
 
 fn apply_action(id: String, action: MailAction) {
-    let Some(source) = locked(&feed().source) else {
-        return;
-    };
+    let source = locked(&feed().source);
+    let offline = locked(&feed().offline);
     let label = action_progress_label(&action);
     send(Update::Status(label));
+    let act_clone = action.clone();
     shell::spawn(async move {
-        let ids = vec![id];
-        match source.mail_action(&ids, &action).await {
+        let ids = vec![id.clone()];
+        let outcome = if let Some(source) = source {
+            source.mail_action(&ids, &act_clone).await
+        } else {
+            Err("The Mac is not reachable.".into())
+        };
+        match outcome {
             Ok(result) => {
-                let notice = format_bulk_notice(&action, &result);
+                let notice = format_bulk_notice(&act_clone, &result);
                 send(Update::ActionDone {
                     succeeded: result.succeeded,
                     notice,
@@ -157,6 +240,22 @@ fn apply_action(id: String, action: MailAction) {
                 refresh();
             }
             Err(error) => {
+                if let Some(offline) = offline {
+                    match offline.queue_action(vec![id.clone()], act_clone.clone()) {
+                        Ok(_) => {
+                            send(Update::ActionDone {
+                                succeeded: vec![id],
+                                notice: "Action queued in offline outbox. Will apply on reconnect."
+                                    .into(),
+                            });
+                            return;
+                        }
+                        Err(err) => {
+                            send(Update::Status(format!("Could not queue in outbox: {err}")));
+                            return;
+                        }
+                    }
+                }
                 send(Update::Status(format!("Not applied: {error}")));
             }
         }
@@ -524,8 +623,8 @@ fn thread_list(
                                 open_thread.detail.set(None);
                                 open_thread.detail_error.set(None);
                                 open_thread.pending_confirm.set(None);
-                                open_thread.proposal.set(Some(chosen));
-                                open_detail(id);
+                                open_thread.proposal.set(Some(chosen.clone()));
+                                open_detail(id, Some(chosen));
                             }
                         })
                         .child(

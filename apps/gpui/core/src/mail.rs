@@ -4,6 +4,13 @@
 //! The labels, order and status groups were the dashboard's (`dashboard/src/routes/feed/+page.svelte`);
 //! this module owns them now (AGENTS.md, "The dashboard is the second consumer").
 
+use std::fs;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+use crate::device::Source;
+use crate::shell::FeedContentDetail;
 #[cfg(test)]
 use crate::shell::FeedRelevance;
 
@@ -12,6 +19,150 @@ pub use feed_api::{
     MailAction, MailAuthenticity, MailProposal, ModelVerdict, StatusFilter, CATEGORIES,
     CLASS_RAISING,
 };
+
+/// An opened mail thread cached on the phone (`docs/plans/gpui.md` §2 rule 2).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct CachedMailThread {
+    pub proposal: MailProposal,
+    pub detail: Option<FeedContentDetail>,
+    pub cached_at: String,
+}
+
+/// A triage action waiting for reconnection (`docs/plans/gpui.md` §2 rule 3).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct MailOutboxEntry {
+    pub id: String,
+    pub thread_ids: Vec<String>,
+    pub action: MailAction,
+    pub queued_at: String,
+}
+
+/// Local storage for opened mail threads and offline triage actions.
+#[derive(Clone, Debug)]
+pub struct MailOffline {
+    dir: PathBuf,
+}
+
+impl MailOffline {
+    pub fn new(dir: PathBuf) -> Self {
+        let _ = fs::create_dir_all(dir.join("threads"));
+        let _ = fs::create_dir_all(dir.join("outbox"));
+        Self { dir }
+    }
+
+    fn threads_dir(&self) -> PathBuf {
+        self.dir.join("threads")
+    }
+
+    fn outbox_dir(&self) -> PathBuf {
+        self.dir.join("outbox")
+    }
+
+    /// Stores an opened mail thread's proposal and detail on this device.
+    pub fn cache_thread(
+        &self,
+        proposal: &MailProposal,
+        detail: Option<&FeedContentDetail>,
+    ) -> Result<(), String> {
+        let _ = fs::create_dir_all(self.threads_dir());
+        let cached = CachedMailThread {
+            proposal: proposal.clone(),
+            detail: detail.cloned(),
+            cached_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let json = serde_json::to_vec(&cached).map_err(|e| e.to_string())?;
+        fs::write(
+            self.threads_dir().join(format!("{}.json", proposal.id)),
+            json,
+        )
+        .map_err(|e| format!("Could not cache mail thread: {e}"))
+    }
+
+    /// Returns the cached detail of `id` if opened previously.
+    pub fn cached_detail_of(&self, id: &str) -> Option<FeedContentDetail> {
+        let path = self.threads_dir().join(format!("{id}.json"));
+        let bytes = fs::read(path).ok()?;
+        let cached: CachedMailThread = serde_json::from_slice(&bytes).ok()?;
+        cached.detail
+    }
+
+    /// Returns all cached thread proposals on this device, newest first.
+    pub fn cached_threads(&self) -> Vec<MailProposal> {
+        let Ok(entries) = fs::read_dir(self.threads_dir()) else {
+            return Vec::new();
+        };
+        let mut threads: Vec<CachedMailThread> = entries
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+            .filter_map(|e| fs::read(e.path()).ok())
+            .filter_map(|b| serde_json::from_slice(&b).ok())
+            .collect();
+        threads.sort_by(|a, b| b.proposal.internal_date.cmp(&a.proposal.internal_date));
+        threads.into_iter().map(|c| c.proposal).collect()
+    }
+
+    /// Queues a triage action when the Mac is unreachable.
+    pub fn queue_action(
+        &self,
+        thread_ids: Vec<String>,
+        action: MailAction,
+    ) -> Result<String, String> {
+        let _ = fs::create_dir_all(self.outbox_dir());
+        let id = format!(
+            "{}_{}",
+            chrono::Utc::now().timestamp_millis(),
+            thread_ids.first().map(String::as_str).unwrap_or("batch")
+        );
+        let entry = MailOutboxEntry {
+            id: id.clone(),
+            thread_ids,
+            action,
+            queued_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let json = serde_json::to_vec(&entry).map_err(|e| e.to_string())?;
+        fs::write(self.outbox_dir().join(format!("{id}.json")), json)
+            .map_err(|e| format!("Could not queue action in outbox: {e}"))?;
+        Ok(id)
+    }
+
+    /// Returns all queued outbox entries, oldest first.
+    pub fn outbox_entries(&self) -> Vec<MailOutboxEntry> {
+        let Ok(entries) = fs::read_dir(self.outbox_dir()) else {
+            return Vec::new();
+        };
+        let mut list: Vec<MailOutboxEntry> = entries
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+            .filter_map(|e| fs::read(e.path()).ok())
+            .filter_map(|b| serde_json::from_slice(&b).ok())
+            .collect();
+        list.sort_by(|a, b| a.queued_at.cmp(&b.queued_at));
+        list
+    }
+
+    /// Removes an outbox entry after it has been applied to the Mac.
+    pub fn remove_outbox_entry(&self, id: &str) {
+        let _ = fs::remove_file(self.outbox_dir().join(format!("{id}.json")));
+    }
+
+    /// Replays any queued outbox actions through `source`.
+    pub async fn replay_outbox(&self, source: &Source) -> Result<usize, String> {
+        let entries = self.outbox_entries();
+        let mut replayed = 0;
+        for entry in entries {
+            match source.mail_action(&entry.thread_ids, &entry.action).await {
+                Ok(_) => {
+                    self.remove_outbox_entry(&entry.id);
+                    replayed += 1;
+                }
+                Err(err) => {
+                    return Err(format!("Outbox replay stopped on {}: {err}", entry.id));
+                }
+            }
+        }
+        Ok(replayed)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -150,5 +301,47 @@ mod tests {
         );
         m.authenticity.as_mut().unwrap().verdict = "verified".into();
         assert_eq!(m.authenticity_badge(), None);
+    }
+
+    #[test]
+    fn mail_offline_caches_threads_and_queues_outbox_actions() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "sjel-mail-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let offline = MailOffline::new(temp_dir.clone());
+        let m = mail("thread_offline", "steuern", "proposed", None, "2026-11-08");
+        let detail = FeedContentDetail {
+            id: "thread_offline".into(),
+            source: "mail".into(),
+            content: Some("Tax statement".into()),
+            ..Default::default()
+        };
+
+        assert!(offline.cache_thread(&m, Some(&detail)).is_ok());
+        let cached_detail = offline.cached_detail_of("thread_offline");
+        assert_eq!(
+            cached_detail.and_then(|d| d.content).as_deref(),
+            Some("Tax statement")
+        );
+
+        let cached_list = offline.cached_threads();
+        assert_eq!(cached_list.len(), 1);
+        assert_eq!(cached_list[0].id, "thread_offline");
+
+        let entry_id = offline
+            .queue_action(vec!["thread_offline".into()], MailAction::Archive)
+            .expect("queues outbox action");
+        let entries = offline.outbox_entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].action, MailAction::Archive);
+        assert_eq!(entries[0].thread_ids, vec!["thread_offline"]);
+
+        offline.remove_outbox_entry(&entry_id);
+        assert!(offline.outbox_entries().is_empty());
+        let _ = std::fs::remove_dir_all(temp_dir);
     }
 }

@@ -58,6 +58,17 @@ fn originals() -> Option<sjel_gpui_core::originals::Originals> {
         .then(|| sjel_gpui_core::originals::Originals::new(cache, kept))
 }
 
+#[cfg(target_os = "ios")]
+#[allow(unsafe_code)]
+fn mail_offline() -> Option<sjel_gpui_core::mail::MailOffline> {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+    let kept = home.join("Library/Application Support/kept-mail");
+    let kept_c = std::ffi::CString::new(kept.to_str()?).ok()?;
+    // SAFETY: `kept_c` is a NUL-terminated path that outlives the call.
+    unsafe { sjel_ios_protected_folder(kept_c.as_ptr()) }
+        .then(|| sjel_gpui_core::mail::MailOffline::new(kept))
+}
+
 /// Mounts the reader into `container`. Returns `false` off the main thread.
 #[cfg(target_os = "ios")]
 #[allow(unsafe_code)]
@@ -75,6 +86,9 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     if let Some(originals) = originals() {
         docs::set_originals(originals);
         docs::set_pdf_viewer();
+    }
+    if let Some(offline) = mail_offline() {
+        mail::set_offline(offline);
     }
     let app = AppView::new(mtm, container.bounds(), SurfaceOptions::default());
     app.register_component(

@@ -20,6 +20,7 @@ use nsh_platform_gpui::{
     open_app_window, set_ui_sets, AppOptions, AppSource, ComponentContext, NativeComponent, Root,
 };
 use sjel_gpui_core::device::Source;
+use sjel_gpui_core::mail::MailOffline;
 use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, Shell};
 use sjel_gpui_ui::documents::PdfRenderer;
@@ -40,10 +41,19 @@ fn mac_originals() -> Option<Originals> {
     Some(Originals::new(cache, kept))
 }
 
+fn mac_mail_offline() -> Option<MailOffline> {
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    let kept = home.join("Library/Application Support/dev.sjel.desktop/nsh-kept-mail");
+    Some(MailOffline::new(kept))
+}
+
 pub fn open(cx: &mut App) {
     set_ui_sets(vec![nsh_base::registry()]);
     if let Some(originals) = mac_originals() {
         set_originals(originals);
+    }
+    if let Some(offline) = mac_mail_offline() {
+        nsh_mail::set_offline(offline);
     }
     set_pdf_viewer();
     if std::env::var("SJEL_NSH_TRIAL").as_deref() == Ok("mail") {

@@ -68,6 +68,12 @@ Two additions serve agents that read Sjel through its APIs.
 `crates/sjel-server/src/agent.rs` applies both at the gate to every response for the agent
 token, on each capability that calls `InboundAuth::admit_agents`.
 
+The trusted and zero-retention tiers use `view::trusted_view`: planning dates, ISO date
+intervals and known SPDX licence labels remain readable; contacts and token-shaped secrets
+are masked. Licence exceptions match whole labels, including the optional `-licensed`
+suffix. The pseudonymized tier continues to redact dates in free text, where they can
+identify a person.
+
 ## Usage
 
 ```rust

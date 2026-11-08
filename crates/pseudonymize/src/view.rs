@@ -234,21 +234,50 @@ fn trusted_identity(value: &str) -> String {
     }
 }
 
-fn trusted_text(value: &str) -> String {
-    use crate::pattern::{looks_like_email, looks_like_iban, looks_like_phone, looks_like_token};
-    // `2026-10-25` is a date, not a number in groups: dates are what a trusted agent plans with.
-    let iso_date = |w: &str| {
-        let b = w.as_bytes();
+fn planning_date(word: &str) -> bool {
+    let iso_date = |date: &str| {
+        let b = date.as_bytes();
         b.len() == 10
             && b[4] == b'-'
             && b[7] == b'-'
             && b.iter()
                 .enumerate()
                 .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+            && ("01"..="12").contains(&&date[5..7])
+            && ("01"..="31").contains(&&date[8..10])
     };
+    iso_date(word)
+        || word
+            .split_once('/')
+            .is_some_and(|(start, end)| iso_date(start) && iso_date(end))
+}
+
+fn licence_label(word: &str) -> bool {
+    let word = word.trim_matches(|c: char| c.is_ascii_punctuation() && c != '-');
+    let identifier = word.strip_suffix("-licensed").unwrap_or(word);
+    [
+        "Apache-2.0",
+        "MIT",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "MPL-2.0",
+        "GPL-2.0-only",
+        "GPL-2.0-or-later",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "LGPL-2.1-only",
+        "LGPL-2.1-or-later",
+        "AGPL-3.0-only",
+        "AGPL-3.0-or-later",
+    ]
+    .contains(&identifier)
+}
+
+fn trusted_text(value: &str) -> String {
+    use crate::pattern::{looks_like_email, looks_like_iban, looks_like_phone, looks_like_token};
     let digitish = |w: &str| {
         !w.is_empty()
-            && !iso_date(w)
+            && !planning_date(w)
             && w.chars().any(|c| c.is_ascii_digit())
             && w.chars().all(|c| c.is_ascii_digit() || "+()/-".contains(c))
     };
@@ -281,7 +310,7 @@ fn trusted_text(value: &str) -> String {
             Some("[email]")
         } else if looks_like_iban(word) {
             Some("[account]")
-        } else if looks_like_token(word) {
+        } else if looks_like_token(word) && !licence_label(word) {
             Some("[token]")
         } else {
             None
@@ -476,6 +505,30 @@ mod tests {
             trusted_identity("DHL Paket <noreply@dhl.de>"),
             "DHL Paket (dhl.de)"
         );
+    }
+
+    #[test]
+    fn trusted_planning_dates_and_licences_survive_contact_redaction() {
+        let mut value = json!({
+            "note": "2026-08-13 to 2026-08-20; 2026-08-13/2026-08-20 Apache-2.0-licensed, (AGPL-3.0-only). Call +49 170 1234567 or erika@example.com sk_live_abcdef1234567890"
+        });
+        trusted_view(&mut value);
+        assert_eq!(value["note"], "2026-08-13 to 2026-08-20; 2026-08-13/2026-08-20 Apache-2.0-licensed, (AGPL-3.0-only). Call [phone] or [email] [token]");
+        for secret in [
+            "Apache-2.0-licensed-abcdef1234567890",
+            "12345678/2026-08-20",
+            "2026-99-99/2026-08-20",
+        ] {
+            assert_ne!(trusted_text(secret), secret);
+        }
+    }
+
+    #[test]
+    fn free_text_dates_stay_private_in_the_pseudonymized_view() {
+        let mut value = json!({"note": "2026-08-13 to 2026-08-20"});
+        agent_view(&mut value, &mut session(), &registry());
+        let note = value["note"].as_str().unwrap();
+        assert!(!note.contains("2026-08-13") && !note.contains("2026-08-20"));
     }
 
     fn registry() -> EntityRegistry {

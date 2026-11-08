@@ -19,10 +19,12 @@ Verified after implementation: 165 focused tooling and Pi adaptation tests, 257
 clipper tests and its production build, 30 pi-learn tests, 68 Obsidian access
 tests, five subagents tests, and three NSH Mail tests. All five frozen installs
 and all five configured Bun security scans pass. Publication hygiene and architecture
-freshness pass. Strict NSH UI Clippy still reports three existing warnings in
-`nsh_documents.rs` and `primitives/tables.rs`. The full local CI replay fails before
-root Bun test collection with `EPERM` and has additional shell-suite failures.
-Device testing and frame-time benchmarking were not run. No frame-rate improvement
+freshness pass. Follow-up strict root and GPUI core/UI Clippy checks pass.
+The travel consolidation passes 380 core and 185 UI tests (`cba9a059`).
+Local verification isolation and portable CI fixtures were repaired (`da81a3a1`).
+The full root Rust suite retains four macOS sandbox integration failures in the
+restricted session; device services were unavailable. Full CI replay is tracked in
+[`tooling.md`](../docs/plans/tooling.md). Frame-time benchmarking was not run. No frame-rate improvement
 is claimed from the memoization change.
 
 ### Investigation verdict before implementation

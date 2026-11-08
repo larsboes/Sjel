@@ -231,7 +231,7 @@ function fixture(): string {
     cpSync(file.path, join(dir, file.rel));
     // A directory extension may import sibling modules (command-policy keeps its pure classifier
     // beside the entry so it can be tested without pi). Copy those too, or the entry cannot load.
-    if (packs.includes(file) && file.rel.endsWith("/index.ts")) {
+    if (file.rel.endsWith("/index.ts")) {
       for (const sibling of readdirSync(dirname(file.path))) {
         if (sibling.endsWith(".ts") && sibling !== "index.ts" && !sibling.endsWith(".test.ts")) {
           cpSync(join(dirname(file.path), sibling), join(destination, sibling));

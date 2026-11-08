@@ -269,6 +269,8 @@ covers it.
 
 ## Done
 
+- Hermetic Cargo verification isolates XDG state; the skill-install rollback regression passes. Portable containment ancestors, backup receipt thresholds, service-runner admission fixtures and Bun environment isolation match their current contracts (`da81a3a1`).
+
 - Capability CLIs run as `sjel <capability> <args...>` through Cargo, with the resolved overlay and local-build policy (`b7e2b832`).
 - Trusted MCP text preserves known licence labels and compact ISO date intervals; pseudonymized free-text dates remain protected (`26f1313b`).
 

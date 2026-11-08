@@ -5,11 +5,13 @@ use std::sync::{Arc, OnceLock};
 
 use futures::channel::oneshot;
 use gpui::{
-    div, img, prelude::*, px, rgb, AnyElement, Context, ObjectFit, RenderImage, StyledImage,
+    div, img, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, ObjectFit, RenderImage,
+    StyledImage,
 };
+use gpui_kit::component::scroll::ScrollableElement;
 use sjel_gpui_core::shell::{self, ShellError};
 
-use crate::theme::Palette;
+use crate::theme::{tint, Palette};
 
 use super::Documents;
 
@@ -73,6 +75,68 @@ pub fn register_renderer(factory: RendererFactory) {
 }
 
 pub(crate) const CACHED_PAGES: usize = 6;
+pub(crate) const THUMB_WIDTH: u32 = 160;
+pub(crate) const CACHED_THUMBS: usize = 32;
+
+/// Extract a compact snippet around the first case-insensitive match of `query` in `text`.
+pub(crate) fn match_snippet(text: &str, query: &str) -> Option<String> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return None;
+    }
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let lower = normalized.to_lowercase();
+    let byte_ix = lower.find(&needle)?;
+    let prefix_chars = lower[..byte_ix].chars().count();
+    let start_char = prefix_chars.saturating_sub(24);
+    let snippet: String = normalized.chars().skip(start_char).take(72).collect();
+    Some(if start_char > 0 {
+        format!("…{snippet}…")
+    } else {
+        format!("{snippet}…")
+    })
+}
+
+/// One page that matched an in-document search query, with its one-based page number and snippet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PageSearchHit {
+    pub(crate) page_index: usize,
+    pub(crate) page_number: u32,
+    pub(crate) snippet: String,
+}
+
+/// Find every page within `[first_page..=last_page]` whose extracted text matches `query`.
+pub(crate) fn search_extracted_pages(
+    pages: &[sjel_gpui_core::shell::DocumentExtractedPage],
+    first_page: usize,
+    last_page: Option<usize>,
+    query: &str,
+) -> Vec<PageSearchHit> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut hits = Vec::new();
+    for page in pages {
+        let ix = (page.page_number as usize).saturating_sub(1);
+        if ix < first_page {
+            continue;
+        }
+        if let Some(last) = last_page {
+            if ix > last {
+                continue;
+            }
+        }
+        if let Some(snippet) = match_snippet(&page.text, &needle) {
+            hits.push(PageSearchHit {
+                page_index: ix,
+                page_number: page.page_number,
+                snippet,
+            });
+        }
+    }
+    hits
+}
 
 /// The zoom level the reader draws at. The bitmap is re-rendered at the width Zoom specifies, so
 /// the difference the reader sees is sharpness, not layout.
@@ -118,6 +182,10 @@ pub(crate) struct Reader {
     pub(crate) zoom: Zoom,
     /// Keyed by page and drawn width, so toggling zoom back reuses what was already drawn.
     pub(crate) drawn: BTreeMap<(usize, u32), Arc<RenderImage>>,
+    /// Low-resolution thumbnails (`THUMB_WIDTH`) keyed by zero-based page index.
+    pub(crate) thumbnails: BTreeMap<usize, Arc<RenderImage>>,
+    /// Whether the collapsible thumbnail rail is shown beside the page.
+    pub(crate) show_thumbnails: bool,
     /// Why the original could not be read or drawn. Shown with the text, never instead of it.
     pub(crate) error: Option<String>,
     pub(crate) loading: bool,
@@ -211,6 +279,37 @@ impl Reader {
                 None => return,
             }
         }
+    }
+
+    pub(super) fn trim_thumbnails(&mut self) {
+        while self.thumbnails.len() > CACHED_THUMBS {
+            let current = self.page;
+            let furthest = self
+                .thumbnails
+                .keys()
+                .max_by_key(|page| (page.abs_diff(current), *page))
+                .copied();
+            match furthest {
+                Some(page) => {
+                    self.thumbnails.remove(&page);
+                }
+                None => return,
+            }
+        }
+    }
+
+    /// Inclusive `(first, last)` zero-based page bounds for the active document or split child.
+    pub(super) fn page_bounds(&self) -> Option<(usize, usize)> {
+        if self.pages == 0 {
+            return None;
+        }
+        let first = self.first_page.min(self.pages - 1);
+        let last = self
+            .last_page
+            .unwrap_or(self.pages - 1)
+            .min(self.pages - 1)
+            .max(first);
+        Some((first, last))
     }
 }
 
@@ -337,10 +436,59 @@ impl Documents {
                     }
                 }
                 view.request_page(cx);
+                if view.reader.show_thumbnails {
+                    view.request_thumbnails(cx);
+                }
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    pub(super) fn toggle_thumbnails(&mut self, cx: &mut Context<Self>) {
+        self.reader.show_thumbnails = !self.reader.show_thumbnails;
+        if self.reader.show_thumbnails {
+            self.request_thumbnails(cx);
+        }
+        cx.notify();
+    }
+
+    /// Ask for thumbnails around the active page when the thumbnail rail is open.
+    pub(super) fn request_thumbnails(&mut self, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.reader.page_bounds() else {
+            return;
+        };
+        let (Some(renderer), Some(bytes), Some(id)) = (
+            self.renderer.as_ref(),
+            self.reader.bytes.clone(),
+            self.reader.id.clone(),
+        ) else {
+            return;
+        };
+        let center = self.reader.page;
+        let window_start = center.saturating_sub(6).max(first);
+        let window_end = (center + 6).min(last);
+        for page in window_start..=window_end {
+            if self.reader.thumbnails.contains_key(&page) {
+                continue;
+            }
+            let answer = renderer.render(bytes.clone(), page, THUMB_WIDTH);
+            let expected = (id.clone(), page);
+            cx.spawn(async move |this, cx| {
+                let Ok(Ok(image)) = answer.await else {
+                    return;
+                };
+                let _ = this.update(cx, |view, cx| {
+                    if view.reader.id.as_deref() != Some(expected.0.as_str()) {
+                        return;
+                    }
+                    view.reader.thumbnails.insert(expected.1, image);
+                    view.reader.trim_thumbnails();
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
     }
 
     /// Ask for the page on screen unless it is drawn already.
@@ -391,6 +539,9 @@ impl Documents {
     pub fn go_to_page(&mut self, by: isize, cx: &mut Context<Self>) {
         if self.reader.next_page(by) {
             self.request_page(cx);
+            if self.reader.show_thumbnails {
+                self.request_thumbnails(cx);
+            }
             cx.notify();
         }
     }
@@ -398,6 +549,9 @@ impl Documents {
     pub fn go_to_page_index(&mut self, target: usize, cx: &mut Context<Self>) {
         if self.reader.set_page(target) {
             self.request_page(cx);
+            if self.reader.show_thumbnails {
+                self.request_thumbnails(cx);
+            }
             cx.notify();
         }
     }
@@ -440,9 +594,131 @@ impl Documents {
         cx.notify();
     }
 
-    /// The page, or the reason there is none. A drawn page is the whole of this element when it
-    /// exists; otherwise the caller shows the text beside it.
-    pub(super) fn page_element(&self, palette: Palette) -> AnyElement {
-        reader_page_element(&self.reader, palette)
+    /// The page, or the reason there is none, with an optional collapsible thumbnail rail beside it.
+    pub(super) fn page_element(
+        &self,
+        matched_pages: &[u32],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let canvas = reader_page_element(&self.reader, palette);
+        let Some((first, last)) = self
+            .reader
+            .page_bounds()
+            .filter(|_| self.reader.show_thumbnails && self.reader.pages > 1)
+        else {
+            return canvas;
+        };
+        let current = self.reader.page;
+        let mut rail = div()
+            .id("document-thumbnail-rail")
+            .w(px(124.))
+            .flex_none()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&self.thumb_scroll)
+            .vertical_scrollbar(&self.thumb_scroll)
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_2()
+            .rounded(px(6.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border));
+
+        for page_ix in first..=last {
+            let active = page_ix == current;
+            let page_num = u32::try_from(page_ix).unwrap_or(0).saturating_add(1);
+            let is_match = matched_pages.contains(&page_num);
+            let border = if active {
+                palette.accent
+            } else if is_match {
+                palette.amber
+            } else {
+                palette.border
+            };
+            let bg = if active {
+                tint(palette.accent, 0x1a)
+            } else if is_match {
+                tint(palette.amber, 0x16)
+            } else {
+                palette.raised
+            };
+            let preview = match self.reader.thumbnails.get(&page_ix).cloned() {
+                Some(thumb) => div()
+                    .w_full()
+                    .h(px(120.))
+                    .overflow_hidden()
+                    .rounded(px(3.))
+                    .bg(rgb(0xffffff))
+                    .child(img(thumb).object_fit(ObjectFit::Contain).size_full())
+                    .into_any_element(),
+                None => div()
+                    .w_full()
+                    .h(px(120.))
+                    .rounded(px(3.))
+                    .bg(rgba(palette.surface))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(format!("p.{page_num}"))
+                    .into_any_element(),
+            };
+            rail = rail.child(
+                div()
+                    .id(("document-thumb", page_ix))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_1()
+                    .p_1p5()
+                    .rounded(px(5.))
+                    .border_1()
+                    .border_color(rgba(border))
+                    .bg(rgba(bg))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.go_to_page_index(page_ix, cx);
+                    }))
+                    .child(preview)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .text_xs()
+                            .font_weight(if active || is_match {
+                                FontWeight::SEMIBOLD
+                            } else {
+                                FontWeight::MEDIUM
+                            })
+                            .text_color(rgb(if active {
+                                palette.accent
+                            } else if is_match {
+                                palette.amber
+                            } else {
+                                palette.muted
+                            }))
+                            .child(if is_match {
+                                format!("p.{page_num} •")
+                            } else {
+                                format!("p.{page_num}")
+                            }),
+                    ),
+            );
+        }
+
+        div()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .flex()
+            .gap_2()
+            .child(rail)
+            .child(canvas)
+            .into_any_element()
     }
 }

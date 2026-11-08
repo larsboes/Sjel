@@ -498,10 +498,12 @@ Use a three-layer split across `gpui-fast` and `nsh`:
 - **Documents.** Built (2026-11-08, `de389e7d`): NSH Documents (`ui/src/nsh_documents.rs`) loads
   one 500-row page on mount with on-demand paging (`fetch_page`), in-place sort chips (`Newest`,
   `Name A–Z`, `Category`, `Pages`), and `nsh_base::text_view` selectable Markdown/links; Mac
-  Documents (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView`
-  and adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`) with search-matched page
-  highlights, plus `DocSort` multi-column sorting and resizable columns. Open: page thumbnails, text
-  search inside the rendered PDF, and drag and drop from Finder into import.
+  Documents (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView`,
+  adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`), a collapsible low-resolution
+  page thumbnail rail (`Reader::thumbnails`, `THUMB_WIDTH`, `request_thumbnails`), and in-PDF page
+  text search (`search_extracted_pages`, `page_search_hits_strip`) with matched-page badges and
+  snippet previews, plus `DocSort` multi-column sorting and resizable columns. Open: drag and drop
+  from Finder into import.
 - **Markdown & Rich Text.** Built (2026-11-08, `de389e7d`): `doc_view::render_markdown` and
   `ui/src/docs/` use `gpui_kit::component::text::TextView` with `FrontmatterPlugin`,
   `MermaidPlugin` (`ui/src/docs/diagrams.rs`), and Sjel's `Palette`-mapped `text_view_style`,
@@ -515,7 +517,7 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
   Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
   keeping `virtual_list` group headers and inline row editors intact.
-- **Calendar.** Built (2026-11-08): Keeps the 24-hour timeline, quarter-hour drag/resize and
+- **Calendar.** Built (2026-11-08, `102dfe5f`): Keeps the 24-hour timeline, quarter-hour drag/resize and
   availability grid in `ui/src/calendar/`, and wires `gpui_kit::component::date_picker::DatePicker`
   and `gpui_kit::component::time_field::TimeField` into the event composer (`ui/src/calendar/page.rs`,
   `ui/src/calendar/types.rs`, `ui/src/calendar/grid.rs`) with automatic end-date clamping when the

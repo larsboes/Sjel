@@ -32,7 +32,7 @@ pub mod viewer;
 
 use proposals::{proposal_panel, workflow_panel};
 pub use viewer::{register_renderer, set_default_pdf_renderer, PdfError, PdfRenderer};
-use viewer::{Reader, Zoom, DEFAULT_RENDERER};
+use viewer::{search_extracted_pages, PageSearchHit, Reader, Zoom, DEFAULT_RENDERER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
@@ -247,6 +247,9 @@ pub struct Documents {
     pub(super) order_rev: u64,
     /// Extracted text is its own scroll area when reading text mode is on.
     pub(super) text_scroll: gpui::ScrollHandle,
+    pub(super) thumb_scroll: gpui::ScrollHandle,
+    pub(super) page_search_query: String,
+    pub(super) page_search_input: Option<(Entity<InputState>, Subscription)>,
     pub(super) reader: Reader,
     pub(super) renderer: Option<Arc<dyn PdfRenderer>>,
     pub(super) renderer_error: Option<String>,
@@ -304,6 +307,9 @@ impl Documents {
             order_key: None,
             order_rev: 0,
             text_scroll: gpui::ScrollHandle::new(),
+            thumb_scroll: gpui::ScrollHandle::new(),
+            page_search_query: String::new(),
+            page_search_input: None,
             reader: Reader::default(),
             renderer,
             renderer_error,
@@ -387,6 +393,8 @@ impl Documents {
             self.selected = None;
             self.detail = Remote::default();
             self.reader.clear();
+            self.page_search_query.clear();
+            self.page_search_input = None;
             self.proposal_busy = None;
             self.workflow_busy = None;
             self.workflow_error = None;
@@ -449,6 +457,8 @@ impl Documents {
         self.selected = Some(id.clone());
         self.detail = Remote::new_loading();
         self.reader.clear();
+        self.page_search_query.clear();
+        self.page_search_input = None;
         self.split_ranges.clear();
         self.split_input = None;
         self.workflow_busy = None;
@@ -520,6 +530,76 @@ impl Documents {
             });
         self.search_input = Some((input.clone(), subscription));
         input
+    }
+
+    fn page_search_field(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        if let Some((input, _)) = &self.page_search_input {
+            return input.clone();
+        }
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Find in document…"));
+        let subscription =
+            cx.subscribe_in(&input, window, |view, input, event, _, cx| match event {
+                InputEvent::Change => {
+                    view.page_search_query = input.read(cx).value().trim().to_owned();
+                    if let Some(first_hit) = view.page_search_hits().first() {
+                        view.go_to_page_index(first_hit.page_index, cx);
+                    }
+                    cx.notify();
+                }
+                InputEvent::PressEnter { .. } => {
+                    let hits = view.page_search_hits();
+                    if !hits.is_empty() {
+                        let next_ix = hits
+                            .iter()
+                            .find(|hit| hit.page_index > view.reader.page)
+                            .or_else(|| hits.first())
+                            .map(|hit| hit.page_index);
+                        if let Some(target) = next_ix {
+                            view.go_to_page_index(target, cx);
+                        }
+                    }
+                }
+                _ => {}
+            });
+        self.page_search_input = Some((input.clone(), subscription));
+        input
+    }
+
+    pub(super) fn page_search_hits(&self) -> Vec<PageSearchHit> {
+        let Some(detail) = self.detail.value.as_ref() else {
+            return Vec::new();
+        };
+        search_extracted_pages(
+            &detail.pages,
+            self.reader.first_page,
+            self.reader.last_page,
+            &self.page_search_query,
+        )
+    }
+
+    pub(super) fn matched_page_numbers(&self) -> Vec<u32> {
+        let local_hits: Vec<u32> = self
+            .page_search_hits()
+            .into_iter()
+            .map(|hit| hit.page_number)
+            .collect();
+        if !local_hits.is_empty() {
+            return local_hits;
+        }
+        self.selected
+            .as_deref()
+            .and_then(|id| {
+                self.rows
+                    .value
+                    .as_ref()
+                    .and_then(|rows| rows.iter().find(|r| r.id == id))
+            })
+            .map(|row| row.matched_pages.clone())
+            .unwrap_or_default()
     }
 
     fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
@@ -918,6 +998,7 @@ impl Render for Documents {
 
         let mut table = div().flex().flex_col().gap_1().flex_1().min_h_0();
         let search = self.search_field(window, cx);
+        let page_search = self.page_search_field(window, cx);
         let split_input = self.split_range_field(window, cx);
         table = table.child(
             div()
@@ -1127,7 +1208,15 @@ impl Render for Documents {
             let page = self.reader.page;
             let pages = self.reader.pages;
             let reading_text = self.reader.reading_text;
+            let show_thumbnails = self.reader.show_thumbnails;
             let zoom = self.reader.zoom;
+            let page_hits = self.page_search_hits();
+            let matched_pages = self.matched_page_numbers();
+            let has_extracted_pages = self
+                .detail
+                .value
+                .as_ref()
+                .is_some_and(|detail| !detail.pages.is_empty());
             let suggestion = self
                 .detail
                 .value
@@ -1261,6 +1350,23 @@ impl Render for Documents {
                                     view.show_text(!reading_text, cx);
                                 })),
                         )
+                        .when(!reading_text && pages > 1, |bar| {
+                            bar.child(
+                                Button::new("document-toggle-thumbnails")
+                                    .small()
+                                    .label(if show_thumbnails {
+                                        "Hide thumbs"
+                                    } else {
+                                        "Thumbnails"
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.toggle_thumbnails(cx);
+                                    })),
+                            )
+                        })
+                        .when(has_extracted_pages, |bar| {
+                            bar.child(div().w(px(160.)).child(Input::new(&page_search).small()))
+                        })
                         .when(can_open_externally, |bar| {
                             bar.child(
                                 Button::new("document-open-external")
@@ -1281,11 +1387,22 @@ impl Render for Documents {
                             )
                         }),
                 )
+                .when(!self.page_search_query.trim().is_empty(), |el| {
+                    el.child(page_search_hits_strip(
+                        &self.page_search_query,
+                        &page_hits,
+                        page,
+                        palette,
+                        cx,
+                    ))
+                })
                 .when(!reading_text && self.reader.pages > 1, |el| {
-                    el.child(page_jump_strip(self, palette, cx))
+                    el.child(page_jump_strip(self, &matched_pages, palette, cx))
                 })
                 .when(reading_text, |el| el.child(text_panel(self, palette)))
-                .when(!reading_text, |el| el.child(self.page_element(palette)))
+                .when(!reading_text, |el| {
+                    el.child(self.page_element(&matched_pages, palette, cx))
+                })
                 .into_any_element()
         });
 
@@ -1384,21 +1501,111 @@ fn status_chip(status: &str, palette: Palette) -> AnyElement {
         .into_any_element()
 }
 
+/// In-document text search match strip showing matched page chips and a snippet preview.
+fn page_search_hits_strip(
+    query: &str,
+    hits: &[PageSearchHit],
+    current_page: usize,
+    palette: Palette,
+    cx: &mut Context<Documents>,
+) -> AnyElement {
+    if hits.is_empty() {
+        return div()
+            .id("document-page-search-empty")
+            .px_2p5()
+            .py_1()
+            .rounded(px(5.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border))
+            .text_xs()
+            .text_color(rgb(palette.muted))
+            .child(format!("No pages match \"{query}\"."))
+            .into_any_element();
+    }
+    let active_snippet = hits
+        .iter()
+        .find(|hit| hit.page_index == current_page)
+        .or_else(|| hits.first())
+        .map(|hit| (hit.page_number, hit.snippet.clone()));
+
+    let mut chips = div().flex().flex_wrap().items_center().gap_1();
+    for hit in hits {
+        let page_ix = hit.page_index;
+        let page_num = hit.page_number;
+        let active = page_ix == current_page;
+        chips = chips.child(
+            div()
+                .id(("doc-search-hit", page_ix))
+                .px_2()
+                .py(px(2.))
+                .rounded(px(4.))
+                .cursor_pointer()
+                .bg(rgba(if active {
+                    tint(palette.amber, 0x30)
+                } else {
+                    tint(palette.amber, 0x16)
+                }))
+                .text_color(rgb(palette.amber))
+                .font_weight(if active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::MEDIUM
+                })
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.go_to_page_index(page_ix, cx);
+                }))
+                .child(format!("p.{page_num}")),
+        );
+    }
+
+    div()
+        .id("document-page-search-strip")
+        .flex()
+        .flex_col()
+        .gap_1()
+        .px_2p5()
+        .py_1p5()
+        .rounded(px(5.))
+        .bg(rgba(palette.surface))
+        .border_1()
+        .border_color(rgba(palette.border))
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_2()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(format!(
+                    "{} matching {}:",
+                    hits.len(),
+                    if hits.len() == 1 { "page" } else { "pages" }
+                ))
+                .child(chips),
+        )
+        .when_some(active_snippet, |col, (page_num, snippet)| {
+            col.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(palette.text))
+                    .truncate()
+                    .child(format!("p.{page_num}: {snippet}")),
+            )
+        })
+        .into_any_element()
+}
+
 /// Quick page jump pills (first, nearby, last, and search-matched pages) for multi-page PDFs.
-fn page_jump_strip(view: &Documents, palette: Palette, cx: &mut Context<Documents>) -> AnyElement {
+fn page_jump_strip(
+    view: &Documents,
+    matched: &[u32],
+    palette: Palette,
+    cx: &mut Context<Documents>,
+) -> AnyElement {
     let jumps = view.reader.jump_pages();
     let current = view.reader.page;
-    let matched: Vec<u32> = view
-        .selected
-        .as_deref()
-        .and_then(|id| {
-            view.rows
-                .value
-                .as_ref()
-                .and_then(|rows| rows.iter().find(|r| r.id == id))
-        })
-        .map(|row| row.matched_pages.clone())
-        .unwrap_or_default();
 
     let mut strip = div()
         .flex()
@@ -1768,5 +1975,61 @@ mod tests {
         assert!(parse_page_ranges("0-3").is_err());
         assert!(parse_page_ranges("4-2").is_err());
         assert!(parse_page_ranges("1..3").is_err());
+    }
+
+    #[test]
+    fn in_pdf_search_finds_matching_pages_and_respects_page_bounds() {
+        use sjel_gpui_core::shell::DocumentExtractedPage;
+        let pages = vec![
+            DocumentExtractedPage {
+                page_number: 1,
+                text: "Cover page for the 2026 annual report.".into(),
+                engine: "pdftotext".into(),
+                failure: None,
+            },
+            DocumentExtractedPage {
+                page_number: 2,
+                text: "Invoice summary: total amount due is 1,240.00 EUR.".into(),
+                engine: "pdftotext".into(),
+                failure: None,
+            },
+            DocumentExtractedPage {
+                page_number: 3,
+                text: "Appendix and payment instructions for the invoice.".into(),
+                engine: "pdftotext".into(),
+                failure: None,
+            },
+        ];
+        let hits = super::viewer::search_extracted_pages(&pages, 0, None, "INVOICE");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].page_index, 1);
+        assert_eq!(hits[0].page_number, 2);
+        assert!(hits[0].snippet.contains("Invoice summary"));
+        assert_eq!(hits[1].page_index, 2);
+        assert_eq!(hits[1].page_number, 3);
+
+        // Child split range [0..=1] excludes page 3 (index 2).
+        let bounded = super::viewer::search_extracted_pages(&pages, 0, Some(1), "invoice");
+        assert_eq!(bounded.len(), 1);
+        assert_eq!(bounded[0].page_number, 2);
+    }
+
+    #[test]
+    fn thumbnail_cache_trims_furthest_pages_from_current() {
+        let mut reader = Reader {
+            pages: 50,
+            page: 25,
+            show_thumbnails: true,
+            ..Reader::default()
+        };
+        for page in 0..50 {
+            reader
+                .thumbnails
+                .insert(page, std::sync::Arc::new(gpui::RenderImage::new(vec![])));
+        }
+        reader.trim_thumbnails();
+        assert_eq!(reader.thumbnails.len(), super::viewer::CACHED_THUMBS);
+        assert!(reader.thumbnails.contains_key(&25));
+        assert!(!reader.thumbnails.contains_key(&0));
     }
 }

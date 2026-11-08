@@ -203,17 +203,8 @@ impl Shell {
         &self,
         query: &str,
     ) -> ShellResult<Option<crate::travel::Coordinate>> {
-        #[derive(serde::Deserialize)]
-        struct Answer {
-            place: Option<Point>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Point {
-            latitude: Option<f64>,
-            longitude: Option<f64>,
-        }
         let body = serde_json::json!({ "query": query });
-        let answer: Answer = self
+        let answer: places_api::GeocodeResponse = self
             .json(Method::POST, "/places/api/geocode", Some(body), 20)
             .await?;
         Ok(answer

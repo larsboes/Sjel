@@ -278,6 +278,11 @@ covers it.
 
 ## Done
 
+- Places geocoding accepts the existing `place_id` response through the shared contract;
+  the desktop response copies and server request copy are removed. Software storage and clients
+  share the complete app model. Focused tests, strict Clippy, GPUI core tests and the host
+  workspace check pass; device acceptance remains separate.
+
 - Hermetic Cargo owns per-run temporary files, cleans them after successful or failed runs, and
   reuses resolved or writable fallback caches (`8ee79415`). Runner regressions and a live Comms
   database probe passed; its sandbox was absent afterward. Legacy fixtures and interrupted

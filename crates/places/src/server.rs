@@ -22,9 +22,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use places::config::Config;
-use places::geocode::{GeocodeQuery, Geocoder, StructuredQuery};
+use places::geocode::{GeocodeQuery, Geocoder};
 use places::store::{stable_id, Place, PlacesStore, Review, ReviewOutcome, PRESENCE_RADIUS_KM};
 use places::{layers, today};
+use places_api::GeocodeRequest;
 
 const ROUTES: &[route_manifest::Route] = &[
     r("GET", "/health", "Liveness."),
@@ -592,12 +593,6 @@ async fn create_place(
         }
         Err(_) => failed("task panicked".into()),
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct GeocodeRequest {
-    query: Option<String>,
-    structured: Option<StructuredQuery>,
 }
 
 async fn geocode(

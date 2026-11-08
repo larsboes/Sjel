@@ -102,6 +102,7 @@ pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
 /// (`venue`, `city`, `station`, `address`, `region`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Place {
+    #[serde(alias = "place_id")]
     pub id: String,
     pub name: String,
     pub kind: String,

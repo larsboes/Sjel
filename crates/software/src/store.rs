@@ -5,7 +5,6 @@
 
 use std::path::Path;
 
-use serde::Serialize;
 use sjel_turso::{libsql, Store, NOW};
 
 use crate::discover::Found;
@@ -13,30 +12,7 @@ use crate::discover::Found;
 pub const PREFIX: &str = "software";
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub use software_api::Decision;
-
-/// One app with its current decision, as the API returns it.
-#[derive(Clone, Debug, Serialize)]
-pub struct App {
-    /// `app`, `leftover` or `tool` (`discover::Found::kind`).
-    pub kind: String,
-    pub bundle_id: String,
-    pub name: String,
-    pub path: String,
-    pub version: String,
-    pub source: String,
-    pub app_bytes: u64,
-    pub data_bytes: u64,
-    pub data_paths: Vec<String>,
-    pub last_used: Option<String>,
-    pub present: bool,
-    pub seen_at: String,
-    pub decision: Option<String>,
-    pub note: Option<String>,
-    pub decided_at: Option<String>,
-    /// Why this row is due another look, or `None` (`review_reason`).
-    pub review: Option<&'static str>,
-}
+pub use software_api::{Decision, SoftwareApp as App};
 
 /// How long a decision holds before the row asks again.
 pub const DECISION_DAYS: i64 = 180;
@@ -210,7 +186,8 @@ impl SoftwareStore {
                 app.decided_at.as_deref(),
                 app.last_used.as_deref(),
                 today,
-            );
+            )
+            .map(str::to_owned);
             out.push(app);
         }
         Ok(out)

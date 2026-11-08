@@ -55,21 +55,29 @@ pub struct SoftwareApp {
     pub bundle_id: String,
     pub name: String,
     #[serde(default)]
+    pub path: String,
+    #[serde(default)]
     pub version: String,
     #[serde(default)]
     pub app_bytes: u64,
     #[serde(default)]
     pub data_bytes: u64,
+    #[serde(default)]
+    pub data_paths: Vec<String>,
     /// `YYYY-MM-DD HH:MM:SS +0000`, or none when Spotlight holds no date.
     #[serde(default)]
     pub last_used: Option<String>,
     #[serde(default)]
     pub present: bool,
+    #[serde(default)]
+    pub seen_at: String,
     /// `use`, `remove`, `replace` or `rebuild`.
     #[serde(default)]
     pub decision: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
+    #[serde(default)]
+    pub decided_at: Option<String>,
     /// Why the row is due another look, or none.
     #[serde(default)]
     pub review: Option<String>,

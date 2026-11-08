@@ -258,6 +258,7 @@ async fn cli(command: &str) -> i32 {
                         app.decision.as_deref().unwrap_or("-"),
                         app.name,
                         app.review
+                            .as_deref()
                             .map(|r| format!("  [review: {r}]"))
                             .unwrap_or_default()
                     );

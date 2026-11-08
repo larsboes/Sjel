@@ -10,6 +10,14 @@ covers it.
 
 ## Open
 
+- **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count
+  without its location. Workaround: run `gitleaks git --redact=100` over the outgoing
+  range, write a JSON report, and extract only rule, path, line and commit metadata.
+  A synthetic redaction fixture was identified without displaying its value.
+  Smallest change: `sjel audit --outgoing --json` returns this metadata without match
+  or secret fields. Done when a fixture finding can be diagnosed through the normal
+  audit command without exposing its matched value.
+
 - **Repository dependency freshness.** `sjel update` inventories software outside the
   checkout. Dependabot covers Cargo, Actions and all five Bun projects, with a
   one-day hold and grouped patch/minor updates for Bun. CI discovers locked Bun

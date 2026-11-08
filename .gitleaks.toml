@@ -12,3 +12,10 @@ description = "The Sjel Clipper manifest's `key` is the public half of a key pai
 paths = ['''crates/comms/clipper/src/manifest\.chrome\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"key": "MII[A-Za-z0-9+/=]+",?$''']
+
+[[allowlists]]
+description = "The trusted-view redaction test uses a fixed synthetic Stripe token."
+condition = "AND"
+paths = ['''^crates/pseudonymize/src/view\.rs$''']
+regexTarget = "secret"
+regexes = ['''^sk_live_abcdef1234567890$''']

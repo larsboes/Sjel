@@ -350,12 +350,18 @@ where
             .text_color(rgb(0xd4d4d4))
             .child(block.text.clone())
             .into_any_element(),
-        Kind::Paragraph => div()
-            .px(density.pad_x())
-            .py(px(2.))
-            .text_sm()
-            .text_color(rgb(palette.text))
-            .child(styled_inline(&block.text, palette))
-            .into_any_element(),
+        Kind::Paragraph => {
+            if let Some(table) = crate::editor::table::parse_markdown_table(&block.text) {
+                crate::editor::table::render_static_table(&table, palette)
+            } else {
+                div()
+                    .px(density.pad_x())
+                    .py(px(2.))
+                    .text_sm()
+                    .text_color(rgb(palette.text))
+                    .child(styled_inline(&block.text, palette))
+                    .into_any_element()
+            }
+        }
     }
 }

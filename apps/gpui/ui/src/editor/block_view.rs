@@ -338,6 +338,9 @@ pub(crate) fn formatted(
     let Some(shown) = editor.shown.get(index).and_then(Option::as_ref) else {
         return div().into_any_element();
     };
+    if let Some(table) = super::table::parse_markdown_table(&shown.text) {
+        return super::table::render_editor_table(&table, shown.palette, index, cx);
+    }
     let styled = StyledText::new(shown.label.clone()).with_highlights(shown.highlights.clone());
     // An `Rc` handle: the layout fills in when the element is laid out, which this closure
     // reads after that. Kept per frame, but the work behind it is not.

@@ -9,6 +9,7 @@
 mod block_view;
 mod preview;
 mod slash_menu;
+pub(crate) mod table;
 mod types;
 
 use std::sync::Arc;
@@ -1166,5 +1167,20 @@ mod tests {
             editor.read_with(cx, |e, _| e.doc.blocks[2].text.clone()),
             "xtwo"
         );
+    }
+
+    #[gpui::test]
+    fn markdown_table_renders_formatted_and_focuses_to_edit(cx: &mut TestAppContext) {
+        let mut record = live_record();
+        record.content = "---\ntype: note\n---\n# Table Note\n\n| Frage | Stand |\n|---|---|\n| Master | Geprüft |\n".into();
+        let (editor, cx) = open_with(cx, record, false);
+        cx.run_until_parked();
+        // The table is rendered as block 1
+        assert_eq!(editor.read_with(cx, |e, _| e.doc.blocks.len()), 2);
+        assert_eq!(editor.read_with(cx, |e, _| e.active), None);
+        // Focusing block 1 opens the textarea for editing
+        cx.update(|window, cx| editor.update(cx, |e, cx| e.focus(1, 0, window, cx)));
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.active), Some(1));
     }
 }

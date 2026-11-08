@@ -1,6 +1,7 @@
 # knowledge
 
-Knowledge work on the Obsidian vault. Deployed per harness where the vault is that harness's
+Knowledge work on the Obsidian vault, which holds learning notes only since 2026-11-08: subject
+knowledge and what `teach` and `practice` write. Operational records live in Sjel. Deployed per harness where the vault is that harness's
 surface: pi today, any other harness when a profile selects it. The pedagogy (`teach` and
 `practice`) moved to [`Packs/learning`](../learning/README.md) on 2026-11-03 and still writes
 through `obsidian` and asks through `quiz` here. Question rounds in `crystallize` degrade to

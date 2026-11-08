@@ -285,10 +285,12 @@ provenance.
 Narrower by design, `scouting` searches for and scores opportunities such as scholarships,
 hackathons, events, calls for papers, or travel deals against an interest profile.
 
-Obsidian is an external personal writing surface, not a second Sjel-wide database. Each
-capability owns its own explicit vault contract: `comms` discovers links in configured headings,
-`scouting` reads opportunity notes, and `trips` synchronizes trip plans. Integrations share schemas
-and contracts, but never mutate another capability's notes by implication.
+Obsidian holds learning notes only: what `teach` and `practice` write, and subject knowledge
+(`PLAN.md`, Decisions, 2026-11-08). It is not a Sjel database. Operational records live in each
+capability's store; notes that belong to a record live in `projects`. The markdown adapters in
+`comms` and `scouting` read any configured directory and no longer point into the vault
+([`storage.md`](docs/plans/storage.md#vault-holds-learning-only)). Integrations never mutate
+another capability's notes by implication.
 
 Lineage: Sjel's public-core and private-overlay separation draws inspiration from upstream AI-operator
 patterns (see `upstreams.toml` [lifeos]).

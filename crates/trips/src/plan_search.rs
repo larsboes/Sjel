@@ -20,9 +20,9 @@
 //! calendar `GET /api/windows`, whose `FeasibleWindow` carries dates and a
 //! verdict and nothing else. `crate::windows::day_loads`, `rank` and their
 //! `collisions` vector collect entry *titles* and are out of bounds here:
-//! `projection.rs` writes an adopted payload verbatim into the operator's
-//! cloud-synced vault, so a title that reached this struct would leave the host
-//! by a mechanism nobody chose. [`FeasibleWindow`] below has no field to hold
+//! `projection.rs` writes an adopted payload verbatim into a plan file in the
+//! overlay (`projection::DIR`), so a title that reached this struct would be
+//! persisted by a mechanism nobody chose. [`FeasibleWindow`] below has no field to hold
 //! one, which is the structural half of the rule; the payload test is the other.
 
 use std::collections::{BTreeMap, HashMap};
@@ -196,7 +196,7 @@ pub fn validate(request: PlanSearchRequest) -> Result<ValidRequest, String> {
     // `day_number` checks the shape and stops at the day field, so
     // `{"from": "2026-01-01&min_days=0"}` passes both checks above and then goes
     // verbatim into `upstream::calendar_windows`' query string and into
-    // `starts_on`, which `projection.rs` writes into the operator's vault. The
+    // `starts_on`, which `projection.rs` writes into the overlay's plan file. The
     // same clip the flight-when handler now does, at the one place this route
     // parses a date. `iso_of_day_number` is `day_number`'s documented inverse, so
     // a well-formed date round-trips to itself.
@@ -794,7 +794,7 @@ pub fn merge_candidates(
                     // first candidate's id here wrote `options[].id` into the
                     // adopted payload naming a place no `destination` in the
                     // same payload has, and that payload is projected into the
-                    // operator's vault verbatim.
+                    // overlay's plan file verbatim.
                     existing.place_id = existing.destination.id.clone();
                 }
             }

@@ -43,12 +43,12 @@ I lost track. I kept trying tools, for myself and for my AI agents, and nothing 
 together.
 
 It started in high school with Notion, which got me hooked on personal knowledge management. Then
-I found Obsidian, and it has been my life management system ever since. I still kept drifting to
+I found Obsidian, and it was my life management system for years. I still kept drifting to
 other tools, and every vault migration taught me something about what I actually need. That
 experience, plus ideas from Reddit and YouTube, is where this project comes from.
 
-Sjel is a layer under the tools you already use, not a replacement for them. Obsidian stays
-Obsidian, with its own sync. Sjel connects the areas of a life and may find connections you didn't
+Sjel is a layer under the tools you already use, not a replacement for them. Obsidian keeps one
+job, the notes I learn from, with its own sync. Sjel connects the areas of a life and may find connections you didn't
 think of. Privacy was part of the design from day one. Not every feature meets that bar yet, and
 closing the gap is ongoing work. I try to keep all of it as efficient and light as I know how.
 
@@ -215,7 +215,7 @@ shows the ones on this machine.
   then fixed rules ([product rule 1](CONTRIBUTING.md#product-rules)). A cloud model receives only
   what rule 4 admits.
 - **Structured facts and the work on them.** Sjel stores people, places, trips, money, home,
-  calendar, projects and tasks. Prose stays in Obsidian and photos stay in the photo library.
+  calendar, projects and tasks. Learning notes stay in Obsidian and photos stay in the photo library.
   Sjel links to them.
 - **Other services through their own authorization**, an API token or an OAuth grant, kept in the
   user's secret store.

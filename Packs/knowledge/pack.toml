@@ -4,7 +4,7 @@
 # enough to fire instead of the skill that gates writes on the vault contract, so they
 # are references/ inside it now and cannot win a trigger. teach and practice live in Packs/learning.
 name        = "knowledge"
-description = "Knowledge work on the Obsidian vault as the one durable surface — vault ops under the vault contract, the wiki layer, research, and clean web capture."
+description = "Knowledge work on the learning vault — subject notes under the vault contract, the wiki layer, research, and clean web capture."
 skills      = ["obsidian", "defuddle", "research"]
 license     = "MIT"
 personal    = ["config/knowledge.toml", "config/obsidian-access.toml"]

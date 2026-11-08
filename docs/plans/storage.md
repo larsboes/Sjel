@@ -151,24 +151,23 @@ about the expanded archive refers to the whole archive, not this filtered intake
 
 ### Vault holds learning only
 
-Decided 2026-11-08 (`PLAN.md`, Decisions). The vault keeps the Learning Pack's notes: `teach`,
-`practice`, claim notes, and the Obsidian plugins that render them. Everything else that reads or
+Decided 2026-11-08 (`PLAN.md`, Decisions). The vault keeps learning notes: `teach`,
+`practice`, claim notes and subject knowledge, plus the Obsidian plugins that render them. Everything else that reads or
 writes the vault moves to Sjel data or retires. Counted 2026-11-08 with `git grep -i -E
 "\bvault\b|obsidian"`: about 300 lines in 40 Markdown files and 108 code files outside
 `crates/vault/`.
 
-| Component | Vault use | Move |
-|---|---|---|
-| `crates/comms` (38 files) | Vault link sources, link candidates | Link sources come from Sjel data and `web-links`. Wait for the open `comms` edits in the primary checkout to land. |
-| `crates/scouting` (9) | `vault_link`, `vault_linker`, a vault path | Same as comms: drop the vault as a link source. |
-| `Packs/knowledge` (15) | The `obsidian` skill and `obsidian-access` write and read notes | Notes go to Sjel data. Keep only what Learning needs to render. |
-| `services/knowledge-base` | Serves the vault | Keep for Learning, or retire if Learning reads files directly. |
-| `crates/trips`, `crates/entities`, `crates/sjel-cli`, `apps/gpui`, `crates/markdown-root` (1 to 4 each) | Vault paths and links | Check each. Most are stale roots, as in "Local data and knowledge-vault migration". |
-| `tools/obsidian-deploy.ts`, `tools/check-obsidian-plugins.sh` | Plugin deployment | Keep. Learning uses the plugins. |
-| `ARCHITECTURE.md`, `README.md`, `CONTRIBUTING.md`, `docs/plans/data.md`, `upstreams.toml`, `systems.toml` | Describe the vault as the knowledge home | Rewrite with each component above, not before. |
+State on 2026-11-08, after a pass over code and overlay config:
 
-Order: the Packs first (no code, no running service), then scouting, then comms after its open
-edits land, then the documents. Each component is one commit.
+| Component | State |
+|---|---|
+| `finance`, `trips` | Done before this decision: subscription notes live in `projects` (2026-10-20), plan copies in `<overlay>/data/trips/plans/` (`crates/trips/src/projection.rs:13`). Stale comments in `plan_search.rs` fixed. |
+| Overlay config | Done: scouting's two vault sources and the dead `obsidian` blocks in trips, finance and interior removed. `knowledge.toml` and the vault state mount stay for Learning. |
+| `README.md`, `CONTRIBUTING.md`, `Packs/knowledge`, `ARCHITECTURE.md` | Done: they describe the vault as learning only. |
+| `crates/comms` (`vault_links.rs`, `server/vault.rs`) | Open. No link source is configured, so the scanner reads nothing. Retire it or rename it to a generic markdown link source after the open `comms` edits in the primary checkout land. |
+| `crates/scouting` (`sources/obsidian_md.rs`) | Open, rename only. The adapter reads any configured directory; the name and README still say Obsidian. |
+| Relevance profiles (`comms-relevance-shadow.json`) | Open, owner decision. Three `profile_path`s point at an iCloud vault path that no longer exists. Reconcile with `operator-profile`, as above. |
+| `obsidian` as a record source in `entities`, `places`, `scouting`, `trips` | Keep. It records where historic rows came from. |
 
 ## 3. Phone standalone
 

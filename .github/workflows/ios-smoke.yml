@@ -35,7 +35,6 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
-      SJEL_IOS_RESULTS: ${{ runner.temp }}/ios-smoke
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -47,6 +46,8 @@ jobs:
           rustup target add aarch64-apple-ios-sim
           if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
       - name: Render Documents and Mail
+        env:
+          SJEL_IOS_RESULTS: ${{ runner.temp }}/ios-smoke
         run: apps/gpui/ios/run-sim --smoke
       - name: Retain screenshots and test results
         if: always()

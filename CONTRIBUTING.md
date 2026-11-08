@@ -115,6 +115,13 @@ release builds. For a run with less memory and contention:
 CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 tools/cargo-hermetic test --workspace --locked
 ~~~
 
+Temporary test files live inside the run's sandbox and are removed after Cargo exits, including
+failed tests. Build output stays outside that sandbox in a reusable cache keyed by checkout.
+Nested invocations retain the resolved cache rather than adding another checkout suffix.
+An inherited cache that cannot create and remove artifact directories falls back to the shared
+temporary cache; an explicit `--target-dir` is refused instead of silently redirected. Reuse the
+default cache for ordinary verification rather than creating a target directory per command.
+
 ### Other checks
 
 - `tools/maintenance --json` inventories tracked maintenance inputs offline. Add `--unused`,

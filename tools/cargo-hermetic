@@ -1,40 +1,5 @@
 #!/bin/bash
-# tools/cargo-hermetic — cargo, on a machine that is also the deployment.
-#
-# This is the one CI gate this host cannot reproduce by running CI's command. On a runner,
-# `cargo test --workspace --locked` is hermetic by construction: the checkout is disposable,
-# there is no overlay, and nothing else is using the disk. Here, three things are true at
-# once, and each of them has already caused a real loss (PRD §13.1, "Six silent failures"):
-#
-#   1. target/release/<bin> IS the file a running service is executing. On Apple Silicon a
-#      process dies when its own binary is replaced, so a build that writes there kills the
-#      operator's deployment. That is the fourth silent failure, and it happened at 22:24 on
-#      2026-09-03 to a worktree that thought it was isolated.
-#
-#   2. Redirecting the database is NOT isolation. `SJEL_DB_PATH` moves the SQLite file and
-#      nothing else; trips, finance, interior and comms each resolve an Obsidian projection
-#      root from the OVERLAY, which that variable does not touch. A trips live check with the
-#      database redirected re-exported thirteen real vault notes and created a fourteenth.
-#      That is the third silent failure, and it is why every projection root is named below
-#      rather than left to a default.
-#
-#   3. An exported SJEL_* environment leaks the operator's real overlay into anything that
-#      builds a scratch root. tools/lib/test-support.sh already owns that problem for the
-#      shell suites; this calls the same function rather than writing a second list.
-#
-# So: clear the environment, point every root that can write outside the repository at a
-# throwaway directory, force the target dir somewhere the supervisor is not reading, and
-# refuse --release outright. Then exec cargo, unchanged.
-#
-#   tools/cargo-hermetic test --workspace --locked
-#   tools/cargo-hermetic clippy --workspace --all-targets --all-features --locked -- -D warnings
-#   tools/cargo-hermetic --print-env      # the environment it would use, running nothing
-#
-# The target directory is reused between runs on purpose — a fresh one means a cold build of
-# the whole workspace every time, which is how a safe tool becomes a tool nobody runs. Export
-# CARGO_TARGET_DIR to choose it; anything inside a checkout of this repository is refused.
-#
-# bash 3.2-safe (CONTRIBUTING.md#portable-shell).
+# Run Cargo with isolated temporary state and reusable checkout-scoped output.
 set -euo pipefail
 
 _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -138,17 +103,42 @@ done
 
 TARGET="${_requested_target:-${CARGO_TARGET_DIR:-}}"
 [ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/sjel-cargo-hermetic/target"
+_checkout_cache="hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
 # One target per checkout: cargo reuses a member's test binary across checkouts that share a
 # target, and env!("CARGO_MANIFEST_DIR") inside it then names the other checkout.
 if [ -z "$_requested_target" ]; then
-  TARGET="$TARGET/hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
+  case "${TARGET%/}" in
+    */"$_checkout_cache") TARGET="${TARGET%/}" ;;
+    *) TARGET="${TARGET%/}/$_checkout_cache" ;;
+  esac
 fi
 TARGET="$(_canonical "$TARGET")"
-for forbidden in "$REPO" "$MAIN_CHECKOUT"; do
-  if _inside "$TARGET" "$forbidden"; then
-    die "CARGO_TARGET_DIR is $TARGET, inside the checkout at $forbidden. That directory holds the binaries the supervisor runs. Point it at scratch, or unset it and take the default."
-  fi
-done
+_guard_target() {
+  local forbidden
+  for forbidden in "$REPO" "$MAIN_CHECKOUT"; do
+    if _inside "$TARGET" "$forbidden"; then
+      die "CARGO_TARGET_DIR is $TARGET, inside the checkout at $forbidden. That directory holds the binaries the supervisor runs. Point it at scratch, or unset it and take the default."
+    fi
+  done
+}
+_guard_target
+
+_cache_writable() {
+  local probe
+  mkdir -p "$1/debug/deps" 2>/dev/null || return 1
+  probe="$(mktemp -d "$1/debug/deps/.sjel-cache-probe.XXXXXX" 2>/dev/null)" || return 1
+  rmdir "$probe" 2>/dev/null
+}
+
+if [ "${1:-}" != "--print-env" ] && ! _cache_writable "$TARGET"; then
+  [ -z "$_requested_target" ] || die "explicit target cannot create and remove cache directories: $TARGET"
+  _fallback_target="$(_canonical "${TMPDIR:-/tmp}/sjel-cargo-hermetic/target/$_checkout_cache")"
+  [ "$TARGET" != "$_fallback_target" ] || die "verification cache is not writable: $TARGET"
+  TARGET="$_fallback_target"
+  _guard_target
+  _cache_writable "$TARGET" || die "verification cache is not writable: $TARGET"
+  echo "cargo-hermetic: inherited target cannot clean cache directories; reusing $TARGET" >&2
+fi
 
 # --- the sandbox -----------------------------------------------------------
 
@@ -158,7 +148,7 @@ isolate_sjel_env
 
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/sjel-cargo-hermetic.XXXXXX")"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault" "$SANDBOX/decisions" "$SANDBOX/state"
+mkdir -p "$SANDBOX/overlay/config" "$SANDBOX/overlay/data/sjel" "$SANDBOX/vault" "$SANDBOX/decisions" "$SANDBOX/state" "$SANDBOX/tmp"
 
 # An empty JSON object, not an absent file: comms resolves $SJEL_COMMS_CONFIG first and only
 # then the overlay and then a gitignored dev config next to its source. Pointing it at a file
@@ -168,6 +158,9 @@ echo '{}' > "$SANDBOX/comms.json"
 
 export CARGO_TARGET_DIR="$TARGET"
 export XDG_STATE_HOME="$SANDBOX/state"
+export TMPDIR="$SANDBOX/tmp"
+export TMP="$TMPDIR"
+export TEMP="$TMPDIR"
 export SJEL_PERSONAL_ROOT="$SANDBOX/overlay"
 export SJEL_OVERLAY_ROOT="$SANDBOX/overlay"
 export SJEL_DB_PATH="$SANDBOX/overlay/data/sjel/sjel.db"
@@ -182,7 +175,7 @@ export SJEL_FINANCE_DECISIONS_ROOT="$SANDBOX/decisions"
 if [ "${1:-}" = "--print-env" ]; then
   # The sandbox is torn down on exit, so these paths are what the run WOULD use, not
   # somewhere to go and look afterwards. Printed in a stable order for the test.
-  for var in CARGO_TARGET_DIR XDG_STATE_HOME SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH \
+  for var in CARGO_TARGET_DIR XDG_STATE_HOME TMPDIR TMP TEMP SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH \
              SJEL_COMMS_CONFIG SJEL_TRIPS_EXPORT_ROOT \
              SJEL_FINANCE_DECISIONS_ROOT; do
     eval "printf '%s=%s\n' \"\$var\" \"\$$var\""

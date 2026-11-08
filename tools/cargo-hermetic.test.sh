@@ -1,14 +1,5 @@
 #!/bin/bash
-# Tests for tools/cargo-hermetic: the guards, watched refusing planted input.
-#
-# The tool's whole value is what it does NOT let happen, and none of that is visible in a
-# green run. So every case here hands it something it must refuse, or an environment it must
-# override, and reads the answer back. A guard nobody has watched fail is the sixth silent
-# failure in PRD §13.1.
-#
-# Nothing here invokes cargo. `--print-env` exists as the seam: it resolves exactly what a
-# run would resolve and then does nothing with it, so the environment can be asserted on
-# without a five-minute workspace build inside a test suite.
+# Regression probes for hermetic Cargo guards, cache reuse and fixture cleanup.
 set -uo pipefail
 
 TOOL="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/cargo-hermetic"
@@ -111,6 +102,11 @@ expect_ok "a scratch target dir outside every checkout is honoured"
 expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CARGO_TARGET_DIR \
   "sjel-cargo-hermetic-test/target/hermetic-$(printf %s "$(cd "$REPO" && pwd -P)" | shasum | cut -c1-12)"
 
+NESTED_TARGET="$(env_value CARGO_TARGET_DIR)"
+out=$(CARGO_TARGET_DIR="$NESTED_TARGET" "$TOOL" --print-env 2>&1); status=$?
+expect_ok "a nested invocation is admitted"
+[ "$(env_value CARGO_TARGET_DIR)" = "$NESTED_TARGET" ] || note_fail "a nested invocation forked another build cache"
+
 # --- the environment the run inherits --------------------------------------
 # Explicit Cargo flags take precedence, and nested Cargo invocations inherit the same target.
 EXPLICIT_TARGET="$(cd "${TMPDIR:-/tmp}" && pwd -P)/sjel-explicit-target"
@@ -156,6 +152,9 @@ for var in XDG_STATE_HOME SJEL_PERSONAL_ROOT SJEL_OVERLAY_ROOT SJEL_DB_PATH SJEL
 done
 expect_ends_with "the comms config is a file, not a directory" SJEL_COMMS_CONFIG ".json"
 expect_ends_with "the database sits under the sandbox overlay" SJEL_DB_PATH "/overlay/data/sjel/sjel.db"
+expect_ends_with "temporary files belong to the test sandbox" TMPDIR "/tmp"
+[ "$(env_value TMPDIR)" = "$(env_value TMP)" ] || note_fail "TMP escapes the sandbox"
+[ "$(env_value TMPDIR)" = "$(env_value TEMP)" ] || note_fail "TEMP escapes the sandbox"
 
 # The projection roots must not be the sandbox OVERLAY either. SJEL_FINANCE_DECISIONS_ROOT
 # exists (PRD Q80) precisely because redirecting the overlay instead would redirect the
@@ -173,6 +172,69 @@ done
 
 run
 expect_refused "a bare invocation is usage, not a silent cargo run" "needs a cargo subcommand"
+
+case_dir="$(mktemp -d "${TMPDIR:-/tmp}/sjel-hermetic-cases.XXXXXX")"
+case_dir="$(cd "$case_dir" && pwd -P)"
+trap 'rm -rf "$case_dir"' EXIT
+mkdir -p "$case_dir/bin" "$case_dir/host-tmp"
+cat > "$case_dir/bin/cargo" <<'CARGO'
+#!/bin/bash
+set -eu
+printf '%s\n%s\n' "$TMPDIR" "$CARGO_TARGET_DIR" > "$HERMETIC_TEST_REPORT"
+mkdir -p "$TMPDIR/comms-test-$$"
+printf 'fixture\n' > "$TMPDIR/comms-test-$$/store.db"
+[ "${1:-}" != "fail" ] || exit 19
+CARGO
+chmod +x "$case_dir/bin/cargo"
+
+fake_run() {
+  out=$(PATH="$case_dir/bin:$PATH" TMPDIR="$case_dir/host-tmp" \
+    CARGO_TARGET_DIR="$case_dir/cache" HERMETIC_TEST_REPORT="$case_dir/report" \
+    SJEL_ALLOW_LOCAL_BUILD=1 "$TOOL" "$@" 2>&1)
+  status=$?
+}
+
+fake_run test
+expect_ok "a planted test process succeeds"
+fixture_tmp="$(sed -n '1p' "$case_dir/report")"
+fixture_cache="$(sed -n '2p' "$case_dir/report")"
+[ ! -e "$fixture_tmp" ] || note_fail "successful tests left temporary databases behind"
+[ -d "$fixture_cache" ] || note_fail "fixture cleanup removed the reusable build cache"
+
+fake_run fail
+[ "$status" -eq 19 ] || note_fail "a failed test process lost its exit status"
+fixture_tmp="$(sed -n '1p' "$case_dir/report")"
+[ ! -e "$fixture_tmp" ] || note_fail "failed tests left temporary databases behind"
+
+cat > "$case_dir/bin/rmdir" <<'RMDIR'
+#!/bin/bash
+case "$1" in
+  "$HERMETIC_TEST_BLOCKED"/*) exit 1 ;;
+esac
+exec /bin/rmdir "$@"
+RMDIR
+chmod +x "$case_dir/bin/rmdir"
+
+fallback_run() {
+  out=$(PATH="$case_dir/bin:$PATH" TMPDIR="$case_dir/host-tmp" \
+    CARGO_TARGET_DIR="$case_dir/blocked" HERMETIC_TEST_BLOCKED="$case_dir/blocked" \
+    HERMETIC_TEST_REPORT="$case_dir/report" SJEL_ALLOW_LOCAL_BUILD=1 \
+    "$TOOL" "$@" 2>&1)
+  status=$?
+}
+
+fallback_run test
+expect_ok "an inherited cache with denied cleanup uses the shared fallback"
+fallback_cache="$(sed -n '2p' "$case_dir/report")"
+case "$fallback_cache" in
+  "$case_dir/host-tmp/sjel-cargo-hermetic/target/hermetic-"*) ;;
+  *) note_fail "the fallback did not use the checkout-keyed shared cache" ;;
+esac
+fallback_run test
+expect_ok "the shared fallback survives a second invocation"
+[ "$(sed -n '2p' "$case_dir/report")" = "$fallback_cache" ] || note_fail "the fallback cache changed between invocations"
+fallback_run test --target-dir "$case_dir/blocked"
+expect_refused "an explicit unwritable cache is not silently redirected" "explicit target cannot create and remove"
 
 # ---------------------------------------------------------------------------
 

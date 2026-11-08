@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -375,11 +375,9 @@ mod tests {
             )
             .unwrap();
         assert!(manager.holds(&id, &value).unwrap());
-        assert!(
-            !manager
-                .holds(&id, &SecretValue::new(b"other".to_vec()).unwrap())
-                .unwrap()
-        );
+        assert!(!manager
+            .holds(&id, &SecretValue::new(b"other".to_vec()).unwrap())
+            .unwrap());
         assert!(matches!(
             manager.create_verified(id, "Again".into(), ProviderKind::Bitwarden, vec![], &value),
             Err(CredentialError::AlreadyExists)

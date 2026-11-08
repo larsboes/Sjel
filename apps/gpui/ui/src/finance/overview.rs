@@ -5,7 +5,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
-    AnyElement, Context, Entity, FontWeight, SharedString, Window, div, prelude::*, px, rgb, rgba,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString, Window,
 };
 use sjel_gpui_core::context::format_money;
 use sjel_gpui_core::finance::{format_exact_money, parse_personal_cents};
@@ -998,9 +998,7 @@ mod overview_tests {
         let months: Vec<_> = window.iter().map(|(month, _)| month.as_str()).collect();
         assert_eq!(
             months,
-            [
-                "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"
-            ]
+            ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"]
         );
         assert!(window[1].1.is_none());
         assert!(window[5].1.is_some());

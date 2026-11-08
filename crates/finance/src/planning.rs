@@ -11,7 +11,7 @@ use crate::analytics::{TransactionKind, TransactionRow};
 use crate::balance::{BalanceCoverage, BalanceKind, ManualBalanceSnapshot};
 use crate::config::RecurringCommitment;
 use crate::investment::{HoldingsCoverage, PortfolioValuation, ReviewedHoldingsSnapshot};
-use crate::subscription::{State, Subscription, burn_by_currency};
+use crate::subscription::{burn_by_currency, State, Subscription};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1602,12 +1602,10 @@ mod tests {
         let result = subscription_portfolio(&[subscription()], "2026-08-11", "EUR");
         assert_eq!(result.monthly_cents, 1_000);
         assert!(result.anomalies.iter().any(|item| item.kind == "low_value"));
-        assert!(
-            result
-                .anomalies
-                .iter()
-                .any(|item| item.kind == "price_jump")
-        );
+        assert!(result
+            .anomalies
+            .iter()
+            .any(|item| item.kind == "price_jump"));
     }
 
     #[test]

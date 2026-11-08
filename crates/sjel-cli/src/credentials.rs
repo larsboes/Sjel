@@ -7,9 +7,9 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use sjel_credentials::declaration::{Declaration, declared_in};
+use sjel_credentials::declaration::{declared_in, Declaration};
 use sjel_credentials::{
-    CredentialId, CredentialManager, CredentialProvider, KeychainProvider, Presence, google,
+    google, CredentialId, CredentialManager, CredentialProvider, KeychainProvider, Presence,
 };
 
 pub fn run(root: &Path, args: &[String]) -> ExitCode {

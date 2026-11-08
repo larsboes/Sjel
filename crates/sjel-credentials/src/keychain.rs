@@ -457,10 +457,8 @@ mod tests {
         let script = String::from_utf8(stdin.clone().unwrap()).unwrap();
         assert!(script.contains("add-generic-password -s"));
         assert!(!script.contains("add-generic-password -U"));
-        assert!(
-            script
-                .contains("73656e7369746976652d76616c75650a776974682d7370656369616c2d276368617273")
-        );
+        assert!(script
+            .contains("73656e7369746976652d76616c75650a776974682d7370656369616c2d276368617273"));
         assert!(!args.join(" ").contains("sensitive-value"));
     }
 
@@ -477,11 +475,9 @@ mod tests {
         let (program, args, stdin) = &calls[0];
         assert_eq!(program, "security");
         assert_eq!(args, &["-i"]);
-        assert!(
-            String::from_utf8(stdin.clone().unwrap())
-                .unwrap()
-                .contains("add-generic-password -U")
-        );
+        assert!(String::from_utf8(stdin.clone().unwrap())
+            .unwrap()
+            .contains("add-generic-password -U"));
         assert!(!args.join(" ").contains("replacement-value"));
     }
 

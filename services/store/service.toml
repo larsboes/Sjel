@@ -5,4 +5,5 @@ backup_sqlite_online = "data/sjel/sjel.db"
 backup_target        = "backup-target"
 backup_retain        = "14"
 backup_advise_days   = "1"
-backup_stale_days    = "2"
+# The backup volume is attached periodically, so advise at 1d and call it stale only after a week.
+backup_stale_days    = "7"

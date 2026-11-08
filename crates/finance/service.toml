@@ -17,7 +17,8 @@ backup_paths       = ["data/finance", "config/finance.json"]
 backup_target      = "backup-target"
 backup_retain      = "14"
 backup_advise_days = "1"
-backup_stale_days  = "2"
+# The backup volume is attached periodically, so advise at 1d and call it stale only after a week.
+backup_stale_days  = "7"
 
 # Hours since the newest successful price fetch before tools/doctor advises or reports stale.
 freshness_advise_hours = "48"

@@ -1376,6 +1376,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2874,7 +2883,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.57.0",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -4206,7 +4215,7 @@ dependencies = [
  "tokio",
  "tower-service",
  "tracing",
- "windows-registry 0.6.1",
+ "windows-registry 0.4.0",
 ]
 
 [[package]]
@@ -4221,7 +4230,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.57.0",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -5445,6 +5454,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "no_std_io2"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5538,7 +5559,7 @@ dependencies = [
 [[package]]
 name = "nsh-base"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "chrono",
  "html5ever",
@@ -5568,7 +5589,7 @@ dependencies = [
 [[package]]
 name = "nsh-core"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "cap-std",
  "crc32fast",
@@ -5583,6 +5604,7 @@ dependencies = [
  "nsh-updater",
  "ordered-float",
  "resvg 0.46.0",
+ "rust-i18n",
  "rustc-hash 2.1.3",
  "rustls",
  "serde",
@@ -5605,7 +5627,7 @@ dependencies = [
 [[package]]
 name = "nsh-engine"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "crossbeam-channel",
  "libc",
@@ -5624,7 +5646,7 @@ dependencies = [
 [[package]]
 name = "nsh-macros"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "imagesize 0.15.0",
  "proc-macro2",
@@ -5637,7 +5659,7 @@ dependencies = [
 [[package]]
 name = "nsh-platform-apple"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "block2 0.6.2",
  "dispatch2",
@@ -5654,7 +5676,7 @@ dependencies = [
 [[package]]
 name = "nsh-platform-gpui"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -5686,7 +5708,7 @@ dependencies = [
 [[package]]
 name = "nsh-platform-ios"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "block2 0.6.2",
  "dispatch2",
@@ -5711,7 +5733,7 @@ dependencies = [
 [[package]]
 name = "nsh-updater"
 version = "0.4.0"
-source = "git+https://github.com/longbridge/nsh?rev=cc38facfdd#cc38facfdd65e82174aad85fef9ba9b336bc0731"
+source = "git+https://github.com/longbridge/nsh?rev=893fb84db6#893fb84db625045f36363ae9de1f999f588d25fd"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -6307,6 +6329,28 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "onig"
+version = "6.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0cc3cbf698f9438986c11a880c90a6d04b9de27575afd28bbf45b154b6c709e2"
+dependencies = [
+ "bitflags 2.13.2",
+ "libc",
+ "once_cell",
+ "onig_sys",
+]
+
+[[package]]
+name = "onig_sys"
+version = "69.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e68317604e77e53b85896388e1a803c1d21b74c899ec9e5e1112db90735edd7"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
 
 [[package]]
 name = "oo7"
@@ -8947,6 +8991,7 @@ dependencies = [
  "flate2",
  "fnv",
  "once_cell",
+ "onig",
  "regex-syntax",
  "serde",
  "serde_derive",
@@ -9566,9 +9611,9 @@ dependencies = [
 
 [[package]]
 name = "typed-path"
-version = "0.12.4"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54ec2755506471f54baf5e4bb5499d8e510cc1caf271270e778a736bd2d7336c"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typeid"
@@ -10616,7 +10661,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11807,15 +11852,21 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "8.6.0"
+version = "9.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+checksum = "df3845f734baabdd02de353a20580e30ceccd03897def44a4eb8e9654992e294"
 dependencies = [
+ "constant_time_eq",
  "crc32fast",
  "flate2",
+ "getrandom 0.4.3",
  "indexmap",
+ "libc",
  "memchr",
+ "nix",
  "typed-path",
+ "windows-sys 0.61.2",
+ "zeroize",
  "zopfli",
 ]
 

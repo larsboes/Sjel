@@ -11,4 +11,5 @@ backup_exclude = [".obsidian/plugin-backups", "Projects/Bachelor-Thesis/Kolloqui
 backup_target      = "backup-target"
 backup_retain      = "2"
 backup_advise_days = "1"
-backup_stale_days  = "2"
+# The backup volume is attached periodically, so advise at 1d and call it stale only after a week.
+backup_stale_days  = "7"

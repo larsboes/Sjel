@@ -629,8 +629,10 @@ Run it: `apps/gpui/ios/run-sim` (add `SIMCTL_CHILD_SJEL_TAB=documents` to land o
 `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPhone. The Mac window:
 `cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1`.
 
-NSH comes from git rev `cc38facfdd` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
-build for this app.
+NSH comes from git rev `893fb84db6` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
+build for this app. The rev moved off `cc38facfdd` on 2026-11-08 for the updater's zip 9 bump
+(upstream `c85e3f7dc8`), because `nsh-updater -> zip 8.6.0` carried eight advisories, one CVSS
+10.0, and `tools/audit` blocks on them, which failed the daily `host-patch` run.
 
 ### Open, in order
 

@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::guard::{Caller, Guard};
 use crate::inuse::{self, Usage};
-use crate::measure::{fmt_bytes, size_of, Walk};
+use crate::measure::{fmt_bytes, size_of, Sizing, Walk};
 use crate::policy::{expand_glob, is_applicable, reclaim_argv, Policy, StorageClass};
 use crate::reclaim::Outcome;
 
@@ -37,7 +37,17 @@ pub fn measure_selected(policy: &Policy, home: &str, only: Option<&str>) -> Vec<
                 .iter()
                 .flat_map(|p| expand_glob(p, home))
                 .collect();
-            let sizing = size_of(&paths);
+            let sizing = match class.entry_pattern.as_deref() {
+                Some(pattern) => match matching_paths(&paths, pattern) {
+                    Ok(selected) => size_of(&selected),
+                    Err(error) => Sizing {
+                        bytes: 0,
+                        complete: false,
+                        error: error.to_string(),
+                    },
+                },
+                None => size_of(&paths),
+            };
             Measured {
                 bytes: sizing.bytes,
                 complete: sizing.complete,
@@ -49,6 +59,31 @@ pub fn measure_selected(policy: &Policy, home: &str, only: Option<&str>) -> Vec<
         .collect();
     measured.sort_by_key(|m| std::cmp::Reverse(m.bytes));
     measured
+}
+
+fn matching_paths(roots: &[String], pattern: &str) -> Result<Vec<String>, std::io::Error> {
+    let mut paths = Vec::new();
+    for root in roots {
+        let metadata = std::fs::symlink_metadata(root)?;
+        if !metadata.is_dir() || metadata.is_symlink() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{root}: filtered root must be a non-symlink directory"),
+            ));
+        }
+        for entry in std::fs::read_dir(root)? {
+            let entry = entry?;
+            if entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| crate::policy::segment_matches(pattern, name))
+                && !entry.file_type()?.is_symlink()
+            {
+                paths.push(entry.path().to_string_lossy().into_owned());
+            }
+        }
+    }
+    Ok(paths)
 }
 
 /// What reclaim intends to do about one class, or why it will not.
@@ -584,6 +619,30 @@ mod tests {
         let picked = steps(&[a, b], false, Some("b"));
         assert_eq!(picked.len(), 1);
         assert_eq!(picked[0].class.name, "b");
+    }
+
+    #[test]
+    fn filtered_measurement_does_not_charge_unrelated_siblings() {
+        let root = crate::testutil::tempdir("filtered-measurement");
+        let selected = root.join("fixture-keep");
+        let unrelated = root.join("unrelated");
+        std::fs::create_dir(&selected).unwrap();
+        std::fs::create_dir(&unrelated).unwrap();
+        std::fs::write(selected.join("data"), vec![b'a'; 64 * 1024]).unwrap();
+        std::fs::write(unrelated.join("data"), vec![b'b'; 1024 * 1024]).unwrap();
+        let mut filtered = class("name = \"filtered\"\npaths = []\napply = true\nolder_than_days = 2\nentry_pattern = \"fixture-*\"\n");
+        filtered.paths = vec![root.to_string_lossy().into_owned()];
+        let policy = Policy {
+            classes: vec![filtered],
+            ..Policy::default()
+        };
+        let measured = measure(&policy, "");
+        assert_eq!(
+            measured[0].bytes,
+            size_of(&[selected.to_string_lossy().into_owned()]).bytes
+        );
+        assert!(measured[0].bytes < 1024 * 1024);
+        assert_eq!(measured[0].paths, vec![root.to_string_lossy().into_owned()]);
     }
 
     #[test]

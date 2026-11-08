@@ -104,6 +104,9 @@ that are symlinks are not followed. Active entries are skipped independently; fa
 probes refuse removal. Each selected entry is rechecked for identity and metadata changes after
 the process probe. These checks are snapshots, not a filesystem transaction.
 
+Filtered classes measure matching children only; unrelated siblings do not contribute to their
+reported size or cap. A child-name filter requires an age limit and cannot contain a slash.
+
 Together they are what makes a class safe to run unattended, so `reclaim --scheduled` acts only
 on classes the policy itself bounds, by size or by age. An unbounded class is a person's
 decision, and that is what a bare `reclaim` is for. `capabilities/cargo-trim` runs

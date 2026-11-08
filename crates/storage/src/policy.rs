@@ -103,7 +103,15 @@ pub fn load(path: &Path) -> Result<Policy, String> {
             path.display()
         )
     })?;
-    toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+    let policy: Policy = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    for class in &policy.classes {
+        if let Some(pattern) = &class.entry_pattern {
+            if class.older_than_days.is_none() || pattern.contains('/') || pattern.is_empty() {
+                return Err(format!("{}: class {} requires older_than_days and a nonempty child-name entry_pattern without slashes", path.display(), class.name));
+            }
+        }
+    }
+    Ok(policy)
 }
 
 /// A class is only touchable by `reclaim` when the policy both allows it and says how.
@@ -450,6 +458,16 @@ mod tests {
         assert!(!is_applicable(&policy.classes[0]));
         assert!(!policy.classes[0].regrows);
         assert_eq!(policy.thresholds.class_flag_gb, None);
+    }
+
+    #[test]
+    fn an_entry_filter_cannot_silently_apply_to_a_whole_root() {
+        let root = crate::testutil::tempdir("invalid-filter");
+        let path = root.join("policy.toml");
+        std::fs::write(&path, "[[class]]\nname = 'bad'\npaths = ['/unused']\napply = true\nreclaim = 'rm -rf'\nentry_pattern = 'fixture-*'\n").unwrap();
+        assert!(load(&path)
+            .unwrap_err()
+            .contains("requires older_than_days"));
     }
 
     // ── the size axis ───────────────────────────────────────────────────────────

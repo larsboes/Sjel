@@ -20,9 +20,12 @@
 mod review;
 mod rules;
 pub mod skills;
+#[cfg(test)]
+mod snapshot_tests;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -32,8 +35,9 @@ use sha2::{Digest as _, Sha256};
 pub use rules::{Finding, Severity};
 
 const HELD: u8 = 2;
-/// A larger file is not read. It is reported, and a person decides.
-const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
+const MAX_TREE_BYTES: usize = 128 * 1024 * 1024;
 const SCRIPT_SUFFIXES: &[&str] = &[
     ".sh", ".bash", ".zsh", ".py", ".js", ".mjs", ".cjs", ".ts", ".rb", ".ps1",
 ];
@@ -397,11 +401,12 @@ pub fn read_tree(root: &Path) -> Result<Tree, String> {
         return Err(format!("{}: expected a real directory", root.display()));
     }
     let mut tree = Tree::new();
-    visit(root, root, &mut tree)?;
+    let mut remaining = MAX_TREE_BYTES;
+    visit(root, root, &mut tree, &mut remaining)?;
     Ok(tree)
 }
 
-fn visit(root: &Path, dir: &Path, tree: &mut Tree) -> Result<(), String> {
+fn visit(root: &Path, dir: &Path, tree: &mut Tree, remaining: &mut usize) -> Result<(), String> {
     let mut entries: Vec<_> = fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .collect::<Result<_, _>>()
@@ -424,7 +429,7 @@ fn visit(root: &Path, dir: &Path, tree: &mut Tree) -> Result<(), String> {
                 "{rel}: symlinks cannot be screened as file content"
             ));
         } else if meta.is_dir() {
-            visit(root, &path, tree)?;
+            visit(root, &path, tree, remaining)?;
         } else if !meta.is_file() {
             return Err(format!("{rel}: only regular files can be screened"));
         } else if meta.len() > MAX_FILE_BYTES {
@@ -432,7 +437,25 @@ fn visit(root: &Path, dir: &Path, tree: &mut Tree) -> Result<(), String> {
                 "{rel}: exceeds the {MAX_FILE_BYTES}-byte screening limit"
             ));
         } else {
-            let bytes = fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
+            if meta.len() > *remaining as u64 {
+                return Err(format!(
+                    "{rel}: exceeds the {MAX_TREE_BYTES}-byte package limit"
+                ));
+            }
+            let limit = MAX_FILE_BYTES.min(*remaining as u64);
+            let mut bytes = Vec::new();
+            fs::File::open(&path)
+                .and_then(|file| file.take(limit + 1).read_to_end(&mut bytes))
+                .map_err(|e| format!("{rel}: {e}"))?;
+            if bytes.len() as u64 > limit {
+                return Err(format!("{rel}: grew beyond the snapshot limit"));
+            }
+            if bytes.len() > MAX_TEXT_BYTES && std::str::from_utf8(&bytes).is_ok() {
+                return Err(format!(
+                    "{rel}: exceeds the {MAX_TEXT_BYTES}-byte text screening limit"
+                ));
+            }
+            *remaining -= bytes.len();
             tree.insert(
                 rel,
                 TreeFile {

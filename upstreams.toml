@@ -1102,8 +1102,8 @@ why = "Renders Claude Code responses as typeset visual output through Typst, CeT
 url = "https://github.com/wheresryan22/anatomy"
 verdict = "adopt"
 license = "MIT"
-summary = "Isometric SVG figure skill, installed from upstream when a figure needs it; not vendored"
-why = "Vendored until 2026-10-24 and then unvendored: 67,545 lines, 141 of 144 files identical to upstream, and nothing in Sjel importing it. Installed from upstream instead, globally, so pi discovers it from outside the checkout; the one Sjel-specific file moved to Packs/knowledge/plugins/interactive/README.md."
+summary = "Isometric SVG figure skill, screened from upstream into the content-pinned skill store"
+why = "Keep the upstream implementation upstream rather than maintaining a vendored fork. tools/skills store screens one immutable snapshot, retains its binary assets and pins the accepted digest; harness profiles select the resulting Pack. research/agent-upstream-integration.md owns the integration boundary. The Sjel-specific Obsidian embedding contract stays in Packs/knowledge/plugins/interactive/README.md."
 
 [portable-pty]
 url = "https://github.com/wezterm/wezterm"
@@ -1121,8 +1121,8 @@ why = "The VT emulator and grid model the app's terminal view draws from -- `vte
 
 [octet]
 url = "https://github.com/skaft-software/octet"
-verdict = "evaluate"
+verdict = "inspiration"
 license = "MIT"
 summary = "Native Rust terminal coding agent, candidate harness and idea source for the Sjel agent"
 why = "Audited 2026-11-07 against v0.10.0, with the method in `Packs/security/skills/vendor-audit`. The strengths are real and measurable: 338 lock entries with zero git dependencies and zero `[patch]` sections, both `build.rs` inert, CI builds `--locked`, cosign-signs every artifact and verifies its own signatures before upload with the certificate identity pinned to the workflow commit, every `uses:` SHA-pinned, no `postinstall`, and no telemetry of any kind. The verdict is not adopt because of three findings: the effect broker -- canonical intent hashing, single-use grants, fail-closed without a human, model text never counted as consent -- ships off (`cli.rs` falls through to `EffectPolicy::UnsafeHost`, which `effect.rs` maps to allow), so plain `octet` prompts for nothing and leaves the file tools unconfined; the updater pipes a fetched shell script to `sh`, outside the Sigstore chain that protects the binary; and credentials are plaintext files rather than keychain items. Extensions have no isolation and the Pi adapter declares `filesystem = \"unrestricted\"` with `builtin_tool_overrides` including `bash`. A contained run the same day measured the boundary rather than the program: direct egress refused in 60 ms, the proxy admitting only the provider's hosts, and the profile refusing a real read of the gcloud application-default credentials."
-revisit = "Decide after a session on a non-trusted provider: adopt if `--safe-mode` holds the broker with a human attached, extensions and the updater stay off, and the credential arrives without widening the profile; otherwise mine the source for ports into `libs/agent/src/ext/` and record reject for running it. A contained trial measured three blocks: it reads its state with an `openat` walk this profile refuses (`containment.md` §2), and `setup --manual-model` fails its own catalog verification with and without the sandbox, so there is no offline configuration path and the only supported one is a live probe with the key inside the process."
+revisit = "The runtime trial is complete; running Octet is declined under the audited defaults. Re-evaluate only after upstream changes address the effect-policy default, updater verification, credential storage and configuration blockers. Mine selected designs into existing crates/sjel-agent interfaces only for a concrete consumer; research/agent-upstream-integration.md owns that integration boundary. The contained trial refused its state-directory openat walk, and setup --manual-model failed catalog verification both inside and outside containment."

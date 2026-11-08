@@ -1,5 +1,10 @@
 # The Sjel agent
 
+External source decisions and integration boundaries live in
+[`agent-upstream-integration.md`](../../research/agent-upstream-integration.md).
+The Octet runtime trial is complete; it remains an idea source. Intelligent UI remains
+renderer prior art, with no plugin hooks adopted.
+
 A coding and operations agent written in Rust. It runs on the Mac, and the user controls it
 from the GPUI app on the Mac or the paired iPhone. The loop is `crates/sjel-agent`. The capability that
 serves it is `crates/agent`. The reasoning for that shape is in

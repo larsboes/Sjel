@@ -17,6 +17,8 @@ set -u
 
 SJEL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 export SJEL_ROOT
+# npm removes its lock directories; use the session-writable temporary cache.
+export npm_config_cache="${npm_config_cache:-${NPM_CONFIG_CACHE:-${TMPDIR:-/tmp}/sjel-npm-cache-$(id -u)}}"
 # shellcheck source=tools/lib/toml.sh
 . "$SJEL_ROOT/tools/lib/toml.sh"       # toml_get_in, for the missing-cargo install hint
 # shellcheck source=tools/lib/sjel-cli.sh

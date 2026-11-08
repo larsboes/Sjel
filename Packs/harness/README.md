@@ -62,6 +62,11 @@ Claude Code, Codex, Antigravity, opencode and Copilot use `coding-harness`. It i
 work, design, deliberation, prose and skill authoring, presentations and secret handling, but
 excludes vault, learning and academic-writing skills. pi uses `full`; sjel-agent remains unbound.
 
+`optional_packs` selects a whole Pack only where its source is installed. This lets the shared
+coding profile select the approved Anatomy store without requiring that machine-local store in
+a fresh checkout. Required `packs` entries still fail when absent; optional selection does not
+fetch, approve or install a source.
+
 `apply` reconciles the selected units, including removals. For materialized harnesses, existing
 copies whose unit set is unchanged still need `sync` to receive source updates. A per-Pack
 `deploy` refuses a Pack outside the binding, and doctor reports owned Packs outside it. Explicit

@@ -60,6 +60,7 @@ skills = { "harness" = ["sjel"], "writing" = ["human-writing", "skill-creator", 
 name = "coding-harness"
 description = "Coding agents: repository work, decks and secret handling; no vault, no learning"
 packs = ["coding", "design", "cognitive-load", "deliberation", "harness", "writing", "presentations", "security"]
+optional_packs = ["anatomy"]
 skills = { "writing" = ["human-writing", "skill-creator", "unslop"] }
 
 [[profile]]

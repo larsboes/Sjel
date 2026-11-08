@@ -3278,8 +3278,20 @@
       "verdict": "adopt"
     },
     {
+      "name": "cargo-deny",
+      "verdict": "adopt"
+    },
+    {
+      "name": "cargo-machete",
+      "verdict": "adopt"
+    },
+    {
       "name": "cc-intelligent-ui",
       "verdict": "inspiration"
+    },
+    {
+      "name": "cisco-skill-scanner",
+      "verdict": "watch"
     },
     {
       "name": "clm",
@@ -3535,7 +3547,7 @@
     },
     {
       "name": "octet",
-      "verdict": "evaluate"
+      "verdict": "inspiration"
     },
     {
       "name": "open-intelligent-ui",
@@ -3672,6 +3684,10 @@
     {
       "name": "semgrep",
       "verdict": "reject"
+    },
+    {
+      "name": "semver",
+      "verdict": "adopt"
     },
     {
       "name": "sha2",

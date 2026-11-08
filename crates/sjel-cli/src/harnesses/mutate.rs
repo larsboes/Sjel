@@ -326,18 +326,24 @@ fn materialize_stage(
     }
 }
 
-fn replace_atomically(config: &DeployConfig, stage: &Path, destination: &Path, single_file: bool) {
+fn replace_atomically(
+    config: &DeployConfig,
+    stage: &Path,
+    destination: &Path,
+    single_file: bool,
+) -> Result<(), String> {
     if single_file {
         // The stage is a directory holding this one file, and the destination is a file, so
         // renaming the stage over it would fail outright (ENOTDIR). Rename the file itself.
         let from = stage.join(basename(destination));
-        let _ = fs::rename(&from, destination);
+        fs::rename(&from, destination)
+            .map_err(|e| format!("{}: installation failed: {e}", destination.display()))?;
         let _ = fs::remove_dir_all(stage);
-        return;
+        return Ok(());
     }
     if !destination.exists() {
-        let _ = fs::rename(stage, destination);
-        return;
+        return fs::rename(stage, destination)
+            .map_err(|e| format!("{}: installation failed: {e}", destination.display()));
     }
     let parent = destination
         .parent()
@@ -349,12 +355,26 @@ fn replace_atomically(config: &DeployConfig, stage: &Path, destination: &Path, s
         basename(destination),
         std::process::id()
     ));
-    let _ = fs::rename(destination, &backup);
-    if fs::rename(stage, destination).is_err() {
-        let _ = fs::rename(&backup, destination);
-        return;
+    if backup.exists() {
+        return Err(format!(
+            "{}: deployment backup already exists",
+            backup.display()
+        ));
+    }
+    fs::rename(destination, &backup).map_err(|e| {
+        format!(
+            "{}: could not preserve installed copy: {e}",
+            destination.display()
+        )
+    })?;
+    if let Err(error) = fs::rename(stage, destination) {
+        return match fs::rename(&backup, destination) {
+            Ok(()) => Err(format!("{}: installation failed: {error}; previous copy restored", destination.display())),
+            Err(rollback) => Err(format!("{}: installation failed: {error}; restore failed: {rollback}; previous copy remains at {}", destination.display(), backup.display())),
+        };
     }
     let _ = fs::remove_dir_all(&backup);
+    Ok(())
 }
 
 fn install_one(
@@ -418,7 +438,13 @@ fn install_one(
         record_unit(config, state, pack, unit, &digest);
         return Ok(format!("= {} (already current)", unit.key));
     }
-    replace_atomically(config, &stage, destination, unit.only_file.is_some());
+    replace_atomically(config, &stage, destination, unit.only_file.is_some())?;
+    if digest_destination(config, destination)? != digest {
+        return Err(format!(
+            "{}: installed bytes differ from the staged copy; ledger unchanged",
+            unit.key
+        ));
+    }
     record_unit(config, state, pack, unit, &digest);
     Ok(format!(
         "✓ {} {}",
@@ -682,10 +708,8 @@ pub fn discard_unit(config: &DeployConfig, pack: &str, unit: &Unit) -> Result<St
                 return Err(e);
             }
         };
-        replace_atomically(config, &stage, &unit.destination, unit.only_file.is_some());
+        replace_atomically(config, &stage, &unit.destination, unit.only_file.is_some())?;
         let _ = fs::remove_dir_all(&stage);
-        // `replace_atomically` reports nothing: a failed rename leaves the old copy where it was.
-        // Recording the Pack's digest over that copy would hide the drift for good.
         if digest_destination(config, &unit.destination)? != digest {
             return Err(format!(
                 "{}: the replacement did not land; the ledger is unchanged. The copy is kept at {}",
@@ -1042,6 +1066,9 @@ pub struct Profile {
     pub description: String,
     #[serde(default)]
     pub packs: Vec<String>,
+    /// Whole Packs selected only where their source is installed.
+    #[serde(default)]
+    pub optional_packs: Vec<String>,
     /// Packs a `*` profile must NOT deploy. Only meaningful with `packs = ["*"]`.
     #[serde(default)]
     pub except: Option<Vec<String>>,
@@ -1446,7 +1473,14 @@ pub fn resolve_profile_packs(
         ));
     }
     let all: BTreeSet<String> = available_packs(config, true)?.into_iter().collect();
-    for pack in &profile.packs {
+    let mut selected = profile.packs.clone();
+    for pack in &profile.optional_packs {
+        engine::assert_simple_name(pack, "optional Pack")?;
+        if all.contains(pack) && !selected.contains(pack) {
+            selected.push(pack.clone());
+        }
+    }
+    for pack in &selected {
         if !all.contains(pack) {
             return Err(format!("profile '{}': unknown pack '{pack}'", profile.name));
         }
@@ -1457,7 +1491,7 @@ pub fn resolve_profile_packs(
             ));
         }
     }
-    Ok(profile.packs.clone())
+    Ok(selected)
 }
 
 /// The per-Pack skill subset a profile asks for: `None` means "all skills of that Pack".
@@ -1735,6 +1769,69 @@ pub fn skills_line_with(line: &str, skill: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_replacement_reports_error_and_preserves_the_previous_copy() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-replace-failure-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let config = replacement_config(&root);
+        let destination = root.join("installed");
+        let missing = root.join("missing-stage");
+        assert!(replace_atomically(&config, &missing, &destination, false).is_err());
+        assert!(!destination.exists());
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("SKILL.md"), "previous copy").unwrap();
+        assert!(replace_atomically(&config, &missing, &destination, false).is_err());
+        assert_eq!(
+            fs::read_to_string(destination.join("SKILL.md")).unwrap(),
+            "previous copy"
+        );
+        let single = root.join("agent.md");
+        fs::write(&single, "previous agent").unwrap();
+        assert!(replace_atomically(&config, &missing, &single, true).is_err());
+        assert_eq!(fs::read_to_string(&single).unwrap(), "previous agent");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn replacement_config(root: &Path) -> DeployConfig {
+        DeployConfig {
+            sjel_root: root.join("repo"),
+            pack_roots: None,
+            destination: root.join("skills"),
+            state_file: root.join("state.json"),
+            adapter: "test".into(),
+            state_env_var: None,
+            tree_convention: None,
+            flat_file_convention: None,
+            skip_manifest_skills: false,
+            validate_adapter_files: None,
+        }
+    }
+
+    #[test]
+    fn optional_packs_select_installed_sources_without_hiding_missing_requirements() {
+        let root = std::env::temp_dir().join(format!("sjel-optional-packs-{}", std::process::id()));
+        let config = replacement_config(&root);
+        fs::create_dir_all(config.sjel_root.join("Packs")).unwrap();
+        let mut profile: Profile =
+            toml::from_str("name = 'test'\noptional_packs = ['external']\n").unwrap();
+        assert!(resolve_profile_packs(&config, &profile).unwrap().is_empty());
+        let pack = config.sjel_root.join("Packs/external");
+        fs::create_dir(&pack).unwrap();
+        fs::write(
+            pack.join("pack.toml"),
+            "name = 'external'\ndescription = 'test'\nskills = []\n",
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_profile_packs(&config, &profile).unwrap(),
+            vec!["external"]
+        );
+        profile.packs.push("missing".into());
+        assert!(resolve_profile_packs(&config, &profile).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn skills_line_appends_inside_the_array() {

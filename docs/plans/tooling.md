@@ -10,14 +10,20 @@ covers it.
 
 ## Open
 
-- **Temporary build and browser-clone reclaim.** Storage investigation needed direct `du` and
-  `lsof` calls to separate disposable build caches and stale browser code-signing clones from
-  live processes. A broad report-only system-state class hides these directories from discovery,
-  and a held member prevents reclaim of an entire class. Workaround: explicit manual build-cache
-  classes and per-clone process checks. Smallest change: expose named subdirectories in discovery,
-  support reviewed per-path reclaim with the existing guard, and distinguish directory byte totals
-  from recoverable APFS space. Done when an active clone remains while idle siblings are reclaimed,
-  and the report shows the volume's measured free-space change separately from candidate sizes.
+- **Temporary test database retention.** `crates/comms/src/store.rs::test_database` creates
+  per-process temporary databases without an owner that removes them after the store closes.
+  Workaround: read-only directory measurements grouped by the fixture prefix. Smallest change:
+  give fixtures a scoped lifetime that closes database handles before cleanup, then test repeated
+  runs for residual files. Existing leftovers need a separate reviewed reclaim; this change does
+  not authorize a blanket temporary-directory sweep.
+
+- **Standalone tool installation from isolated builds.** A restricted session could build storage
+  in a writable scratch target but could not clean temporary archive directories in the shared
+  Cargo target. Workaround: build through the existing launcher with an isolated target, check
+  executable use, and atomically install hash-verified bytes at the CLI and scheduled artifact
+  locations. Smallest change: a tooling install command that derives both locations from existing
+  launch and service contracts, refuses active executables, and verifies the installed digest.
+  Done when one command installs the verified tool without rebuilding in the shared cache.
 
 - **Environment-isolated website build.** `website/build` could not remove the existing output
   directories in a restricted session. A scratch `--out` then exited 1 without diagnostics at
@@ -297,6 +303,12 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- Storage checks aged entries independently, supports name filters, protects descendants, reports
+  volume free-space changes and exposes policy-managed directories with `--include-named`
+  (`41589496`). All 117 storage tests and scoped Clippy passed in an isolated writable target.
+  Live reclaim preserved active browser clones; the next scheduled firing and full workspace
+  gates were not observed or run.
 
 - GPUI formatting is selected through `tools/ci-run.ts` and covered by `tools/ci-local.test.ts`
   (`217a921b`); revision-isolated verification remains open above.

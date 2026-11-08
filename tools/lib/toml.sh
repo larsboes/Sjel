@@ -7,8 +7,7 @@
 #
 # The boundary, stated once: anything beyond single-line (array-of-tables like
 # [[state_mount]], nested tables, dotted queries) is read in TypeScript through
-# Bun.TOML directly -- obsidian-deploy.ts and
-# libs/overlay each do exactly that. A shared CLI wrapper for it existed until
+# Bun.TOML directly -- libs/overlay does exactly that. A shared CLI wrapper for it existed until
 # 2026-08-02 and never had a caller: the callers are all TS already, and the ones
 # that are not are the shell gates, which stay on this file so a manifest check
 # needs nothing but bash -- which is exactly why the gates' manifests stay

@@ -11,7 +11,7 @@ use crate::analytics::{TransactionKind, TransactionRow};
 use crate::balance::{BalanceCoverage, BalanceKind, ManualBalanceSnapshot};
 use crate::config::RecurringCommitment;
 use crate::investment::{HoldingsCoverage, PortfolioValuation, ReviewedHoldingsSnapshot};
-use crate::subscription::{burn_by_currency, State, Subscription};
+use crate::subscription::{State, Subscription, burn_by_currency};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -134,6 +134,105 @@ pub struct CardDecisionInput {
     pub options: Vec<CardOptionInput>,
 }
 
+/// A spend target over a fixed window, such as a card's welcome offer: spend `target_cents` on
+/// these accounts between `start` and `end`, both inclusive ISO dates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpendGoal {
+    pub id: String,
+    pub label: String,
+    pub account_prefixes: Vec<String>,
+    #[serde(default)]
+    pub ineligible_category_prefixes: Vec<String>,
+    pub start: String,
+    pub end: String,
+    pub target_cents: i64,
+    #[serde(default = "default_currency")]
+    pub currency: String,
+    /// Where the rule comes from, so the target stays checkable.
+    #[serde(default)]
+    pub terms_source: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SpendGoalProgress {
+    pub id: String,
+    pub label: String,
+    pub start: String,
+    pub end: String,
+    pub currency: String,
+    pub target_cents: i64,
+    /// Expenses minus refunds and credits on the accounts, inside the window, up to `as_of`.
+    pub spent_cents: i64,
+    pub remaining_cents: i64,
+    /// Days from `as_of` to `end`, both counted; 0 once the window has closed.
+    pub days_left: i64,
+    /// `remaining_cents` spread evenly over `days_left`, rounded up.
+    pub needed_per_day_cents: i64,
+    pub met: bool,
+    pub terms_source: Option<String>,
+}
+
+fn spend_goal_progress(
+    rows: &[TransactionRow],
+    goal: &SpendGoal,
+    as_of: &str,
+) -> SpendGoalProgress {
+    let until = if as_of < goal.end.as_str() {
+        as_of
+    } else {
+        goal.end.as_str()
+    };
+    let spent_cents: i64 = rows
+        .iter()
+        .filter(|row| {
+            row.currency == goal.currency
+                && row.date.as_str() >= goal.start.as_str()
+                && row.date.as_str() <= until
+                && goal
+                    .account_prefixes
+                    .iter()
+                    .any(|prefix| row.account.starts_with(prefix))
+                && !goal
+                    .ineligible_category_prefixes
+                    .iter()
+                    .any(|prefix| row.category.starts_with(prefix))
+        })
+        .map(|row| match row.kind {
+            TransactionKind::Expense => row.amount_cents,
+            // A refund or statement credit on the card reduces what counts.
+            TransactionKind::Income => -row.amount_cents,
+            TransactionKind::Transfer => 0,
+        })
+        .sum();
+    let remaining_cents = goal.target_cents.saturating_sub(spent_cents).max(0);
+    let days_left = match (
+        civil_date::unix_day_of_iso(as_of),
+        civil_date::unix_day_of_iso(&goal.end),
+    ) {
+        (Some(today), Some(end)) => (end - today + 1).max(0),
+        _ => 0,
+    };
+    let needed_per_day_cents = if days_left > 0 {
+        (remaining_cents + days_left - 1) / days_left
+    } else {
+        remaining_cents
+    };
+    SpendGoalProgress {
+        id: goal.id.clone(),
+        label: goal.label.clone(),
+        start: goal.start.clone(),
+        end: goal.end.clone(),
+        currency: goal.currency.clone(),
+        target_cents: goal.target_cents,
+        spent_cents,
+        remaining_cents,
+        days_left,
+        needed_per_day_cents,
+        met: remaining_cents == 0,
+        terms_source: goal.terms_source.clone(),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoyaltyBalanceInput {
     pub id: String,
@@ -220,6 +319,8 @@ pub struct PlanningConfig {
     #[serde(default)]
     pub card_decision: Option<CardDecisionInput>,
     #[serde(default)]
+    pub spend_goals: Vec<SpendGoal>,
+    #[serde(default)]
     pub loyalty_balances: Vec<LoyaltyBalanceInput>,
     #[serde(default)]
     pub source_expectations: Vec<SourceExpectation>,
@@ -238,6 +339,7 @@ impl Default for PlanningConfig {
             forecast_adjustments: Vec::new(),
             comparison_dates: Vec::new(),
             card_decision: None,
+            spend_goals: Vec::new(),
             loyalty_balances: Vec::new(),
             source_expectations: Vec::new(),
         }
@@ -374,6 +476,7 @@ pub struct PlanningReport {
     pub liquidity: Option<LiquidityInsight>,
     pub subscriptions: SubscriptionPortfolio,
     pub card_decision: Option<CardDecisionResult>,
+    pub spend_goals: Vec<SpendGoalProgress>,
     pub loyalty: Vec<LoyaltyValuation>,
     pub caveats: Vec<String>,
 }
@@ -423,6 +526,12 @@ pub fn report(inputs: PlanningInputs<'_>) -> PlanningReport {
         let derived = eligible_card_spend(inputs.rows, input, inputs.as_of, inputs.currency);
         card_decision(input, derived, inputs.currency)
     });
+    let spend_goals = inputs
+        .config
+        .spend_goals
+        .iter()
+        .map(|goal| spend_goal_progress(inputs.rows, goal, inputs.as_of))
+        .collect();
     let loyalty = inputs
         .config
         .loyalty_balances
@@ -488,6 +597,7 @@ pub fn report(inputs: PlanningInputs<'_>) -> PlanningReport {
         liquidity,
         subscriptions,
         card_decision,
+        spend_goals,
         loyalty,
         caveats,
     }
@@ -1164,6 +1274,49 @@ mod tests {
         }
     }
 
+    #[test]
+    fn spend_goal_counts_card_spend_in_window_net_of_refunds() {
+        let card = |date: &str, kind, cents| TransactionRow {
+            date: date.into(),
+            account: "liabilities:card:synthetic-new".into(),
+            ..row("2026-01", kind, "expenses:food", cents)
+        };
+        let rows = vec![
+            card("2026-09-17", TransactionKind::Expense, 50_000), // before the window
+            card("2026-09-18", TransactionKind::Expense, 100_000),
+            card("2026-10-01", TransactionKind::Income, 20_000), // refund
+            card("2026-10-02", TransactionKind::Transfer, 300_000), // card payment
+            row(
+                "2026-10-03",
+                TransactionKind::Expense,
+                "expenses:food",
+                70_000,
+            ), // other account
+        ];
+        let goal = SpendGoal {
+            id: "welcome".into(),
+            label: "Welcome offer".into(),
+            account_prefixes: vec!["liabilities:card:synthetic-new".into()],
+            ineligible_category_prefixes: Vec::new(),
+            start: "2026-09-18".into(),
+            end: "2027-03-17".into(),
+            target_cents: 1_000_000,
+            currency: "EUR".into(),
+            terms_source: None,
+        };
+        let progress = spend_goal_progress(&rows, &goal, "2026-11-08");
+        assert_eq!(progress.spent_cents, 80_000);
+        assert_eq!(progress.remaining_cents, 920_000);
+        assert_eq!(progress.days_left, 130);
+        assert_eq!(progress.needed_per_day_cents, 7_077);
+        assert!(!progress.met);
+        let closed = spend_goal_progress(&rows, &goal, "2027-04-01");
+        assert_eq!(
+            (closed.days_left, closed.needed_per_day_cents),
+            (0, 920_000)
+        );
+    }
+
     fn subscription() -> Subscription {
         Subscription {
             id: "synthetic-subscription".into(),
@@ -1449,10 +1602,12 @@ mod tests {
         let result = subscription_portfolio(&[subscription()], "2026-08-11", "EUR");
         assert_eq!(result.monthly_cents, 1_000);
         assert!(result.anomalies.iter().any(|item| item.kind == "low_value"));
-        assert!(result
-            .anomalies
-            .iter()
-            .any(|item| item.kind == "price_jump"));
+        assert!(
+            result
+                .anomalies
+                .iter()
+                .any(|item| item.kind == "price_jump")
+        );
     }
 
     #[test]

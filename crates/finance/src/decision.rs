@@ -965,6 +965,7 @@ mod tests {
                 anomalies: Vec::new(),
             },
             card_decision: None,
+            spend_goals: Vec::new(),
             loyalty: Vec::new(),
             caveats: Vec::new(),
         }

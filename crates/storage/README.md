@@ -13,8 +13,10 @@ logic is Rust (`Packs/harness/skills/sjel/references/on-placement.md`,
 ## What it measures
 
 **The machine.** `du -sx -k` per policy class, `df -k` for the volume. `du` is the kernel's own
-accounting, stays on one filesystem, and reports allocated blocks — which is what actually
-frees. It also prints a partial total where an in-process walk would fail outright.
+accounting, stays on one filesystem, and reports allocated blocks. APFS clones and snapshots can
+share or retain those blocks, so directory totals are not recoverable-space estimates. Reclaim
+reports the volume's free space before and after separately; concurrent writes can affect that
+change. A partial directory measurement remains marked as partial.
 
 **This checkout.** An in-process walk of the Cargo target dir: `target` reports six buckets per
 profile, and shelling out per bucket would walk the same tree six times. It uses `du`'s unit,
@@ -46,7 +48,7 @@ needs a guard.
 | Verb | Reads | Answers |
 |---|---|---|
 | `report [--json]` | the overlay policy | free/used/total, every class against its cap, what is over the flag, what is protected, which entries are gone, which paths exist but could not be read, and how much space no entry accounts for |
-| `discover [--top N] [--depth D] [--root PATH] [--json]` | the overlay policy | the largest directories under `PATH` (default `$HOME`) that no policy path names — where `unattributed` lives |
+| `discover [--top N] [--depth D] [--root PATH] [--include-named] [--json]` | the overlay policy | unnamed directories by default; `--include-named` ranks all directories by total bytes, including policy-managed paths |
 
 | Verb | Acts on | Answers |
 |---|---|---|
@@ -54,7 +56,7 @@ needs a guard.
 | `reclaim --repo [--incremental] [--target] [--node-modules]` | the checkout's build output | the same, for target dirs and `node_modules` |
 | `target [--json]` | nothing | the Cargo target dir per profile and bucket, the R6 ratio, and whether the artifacts match the installed rustc |
 
-`report --where [--root PATH]` adds the walk `discover` prints, under the `unattributed` figure
+`report --where [--root PATH] [--include-named]` adds the walk `discover` prints, under the `unattributed` figure
 it explains. The walk is the expensive half — 35 s under `$HOME`, 45 s over the whole volume — so
 neither surfaces it unasked.
 
@@ -90,11 +92,17 @@ build, or Spotlight indexing what is going away. Treating that as a whole-class 
 
 ### The size axis
 
-`cap_gb` gates `reclaim`: a capped class acts only when it is measured above the cap, and a class
+`--only <class>` measures only that class and refuses an unknown name. `cap_gb` gates `reclaim`: a capped class acts only when it is measured above the cap, and a class
 with no cap acts whenever it is asked. `older_than_days` removes the entries *inside* each path
 older than the age rather than the path itself, and is a reclaim mechanism on its own — a class
 using it needs no `reclaim`. The cheap way to hold a directory down without a full rebuild;
 the alternative is dropping all of it at the cap, over and over.
+
+Age selection checks modification time and creation time when available. `entry_pattern` limits
+selection to matching immediate child names, with `*` as the only wildcard. Roots and children
+that are symlinks are not followed. Active entries are skipped independently; failed process
+probes refuse removal. Each selected entry is rechecked for identity and metadata changes after
+the process probe. These checks are snapshots, not a filesystem transaction.
 
 Together they are what makes a class safe to run unattended, so `reclaim --scheduled` acts only
 on classes the policy itself bounds, by size or by age. An unbounded class is a person's
@@ -139,6 +147,10 @@ question `report` can pose and not answer. A directory at the requested depth is
 what is left after the named paths inside it, and one that is itself named — or lies inside a
 named path — is dropped, because none of it is unnamed. A named path nested inside another is
 subtracted once, not twice.
+
+`--include-named` retains directories inside broad report-only classes, including system state.
+It sorts by total directory bytes and preserves `unnamed_bytes` separately in JSON. Policy paths
+outside the requested tree are not measured. The default ranking remains unchanged.
 
 Depth is the partition: `du` walks the whole tree at any depth, so the flag changes the answer's
 shape, not its cost. The default root is `$HOME`, where the report's `unattributed` covers the
@@ -273,11 +285,10 @@ is being asked to remove, and a flag is the wrong answer to not knowing:
 **Judgement, and `--force` overrides these.** They are calls the policy and the machine have
 already made, so the reader is given the reason and a way to disagree:
 
-- A path the policy protects, *or that would take a protected path with it*. The containment half
+- A path the policy protects, any descendant, *or a path that would take it with it*. The containment half
   is the load-bearing one: `cargo clean` on `~/.cargo-target` deletes `release/`, where `sjel-mcp`
-  runs from, and the protection naming `release/` is what refuses it. A candidate *inside* a named
-  path is still prunable, which is what keeps a subdirectory sweep possible inside a report-only
-  directory.
+  runs from, and the protection naming `release/` is what refuses it. A subdirectory sweep inside
+  a report-only class is still possible; protection also covers descendants.
 - A path a policy class names, when something other than that class is asking. A class reclaiming
   its own path is the policy acting; a sweep over it is not.
 - A directory a live process has open. The refusal names the pid and what it holds. A probe that

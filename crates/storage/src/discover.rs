@@ -1,28 +1,4 @@
-//! Where the space the policy does not name actually is.
-//!
-//! `report` answers "how much of the disk does no entry account for" and, until now, could
-//! not answer "which directories". That is the same blind spot one level down: on
-//! 2026-10-11 the report read "1.3 GB reclaimable" while `~/.cargo-target` held 149 GB no
-//! class named. The fix for that was to say the gap exists; this says where it lives.
-//!
-//! ## The shape of the answer
-//!
-//! One `du -x -k -d <depth>` walk of `$HOME`, then every policy path measured on its own so
-//! its bytes can be subtracted from whichever directory contains it. A directory at the
-//! requested depth is reported with what is left after the named paths inside it, and a
-//! directory that is itself a named path — or lies inside one — is dropped entirely, because
-//! none of it is unnamed.
-//!
-//! The depth is the partition. `du` always walks the whole tree, so asking for depth 3 costs
-//! what depth 1 costs; the flag changes what is reported, not what is read.
-//!
-//! ## What it cannot see, said out loud
-//!
-//! `du` exits non-zero and prints a partial total when it meets a directory it cannot read.
-//! On this machine that is the cloud-backed ones — `~/Library/CloudStorage`, iCloud Drive —
-//! where it writes `Resource deadlock avoided` and does not descend. A partial scan is
-//! reported as partial rather than presented as a size, for the same reason a class
-//! measurement carries `measured`.
+//! Policy-aware directory ranking over du output.
 
 use std::cmp::Reverse;
 
@@ -218,19 +194,41 @@ pub fn named_inside(dir: &str, named: &[Named]) -> u64 {
 
 /// Reduce a walk to the rows `discover` prints: the largest unnamed directories at one
 /// depth. Pure, so the partition is tested rather than lived in the command.
-pub fn rows(walk: &[DirSize], named: &[Named], root: &str, depth: usize) -> Vec<Row> {
+pub fn rows(
+    walk: &[DirSize],
+    named: &[Named],
+    root: &str,
+    depth: usize,
+    include_named: bool,
+) -> Vec<Row> {
     let mut rows: Vec<Row> = walk
         .iter()
         .filter(|d| depth_of(&d.path, root) == Some(depth))
-        .filter(|d| !fully_named(&d.path, named))
+        .filter(|d| include_named || !fully_named(&d.path, named))
         .map(|d| Row {
             path: d.path.clone(),
             bytes: d.bytes,
-            unnamed_bytes: d.bytes.saturating_sub(named_inside(&d.path, named)),
+            unnamed_bytes: if fully_named(&d.path, named) {
+                0
+            } else {
+                d.bytes.saturating_sub(named_inside(&d.path, named))
+            },
         })
-        .filter(|row| row.unnamed_bytes > 0)
+        .filter(|row| {
+            if include_named {
+                row.bytes > 0
+            } else {
+                row.unnamed_bytes > 0
+            }
+        })
         .collect();
-    rows.sort_by_key(|row| Reverse(row.unnamed_bytes));
+    rows.sort_by_key(|row| {
+        Reverse(if include_named {
+            row.bytes
+        } else {
+            row.unnamed_bytes
+        })
+    });
     rows
 }
 
@@ -384,7 +382,7 @@ mod tests {
             },
         ];
         let named = vec![named("/home/Library/Caches", 2_000)];
-        let rows = rows(&walk, &named, "/home", 1);
+        let rows = rows(&walk, &named, "/home", 1, false);
         assert_eq!(
             rows.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(),
             ["/home/Developer", "/home/Library"]
@@ -407,9 +405,29 @@ mod tests {
         ];
         let named = vec![named("/home/.cargo-target", 9_000)];
         // Depth 1: the named path itself is dropped.
-        assert!(rows(&walk, &named, "/home", 1).is_empty());
+        assert!(rows(&walk, &named, "/home", 1, false).is_empty());
         // Depth 2: its child lies inside the named path, so it is dropped too.
-        assert!(rows(&walk, &named, "/home", 2).is_empty());
+        assert!(rows(&walk, &named, "/home", 2, false).is_empty());
+    }
+
+    #[test]
+    fn include_named_reveals_children_of_report_only_roots() {
+        let walk = vec![
+            DirSize {
+                path: "/state/cache".into(),
+                bytes: 500,
+            },
+            DirSize {
+                path: "/state/logs".into(),
+                bytes: 100,
+            },
+        ];
+        let named = vec![named("/state", 600)];
+        assert!(rows(&walk, &named, "/state", 1, false).is_empty());
+        let visible = rows(&walk, &named, "/state", 1, true);
+        assert_eq!(visible.len(), 2);
+        assert_eq!(visible[0].path, "/state/cache");
+        assert_eq!(visible[0].unnamed_bytes, 0);
     }
 
     #[test]

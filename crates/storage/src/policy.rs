@@ -61,6 +61,8 @@ pub struct StorageClass {
     /// The cheap way to keep a directory bounded without a full rebuild: the alternative for
     /// `~/.cargo-target/debug` is dropping all of it at the cap, one rebuild, repeatedly.
     pub older_than_days: Option<u32>,
+    /// Optional star-only name filter for immediate children of an aged class.
+    pub entry_pattern: Option<String>,
 }
 
 impl StorageClass {
@@ -259,6 +261,7 @@ mod tests {
             note: None,
             cap_gb: None,
             older_than_days: None,
+            entry_pattern: None,
         }
     }
 

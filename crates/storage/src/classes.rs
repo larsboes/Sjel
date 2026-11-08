@@ -1,16 +1,4 @@
-//! The policy's classes: measured, and acted on.
-//!
-//! `report` prints what these measure and `reclaim` acts on them, from one walk, because a
-//! class that measured one size and acted on another is how a cap stops meaning anything.
-//!
-//! ## The size axis
-//!
-//! `apply` answers "may I" and never "is it too big", and the policy had no way to say the
-//! second — which is why the daily trim of `~/.cargo-target/debug` lived in a shell script
-//! outside this crate, carrying its own `du`, its own cap and its own process guard. `cap_gb`
-//! and `older_than_days` are that axis, and they are what make a class something a machine may
-//! run unattended: `reclaim --scheduled` acts only on classes whose own declaration bounds
-//! them, by size or by age. An unbounded class is a person's decision.
+//! Policy class measurement and guarded reclaim.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -34,9 +22,15 @@ pub struct Measured {
 
 /// The walk `report` prints and `reclaim` acts on. One function, so the two cannot disagree.
 pub fn measure(policy: &Policy, home: &str) -> Vec<Measured> {
+    measure_selected(policy, home, None)
+}
+
+/// Measure only the requested class; unrelated paths are not walked.
+pub fn measure_selected(policy: &Policy, home: &str, only: Option<&str>) -> Vec<Measured> {
     let mut measured: Vec<Measured> = policy
         .classes
         .iter()
+        .filter(|class| only.is_none_or(|name| class.name == name))
         .map(|class| {
             let paths: Vec<String> = class
                 .paths
@@ -222,6 +216,14 @@ pub fn run(
             skipped += 1;
             continue;
         }
+        if step.class.older_than_days.is_some() {
+            let aged = act_on_aged(&step.class, &step.paths, guard, dry_run);
+            bytes += aged.bytes;
+            refused += aged.refused;
+            skipped += aged.skipped;
+            lines.extend(aged.lines);
+            continue;
+        }
         // The guard runs on the class's own paths before anything is selected from them: a
         // directory a build is writing into is refused as a whole rather than per entry, which
         // is both cheaper and the conservative answer.
@@ -261,32 +263,6 @@ pub fn run(
             continue;
         }
         if allowed.is_empty() {
-            continue;
-        }
-        if let Some(days) = step.class.older_than_days {
-            let (freed, entries, failures) = act_on_aged(&step.class, &allowed, dry_run);
-            for why in &failures {
-                lines.push(format!("  failed   {why}"));
-                refused += 1;
-            }
-            if entries == 0 && failures.is_empty() {
-                // Nothing to do and nothing wrong: the age gate held it, which is the policy
-                // working, so this reads as a skip rather than as a reclaim of zero bytes. An
-                // age class acting is otherwise indistinguishable from one that found nothing.
-                lines.push(format!(
-                    "  skipped  {} — nothing under it is older than {days}d",
-                    step.class.name
-                ));
-                skipped += 1;
-                continue;
-            }
-            bytes += freed;
-            lines.push(format!(
-                "  {:>9}  {} — {entries} entr{} older than {days}d",
-                fmt_bytes(freed),
-                step.class.name,
-                if entries == 1 { "y" } else { "ies" }
-            ));
             continue;
         }
         let Some(argv) = reclaim_argv(&step.class, &allowed) else {
@@ -335,61 +311,171 @@ pub fn run(
     }
 }
 
-/// Remove entries inside each path older than the class's age, and report what went.
-///
-/// The cheap way to hold a directory down without a full rebuild: the alternative for a build
-/// cache is dropping all of it at the cap, over and over. Returns the bytes freed (measured
-/// before removal, because after it there is nothing to ask) and the entry count.
-fn act_on_aged(class: &StorageClass, paths: &[String], dry_run: bool) -> (u64, usize, Vec<String>) {
+/// Reclaim idle aged children independently, preserving active siblings.
+fn act_on_aged(
+    class: &StorageClass,
+    paths: &[String],
+    guard: &Guard<'_>,
+    dry_run: bool,
+) -> Outcome {
     let days = class.older_than_days.unwrap_or_default();
-    let mut freed = 0u64;
-    let mut count = 0usize;
-    let mut failures: Vec<String> = Vec::new();
+    let mut outcome = Outcome::default();
     for path in paths {
-        for (entry, held) in aged_entries(Path::new(path), days) {
-            if dry_run {
-                freed += held;
-                count += 1;
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_dir() && !metadata.is_symlink() => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            _ => {
+                outcome.refused += 1;
+                outcome.lines.push(format!(
+                    "  refused  {path} — aged root must be a non-symlink directory"
+                ));
                 continue;
             }
-            match std::fs::remove_dir_all(&entry).or_else(|_| std::fs::remove_file(&entry)) {
-                Ok(()) => {
-                    freed += held;
-                    count += 1;
+        }
+        let entries = match aged_entries(Path::new(path), days, class.entry_pattern.as_deref()) {
+            Ok(entries) => entries,
+            Err(error) => {
+                outcome.refused += 1;
+                outcome.lines.push(format!("  refused  {path} — {error}"));
+                continue;
+            }
+        };
+        if entries.is_empty() {
+            outcome.skipped += 1;
+            outcome
+                .lines
+                .push(format!("  skipped  {path} — no entries older than {days}d"));
+        }
+        for (entry, held) in entries {
+            let before = match std::fs::symlink_metadata(&entry) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    outcome.refused += 1;
+                    outcome
+                        .lines
+                        .push(format!("  refused  {} — {error}", entry.display()));
+                    continue;
                 }
-                Err(e) => failures.push(format!("{}: {e}", entry.display())),
+            };
+            if !old_enough(&before, days) {
+                outcome.skipped += 1;
+                outcome.lines.push(format!(
+                    "  skipped  {} — entry is no longer aged",
+                    entry.display()
+                ));
+                continue;
+            }
+            match guard.idle_entry(&entry) {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    outcome.skipped += 1;
+                    outcome.lines.push(format!(
+                        "  skipped  {} — held by a live process",
+                        entry.display()
+                    ));
+                    continue;
+                }
+                Err(reason) => {
+                    outcome.refused += 1;
+                    outcome.lines.push(format!("  refused  {reason}"));
+                    continue;
+                }
+            }
+            if !std::fs::symlink_metadata(&entry).is_ok_and(|after| same_entry(&before, &after)) {
+                outcome.refused += 1;
+                outcome.lines.push(format!(
+                    "  refused  {} — entry changed during the process probe",
+                    entry.display()
+                ));
+                continue;
+            }
+            let result = if dry_run {
+                Ok(())
+            } else {
+                std::fs::remove_dir_all(&entry).or_else(|_| std::fs::remove_file(&entry))
+            };
+            match result {
+                Ok(()) => {
+                    outcome.bytes += held;
+                    outcome.lines.push(format!(
+                        "  {:>9}  {} — {}",
+                        fmt_bytes(held),
+                        class.name,
+                        entry.display()
+                    ));
+                }
+                Err(error) => {
+                    let after = size_of(&[entry.to_string_lossy().into_owned()]).bytes;
+                    outcome.bytes += held.saturating_sub(after);
+                    outcome.refused += 1;
+                    outcome
+                        .lines
+                        .push(format!("  failed   {} — {error}", entry.display()));
+                }
             }
         }
     }
-    (freed, count, failures)
+    outcome
 }
 
-/// Entries directly inside `path` whose mtime is older than `days`, with the bytes each holds.
-/// Only the immediate children: a class naming `debug/incremental` means the crate hashes in
-/// it, not something nested three levels down that cargo may still be reading.
-fn aged_entries(path: &Path, days: u32) -> Vec<(PathBuf, u64)> {
-    let Some(cutoff) = SystemTime::now().checked_sub(Duration::from_secs(u64::from(days) * 86_400))
-    else {
-        return vec![];
-    };
-    let Ok(entries) = std::fs::read_dir(path) else {
-        return vec![];
-    };
-    let mut out: Vec<(PathBuf, u64)> = entries
-        .flatten()
-        .filter(|entry| {
-            entry
-                .metadata()
-                .and_then(|m| m.modified())
-                .is_ok_and(|m| m < cutoff)
+fn same_entry(before: &std::fs::Metadata, after: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if (before.dev(), before.ino()) != (after.dev(), after.ino()) {
+            return false;
+        }
+    }
+    !after.is_symlink()
+        && before.file_type() == after.file_type()
+        && before.modified().ok() == after.modified().ok()
+        && before.created().ok() == after.created().ok()
+        && before.len() == after.len()
+}
+
+fn old_enough(metadata: &std::fs::Metadata, days: u32) -> bool {
+    SystemTime::now()
+        .checked_sub(Duration::from_secs(u64::from(days) * 86_400))
+        .is_some_and(|cutoff| {
+            !metadata.is_symlink()
+                && aged_times(metadata.modified().ok(), metadata.created().ok(), cutoff)
         })
-        .map(|entry| {
-            let held = Walk::default().size(&entry.path());
-            (entry.path(), held)
-        })
-        .collect();
+}
+
+fn aged_times(
+    modified: Option<SystemTime>,
+    created: Option<SystemTime>,
+    cutoff: SystemTime,
+) -> bool {
+    modified.is_some_and(|modified| modified < cutoff)
+        && !created.is_some_and(|created| created >= cutoff)
+}
+
+/// Select non-symlink children whose modification and creation times exceed the age.
+fn aged_entries(
+    path: &Path,
+    days: u32,
+    pattern: Option<&str>,
+) -> Result<Vec<(PathBuf, u64)>, std::io::Error> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        if pattern.is_some_and(|pattern| {
+            !entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| crate::policy::segment_matches(pattern, name))
+        }) {
+            continue;
+        }
+        let metadata = std::fs::symlink_metadata(entry.path())?;
+        if !old_enough(&metadata, days) {
+            continue;
+        }
+        out.push((entry.path(), Walk::default().size(&entry.path())));
+    }
     out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
+    Ok(out)
 }
 
 fn run_argv(argv: &[String], dry_run: bool) -> Result<(), String> {
@@ -405,7 +491,7 @@ fn run_argv(argv: &[String], dry_run: bool) -> Result<(), String> {
     if out.status.success() {
         return Ok(());
     }
-    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    let err = crate::measure::first_line(&String::from_utf8_lossy(&out.stderr));
     Err(format!(
         "{} exited {} ({err})",
         argv.join(" "),
@@ -556,9 +642,112 @@ mod tests {
         std::fs::write(stale.join("f"), vec![0u8; 4096]).unwrap();
 
         // Zero days keeps nothing: everything was modified before "now".
-        assert_eq!(aged_entries(&root, 0).len(), 2);
+        assert_eq!(aged_entries(&root, 0, None).unwrap().len(), 2);
+        assert_eq!(aged_entries(&root, 0, Some("sta*")).unwrap().len(), 1);
         // A century of age keeps everything, so the filter is on mtime and not on the walk.
-        assert!(aged_entries(&root, 36_500).is_empty());
+        assert!(aged_entries(&root, 36_500, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn aged_reclaim_preserves_active_children_and_removes_idle_siblings() {
+        let root = crate::testutil::tempdir("aged-siblings");
+        let active = root.join("active");
+        let idle = root.join("idle");
+        std::fs::create_dir(&active).unwrap();
+        std::fs::create_dir(&idle).unwrap();
+        std::fs::write(idle.join("data"), vec![0u8; 4096]).unwrap();
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .current_dir(&active)
+            .spawn()
+            .unwrap();
+        let authority = Authority::default();
+        let guard = Guard::new(&authority, &root, &root, false);
+        let measured = vec![Measured {
+            class: class(
+                "name = \"aged\"\npaths = [\"/unused\"]\napply = true\nolder_than_days = 0\n",
+            ),
+            paths: vec![root.to_string_lossy().into_owned()],
+            bytes: 4096,
+            complete: true,
+            error: String::new(),
+        }];
+        let dry = run(&measured, &guard, true, None, true);
+        let dry_preserved_both = active.exists() && idle.join("data").exists();
+        let applied = run(&measured, &guard, true, None, false);
+        let active_preserved = active.exists();
+        let idle_removed = !idle.exists();
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(dry_preserved_both, "{:?}", dry.lines);
+        assert!(active_preserved && idle_removed, "{:?}", applied.lines);
+        assert_eq!(applied.refused, 0, "{:?}", applied.lines);
+        assert_eq!(applied.skipped, 1, "{:?}", applied.lines);
+        assert!(applied.bytes >= 4096);
+    }
+
+    #[test]
+    fn aged_reclaim_does_not_follow_root_or_child_symlinks() {
+        let root = crate::testutil::tempdir("aged-links");
+        let outside = root.join("outside");
+        let entries = root.join("entries");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::create_dir(&entries).unwrap();
+        std::fs::write(outside.join("keep"), "keep").unwrap();
+        std::os::unix::fs::symlink(&outside, entries.join("link")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("root-link")).unwrap();
+        let authority = Authority::default();
+        let guard = Guard::new(&authority, &root, &root, false);
+        let aged = class("name = \"aged\"\npaths = []\napply = true\nolder_than_days = 0\n");
+        let result = act_on_aged(
+            &aged,
+            &[
+                entries.to_string_lossy().into_owned(),
+                root.join("root-link").to_string_lossy().into_owned(),
+            ],
+            &guard,
+            false,
+        );
+        assert!(outside.join("keep").exists());
+        assert!(entries.join("link").is_symlink());
+        assert_eq!(result.refused, 1);
+    }
+
+    #[test]
+    fn a_replaced_entry_is_not_the_entry_that_was_probed() {
+        let root = crate::testutil::tempdir("aged-replaced");
+        let path = root.join("entry");
+        std::fs::write(&path, "old").unwrap();
+        let before = path.metadata().unwrap();
+        std::fs::rename(&path, root.join("previous")).unwrap();
+        std::fs::write(&path, "new").unwrap();
+        assert!(!same_entry(&before, &path.metadata().unwrap()));
+    }
+
+    #[test]
+    fn a_fresh_copy_with_an_old_modification_time_is_not_aged() {
+        let now = SystemTime::now();
+        let cutoff = now - Duration::from_secs(2 * 86_400);
+        let old = now - Duration::from_secs(3 * 86_400);
+        assert!(!aged_times(Some(old), Some(now), cutoff));
+        assert!(!aged_times(None, Some(old), cutoff));
+        assert!(aged_times(Some(old), None, cutoff));
+    }
+
+    #[test]
+    fn an_unknown_class_does_not_succeed_silently() {
+        let root = crate::testutil::tempdir("unknown-class");
+        let result = crate::reclaim::run(
+            Some(&Policy::default()),
+            "",
+            &root,
+            &crate::reclaim::Args {
+                only: Some("missing".into()),
+                dry_run: true,
+                ..Default::default()
+            },
+        );
+        assert!(result.unwrap_err().contains("unknown storage class"));
     }
 
     #[test]

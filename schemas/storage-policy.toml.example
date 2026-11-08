@@ -34,6 +34,7 @@ class_flag_gb = 5
 # rather than the path itself. That is the cheap way to hold a build cache down: the
 # alternative for a debug directory is dropping all of it at the cap, one full rebuild,
 # every time it reaches the cap.
+# `entry_pattern` limits aged cleanup to matching child names; `*` is the only wildcard.
 
 [[class]]
 name = "package manager cache"
@@ -75,6 +76,14 @@ paths = ["~/<cache-dir>"]
 reclaim = "<curl-the-servers-own-cache-clear-endpoint>"
 apply = true
 note = "Unbounded by default in some versions; check the server's own config first."
+
+[[class]]
+name = "<browser> signing clones"
+paths = ["<browser-clone-root>"]
+apply = true
+older_than_days = 1
+entry_pattern = "code_sign_clone.*"
+note = "Each aged clone is checked independently; live and unverifiable copies remain."
 
 [[class]]
 name = "<something-large-you-only-want-to-see>"

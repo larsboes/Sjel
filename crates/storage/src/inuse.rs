@@ -1,18 +1,4 @@
-//! Who has this directory open?
-//!
-//! `prune` printed a size and named `cargo clean`, and neither answers the question that
-//! decides whether running it is safe. On 2026-10-12 `~/.cargo-target` held 17.5 GB with
-//! `release/sjel-mcp` — the binary this session's MCP server is exec'ing — inside it, and a
-//! `cargo check` from another session writing into `debug/deps` at the same time. `cargo
-//! clean` there frees the number and breaks both.
-//!
-//! It is not a hypothetical act. `tools/doctor` names `sjel storage prune --target` as the
-//! remediation when the toolchain moves, and `--target` resolves through `CARGO_TARGET_DIR`,
-//! so on this machine it means that shared directory rather than anything inside the repo.
-//!
-//! Three answers, and the third is why this is not a boolean. A probe that could not run
-//! must not read as "nothing is using it", because that is the answer that licenses
-//! deletion — the rule `service.rs` follows for a service whose probe is missing.
+//! Live-process probes that distinguish idle, held, and unverifiable paths.
 
 use std::path::Path;
 use std::process::Command;
@@ -92,7 +78,7 @@ pub fn usage(dir: &Path) -> Usage {
     let out = match Command::new("lsof")
         .arg("-F")
         .arg("pcn")
-        .arg("+D")
+        .arg(if dir.is_dir() { "+D" } else { "--" })
         .arg(dir)
         .output()
     {
@@ -102,24 +88,51 @@ pub fn usage(dir: &Path) -> Usage {
         }
         Err(e) => return Usage::Unverifiable(e.to_string()),
     };
-    let found = holders(&String::from_utf8_lossy(&out.stdout));
+    classify(
+        out.status.code(),
+        &String::from_utf8_lossy(&out.stdout),
+        &String::from_utf8_lossy(&out.stderr),
+    )
+}
+
+fn classify(status: Option<i32>, stdout: &str, stderr: &str) -> Usage {
+    let found = holders(stdout);
     if !found.is_empty() {
         return Usage::Held(found);
     }
     // lsof exits 1 whether or not it found anything, so the exit status is not the answer
     // here — stdout is. stderr is the other half: a version banner prints on error, and a
     // message on it means the walk did not finish, which is not the same as an empty one.
-    let err = String::from_utf8_lossy(&out.stderr);
-    match err.lines().find(|l| l.starts_with("lsof:")) {
-        Some(line) => Usage::Unverifiable(line.to_string()),
-        None => Usage::Free,
+    if !stderr.trim().is_empty() {
+        return Usage::Unverifiable(crate::measure::first_line(stderr));
     }
+    if !matches!(status, Some(0 | 1)) || !stdout.trim().is_empty() {
+        return Usage::Unverifiable(format!(
+            "lsof did not return a complete empty result (exit {status:?})"
+        ));
+    }
+    Usage::Free
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn incomplete_probe_results_never_license_removal() {
+        assert_eq!(classify(Some(1), "", ""), Usage::Free);
+        assert!(matches!(classify(Some(2), "", ""), Usage::Unverifiable(_)));
+        assert!(matches!(classify(None, "", ""), Usage::Unverifiable(_)));
+        assert!(matches!(
+            classify(Some(1), "", "permission denied"),
+            Usage::Unverifiable(_)
+        ));
+        assert!(matches!(
+            classify(Some(0), "unrecognized output", ""),
+            Usage::Unverifiable(_)
+        ));
+    }
 
     #[test]
     fn one_block_per_process_becomes_one_holder() {
@@ -174,6 +187,18 @@ mod tests {
     fn an_empty_directory_is_free() {
         let dir = crate::testutil::tempdir("inuse-free");
         assert_eq!(usage(&dir), Usage::Free);
+    }
+
+    #[test]
+    fn a_regular_file_can_be_checked_for_open_handles() {
+        let root = crate::testutil::tempdir("inuse-file");
+        let path = root.join("entry");
+        let file = std::fs::File::create(&path).unwrap();
+        let answer = usage(&path);
+        drop(file);
+        assert!(
+            matches!(answer, Usage::Held(holders) if holders.iter().any(|holder| holder.pid == std::process::id()))
+        );
     }
 
     #[test]

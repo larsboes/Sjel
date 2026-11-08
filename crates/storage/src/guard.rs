@@ -1,21 +1,4 @@
-//! Every reason a path may not be removed, asked in one place.
-//!
-//! `apply` and `prune` each grew their own answer to "may I delete this", and they disagreed.
-//! `apply` ran a class's reclaim verb without asking whether a process was using the path at
-//! all; `prune` refused paths the policy owned, which `apply` existed to reclaim. One verb
-//! means one place to ask, and this is it — resolution, scope, git, the policy, and the
-//! live-process probe, in the order a reader would ask them.
-//!
-//! Two kinds of refusal, and only the second is negotiable:
-//!
-//! * **Structural** — the path cannot be resolved, or sits outside the checkout, or is
-//!   tracked by git, or *is* the repo root. `--force` does not reach these. Each one means the
-//!   tool does not know what it is being asked to remove, and a flag is the wrong answer to
-//!   not knowing.
-//! * **Judgement** — the policy protects it, the policy owns it and something other than that
-//!   class is asking, or a live process has it open. These are the calls the policy and the
-//!   machine have already made, so the reader is told the reason and `--force` is the way past
-//!   when they disagree.
+//! Path ownership, protection, and live-process checks for reclaim.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -81,7 +64,13 @@ impl Authority {
 
     /// Why a protection covers this candidate, or `None` when none does.
     fn protected_owns(&self, candidate: &Path) -> Option<&str> {
-        owns(&self.protected, candidate)
+        let real = candidate
+            .canonicalize()
+            .unwrap_or_else(|_| candidate.to_path_buf());
+        self.protected
+            .iter()
+            .find(|(path, _)| path.starts_with(&real) || real.starts_with(path))
+            .map(|(_, reason)| reason.as_str())
     }
 
     /// Why a class names this candidate, or `None` when none does.
@@ -150,6 +139,40 @@ impl<'a> Guard<'a> {
     /// May this candidate be removed? `Ok` is the resolved path; `Err` is the sentence to
     /// print, in the same voice the reader gets from every other refusal.
     pub fn check(&self, candidate: &Path, caller: Caller) -> Result<PathBuf, String> {
+        let real = self.resolve(candidate, caller)?;
+        if let Some(reason) = self.holds(&real) {
+            return Err(reason);
+        }
+        Ok(real)
+    }
+
+    /// Return an idle policy entry, or `None` when a live process holds it.
+    ///
+    /// # Errors
+    /// Refuses protected paths and incomplete process probes.
+    pub fn idle_entry(&self, candidate: &Path) -> Result<Option<PathBuf>, String> {
+        let real = self.resolve(candidate, Caller::Policy)?;
+        if self.force {
+            return Ok(Some(real));
+        }
+        match inuse::usage(&real) {
+            Usage::Free => Ok(Some(real)),
+            Usage::Held(holders)
+                if holders
+                    .iter()
+                    .all(|holder| holder.pid == std::process::id()) =>
+            {
+                Ok(Some(real))
+            }
+            Usage::Held(_) => Ok(None),
+            Usage::Unverifiable(reason) => Err(format!(
+                "{} — could not verify process use ({reason})",
+                real.display()
+            )),
+        }
+    }
+
+    fn resolve(&self, candidate: &Path, caller: Caller) -> Result<PathBuf, String> {
         let real = candidate
             .canonicalize()
             .map_err(|e| format!("{}: {e}", candidate.display()))?;
@@ -207,9 +230,6 @@ impl<'a> Guard<'a> {
                         "pass --force to remove it anyway",
                     ));
                 }
-            }
-            if let Some(line) = self.holds(&real) {
-                return Err(line);
             }
         }
         Ok(real)
@@ -329,11 +349,11 @@ mod tests {
         // `rm -rf /t` deletes `/t/release`, which is the thing the protection was written for.
         let a = authority(&["/t/release"], &[]);
         assert!(a.protected_owns(Path::new("/t")).is_some());
-        // A subdirectory of the protected path does not contain it, so it stays removable —
-        // which is what keeps `reclaim --incremental` usable inside a report-only target dir.
+        // Protection covers descendants as well as a deletion of the containing directory.
         assert!(a
             .protected_owns(Path::new("/t/debug/incremental"))
             .is_none());
+        assert!(a.protected_owns(Path::new("/t/release/deps")).is_some());
         // A sibling sharing a prefix is not containment either.
         assert!(a.protected_owns(Path::new("/tb")).is_none());
     }

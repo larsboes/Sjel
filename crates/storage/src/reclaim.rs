@@ -1,30 +1,4 @@
-//! `reclaim` — the one verb that removes anything.
-//!
-//! Two candidate sources, one guard. `apply` and `prune` were both reclaim, differing only in
-//! which candidates they looked at, and each grew its own answer to "may I delete this": `apply`
-//! ran a class's reclaim verb without asking whether a process was using the path, and `prune`
-//! refused paths the policy owned while offering to clean the very directory the policy called
-//! report-only. They are spellings of this verb now, so there is one plan format, one refusal
-//! vocabulary and one exit code — and one place where a path can be removed.
-//!
-//! ## What it will act on, and why nothing is implicit
-//!
-//! A bare `reclaim` acts on the policy's classes, which is what `apply` did. Reaching the
-//! checkout's build output takes `--repo` *and* naming which part of it, because deleting every
-//! `node_modules` in a checkout is not something to discover after the fact. `--scheduled` is
-//! the unattended rule: it narrows to classes the policy itself bounds, by size (`cap_gb`) or by
-//! age (`older_than_days`), because those are the only ones whose declaration says when to stop.
-//!
-//! ## The two gates, and why `--force` reaches only one
-//!
-//! `skip` is a class held back by its own policy — under its cap, or unbounded on a schedule.
-//! Nothing went wrong and nothing was refused, so it does not touch the exit code; it is printed
-//! because a scheduled run that silently did nothing is indistinguishable from one with nothing
-//! to do. A `refusal` is the guard declining, and that is exit 1.
-//!
-//! `--force` overrides the guard's judgement calls (a protection, the policy's ownership, a live
-//! process) and never its structural ones (out of scope, the repo root, tracked by git). A flag
-//! is the wrong answer to not knowing what is being removed.
+//! Policy and checkout reclaim through one path guard.
 
 use std::path::Path;
 
@@ -138,7 +112,17 @@ pub fn run(
                 .to_string()
         })?;
         // `--only` is a filter over the class list, so it needs nothing further.
-        let measured = classes::measure(policy, home);
+        if args
+            .only
+            .as_ref()
+            .is_some_and(|name| !policy.classes.iter().any(|class| &class.name == name))
+        {
+            return Err(format!(
+                "unknown storage class: {}",
+                args.only.as_deref().unwrap_or_default()
+            ));
+        }
+        let measured = classes::measure_selected(policy, home, args.only.as_deref());
         outcome.merge(classes::run(
             &measured,
             &guard,

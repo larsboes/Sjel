@@ -1,22 +1,4 @@
-//! sjel-storage — what is filling this disk, and what is safe to reclaim.
-//!
-//! `sysmon report` answers "am I full" with one `df` line. This answers "what is filling
-//! me", which `df` structurally cannot: the 46 GB that started this was 215 individually
-//! unremarkable 230 MB cache blocks, invisible to every per-file view.
-//!
-//! Five verbs, and the split is the contract. `report`, `discover` and `installed` read;
-//! `reclaim` is the only thing that removes; `target` answers PRD §9's R6 for this checkout.
-//! `report`, `discover`, `installed` and `reclaim` read the overlay's
-//! `config/storage-policy.toml`, so the core names no path on this machine
-//! (CONTRIBUTING.md#public-core-and-private-overlays). `target` works on a clone with no
-//! overlay, which is when someone most needs the disk back.
-//!
-//! Exit codes, which `tools/host-watch`, `tools/doctor` and any hook depend on:
-//!
-//! * `0` — measured, and nothing is over a threshold.
-//! * `1` — measured, and something is: free space below `free_critical_gb`, `target`'s
-//!   debug/release ratio above R6's 3×, or a reclaim path that had to be refused.
-//! * `2` — could not measure: a usage error, or no overlay policy to read.
+//! Storage reporting, discovery, and guarded reclaim CLI.
 
 mod checkout;
 mod classes;
@@ -42,7 +24,7 @@ use policy::{disk_state, expand_glob, is_applicable, ExpectedService, ProtectedE
 
 const HELP: &str = "sjel-storage — what is filling this disk, and what is safe to reclaim.
 
-  sjel-storage report [--where [--root PATH]] [--json]
+  sjel-storage report [--where [--root PATH] [--include-named]] [--json]
                                    free/used/total, every policy class, what is flagged.
                                    `--where` adds the largest directories no policy path
                                    names, which is where `unattributed` lives
@@ -52,7 +34,7 @@ const HELP: &str = "sjel-storage — what is filling this disk, and what is safe
                                    default; `--repo` acts on the checkout's build
                                    output instead, and needs one of the three
   sjel-storage target [--json]     the Cargo target dir against PRD §9's R6 ratio
-  sjel-storage discover [--top N] [--depth D] [--root PATH] [--json]
+  sjel-storage discover [--top N] [--depth D] [--root PATH] [--include-named] [--json]
                                    the largest directories under PATH (default $HOME) that
                                    no policy path names — where `unattributed` lives.
                                    `--root /System/Volumes/Data` covers the whole volume
@@ -109,12 +91,8 @@ fn main() -> ExitCode {
     let result = match verb {
         "report" => {
             // `--root` roots the walk `--where` adds, so on its own it would do nothing.
-            if value("--root").is_some() && !has("--where") {
-                Err(
-                    "--root applies to `report --where` — without `--where` there is no walk \
-                     to root"
-                        .to_string(),
-                )
+            if (value("--root").is_some() || has("--include-named")) && !has("--where") {
+                Err("--root and --include-named require `report --where`".to_string())
             } else {
                 number("--depth", 2).and_then(|depth| {
                     number("--top", 10).and_then(|top| {
@@ -124,6 +102,7 @@ fn main() -> ExitCode {
                                 root: value("--root"),
                                 depth,
                                 top,
+                                include_named: has("--include-named"),
                             }),
                         )
                     })
@@ -156,7 +135,9 @@ fn main() -> ExitCode {
         ),
         "target" => cmd_target(json),
         "discover" => number("--top", 20).and_then(|top| {
-            number("--depth", 2).and_then(|depth| cmd_discover(json, top, depth, value("--root")))
+            number("--depth", 2).and_then(|depth| {
+                cmd_discover(json, top, depth, value("--root"), has("--include-named"))
+            })
         }),
         "installed" => {
             let idle = match value("--idle") {
@@ -256,7 +237,14 @@ fn cmd_report(json: bool, where_request: Option<WhereRequest>) -> Result<u8, Str
     let where_walk = where_request
         .map(|request| {
             let root = request.root.unwrap_or_else(|| home.clone());
-            where_scan(&policy, &home, &root, request.depth, request.top)
+            where_scan(
+                &policy,
+                &home,
+                &root,
+                request.depth,
+                request.top,
+                request.include_named,
+            )
         })
         .transpose()?;
 
@@ -739,7 +727,9 @@ fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
         );
     }
 
+    let before = (!args.dry_run).then(measure::disk_usage);
     let outcome = reclaim::run(policy.as_ref(), &home, &root, &args)?;
+    let after = before.as_ref().map(|_| measure::disk_usage());
     if outcome.lines.is_empty() {
         println!("  nothing to reclaim");
     }
@@ -753,11 +743,25 @@ fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
         "\n  {} {}",
         fmt_bytes(outcome.bytes),
         if args.dry_run {
-            "would be freed"
+            "candidate directory bytes (dry run; may share filesystem blocks)"
         } else {
-            "freed"
+            "directory bytes removed (may share filesystem blocks)"
         }
     );
+    if let Some((before, after)) = before.as_ref().zip(after.as_ref()) {
+        if let Some(change) = measure::free_space_change(before, after) {
+            println!(
+                "  Volume free space: {} -> {} ({}{:.1} GiB)",
+                fmt_bytes(before.free),
+                fmt_bytes(after.free),
+                if change >= 0 { "+" } else { "-" },
+                change.unsigned_abs() as f64 / GB as f64
+            );
+            println!("  Concurrent writes and snapshots can affect the volume change.");
+        } else {
+            println!("  Volume free-space change unavailable.");
+        }
+    }
     // Said out loud rather than dropped silently: the per-directory lines above still list the
     // incremental dirs, so without this the total looks like it fails to add up.
     if outcome.nested_bytes > 0 {
@@ -771,7 +775,7 @@ fn cmd_reclaim(args: reclaim::Args, alias: bool) -> Result<u8, String> {
     }
     if outcome.refused > 0 {
         println!(
-            "  {} refused — nothing was removed for those",
+            "  {} refusal(s) or partial failures; see paths above",
             outcome.refused
         );
     }
@@ -787,6 +791,7 @@ struct WhereRequest {
     root: Option<String>,
     depth: usize,
     top: usize,
+    include_named: bool,
 }
 
 /// One walk of a root, with every policy path inside it subtracted.
@@ -800,6 +805,7 @@ struct Where {
     named_bytes: u64,
     unnamed_bytes: u64,
     rows: Vec<discover::Row>,
+    include_named: bool,
 }
 
 impl Where {
@@ -814,6 +820,7 @@ impl Where {
             "named_bytes": self.named_bytes,
             "unnamed_bytes": self.unnamed_bytes,
             "rows": self.rows,
+            "include_named": self.include_named,
         })
     }
 }
@@ -828,6 +835,7 @@ fn where_scan(
     root: &str,
     depth: usize,
     top: usize,
+    include_named: bool,
 ) -> Result<Where, String> {
     discover::check_root(root)?;
     if depth == 0 {
@@ -850,9 +858,19 @@ fn where_scan(
         .chain(policy.protected.iter().map(|p| &p.path));
     for pattern in policy_paths {
         for expanded in expand_glob(pattern, home) {
-            let bytes = size_of(std::slice::from_ref(&expanded)).bytes;
+            let normalized = discover::normalize(&expanded, root);
+            if !discover::is_inside(&normalized, &display)
+                && !discover::is_inside(&display, &normalized)
+            {
+                continue;
+            }
+            let bytes = if discover::is_inside(&normalized, &display) {
+                size_of(std::slice::from_ref(&expanded)).bytes
+            } else {
+                0
+            };
             named.push(discover::Named {
-                path: discover::normalize(&expanded, root),
+                path: normalized,
                 bytes,
             });
         }
@@ -879,7 +897,7 @@ fn where_scan(
             })
             .collect();
 
-    let mut rows = discover::rows(&walk, &named, &display, depth);
+    let mut rows = discover::rows(&walk, &named, &display, depth, include_named);
     rows.truncate(top);
 
     let root_bytes = walk
@@ -887,7 +905,11 @@ fn where_scan(
         .find(|d| d.path == display)
         .map(|d| d.bytes)
         .unwrap_or(0);
-    let named_bytes = discover::named_inside(&display, &named);
+    let named_bytes = if discover::fully_named(&display, &named) {
+        root_bytes
+    } else {
+        discover::named_inside(&display, &named)
+    };
     Ok(Where {
         root: display,
         depth,
@@ -898,6 +920,7 @@ fn where_scan(
         named_bytes,
         unnamed_bytes: root_bytes.saturating_sub(named_bytes),
         rows,
+        include_named,
     })
 }
 
@@ -919,6 +942,9 @@ fn print_walk(walk: &Where, home: &str) {
         }
     }
     println!();
+    if walk.include_named {
+        println!("  Ranking total directory bytes, including policy-managed paths.");
+    }
     if walk.rows.is_empty() {
         println!("  nothing unnamed at depth {}", walk.depth);
         return;
@@ -929,7 +955,11 @@ fn print_walk(walk: &Where, home: &str) {
         if named_part > 0 {
             println!(
                 "  {:>9}  {short}  ({} of it named)",
-                fmt_bytes(row.unnamed_bytes),
+                fmt_bytes(if walk.include_named {
+                    row.bytes
+                } else {
+                    row.unnamed_bytes
+                }),
                 fmt_bytes(named_part)
             );
         } else {
@@ -939,14 +969,20 @@ fn print_walk(walk: &Where, home: &str) {
 }
 
 /// Where the space the policy does not name actually is.
-fn cmd_discover(json: bool, top: usize, depth: usize, root: Option<String>) -> Result<u8, String> {
+fn cmd_discover(
+    json: bool,
+    top: usize,
+    depth: usize,
+    root: Option<String>,
+    include_named: bool,
+) -> Result<u8, String> {
     let home = std::env::var("HOME")
         .ok()
         .filter(|h| !h.is_empty())
         .ok_or_else(|| "no HOME in the environment".to_string())?;
     let root = root.unwrap_or_else(|| home.clone());
     let policy = policy::load(&policy_path()?)?;
-    let walk = where_scan(&policy, &home, &root, depth, top)?;
+    let walk = where_scan(&policy, &home, &root, depth, top, include_named)?;
 
     if json {
         println!(
@@ -961,7 +997,12 @@ fn cmd_discover(json: bool, top: usize, depth: usize, root: Option<String>) -> R
         walk.root, walk.depth
     );
     print_walk(&walk, &home);
-    println!("\n  What is reclaimable is `sjel storage report`. This ranks what no policy names.");
+    println!("\n  What is reclaimable is `sjel storage report`.");
+    if !include_named {
+        println!(
+            "  This ranks what no policy names; --include-named also shows managed directories."
+        );
+    }
     Ok(EXIT_OK)
 }
 

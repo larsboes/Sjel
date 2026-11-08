@@ -1,16 +1,4 @@
-//! Turning bytes on disk into the numbers a human acts on.
-//!
-//! Two measuring instruments, chosen for two different jobs.
-//!
-//! `du -sx` measures the policy's classes: it is the kernel's own accounting, it stays on
-//! one filesystem, and it reports allocated blocks — which is what actually frees. A class
-//! can point anywhere on the machine, including directories this process cannot read, and
-//! `du` degrades to a partial number where a walk in here would fail outright.
-//!
-//! An in-process walk measures the Cargo target dir, because `target` reports per bucket
-//! (`deps`, `incremental`, `build`, binaries) and shelling out once per bucket would walk
-//! the same tree four times. It uses the same unit `du` does — allocated blocks — and
-//! dedups hard links the same way, so the two instruments agree on the same directory.
+//! Directory allocation and volume free-space measurements.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -39,6 +27,12 @@ pub struct Disk {
     pub used: u64,
     pub free: u64,
     pub target: String,
+}
+
+/// Return the signed free-space change only for two valid readings of the same volume.
+pub fn free_space_change(before: &Disk, after: &Disk) -> Option<i128> {
+    (before.total > 0 && before.total == after.total && before.target == after.target)
+        .then(|| i128::from(after.free) - i128::from(before.free))
 }
 
 /// Parse `df -k <target>`: second line, columns are total/used/free in 1K blocks.
@@ -171,12 +165,12 @@ pub fn disk_usage() -> Disk {
     }
 }
 
-/// A recursive size walk that counts each on-disk extent once.
+/// A recursive allocation walk that counts each inode once; cloned extents can still be shared.
 ///
 /// Two properties it has to keep to agree with `du -s`:
 ///
 /// * **Allocated blocks, not `len()`.** A file's apparent size is not what freeing it
-///   returns. `blocks() * 512` is the number the volume gets back.
+///   returns. `blocks() * 512` reports allocation without resolving shared clone extents.
 /// * **One count per inode.** Cargo hard-links the finished binary from
 ///   `target/<profile>/deps/` up to `target/<profile>/`, so a naive walk reports it twice.
 ///   The set is shared across every bucket of one profile, and buckets are walked in a
@@ -235,6 +229,26 @@ impl Walk {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn volume_change_is_signed_and_requires_comparable_readings() {
+        let before = Disk {
+            total: 100,
+            used: 60,
+            free: 40,
+            target: "/data".into(),
+        };
+        let mut after = before.clone();
+        after.free = 30;
+        assert_eq!(free_space_change(&before, &after), Some(-10));
+        after.free = 50;
+        assert_eq!(free_space_change(&before, &after), Some(10));
+        after.total = 0;
+        assert_eq!(free_space_change(&before, &after), None);
+        after.total = 100;
+        after.target = "/other".into();
+        assert_eq!(free_space_change(&before, &after), None);
+    }
 
     #[test]
     fn parse_du_sums_1k_block_totals_across_paths() {

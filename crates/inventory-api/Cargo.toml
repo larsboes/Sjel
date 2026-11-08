@@ -9,8 +9,7 @@ publish = false
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
-schemars = "1.2.2"
+schemars.workspace = true
 
 [lints]
 workspace = true

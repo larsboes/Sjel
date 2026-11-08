@@ -27,7 +27,7 @@ markdown-root = { path = "../markdown-root" }
 projects-api = { path = "../projects-api" }
 route-manifest = { path = "../route-manifest" }
 reqwest.workspace = true
-schemars = "1.2.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../sjel-config" }

@@ -49,11 +49,8 @@ sjel-gpui-ui.workspace = true
 gpui-kit = { workspace = true, features = ["assets"] }
 chrono.workspace = true
 futures.workspace = true
-reqwest.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
-libsql.workspace = true
 # CoreAudio on the Mac, ALSA on Linux, CoreAudio on iOS: the soundscape window synthesizes its
 # own audio (`src/soundscape`), and Web Audio is not available outside a browser. cpal reaches
 # the device without any C toolchain step -- on macOS it goes through objc2-audio-toolbox, not

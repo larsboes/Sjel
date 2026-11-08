@@ -23,7 +23,7 @@ path = "src/server.rs"
 axum.workspace = true
 route-manifest = { path = "../route-manifest" }
 web-links-api = { path = "../web-links-api" }
-schemars = "1.2.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

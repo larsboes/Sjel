@@ -35,11 +35,9 @@ route-manifest = { path = "../route-manifest" }
 # schemars' trait. Thirteen request bodies declare one here — the setup apply and the twelve
 # that parse `Json<T>` — and the five left over (start, stop, restart, session ticket, session
 # logout) take only a path, which a `Route` cannot yet say.
-schemars = "1.2.2"
+schemars.workspace = true
 # The browser login (src/session.rs): a random single-use ticket, and the digest kept for it
 # in memory. The session itself is signed by sjel-server, so nothing here is stored.
-getrandom.workspace = true
-sha2.workspace = true
 axum.workspace = true
 # `stream::unfold` turns the event watcher's channel into the body `Sse` takes, since neither
 # `Sse` nor tokio's channels re-export a Stream (src/status/events.rs).

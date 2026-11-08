@@ -8,7 +8,7 @@ description = "Pure wire models, stop queries, delay histograms, and contracts f
 publish = false
 
 [dependencies]
-schemars = "1.2.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 

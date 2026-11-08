@@ -21,7 +21,6 @@ portable-pty = "0.9"
 # The shared database, opened read-only by the `sql` plugin.
 rusqlite.workspace = true
 route-manifest = { path = "../route-manifest" }
-schemars = "1.2.2"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

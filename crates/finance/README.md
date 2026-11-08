@@ -88,6 +88,18 @@ Portfolio allocation proposals and rebalancing logic (`src/decision.rs`) follow 
    against current market data; if positions or prices shifted during review, the endpoint rejects the submission
    with HTTP 409, preventing stale decisions from committing.
 
+## Why this shape: Reviewed investment ideas
+
+Ideas and their edits live in finance storage, keeping one history for the API and app.
+Research matches ticker, name and keywords before a model writes a cited digest. A model
+may propose entry or exit, but the proposal carries its model, sources and reference price,
+requires a human verdict, and never places a trade. The separate deterministic allocation
+engine remains in `src/decision.rs`.
+
+Price outcomes after 30 and 90 days make the proposal's record inspectable; an unanswered
+review or missing price is not evidence of success. Public Reddit RSS supplies research
+without storing an OAuth credential. Subscription notes remain Sjel-managed through projects.
+
 ## Why this shape: Symbolic accounts and cross-capability joins
 
 Accounting schemas protect privacy and integrate across workspace domains:

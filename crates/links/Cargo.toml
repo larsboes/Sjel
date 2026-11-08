@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 # Request schemas for `/routes`, as every capability derives them (libs/route-manifest).
-schemars = "1.2.2"
+schemars.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]

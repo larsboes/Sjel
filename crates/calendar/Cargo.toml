@@ -17,7 +17,7 @@ path = "src/server.rs"
 
 [dependencies]
 calendar-api = { path = "../calendar-api" }
-schemars = "1.2.2"
+schemars.workspace = true
 # Howard Hinnant's civil-from-days pair, shared rather than copied. No
 # dependencies of its own, which is why the four copies existed.
 civil-date = { path = "../civil-date" }

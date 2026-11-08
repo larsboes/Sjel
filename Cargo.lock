@@ -1446,7 +1446,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -2480,7 +2479,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -2550,7 +2548,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -3314,7 +3311,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -3656,7 +3652,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4809,7 +4804,6 @@ dependencies = [
  "portable-pty",
  "route-manifest",
  "rusqlite",
- "schemars",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -4916,6 +4910,7 @@ dependencies = [
  "reqwest",
  "ring",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "setup-api",
@@ -5026,7 +5021,6 @@ dependencies = [
  "ring",
  "route-manifest",
  "rusqlite",
- "schemars",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -5044,7 +5038,6 @@ dependencies = [
  "chrono",
  "documents-api",
  "lopdf 0.47.0",
- "reqwest",
  "route-manifest",
  "rusqlite",
  "schemars",
@@ -5155,7 +5148,6 @@ dependencies = [
  "reqwest",
  "route-manifest",
  "rusqlite",
- "schemars",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -5224,7 +5216,6 @@ dependencies = [
  "sjel-http",
  "sjel-server",
  "sjel-store",
- "thiserror 2.0.21",
  "tokio",
  "toml",
  "tower",
@@ -5278,8 +5269,6 @@ dependencies = [
  "operator-profile-api",
  "reqwest",
  "route-manifest",
- "schemars",
- "serde",
  "serde_json",
  "sjel-config",
  "sjel-server",
@@ -5300,7 +5289,6 @@ dependencies = [
  "reqwest",
  "route-manifest",
  "rusqlite",
- "schemars",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -5435,7 +5423,6 @@ dependencies = [
  "axum",
  "chrono",
  "route-manifest",
- "schemars",
  "serde",
  "serde_json",
  "sjel-config",
@@ -5452,7 +5439,6 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "route-manifest",
- "serde",
  "serde_json",
  "sjel-config",
  "sjel-server",
@@ -5467,14 +5453,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
- "getrandom 0.4.3",
  "reqwest",
  "ring",
  "route-manifest",
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.11.1",
  "sjel-backup",
  "sjel-config",
  "sjel-credentials",
@@ -5557,8 +5541,6 @@ dependencies = [
  "reqwest",
  "route-manifest",
  "rusqlite",
- "schemars",
- "serde",
  "serde_json",
  "sjel-config",
  "sjel-server",
@@ -5599,8 +5581,6 @@ name = "sjel-turso"
 version = "0.1.0"
 dependencies = [
  "libsql",
- "serde",
- "serde_json",
  "tokio",
 ]
 
@@ -5696,7 +5676,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -5704,7 +5683,6 @@ name = "soundscape-api"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -5738,7 +5716,6 @@ name = "status-api"
 version = "0.1.0"
 dependencies = [
  "civil-date",
- "schemars",
  "serde",
  "serde_json",
  "setup-api",

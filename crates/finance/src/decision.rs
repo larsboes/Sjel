@@ -1,28 +1,7 @@
-//! The rule engine, the ledger's read model, and the human-readable copy.
+//! Deterministic allocation proposals and their append-only decision ledger.
 //!
-//! Principle 1 made structural rather than documentary: rung 1 is three rules
-//! here, and every proposal names the rung that produced it. No proposal in this
-//! build carries `rung = "model"`, and `every_proposal_names_its_rung_and_none_is_model`
-//! is the test rather than a paragraph. The risk model in `risk.rs` explains; it
-//! does not propose.
-//!
-//! **`sell` is accepted by the table's CHECK and minted by no rule.** A machine
-//! proposing the sale of a real position is a different order of claim from
-//! proposing a rebalance, and nothing measured justifies it. A sell rule needs
-//! its own trigger and its own ruling.
-//!
-//! **The verdict writes the month file in the same call.** A human verdict plus
-//! its note is the one fact in this capability that no re-import and no re-run
-//! reproduces, and PRD:234 calls the database "a rebuildable index, never the
-//! only copy". `finance decisions export` is the copy a human runs when the
-//! server is down, exactly as `crates/trips/src/bin/trips-cli.rs` describes
-//! its own role -- never the only writer.
-//!
-//! **Class c1, validated at every write site.** PRD:1201-1202: C1 is "My notes,
-//! plans, drafts, journals", C2 is "Facts about named people", and a proposal
-//! about the owner's own allocation names no third party. The consequence is
-//! implemented rather than merely stated: c1 rows are stored verbatim, which is
-//! what this module does, so no redaction obligation is left open.
+//! Model-backed investment idea reviews live in [`crate::review`]. A human verdict
+//! closes a proposal and exports its journal projection in the same operation.
 
 use std::collections::BTreeMap;
 use std::io::Write as _;

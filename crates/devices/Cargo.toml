@@ -27,7 +27,6 @@ device-auth = { path = "../device-auth" }
 axum.workspace = true
 getrandom.workspace = true
 rusqlite.workspace = true
-schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

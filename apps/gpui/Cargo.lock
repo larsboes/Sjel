@@ -1993,7 +1993,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4482,7 +4481,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4574,7 +4572,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -6464,7 +6461,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -6993,7 +6989,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -8485,15 +8480,12 @@ dependencies = [
  "cpal",
  "futures",
  "gpui-kit",
- "libsql",
  "nsh-base",
  "nsh-platform-gpui",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "raw-window-handle",
- "reqwest 0.13.5",
- "serde",
  "serde_json",
  "sjel-gpui-core",
  "sjel-gpui-ui",
@@ -8537,7 +8529,6 @@ dependencies = [
  "sjel-clip-socket",
  "sjel-config",
  "sjel-credentials",
- "sjel-links",
  "software-api",
  "soundscape-api",
  "status-api",
@@ -8693,7 +8684,6 @@ version = "0.1.0"
 dependencies = [
  "schemars",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -8701,7 +8691,6 @@ name = "soundscape-api"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
 ]
 
 [[package]]

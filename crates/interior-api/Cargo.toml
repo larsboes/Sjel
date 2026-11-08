@@ -8,6 +8,6 @@ description = "Pure wire models and route constants for Interior (room measureme
 publish = false
 
 [dependencies]
-schemars = "1.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -11,7 +11,7 @@ publish = false
 places-api = { path = "../places-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-schemars = "1.2.2"
+schemars.workspace = true
 url = { version = "2.5", default-features = false }
 
 [lints]

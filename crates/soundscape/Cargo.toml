@@ -24,7 +24,6 @@ axum.workspace = true
 # SSE stream fans out on.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [lints]

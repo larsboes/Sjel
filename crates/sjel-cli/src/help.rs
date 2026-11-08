@@ -24,6 +24,8 @@ Discover Sjel:
   demo up|mac <page>|down        Run the demo stack in a container and screenshot the app on it
 
 Check a change before pushing it:
+  maintenance [--json] [--unused] [--freshness] [--licenses]
+                                 Read-only plan, contract, dependency and license evidence
   check                          Run the quick CI subset for this change (pre-push runs it)
   gates                          Run CI's repo gates here, from CI's own definition
   test                           Run CI's bun test and every tools/*.test.sh

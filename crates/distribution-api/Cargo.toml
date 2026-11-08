@@ -8,6 +8,5 @@ description = "Pure wire models and contracts for Sjel package distribution and 
 publish = false
 
 [dependencies]
-schemars = "1.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true

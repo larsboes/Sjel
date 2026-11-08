@@ -11,32 +11,11 @@
 //! no later one is: the alert means "the limit was reached", not "the price moved".
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::{Error, Item, Store};
 
-/// One numeric property: a candidate's spec, or a group's need.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct Spec {
-    pub key: String,
-    pub value: f64,
-    #[serde(default)]
-    pub unit: String,
-}
-
-/// One dated price for one candidate.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct Observation {
-    pub price_cents: i64,
-    /// A product URL, or a short label such as `kleinanzeigen` for a manual entry.
-    pub source: String,
-    #[serde(default)]
-    pub configuration: String,
-    pub observed_at: String,
-    /// The first observation at or below the wish's price limit.
-    #[serde(default)]
-    pub alert: bool,
-}
+pub use inventory_api::{Candidate, GroupComparison, PriceObservation as Observation, Spec};
 
 /// What recording an observation did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -44,26 +23,6 @@ pub struct Recorded {
     /// False when this wish already has an observation from this source on this day.
     pub added: bool,
     pub alert: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct Candidate {
-    pub id: String,
-    pub label: String,
-    pub link: Option<String>,
-    pub cost_max_cents: Option<i64>,
-    pub specs: Vec<Spec>,
-    /// Oldest first.
-    pub observations: Vec<Observation>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct GroupComparison {
-    pub id: String,
-    pub title: String,
-    pub constraint_text: String,
-    pub needs: Vec<Spec>,
-    pub candidates: Vec<Candidate>,
 }
 
 /// The tables, created next to the item tables. Idempotent.

@@ -29,7 +29,6 @@ sjel-server = { path = "../sjel-server" }
 sjel-store = { path = "../sjel-store" }
 route-manifest = { path = "../route-manifest" }
 traveler-api = { path = "../traveler-api" }
-serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # The database, after PRD Q45 retired Postgres. Bundled, same as every other
 # store-owning capability (upstreams.toml [rusqlite] has the measurement).
@@ -42,7 +41,6 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 axum.workspace = true
 # Derived, never hand-written: the route manifest publishes the write body's
 # schema from the struct serde already deserializes (PRD §4.4 item 11).
-schemars = "1.2.2"
 
 [dev-dependencies]
 # The HTTP tests drive the wired router over a real socket, because the origin

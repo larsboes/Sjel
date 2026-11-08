@@ -48,7 +48,7 @@ rusqlite.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "net"] }
 axum.workspace = true
 tower-http = { workspace = true, features = ["cors"] }
-schemars = "1.2.2"
+schemars.workspace = true
 # Was loopback-only with no TLS backend; the Kiwi flight adapter (kiwi.rs)
 # speaks HTTPS to mcp.kiwi.com, so the default TLS stack is back in. Version
 # matched to crates/calendar and transit so the workspace resolves one reqwest.

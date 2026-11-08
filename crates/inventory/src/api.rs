@@ -1,4 +1,4 @@
-//! The capability's HTTP surface. Every endpoint returns JSON; the dashboard renders it.
+//! Inventory HTTP routes and shared request contracts.
 //!
 //! Item images stay on `interior`'s `/api/media` for now: the media path resolves a private asset
 //! root that interior also uses for RoomPlan captures.
@@ -13,52 +13,16 @@ use axum::{Json, Router};
 #[path = "sync.rs"]
 mod sync;
 use rusqlite::OptionalExtension;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::store::{Item, Store, WriteOutcome, LEGACY_FIELDS};
 
-#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct SaveWishGroupRequest {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub constraint_text: String,
-    #[serde(default)]
-    pub item_ids: Option<Vec<String>>,
-    /// Mark the group as alternatives: a budget counts only its cheapest member. Absent leaves
-    /// the mark as it is.
-    #[serde(default)]
-    pub alternatives: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct SetWishGroupItemsRequest {
-    pub item_ids: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct SetSpecsRequest {
-    pub specs: Vec<crate::store::compare::Spec>,
-}
-
-#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct SetNeedsRequest {
-    pub needs: Vec<crate::store::compare::Spec>,
-}
-
-#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
-pub struct RecordPriceRequest {
-    pub price_cents: i64,
-    /// A product URL, or a short label for a manual entry.
-    pub source: String,
-    #[serde(default)]
-    pub configuration: String,
-    /// `YYYY-MM-DD` or a timestamp. Absent means now.
-    #[serde(default)]
-    pub observed_at: Option<String>,
-}
+pub use inventory_api::{
+    RecordPriceRequest, SaveWishGroupRequest, SetNeedsRequest, SetSpecsRequest,
+    SetWishGroupItemsRequest,
+};
 
 pub struct AppState {
     pub device_store: devices::store::DevicesStore,

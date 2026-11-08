@@ -30,6 +30,7 @@ mod help;
 mod host_watch;
 mod inference_keys;
 mod intake;
+mod maintenance;
 mod mirror;
 mod model_check;
 mod pack_hook;
@@ -181,6 +182,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         "search" => search::run(root, rest),
+        "maintenance" => maintenance::run(root, rest),
         // Native macOS application bundles (GPUI desktop and menu bar).
         "app" => app::run(root, rest),
         // In-process since 2026-10-02: tools/doctor is a launcher for this same entry point.

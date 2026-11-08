@@ -23,8 +23,6 @@ path = "src/cli.rs"
 axum.workspace = true
 operator-profile-api = { path = "../operator-profile-api" }
 route-manifest = { path = "../route-manifest" }
-schemars = "1.2.2"
-serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-config = { path = "../sjel-config" }
 sjel-server = { path = "../sjel-server" }

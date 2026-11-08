@@ -56,7 +56,6 @@ sha2.workspace = true
 # Outbound HTTP to Nominatim and transit's suggest surface; the blocking client,
 # matching crates/transit/src/hafas.rs.
 reqwest = { workspace = true, features = ["blocking", "json", "query", "form"] }
-schemars = "1.2.2"
 
 [lints]
 workspace = true

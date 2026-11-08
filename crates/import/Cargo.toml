@@ -23,7 +23,6 @@ import-api = { path = "../import-api" }
 reqwest.workspace = true
 route-manifest = { path = "../route-manifest" }
 rusqlite.workspace = true
-schemars = "1.2.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

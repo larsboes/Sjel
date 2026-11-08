@@ -30,7 +30,7 @@ sjel-store = { path = "../sjel-store" }
 sjel-server = { path = "../sjel-server" }
 route-manifest = { path = "../route-manifest" }
 assistant-api = { path = "../assistant-api" }
-schemars = "1.2.2"
+schemars.workspace = true
 
 [lints]
 workspace = true

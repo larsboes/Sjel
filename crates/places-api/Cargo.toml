@@ -8,7 +8,7 @@ description = "Pure wire models and contracts for Sjel canonical place registry,
 publish = false
 
 [dependencies]
-schemars = "1.2.2"
+schemars.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sjel-links = { path = "../links" }

@@ -12,6 +12,27 @@
 # No row records a version: every dependency tracks its upstream release. A measurement belongs in
 # `why` with the date it was taken, and a dependency verdict lives here and nowhere else.
 
+[semver]
+url = "https://github.com/dtolnay/semver"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+summary = "Cargo version requirement parsing for the read-only maintenance report"
+why = "Already in the lockfile. Reuse Cargo-compatible version matching instead of implementing requirement syntax; JavaScript updates remain Bun's responsibility."
+
+[cargo-deny]
+url = "https://github.com/EmbarkStudios/cargo-deny"
+verdict = "adopt"
+license = "MIT OR Apache-2.0"
+summary = "Optional license inventory in the maintenance report"
+why = "Reuse the installed tool for current-host license evidence. This adds no automatic license allowlist and no duplicate advisory queue; OSV remains the vulnerability owner."
+
+[cargo-machete]
+url = "https://github.com/bnjbvr/cargo-machete"
+verdict = "adopt"
+license = "MIT"
+summary = "Read-only unused Rust dependency detection for maintenance"
+why = "Optional read-only maintenance analyzer, without --fix or --with-metadata. Its source-checked trial used two patched transitive lock entries; reported candidates were inspected on 2026-11-08, 28 declarations removed and isolated checks run. Missing installation reports incomplete coverage."
+
 [python-eval-image]
 url = "https://github.com/docker-library/python"
 verdict = "adopt"

@@ -28,6 +28,7 @@ use finance::store::FinanceStore;
 use finance::subscription::{burn_by_currency, PricePoint, StateChange};
 use finance::subscription_notes;
 use finance::JournalEngine;
+use finance_api::{ReclassifyBatchRequest, ReconcileTransferRequest};
 
 /// What this capability answers, served as data beside `/health`. Query parameters
 /// are named in the summary: a path alone cannot tell a caller what to send, and
@@ -950,27 +951,6 @@ struct ReviewRequest {
     source_account: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct ReconcileTransferRequest {
-    counterpart_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct BatchConfirmation {
-    id: String,
-    account: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct BatchConfirmationRequest {
-    items: Vec<BatchConfirmation>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BatchReclassificationRequest {
-    items: Vec<BatchConfirmation>,
-}
-
 async fn reconcile_transfer(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -1209,7 +1189,7 @@ async fn link_reimbursement(
 
 async fn confirm_candidates_batch(
     State(state): State<AppState>,
-    Json(request): Json<BatchConfirmationRequest>,
+    Json(request): Json<ReclassifyBatchRequest>,
 ) -> ApiResponse {
     let Some(journal) = state.journal.clone() else {
         return no_journal();
@@ -1299,7 +1279,7 @@ async fn confirm_candidates_batch(
 
 async fn reclassify_candidates_batch(
     State(state): State<AppState>,
-    Json(request): Json<BatchReclassificationRequest>,
+    Json(request): Json<ReclassifyBatchRequest>,
 ) -> ApiResponse {
     let Some(journal) = state.journal.clone() else {
         return no_journal();

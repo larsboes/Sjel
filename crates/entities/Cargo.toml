@@ -36,7 +36,7 @@ rusqlite.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "form", "query"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 axum.workspace = true
-schemars = "1.2.2"
+schemars.workspace = true
 
 [lints]
 workspace = true

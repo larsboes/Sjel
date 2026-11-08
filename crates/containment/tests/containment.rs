@@ -288,8 +288,8 @@ fn macos_sandbox_leaves_the_keychain_to_the_harness() {
     let tmp = std::env::temp_dir().join(format!("sjel-seatbelt-keychain-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let profile = SeatbeltProfile::new(&tmp).render();
-    // Decision C3: a harness reads its own sign-in from the Keychain, so the profile does not
-    // close it. The question about a missing item is answered by the store, not the sandbox.
+    // Decision C3: the broker stays reachable. The question about a missing item is answered by
+    // the store, not the sandbox; an item whose ACL trusts only another binary stays refused.
     assert!(!profile.contains("com.apple.SecurityServer"));
     let output = ContainedCommand::new("/usr/bin/security", SeatbeltProfile::new(&tmp))
         .args(["find-generic-password", "-s", "sjel-containment-probe-item"])

@@ -104,9 +104,8 @@ impl SeatbeltProfile {
         out.push_str(
             "(allow process-exec process-fork signal sysctl-read mach-lookup ipc-posix-shm)\n",
         );
-        // The Keychain stays reachable: a harness reads its own sign-in from it (C3), and a
-        // runtime that trusts through it finds its roots there. What a contained run cannot
-        // reach is the overlay, other checkouts and the credentials held outside the Keychain.
+        // The Keychain broker stays reachable (C3). An item is still readable only by the
+        // application its ACL trusts, so this is not a route to another program's sign-in.
         // Metadata lets path resolution walk through parents. Listing a directory or reading a
         // file needs file-read-data, which only the paths below get.
         out.push_str("(allow file-read-metadata)\n");

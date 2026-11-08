@@ -20,93 +20,12 @@
 //! `Result<TripSpending, Unreachable>`, so all of it is testable with no network
 //! and no database.
 
-use serde::Serialize;
 use serde_json::Value;
 
 use crate::finance_client::{TripSpending, Unreachable};
 use crate::store::PlanDetails;
 
-/// Finance's four figures, or four nulls and a reason. Never a zero.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Actuals {
-    pub ok: bool,
-    pub reason: Option<String>,
-    /// The unit finance stated for these five figures, and null when it stated
-    /// none. Carried rather than assumed: the card used to render them under the
-    /// PLAN's currency, which is a claim about somebody else's numbers.
-    pub currency: Option<String>,
-    pub personal_cents: Option<i64>,
-    pub gross_cash_outflow_cents: Option<i64>,
-    pub reimbursed_cents: Option<i64>,
-    pub outstanding_cents: Option<i64>,
-    pub posting_count: Option<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct SelectedOptions {
-    /// A float, because the schema says a float. Null when nothing is priced.
-    pub total: Option<f64>,
-    /// Always null, and declared rather than omitted: `optionSetPayload` and
-    /// `transportPayload` carry no currency field at all, so the unit of this
-    /// number is genuinely unknown.
-    pub currency: Option<String>,
-    pub priced_items: usize,
-    pub note: &'static str,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ByCurrency {
-    pub currency: String,
-    pub booked_cents: i64,
-    pub item_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ByStage {
-    pub stage_id: String,
-    pub sequence: usize,
-    pub origin: String,
-    pub destination: String,
-    /// Null, exactly like the top-level total, when the items on this stage do
-    /// not agree on a currency. `currency` then carries none and `reason` says
-    /// which disagreement it was.
-    pub booked_cents: Option<i64>,
-    pub currency: Option<String>,
-    pub reason: Option<String>,
-    pub item_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Unattributed {
-    pub booked_cents: Option<i64>,
-    pub currency: Option<String>,
-    pub reason: Option<String>,
-    pub item_count: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Source {
-    pub source: &'static str,
-    pub ok: bool,
-    pub reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CostRollup {
-    pub plan_id: String,
-    pub currency: Option<String>,
-    pub planned_cents: Option<i64>,
-    /// Null rather than a sum when the bookings are in more than one currency;
-    /// `booked_reason` then says so and `by_currency` carries one row each.
-    pub booked_cents: Option<i64>,
-    pub booked_reason: Option<String>,
-    pub actuals: Actuals,
-    pub selected_options: SelectedOptions,
-    pub by_currency: Vec<ByCurrency>,
-    pub by_stage: Vec<ByStage>,
-    pub unattributed: Unattributed,
-    pub sources: Vec<Source>,
-}
+pub use trips_api::cost::*;
 
 const OFFERED_NOT_PAID: &str = "offered, not paid; these prices are floats with no currency \
      (schemas/trip-plan.schema.json optionSetPayload, transportPayload)";
@@ -383,7 +302,7 @@ pub fn roll_up(details: &PlanDetails, spending: Result<TripSpending, Unreachable
                 posting_count: None,
             },
             Source {
-                source: "finance",
+                source: "finance".into(),
                 ok: false,
                 reason: Some(reason),
             },
@@ -419,7 +338,7 @@ pub fn roll_up(details: &PlanDetails, spending: Result<TripSpending, Unreachable
                 posting_count: Some(spending.expense_posting_count),
             },
             Source {
-                source: "finance",
+                source: "finance".into(),
                 ok: true,
                 reason: None,
             },
@@ -438,14 +357,14 @@ pub fn roll_up(details: &PlanDetails, spending: Result<TripSpending, Unreachable
             total: (priced_items > 0).then_some(offered_total),
             currency: None,
             priced_items,
-            note: OFFERED_NOT_PAID,
+            note: OFFERED_NOT_PAID.into(),
         },
         by_currency,
         by_stage,
         unattributed,
         sources: vec![
             Source {
-                source: "trips",
+                source: "trips".into(),
                 ok: true,
                 reason: None,
             },

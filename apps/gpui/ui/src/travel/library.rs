@@ -126,27 +126,27 @@ impl Travel {
                         div()
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Interactive Location Map"),
+                            .child("Map"),
                     )
                     .child(
                         div().flex().items_center().gap_1().child(
                             self.button("open-location-map")
                                 .small()
                                 .ghost()
-                                .label("Full Map View →")
+                                .label("Open map")
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.open_route(TravelRoute::Map, cx)
                                 })),
                         ),
                     ),
             )
+            .child(self.category_chips(cx))
             .child(self.map(cx));
 
         let mut list = div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(top_map)
             .child(self.trip_suggestions(cx))
             .child(
                 div().child(
@@ -361,7 +361,33 @@ impl Travel {
                     })),
             );
         }
-        list.into_any_element()
+        if self.density.is_mobile() {
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(top_map)
+                .child(list)
+                .into_any_element()
+        } else {
+            let master = div().w(px(380.)).flex_none().child(list);
+            let detail = div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(top_map)
+                .child(self.map_stops(cx));
+            div()
+                .w_full()
+                .flex()
+                .items_start()
+                .gap_4()
+                .child(master)
+                .child(detail)
+                .into_any_element()
+        }
     }
 
     pub(super) fn trip_suggestions(&self, cx: &mut Context<Self>) -> AnyElement {

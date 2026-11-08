@@ -8,9 +8,11 @@ description = "Typed API contract, serde models, and route constants for the tri
 publish = false
 
 [dependencies]
+places-api = { path = "../places-api" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 schemars = "1.2.2"
+url = { version = "2.5", default-features = false }
 
 [lints]
 workspace = true

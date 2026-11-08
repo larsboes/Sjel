@@ -323,6 +323,29 @@ impl Travel {
                             view.show_stop(destination.clone(), cx)
                         })),
                 );
+                let origin_name = stage.origin.name.clone();
+                let dest_name = stage.destination.name.clone();
+                let stage_date = stage.date.clone().or_else(|| {
+                    if !plan.date_start.is_empty() {
+                        Some(plan.date_start.clone())
+                    } else {
+                        None
+                    }
+                });
+                actions = actions.child(
+                    self.button(gpui::SharedString::from(format!("stage-conn-{orig_i}")))
+                        .ghost()
+                        .label("Find connection")
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.find_stage_connection(
+                                origin_name.clone(),
+                                dest_name.clone(),
+                                stage_date.clone(),
+                                window,
+                                cx,
+                            )
+                        })),
+                );
                 if !stage.id.is_empty() {
                     actions = actions
                         .children(self.form_button(

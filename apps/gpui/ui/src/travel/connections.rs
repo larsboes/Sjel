@@ -6,12 +6,16 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
 };
 use gpui_kit::component::button::ButtonVariants;
+use gpui_kit::component::calendar::Date;
+use gpui_kit::component::date_picker::{DatePicker, DatePickerEvent, DatePickerState};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::time_field::{TimeField, TimeFieldEvent, TimeFieldState};
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell;
 use sjel_gpui_core::travel::connections::{
     self, Journey, Query, Rank, Sort, SplitResult, Station, PRIORITIES,
 };
+use sjel_gpui_core::travel::TravelRoute;
 
 use super::Travel;
 
@@ -40,8 +44,8 @@ enum End {
 pub(super) struct Connections {
     from: StationField,
     to: StationField,
-    date: Entity<InputState>,
-    time: Entity<InputState>,
+    date: Entity<DatePickerState>,
+    time: Entity<TimeFieldState>,
     phrase: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
     priority: Option<&'static str>,
@@ -75,8 +79,20 @@ impl Travel {
         };
         let from = input("From station", String::new(), window, cx);
         let to = input("To station", String::new(), window, cx);
-        let date = input("2026-10-25", connections::tomorrow(), window, cx);
-        let time = input("10:00", "10:00".into(), window, cx);
+        let initial_date = chrono::NaiveDate::parse_from_str(&connections::tomorrow(), "%Y-%m-%d")
+            .unwrap_or_else(|_| chrono::Local::now().date_naive());
+        let date = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
+            picker.set_date(Date::Single(Some(initial_date)), window, cx);
+            picker
+        });
+        let time = cx.new(|cx| {
+            let mut field = TimeFieldState::new(window, cx);
+            if let Ok(t) = chrono::NaiveTime::parse_from_str("10:00", "%H:%M") {
+                field.set_time(t, window, cx);
+            }
+            field
+        });
         let phrase = input(
             "or say it: cheapest, direct, schnell und zuverlässig",
             String::new(),
@@ -106,11 +122,18 @@ impl Travel {
                 view.search_connections(window, cx);
             }
         };
+        let date_sub =
+            cx.subscribe_in(&date, window, |view, _, _: &DatePickerEvent, window, cx| {
+                view.search_connections(window, cx);
+            });
+        let time_sub = cx.subscribe_in(&time, window, |view, _, _: &TimeFieldEvent, window, cx| {
+            view.search_connections(window, cx);
+        });
         let subscriptions = vec![
             cx.subscribe_in(&from, window, station_events(End::From)),
             cx.subscribe_in(&to, window, station_events(End::To)),
-            cx.subscribe_in(&date, window, search_on_enter),
-            cx.subscribe_in(&time, window, search_on_enter),
+            date_sub,
+            time_sub,
             cx.subscribe_in(&phrase, window, search_on_enter),
         ];
         from.update(cx, |input, cx| input.focus(window, cx));
@@ -294,11 +317,19 @@ impl Travel {
             cx.notify();
             return;
         };
+        let date_str = page
+            .date
+            .read(cx)
+            .date_time()
+            .start()
+            .map(|dt| dt.date().format("%Y-%m-%d").to_string())
+            .unwrap_or_else(connections::tomorrow);
+        let time_str = page.time.read(cx).time().format("%H:%M").to_string();
         let query = Query {
             from,
             to,
-            date: page.date.read(cx).value().to_string(),
-            time: page.time.read(cx).value().to_string(),
+            date: date_str,
+            time: time_str,
             rank: Rank {
                 priority: page.priority,
                 phrase: page.phrase.read(cx).value().to_string(),
@@ -388,8 +419,8 @@ impl Travel {
                     .on_click(cx.listener(|view, _, window, cx| view.swap_stations(window, cx))),
             )
             .child(station(End::To, &page.to, cx))
-            .child(div().w(px(110.)).child(Input::new(&page.date).small()))
-            .child(div().w(px(70.)).child(Input::new(&page.time).small()))
+            .child(div().w(px(130.)).child(DatePicker::new(&page.date).small()))
+            .child(div().w(px(80.)).child(TimeField::new(&page.time).small()))
             .child(
                 self.button("search-connections")
                     .small()
@@ -703,6 +734,19 @@ impl Travel {
                     )));
                 }
             }
+            if let Some(plan) = self.current().filter(|_| self.writer().is_some()) {
+                let journey_clone = journey.clone();
+                row = row.child(
+                    div().flex().items_center().justify_end().pt_1().child(
+                        self.button(gpui::SharedString::from(format!("add-to-trip-{i}")))
+                            .ghost()
+                            .label(format!("Add to {}", plan.title))
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.add_journey_to_trip(&journey_clone, cx);
+                            })),
+                    ),
+                );
+            }
         }
         row.into_any_element()
     }
@@ -833,5 +877,36 @@ impl Travel {
             )
         };
         panel.into_any_element()
+    }
+
+    pub fn find_stage_connection(
+        &mut self,
+        from_name: String,
+        to_name: String,
+        date_str: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open_route(TravelRoute::Connections, cx);
+        self.ensure_connections(window, cx);
+        if let Some(page) = self.connections.as_mut() {
+            page.from.input.update(cx, |input, cx| {
+                input.set_value(from_name.clone(), window, cx)
+            });
+            page.to
+                .input
+                .update(cx, |input, cx| input.set_value(to_name.clone(), window, cx));
+            if let Some(d) = date_str
+                .as_deref()
+                .and_then(|s| chrono::NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok())
+            {
+                page.date.update(cx, |picker, cx| {
+                    picker.set_date(Date::Single(Some(d)), window, cx);
+                });
+            }
+        }
+        self.station_typed(End::From, from_name, cx);
+        self.station_typed(End::To, to_name, cx);
+        cx.notify();
     }
 }

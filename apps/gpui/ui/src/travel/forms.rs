@@ -8,6 +8,8 @@ use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, SharedString, Subscription, Window,
 };
 use gpui_kit::component::button::ButtonVariants;
+use gpui_kit::component::calendar::Date;
+use gpui_kit::component::date_picker::{DatePicker, DatePickerState};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::{
@@ -34,9 +36,28 @@ pub(super) enum FormKind {
     Stage(Option<String>),
 }
 
+pub(super) enum FormField {
+    Text(Entity<InputState>),
+    Date(Entity<DatePickerState>),
+}
+
+impl FormField {
+    fn value(&self, cx: &gpui::App) -> String {
+        match self {
+            Self::Text(input) => input.read(cx).value().to_string(),
+            Self::Date(picker) => picker
+                .read(cx)
+                .date_time()
+                .start()
+                .map(|dt| dt.date().format("%Y-%m-%d").to_string())
+                .unwrap_or_default(),
+        }
+    }
+}
+
 pub(super) struct Form {
     kind: FormKind,
-    fields: Vec<(&'static str, Entity<InputState>)>,
+    fields: Vec<(&'static str, FormField)>,
     mode: &'static str,
     status: &'static str,
     error: Option<SharedString>,
@@ -46,7 +67,7 @@ pub(super) struct Form {
 
 impl Form {
     fn value(&self, index: usize, cx: &gpui::App) -> String {
-        self.fields[index].1.read(cx).value().to_string()
+        self.fields[index].1.value(cx)
     }
 }
 
@@ -68,11 +89,18 @@ impl Travel {
         self.open_route(TravelRoute::Trips, cx);
         self.open_form(FormKind::Trip(None), window, cx);
         if let Some(form) = &self.form {
-            let day = day.format("%Y-%m-%d").to_string();
             for index in [3, 4] {
-                form.fields[index]
-                    .1
-                    .update(cx, |input, cx| input.set_value(day.clone(), window, cx));
+                match &form.fields[index].1 {
+                    FormField::Date(picker) => {
+                        picker.update(cx, |picker, cx| {
+                            picker.set_date(Date::Single(Some(day)), window, cx);
+                        });
+                    }
+                    FormField::Text(input) => {
+                        let formatted = day.format("%Y-%m-%d").to_string();
+                        input.update(cx, |input, cx| input.set_value(formatted, window, cx));
+                    }
+                }
             }
         }
         cx.notify();
@@ -249,24 +277,44 @@ impl Travel {
                     )
                 }
             };
+        let is_date_field = |label: &str| {
+            matches!(
+                label,
+                "Start date" | "End date" | "Day" | "Check-in" | "Check-out" | "Date"
+            )
+        };
         let mut fields = Vec::new();
         let mut subscriptions = Vec::new();
         for ((label, placeholder), value) in labels.into_iter().zip(values) {
-            let input = cx.new(|cx| {
-                let mut state = InputState::new(window, cx).placeholder(placeholder);
-                state.set_value(value, window, cx);
-                state
-            });
-            subscriptions.push(
-                cx.subscribe_in(&input, window, |view, _, event, window, cx| {
-                    if let InputEvent::PressEnter { .. } = event {
-                        view.save_form(window, cx);
+            if is_date_field(label) {
+                let parsed_date = chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok();
+                let picker = cx.new(|cx| {
+                    let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
+                    if let Some(d) = parsed_date {
+                        picker.set_date(Date::Single(Some(d)), window, cx);
                     }
-                }),
-            );
-            fields.push((label, input));
+                    picker
+                });
+                fields.push((label, FormField::Date(picker)));
+            } else {
+                let input = cx.new(|cx| {
+                    let mut state = InputState::new(window, cx).placeholder(placeholder);
+                    state.set_value(value, window, cx);
+                    state
+                });
+                subscriptions.push(cx.subscribe_in(
+                    &input,
+                    window,
+                    |view, _, event, window, cx| {
+                        if let InputEvent::PressEnter { .. } = event {
+                            view.save_form(window, cx);
+                        }
+                    },
+                ));
+                fields.push((label, FormField::Text(input)));
+            }
         }
-        if let Some((_, first)) = fields.first() {
+        if let Some((_, FormField::Text(first))) = fields.first() {
             first.update(cx, |input, cx| input.focus(window, cx));
         }
         self.form = Some(Form {
@@ -303,7 +351,7 @@ impl Travel {
         self.current()?.stages.iter().find(|stage| stage.id == id)
     }
 
-    fn save_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn save_form(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let (Some(shell), Some(form)) = (self.writer(), self.form.as_ref()) else {
             return;
         };
@@ -333,7 +381,7 @@ impl Travel {
                     free_cancellation_until: v(6),
                 };
                 match item {
-                    None => draft.create_body().map(|body| Work::AddBooking(plan, body)),
+                    None => draft.create_body().map(|body| Work::AddItem(plan, body)),
                     Some(item) => draft
                         .edit_body()
                         .map(|(fields, day)| Work::EditBooking(plan, item, fields, day)),
@@ -355,13 +403,9 @@ impl Travel {
                     order_ref: v(11),
                     notes: v(12),
                 };
-                match item {
-                    None => draft.create_body().map(|body| Work::AddBooking(plan, body)),
-                    Some(item) => draft
-                        .edit_body()
-                        .map(|(fields, day)| Work::EditBooking(plan, item, fields, day)),
-                }
+                Ok(Work::SaveStay(plan, item, Box::new(draft)))
             }
+
             FormKind::Stage(stage) => {
                 let draft = StageDraft {
                     origin: v(0),
@@ -396,11 +440,11 @@ impl Travel {
             form.saving = true;
             form.error = None;
         }
-        self.write(shell, work, window, cx);
+        self.write(shell, work, cx);
     }
 
     /// Removes a trip, booking or stage. The first press asks; the second removes.
-    pub(super) fn remove(&mut self, target: Remove, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn remove(&mut self, target: Remove, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(shell) = self.writer() else {
             return;
         };
@@ -417,14 +461,14 @@ impl Travel {
             Remove::Item(item) => Work::RemoveItem(plan, item.clone()),
             Remove::Stage(stage) => Work::Stages(plan, StageEdit::Remove(stage.clone())),
         };
-        self.write(shell, work, window, cx);
+        self.write(shell, work, cx);
     }
 
     pub(super) fn set_stay_rank(
         &mut self,
         item_id: String,
         rank: Option<i64>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(shell) = self.writer() else {
@@ -436,12 +480,65 @@ impl Travel {
         let Ok(body) = stay_rank_body(rank) else {
             return;
         };
-        self.write(shell, Work::ItemFields(plan, item_id, body), window, cx);
+        self.write(shell, Work::ItemFields(plan, item_id, body), cx);
     }
 
-    fn write(&mut self, shell: Arc<Shell>, work: Work, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn add_journey_to_trip(
+        &mut self,
+        journey: &sjel_gpui_core::travel::connections::Journey,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(plan) = self.selected.clone() else {
+            return;
+        };
+        let Some(shell) = self.writer() else {
+            return;
+        };
+        match sjel_gpui_core::travel::connections::hold_journey(journey) {
+            Ok(body) => self.write(shell, Work::AddItem(plan, body), cx),
+            Err(why) => {
+                self.write_error = Some(why);
+                cx.notify();
+            }
+        }
+    }
+
+    fn write(&mut self, shell: Arc<Shell>, work: Work, cx: &mut Context<Self>) {
         let task = shell::run(async move {
             match work {
+                Work::SaveStay(plan, item, mut draft) => {
+                    if draft.needs_geocode() {
+                        let query = draft.geocode_query().ok_or_else(|| {
+                            ShellError::Refused(
+                                400,
+                                Some("Give the stay a name or address.".into()),
+                            )
+                        })?;
+                        let coordinate = shell.places_geocode(&query).await?.ok_or_else(|| {
+                            ShellError::Refused(
+                                422,
+                                Some(
+                                    "No coordinates found. Enter latitude and longitude manually."
+                                        .into(),
+                                ),
+                            )
+                        })?;
+                        draft.with_resolved_coordinates(coordinate.latitude, coordinate.longitude);
+                    }
+                    let invalid = |reason: String| ShellError::Refused(400, Some(reason));
+                    match item {
+                        None => {
+                            shell
+                                .trip_item_add(&plan, draft.create_body().map_err(invalid)?)
+                                .await?
+                        }
+                        Some(item) => {
+                            let (fields, day) = draft.edit_body().map_err(invalid)?;
+                            shell.trip_booking_edit(&plan, &item, fields, day).await?;
+                        }
+                    }
+                    Ok(Saved::Details)
+                }
                 Work::Trip(body) => shell
                     .trip_create(body)
                     .await
@@ -450,8 +547,8 @@ impl Travel {
                     .trip_plan_delete(&plan)
                     .await
                     .map(|()| Saved::Deleted(plan)),
-                Work::AddBooking(plan, body) => shell
-                    .trip_booking_add(&plan, body)
+                Work::AddItem(plan, body) => shell
+                    .trip_item_add(&plan, body)
                     .await
                     .map(|()| Saved::Details),
                 Work::EditBooking(plan, item, fields, day) => shell
@@ -546,14 +643,18 @@ impl Travel {
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .child(title),
             );
-        for (label, input) in &form.fields {
+        for (label, field) in &form.fields {
+            let control = match field {
+                FormField::Text(input) => Input::new(input).small().into_any_element(),
+                FormField::Date(picker) => DatePicker::new(picker).small().into_any_element(),
+            };
             card = card.child(
                 div()
                     .flex()
                     .flex_col()
                     .gap_1()
                     .child(div().text_xs().text_color(rgb(palette.muted)).child(*label))
-                    .child(Input::new(input).small()),
+                    .child(control),
             );
         }
         if matches!(form.kind, FormKind::Stage(_)) {
@@ -719,7 +820,8 @@ impl Remove {
 enum Work {
     Trip(serde_json::Value),
     DeletePlan(String),
-    AddBooking(String, serde_json::Value),
+    AddItem(String, serde_json::Value),
+    SaveStay(String, Option<String>, Box<StayDraft>),
     EditBooking(String, String, serde_json::Value, Option<String>),
     ItemFields(String, String, serde_json::Value),
     RemoveItem(String, String),

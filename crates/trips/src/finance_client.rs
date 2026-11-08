@@ -108,21 +108,7 @@ pub fn trip_spending_at(base_url: &str, plan_id: &str) -> Result<TripSpending, U
     })
 }
 
-/// A plan id is `trip:plan:<hex>`, so the colons need escaping and nothing else
-/// does. Hand-rolled rather than a dependency, and deliberately conservative:
-/// anything outside the unreserved set is percent-encoded.
-fn urlencode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
-}
+use trips_api::urlencode;
 
 #[cfg(test)]
 mod tests {

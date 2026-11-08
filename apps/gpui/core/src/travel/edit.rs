@@ -257,6 +257,33 @@ pub struct StayDraft {
 }
 
 impl StayDraft {
+    /// Whether both coordinates need to be resolved from the stay's name or address.
+    pub fn needs_geocode(&self) -> bool {
+        self.latitude.trim().is_empty() && self.longitude.trim().is_empty()
+    }
+
+    /// Combines the location fields available to the geocoder.
+    pub fn geocode_query(&self) -> Option<String> {
+        let title = self.title.trim();
+        let address = self.address.trim();
+        match (!title.is_empty(), !address.is_empty()) {
+            (true, true) => Some(format!("{title}, {address}")),
+            (true, false) => Some(title.to_owned()),
+            (false, true) => Some(address.to_owned()),
+            (false, false) => None,
+        }
+    }
+
+    /// Fills missing coordinate fields from a geocoder result.
+    pub fn with_resolved_coordinates(&mut self, lat: f64, lon: f64) {
+        if self.latitude.trim().is_empty() {
+            self.latitude = format!("{lat:.5}");
+        }
+        if self.longitude.trim().is_empty() {
+            self.longitude = format!("{lon:.5}");
+        }
+    }
+
     pub fn from_item(item: &super::Item) -> Self {
         let text = |key: &str| {
             item.payload
@@ -765,5 +792,23 @@ mod tests {
             json!({ "payload": { "rank": null } })
         );
         assert!(stay_rank_body(Some(0)).is_err());
+
+        let mut missing = draft.clone();
+        missing.latitude.clear();
+        missing.longitude.clear();
+        assert!(missing.needs_geocode());
+        assert_eq!(
+            missing.geocode_query().as_deref(),
+            Some("Hotel Hafen Hamburg, Seewartenstraße 9, Hamburg")
+        );
+        missing.with_resolved_coordinates(53.5451, 9.9717);
+        assert!(!missing.needs_geocode());
+        assert!(missing.create_body().is_ok());
+        missing.longitude.clear();
+        assert!(
+            !missing.needs_geocode(),
+            "a partial manual coordinate must not be combined with another location"
+        );
+        assert!(missing.create_body().is_err());
     }
 }

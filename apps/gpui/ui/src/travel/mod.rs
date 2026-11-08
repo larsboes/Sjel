@@ -106,6 +106,7 @@ pub struct Travel {
     home_framed: bool,
     map_expanded: bool,
     selected_day_filter: Option<String>,
+    pub(super) selected_category_filter: Option<PlaceCategory>,
     pub(super) offline_downloading: std::collections::HashSet<String>,
     pub(super) offline_progress: HashMap<String, (usize, usize)>,
     #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -170,17 +171,7 @@ impl PlaceCategory {
     }
 }
 
-pub(crate) fn urlencode(text: &str) -> String {
-    let mut encoded = String::new();
-    for byte in text.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    encoded
-}
+pub(crate) use sjel_gpui_core::travel::urlencode;
 
 #[derive(Clone)]
 pub struct LocationMarker {
@@ -253,6 +244,7 @@ impl Travel {
             home_framed: false,
             map_expanded: false,
             selected_day_filter: None,
+            selected_category_filter: None,
             offline_downloading: std::collections::HashSet::new(),
             offline_progress: HashMap::new(),
             #[cfg(all(feature = "native-maps", target_os = "macos"))]
@@ -827,6 +819,9 @@ impl Travel {
                 }
             }
         }
+        if let Some(cat) = self.selected_category_filter {
+            markers.retain(|m| m.category == cat);
+        }
         markers
     }
 
@@ -897,6 +892,9 @@ impl Travel {
                     category: PlaceCategory::Stay,
                 });
             }
+        }
+        if let Some(cat) = self.selected_category_filter {
+            markers.retain(|m| m.category == cat);
         }
         markers
     }

@@ -1303,15 +1303,7 @@ pub fn frontmatter_home(scalars: &BTreeMap<String, String>) -> Option<String> {
 
 /// Great-circle distance in kilometres — haversine in code, the no-PostGIS
 /// decision (README "Considered and declined").
-pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
-    let radius_km = 6371.0;
-    let (lat1, lon1) = (a.0.to_radians(), a.1.to_radians());
-    let (lat2, lon2) = (b.0.to_radians(), b.1.to_radians());
-    let dlat = lat2 - lat1;
-    let dlon = lon2 - lon1;
-    let h = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
-    2.0 * radius_km * h.sqrt().asin()
-}
+pub use places_api::haversine_km;
 
 fn note_stem(path: &Path) -> Option<String> {
     path.file_stem()

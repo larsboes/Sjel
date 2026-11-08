@@ -49,6 +49,7 @@ impl Query {
     }
 
     pub fn search_path(&self) -> Result<String, String> {
+        self.validate_stations()?;
         let when = self.when()?;
         let mut pairs = vec![
             ("from", self.from.id.as_str()),
@@ -65,6 +66,7 @@ impl Query {
     }
 
     pub fn split_path(&self) -> Result<String, String> {
+        self.validate_stations()?;
         let when = self.when()?;
         Ok(path(
             PROXY_ROUTE_TRANSIT_SPLIT,
@@ -75,10 +77,39 @@ impl Query {
             ],
         ))
     }
+
+    fn validate_stations(&self) -> Result<(), String> {
+        if self.from.id.trim().is_empty() || self.to.id.trim().is_empty() {
+            return Err("Pick an origin and destination from the station suggestions.".into());
+        }
+        Ok(())
+    }
 }
 
 pub fn suggest_path(text: &str) -> String {
     path(PROXY_ROUTE_TRANSIT_SUGGEST, &[("q", text.trim())])
+}
+
+/// Holds a selected connection as an offered itinerary item, without creating a booking.
+///
+/// # Errors
+/// Returns an error if the provider supplied no stable journey identifier.
+pub fn hold_journey(journey: &Journey) -> Result<serde_json::Value, String> {
+    if journey.id.trim().is_empty() {
+        return Err("This connection has no provider identifier and cannot be saved.".into());
+    }
+    let day = journey
+        .departs()
+        .get(..10)
+        .and_then(|day| NaiveDate::parse_from_str(day, "%Y-%m-%d").ok())
+        .map(|day| day.format("%Y-%m-%d").to_string());
+    Ok(serde_json::json!({
+        "item_type": "transport",
+        "external_id": journey.id,
+        "day": day,
+        "title": format!("{} → {}", journey.start_station.name, journey.end_station.name),
+        "payload": {"mode": "train", "journey": journey}
+    }))
 }
 
 fn path(base: &str, pairs: &[(&str, &str)]) -> String {
@@ -185,6 +216,31 @@ impl Source {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_held_journey_is_an_offer_without_purchase_evidence() {
+        let journey = Journey {
+            id: "journey:offered".into(),
+            total_price: Some(42.50),
+            ..Default::default()
+        };
+        let body = hold_journey(&journey).unwrap();
+        assert_eq!(body["item_type"], "transport");
+        assert_eq!(body["external_id"], journey.id);
+        assert_eq!(body["payload"]["journey"]["total_price"], 42.50);
+        assert!(body["payload"].get("order_ref").is_none());
+        assert!(body["payload"].get("amount_cents").is_none());
+        assert!(hold_journey(&Journey::default()).is_err());
+        let query = Query {
+            from: Station::default(),
+            to: Station::default(),
+            date: "2026-11-08".into(),
+            time: "10:00".into(),
+            rank: Rank::default(),
+        };
+        assert!(query.search_path().is_err());
+        assert!(query.split_path().is_err());
+    }
 
     fn station(id: &str) -> Station {
         Station {

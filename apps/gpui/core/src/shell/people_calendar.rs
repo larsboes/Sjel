@@ -3,6 +3,15 @@
 use super::*;
 
 impl Shell {
+    /// Reads the trips capability's cost response.
+    ///
+    /// # Errors
+    /// Returns a refused route, transport or response error.
+    pub async fn trip_cost(&self, id: &str) -> ShellResult<trips_api::cost::CostRollup> {
+        let path = crate::travel::plan_path(id, &["cost"]).map_err(refused)?;
+        self.json(Method::GET, &path, None, 10).await
+    }
+
     pub async fn calendar_entry(&self, id: &str) -> ShellResult<CalendarEntryDetail> {
         if !valid_calendar_entry_id(id) {
             return Err(ShellError::Refused(
@@ -70,8 +79,11 @@ impl Shell {
         Ok(plan)
     }
 
-    /// `POST …/items` with a body from [`crate::travel::edit::BookingDraft::create_body`].
-    pub async fn trip_booking_add(&self, plan: &str, body: serde_json::Value) -> ShellResult<()> {
+    /// Adds an itinerary item, including held transport offers and confirmed bookings.
+    ///
+    /// # Errors
+    /// Returns an invalid plan identifier, transport or server error.
+    pub async fn trip_item_add(&self, plan: &str, body: serde_json::Value) -> ShellResult<()> {
         let path = crate::travel::plan_path(plan, &["items"]).map_err(refused)?;
         self.send(Method::POST, &path, Some(body), 10).await?;
         self.trip_calendar_sync(plan).await;

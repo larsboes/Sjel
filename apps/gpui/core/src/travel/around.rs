@@ -46,13 +46,7 @@ pub struct Meetup {
     pub place: Option<String>,
 }
 
-pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
-    let (lat_a, lat_b) = (a.0.to_radians(), b.0.to_radians());
-    let d_lat = (b.0 - a.0).to_radians();
-    let d_lon = (b.1 - a.1).to_radians();
-    let h = (d_lat / 2.0).sin().powi(2) + lat_a.cos() * lat_b.cos() * (d_lon / 2.0).sin().powi(2);
-    2.0 * 6371.0 * h.sqrt().asin()
-}
+pub use places_api::haversine_km;
 
 /// The meetups on a plan, dated ones first.
 pub fn meetups(items: &[Item]) -> Vec<Meetup> {
@@ -135,6 +129,7 @@ mod tests {
             external_id: id.into(),
             title: id.into(),
             payload,
+            ..Default::default()
         }
     }
 

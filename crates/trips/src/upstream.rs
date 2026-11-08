@@ -500,18 +500,7 @@ pub fn parse_climate(body: &Value, month: u32) -> Result<HashMap<String, SeasonS
 }
 
 /// Percent-encode a query value. Place names carry spaces, commas and umlauts.
-pub(crate) fn urlencode(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.as_bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                encoded.push(*byte as char)
-            }
-            _ => encoded.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    encoded
-}
+pub(crate) use trips_api::urlencode;
 
 /// Now, as an ISO instant, without a date crate: the day number gives the date
 /// and the remainder gives the clock.

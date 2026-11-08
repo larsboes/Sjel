@@ -3,13 +3,15 @@ use super::Travel;
 use gpui::Context;
 use sjel_gpui_core::{
     shell::{self, CalendarEntry},
-    travel::{self, SavedDetails},
+    travel::{self, CostRollup, SavedDetails},
 };
 
 #[derive(Default)]
 pub(super) struct DetailState {
     pub value: Option<SavedDetails>,
     pub error: Option<String>,
+    pub cost: Option<CostRollup>,
+    pub cost_error: Option<String>,
     pub loading: bool,
     pub calendar_events: Vec<CalendarEntry>,
     pub calendar_events_loaded: bool,
@@ -67,16 +69,18 @@ impl Travel {
             let work = shell::run(async move {
                 let source = source.ok_or("Connect to your Mac to update this trip's details.")?;
                 let details = source.details(&requested).await?;
+                let cost = source.cost(&requested).await;
                 let calendar_events = source.related_calendar_events(&details.plan).await;
                 let calendar_links = source.calendar_plan_links(&details.plan.id).await;
                 match travel::save_details(details.clone()).await {
-                    Ok(saved) => Ok((saved, None, calendar_events, calendar_links)),
+                    Ok(saved) => Ok((saved, None, cost, calendar_events, calendar_links)),
                     Err(error) => Ok((
                         SavedDetails {
                             saved_at: chrono::Utc::now().timestamp().max(0) as u64,
                             details,
                         },
                         Some(error),
+                        cost,
                         calendar_events,
                         calendar_links,
                     )),
@@ -93,9 +97,16 @@ impl Travel {
                 slot.calendar_events_loaded = true;
                 slot.calendar_links_loading = false;
                 match result {
-                    Ok((saved, warning, events, links)) => {
+                    Ok((saved, warning, cost, events, links)) => {
                         slot.value = Some(saved);
                         slot.error = warning;
+                        match cost {
+                            Ok(cost) => {
+                                slot.cost = Some(cost);
+                                slot.cost_error = None;
+                            }
+                            Err(error) => slot.cost_error = Some(error),
+                        }
                         match events {
                             Ok(events) => slot.calendar_events = events,
                             Err(error) => slot.calendar_events_error = Some(error),
@@ -107,6 +118,7 @@ impl Travel {
                         }
                     }
                     Err(error) => {
+                        slot.cost_error = Some(error.clone());
                         slot.error = Some(error.clone());
                         slot.calendar_events_error = Some(error);
                         slot.calendar_links_loaded = true;

@@ -194,7 +194,8 @@ their open edits.
 4. `cargo check --workspace`, `tools/doctor`, the CI legs, and a service restart prove it — done.
 5. Then the API crates and crate-shape changes, one capability per commit. Done for
    `trips`: `crates/trips-api` (`trips-api`) extracts pure wire models and route constants
-   shared with `sjel-trips` and `sjel-gpui-core`.
+   shared with `sjel-trips` and `sjel-gpui-core` (full retirement of remaining shadow structs
+   in `apps/gpui/core/src/travel.rs` tracked under WP 31 in `gpui.md`).
    Done for `calendar`: `crates/calendar-api` (`calendar-api`) extracts pure wire models,
    commitment enums, export types, and route constants shared with `sjel-calendar` and
    `sjel-gpui-core`.

@@ -2,104 +2,7 @@
 use super::Plan;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Item {
-    pub id: String,
-    pub item_type: String,
-    pub day: Option<String>,
-    #[serde(default)]
-    pub external_id: String,
-    pub title: String,
-    #[serde(default)]
-    pub payload: serde_json::Value,
-}
-
-impl Item {
-    /// Only fields understood by the itinerary are presented as item properties.
-    pub fn fields(&self) -> Vec<(&'static str, String)> {
-        [
-            ("status", "Status"),
-            ("time", "Time"),
-            ("check_in", "Check-in"),
-            ("check_out", "Check-out"),
-            ("address", "Address"),
-            ("provider", "Provider"),
-            ("order_ref", "Reference"),
-            ("free_cancellation_until", "Free cancellation until"),
-            ("notes", "Notes"),
-        ]
-        .into_iter()
-        .filter_map(|(key, label)| {
-            self.payload
-                .get(key)?
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(|s| (label, s.to_owned()))
-        })
-        .collect()
-    }
-
-    pub fn booking_code(&self) -> Option<&str> {
-        self.payload
-            .get("order_ref")
-            .or_else(|| self.payload.get("booking_code"))
-            .or_else(|| self.payload.get("reference"))
-            .or_else(|| self.payload.get("pnr"))
-            .and_then(serde_json::Value::as_str)
-            .filter(|s| !s.is_empty())
-    }
-
-    pub fn source_url(&self) -> Option<reqwest::Url> {
-        let url = self.payload.get("url")?.as_str()?;
-        let url = reqwest::Url::parse(url).ok()?;
-        (matches!(url.scheme(), "http" | "https")
-            && url.username().is_empty()
-            && url.password().is_none())
-        .then_some(url)
-    }
-
-    pub fn stay_rank(&self) -> Option<i64> {
-        self.payload
-            .get("rank")
-            .and_then(serde_json::Value::as_i64)
-            .filter(|&rank| rank >= 1)
-    }
-
-    pub fn is_stay_booked(&self) -> bool {
-        self.payload
-            .get("booked")
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-            || self.booking_code().is_some()
-    }
-
-    pub fn price_label(&self) -> Option<String> {
-        let cents = self
-            .payload
-            .get("amount_cents")
-            .and_then(serde_json::Value::as_i64)?;
-        let currency = self
-            .payload
-            .get("currency")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .unwrap_or("EUR");
-        Some(format!(
-            "{currency} {}.{:02}",
-            cents / 100,
-            (cents % 100).abs()
-        ))
-    }
-
-    pub fn rating_label(&self) -> Option<String> {
-        let rating = self
-            .payload
-            .get("rating")
-            .and_then(serde_json::Value::as_f64)?;
-        Some(format!("{rating:.1}"))
-    }
-}
+pub use trips_api::PlanItem as Item;
 
 /// Orders `stay` items for the candidate ranking board: ranked candidates ascending by rank,
 /// then unranked candidates ascending by price, then by title.
@@ -132,6 +35,8 @@ pub struct Details {
     #[serde(flatten)]
     pub plan: Plan,
     pub items: Vec<Item>,
+    #[serde(default)]
+    pub retrospective: Option<trips_api::Retrospective>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -210,6 +115,7 @@ mod tests {
             external_id: "stay:1".into(),
             title: "Stay".into(),
             payload,
+            ..Default::default()
         }
     }
 
@@ -285,6 +191,7 @@ mod tests {
             external_id: "stay:a".into(),
             title: "Hotel Zebra".into(),
             payload: serde_json::json!({ "rank": 2, "amount_cents": 15000, "currency": "EUR" }),
+            ..Default::default()
         };
         let b = Item {
             id: "2".into(),
@@ -293,6 +200,7 @@ mod tests {
             external_id: "stay:b".into(),
             title: "Hotel Alpha".into(),
             payload: serde_json::json!({ "rank": 1, "amount_cents": 18000, "currency": "EUR", "booked": true }),
+            ..Default::default()
         };
         let c = Item {
             id: "3".into(),
@@ -301,6 +209,7 @@ mod tests {
             external_id: "stay:c".into(),
             title: "Hotel Budget".into(),
             payload: serde_json::json!({ "amount_cents": 9500, "currency": "EUR", "rating": 8.4 }),
+            ..Default::default()
         };
         let mut refs = vec![&a, &c, &b];
         sort_stay_candidates(&mut refs);

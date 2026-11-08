@@ -40,6 +40,64 @@ pub const ROUTE_PLACES_REVIEWS_DECIDE: &str = "/api/reviews/decide";
 // Core Place & Link Models
 // ============================================================================
 
+/// Coordinate pair validated within standard latitude and longitude ranges.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Coordinate {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+impl Coordinate {
+    pub fn new(latitude: f64, longitude: f64) -> Option<Self> {
+        (latitude.is_finite()
+            && longitude.is_finite()
+            && (-90.0..=90.0).contains(&latitude)
+            && (-180.0..=180.0).contains(&longitude))
+        .then_some(Self {
+            latitude,
+            longitude,
+        })
+    }
+
+    pub fn world(self, zoom: u8) -> (f64, f64) {
+        self.world_at(f64::from(zoom))
+    }
+
+    /// Web Mercator projection at fractional zoom for fluid map panning and zooming.
+    pub fn world_at(self, zoom: f64) -> (f64, f64) {
+        let size = 256.0 * 2_f64.powf(zoom);
+        let latitude = self.latitude.clamp(-85.05112878, 85.05112878).to_radians();
+        (
+            (self.longitude + 180.0) / 360.0 * size,
+            (1.0 - latitude.tan().asinh() / std::f64::consts::PI) / 2.0 * size,
+        )
+    }
+
+    pub fn from_world(x: f64, y: f64, zoom: u8) -> Self {
+        Self::from_world_at(x, y, f64::from(zoom))
+    }
+
+    pub fn from_world_at(x: f64, y: f64, zoom: f64) -> Self {
+        let size = 256.0 * 2_f64.powf(zoom);
+        Self {
+            longitude: x.rem_euclid(size) / size * 360.0 - 180.0,
+            latitude: (std::f64::consts::PI * (1.0 - 2.0 * y.clamp(0.0, size) / size))
+                .sinh()
+                .atan()
+                .to_degrees(),
+        }
+    }
+}
+
+/// Great-circle distance between two (latitude, longitude) coordinate pairs in kilometers.
+pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (lat_a, lat_b) = (a.0.to_radians(), b.0.to_radians());
+    let d_lat = (b.0 - a.0).to_radians();
+    let d_lon = (b.1 - a.1).to_radians();
+    let h = (d_lat / 2.0).sin().powi(2) + lat_a.cos() * lat_b.cos() * (d_lon / 2.0).sin().powi(2);
+    2.0 * 6371.0 * h.clamp(0.0, 1.0).sqrt().asin()
+}
+
 /// One place, as the register holds it. `kind` is the register's own word
 /// (`venue`, `city`, `station`, `address`, `region`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

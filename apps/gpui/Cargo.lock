@@ -9559,9 +9559,11 @@ dependencies = [
 name = "trips-api"
 version = "0.1.0"
 dependencies = [
+ "places-api",
  "schemars",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]

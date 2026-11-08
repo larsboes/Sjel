@@ -62,6 +62,49 @@ fn scroll_direction_factor() -> f64 {
 }
 
 impl Travel {
+    pub(super) fn category_chips(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut row = div().flex().flex_wrap().items_center().gap_1();
+        let all_active = self.selected_category_filter.is_none();
+        row = row.child(
+            self.button("filter-all")
+                .small()
+                .label("All places")
+                .when(all_active, |b| b.primary())
+                .when(!all_active, |b| b.ghost())
+                .on_click(cx.listener(|view, _, _, cx| {
+                    view.selected_category_filter = None;
+                    cx.notify();
+                })),
+        );
+        for cat in [
+            PlaceCategory::Stay,
+            PlaceCategory::Station,
+            PlaceCategory::Airport,
+            PlaceCategory::Place,
+        ] {
+            let active = self.selected_category_filter == Some(cat);
+            let label = cat.label();
+            let id = format!("filter-{}", cat.label().to_lowercase());
+            row = row.child(
+                self.button(gpui::SharedString::from(id))
+                    .small()
+                    .label(label)
+                    .when(active, |b| b.primary())
+                    .when(!active, |b| b.ghost())
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.selected_category_filter =
+                            if view.selected_category_filter == Some(cat) {
+                                None
+                            } else {
+                                Some(cat)
+                            };
+                        cx.notify();
+                    })),
+            );
+        }
+        row.into_any_element()
+    }
+
     pub(super) fn map_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut page = div().flex().flex_col().gap_3();
         let mut actions = div()
@@ -70,7 +113,8 @@ impl Travel {
             .flex_wrap()
             .items_center()
             .justify_between()
-            .gap_2();
+            .gap_2()
+            .child(self.category_chips(cx));
         if matches!(self.route, TravelRoute::Map) {
             actions = actions
                 .children(self.form_button(
@@ -192,7 +236,7 @@ impl Travel {
         page.into_any_element()
     }
 
-    fn map_stops(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn map_stops(&self, cx: &mut Context<Self>) -> AnyElement {
         let markers: Vec<LocationMarker> = if matches!(self.route, TravelRoute::Map) {
             self.location_markers()
         } else {

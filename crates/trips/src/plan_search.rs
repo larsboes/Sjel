@@ -1203,17 +1203,8 @@ fn is_origin(origin: &PlaceRef, candidate: &DestinationCandidate) -> bool {
     same_id || same_name
 }
 
-/// Great-circle distance in kilometres. See [`EVENT_RADIUS_KM`] for why this is
-/// a copy rather than a dependency.
-pub fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
-    let radius_km = 6371.0;
-    let (lat1, lon1) = (a.0.to_radians(), a.1.to_radians());
-    let (lat2, lon2) = (b.0.to_radians(), b.1.to_radians());
-    let dlat = lat2 - lat1;
-    let dlon = lon2 - lon1;
-    let h = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
-    2.0 * radius_km * h.sqrt().asin()
-}
+/// Great-circle distance in kilometres, shared from places-api via trips-api.
+pub use trips_api::haversine_km;
 
 /// The one durable thing a search can produce: an `option_set` payload.
 ///

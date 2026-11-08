@@ -20,7 +20,10 @@ pub use places::PlaceCoords;
 pub use punctuality_api;
 pub use traveler_api;
 
-pub use trips_api::{ResolvePlacesRequest, ResolvePlacesResult, ResolvedPlace, UnresolvedPlace};
+pub use trips_api::{
+    cost::CostRollup, urlencode, ResolvePlacesRequest, ResolvePlacesResult, ResolvedPlace,
+    Retrospective, UnresolvedPlace,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Place {
@@ -62,6 +65,10 @@ pub struct Plan {
     pub status: String,
     #[serde(default)]
     pub stages: Vec<Stage>,
+    #[serde(default)]
+    pub budget_cents: Option<i64>,
+    #[serde(default)]
+    pub currency: Option<String>,
 }
 
 impl Plan {
@@ -240,6 +247,22 @@ pub fn unseen_fare_lows(
 }
 
 impl Source {
+    /// Reads the capability's cost roll-up without recomputing money in the client.
+    ///
+    /// # Errors
+    /// Returns a route, transport or response error.
+    pub async fn cost(&self, id: &str) -> Result<trips_api::cost::CostRollup, String> {
+        let path = plan_path(id, &["cost"])?;
+        let cost: CostRollup = match self {
+            Self::Shell(shell) => shell.trip_cost(id).await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }?;
+        if cost.plan_id != id {
+            return Err("The cost response belongs to another trip.".into());
+        }
+        Ok(cost)
+    }
+
     pub async fn plans(&self) -> Result<Vec<Plan>, String> {
         match self {
             Self::Shell(shell) => shell.travel_plans().await.map_err(|e| e.to_string()),
@@ -472,53 +495,7 @@ pub(crate) fn plan_path(id: &str, rest: &[&str]) -> Result<String, String> {
     Ok(url.path().to_owned())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Coordinate {
-    pub latitude: f64,
-    pub longitude: f64,
-}
-
-impl Coordinate {
-    pub fn new(latitude: f64, longitude: f64) -> Option<Self> {
-        (latitude.is_finite()
-            && longitude.is_finite()
-            && (-90.0..=90.0).contains(&latitude)
-            && (-180.0..=180.0).contains(&longitude))
-        .then_some(Self {
-            latitude,
-            longitude,
-        })
-    }
-
-    pub fn world(self, zoom: u8) -> (f64, f64) {
-        self.world_at(f64::from(zoom))
-    }
-
-    /// The same projection at a fractional zoom, which is what a gesture produces.
-    pub fn world_at(self, zoom: f64) -> (f64, f64) {
-        let size = 256.0 * 2_f64.powf(zoom);
-        let latitude = self.latitude.clamp(-85.05112878, 85.05112878).to_radians();
-        (
-            (self.longitude + 180.0) / 360.0 * size,
-            (1.0 - latitude.tan().asinh() / std::f64::consts::PI) / 2.0 * size,
-        )
-    }
-
-    pub fn from_world(x: f64, y: f64, zoom: u8) -> Self {
-        Self::from_world_at(x, y, f64::from(zoom))
-    }
-
-    pub fn from_world_at(x: f64, y: f64, zoom: f64) -> Self {
-        let size = 256.0 * 2_f64.powf(zoom);
-        Self {
-            longitude: x.rem_euclid(size) / size * 360.0 - 180.0,
-            latitude: (std::f64::consts::PI * (1.0 - 2.0 * y.clamp(0.0, size) / size))
-                .sinh()
-                .atan()
-                .to_degrees(),
-        }
-    }
-}
+pub use places_api::Coordinate;
 
 /// Lowest and highest zoom the map offers. Raster tiles exist to z18; below z1 a vector
 /// basemap has no tiles at all.
@@ -1078,6 +1055,8 @@ mod tests {
             date_end: "2026-12-05".into(),
             status: "saved".into(),
             stages: Vec::new(),
+            budget_cents: None,
+            currency: None,
         };
 
         let tiles = plan.offline_tiles();
@@ -1109,6 +1088,8 @@ mod tests {
             date_end: "".into(),
             status: "draft".into(),
             stages: Vec::new(),
+            budget_cents: None,
+            currency: None,
         };
         assert!(empty_plan.offline_tiles().is_empty());
     }

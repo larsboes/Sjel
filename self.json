@@ -3082,6 +3082,16 @@
       ]
     },
     {
+      "from": "trips-api",
+      "to": "places-api",
+      "kinds": [
+        "cargo-dep"
+      ],
+      "evidence": [
+        "crates/trips-api/Cargo.toml"
+      ]
+    },
+    {
       "from": "vault",
       "to": "content-item",
       "kinds": [

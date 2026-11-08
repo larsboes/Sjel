@@ -108,6 +108,16 @@ pub fn normalize_eva(eva: &str) -> String {
     format!("{digits:0>8}")
 }
 
+/// Strip leading zeroes from an EVA code for lookups against unpadded HAFAS keys.
+pub fn unpad_eva(raw: &str) -> String {
+    let trimmed = raw.trim().trim_start_matches('0');
+    if trimmed.is_empty() {
+        raw.trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

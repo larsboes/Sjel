@@ -1,0 +1,207 @@
+{
+  "source_revision": "c558c421157c546ec417cf23778ce81a3a8f35fd",
+  "lock_digest": "d1699700424a86190504a1e7e809ffe5ccf9b498e2221f9a3d0cbe7a1e537007",
+  "image": "sha256:80129cb0e1a87be47f26dea93b54f51fab71020a82ab55239a900050804e0e91",
+  "network": "none",
+  "corpus": "synthetic smoke cases; not a held-out efficacy benchmark",
+  "rows": [
+    {
+      "id": "plain",
+      "expected_hold": false,
+      "sjel_hold": false,
+      "scanner_hold": false,
+      "elapsed_ms": 4297,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "security-guidance",
+      "expected_hold": false,
+      "sjel_hold": false,
+      "scanner_hold": false,
+      "elapsed_ms": 4154,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "normal-network",
+      "expected_hold": false,
+      "sjel_hold": false,
+      "scanner_hold": false,
+      "elapsed_ms": 4074,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "local-script",
+      "expected_hold": false,
+      "sjel_hold": false,
+      "scanner_hold": false,
+      "elapsed_ms": 4203,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "override",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": true,
+      "elapsed_ms": 4749,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        },
+        {
+          "rule": "YARA_prompt_injection_generic",
+          "severity": "CRITICAL"
+        },
+        {
+          "rule": "PROMPT_INJECTION_IGNORE_INSTRUCTIONS",
+          "severity": "HIGH"
+        }
+      ]
+    },
+    {
+      "id": "conceal",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": false,
+      "elapsed_ms": 5126,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "fetch-execute",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": false,
+      "elapsed_ms": 4347,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "exfiltration",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": false,
+      "elapsed_ms": 4345,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "permissions",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": false,
+      "elapsed_ms": 4212,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    },
+    {
+      "id": "role-spoof",
+      "expected_hold": true,
+      "sjel_hold": true,
+      "scanner_hold": false,
+      "elapsed_ms": 4161,
+      "analyzers": [
+        "static_analyzer",
+        "bytecode",
+        "pipeline",
+        "correlation"
+      ],
+      "findings": [
+        {
+          "rule": "MANIFEST_MISSING_LICENSE",
+          "severity": "INFO"
+        }
+      ]
+    }
+  ]
+}

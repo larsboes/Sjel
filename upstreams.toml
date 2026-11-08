@@ -33,12 +33,20 @@ license = "MIT"
 summary = "Read-only unused Rust dependency detection for maintenance"
 why = "Optional read-only maintenance analyzer, without --fix or --with-metadata. Its source-checked trial used two patched transitive lock entries; reported candidates were inspected on 2026-11-08, 28 declarations removed and isolated checks run. Missing installation reports incomplete coverage."
 
+[cisco-skill-scanner]
+url = "https://github.com/cisco-ai-defense/skill-scanner"
+verdict = "watch"
+license = "Apache-2.0"
+summary = "Local skill detection candidate compared against Sjel intake fixtures"
+why = "The 2026-11-08 pinned local-only trial held one of six malicious smoke cases, while Sjel's existing rules held all six; both passed four benign cases. Do not add it as a routine gate or replace intake; evidence and a reproducible network-disabled trial live in research/benchmarks/skill-intake."
+revisit = "A local semantic-review configuration passes the existing admission cases and a separate corpus without increasing review burden; the dependency preflight must also pass."
+
 [python-eval-image]
 url = "https://github.com/docker-library/python"
 verdict = "adopt"
 license = "MIT (image recipes); various (bundled Python and Debian components)"
-summary = "Existing official Python image used only inside the bounded offline agent-evaluation guest"
-why = "Base image for the bounded offline guest tools/lib/agent-eval-sandbox.ts evaluates agents in: an existing local Python slim image resolved to an immutable image ID for each evaluation and never pulled. The guest gets evaluator code plus candidate source and events and nothing else -- no host mounts, network, credentials, ports or expected rows -- and the flags it is started with are not an import allowlist."
+summary = "Official Python base for bounded public-fixture evaluation containers"
+why = "The agent evaluator uses an existing image resolved to its immutable ID, without host mounts or networking. The skill-scanner trial builds reviewed source into a separate image, mounts only synthetic leaf fixtures read-only, and runs without network, host configuration or credentials."
 
 [meta-harness]
 url = "https://github.com/stanford-iris-lab/meta-harness"

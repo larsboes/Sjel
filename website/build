@@ -31,11 +31,9 @@ done
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-bun "$_here/scripts/landing.ts" --out "$OUT"
-bun "$_here/scripts/docs.ts" --out "$OUT"
-bun "$_here/scripts/reference.ts" --out "$OUT"
-bun "$_here/scripts/self-model.ts" --out "$OUT"
-bun "$_here/scripts/roadmap.ts" --out "$OUT"
+for page in landing docs reference self-model roadmap; do
+  bun --no-env-file "$_here/scripts/$page.ts" --out "$OUT"
+done
 cp "$_here/assets/favicon.svg" "$OUT/favicon.svg"
 if [ -f "$_here/assets/hedgehog.svg" ]; then
   cp "$_here/assets/hedgehog.svg" "$OUT/hedgehog.svg"
@@ -51,11 +49,11 @@ fi
 # GitHub Pages runs Jekyll unless told not to, and Jekyll drops directories that begin with `_`.
 touch "$OUT/.nojekyll"
 
-bun "$_here/scripts/links.ts" "$OUT"
+bun --no-env-file "$_here/scripts/links.ts" "$OUT"
 "$SJEL_ROOT/tools/check-site-payload.sh" "$OUT"
 
 echo "website/build: $(du -sh "$OUT" | cut -f1) in $OUT"
 
 if [ "$SERVE" -eq 1 ]; then
-  exec bun "$_here/scripts/serve.ts" "$OUT" 8000
+  exec bun --no-env-file "$_here/scripts/serve.ts" "$OUT" 8000
 fi

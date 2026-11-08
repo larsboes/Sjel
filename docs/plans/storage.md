@@ -40,20 +40,20 @@ power-loss test at each durable write, and any check of a started primary.
 
 - **One shared file.** Capabilities open `<overlay>/data/sjel/sjel.db` through
   `sjel_config::database_path`.
-- **Two engines.** 3 capabilities use `libs/sjel-turso` (libSQL): `projects`, `software`,
-  `operator-profile`. 21 use `libs/sjel-store` (rusqlite). A binary links one engine, never both.
+- **Two engines.** 3 capabilities use `crates/sjel-turso` (libSQL): `projects`, `software`,
+  `operator-profile`. 21 use `crates/sjel-store` (rusqlite). A binary links one engine, never both.
   The phone's store (`apps/gpui/core/src/store.rs`) is libSQL too.
-- **No embedded replicas.** `sjel-turso` dropped them on 2026-10-22 (`libs/sjel-turso/README.md`,
+- **No embedded replicas.** `sjel-turso` dropped them on 2026-10-22 (`crates/sjel-turso/README.md`,
   "Embedded replicas: removed"). That also removed the ten advisories they pulled in: the CI
   Security job passes on `main` (runs for `8ebd667d`, `6ee15b19`, `b6bf56c8`).
 - **Left over from the replica path.** `services/sqld` runs a primary that holds no data and
-  is backed up daily. `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs` and the
-  `SJEL_TURSO_URL` handling in `tools/sjel-cli/src/runner.rs` and `apps/gpui/core/src/setup.rs`
+  is backed up daily. `crates/libsql-auth`, `crates/sjel-cli/src/setup/turso.rs` and the
+  `SJEL_TURSO_URL` handling in `crates/sjel-cli/src/runner.rs` and `apps/gpui/core/src/setup.rs`
   serve only that primary.
 - **The phone's writes.** Writes queue in `_offline_mutations`. `core/src/sync.rs` replays them in
   order through the Mac's existing routes and pulls records whose `updated_at` moved. A record
   with an unsent local write is skipped on pull. This covers projects and calendar.
-- **The phone's copy.** A read-only snapshot of `PHONE_SET` (`tools/sjel-cli/src/mirror.rs`:
+- **The phone's copy.** A read-only snapshot of `PHONE_SET` (`crates/sjel-cli/src/mirror.rs`:
   projects, calendar, entities, places), built by `sjel mirror build`, served by
   `GET /api/sjel-status/mirror` and checked by digest. Comms, documents and finance are left out on
   purpose.
@@ -301,7 +301,7 @@ migrations").
    whether the `turso` crate brings an offline sync engine that could replace the custom outbox
    in §3. Answered: it does not (§3).
 2. **Remove the replica leftovers** unless step 1 brings replicas back: stop and delete
-   `services/sqld`, `libs/libsql-auth`, `tools/sjel-cli/src/setup/turso.rs`, the
+   `services/sqld`, `crates/libsql-auth`, `crates/sjel-cli/src/setup/turso.rs`, the
    `SJEL_TURSO_URL` handling, `tools/install-sqld.sh`, and the `[libsql-server]` and `[sqld]`
    entries. One fewer daemon and one fewer daily backup.
 3. **Cut the three bypassing readers** (§1). The finder's search asks each capability's search

@@ -117,6 +117,9 @@ CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 tools/cargo-hermetic test --workspace --l
 
 ### Other checks
 
+- `tools/maintenance --json` inventories tracked maintenance inputs offline. Add `--unused`,
+  `--freshness` or `--licenses` for optional read-only analyzers. Missing requested coverage
+  exits 2; license inventory covers the current Rust host target and is not legal approval.
 - `sjel gates` and `sjel test` replay CI's repo gates and Bun job from the workflow file.
   `tools/ci-local list` shows which jobs can be replayed.
 - A package that `tools/discover-ui-packages` reports: run `bun run check`, and `bun run build`

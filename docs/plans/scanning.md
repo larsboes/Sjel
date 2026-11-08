@@ -9,7 +9,7 @@ clothing, and paper documents.
 
 ## 1. The shape every scanner follows
 
-RoomPlan already proves this flow (`libs/roomplan-contract`, `crates/interior`,
+RoomPlan already proves this flow (`crates/roomplan-contract`, `crates/interior`,
 `apps/gpui/ios/host`):
 
 ```mermaid

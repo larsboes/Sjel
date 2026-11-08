@@ -25,34 +25,11 @@ covers it.
   launch and service contracts, refuses active executables, and verifies the installed digest.
   Done when one command installs the verified tool without rebuilding in the shared cache.
 
-- **Environment-isolated website build.** `website/build` could not remove the existing output
-  directories in a restricted session. A scratch `--out` then exited 1 without diagnostics at
-  its first Bun script; the same five generators succeeded with `bun --no-env-file`.
-  Workaround: run the existing generators with that flag into scratch output and run the link
-  and payload checks there. Smallest change: make the launcher disable environment-file loading
-  and preserve diagnostics. Done when one `website/build --out <scratch>` completes in the
-  restricted session without reading deployment environment files.
-
-- **Maintenance evidence and reusable skill detection.** The
-  [maintenance review](../../research/plan-maintenance-review.md) found stale plan entries and
-  repeated custom intake detection beside existing package scanners. Workaround: a read-only
-  census of plan lengths, legacy path strings and Cargo manifests, followed by source checks.
-  Smallest changes, in order:
-  1. Extend existing tooling with a tracked-file-only maintenance report: unresolved operational
-     paths, unused-dependency findings and duplicate-code candidates, with explicit exclusions
-     for historical references, vendored code and fixtures. Reuse existing scanners and link
-     checks; register any new tool's source and license before integration.
-  2. Evaluate Cisco Skill Scanner against the existing intake cases and benign security prose;
-     use isolated public fixtures, disable remote analyzers, and measure review noise and cost.
-     Keep current admission rules until the comparison supports a replacement.
-  3. Persist completed inference-role review evidence like harness receipts, binding reuse to
-     content, review context and detector/model/policy identities. Advisory scans remain fresh
-     independently of content. Do not repeat an unchanged accepted finding without a reason.
-  Done when one report covers both product Cargo workspaces and all discovered Bun trees,
-  distinguishes missing coverage from no findings, and a detector comparison establishes which
-  custom code can be removed without losing the existing admission cases. Scanner performance,
-  unused-dependency totals and duplication rates have not been measured. This work reduces
-  maintenance; it does not expand agent features or authorize private-content uploads.
+- **Duplicate behavior discovery.** The maintenance report inventories contracts and unresolved
+  path candidates, but does not estimate duplicate code. Finance and Inventory now reuse their
+  API contracts. Run any future clone detector as an optional discovery tool with generated,
+  vendored and fixture exclusions; inspect shared behavior before extracting another module.
+  Knip and jscpd are candidates, not mandatory gates or established coverage.
 
 - **Native iOS screen validation.** Compile checks and screenshot-only touch tests did
   not detect an empty Documents host on a physical phone. `ios/run-sim --smoke`
@@ -78,29 +55,15 @@ covers it.
   or secret fields. Done when a fixture finding can be diagnosed through the normal
   audit command without exposing its matched value.
 
-- **Repository dependency freshness.** `sjel update` inventories software outside the
-  checkout. Dependabot covers Cargo, Actions and all five Bun projects, with a
-  one-day hold and grouped patch/minor updates for Bun. CI discovers locked Bun
-  package directories instead of maintaining an install list, and the install
-  policy requires the configured scanner to be a declared dependency.
-  Workaround: a read-only `uv run --no-project python` comparison of direct Cargo
-  dependencies against crates.io and `bun outdated` in each package directory.
-  Smallest change: a repository freshness report covering both Cargo workspaces,
-  Bun lockfiles and coordinated git pins, distinguishing compatible updates from
-  migrations and respecting release-age policy. Evidence and upgrade groups:
-  [`dependency-upgrade-review.md`](../../research/dependency-upgrade-review.md).
-  Done when one read-only command reports every owned dependency surface without
-  changing lockfiles or installing packages.
-
-- **Full local CI replay remains unverified.** A clean committed checkout passes
-  497 Bun tests (12 skipped), and all repository gates pass. The full shell replay
-  still cannot rebuild the CLI in the restricted host's shared Cargo target.
+- **Full local CI replay remains unverified.** The isolated CLI suite, nested-build
+  regression and hermetic-wrapper suite pass. Explicit targets reach nested Cargo
+  consistently (`b2fc9ed1`). A later broad run completed the remaining Rust suites,
+  but its wrapper exited during a concurrent edit; it is not a full-replay receipt.
   Four native macOS sandbox integration tests require an unrestricted host;
   their security assertions remain intact. The same revision's
   [full Actions run](https://github.com/larsboes/Sjel/actions/runs/42511020140)
   passes Rust tests, Bun/shell tests, UI checks and all five platform compile checks.
-  Smallest change: let the replay use the isolated Cargo runner consistently,
-  then verify the native integrations on an unrestricted host.
+  Remaining acceptance: verify the native integrations and full replay on an unrestricted host.
 
 - **Pre-push checks mix committed and unfinished changes.** `ci-local fast --committed`
   selects committed inputs but executes formatting and gates against the current
@@ -211,7 +174,7 @@ covers it.
   `/tmp/sjel-<cap>.err`. Smallest change: send the agent token, or add a read-only agent route
   for the runtime mode.
 - **Timestamps in script service logs.** A Rust service stamps its own stderr from
-  `sjel_server::serve` on (`libs/sjel-server/src/stderr_stamp.rs`). A `process` service that is a
+  `sjel_server::serve` on (`crates/sjel-server/src/stderr_stamp.rs`). A `process` service that is a
   script or container still writes lines without a time to `/tmp/sjel-<cap>.err`. Smallest
   change: the runner pipes those through the same stamp.
 - **Mail event outcomes by sender.** To choose the next ticket reader, the agent read
@@ -265,7 +228,7 @@ covers it.
   `sjel backup status|runs [--limit N]` over the existing routes.
 - **`tools/doctor` in a worktree reports the repository as its own undeclared connection.** The
   undeclared-connections sweep derives the repos that count as "self" from the *basename* of the
-  checkout (`tools/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is
+  checkout (`crates/sjel-cli/src/doctor/checks.rs`, `undeclared_connections`: `self_roots` is
   `basename(ctx.root)`), which is `Sjel` in the primary checkout and `host-health-reclaim-retry` in
   a worktree. Every tracked path naming this repository then reads as a reference to a sibling
   repo with no `systems.toml` entry, so a worktree fails three checks that pass on `main` and the
@@ -303,6 +266,23 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- Maintenance (`7fa64333`) reports all three tracked Cargo workspaces, five locked Bun projects, API
+  contracts, plan lengths and unresolved inline path candidates. Optional `--unused`,
+  `--freshness` and `--licenses` distinguish missing coverage from completed reports, apply no
+  fixes and leave git pins explicitly unchecked. License inventory covers the current Rust host;
+  no legal allowlist or duplicate advisory queue was added. All requested analyzers completed
+  in the local trial. See the [maintenance review](../../research/plan-maintenance-review.md).
+- Cisco's pinned, source-reviewed local scanner (`f46337c0`) was evaluated in network-disabled containers
+  against ten synthetic cases. It did not meet the existing gate's smoke cases; the decision is
+  to keep intake and avoid another routine scanner. Source, lock patch, runner and results live
+  in [the trial](../../research/benchmarks/skill-intake/README.md).
+- Completed inference-role intake reviews (`fa7a7ba5`) persist content- and policy-bound receipts; source,
+  baseline and model configuration changes invalidate reuse. Text-part completeness and receipt
+  persistence have regression coverage. Existing installation tests pass; live inference and
+  harness acceptance remain open above.
+- The website launcher disables environment-file loading for every Bun generator and server
+  (`6cbd5de2`); scratch generation, internal links and payload checks pass.
 
 - Storage checks aged entries independently, supports name filters, protects descendants, reports
   volume free-space changes and exposes policy-managed directories with `--include-named`

@@ -1,168 +1,123 @@
 # Maintenance priorities and reusable audit tooling
 
-Reviewed 2026-11-08. The decision is to finish shared contracts, remove stale planning and
-automate routine maintenance before expanding agent features. Priority lives in
-[`PLAN.md`](../PLAN.md); implementation work stays in the existing area plans.
+Reviewed and implemented 2026-11-08. Code unification and maintenance precede agent
+expansion. [`PLAN.md`](../PLAN.md) owns priority; area plans own remaining acceptance.
 
-## What the repository contradicts
+## Findings and changes
 
-The initial census found 14 area plans and 4,003 lines including the priority index. Age and
-length alone do not establish obsolescence. The review sampled source-backed
-claims across all areas; it did not validate every acceptance check or GitHub issue.
+The initial census found 14 area plans and 4,003 lines including the priority index.
+The review sampled source-backed claims across all areas; it did not validate every
+acceptance check or remote issue. Age and length alone did not establish obsolescence.
 
-| Claim or backlog | Evidence in the checkout | Consequence |
-|---|---|---|
-| Agent containment must precede all other work | The old priority index placed containment first and phone-agent tiers next | Superseded by the maintenance-first order; current protections remain |
-| API extraction is future restructuring | 26 `crates/*-api/Cargo.toml` manifests already exist; GPUI core depends on shared contracts | Audit remaining copies and transformations before extracting more crates |
-| One workspace and directory/package equality describe the current layout | Root has 85 crate manifests; GPUI declares another workspace; 40 root package names differ from their directory names | These remain unfinished targets; rank renaming below removing duplicate behavior |
-| GPUI escapes formatting | `tools/ci-run.ts` checks the GPUI manifest; `tools/ci-local.test.ts` covers selection | Retire the old tooling item; retain any separate failure of revision isolation |
-| Repository Bun updates need initial automation | `.github/dependabot.yml` now covers all five Bun trees | Keep the read-only freshness gap, but remove claims that Bun coverage is missing |
-| Markdown readers need replacing | `ui/src/research/articles.rs` delegates to `doc_view::render_markdown`; the GPUI plan records TextView adoption | Verify remaining consumers instead of repeating that migration |
-| Finance ideas need an app | `docs/plans/finance.md` first calls the app open, then describes its built Ideas view | Keep manual acceptance open; remove the obsolete implementation task |
-| Learning needs further UI implementation | `docs/plans/learning.md` requires five real teach/practice pairs before new controls, while later sections propose more surfaces | Keep the pilot's evidence gate; defer additional UI until observed friction justifies it |
-| The research index describes the product | Its introduction names the deleted dashboard and an idea links to `apps/gpui-prototype` | Repair the index; Git retains the retired rationale |
-
-The plans contain 66 occurrences of the legacy path prefixes `tools/sjel-cli`, `libs/` and
-`capabilities/`. Some are historical references, so a global replacement would be wrong.
-The current CLI source is `crates/sjel-cli`; each operational reference needs resolution.
-
-The restructure plan carries extensive shipped API inventories, old measurements and execution
-history. Reduce each completed package to its verified commit, as the documentation rule
-already requires. The website plan similarly keeps completed implementation details under
-“Open”. Storage, data and tooling repeat vault migration and backup work. Preserve one owner
-and link to it rather than merging unrelated domains into one larger plan.
-
-There is also a policy contradiction: the Sjel skill's `shared-data-boundaries.md` says `c2`
-stays local, while the priority index admits `trusted_view` to trusted providers. Resolve this
-against the enforced admission implementation before changing either rule. Text cleanup must
-not silently decide a security policy.
-
-## Code reduction with the existing architecture
-
-The root workspace already centralizes dependencies, but many manifests repeat `schemars`
-requirements. Converge compatible direct requirements through `workspace.dependencies`, while
-keeping each consumer's features explicit. This reduces version maintenance; it does not prove
-that a transitive duplicate can be removed. Cargo supports inherited workspace dependencies
-([Cargo workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html)).
-
-`crates/route-manifest` already derives request schemas through Schemars. `sjel-server` owns
-startup and authentication; `sjel-http` owns outbound client defaults. Extend these owners only
-where repeated behavior has the same contract. A new OpenAPI framework, generic CRUD engine
-or central service superclass has no demonstrated need in this review.
-
-The UI already has `ui/src/primitives`, Kit TextView/date/time controls, NSH base components and
-native PDF/map integration. Preserve that boundary. Full UI replacement would add migration
-work while device acceptance is still open. The prior
-[dependency review](dependency-upgrade-review.md) records lifecycle and compatibility questions;
-its old observations must be rechecked before implementation.
-
-Large modules identify inspection targets, not proof of duplication: `comms/src/store.rs` has
-4,167 lines, `finance/src/server.rs` 3,589, and `sjel-cli/src/doctor/checks.rs` 3,110 at review.
-Split a module around independently used behavior or a test boundary. A file-size target alone
-can produce more wrappers and navigation without removing any maintenance.
-
-| Tool | Useful boundary | Recommendation |
-|---|---|---|
-| [cargo-machete](https://github.com/bnjbvr/cargo-machete) | Unused Rust dependencies | First cleanup candidate; review generated-code and renamed-crate false positives; do not auto-delete |
-| [Knip](https://knip.dev/) | Unused TS dependencies, exports and files | Trial on one Bun owner; model extension entry points before trusting findings |
-| [jscpd](https://github.com/kucherenko/jscpd) | Repeated token sequences across source files | Discovery report only; exclude generated, vendored and fixture trees; prioritize by shared behavior |
-| [cargo tree](https://doc.rust-lang.org/cargo/commands/cargo-tree.html) | Duplicate versions and feature activation | Use the existing Cargo tool before adding a dependency-graph service |
-| [cargo-hakari](https://docs.rs/cargo-hakari/latest/cargo_hakari/) | Workspace feature unification to reduce rebuilds | Defer until measured feature-induced rebuild cost justifies a generated workspace-hack crate |
-
-No cleanup tool was installed or run. No duplicate-code percentage or unused-dependency total
-has been established. Candidate capability descriptions are project-documented, not Sjel
-performance results.
-
-## Security work that can be reused
-
-Sjel already uses OSV and Gitleaks in `crates/sjel-cli/src/audit.rs`, Grype and OSV in the
-Security workflow, CodeQL in its workflow, and Socket in each Bun install configuration.
-`tools/check-bun-install-policy.sh` checks scanner declarations, release age and script policy.
-The existing [Bun scanner API](https://bun.sh/docs/pm/security-scanner-api) can stop installation
-on fatal findings. Adding another Socket integration would duplicate current coverage.
-
-These tools answer different questions. [OSV](https://google.github.io/osv-scanner/) matches
-dependencies to known advisories. [Socket](https://docs.socket.dev/docs/socket-for-github)
-examines package behavior such as install scripts and privileged APIs. Neither establishes
-that natural-language instructions are benign. Gitleaks detects secret patterns; it does not
-enforce what a running agent can read.
-
-| Candidate | Assessment for Sjel |
+| Finding | Result |
 |---|---|
-| [Cisco Skill Scanner](https://github.com/cisco-ai-defense/skill-scanner) | Best first evaluation for replacing custom skill detection: static patterns, code analysis, optional LLM review and machine-readable findings. Apache-2.0; supports local model configurations. Keep remote analyzers off for a local trial. |
-| [Snyk Agent Scan](https://github.com/snyk/agent-scan) | Useful broader MCP/skill discovery comparator. Analysis requires service authentication; the project warns that CLI output is experimental. MCP scanning can start configured servers and contact remote endpoints. A trial must isolate execution and establish egress; avoid automatic host-wide discovery. |
-| [cargo-deny](https://embarkstudios.github.io/cargo-deny/checks/index.html) | Fills Rust license, source and dependency-ban policy gaps. Evaluate those checks first; keep OSV as the existing advisory owner instead of adding a second routine CVE queue. License allowlists still require a project decision. |
-| [Cargo Vet](https://mozilla.github.io/cargo-vet/) | Shares trusted audits and supports version-diff audits and exemptions. It reduces repeated reading when relevant audits exist, but creates a coverage obligation. Defer a mandatory rollout until an audit-import coverage trial proves lower effort. |
+| API extraction described as future work despite 26 API crates | Finance and Inventory now use existing shared contracts instead of local request and comparison copies |
+| Schemars requirements repeated across manifests | Compatible consumers inherit the workspace requirement and retain explicit features |
+| Unused direct dependencies | Thirty cargo-machete candidates inspected: two API dependencies made useful, 28 unused declarations removed |
+| Stale operational paths | Forty references repaired after checking their targets; proposed and historical paths retained for contextual review |
+| Finance app and website implementation still listed as open | Plans shortened to shipped references, constraints and remaining acceptance |
+| Research index described the retired dashboard and GPUI prototype | Index corrected |
+| GPUI formatting and Bun update automation described as absent | Obsolete tasks removed; existing coverage retained |
+| Inference review did not leave reusable evidence | Completed reviews now persist applicable receipts |
+| Nested Cargo ignored the explicit scratch target | Hermetic wrapper exports the selected target consistently; regression suite covers both flag spellings and refusals |
+| Website generators implicitly loaded environment files | Launcher disables that loading; scratch generation and link/payload checks pass |
 
-Cisco explicitly describes best-effort detection. Its README reports 7.7% HIGH-severity recall
-for rules alone on its held-out corpus; adding its specified judge changes the operating
-point. Those vendor-reported figures are not a comparison with Sjel's rules. Benchmark benign
-security documentation as well as malicious fixtures before replacing a gate. Snyk's
-[CLI reference](https://raw.githubusercontent.com/snyk/agent-scan/main/docs/cli-reference.md)
-documents authentication and version-dependent APIs; it is not a local-only alternative.
+The two product workspaces remain separate; the graph benchmark is a third workspace.
+Forty root package/directory mismatches were observed initially. Renaming everything or
+merging workspaces has no measured benefit here and stays below removing duplicate behavior.
+Concurrent GPUI and restructure work was preserved.
 
-The independent [ColluSkill preprint](https://arxiv.org/abs/2608.09732) studies malicious behavior
-distributed across skills. Its experimental results do not measure this installation, but
-support retaining execution restrictions when individual skills scan clean. It is research
-evidence, not a reason to add another production scanner or claim complete protection.
+`route-manifest` already owns schema derivation, `sjel-server` startup/authentication and
+`sjel-http` outbound defaults. UI reuse already has GPUI Kit, NSH primitives, TextView and
+native media views. Extend these owners when contracts match. A generic CRUD engine,
+new API framework or UI replacement has no demonstrated need in this pass.
 
-### Keep a small Sjel admission layer
+## Repeatable maintenance
 
-`crates/sjel-cli/src/intake/{mod,rules,review,skills}.rs` currently combines scanning, model
-review, approvals and installation. Its useful Sjel-specific property is content binding:
-stage once, hash paths/bytes/executable bits, review those bytes and publish the same snapshot.
-Keep that machinery. The vendor-audit skill already recommends reviewing only changed surfaces
-after a prior audit; changing this principle is unnecessary.
+```sh
+tools/maintenance --json
+tools/maintenance --json --unused --freshness --licenses
+```
 
-The current gate reuses exact approvals and harness receipts. The ordinary inference-role
-review does not record an equivalent receipt (`intake::evidence` documents this). That is a
-concrete repeat-work candidate, although this review has not measured how often it occurs.
-Current receipts also lack scanner/ruleset and policy identity.
+Default execution inventories Git-tracked manifests and plans offline. Optional analyzers:
 
-Recommended evaluation contract:
+| Flag | Coverage and limit |
+|---|---|
+| `--unused` | cargo-machete, read-only, without fixes or Cargo metadata; findings require source inspection |
+| `--freshness` | crates.io direct requirements and Bun outdated; compatible updates and requirement changes are distinct; git pins explicitly unchecked |
+| `--licenses` | cargo-deny offline license inventory for the current Rust host; no compatibility verdict or automatic allowlist |
 
-1. Trial one upstream detector on synthetic fixtures and explicitly public, tracked skill
-   content. Record source, license and evaluation verdict in `upstreams.toml` before integration.
-2. Normalize only fields needed by existing intake: detector/ruleset identity, file evidence,
-   severity and completion. A scanner outage stays distinguishable from no findings.
-3. Reuse completed content-review evidence only while content, executable bits, review context,
-   detector/model identity and admission policy remain applicable. Re-evaluate permission or
-   destination changes. Keep advisory-database scans scheduled even when content is unchanged.
-4. Present one deduplicated finding queue. Narrow exceptions carry scope, reason and expiry;
-   unchanged accepted findings should not require the same explanation on every update.
-5. Replace overlapping custom detector code only after the trial meets the existing gate's
-   acceptance cases. Keep installation verification, containment and publication boundaries.
+The local run completed all requested analyzers across three Cargo workspaces and five
+locked Bun projects. It listed 26 API contracts and 23 unresolved path candidates after
+repair. Candidates include proposals, historical references and concurrent plans; they
+are not automatically defects. No source, lockfile or installation changes are applied.
+Missing or failed requested analyzers exit 2.
 
-This is an implementation proposal. It grants no admission bypass, bulk approval or permission
-to upload private skills. Changing mandatory review thresholds remains a product decision.
+[Cargo-machete provenance](benchmarks/maintenance/README.md) records reviewed source,
+patched transitive dependencies and limitations. All three workspaces subsequently
+reported no unused-dependency candidates. No duplicate-code percentage or build-speed
+improvement was measured. Knip and jscpd remain optional discovery candidates; neither
+was installed or added as a gate. Generated code, fixtures and extension entry points
+must be modeled before acting on such reports. Cargo's existing dependency and feature
+inspection precedes adding cargo-hakari or another graph service.
 
-### Avoid another maintenance framework
+## Reduce audit work without adding a second gate
 
-Dependabot already covers both Cargo workspaces, Actions and the five Bun projects. Keep it.
-[Renovate](https://docs.renovatebot.com/configuration-options/) supports grouping and release-age
-rules, but those features alone do not justify switching bots. Reconsider only if a concrete
-coordinated-update requirement cannot be met with the current setup.
+OSV, Gitleaks, Grype, CodeQL and Socket already cover distinct parts of the repository.
+Keep those owners. [OSV](https://google.github.io/osv-scanner/) matches known advisories;
+[Socket](https://docs.socket.dev/docs/socket-for-github) examines package behavior. Neither
+establishes that natural-language instructions are benign. Secret detection does not
+replace execution restrictions.
 
-[Lychee](https://lychee.cli.rs/) is a candidate for local Markdown/HTML links. First check whether
-the website builder's existing internal-link validation can cover contributor docs too. Neither
-one can validate arbitrary backticked source paths without extraction and contextual rules.
-Keep the existing stale-path tooling item; do not build a second document registry.
+The [Cisco trial](benchmarks/skill-intake/README.md) used reviewed pinned source, a patched
+lockfile and network-disabled containers. Both detectors passed four benign cases. Sjel
+held all six malicious cases; Cisco's local analyzers held one. Keep Sjel intake and do
+not add Cisco as a routine gate. This synthetic smoke set is not a held-out efficacy
+benchmark. Local semantic review was not evaluated, and the source review did not audit
+every transitive dependency. Reproduction inputs and results are tracked.
 
-## Limits and next boundary
+The retained intake layer stages once, hashes paths/bytes/executable bits, reviews those
+bytes and publishes that snapshot. Inference receipts now bind source, content, approved
+baseline, model/backend settings and policy fingerprint. Every staged text part must be
+read before recording a completed model review. Legacy receipts require review again.
+Holding findings still hold; explicit approvals retain their existing scope. Policy
+source changes conservatively invalidate receipts, including nonfunctional edits.
+Advisory scans remain fresh independently of content-review reuse. Live inference and
+harness acceptance remain open; fixture tests do not close them.
 
-`tools/doctor` exited 1 with one failing host-patch audit check. It also reported unavailable
-host integrations, unverified scheduled producers and backup destinations unavailable on this
-machine. These are separate from planning drift; the old plan's backup-timer hypothesis was
-not established by this run. No new vulnerability scan or restore test ran.
+Other researched options have explicit boundaries:
 
-Concurrent GPUI and restructure edits were present and were not changed by this review. Counts
-describe that uncommitted checkout. Native behavior, scanner efficacy, dependency
-removal, build-time improvement and current remote issue states remain unverified.
+- [Snyk Agent Scan](https://github.com/snyk/agent-scan): defer; service authentication and
+  potential MCP-server execution do not fit the narrow offline trial.
+- [Cargo Vet](https://mozilla.github.io/cargo-vet/): defer a mandatory rollout until an
+  audit-import coverage trial demonstrates less work than the obligation it introduces.
+- [cargo-deny](https://embarkstudios.github.io/cargo-deny/checks/index.html): adopt optional
+  license inventory; keep OSV as advisory owner. Legal allowlists require their own decision.
+- Renovate: retain existing Dependabot coverage; no unmet coordinated-update need established.
+- A second document registry: reject; use existing site link checks and tracked path inventory.
 
-Interceptor returned exit 1 without diagnostics for its help and research initialization.
-Public-source research used the available web tool; no Interceptor ledger or browser group was
-created. The candidate comparison uses published documentation; source-code security audits of
-the tools remain outstanding.
+Dependency verdicts live in [`upstreams.toml`](../upstreams.toml). The
+[ColluSkill preprint](https://arxiv.org/abs/2608.09732) supports examining interactions between
+skills; its experiments do not measure this installation or justify claiming complete protection.
 
-The next implementation boundary is the existing tooling plan's maintenance report and scanner
-evaluation. Reconcile source-backed completed entries before choosing any new architecture.
+## Verification and remaining acceptance
+
+Fresh repository/installed-package OSV and secret scans passed under existing exceptions.
+The CLI suite, scoped Finance/Inventory tests, root Clippy, hermetic wrapper regression
+suite, skill-install regressions, GPUI compilation and website link/payload checks passed.
+Four native macOS sandbox tests fail in this restricted environment; their assertions
+remain intact. A later broad run completed the remaining test suites, but its wrapper
+exited during a concurrent edit, so it is not a clean full-replay receipt.
+
+Doctor still reports the old host-patch audit receipt and, in the latest run, a missing
+ledger-owned Anatomy installation across four harnesses. Fresh dependency scans cannot
+impersonate a host-patch run. The external backup destination was unavailable; no restore
+proof was manufactured. Native UI acceptance and finance outcome quality remain open.
+
+The data paths remain distinct: `content-item::cloud_admission` refuses `c2`/`c3` for
+Sjel-initiated cloud inference; MCP `agent_policy` separately permits filtered
+`trusted_view` for trusted harness tiers. This pass changes neither policy nor skill rules.
+
+Interceptor research initialization exited 1 without diagnostics; public research used the
+available web tool. Published tool capabilities are not local performance results unless
+explicitly marked above. No private content was uploaded for evaluation.

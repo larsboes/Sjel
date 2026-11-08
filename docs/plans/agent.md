@@ -1,7 +1,7 @@
 # The Sjel agent
 
 A coding and operations agent written in Rust. It runs on the Mac, and the user controls it
-from the GPUI app on the Mac or the paired iPhone. The loop is `libs/agent`. The capability that
+from the GPUI app on the Mac or the paired iPhone. The loop is `crates/sjel-agent`. The capability that
 serves it is `crates/agent`. The reasoning for that shape is in
 [`crates/agent/README.md`](../../capabilities/agent/README.md).
 
@@ -19,9 +19,9 @@ Order:
 
 ## 1. What exists
 
-- **Loop and CLI.** `libs/agent`: the core tools (`read`, `write`, `edit`, `bash`, `grep`,
+- **Loop and CLI.** `crates/sjel-agent`: the core tools (`read`, `write`, `edit`, `bash`, `grep`,
   `find`), sessions in the overlay, steering, cloud calls with a data-class check.
-- **Extensions in `libs/agent/src/ext/`.** `guard` (secrets, on by default), `web`, `subagents`,
+- **Extensions in `crates/sjel-agent/src/ext/`.** `guard` (secrets, on by default), `web`, `subagents`,
   `mcp`, `skills`, `rust`, `graph`, `sjel`, `compaction`.
 - **Capability.** `crates/agent` serves sessions, prompts, steering, a resumable event
   stream, approvals and stop, on `Reach::Loopback`. The phone reaches it through the paired-device
@@ -108,7 +108,7 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 | B3 | Block | Privilege: `sudo`, `su`, `doas`, `osascript` with `administrator privileges`. |
 | B4 | Block | Download and run: a pipe or process substitution into `sh`, `bash`, `zsh`, `python`, `node` or `ruby` (`curl … \| sh`, `bash <(curl …)`). |
 | B5 | Block | Disks and system state: `dd`, `mkfs*`, `diskutil`, `fdisk`, `shred`, `csrutil`, `spctl`, `nvram`, `launchctl`, `systemctl`, `crontab -r`, `defaults write`, `chmod -R`, `chown -R`. |
-| B6 | Block | Secrets: the existing guard (`libs/agent/src/ext/guard.rs`), plus `security find-*-password -w` and `security delete-*`. |
+| B6 | Block | Secrets: the existing guard (`crates/sjel-agent/src/ext/guard.rs`), plus `security find-*-password -w` and `security delete-*`. |
 | B7 | Block | Irreversible publishing: `cargo publish`, `npm publish`, `bun publish`, `gh release create`, `gh repo delete`. |
 | A1 | Ask | A write through the shell or the `write` and `edit` tools whose target is under `$HOME` but outside the tier scope. |
 | A2 | Ask | Git changes to history, branches or remotes: `commit`, `push` (no force), `pull`, `merge`, `rebase`, `cherry-pick`, `revert`, `am`, `apply`, `stash` (save, pop, apply), `reset` (soft or mixed), `switch`, `checkout` of a branch, `branch` and `tag` create, rename or delete, `worktree`, `submodule`, `remote` changes, `config` writes, `gc`, `prune`, `notes`, `bisect`, `update-index`. |
@@ -123,7 +123,7 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 
 ### Where it lives and how it is tested
 
-- `libs/agent/src/ext/policy.rs`: the classifier, so the CLI and the capability share one rule
+- `crates/sjel-agent/src/ext/policy.rs`: the classifier, so the CLI and the capability share one rule
   set. `crates/agent/src/gate.rs` reads the class: Allow skips the card, Ask shows it, and
   Block shows the separate card with the rule ID.
 - `Packs/security/extensions/command-policy/cases.toml`: the one table both implementations are
@@ -133,7 +133,7 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
   written against a fixture scope — a synthetic `$HOME`, a project directory inside it, and the
   temp directory writable — so a case means the same on every machine.
   `tools/command-policy.test.ts` runs it against the pi extension,
-  `libs/agent/tests/policy_cases.rs` against the Rust one.
+  `crates/sjel-agent/tests/policy_cases.rs` against the Rust one.
 - Done when every case passes, the gate shows the rule ID on each card, and one week of real use
   gives a prompt rate (below).
 
@@ -144,7 +144,7 @@ so writes inside the scope, unknown programs and interpreters run without one.
 
 **The Rust classifier is the same table** (built `b0d94cae`). `Policy` reads a fixture's home
 directory and writable roots (`with_home`, `with_writable`) instead of the machine's, and
-`libs/agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
+`crates/sjel-agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
 rules to drift from. All 115 command cases and 5 write cases pass in both. The second table
 (`libs/agent/tests/policy_cases.toml`) is deleted. `crates/agent/src/gate.rs` says what the
 three classes now cost a run — a read, a build and an in-scope write run without a card — and its
@@ -154,7 +154,7 @@ write that still reaches a card.
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
-Built (6622b21e): `libs/agent/src/ext/policy.rs` holds the classifier and the rule table, and
+Built (6622b21e): `crates/sjel-agent/src/ext/policy.rs` holds the classifier and the rule table, and
 `crates/agent/src/gate.rs` reads the class: Allow runs without a card, Block is refused
 before any card, Ask is the card as before, and each decision is logged with its rule ID on the
 call log. Open: §5's separate Block card that can allow one call, the A6 classifier for unknown
@@ -172,7 +172,7 @@ programs, and the measures below, none of which have run.
   `cloud_derivative_carries_only_fields_task_needs_answering_staab_et_al` covers it.
 
 **The classifier is not a sandbox.** Shell indirection is unbounded, the same argument
-`libs/agent/src/ext/guard.rs` makes for secret paths. A command can write outside the root
+`crates/sjel-agent/src/ext/guard.rs` makes for secret paths. A command can write outside the root
 without naming the path. The hard boundary for `project` and `account` is decision A1 in §10.
 
 
@@ -213,7 +213,7 @@ terminal-emulator crate is in the workspace; `portable-pty` is now (see `upstrea
 Steps:
 
 1. **PTY sessions on the Mac** in `crates/agent` (A5), behind the routes below. Built
-   (`833c571d`): `crates/agent/src/terminal.rs`, with `[terminal.presets]` in
+   (`833c571d`): `crates/agent/src/terminal/mod.rs`, with `[terminal.presets]` in
    `<overlay>/config/agent.toml` and the audit in `<overlay>/data/agent/terminals.jsonl`. What is
    left from this step: nothing.
 2. **One terminal view for Mac and phone**, specified below. Built for the Mac: `⌘K › Terminal`
@@ -278,7 +278,7 @@ A terminal is a full shell with the user account's rights. The command policy in
 to interactive keystrokes, so access is the control.
 
 - The agent token never reaches these routes. `AgentRoutes::closed`
-  (`libs/sjel-server/src/agent_policy.rs`) is checked in the gate before the token is admitted, so a
+  (`crates/sjel-server/src/agent_policy.rs`) is checked in the gate before the token is admitted, so a
   closed route answers 401 with the same shape an unknown token gets. `crates/agent` lists
   every terminal route there, and `every_terminal_route_is_closed_to_an_agent_token` reads the
   manifest instead of restating the list, so a later route added without closing it fails the test
@@ -300,7 +300,7 @@ to interactive keystrokes, so access is the control.
   resume offset, input, resize, close, and [`Position`], which is what stops a
   replayed frame from being drawn twice and what moves the reader to `first_offset` after
   `truncated`.
-- `apps/gpui/ui/src/terminal.rs`: the view. Built: `alacritty_terminal` 0.26 (Apache-2.0, the
+- `apps/gpui/ui/src/terminal/mod.rs`: the view. Built: `alacritty_terminal` 0.26 (Apache-2.0, the
   licence check this plan asked for; its `upstreams.toml` row records the dependency cost and what
   it does not do) parses the stream into a grid, and GPUI draws it as runs of cells that share a
   look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
@@ -413,7 +413,7 @@ Next, in order:
 2. Cells B and D with vector retrieval. Only a measured answer gain justifies a retrieval
    capability on libSQL.
 3. Tools that attest their data class, so cloud roles can do real work. Today only the
-   evaluator's proxy tools attest c0 (`Tool::data_class`, `libs/agent/src/lib.rs`).
+   evaluator's proxy tools attest c0 (`Tool::data_class`, `crates/sjel-agent/src/lib.rs`).
 4. Local candidates (Gemma E2B/E4B, Granite, Apple Foundation Models) each get an
    `upstreams.toml` row and a measurement on one job.
 
@@ -423,7 +423,7 @@ coding task, each measured against the existing path.
 ### Pi daily use and managed configuration
 
 Pi stays the daily agent during the evaluation. `sjel pi plan|apply|check|rollback`
-([`tools/sjel-cli/src/pi_config.rs`](../../tools/sjel-cli/src/pi_config.rs), `6eef2c79`) owns
+([`crates/sjel-cli/src/pi_config.rs`](../../tools/sjel-cli/src/pi_config.rs), `6eef2c79`) owns
 the keys in [`tools/templates/pi/settings.base.json`](../../tools/templates/pi/settings.base.json)
 plus an overlay fragment. Credentials stay in the keychain and in oMLX's own settings. Open:
 model and keybinding keys.
@@ -480,7 +480,7 @@ All decided 2026-10-25.
 
 | # | Question | Decision |
 |---|---|---|
-| A1 | What is the hard boundary for `project` and `account`? | The static classifier first. Then a macOS sandbox profile that limits writes to the tier scope, or `capabilities/agentbox` for untrusted work. In place before `account` ships. |
+| A1 | What is the hard boundary for `project` and `account`? | The static classifier first. Then a macOS sandbox profile that limits writes to the tier scope, or `tools/agentbox` for untrusted work. In place before `account` ships. |
 | A2 | Which web search providers to port from `pi-web-access`? | All of them. DuckDuckGo stays the keyless default. |
 | A3 | Can a tier change inside a session? | No. A new session per tier. |
 | A4 | Can the phone start a `project` or `account` session? | Yes. Every Ask and Block decision still needs a card. |

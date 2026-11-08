@@ -255,10 +255,10 @@ native-messaging ping reaches the live `comms-server`. Open, in order:
      Added `objc2-app-kit` `NSPasteboard` reader for `public.html` and `public.utf8-plain-text` in safe
      Rust. Converts `<a href="url">` and footnote badges into Markdown links (`[label](url)`), and audits
      citations into `Resolved`, `UnlinkedRef` (`[N]` without URL target), and `MalformedUrl`.
-   - **GPUI composer and reader (`apps/gpui/src/clipper.rs`, `apps/gpui/ui/src/doc_view.rs`).**
+   - **GPUI composer and reader (`apps/gpui/core/src/clipper.rs`, `apps/gpui/ui/src/doc_view.rs`).**
      Added **+ New Thread Clip** and **Edit in Composer** in `Feed › Clips`: turn-by-turn composer
      (`Prompt N` + `Response N`, **📋 Paste Rich (HTML + Links)**, **+ Add Turn**, reorder/delete)
-     saving over `libs/clip-socket`. Added **Citation & Link Audit** chip strip in both composer turn cards
+     saving over `crates/clip-socket`. Added **Citation & Link Audit** chip strip in both composer turn cards
      and document reader view. Enabled clickable links in `doc_view.rs`.
    - **Verified with:** (a) 337 passing unit tests in `apps/gpui/core` (`cargo test`); (b) 227 passing
      unit tests in `crates/comms/clipper` (`bun run check`); (c) clean compilation of GPUI desktop
@@ -316,11 +316,11 @@ the GPUI Settings tab. No new client, page or CLI verb set.
 - Why: on 2026-10-24 `tools/graphify.sh` ran a full pass on a model retired since 2026-08-07. The
   only record of that model was a backend field that no tool read.
 - Owner: `capabilities/settings`, read and probe first, writes later. It reads `inference.json`
-  through `libs/inference` and re-implements none of it.
+  through `crates/inference` and re-implements none of it.
 - **What works today.** Settings › Accounts stores a provider key in the OS keychain as
-  `inference-<provider>` (`apps/gpui/core/src/shell.rs`, `store_provider_key`), for OpenAI,
+  `inference-<provider>` (`apps/gpui/core/src/shell/mod.rs`, `store_provider_key`), for OpenAI,
   DeepSeek, OpenCode Go, NVIDIA NIM and Gemini. A backend names that item with
-  `api_key_credential_id`. `libs/inference` and `tools/model-check` resolve a key through one
+  `api_key_credential_id`. `crates/inference` and `tools/model-check` resolve a key through one
   function, `backend_api_key`: keychain first, then a key file. `tools/model-check --role <role>
   --probe` sends one request to one role. Checked 2026-10-25: the `deepseek` and `gemini` backends
   answer from their keychain items alone.
@@ -456,7 +456,7 @@ Open items that belong to one capability and to no priority yet.
   raised the alert for `mac-mini-m4-pro` at €1,401.02 against a €1,500 limit.
 - **Trip numbers.** A budget on a plan and a trip id on a transaction are data entry. The finance
   per-trip route answers 200 with five zeros for an untagged trip.
-- **Web Links launcher (in progress, Mac-first; implementation is in the uncommitted working tree).** Build a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `crates/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `crates/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `libs/links` capability contract continues to own typed record references (`website/content/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
+- **Web Links launcher (in progress, Mac-first; implementation is in the uncommitted working tree).** Build a personal launch surface for recurring destinations such as `x.com`, Reddit communities, GitHub notifications and frequently used tools. This is not a general bookmark/archive manager: saved articles remain in `comms` and the Sjel Clipper. The `crates/web-links` capability owns destination records, deterministic grouping, history candidates and its CLI/API; `crates/places` remains the geographic registry. The native app labels the surface Links at `sjel://links`, and the existing finder offers its destinations as results. The existing `crates/links` capability contract continues to own typed record references (`website/content/capabilities/links.md`). Destination URLs remain user-controlled and locally stored; page content is not fetched for display.
 
   - A record represents a destination, not just a hostname: e.g. `reddit.com/r/rust` and `reddit.com/r/golang` can be independently opened and pinned. Normalize scheme and host, remove fragments, and preserve query parameters on manually entered URLs; history candidates drop query and fragment data. Group by normalized host, then apply explicit per-host tenant rules. Users can rename, regroup and pin or unpin destinations; dismissed history candidates stay dismissed. Derived suggestions never silently move or delete operator-curated records.
   - Seed through an explicit Chrome and Safari history scan, bounded to a user-selected 30-, 90- or 180-day range and a minimum of three visits. Read-only sources are snapshotted before query; candidates are staged locally, and only an explicit keep decision saves them. Manual add and paste remain available.

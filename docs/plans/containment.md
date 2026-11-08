@@ -31,17 +31,17 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
   existing rule in `libs/inference/src/providers.rs:3`: a call is refused unless the provider is
   listed.
 - **The boundary is the operating system.** The command classifier
-  (`libs/agent/src/ext/policy.rs`) is not a sandbox (`agent.md` §3). It stays the second layer
+  (`crates/sjel-agent/src/ext/policy.rs`) is not a sandbox (`agent.md` §3). It stays the second layer
   for the `trusted` ring.
 
 ## 2. What exists
 
 | Piece | Where | Use here |
 |---|---|---|
-| Provider register with a data-class ceiling | `providers.toml`, `libs/inference/src/providers.rs` | The ring and the data cap come from here. |
-| Pseudonymized agent view, c3 removed | `libs/pseudonymize/src/view.rs` | The only data path for `contained`. |
+| Provider register with a data-class ceiling | `providers.toml`, `crates/inference/src/providers.rs` | The ring and the data cap come from here. |
+| Pseudonymized agent view, c3 removed | `crates/pseudonymize/src/view.rs` | The only data path for `contained`. |
 | Named agent tokens, the name selects the tier | `libs/sjel-server/src/agent.rs:79`, `tools/capability-auth` | One token per ring. |
-| Container sandbox with one project mount | `capabilities/agentbox` | Prior art for the mount contract. Not the boundary here: Docker has no per-destination network allow-list (its README, "Considered and declined"). |
+| Container sandbox with one project mount | `tools/agentbox` | Prior art for the mount contract. Not the boundary here: Docker has no per-destination network allow-list (its README, "Considered and declined"). |
 | Claude Code sandbox floor | User-level `sandbox` settings | Blocks `secrets/`. Does not block the overlay's `data/`. That matches the `trusted` ring. |
 | macOS seatbelt | `/usr/bin/sandbox-exec` | The mechanism. |
 

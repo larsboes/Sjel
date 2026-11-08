@@ -719,8 +719,11 @@ fn text_view(found: &DocumentDetail, body: &str) -> impl IntoElement {
 mod tests {
     use super::*;
 
+    static TEST_STATE: Mutex<()> = Mutex::new(());
+
     #[test]
     fn a_row_names_the_title_or_the_file_and_states_day_pages_and_category() {
+        let _state = TEST_STATE.lock().unwrap();
         let mut doc = DocumentSummary {
             filename: "scan.pdf".into(),
             imported_at: "2026-11-07T14:00:00Z".into(),
@@ -770,5 +773,50 @@ mod tests {
         });
         switch_tab_target("calendar");
         assert_eq!(*switched.lock().unwrap(), "calendar");
+    }
+
+    #[test]
+    fn a_loaded_page_and_its_reader_render_in_the_phone_host() {
+        use nsh_core::element::Root;
+        use nsh_engine::EngineConfig;
+        use nsh_testing::Headless;
+
+        let _state = TEST_STATE.lock().unwrap();
+        set_close(|| {});
+        set_nsh_page(NshPage::Documents);
+        let mut app = Headless::start(EngineConfig {
+            ui_sets: vec![nsh_base::registry()],
+            ..EngineConfig::new(Root::of::<NshHostScreen>())
+        })
+        .expect("the phone's NSH root starts");
+        app.wait_for("text:Documents").unwrap();
+
+        let rows: Vec<_> = (0..500)
+            .map(|at| DocumentSummary {
+                id: format!("{at:064x}"),
+                filename: format!("Document {at:03}.pdf"),
+                page_count: 3,
+                ..Default::default()
+            })
+            .collect();
+        let first = rows[0].clone();
+        send(Update::Rows {
+            rows,
+            replace: true,
+            next_offset: Some(500),
+            total: 1200,
+        });
+        app.wait_for("text:Document 000.pdf").unwrap();
+        app.press("text:Name A–Z").unwrap();
+        app.wait_for("text:Name A–Z •").unwrap();
+        send(Update::Detail {
+            detail: Box::new(DocumentDetail {
+                document: first,
+                text: Some("A synthetic document body.".into()),
+                ..Default::default()
+            }),
+            kept: false,
+        });
+        app.wait_for("text:A synthetic document body.").unwrap();
     }
 }

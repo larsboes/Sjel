@@ -10,19 +10,45 @@ final class NshScreens: XCTestCase {
     assertScreen("mail", heading: "Mail")
   }
 
-  private func assertScreen(_ tab: String, heading: String) {
+  func testDocumentsRendersInDarkMode() {
+    assertScreen("documents", heading: "Documents", dark: true)
+  }
+
+  func testMailRendersInDarkMode() {
+    assertScreen("mail", heading: "Mail", dark: true)
+  }
+
+  func testOpeningNshAfterTodayRenders() {
+    let app = XCUIApplication()
+    app.launchEnvironment["SJEL_TAB"] = "today"
+    app.launchEnvironment["SJEL_SIDEBAR"] = "off"
+    app.launch()
+    defer { attach("nsh-after-today"); app.terminate() }
+
+    // GPUI paints its five tabs in Metal; Mail is second, above the home indicator.
+    let mail = app.coordinate(withNormalizedOffset: .zero).withOffset(
+      CGVector(dx: app.frame.width * 0.3, dy: app.frame.height - 62))
+    attach("today-before-nsh")
+    mail.tap()
+    assertHeading(app, "Mail")
+    app.staticTexts["Documents"].firstMatch.tap()
+    assertHeading(app, "Documents")
+  }
+
+  private func assertScreen(_ tab: String, heading: String, dark: Bool = false) {
     let app = XCUIApplication()
     app.launchEnvironment["SJEL_TAB"] = tab
     app.launchEnvironment["SJEL_SIDEBAR"] = "off"
+    if dark { app.launchArguments += ["-AppleInterfaceStyle", "Dark"] }
     app.launch()
     defer {
-      let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-      shot.name = "nsh-\(tab)"
-      shot.lifetime = .keepAlways
-      add(shot)
+      attach("nsh-\(tab)\(dark ? "-dark" : "")")
       app.terminate()
     }
+    assertHeading(app, heading)
+  }
 
+  private func assertHeading(_ app: XCUIApplication, _ heading: String) {
     let title = app.staticTexts[heading].firstMatch
     let visible = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == true AND hittable == true"), object: title)
@@ -31,6 +57,13 @@ final class NshScreens: XCTestCase {
       return
     }
     assertTextContrast(title)
+  }
+
+  private func attach(_ name: String) {
+    let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    shot.name = name
+    shot.lifetime = .keepAlways
+    add(shot)
   }
 
   private func assertTextContrast(_ title: XCUIElement) {

@@ -16,9 +16,12 @@ covers it.
   even when a test fails. The `iOS screen smoke tests` workflow runs the same command
   on an Apple Silicon Mac with simulator services. The agent shell cannot connect
   to CoreSimulator; native Device Hub control can boot and inspect a simulator.
-  The pinned NSH headless driver renders Documents and switches Mail and Documents
-  through the actual phone root without a window. Open: reproduce the black screen
-  in the UIKit test and fix its cause; headless success does not validate UIKit.
+  The pinned NSH headless driver renders the phone root, switches its tabs, and
+  renders a 500-row page and reader. The [iOS 26.2 light-mode baseline](https://github.com/larsboes/Sjel/actions/runs/42515565617)
+  passes two UIKit tests with inspected screenshots. Smoke coverage also checks
+  dark mode, rendered text contrast and opening NSH after Today; manual dispatch
+  can select the Xcode 27 image. Open: reproduce the physical phone's black screen
+  and fix its cause; the light-mode baseline does not validate every device path.
 
 
 - **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count

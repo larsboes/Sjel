@@ -427,6 +427,8 @@ pub fn NshHostScreen() -> impl IntoElement {
 
     view()
         .flex_1()
+        .bg(move || nsh_base::theme().background)
+        .text_color(move || nsh_base::theme().foreground)
         .child((!closable).then(|| {
             view()
                 .flex_row()

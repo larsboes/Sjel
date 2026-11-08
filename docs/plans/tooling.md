@@ -20,8 +20,12 @@ covers it.
   renders a 500-row page and reader. The [iOS 26.2 light-mode baseline](https://github.com/larsboes/Sjel/actions/runs/42515565617)
   passes two UIKit tests with inspected screenshots. Smoke coverage also checks
   dark mode, rendered text contrast and opening NSH after Today; manual dispatch
-  can select the Xcode 27 image. Open: reproduce the physical phone's black screen
-  and fix its cause; the light-mode baseline does not validate every device path.
+  can select the Xcode 27 image. The shared NSH host now sets the theme's adaptive
+  background and foreground: its headings previously resolved to opaque black in
+  dark appearance. The headless contrast regression fails before this change and
+  passes after it, including switching Documents and Mail. Open: verify the fixed
+  UIKit dark-mode and navigation paths and confirm the updated physical build;
+  the light-mode baseline does not validate every device path.
 
 
 - **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count

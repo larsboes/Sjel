@@ -67,6 +67,7 @@ impl CalendarPage {
             strip = strip.child(
                 div()
                     .id(SharedString::from(format!("span-{day}-{id}")))
+                    .debug_selector(|| "calendar-span-block".into())
                     .absolute()
                     .top(px(span.lane as f32 * 24. + 1.))
                     .left(gpui::relative(span.start as f32 / dates.len() as f32))
@@ -117,6 +118,7 @@ impl CalendarPage {
                         let is_selected = day == self.day;
                         div()
                             .id(SharedString::from(format!("calendar-heading-{day}")))
+                            .debug_selector(|| "calendar-heading".into())
                             .flex_1()
                             .min_w_0()
                             .py_2()
@@ -209,6 +211,7 @@ impl CalendarPage {
             let is_today = day == today;
             let mut column = div()
                 .id(SharedString::from(format!("calendar-time-column-{day}")))
+                .debug_selector(|| "calendar-time-column".into())
                 .relative()
                 .flex_1()
                 .min_w_0()
@@ -307,11 +310,31 @@ impl CalendarPage {
                     );
                 }
             }
+            if let Some((drop_day, drop_minute)) = self.drop_time {
+                if drop_day == day {
+                    column = column.child(
+                        div()
+                            .id(SharedString::from(format!("calendar-drop-preview-{day}")))
+                            .debug_selector(|| "calendar-drop-preview".into())
+                            .absolute()
+                            .top(px(drop_minute as f32 / 60. * hours))
+                            .left_0()
+                            .right_0()
+                            .h(px(hours / 2.))
+                            .rounded(px(4.))
+                            .border_2()
+                            .border_color(rgb(palette.accent))
+                            .bg(rgba(tint(palette.accent, 0x24))),
+                    );
+                }
+            }
             for block in sjel_gpui_core::calendar::timeline::blocks(entries, day) {
                 let entry = &entries[block.entry_index];
                 let id = entry.id.clone();
                 let color = sjel_gpui_core::calendar::kind_color(&entry.kind);
                 let is_selected = self.selected_entry.as_deref() == Some(entry.id.as_str());
+                let duration_minutes = block.end.saturating_sub(block.start);
+                let is_short = duration_minutes < 30;
                 column = column.child(
                     div()
                         .id(SharedString::from(format!("block-{day}-{}", entry.id)))
@@ -350,24 +373,48 @@ impl CalendarPage {
                             },
                             |drag, _, _, cx| cx.new(|_| drag.clone()),
                         )
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .truncate()
-                                .child(entry.title.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_color(rgb(palette.muted))
-                                .text_xs()
-                                .truncate()
-                                .child(time_label(entry, day)),
-                        )
+                        .when(is_short, |el| {
+                            el.child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .truncate()
+                                            .child(entry.title.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_color(rgb(palette.muted))
+                                            .text_xs()
+                                            .truncate()
+                                            .child(time_label(entry, day)),
+                                    ),
+                            )
+                        })
+                        .when(!is_short, |el| {
+                            el.child(
+                                div()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .truncate()
+                                    .child(entry.title.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_color(rgb(palette.muted))
+                                    .text_xs()
+                                    .truncate()
+                                    .child(time_label(entry, day)),
+                            )
+                        })
                         .when_some(
-                            entry
-                                .location
-                                .clone()
-                                .filter(|loc| !loc.is_empty() && block.end - block.start >= 45),
+                            entry.location.clone().filter(|loc| {
+                                !loc.is_empty()
+                                    && block.end - block.start >= 45
+                                    && block.columns == 1
+                            }),
                             |el, loc| {
                                 el.child(
                                     div()
@@ -411,6 +458,8 @@ impl CalendarPage {
                 let y = px(minute as f32 / 60. * hours);
                 column = column.child(
                     div()
+                        .id("calendar-now-line")
+                        .debug_selector(|| "calendar-now-line".into())
                         .absolute()
                         .top(y)
                         .left_0()

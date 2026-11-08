@@ -1723,4 +1723,102 @@ mod tests {
             assert!(matches!(page.write_error, Some(ShellError::NotSetUp)));
         });
     }
+
+    #[gpui::test]
+    fn week_timeline_renders_seven_day_columns_duration_blocks_overlaps_and_now_line(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(gpui_kit::init);
+        cx.update(bind_keys);
+        let today = chrono::Local::now().date_naive();
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = today;
+            page.view = View::Week;
+            let day_str = today.format("%Y-%m-%d").to_string();
+            page.entries.value = Some(vec![
+                CalendarEntry {
+                    id: "calendar:overlap1".into(),
+                    title: "Architecture Review".into(),
+                    starts_at: format!("{day_str}T10:00:00"),
+                    ends_at: format!("{day_str}T11:30:00"),
+                    kind: "event".into(),
+                    commitment: "planned".into(),
+                    ..Default::default()
+                },
+                CalendarEntry {
+                    id: "calendar:overlap2".into(),
+                    title: "Security Sync".into(),
+                    starts_at: format!("{day_str}T10:30:00"),
+                    ends_at: format!("{day_str}T12:00:00"),
+                    kind: "event".into(),
+                    commitment: "planned".into(),
+                    ..Default::default()
+                },
+                CalendarEntry {
+                    id: "calendar:allday".into(),
+                    title: "Offsite".into(),
+                    starts_at: day_str.clone(),
+                    ends_at: (today + chrono::Duration::days(1))
+                        .format("%Y-%m-%d")
+                        .to_string(),
+                    all_day: true,
+                    kind: "event".into(),
+                    commitment: "planned".into(),
+                    ..Default::default()
+                },
+            ]);
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.run_until_parked();
+
+        // 7 days in week view
+        page.read_with(cx, |page, _| {
+            assert_eq!(page.dates().len(), 7);
+            assert!(page.dates().contains(&today));
+        });
+
+        // Now line rendered for today
+        let now_line = cx.debug_bounds("calendar-now-line");
+        assert!(now_line.is_some(), "now-line rendered on today's column");
+
+        // All-day span rendered in top strip
+        let span_block = cx.debug_bounds("calendar-span-block");
+        assert!(span_block.is_some(), "all-day span rendered across week");
+
+        // Overlapping blocks share columns and are sized to 90 min (72px)
+        let blocks = cx.debug_bounds("calendar-time-block");
+        assert!(blocks.is_some(), "timed blocks rendered");
+        assert_eq!(blocks.unwrap().size.height, px(72.));
+
+        // Dragging moves target day and minute across columns
+        let block_origin = blocks.unwrap().origin + gpui::point(px(10.), px(10.));
+        let next_day_target = block_origin + gpui::point(px(80.), px(48.));
+        cx.simulate_mouse_down(
+            block_origin,
+            gpui::MouseButton::Left,
+            gpui::Modifiers::none(),
+        );
+        cx.simulate_mouse_move(
+            block_origin + gpui::point(px(0.), px(5.)),
+            gpui::MouseButton::Left,
+            gpui::Modifiers::none(),
+        );
+        cx.simulate_mouse_move(
+            next_day_target,
+            gpui::MouseButton::Left,
+            gpui::Modifiers::none(),
+        );
+        page.read_with(cx, |page, _| {
+            assert!(page.drop_time.is_some(), "drop target tracked across week");
+        });
+        cx.simulate_mouse_up(
+            next_day_target,
+            gpui::MouseButton::Left,
+            gpui::Modifiers::none(),
+        );
+    }
 }

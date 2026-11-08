@@ -524,7 +524,10 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
   keeping `virtual_list` group headers and inline row editors intact.
 - **Calendar.** Built (2026-11-08, `102dfe5f`): Keeps the 24-hour timeline, quarter-hour drag/resize and
-  availability grid in `ui/src/calendar/`, and wires `gpui_kit::component::date_picker::DatePicker`
+  availability grid in `ui/src/calendar/`, extends the 24-hour time grid to a 7-day week view (`View::Week`,
+  `time_grid`) with duration-sized events, overlap columns (`timeline::blocks`), all-day spans across the week,
+  cross-day drag-and-drop rescheduling with drop preview ghost, now-line on today's column (`calendar-now-line`),
+  compact inline title/time formatting for short events (<30 min), and wires `gpui_kit::component::date_picker::DatePicker`
   and `gpui_kit::component::time_field::TimeField` into the event composer (`ui/src/calendar/page.rs`,
   `ui/src/calendar/types.rs`, `ui/src/calendar/grid.rs`) with automatic end-date clamping when the
   start date moves past the end date.

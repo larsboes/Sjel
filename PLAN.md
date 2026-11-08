@@ -23,7 +23,7 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 | Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Documents | NSH reader: list, text, PDF original checked by SHA-256, keep offline. Not checked on a device since `a71af504`. | Device check, then #246–#247 | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
 | Mail | NSH triage reader (`ui/src/nsh_mail.rs`): status + category filters, thread reader, triage actions with confirmation. Not checked on a device. | Device check, then the new tab bar | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
-| Calendar | Tab, reads and writes the replica | A time grid and quick rescheduling | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
+| Calendar | Tab, reads and writes the replica | Device check on phone, quick rescheduling | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 
 Order inside Priority 1:
 

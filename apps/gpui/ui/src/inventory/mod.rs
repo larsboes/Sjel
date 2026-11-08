@@ -476,28 +476,24 @@ impl InventoryPage {
     }
 
     fn render_layout_card(&self, l: &InteriorLayoutSummary, palette: Palette) -> AnyElement {
-        let status_color = if l.pass {
-            palette.green
+        let (status_color, status_icon, status_text) = if l.pass {
+            (palette.green, "✓", "Pass".to_string())
         } else if l.hard > 0 {
-            palette.red
+            (palette.red, "✕", format!("{} hard violations", l.hard))
         } else {
-            palette.amber
-        };
-
-        let status_text = if l.pass {
-            "Pass".to_string()
-        } else if l.hard > 0 {
-            format!("{} hard violations", l.hard)
-        } else {
-            format!("{} soft warnings", l.soft)
+            (palette.amber, "⚠", format!("{} soft warnings", l.soft))
         };
 
         div()
             .p_4()
-            .rounded_lg()
-            .bg(rgba(tint(palette.raised, 0x40)))
+            .rounded(px(12.))
+            .bg(rgba(tint(palette.raised, 0x25)))
             .border_1()
             .border_color(rgba(tint(palette.border, 0x30)))
+            .hover(|s| {
+                s.bg(rgba(tint(palette.raised, 0x45)))
+                    .border_color(rgba(tint(palette.border, 0x55)))
+            })
             .flex()
             .items_center()
             .justify_between()
@@ -510,10 +506,10 @@ impl InventoryPage {
                         div()
                             .flex()
                             .items_center()
-                            .gap_2()
+                            .gap_2p5()
                             .child(
                                 div()
-                                    .text_base()
+                                    .text_sm()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .child(l.name.clone()),
                             )
@@ -525,6 +521,10 @@ impl InventoryPage {
                                     .text_xs()
                                     .bg(rgba(tint(status_color, 0x20)))
                                     .text_color(rgb(status_color))
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(status_icon)
                                     .child(status_text),
                             ),
                     )
@@ -537,7 +537,16 @@ impl InventoryPage {
             )
             .children(l.occupied_m2.map(|area| {
                 div()
-                    .text_sm()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .px_2p5()
+                    .py_1()
+                    .rounded_md()
+                    .bg(rgba(tint(palette.surface, 0x40)))
+                    .border_1()
+                    .border_color(rgba(tint(palette.border, 0x20)))
+                    .text_xs()
                     .text_color(rgb(palette.muted))
                     .child(format!("{:.1} m² occupied", area))
             }))

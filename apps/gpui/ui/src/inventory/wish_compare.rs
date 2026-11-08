@@ -106,7 +106,8 @@ impl InventoryPage {
 
         let mut panel = div()
             .p_4()
-            .rounded_lg()
+            .rounded(px(12.))
+            .bg(rgba(tint(palette.raised, 0x22)))
             .border_1()
             .border_color(rgba(tint(palette.border, 0x30)))
             .flex()

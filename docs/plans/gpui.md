@@ -26,8 +26,8 @@ names the rest.
 | 8 | `/travel` | Partial | `Travel` | tab | `trips`, `traveler`, `transit` |
 | 9 | `/map` | Partial | `Travel::Map` | native map | `trips`, `places` |
 | 10 | `/finance` | Ported | `FinancePage` | planned | `finance` |
-| 11 | `/inventory` | Partial | `InventoryPage`: state history and layout impact review missing | planned | `inventory` |
-| 12 | `/wishlist` | Partial | `InventoryPage` tab | planned | `inventory` |
+| 11 | `/inventory` | Ported | `InventoryPage`: state history, layout impact review, virtual list | planned | `inventory` |
+| 12 | `/wishlist` | Ported | `InventoryPage` tab with budget range, alternatives, and comparisons | planned | `inventory` |
 | 13 | `/interior` | Ported | `InventoryPage` tab | Interior tab, see [`scanning.md`](scanning.md) | `inventory`, `interior` |
 | 14 | `/people` | Ported | `PeoplePage` | tab, People and Places, read-only | `people-registry`, `entities`, `places` |
 | 15 | `/software` | Ported | `Software` | Mac only | `software` |
@@ -609,7 +609,7 @@ the budget on either build, so the 2026-11-02 table above is out of date for tha
 
 | page | what it draws | state |
 |---|---|---|
-| Inventory, Interior | grouped cards in one scroll container | Open. They build cards rather than uniform rows, so a conversion needs a looked-at window; not done blind. |
+| Inventory, Interior | grouped cards with responsive metrics, subtle hover, and virtual list | Done: Owned uses virtual_list with resizable headers; Interior and Wishlist use modern Notion-grade reactive cards and budget strip. |
 | Packs | a matrix with a pinned header and a horizontal scroller | Open, and last: 5.7 ms with 2 of 238 frames over budget. |
 
 ## 10. Dev and prod

@@ -39,6 +39,15 @@ covers it.
   from `tools/`. Smallest change: isolate the root discovery failure, then reproduce
   each remaining shell failure independently before claiming a green baseline.
 
+- **Pre-push checks mix committed and unfinished changes.** `ci-local fast --committed`
+  selects committed inputs but executes formatting and gates against the current
+  worktree. Concurrent travel edits therefore blocked an unrelated push.
+  Workaround: verify the exact outgoing revision in a clean temporary local clone
+  using `ci-local fast --committed --base <remote-sha>`, then retain the hook's secret
+  scan and publication gate while skipping its duplicate worktree checks.
+  Smallest change: let `ci-local fast --revision <sha>` verify an immutable snapshot
+  and bind a successful receipt to that revision.
+
 - **Skill-install rollback regression fails.** The full `sjel-cli` unit suite passes 414
   tests and fails `intake::skills::tests::a_failed_second_layout_restores_the_first`:
   reading the first destination after rollback returns `NotFound` at

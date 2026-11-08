@@ -162,14 +162,24 @@ pub struct DuplicatePair {
 
 /// The fields every install has built in.
 pub fn builtin_fields() -> Vec<EntityField> {
-    let person = |key: &str, label: &str, field_type: &str, options: &[&str]| EntityField {
-        kind: "person".into(),
-        key: key.into(),
-        label: label.into(),
-        field_type: field_type.into(),
-        options: options.iter().map(|o| o.to_string()).collect(),
-        data_class: "C2".into(),
-        builtin: true,
+    let field =
+        |kind: &str, key: &str, label: &str, field_type: &str, options: &[&str], class: &str| {
+            EntityField {
+                kind: kind.into(),
+                key: key.into(),
+                label: label.into(),
+                field_type: field_type.into(),
+                options: options.iter().map(|o| o.to_string()).collect(),
+                data_class: class.into(),
+                builtin: true,
+            }
+        };
+    let person = |key: &str, label: &str, field_type: &str, options: &[&str]| {
+        field("person", key, label, field_type, options, "C2")
+    };
+    // Notes and relation can name people, so they are C2 like a person's; a website is public.
+    let organisation = |key: &str, label: &str, field_type: &str, class: &str| {
+        field("organisation", key, label, field_type, &[], class)
     };
     vec![
         person(
@@ -191,6 +201,10 @@ pub fn builtin_fields() -> Vec<EntityField> {
         person("skills", "Skills", "tags", &[]),
         person("socials", "Socials", "tags", &[]),
         person("last_contact", "Last contact", "date", &[]),
+        organisation("notes", "Notes", "longtext", "C2"),
+        organisation("relation", "Relation", "text", "C2"),
+        organisation("website", "Website", "text", "C0"),
+        organisation("aliases", "Aliases", "tags", "C2"),
     ]
 }
 

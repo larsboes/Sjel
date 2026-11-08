@@ -1138,8 +1138,17 @@ mod tests {
         assert_eq!(ron.values["climbing_grade"].value, json!("6b"));
         assert_eq!(
             store.fields(Some("person")).unwrap().len(),
-            builtin_fields().len() + 1
+            builtin_fields()
+                .iter()
+                .filter(|f| f.kind == "person")
+                .count()
+                + 1
         );
+        assert!(store
+            .fields(Some("organisation"))
+            .unwrap()
+            .iter()
+            .any(|f| f.key == "notes"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

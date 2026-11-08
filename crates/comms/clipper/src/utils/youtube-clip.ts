@@ -49,8 +49,15 @@ export function addYouTubeClipSections(doc: Document, result: DefuddleResponse, 
 	content.innerHTML = result.content;
 	const description = content.cloneNode(true) as HTMLElement;
 	description.querySelectorAll('iframe, video, .transcript').forEach(el => el.remove());
-	const videoDescription = createMarkdownContent(description.innerHTML, doc.URL);
 	const transcript = result.variables?.transcript || '';
+	if (transcript.trim()) {
+		// Defuddle's output sanitizer removes the transcript wrapper's class.
+		for (const heading of Array.from(description.querySelectorAll('h2'))) {
+			const wrapper = heading.parentElement;
+			if (heading.textContent?.trim() === 'Transcript' && wrapper?.tagName === 'DIV' && wrapper !== description) wrapper.remove();
+		}
+	}
+	const videoDescription = createMarkdownContent(description.innerHTML, doc.URL);
 	if (!transcript.trim()) {
 		const notice = doc.createElement('p');
 		notice.textContent = 'Transcript unavailable for this capture. Open the transcript on YouTube and clip again to retry.';

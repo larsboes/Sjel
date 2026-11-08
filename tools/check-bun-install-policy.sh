@@ -38,8 +38,7 @@ while IFS= read -r pkg; do
 $rel"
 done <<PKGS
 $(find "$ROOT" \
-  \( -name node_modules -o -name .git -o -name target -o -name .claude -o -name 'bazel-*' \
-     -o -path '*/Packs/*/pi-packages/*' \) -prune \
+  \( -name node_modules -o -name .git -o -name target -o -name .claude -o -name 'bazel-*' \) -prune \
   -o -name package.json -print 2>/dev/null)
 PKGS
 
@@ -52,6 +51,14 @@ while IFS= read -r rel; do
   [ -n "$rel" ] || continue
   require "$rel/bunfig.toml" "minimumReleaseAge = 86400"
   require "$rel/bunfig.toml" "@socketsecurity/bun-security-scanner"
+  if ! bun --no-env-file -e '
+    const pkg = await Bun.file(process.argv[1]).json();
+    const scanner = "@socketsecurity/bun-security-scanner";
+    process.exit(pkg.devDependencies?.[scanner] || pkg.dependencies?.[scanner] ? 0 : 1);
+  ' "$ROOT/$rel/package.json"; then
+    echo "FAIL: $rel/package.json must declare its configured security scanner" >&2
+    fail=1
+  fi
 done <<TREES
 $trees
 TREES

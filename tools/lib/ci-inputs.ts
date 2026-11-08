@@ -65,6 +65,18 @@ function gitFiles(root: string): string[] {
   return sorted(run.stdout.toString().split("\0").filter((file) => file && !ignoredTree(file)));
 }
 
+/** Locked Bun package directories whose dependencies are required by repository tests.
+ * @throws If Git cannot enumerate repository inputs.
+ */
+export function bunInstallDirs(root: string): string[] {
+  const inventory = gitFiles(root);
+  const available = new Set(inventory);
+  return inventory.filter((file) => posix.basename(file) === "package.json" && existsSync(join(root, file)))
+    .map((file) => posix.dirname(file))
+    .filter((dir) => ["bun.lock", "bun.lockb"].some((lock) => available.has(posix.join(dir, lock)) && existsSync(join(root, dir, lock))))
+    .sort();
+}
+
 function read(root: string, file: string): string {
   return readFileSync(join(root, file), "utf8");
 }

@@ -15,7 +15,7 @@ plant() { # plant <name> <ci-install> [<mode>]
   printf 'bun pm scan\n' >> "$root/.github/workflows/ci.yml"
   printf 'bun install --frozen-lockfile --ignore-scripts\n' > "$root/crates/comms/clipper/README.md"
 
-  printf '{"name":"planted-ui"}\n' > "$root/ui/package.json"
+  printf '{"name":"planted-ui","devDependencies":{"@socketsecurity/bun-security-scanner":"^1.1.3"}}\n' > "$root/ui/package.json"
   printf '{}\n' > "$root/ui/bun.lock"
   case "$mode" in
     no-bunfig) : ;; # a tree that resolves dependencies and declares nothing
@@ -26,14 +26,9 @@ plant() { # plant <name> <ci-install> [<mode>]
         > "$root/ui/bunfig.toml" ;;
   esac
 
-  # A vendored tree WITH a lockfile and NO bunfig, and a directory with a bunfig and NO lockfile.
-  # Neither resolves this repository's dependencies, so neither may be demanded of: the first is
-  # another project's configuration, the second is not a tree at all (it would also catch a
-  # ui/ tree that lost its lockfile as a missing-bunfig failure, which is the wrong name
-  # for the fault).
+  # Packages without a lockfile are not installed by the repository test runner.
   mkdir -p "$root/Packs/planted/pi-packages/vendored" "$root/not-a-tree"
   printf '{"name":"vendored"}\n' > "$root/Packs/planted/pi-packages/vendored/package.json"
-  printf '{}\n' > "$root/Packs/planted/pi-packages/vendored/bun.lock"
   printf '{"name":"unresolved"}\n' > "$root/not-a-tree/package.json"
   printf '[install]\nminimumReleaseAge = 86400\n' > "$root/not-a-tree/bunfig.toml"
   printf '%s' "$root"
@@ -56,6 +51,14 @@ expect "a resolving tree with no bunfig fails" 1 \
   "$(plant no-hold 'bun install --frozen-lockfile --ignore-scripts' no-bunfig)"
 expect "a tree that keeps the hold but loses the scanner fails" 1 \
   "$(plant no-scanner 'bun install --frozen-lockfile --ignore-scripts' hold-only)"
+
+missing="$(plant undeclared-scanner 'bun install --frozen-lockfile --ignore-scripts')"
+printf '{"name":"planted-ui"}\n' > "$missing/ui/package.json"
+expect "a configured scanner without a dependency fails" 1 "$missing"
+
+vendored="$(plant vendored-lock 'bun install --frozen-lockfile --ignore-scripts')"
+printf '{}\n' > "$vendored/Packs/planted/pi-packages/vendored/bun.lock"
+expect "a locked vendored package also requires the install policy" 1 "$vendored"
 
 runner_plant() {
   local root

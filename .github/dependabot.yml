@@ -11,8 +11,7 @@
 #
 # `default-days: 0` is the ruling for cargo and github-actions: a malicious Cargo crate or a
 # compromised `actions/*` tag is close to unheard of, and a hold there buys nothing.
-# No npm tree is watched here. The one left, the web clipper, is updated by hand under the
-# 24-hour hold in its own bunfig.toml.
+# Bun updates retain the package trees' one-day adoption hold.
 
 # The pull requests these open MERGE THEMSELVES once the required checks pass:
 # .github/workflows/dependabot-automerge.yml arms `gh pr merge --auto --squash` on each one
@@ -73,5 +72,25 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "bun"
+    directories:
+      - "/crates/comms/clipper"
+      - "/Packs/harness/pi-packages/pi-subagents"
+      - "/Packs/harness/pi-packages/pi-web-access"
+      - "/Packs/knowledge/pi-packages/obsidian-access"
+      - "/Packs/learning/plugins/pi-learn"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 1
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      bun:
         patterns: ["*"]
         update-types: ["minor", "patch"]

@@ -57,6 +57,17 @@ describe('YouTube clip sections', () => {
 		expect(result.content).not.toContain('Use &lt;script&gt; safely');
 	});
 
+	test('separates a sanitized transcript wrapper without truncating the description', () => {
+		const doc = videoDocument();
+		const parsed = new Defuddle(doc, { url: doc.URL }).parse();
+		parsed.content = '<p>Keep this description.</p><div><h2>Transcript</h2><p>Transcript sentence.</p></div>';
+		parsed.variables = { ...parsed.variables, transcript: 'Transcript sentence.' };
+		const result = addYouTubeClipSections(doc, parsed);
+		expect(result.variables?.videoDescription).toBe('Keep this description.');
+		expect(result.variables?.transcript).toBe('Transcript sentence.');
+		expect(result.content).toContain('Transcript sentence.');
+	});
+
 	test('bounds comment capture to 50 loaded threads', () => {
 		const doc = videoDocument(Array.from({ length: 55 }, (_, i) => `<ytd-comment-thread-renderer><span id="content-text">Comment ${i}</span></ytd-comment-thread-renderer>`).join(''));
 		const comments = captureYouTubeComments(doc);

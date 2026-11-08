@@ -3,7 +3,7 @@ import { availableParallelism } from "node:os";
 import { join, resolve } from "node:path";
 import { createPlan, type CIPlan } from "./ci-plan.ts";
 import { testScope, type FastCheck } from "./ci-impact.ts";
-import { allGateIDs, GATES } from "./lib/ci-inputs.ts";
+import { allGateIDs, bunInstallDirs, GATES } from "./lib/ci-inputs.ts";
 
 /** Cheap local checks share CI's input plan; compilation and tests remain in CI. */
 export function localChecks(plan: CIPlan): FastCheck[] {
@@ -89,8 +89,8 @@ async function main() {
     if (plan.rust.packages.length) ok = run(root, ["bash", "-euo", "pipefail", "-c", `cargo test ${testScope(plan.rust)} --locked --no-fail-fast`]);
   } else if (job === "bun-tests") {
     if (plan.bun.length) {
-      for (const dir of ["Packs/harness/pi-packages/pi-subagents", "Packs/harness/pi-packages/pi-web-access"]) {
-        if (existsSync(join(root, dir, "package.json")) && !run(root, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"], join(root, dir))) ok = false;
+      for (const dir of bunInstallDirs(root)) {
+        if (!run(root, ["bun", "install", "--frozen-lockfile", "--ignore-scripts"], join(root, dir))) ok = false;
       }
       if (ok && !run(root, ["bun", "test", ...plan.bun.map((file) => `./${file}`)])) ok = false;
     }

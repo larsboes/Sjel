@@ -4,7 +4,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localChecks, runGates } from "./ci-run.ts";
 import { outputs, type CIPlan } from "./ci-plan.ts";
-import { allGateIDs, GATES } from "./lib/ci-inputs.ts";
+import { allGateIDs, bunInstallDirs, GATES } from "./lib/ci-inputs.ts";
+
+test("Bun dependency installation discovers every locked package, including plugin test owners", () => {
+  const root = mkdtempSync(join(tmpdir(), "sjel-bun-installs-"));
+  try {
+    expect(Bun.spawnSync(["git", "init", "-q"], { cwd: root }).exitCode).toBe(0);
+    for (const dir of ["extensions/a", "plugins/new-plugin", "unlocked", "node_modules/vendor"]) {
+      mkdirSync(join(root, dir), { recursive: true });
+      writeFileSync(join(root, dir, "package.json"), '{"name":"fixture"}');
+      if (dir !== "unlocked") writeFileSync(join(root, dir, "bun.lock"), "{}");
+    }
+    expect(bunInstallDirs(root)).toEqual(["extensions/a", "plugins/new-plugin"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Dependabot covers every installed Bun tree with the one-day release hold", () => {
+  const root = join(import.meta.dir, "..");
+  const config = Bun.YAML.parse(readFileSync(join(root, ".github/dependabot.yml"), "utf8")) as {
+    updates: { "package-ecosystem": string; directories?: string[]; cooldown?: { "default-days": number } }[];
+  };
+  const updates = config.updates.filter((entry) => entry["package-ecosystem"] === "bun");
+  expect(updates.flatMap((entry) => entry.directories ?? []).sort()).toEqual(bunInstallDirs(root).map((dir) => `/${dir}`).sort());
+  expect(updates.every((entry) => entry.cooldown?.["default-days"] === 1)).toBe(true);
+});
 
 const empty = (): CIPlan => ({
   version: 1, head: "a".repeat(40), base: "b".repeat(40), full: false, files: [], reasons: [],

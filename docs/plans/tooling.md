@@ -10,6 +10,27 @@ covers it.
 
 ## Open
 
+- **Repository dependency freshness.** `sjel update` inventories software outside the
+  checkout. Dependabot covers Cargo, Actions and all five Bun projects, with a
+  one-day hold and grouped patch/minor updates for Bun. CI discovers locked Bun
+  package directories instead of maintaining an install list, and the install
+  policy requires the configured scanner to be a declared dependency.
+  Workaround: a read-only `uv run --no-project python` comparison of direct Cargo
+  dependencies against crates.io and `bun outdated` in each package directory.
+  Smallest change: a repository freshness report covering both Cargo workspaces,
+  Bun lockfiles and coordinated git pins, distinguishing compatible updates from
+  migrations and respecting release-age policy. Evidence and upgrade groups:
+  [`dependency-upgrade-review.md`](../../research/dependency-upgrade-review.md).
+  Done when one read-only command reports every owned dependency surface without
+  changing lockfiles or installing packages.
+
+- **Full local CI replay remains unverified.** The dependency-install replay succeeds
+  for all five Bun trees, but root-level `bun test` exits with `EPERM` on this host
+  before collection, and the shell replay has failures including backup receipts
+  and the service-runner protocol. Focused planner and Pi adaptation tests pass
+  from `tools/`. Smallest change: isolate the root discovery failure, then reproduce
+  each remaining shell failure independently before claiming a green baseline.
+
 - **Skill-install rollback regression fails.** The full `sjel-cli` unit suite passes 414
   tests and fails `intake::skills::tests::a_failed_second_layout_restores_the_first`:
   reading the first destination after rollback returns `NotFound` at

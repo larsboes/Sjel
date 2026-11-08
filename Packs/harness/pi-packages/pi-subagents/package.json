@@ -1,6 +1,6 @@
 {
   "name": "@tintinweb/pi-subagents",
-  "description": "A pi extension that brings Claude Code-like sub-agents and workflow orchestration to pi \u2014 parallel execution, live widget, fleet view, custom agent types, mid-run steering, dynamic workflows, Claude Code compatibility, look and feel.",
+  "description": "A pi extension that brings Claude Code-like sub-agents and workflow orchestration to pi — parallel execution, live widget, fleet view, custom agent types, mid-run steering, dynamic workflows, Claude Code compatibility, look and feel.",
   "author": "tintinweb",
   "license": "MIT",
   "repository": {
@@ -48,12 +48,12 @@
     "image": "https://github.com/tintinweb/pi-subagents/raw/master/media/screenshot.png"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.14",
-    "@earendil-works/pi-ai": "1.4.0",
-    "@earendil-works/pi-coding-agent": "1.4.0",
-    "@earendil-works/pi-tui": "1.4.0",
+    "@biomejs/biome": "^2.6.6",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0",
     "@socketsecurity/bun-security-scanner": "^1.1.2",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.9.9",
     "@vitest/coverage-istanbul": "^4.1.11",
     "typescript": "^6.0.0",
     "vitest": "^4.1.11"

@@ -171,6 +171,26 @@ State on 2026-11-08, after a pass over code and overlay config:
 | Relevance profiles (`comms-relevance-shadow.json`) | Done: the three dead `profile_path`s are gone and the frozen `text_variants` remain. Restoring personal lenses stays `operator-profile`'s call. |
 | `obsidian` as a record source in `entities`, `places`, `scouting`, `trips` | Keep. It records where historic rows came from. |
 
+### One home per fact
+
+Decided 2026-11-08 (`PLAN.md`, Decisions). A note in Sjel data holds only what no live source
+holds:
+
+1. A fact about Sjel (architecture, a decision, a lesson about the harness) lives in the
+   repository: code, `PLAN.md`, `docs/plans/`, a skill or `CONTRIBUTING.md`. A copy in a note
+   goes stale when the repository changes.
+2. Subject knowledge lives in the vault, where `teach` writes it.
+3. Status lives in the record that owns it: a task closes, a calendar entry passes, a ledger row
+   settles. Note prose keeps only durable facts.
+
+Delete outdated or duplicated notes. Git history and the capability backups are the archive.
+
+The LifeOS export moved under these rules on 2026-11-08. Of 85 knowledge notes, 5 stay in
+`projects` under `Atlas/`. The people and companies went to `entities`, where the
+`organisation` kind got built-in fields in `5ee5d6ef`. The durable preferences went to
+`operator-profile` revision 2, and the TELOS document to the `Life-Plan` project. The sample
+templates and the files LifeOS generated from TELOS did not move.
+
 ## 3. Phone standalone
 
 The phone works without the Mac for notes, tasks, capture and calendar today. Unpaired, Mail and

@@ -93,6 +93,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Generic tables (`DataTable`), rich-text/Markdown readers (`TextView`), and date/time pickers (`Calendar`, `DatePicker`, `TimeField`) use the installed `gpui-kit` and `nsh-base` primitives styled through `apps/gpui/ui/src/primitives`, heavy media uses native OS views (`PDFKit`, `MapLibre`), and custom layout code stays reserved for Sjel-specific surfaces ([`gpui.md` §7](docs/plans/gpui.md#7-ui-and-ux-roadmap)). | 2026-11-08 |
 | Target one database per capability or agent. | 2026-10-23 |
 | The Obsidian vault holds learning only: `teach`, `practice`, claim notes and subject knowledge. Every other note, fact and link source moves into Sjel data; the inventory is in [`storage.md`](docs/plans/storage.md#vault-holds-learning-only). Supersedes "knowledge stays in the vault until moving it hurts" (2026-10-23). | 2026-11-08 |
+| Sjel data holds only what no live source holds. A fact about Sjel lives in the repository. Subject knowledge lives in the vault. Status lives in the owning record (a task, a calendar entry, a ledger row), never in note prose. Delete outdated notes instead of archiving them ([`storage.md`](docs/plans/storage.md#one-home-per-fact)). | 2026-11-08 |
 | The model provider sets an agent's reach. Untrusted providers run sandboxed, before Priority 1. | 2026-10-31 |
 | Anthropic and OpenAI harnesses read Sjel fully; every other provider gets the demo node only. | 2026-11-04 |
 | Priority order as above: the phone app first. | 2026-10-25 |

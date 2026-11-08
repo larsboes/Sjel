@@ -14,10 +14,11 @@ covers it.
   not detect an empty Documents host on a physical phone. `ios/run-sim --smoke`
   checks visible Documents and Mail headings through XCTest and exports screenshots
   even when a test fails. The `iOS screen smoke tests` workflow runs the same command
-  on an Apple Silicon Mac with simulator services. The agent environment cannot
-  connect to CoreSimulator and does not expose Simulator.app; a successful host
-  Terminal probe does not establish agent access. Open: reproduce the black screen
-  in the native test, fix its cause, and verify direct simulator control on the Mac.
+  on an Apple Silicon Mac with simulator services. The agent shell cannot connect
+  to CoreSimulator; native Device Hub control can boot and inspect a simulator.
+  The pinned NSH headless driver renders Documents and switches Mail and Documents
+  through the actual phone root without a window. Open: reproduce the black screen
+  in the UIKit test and fix its cause; headless success does not validate UIKit.
 
 
 - **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count

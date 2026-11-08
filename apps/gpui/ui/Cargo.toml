@@ -49,6 +49,8 @@ optional = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
+nsh-engine = { git = "https://github.com/longbridge/nsh", rev = "058a745ad2", default-features = false }
+nsh-testing = { git = "https://github.com/longbridge/nsh", rev = "058a745ad2", default-features = false }
 # Keeps `Repo` off this machine's real sjel.db in the Projects window tests (core's Cargo.toml).
 sjel-gpui-core = { workspace = true, features = ["test-support"] }
 

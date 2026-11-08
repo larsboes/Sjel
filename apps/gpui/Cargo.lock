@@ -5731,6 +5731,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nsh-testing"
+version = "0.4.0"
+source = "git+https://github.com/longbridge/nsh?rev=058a745ad2#058a745ad2d837374b99a9e46715e9b212d9b7a8"
+dependencies = [
+ "crossbeam-channel",
+ "log",
+ "nsh-core",
+ "nsh-engine",
+ "regex",
+]
+
+[[package]]
 name = "nsh-updater"
 version = "0.4.0"
 source = "git+https://github.com/longbridge/nsh?rev=058a745ad2#058a745ad2d837374b99a9e46715e9b212d9b7a8"
@@ -8571,6 +8583,8 @@ dependencies = [
  "metal",
  "nsh-base",
  "nsh-core",
+ "nsh-engine",
+ "nsh-testing",
  "objc2-core-foundation",
  "objc2-core-graphics",
  "serde",

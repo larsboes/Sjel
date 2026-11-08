@@ -16,10 +16,71 @@ use sjel_gpui_core::inventory::{
 use sjel_gpui_core::shell::{self, ShellError};
 
 use crate::data::Remote;
-use crate::primitives::{stat_card, stat_strip, virtual_list};
-use crate::theme::{tint, Palette};
+use crate::primitives::{
+    resizable_table_header, stat_card, stat_strip, tabular_cell, virtual_list, SortOrder,
+    SortableColumn,
+};
+use crate::theme::{tint, Density, Palette};
 
 use super::{nonempty, InventoryPage};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum InventorySort {
+    #[default]
+    Name,
+    Category,
+    Dimensions,
+    Price,
+}
+
+impl InventorySort {
+    pub(crate) fn default_order(self) -> SortOrder {
+        match self {
+            Self::Price | Self::Dimensions => SortOrder::Descending,
+            Self::Name | Self::Category => SortOrder::Ascending,
+        }
+    }
+}
+
+pub(crate) fn compare_inventory(
+    left: &InventoryRow,
+    right: &InventoryRow,
+    sort: InventorySort,
+    order: SortOrder,
+) -> std::cmp::Ordering {
+    let volume = |item: &InventoryItem| {
+        i64::from(item.width.unwrap_or(0))
+            .saturating_mul(i64::from(item.depth.unwrap_or(0)))
+            .saturating_mul(i64::from(item.height.unwrap_or(0)))
+    };
+    let primary = match sort {
+        InventorySort::Name => left
+            .item
+            .label
+            .to_lowercase()
+            .cmp(&right.item.label.to_lowercase()),
+        InventorySort::Category => group_of(&left.item)
+            .to_lowercase()
+            .cmp(&group_of(&right.item).to_lowercase()),
+        InventorySort::Dimensions => volume(&left.item).cmp(&volume(&right.item)),
+        InventorySort::Price => left
+            .item
+            .price_cents
+            .unwrap_or(-1)
+            .cmp(&right.item.price_cents.unwrap_or(-1)),
+    };
+    let primary = if order.is_ascending() {
+        primary
+    } else {
+        primary.reverse()
+    };
+    primary.then_with(|| {
+        left.item
+            .label
+            .to_lowercase()
+            .cmp(&right.item.label.to_lowercase())
+    })
+}
 
 pub(crate) struct InventoryEditForm {
     pub(super) item: InventoryItem,
@@ -52,6 +113,15 @@ pub(crate) struct OwnedDerived {
 }
 
 impl InventoryPage {
+    pub(super) fn set_owned_sort(&mut self, column: InventorySort, cx: &mut Context<Self>) {
+        self.owned_sort = match self.owned_sort {
+            (current, order) if current == column => (column, order.flip()),
+            _ => (column, column.default_order()),
+        };
+        self.filter_rev = self.filter_rev.wrapping_add(1);
+        cx.notify();
+    }
+
     pub(super) fn sync_owned_derived(&mut self) {
         let key = (self.rows.loaded_at, self.filter_rev);
         if self.owned_derived.key == Some(key) {
@@ -80,6 +150,8 @@ impl InventoryPage {
                 self.selected_category.as_deref(),
                 Some("owned"),
             );
+            let (sort_col, sort_order) = self.owned_sort;
+            filtered.sort_by(|left, right| compare_inventory(left, right, sort_col, sort_order));
         }
         self.owned_list.reset(filtered.len());
         self.owned_derived = OwnedDerived {
@@ -536,7 +608,44 @@ impl InventoryPage {
                     .child(error.clone()),
             );
         }
+        let cat_w = self.col_width("category", 130.);
+        let dim_w = self.col_width("dimensions", 160.);
+        let price_w = self.col_width("price", 110.);
+        let (sort_col, sort_order) = self.owned_sort;
+        let sort_state = |column: InventorySort| (sort_col == column).then_some(sort_order);
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let header = resizable_table_header(
+            "inventory-owned",
+            vec![
+                SortableColumn::flex("name", "ITEM").sorted(sort_state(InventorySort::Name)),
+                SortableColumn::fixed("category", "CATEGORY", px(cat_w))
+                    .sorted(sort_state(InventorySort::Category)),
+                SortableColumn::fixed("dimensions", "DIMENSIONS", px(dim_w))
+                    .sorted(sort_state(InventorySort::Dimensions)),
+                SortableColumn::fixed("price", "VALUE", px(price_w))
+                    .right_align()
+                    .sorted(sort_state(InventorySort::Price)),
+                SortableColumn::spacer(px(64.)),
+            ],
+            Density::Desktop,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "name" => InventorySort::Name,
+                    "category" => InventorySort::Category,
+                    "dimensions" => InventorySort::Dimensions,
+                    "price" => InventorySort::Price,
+                    _ => return,
+                };
+                sort_entity.update(cx, |page, cx| page.set_owned_sort(column, cx));
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |page, cx| page.resize_column(col_id, cx));
+            },
+        );
         content
+            .child(header)
             .child(if is_empty {
                 div()
                     .p_8()
@@ -557,7 +666,7 @@ impl InventoryPage {
                             };
                             let item = row.item.clone();
                             div()
-                                .pb_2p5()
+                                .pb_1p5()
                                 .child(page.render_item_card(&item, palette, cx))
                                 .into_any_element()
                         })
@@ -575,22 +684,28 @@ impl InventoryPage {
     ) -> AnyElement {
         let dim = format_dimensions(item.width, item.depth, item.height);
         let price = format_cents(item.price_cents);
+        let cat_w = self.col_width("category", 130.);
+        let dim_w = self.col_width("dimensions", 160.);
+        let price_w = self.col_width("price", 110.);
         let item = item.clone();
 
         div()
-            .p_3p5()
+            .px_3()
+            .py_2p5()
             .rounded_lg()
             .bg(rgba(tint(palette.raised, 0x30)))
             .border_1()
             .border_color(rgba(tint(palette.border, 0x25)))
             .flex()
             .items_center()
-            .justify_between()
+            .gap_3()
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap_0p5()
                     .child(
                         div()
                             .flex()
@@ -598,19 +713,10 @@ impl InventoryPage {
                             .gap_2()
                             .child(
                                 div()
+                                    .truncate()
                                     .text_sm()
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .child(item.label.clone()),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .text_xs()
-                                    .bg(rgba(tint(palette.accent, 0x20)))
-                                    .text_color(rgb(palette.accent))
-                                    .child(group_of(&item)),
                             )
                             .children(if !item.kind.is_empty() && item.kind != "piece" {
                                 Some(
@@ -634,24 +740,34 @@ impl InventoryPage {
                             .gap_3()
                             .text_xs()
                             .text_color(rgb(palette.muted))
-                            .child(format!("Dim: {dim}"))
                             .children(item.size.as_ref().map(|s| format!("Size: {s}")))
                             .children(item.color.as_ref().map(|c| format!("Color: {c}")))
                             .children(item.notes.as_ref().map(|n| format!("Note: {n}"))),
                     ),
             )
             .child(
+                div().w(px(cat_w)).flex_none().flex().items_center().child(
+                    div()
+                        .max_w_full()
+                        .truncate()
+                        .px_2()
+                        .py_0p5()
+                        .rounded_full()
+                        .text_xs()
+                        .bg(rgba(tint(palette.accent, 0x20)))
+                        .text_color(rgb(palette.accent))
+                        .child(group_of(&item)),
+                ),
+            )
+            .child(tabular_cell(dim, px(dim_w), palette.muted))
+            .child(
                 div()
+                    .w(px(price_w))
+                    .flex_none()
                     .flex()
                     .flex_col()
                     .items_end()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
-                            .text_color(rgb(palette.text))
-                            .child(price),
-                    )
+                    .child(tabular_cell(price, px(price_w), palette.text))
                     .children(if let Some(count) = item.count {
                         if count > 1 {
                             Some(
@@ -665,16 +781,18 @@ impl InventoryPage {
                         }
                     } else {
                         None
-                    })
-                    .child(
-                        Button::new(format!("inventory-edit-{}", item.id))
-                            .small()
-                            .ghost()
-                            .label("Edit")
-                            .on_click(cx.listener(move |page, _, window, cx| {
-                                page.open_item_edit(item.clone(), window, cx)
-                            })),
-                    ),
+                    }),
+            )
+            .child(
+                div().w(px(64.)).flex_none().flex().justify_end().child(
+                    Button::new(format!("inventory-edit-{}", item.id))
+                        .small()
+                        .ghost()
+                        .label("Edit")
+                        .on_click(cx.listener(move |page, _, window, cx| {
+                            page.open_item_edit(item.clone(), window, cx)
+                        })),
+                ),
             )
             .into_any_element()
     }

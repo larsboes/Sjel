@@ -11,7 +11,7 @@ use gpui_kit::{
 
 use crate::data::{Remote, Repo};
 use crate::interior::RoomPlanHistory;
-use crate::primitives::{key_bar, sub_tabs};
+use crate::primitives::{column_width, cycle_column_width, key_bar, sub_tabs, SortOrder};
 use crate::theme::{tint, Palette, ThemeContext};
 use sjel_gpui_core::interior::RoomPlanSource;
 use sjel_gpui_core::inventory::{
@@ -25,7 +25,7 @@ mod wish_compare;
 mod wishlist;
 
 use mail_review::MailReviewForm;
-use owned::{InventoryEditForm, OwnedDerived};
+use owned::{InventoryEditForm, InventorySort, OwnedDerived};
 use wishlist::{GroupForm, WishForm, WishlistDerived};
 
 actions!(
@@ -84,6 +84,8 @@ pub struct InventoryPage {
     pub(super) roomplan_history: Entity<RoomPlanHistory>,
     pub search_query: String,
     pub selected_category: Option<String>,
+    pub(super) owned_sort: (InventorySort, SortOrder),
+    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     /// The wish group the wishlist is narrowed to, by id. None shows every open wish.
     pub selected_group: Option<String>,
     pub(super) filter_rev: u64,
@@ -140,6 +142,8 @@ impl InventoryPage {
             roomplan_history,
             search_query: String::new(),
             selected_category: None,
+            owned_sort: (InventorySort::Name, SortOrder::Ascending),
+            col_widths: Default::default(),
             selected_group: None,
             filter_rev: 0,
             owned_derived: OwnedDerived::default(),
@@ -197,6 +201,23 @@ impl InventoryPage {
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.load(cx);
+    }
+
+    pub(super) fn col_width(&self, id: &'static str, default: f32) -> f32 {
+        column_width(&self.col_widths, id, default)
+    }
+
+    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
+        let default = match id {
+            "category" => Some(130.),
+            "dimensions" => Some(160.),
+            "price" => Some(110.),
+            _ => None,
+        };
+        if let Some(default) = default {
+            cycle_column_width(&mut self.col_widths, id, default);
+            cx.notify();
+        }
     }
 
     pub fn set_tab(&mut self, tab: InventoryTab, cx: &mut Context<Self>) {
@@ -617,6 +638,19 @@ mod tests {
             assert_eq!(page.tab, InventoryTab::Interior);
             page.set_tab(InventoryTab::MailReview, cx);
             assert_eq!(page.tab, InventoryTab::MailReview);
+            assert_eq!(page.owned_sort, (InventorySort::Name, SortOrder::Ascending));
+            page.set_owned_sort(InventorySort::Price, cx);
+            assert_eq!(
+                page.owned_sort,
+                (InventorySort::Price, SortOrder::Descending)
+            );
+            page.set_owned_sort(InventorySort::Price, cx);
+            assert_eq!(
+                page.owned_sort,
+                (InventorySort::Price, SortOrder::Ascending)
+            );
+            page.resize_column("price", cx);
+            assert_eq!(page.col_width("price", 110.), 149.);
         });
     }
 }

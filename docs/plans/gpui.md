@@ -506,12 +506,13 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   `gpui_kit::component::text::TextView` with `FrontmatterPlugin` and Sjel's `Palette`-mapped
   `text_view_style`, replacing the duplicate hand-rolled parser in `ui/src/research/articles.rs`.
   Open: unify `ui/src/docs/render.rs` onto `TextView` with the Mermaid SVG `MarkdownPlugin`.
-- **Tables.** Built (2026-11-08): `SortableColumn`, `SortOrder`, `sortable_table_header`,
-  `resizable_table_header`, `cycle_column_width`, and `tabular_cell` in `ui/src/primitives/tables.rs`,
-  wired into All Tasks, All Notes, Project Tasks (`ui/src/projects/tables.rs`) and Documents
-  (`ui/src/documents/mod.rs`) with per-column sorting and interactive column resizing while keeping
-  `virtual_list` group headers and inline row editors intact. Open: wire `resizable_table_header`
-  and `tabular_cell` into Finance Import and Inventory tables.
+- **Tables.** Built (2026-11-08, `a2f5647e`): `SortableColumn`, `SortOrder`,
+  `sortable_table_header`, `resizable_table_header`, `cycle_column_width`, and `tabular_cell` in
+  `ui/src/primitives/tables.rs`, wired into All Tasks, All Notes, Project Tasks
+  (`ui/src/projects/tables.rs`), Documents (`ui/src/documents/mod.rs`), Finance Transactions and
+  Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
+  Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
+  keeping `virtual_list` group headers and inline row editors intact.
 - **Calendar.** Keep the 24-hour timeline, quarter-hour drag/resize and availability grid in
   `ui/src/calendar/`; wire `DatePicker` and `TimeField` into the event composer.
 - **Finance.** Built: the overview cards show the newest month instead of the

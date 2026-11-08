@@ -14,13 +14,66 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceTransaction, ShellError};
 
-use crate::primitives::{mono_num, tone_chip, virtual_list};
-use crate::theme::Palette;
+use crate::primitives::{
+    mono_num, resizable_table_header, tabular_cell, virtual_list, SortOrder, SortableColumn,
+};
+use crate::theme::{Density, Palette};
 
 use super::FinancePage;
 
 /// How many category suggestions the picker shows.
 const RECLASS_SUGGESTIONS: usize = 6;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TxSort {
+    #[default]
+    Date,
+    Description,
+    Category,
+    Account,
+    Amount,
+}
+
+impl TxSort {
+    pub(crate) fn default_order(self) -> SortOrder {
+        match self {
+            Self::Date | Self::Amount => SortOrder::Descending,
+            Self::Description | Self::Category | Self::Account => SortOrder::Ascending,
+        }
+    }
+}
+
+pub(crate) fn compare_tx(
+    left: &FinanceTransaction,
+    right: &FinanceTransaction,
+    sort: TxSort,
+    order: SortOrder,
+) -> std::cmp::Ordering {
+    let primary = match sort {
+        TxSort::Date => left.date.cmp(&right.date),
+        TxSort::Description => left
+            .description
+            .to_lowercase()
+            .cmp(&right.description.to_lowercase()),
+        TxSort::Category => left
+            .category
+            .to_lowercase()
+            .cmp(&right.category.to_lowercase()),
+        TxSort::Account => left
+            .account
+            .to_lowercase()
+            .cmp(&right.account.to_lowercase()),
+        TxSort::Amount => left.amount_cents.cmp(&right.amount_cents),
+    };
+    let primary = if order.is_ascending() {
+        primary
+    } else {
+        primary.reverse()
+    };
+    primary
+        .then_with(|| right.date.cmp(&left.date))
+        .then_with(|| left.id.cmp(&right.id))
+}
 
 #[derive(Default)]
 pub(crate) struct TxDerived {
@@ -28,7 +81,14 @@ pub(crate) struct TxDerived {
     pub(super) indices: Vec<usize>,
 }
 
-pub(crate) fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyElement {
+pub(crate) fn render_tx_row(
+    tx: &FinanceTransaction,
+    date_w: f32,
+    cat_w: f32,
+    acct_w: f32,
+    amt_w: f32,
+    palette: Palette,
+) -> AnyElement {
     let is_expense = tx.kind == "expense" || tx.amount_cents < 0;
     let amount_color = if is_expense {
         palette.red
@@ -43,61 +103,68 @@ pub(crate) fn render_tx_row(tx: &FinanceTransaction, palette: Palette) -> AnyEle
     div()
         .flex()
         .items_center()
-        .justify_between()
-        .p_2p5()
+        .gap_3()
+        .px_3()
+        .py_2()
         .rounded(px(6.))
         .border_1()
         .border_color(rgba(palette.border))
         .bg(rgba(palette.surface))
         .child(
             div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .min_w_0()
-                .child(
-                    div()
-                        .w(px(80.))
-                        .text_xs()
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(mono_num(tx.date.clone(), palette.muted)),
-                )
-                .child(
-                    div()
-                        .px_1()
-                        .py(px(1.))
-                        .rounded(px(3.))
-                        .bg(rgba(palette.raised))
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(tx.category.clone()),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_sm()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(rgb(palette.text))
-                        .child(tx.description.clone()),
-                ),
+                .w(px(date_w))
+                .flex_none()
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .child(mono_num(tx.date.clone(), palette.muted)),
         )
         .child(
             div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .child(tx.account.clone()),
-                )
-                .child(tone_chip(amount_text, amount_color)),
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_sm()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(rgb(palette.text))
+                .child(tx.description.clone()),
         )
+        .child(
+            div().w(px(cat_w)).flex_none().flex().items_center().child(
+                div()
+                    .max_w_full()
+                    .truncate()
+                    .px_1p5()
+                    .py(px(1.))
+                    .rounded(px(3.))
+                    .bg(rgba(palette.raised))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(tx.category.clone()),
+            ),
+        )
+        .child(
+            div()
+                .w(px(acct_w))
+                .flex_none()
+                .truncate()
+                .text_xs()
+                .text_color(rgb(palette.muted))
+                .child(tx.account.clone()),
+        )
+        .child(tabular_cell(amount_text, px(amt_w), amount_color))
         .into_any_element()
 }
 
 impl FinancePage {
+    pub(super) fn set_tx_sort(&mut self, column: TxSort, cx: &mut Context<Self>) {
+        self.tx_sort = match self.tx_sort {
+            (current, order) if current == column => (column, order.flip()),
+            _ => (column, column.default_order()),
+        };
+        self.filter_rev = self.filter_rev.wrapping_add(1);
+        cx.notify();
+    }
+
     pub(super) fn sync_tx_derived(&mut self) {
         let key = (self.dashboard.loaded_at, self.filter_rev);
         if self.tx_derived.key == Some(key) {
@@ -118,6 +185,15 @@ impl FinancePage {
                     .map(|tx| ((tx as *const FinanceTransaction as usize) - base) / stride)
                     .collect();
             }
+            let (sort_col, sort_order) = self.tx_sort;
+            indices.sort_by(|left, right| {
+                compare_tx(
+                    &projection.transactions[*left],
+                    &projection.transactions[*right],
+                    sort_col,
+                    sort_order,
+                )
+            });
         }
         self.tx_list.reset(indices.len());
         self.tx_derived = TxDerived {
@@ -512,6 +588,46 @@ impl FinancePage {
                     })),
             );
 
+        let date_w = self.col_width("date", 96.);
+        let cat_w = self.col_width("category", 130.);
+        let acct_w = self.col_width("account", 160.);
+        let amt_w = self.col_width("amount", 110.);
+        let (sort_col, sort_order) = self.tx_sort;
+        let sort_state = |column: TxSort| (sort_col == column).then_some(sort_order);
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let header = resizable_table_header(
+            "finance-tx",
+            vec![
+                SortableColumn::fixed("date", "DATE", px(date_w)).sorted(sort_state(TxSort::Date)),
+                SortableColumn::flex("description", "DESCRIPTION")
+                    .sorted(sort_state(TxSort::Description)),
+                SortableColumn::fixed("category", "CATEGORY", px(cat_w))
+                    .sorted(sort_state(TxSort::Category)),
+                SortableColumn::fixed("account", "ACCOUNT", px(acct_w))
+                    .sorted(sort_state(TxSort::Account)),
+                SortableColumn::fixed("amount", "AMOUNT", px(amt_w))
+                    .right_align()
+                    .sorted(sort_state(TxSort::Amount)),
+            ],
+            Density::Desktop,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "date" => TxSort::Date,
+                    "description" => TxSort::Description,
+                    "category" => TxSort::Category,
+                    "account" => TxSort::Account,
+                    "amount" => TxSort::Amount,
+                    _ => return,
+                };
+                sort_entity.update(cx, |page, cx| page.set_tx_sort(column, cx));
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |page, cx| page.resize_column(col_id, cx));
+            },
+        );
+
         let table_body = if is_empty {
             div()
                 .flex()
@@ -545,9 +661,13 @@ impl FinancePage {
                         else {
                             return div().into_any_element();
                         };
+                        let date_w = page.col_width("date", 96.);
+                        let cat_w = page.col_width("category", 130.);
+                        let acct_w = page.col_width("account", 160.);
+                        let amt_w = page.col_width("amount", 110.);
                         div()
                             .pb_1()
-                            .child(render_tx_row(tx, palette))
+                            .child(render_tx_row(tx, date_w, cat_w, acct_w, amt_w, palette))
                             .into_any_element()
                     })
                 },
@@ -557,9 +677,10 @@ impl FinancePage {
         div()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_2()
             .size_full()
             .child(filter_bar)
+            .child(header)
             .child(
                 div()
                     .id("finance-transactions-scroll")

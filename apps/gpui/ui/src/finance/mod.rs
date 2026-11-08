@@ -15,7 +15,7 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::key_bar;
+use crate::primitives::{column_width, cycle_column_width, key_bar, SortOrder};
 use crate::theme::{Palette, ThemeContext};
 
 actions!(
@@ -64,10 +64,10 @@ mod overview;
 mod subscriptions;
 mod transactions;
 
-use import::{default_csv_mapping, CsvMappingField, ImportDerived};
+use import::{default_csv_mapping, CandidateSort, CsvMappingField, ImportDerived};
 use overview::BalanceDraft;
 use subscriptions::SubsDerived;
-use transactions::TxDerived;
+use transactions::{TxDerived, TxSort};
 
 pub struct FinancePage {
     pub(super) repo: Repo,
@@ -110,6 +110,9 @@ pub struct FinancePage {
     pub(super) balance_fields: Vec<BalanceDraft>,
     pub search_query: String,
     pub selected_category: Option<String>,
+    pub(super) tx_sort: (TxSort, SortOrder),
+    pub(super) import_sort: (CandidateSort, SortOrder),
+    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) filter_rev: u64,
     pub(super) review_rev: u64,
     pub(super) tx_derived: TxDerived,
@@ -176,6 +179,9 @@ impl FinancePage {
             balance_fields: Vec::new(),
             search_query: String::new(),
             selected_category: None,
+            tx_sort: (TxSort::Date, SortOrder::Descending),
+            import_sort: (CandidateSort::BookedAt, SortOrder::Descending),
+            col_widths: Default::default(),
             filter_rev: 0,
             review_rev: 0,
             tx_derived: TxDerived::default(),
@@ -247,6 +253,27 @@ impl FinancePage {
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.load(cx);
+    }
+
+    pub(super) fn col_width(&self, id: &'static str, default: f32) -> f32 {
+        column_width(&self.col_widths, id, default)
+    }
+
+    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
+        let default = match id {
+            "date" => Some(96.),
+            "category" => Some(130.),
+            "account" => Some(160.),
+            "amount" => Some(110.),
+            "cand_date" => Some(96.),
+            "cand_account" => Some(180.),
+            "cand_amount" => Some(110.),
+            _ => None,
+        };
+        if let Some(default) = default {
+            cycle_column_width(&mut self.col_widths, id, default);
+            cx.notify();
+        }
     }
 
     pub fn load(&mut self, cx: &mut Context<Self>) {
@@ -492,6 +519,18 @@ mod tests {
             assert_eq!(page.view, View::Transactions);
             page.set_view(View::Subscriptions, cx);
             assert_eq!(page.view, View::Subscriptions);
+            assert_eq!(page.tx_sort, (TxSort::Date, SortOrder::Descending));
+            page.set_tx_sort(TxSort::Amount, cx);
+            assert_eq!(page.tx_sort, (TxSort::Amount, SortOrder::Descending));
+            page.set_tx_sort(TxSort::Amount, cx);
+            assert_eq!(page.tx_sort, (TxSort::Amount, SortOrder::Ascending));
+            page.set_import_sort(CandidateSort::Account, cx);
+            assert_eq!(
+                page.import_sort,
+                (CandidateSort::Account, SortOrder::Ascending)
+            );
+            page.resize_column("amount", cx);
+            assert_eq!(page.col_width("amount", 110.), 149.);
         });
     }
 }

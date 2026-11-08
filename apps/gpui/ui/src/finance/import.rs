@@ -17,9 +17,56 @@ use sjel_gpui_core::finance::{
 };
 use sjel_gpui_core::shell::{self, FinanceCandidate, ShellError};
 
-use crate::theme::Palette;
+use crate::primitives::{resizable_table_header, tabular_cell, SortOrder, SortableColumn};
+use crate::theme::{Density, Palette};
 
 use super::FinancePage;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum CandidateSort {
+    #[default]
+    BookedAt,
+    Description,
+    Account,
+    Amount,
+}
+
+impl CandidateSort {
+    pub(crate) fn default_order(self) -> SortOrder {
+        match self {
+            Self::BookedAt | Self::Amount => SortOrder::Descending,
+            Self::Description | Self::Account => SortOrder::Ascending,
+        }
+    }
+}
+
+pub(crate) fn compare_candidates(
+    left: &FinanceCandidate,
+    right: &FinanceCandidate,
+    sort: CandidateSort,
+    order: SortOrder,
+) -> std::cmp::Ordering {
+    let primary = match sort {
+        CandidateSort::BookedAt => left.booked_at.cmp(&right.booked_at),
+        CandidateSort::Description => left
+            .description
+            .to_lowercase()
+            .cmp(&right.description.to_lowercase()),
+        CandidateSort::Account => left
+            .proposed_account
+            .to_lowercase()
+            .cmp(&right.proposed_account.to_lowercase()),
+        CandidateSort::Amount => left.amount_cents.cmp(&right.amount_cents),
+    };
+    let primary = if order.is_ascending() {
+        primary
+    } else {
+        primary.reverse()
+    };
+    primary
+        .then_with(|| right.booked_at.cmp(&left.booked_at))
+        .then_with(|| left.id.cmp(&right.id))
+}
 
 pub(crate) struct CsvMappingField {
     pub(super) label: &'static str,
@@ -69,6 +116,15 @@ pub(crate) fn default_csv_mapping() -> serde_json::Value {
 }
 
 impl FinancePage {
+    pub(super) fn set_import_sort(&mut self, column: CandidateSort, cx: &mut Context<Self>) {
+        self.import_sort = match self.import_sort {
+            (current, order) if current == column => (column, order.flip()),
+            _ => (column, column.default_order()),
+        };
+        self.review_rev = self.review_rev.wrapping_add(1);
+        cx.notify();
+    }
+
     pub(super) fn sync_import_derived(&mut self) {
         let key = ImportDerivedKey {
             candidates_loaded_at: self.candidates.loaded_at,
@@ -80,12 +136,21 @@ impl FinancePage {
             return;
         }
         let candidates = self.candidates.value.as_deref().unwrap_or_default();
-        let pending_indices: Vec<usize> = candidates
+        let (sort_col, sort_order) = self.import_sort;
+        let mut pending_indices: Vec<usize> = candidates
             .iter()
             .enumerate()
             .filter_map(|(ix, c)| (c.state == "pending").then_some(ix))
             .collect();
-        let uncategorized: Vec<_> = candidates
+        pending_indices.sort_by(|left, right| {
+            compare_candidates(
+                &candidates[*left],
+                &candidates[*right],
+                sort_col,
+                sort_order,
+            )
+        });
+        let mut uncategorized: Vec<_> = candidates
             .iter()
             .filter(|candidate| {
                 candidate.state == "confirmed"
@@ -97,6 +162,7 @@ impl FinancePage {
             })
             .cloned()
             .collect();
+        uncategorized.sort_by(|left, right| compare_candidates(left, right, sort_col, sort_order));
         let transactions = self
             .dashboard
             .value
@@ -396,7 +462,44 @@ impl FinancePage {
             .take(self.pending_limit)
             .filter_map(|&ix| candidates.get(ix).cloned())
             .collect();
-        let mut queue = div().flex().flex_col().gap_2();
+        let cand_date_w = self.col_width("cand_date", 96.);
+        let cand_acct_w = self.col_width("cand_account", 180.);
+        let cand_amt_w = self.col_width("cand_amount", 110.);
+        let (sort_col, sort_order) = self.import_sort;
+        let sort_state = |column: CandidateSort| (sort_col == column).then_some(sort_order);
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let cand_header = resizable_table_header(
+            "finance-candidates",
+            vec![
+                SortableColumn::fixed("cand_date", "DATE", px(cand_date_w))
+                    .sorted(sort_state(CandidateSort::BookedAt)),
+                SortableColumn::flex("cand_description", "DESCRIPTION")
+                    .sorted(sort_state(CandidateSort::Description)),
+                SortableColumn::fixed("cand_account", "PROPOSED ACCOUNT", px(cand_acct_w))
+                    .sorted(sort_state(CandidateSort::Account)),
+                SortableColumn::fixed("cand_amount", "AMOUNT", px(cand_amt_w))
+                    .right_align()
+                    .sorted(sort_state(CandidateSort::Amount)),
+                SortableColumn::spacer(px(210.)),
+            ],
+            Density::Desktop,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "cand_date" => CandidateSort::BookedAt,
+                    "cand_description" => CandidateSort::Description,
+                    "cand_account" => CandidateSort::Account,
+                    "cand_amount" => CandidateSort::Amount,
+                    _ => return,
+                };
+                sort_entity.update(cx, |page, cx| page.set_import_sort(column, cx));
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |page, cx| page.resize_column(col_id, cx));
+            },
+        );
+        let mut queue = div().flex().flex_col().gap_1p5().child(cand_header);
         for candidate in &pending {
             let id = candidate.id.clone();
             let reject_id = id.clone();
@@ -417,32 +520,15 @@ impl FinancePage {
                     account.starts_with("assets:") || account.starts_with("liabilities:")
                 })
                 .map(str::to_owned);
-            let mut row = div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_3()
-                .p_3()
-                .rounded(px(7.))
-                .border_1()
-                .border_color(rgba(palette.border))
-                .bg(rgba(palette.surface))
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(candidate.description.clone())
-                        .child(format!(
-                            "{} · {} · {}",
-                            candidate.booked_at,
-                            candidate.proposed_account,
-                            format_money(candidate.amount_cents, &candidate.currency)
-                        )),
-                );
+            let amount_color = if candidate.amount_cents < 0 {
+                palette.red
+            } else {
+                palette.green
+            };
+            let mut actions = div().w(px(210.)).flex_none().flex().justify_end().gap_1();
             if let Some(counterpart) = transfer {
                 let reconcile_id = id.clone();
-                row = row.child(
+                actions = actions.child(
                     Button::new(SharedString::from(format!(
                         "finance-transfer-{}",
                         candidate.id
@@ -457,7 +543,7 @@ impl FinancePage {
             }
             if !exact_transfer && !is_mail {
                 let confirm_id = id.clone();
-                row = row.child(
+                actions = actions.child(
                     Button::new(SharedString::from(format!(
                         "finance-confirm-{}",
                         candidate.id
@@ -472,7 +558,7 @@ impl FinancePage {
             } else if !exact_transfer && is_mail {
                 if let Some(source_account) = mail_source {
                     let confirm_id = id.clone();
-                    row = row.child(
+                    actions = actions.child(
                         Button::new(SharedString::from(format!(
                             "finance-confirm-mail-{}",
                             candidate.id
@@ -491,7 +577,7 @@ impl FinancePage {
                     );
                 }
             }
-            row = row.child(
+            actions = actions.child(
                 Button::new(SharedString::from(format!(
                     "finance-reject-{}",
                     candidate.id
@@ -503,6 +589,45 @@ impl FinancePage {
                     page.review_candidate(reject_id.clone(), "reject", None, cx)
                 })),
             );
+            let row = div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .px_3()
+                .py_2()
+                .rounded(px(7.))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .bg(rgba(palette.surface))
+                .child(tabular_cell(
+                    candidate.booked_at.clone(),
+                    px(cand_date_w),
+                    palette.muted,
+                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_sm()
+                        .text_color(rgb(palette.text))
+                        .child(candidate.description.clone()),
+                )
+                .child(
+                    div()
+                        .w(px(cand_acct_w))
+                        .flex_none()
+                        .truncate()
+                        .text_xs()
+                        .text_color(rgb(palette.muted))
+                        .child(candidate.proposed_account.clone()),
+                )
+                .child(tabular_cell(
+                    format_money(candidate.amount_cents, &candidate.currency),
+                    px(cand_amt_w),
+                    amount_color,
+                ))
+                .child(actions);
             queue = queue.child(row);
         }
         if pending_count > self.pending_limit {
@@ -533,22 +658,28 @@ impl FinancePage {
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
-                    .gap_2()
+                    .gap_3()
                     .p_2()
                     .rounded(px(5.))
+                    .child(tabular_cell(
+                        candidate.booked_at.clone(),
+                        px(cand_date_w),
+                        palette.muted,
+                    ))
                     .child(
                         div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(candidate.description.clone())
-                            .child(format!(
-                                "{} · {}",
-                                candidate.booked_at,
-                                format_money(candidate.amount_cents, &candidate.currency)
-                            )),
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_sm()
+                            .text_color(rgb(palette.text))
+                            .child(candidate.description.clone()),
                     )
+                    .child(tabular_cell(
+                        format_money(candidate.amount_cents, &candidate.currency),
+                        px(cand_amt_w),
+                        palette.red,
+                    ))
                     .child(
                         Button::new(SharedString::from(format!(
                             "finance-select-category-{}",

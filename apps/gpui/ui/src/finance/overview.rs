@@ -277,12 +277,16 @@ impl FinancePage {
             .map(|portfolio| render_holdings(portfolio, palette))
             .unwrap_or_else(|| div().into_any_element());
 
+        let date_w = self.col_width("tx-date", 88.0);
+        let cat_w = self.col_width("tx-cat", 120.0);
+        let acct_w = self.col_width("tx-acct", 120.0);
+        let amt_w = self.col_width("tx-amt", 110.0);
         let recent_rows: Vec<AnyElement> = projection
             .map(|p| {
                 p.transactions
                     .iter()
                     .take(8)
-                    .map(|tx| render_tx_row(tx, palette))
+                    .map(|tx| render_tx_row(tx, date_w, cat_w, acct_w, amt_w, palette))
                     .collect()
             })
             .unwrap_or_default();

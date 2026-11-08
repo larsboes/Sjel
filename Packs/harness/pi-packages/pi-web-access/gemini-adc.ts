@@ -204,7 +204,7 @@ export function clearAdcTokenCache(): void {
  */
 const OAUTH_CREDENTIAL_REJECTION_STATUSES = new Set([400, 401, 403]);
 
-function throwOnTokenExchangeFailure(res: Response, detail: string, status: number): never {
+function throwOnTokenExchangeFailure(detail: string, status: number): never {
 	if (OAUTH_CREDENTIAL_REJECTION_STATUSES.has(status)) {
 		throw new CredentialResolutionError("Gemini ADC", "oauth-credential-rejected");
 	}
@@ -226,7 +226,7 @@ async function exchangeRefreshToken(cfg: AdcFile, signal?: AbortSignal): Promise
 	});
 	const text = await res.text();
 	if (!res.ok) {
-		throwOnTokenExchangeFailure(res, text, res.status);
+		throwOnTokenExchangeFailure(text, res.status);
 	}
 	return parseTokenExchangeResponse(text, "Gemini ADC token exchange");
 }
@@ -265,7 +265,7 @@ async function exchangeServiceAccountJwt(cfg: AdcFile, signal?: AbortSignal): Pr
 	});
 	const text = await res.text();
 	if (!res.ok) {
-		throwOnTokenExchangeFailure(res, text, res.status);
+		throwOnTokenExchangeFailure(text, res.status);
 	}
 	return parseTokenExchangeResponse(text, "Gemini ADC service account token exchange");
 }

@@ -115,7 +115,6 @@ if (typeof browser !== 'undefined' && browser.webRequest?.onBeforeSendHeaders) {
 let sidePanelOpenWindows: Set<number> = new Set();
 let highlighterModeState: { [tabId: number]: boolean } = {};
 let readerModeState: { [tabId: number]: boolean } = {};
-let hasHighlights = false;
 let isContextMenuCreating = false;
 let popupPorts: { [tabId: number]: browser.Runtime.Port } = {};
 const contentScriptLoads = new Map<number, { url: string; promise: Promise<void> }>();
@@ -618,12 +617,10 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		}
 
 		if (typedRequest.action === "highlightsCleared" && sender.tab) {
-			hasHighlights = false;
 			debouncedUpdateContextMenu(sender.tab.id!);
 		}
 
 		if (typedRequest.action === "updateHasHighlights" && sender.tab && typedRequest.hasHighlights !== undefined) {
-			hasHighlights = typedRequest.hasHighlights;
 			debouncedUpdateContextMenu(sender.tab.id!);
 		}
 
@@ -1152,7 +1149,6 @@ async function highlightSelection(tabId: number, info: browser.Menus.OnClickData
 		highlightData,
 	});
 	highlighterModeState[tabId] = true;
-	hasHighlights = true;
 	debouncedUpdateContextMenu(tabId);
 }
 
@@ -1167,7 +1163,6 @@ async function highlightElement(tabId: number, info: browser.Menus.OnClickData) 
 		}
 	});
 	highlighterModeState[tabId] = true;
-	hasHighlights = true;
 	debouncedUpdateContextMenu(tabId);
 }
 

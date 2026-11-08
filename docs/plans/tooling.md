@@ -30,6 +30,8 @@ covers it.
   API contracts. Run any future clone detector as an optional discovery tool with generated,
   vendored and fixture exclusions; inspect shared behavior before extracting another module.
   Knip and jscpd are candidates, not mandatory gates or established coverage.
+  The [compiler trial](../../research/benchmarks/maintenance/README.md#typescript-cleanup)
+  covers unused declarations; public exports and cross-file clones remain outside that check.
 
 - **Native iOS screen validation.** Compile checks and screenshot-only touch tests did
   not detect an empty Documents host on a physical phone. `ios/run-sim --smoke`
@@ -278,7 +280,7 @@ covers it.
 
 ## Done
 
-- Places geocoding accepts the existing `place_id` response through the shared contract;
+- Places geocoding (`93b05a72`) accepts the existing `place_id` response through the shared contract;
   the desktop response copies and server request copy are removed. Software storage and clients
   share the complete app model. Focused tests, strict Clippy, GPUI core tests and the host
   workspace check pass; device acceptance remains separate.

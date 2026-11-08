@@ -2317,7 +2317,6 @@ export default function (pi: ExtensionAPI) {
 			const availableProviders = bootstrap.availableProviders;
 			const initialProvider = bootstrap.defaultProvider;
 			const curatorTimeoutSeconds = bootstrap.timeoutSeconds;
-			let currentProvider: SearchProvider = initialProvider;
 			const commandConfig = loadConfig();
 			const rawSearchProvider = normalizeProviderInput(
 				commandConfig.searchProvider ?? commandConfig.provider ?? "auto",
@@ -2429,7 +2428,6 @@ export default function (pi: ExtensionAPI) {
 							if (commandHandle && !isCommandActive()) return;
 							const normalized = normalizeProviderInput(provider);
 							if (!normalized || normalized === "auto" || Array.isArray(normalized)) return;
-							currentProvider = normalized;
 							currentSearchProvider = normalized;
 							try {
 								saveConfig({ provider: normalized });

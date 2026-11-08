@@ -11,7 +11,7 @@ import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './utils/iframe-resize';
 import { parseForClipAsync } from './utils/clip-utils';
-import { cleanAiStudioTurns, extractAiStudio, extractAiStudioAsync, extractAiStudioTurns, getAiStudioConversationKey, scanFullAiStudioChat, turnsToMarkdown, mergeTurnsForConversation, turnsToHtml } from './utils/ai-studio-extractor';
+import { cleanAiStudioTurns, extractAiStudioAsync, extractAiStudioTurns, getAiStudioConversationKey, scanFullAiStudioChat, turnsToMarkdown, mergeTurnsForConversation, turnsToHtml } from './utils/ai-studio-extractor';
 
 declare global {
 	interface Window {
@@ -33,8 +33,6 @@ declare global {
 	let liveAiStudioTurns: any[] = [];
 	let liveAiStudioConversationKey = '';
 	const currentAiStudioConversationKey = () => getAiStudioConversationKey(window.location.href);
-	const isCurrentAiStudioConversation = (sourceUrl: string) =>
-		getAiStudioConversationKey(sourceUrl) === currentAiStudioConversationKey();
 	const mergeLiveAiStudioTurns = (turns: any[], sourceUrl = window.location.href) => {
 		const conversationKey = getAiStudioConversationKey(sourceUrl);
 		liveAiStudioTurns = mergeTurnsForConversation(

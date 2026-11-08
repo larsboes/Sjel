@@ -1,6 +1,5 @@
-import dayjs from 'dayjs';
-import { Template, Property, PromptVariable } from '../types/types';
-import { incrementStat, addHistoryEntry, getClipHistory } from '../utils/storage-utils';
+import { Template, Property } from '../types/types';
+import { incrementStat } from '../utils/storage-utils';
 import { generateFrontmatter } from '../utils/obsidian-note-creator';
 import { saveToSjel, SjelRejected } from '../utils/sjel-destination';
 import { extractPageContent, initializePageContent } from '../utils/content-extractor';
@@ -8,8 +7,8 @@ import { compileTemplate } from '../utils/template-compiler';
 import { initializeIcons, getPropertyTypeIcon } from '../icons/icons';
 import { findMatchingTemplate, initializeTriggers } from '../utils/triggers';
 import { getLocalStorage, setLocalStorage, loadSettings, generalSettings, Settings } from '../utils/storage-utils';
-import { escapeHtml, unescapeValue } from '../utils/string-utils';
-import { loadTemplates, createDefaultTemplate } from '../managers/template-manager';
+import { unescapeValue } from '../utils/string-utils';
+import { loadTemplates } from '../managers/template-manager';
 import browser from '../utils/browser-polyfill';
 import { addBrowserClassToHtml, detectBrowser } from '../utils/browser-detection';
 import { createElementWithClass } from '../utils/dom-utils';
@@ -54,14 +53,6 @@ const memoizedCompileTemplate = memoizeWithExpiration(
 		keyFn: (tabId: number, template: string, variables: { [key: string]: string }, currentUrl: string) =>
 			`${tabId}-${template}-${currentUrl}`
 	}
-);
-
-// Memoize generateFrontmatter with a longer expiration
-const memoizedGenerateFrontmatter = memoizeWithExpiration(
-	async (properties: Property[]) => {
-		return generateFrontmatter(properties);
-	},
-	{ expirationMs: 5000 }
 );
 
 function getPropertiesFromDOM(): Property[] {
@@ -450,7 +441,6 @@ function setupEventListeners(tabId: number) {
 	const moreDropdown = document.getElementById('more-dropdown');
 	const copyContentButton = document.getElementById('copy-content');
 	const saveDownloadsButton = document.getElementById('save-downloads');
-	const shareContentButton = document.getElementById('share-content');
 
 	if (moreButton && moreDropdown) {
 		moreButton.addEventListener('click', (e) => {
@@ -621,23 +611,6 @@ function showError(messageKey: string): void {
 		document.body.classList.add('has-error');
 	}
 }
-function clearError(): void {
-	const errorMessage = document.querySelector('.error-message') as HTMLElement;
-	const clipper = document.querySelector('.clipper') as HTMLElement;
-
-	if (errorMessage && clipper) {
-		errorMessage.style.display = 'none';
-		clipper.style.display = 'block';
-
-		document.body.classList.remove('has-error');
-	}
-}
-
-function logError(message: string, error?: any): void {
-	console.error(message, error);
-	showError(message);
-}
-
 async function waitForInterpreter(interpretBtn: HTMLButtonElement): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const checkProcessing = () => {

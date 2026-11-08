@@ -2,7 +2,6 @@ import browser from '../utils/browser-polyfill';
 import { Reader } from '../utils/reader';
 import { initializeI18n, getMessage } from '../utils/i18n';
 import { ReaderSettings } from '../types/types';
-import { getFontCss } from '../utils/font-utils';
 import { getDomain } from '../utils/string-utils';
 import { extractContentBySelector as extractContentBySelectorShared } from '../utils/shared';
 import { setPageUrl, setPageTitle, updatePageDomainSettings, getHighlights, repositionHighlights } from '../utils/highlighter';

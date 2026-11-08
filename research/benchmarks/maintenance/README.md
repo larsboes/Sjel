@@ -23,3 +23,28 @@ remaining dependency is necessary.
 Put the reviewed executable on PATH and run `tools/maintenance --unused --json`.
 The report discovers workspaces from tracked manifests. It reports unavailable tooling
 as incomplete coverage and never applies fixes.
+
+## TypeScript cleanup
+
+The follow-up used the already-installed TypeScript compiler before adding another
+analysis package. From each package directory:
+
+```sh
+bun --no-env-file node_modules/typescript/bin/tsc --noEmit --noUnusedLocals --noUnusedParameters
+```
+
+Clipper also requires `--module es2020`, as its existing check script does. On
+2026-11-08, Obsidian Access and Pi Subagents reported no unused declarations. Web
+Access reported four: two imports, an unused response parameter and write-only provider
+state. Those were removed, and all three package configurations now enforce both checks.
+The repository's 16 local-adaptation tests pass; upstream Web Access tests are not vendored.
+
+Clipper initially reported 69 diagnostics. Inspection removed 15 findings, including
+write-only highlight/window state, unused imports, a redundant memoized frontmatter
+wrapper and uncalled error/conversation helpers. The existing typecheck, 257 tests and
+Chrome build pass. The remaining 54 diagnostics include callback parameters and deliberate
+compile-time checks; they are candidates, not a proven defect count. No blanket fix was applied.
+
+Compiler checks do not detect unused public exports, unreferenced entry points or
+cross-file clones. Knip and jscpd remain optional discovery candidates; no new package
+was installed and no general duplication percentage is claimed.

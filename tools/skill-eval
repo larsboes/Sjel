@@ -3,4 +3,4 @@
 # (CONTRIBUTING.md#language-tooling), matching the tools/ci-local and tools/doctor pattern so the
 # command the docs print, `tools/skill-eval`, is the thing that runs it.
 _here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bun run "$_here/skill-eval.ts" "$@"
+exec bun --no-env-file "$_here/skill-eval.ts" "$@"

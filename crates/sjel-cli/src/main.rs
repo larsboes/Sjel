@@ -19,6 +19,7 @@ mod app;
 mod audit;
 mod backup;
 mod capability;
+mod capability_cli;
 mod copilot;
 mod credentials;
 mod distribution;
@@ -243,11 +244,7 @@ fn sjel(root: &Path, command: &str, rest: &[String]) -> ExitCode {
         // The public Pack list the marketplace generator reads. No tools/ launcher: its only
         // caller is a generator inside this repository.
         "packs" => packs::list_public(root, rest),
-        other => {
-            eprintln!("sjel: unknown command '{other}'");
-            eprintln!("Run 'sjel help'.");
-            ExitCode::from(1)
-        }
+        other => capability_cli::run(root, other, rest),
     }
 }
 

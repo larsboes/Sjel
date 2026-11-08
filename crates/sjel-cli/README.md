@@ -13,6 +13,8 @@ their respective subcommands through `sjel-cli`.
 sjel help                      # command overview and usage
 sjel capability list           # list active and available capabilities
 sjel capability health         # query capability health status
+sjel projects projects         # run the projects CLI
+sjel operator-profile show     # run the operator-profile CLI
 sjel search <query>            # search across skills, tools, and docs
 sjel doctor                    # diagnostic health and contract checks
 sjel setup plan                # inspect required host and capability configuration
@@ -21,6 +23,14 @@ sjel harnesses sync --all      # synchronize skill packs across agent harnesses
 sjel update report             # check dependencies and toolchain freshness
 sjel audit                     # security vulnerability audit across locks and packages
 ```
+
+`sjel <capability> <args...>` resolves the capability through the shared service-manifest
+lookup and runs its declared `<capability>` or `<capability>-cli` Cargo binary. Built-in
+commands take precedence. Cargo checks source and dependency freshness, builds in debug
+mode with the lockfile, and forwards arguments after `--`. Debug builds leave deployed
+release binaries intact. The CLI inherits the caller's working directory and receives the
+resolved overlay. The local-build power policy also applies. Server and helper binaries are not
+selected as CLI fallbacks.
 
 ### Launchers in `tools/`
 

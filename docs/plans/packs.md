@@ -65,12 +65,11 @@ drifting copies.
 3. **External skills use the same profile selection.** `tools/skills store` publishes a screened,
    digest-pinned Pack. `optional_packs` selects an installed external source without making a
    fresh checkout depend on a machine-local store (`35d866ed`). Anatomy is stored and verified;
-   Pi and Antigravity registrations are current. The legacy global `SKILL.md` and Claude link
+   All six bound harnesses are current. The legacy global `SKILL.md` and Claude link
    are removed, so they no longer form a second discovery channel; helper-file cleanup remains.
-   Four materialized destinations remain missing because the restricted session refused atomic
-   directory renames. Replacement failures now return an error before recording success and
-   successful installs verify destination bytes (`35d866ed`). Complete those deployments from
-   an unrestricted terminal, then re-read the matrix. Unchecked: loading Anatomy in a fresh
+   The four materialized destinations were completed from an unrestricted terminal and the
+   matrix was re-read on 2026-11-08. Replacement failures return an error before recording
+   success and successful installs verify destination bytes (`35d866ed`). Unchecked: loading Anatomy in a fresh
    vault-started Pi session. Application-owned skill links remain independently installed.
 
 Fixed in `383cb67`: `sync` ignored the profile, the doctor warned for units the profile leaves
@@ -130,7 +129,7 @@ precedes installer hardening. Approved external skills use the content-pinned st
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
 | P6 | Done in `cf6563d9`, with failure rollback in `f0538875`: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
-| P7 | Store and verification built in `095960fc`; bounded assets, optional profile selection and verified replacement in `35d866ed`. Anatomy store and two registry deployments verified. Open: four materialized deployments, old helper-file cleanup, source revision metadata when the upstream CLI omits it, and application-owned links. | Stored bytes match their digest; each destination loads the reviewed source without a second global channel, including a vault-started Pi session. |
+| P7 | Store and verification built in `095960fc`; bounded assets, optional profile selection and verified replacement in `35d866ed`. Anatomy store, four materialized destinations and two registry deployments verified. Open: old helper-file cleanup, source revision metadata when the upstream CLI omits it, and application-owned links. | Stored bytes match their digest; each destination loads the reviewed source without a second global channel, including a vault-started Pi session. |
 | P8 | Done in `5ddc2049`: `vendor-audit`, the four-lens method for vetting third-party software before it runs, plus the octet v0.10.0 pass as its worked example. Method only, deliberately: `tools/audit` keeps its inward scope and the verdict lands in `upstreams.toml`. | `tools/check-skill-metadata.sh` passes with it included; a later audit of a differently-shaped program (a Node CLI, a Python daemon) reaches a verdict without leaving a lens unrun. |
 
 Verification: all 408 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy and `rustfmt

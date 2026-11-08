@@ -111,7 +111,8 @@ covers it.
 - **Restricted skill deployment preflight.** Directory renames under harness homes were denied
   after staging. `35d866ed` makes replacement errors explicit and verifies destination bytes
   before recording success. Workaround: finish the atomic installation in an unrestricted
-  terminal; do not publish partial copies. Smallest change: probe the required rename capability
+  terminal, which completed all four Anatomy copies; do not publish partial copies. Smallest
+  change: probe the required rename capability
   before materializing a large Pack and report the failing destination and retained stage.
 - **One update surface.** `sjel update` reports package classes but no skills,
   `tools/skills` has no update check, and `tools/harnesses` owns Packs. Smallest change: one

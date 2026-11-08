@@ -643,6 +643,12 @@ Open:
 
 ## 11. UI stack
 
+Upgrade and fork review: [`research/dependency-upgrade-review.md`](../../research/dependency-upgrade-review.md).
+Keep the Mobile fork until upstream's compatible revision is merged and verified.
+NSH Mail caches its filtered row projection with `computed`; three focused Mail tests
+pass, including retained rows, filter changes and removal. Frame-time and device
+checks remain open.
+
 Decided 2026-11-07: GPUI Fast draws the Mac app, and [NSH](https://github.com/longbridge/nsh)
 draws new phone screens with UIKit views. GPUI draws every pixel itself, which suits the desktop.
 On the phone it has to rebuild text selection, input methods and accessibility that UIKit already

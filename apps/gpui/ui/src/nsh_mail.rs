@@ -512,6 +512,23 @@ pub fn MailScreen() -> impl IntoElement {
         }))
 }
 
+fn visible_mail(
+    rows: Signal<Vec<MailProposal>>,
+    status_filter: Signal<StatusFilter>,
+    category_filter: Signal<Option<&'static str>>,
+) -> Memo<Vec<MailProposal>> {
+    computed(move || {
+        let status = status_filter.get();
+        let category = category_filter.get();
+        rows.with(|all| {
+            mail::in_view(all.iter(), status, category)
+                .into_iter()
+                .cloned()
+                .collect()
+        })
+    })
+}
+
 fn thread_list(
     rows: Signal<Vec<MailProposal>>,
     status_filter: Signal<StatusFilter>,
@@ -563,16 +580,7 @@ fn thread_list(
             )
     };
 
-    let visible_rows = move || {
-        let s = status_filter.get();
-        let c = category_filter.get();
-        rows.with(|all| {
-            mail::in_view(all.iter(), s, c)
-                .into_iter()
-                .cloned()
-                .collect::<Vec<_>>()
-        })
-    };
+    let visible_rows = visible_mail(rows, status_filter, category_filter);
 
     let mut status_bar = view().flex_row().px_4().pb_1().gap_2();
     for s in StatusFilter::ALL {
@@ -590,12 +598,11 @@ fn thread_list(
         .child(scroll().horizontal().px_4().pb_2().child(category_bar))
         .child(
             virtual_list(
-                move || visible_rows().len(),
+                move || visible_rows.with(Vec::len),
                 move |at| {
                     let item = move || {
-                        visible_rows()
-                            .get(at.index())
-                            .cloned()
+                        visible_rows
+                            .with(|visible| visible.get(at.index()).cloned())
                             .unwrap_or_else(|| MailProposal {
                                 id: String::new(),
                                 from_addr: None,
@@ -884,6 +891,40 @@ mod tests {
                 classification_version: "v1".into(),
             }),
         }
+    }
+
+    #[test]
+    fn visible_mail_reuses_rows_and_tracks_filter_and_source_changes() {
+        let runtime = nsh_core::element::Runtime::default();
+        let _entered = runtime.enter();
+        let (owner, ()) = nsh_core::element::create_root(|| {
+            let pending = sample_proposal();
+            let mut archived = pending.clone();
+            archived.id = "archived".into();
+            archived.status = "archived".into();
+            archived.stream = "steuern".into();
+            let rows = signal(vec![pending, archived]);
+            let status = signal(StatusFilter::Pending);
+            let category = signal(None);
+            let visible = visible_mail(rows, status, category);
+            assert_eq!(visible.with(|rows| rows[0].id.clone()), "thread_1");
+            let retained = visible.with(|rows| rows.as_ptr());
+            for _ in 0..100 {
+                assert_eq!(visible.with(Vec::len), 1);
+                assert_eq!(visible.with(|rows| rows.as_ptr()), retained);
+            }
+            status.set(StatusFilter::All);
+            assert_eq!(visible.with(Vec::len), 2);
+            category.set(Some("steuern"));
+            assert_eq!(visible.with(|rows| rows[0].id.clone()), "archived");
+            status.set(StatusFilter::Pending);
+            assert_eq!(visible.with(Vec::len), 0);
+            rows.update(|rows| rows[1].status = "proposed".into());
+            assert_eq!(visible.with(|rows| rows[0].id.clone()), "archived");
+            rows.update(|rows| rows.retain(|row| row.id != "archived"));
+            assert_eq!(visible.with(Vec::len), 0);
+        });
+        owner.dispose();
     }
 
     #[test]

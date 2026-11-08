@@ -97,12 +97,22 @@ covers it.
   primary index. Smallest change: a scoped commit command that preserves unrelated staged
   files and rejects a changed HEAD.
 
-- **Harness intake review, live.** `tools/intake review --reviewer claude` passed only against a
-  fake `claude` in `tools/skills.test.sh`. A real `claude -p` run has not happened. Unverified:
-  the CLI accepts `--setting-sources project` together with `--json-schema`, and the field that
-  holds the answer (the parser reads `structured_output`, then JSON in `result`). Smallest
-  change: run it once on a held stage and fix the flags it rejects. Also open: Codex as a second
-  reviewer in `review::HARNESSES`, and a timeout on the harness run.
+- **Harness intake review execution.** The real Claude review and receipt reuse passed on
+  Anatomy on 2026-11-08. Open: Codex as a second reviewer in `review::HARNESSES`, and a timeout
+  on the harness run. The accepted CLI flags and output parser no longer need a live probe.
+
+- **Project reconciliation export and revision checks.** A reviewed cleanup used a local tar
+  of the rendered project tree, checked record revisions, then wrote and removed records through
+  Projects. Pseudonymized content could not round-trip as an exact `base`; the retained raw
+  projection supplied that base without exposing it to the prompt. Smallest change: an owner
+  export with a manifest and opaque revision-checked updates/removals, so reconciliation needs
+  neither a shell archive nor a raw-content base. Attachments need an owner migration contract.
+
+- **Restricted skill deployment preflight.** Directory renames under harness homes were denied
+  after staging. `35d866ed` makes replacement errors explicit and verifies destination bytes
+  before recording success. Workaround: finish the atomic installation in an unrestricted
+  terminal; do not publish partial copies. Smallest change: probe the required rename capability
+  before materializing a large Pack and report the failing destination and retained stage.
 - **One update surface.** `sjel update` reports package classes but no skills,
   `tools/skills` has no update check, and `tools/harnesses` owns Packs. Smallest change: one
   `sjel update` entry point that delegates skills to `tools/skills check|update`, Packs to
@@ -266,6 +276,10 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- `35d866ed`: upstream skill snapshots retain bounded binary assets, keep the text limit, and
+  cap total package bytes. The skills launcher uses a session-writable npm cache; a real Anatomy
+  harness review passed and its receipt admitted the exact stored digest.
 
 - Maintenance (`7fa64333`) reports all three tracked Cargo workspaces, five locked Bun projects, API
   contracts, plan lengths and unresolved inline path candidates. Optional `--unused`,

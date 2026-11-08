@@ -54,26 +54,24 @@ drifting copies.
    content, approved baseline, model/endpoint settings and the intake policy fingerprint;
    incomplete file reads and failed persistence hold the candidate. Findings retain their
    normal severity. Legacy receipts without a policy fingerprint require a new review.
-   Not run live yet: see "Harness intake review, live" in [`tooling.md`](tooling.md).
+   A real Claude harness review of Anatomy completed on 2026-11-08 and its receipt was reused
+   by the store gate. It reported no holding finding; binary assets were explicitly unread.
    Snapshots refuse symlinks, special files and unreadable directories. Text is limited to
    2 MiB, binary assets to 32 MiB per file, and complete packages to 128 MiB. Binary bytes
    remain in the installed snapshot and digest; the text review reports them as unread.
    Limits: publication is not
    crash-atomic across layouts (backups are restored on ordinary failure, the lock is written
    last), and approval records still do not prove who read the findings.
-3. **External skills bypass Pack profile selection.** Partly fixed by P7: a skill stored with
-   `tools/skills store` is a Pack in the store root (`~/.local/state/sjel/skill-store/`) and a
-   profile selects it. Destinations stay in each harness's deployment ledger, not in the store
-   Pack. Not run live: Anatomy is still the global install. The move is `tools/skills store
-   wheresryan22/anatomy` (held until reviewed or approved), `anatomy` in the `coding-harness`
-   profile (pi's `full` takes every Pack), `tools/harnesses apply`, then `tools/skills remove -g
-   -s anatomy -y`, and `upstreams.toml [anatomy]` updated. Unchecked: Anatomy in a pi session
-   started in the vault. The text below is the state before P7.
-   Anatomy is globally discovered outside the
-   Pack ledger, and application-owned skill symlinks have their own installer. The current scope
-   rule in `tools/skills` rejects global non-Pack installs, while `upstreams.toml [anatomy]`
-   records a direct global install. Removing a Pack from a coding profile does not remove these
-   independent channels. Anatomy remains unchanged pending an external-skill policy.
+3. **External skills use the same profile selection.** `tools/skills store` publishes a screened,
+   digest-pinned Pack. `optional_packs` selects an installed external source without making a
+   fresh checkout depend on a machine-local store (`35d866ed`). Anatomy is stored and verified;
+   Pi and Antigravity registrations are current. The legacy global `SKILL.md` and Claude link
+   are removed, so they no longer form a second discovery channel; helper-file cleanup remains.
+   Four materialized destinations remain missing because the restricted session refused atomic
+   directory renames. Replacement failures now return an error before recording success and
+   successful installs verify destination bytes (`35d866ed`). Complete those deployments from
+   an unrestricted terminal, then re-read the matrix. Unchecked: loading Anatomy in a fresh
+   vault-started Pi session. Application-owned skill links remain independently installed.
 
 Fixed in `383cb67`: `sync` ignored the profile, the doctor warned for units the profile leaves
 out, and its Claude Code fix hint named the `tools/packs.sh` shim. A ledger now records the
@@ -120,7 +118,7 @@ no profile until the next `use <profile>` on that machine.
      case with the engine that exists, and the P6 digest binds each copy to its approval.
 
 Decided 2026-11-03: coding harnesses use `coding-harness`; pi keeps `full`. Profile reconciliation
-precedes installer hardening. Anatomy remains unchanged until the external-skill policy is settled.
+precedes installer hardening. Approved external skills use the content-pinned store.
 
 ## 5. Work packages
 
@@ -132,7 +130,7 @@ precedes installer hardening. Anatomy remains unchanged until the external-skill
 | P4 | Deployment levels in the ledger and registry (idea 1), after decision 4.1. | A ledger entry carries its level, and `harnesses status` groups by it. |
 | P5 | Done in `97c51d07`: harness-bound coding/full profiles, deployed and checked on the Mac. | 401 CLI tests pass serially; five coding harnesses omit knowledge and learning; pi retains both. |
 | P6 | Done in `cf6563d9`, with failure rollback in `f0538875`: bind third-party installation to screened content; review failure holds. | 408 CLI tests and 14 `tools/skills` cases pass; model-review failure holds; an unapproved baseline cannot suppress findings; a failed layout or lock write rolls earlier layouts back. |
-| P7 | Manage approved external skills per harness (defect 3) from a content-pinned store (decision 4.4). Built in `095960fc`: `tools/skills store` and `verify`, the store as a Pack root in `harnesses/registry.rs`, drift in `tools/skills audit`. Open: the live Anatomy move below, re-storing as the only update path, and application-owned skill links. | A supported Sjel command records source, revision, digest, destination and approval evidence; audit reports drift and unintended discovery; Anatomy loads in a vault-started pi session without a second global channel. |
+| P7 | Store and verification built in `095960fc`; bounded assets, optional profile selection and verified replacement in `35d866ed`. Anatomy store and two registry deployments verified. Open: four materialized deployments, old helper-file cleanup, source revision metadata when the upstream CLI omits it, and application-owned links. | Stored bytes match their digest; each destination loads the reviewed source without a second global channel, including a vault-started Pi session. |
 | P8 | Done in `5ddc2049`: `vendor-audit`, the four-lens method for vetting third-party software before it runs, plus the octet v0.10.0 pass as its worked example. Method only, deliberately: `tools/audit` keeps its inward scope and the verdict lands in `upstreams.toml`. | `tools/check-skill-metadata.sh` passes with it included; a later audit of a differently-shaped program (a Node CLI, a Python daemon) reaches a verdict without leaving a lens unrun. |
 
 Verification: all 408 `sjel-cli` tests pass with `--test-threads=1`; strict Clippy and `rustfmt

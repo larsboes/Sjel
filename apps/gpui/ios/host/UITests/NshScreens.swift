@@ -10,14 +10,6 @@ final class NshScreens: XCTestCase {
     assertScreen("mail", heading: "Mail")
   }
 
-  func testDocumentsRendersInDarkMode() {
-    assertScreen("documents", heading: "Documents", dark: true)
-  }
-
-  func testMailRendersInDarkMode() {
-    assertScreen("mail", heading: "Mail", dark: true)
-  }
-
   func testOpeningNshAfterTodayRenders() {
     let app = XCUIApplication()
     app.launchEnvironment["SJEL_TAB"] = "today"
@@ -31,18 +23,17 @@ final class NshScreens: XCTestCase {
     attach("today-before-nsh")
     mail.tap()
     assertHeading(app, "Mail")
-    app.staticTexts["Documents"].firstMatch.tap()
+    app.buttons["Documents"].firstMatch.tap()
     assertHeading(app, "Documents")
   }
 
-  private func assertScreen(_ tab: String, heading: String, dark: Bool = false) {
+  private func assertScreen(_ tab: String, heading: String) {
     let app = XCUIApplication()
     app.launchEnvironment["SJEL_TAB"] = tab
     app.launchEnvironment["SJEL_SIDEBAR"] = "off"
-    if dark { app.launchArguments += ["-AppleInterfaceStyle", "Dark"] }
     app.launch()
     defer {
-      attach("nsh-\(tab)\(dark ? "-dark" : "")")
+      attach("nsh-\(tab)")
       app.terminate()
     }
     assertHeading(app, heading)

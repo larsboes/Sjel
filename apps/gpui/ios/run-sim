@@ -70,23 +70,33 @@ if $tap || $smoke; then
   # xcodebuild boots and drives the simulator itself; nothing opens Simulator.app.
   results="${SJEL_IOS_RESULTS:-$(mktemp -d "${TMPDIR:-/tmp}/sjel-ios-tests.XXXXXX")}"
   mkdir -p "$results"
-  result="$results/tests.xcresult"
   selection=(-only-testing:SjelIOSUITests)
-  if $smoke; then selection=(-only-testing:SjelIOSUITests/NshScreens); fi
-  status=0
-  xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
-    -configuration Debug -derivedDataPath "$HOST/build" -resultBundlePath "$result" \
-    -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" \
-    "${selection[@]}" test || status=$?
-  shots="$results/screenshots"
-  if [ -d "$result" ]; then
-    xcrun xcresulttool export attachments --path "$result" --output-path "$shots" >/dev/null || {
-      echo "ios/run-sim: could not export test attachments" >&2
-      [ "$status" -ne 0 ] || status=1
-    }
+  appearances=(current)
+  if $smoke; then
+    selection=(-only-testing:SjelIOSUITests/NshScreens)
+    appearances=(light dark)
+    original_appearance="$(xcrun simctl ui "$udid" appearance)"
+    trap 'xcrun simctl ui "$udid" appearance "$original_appearance" >/dev/null 2>&1' EXIT
   fi
-  echo "$result"
-  [ ! -d "$shots" ] || find "$shots" -name '*.png' -print
+  status=0
+  for appearance in "${appearances[@]}"; do
+    if [ "$appearance" != current ]; then xcrun simctl ui "$udid" appearance "$appearance"; fi
+    result="$results/$appearance/tests.xcresult"
+    mkdir -p "$results/$appearance"
+    xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
+      -configuration Debug -derivedDataPath "$HOST/build" -resultBundlePath "$result" \
+      -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" \
+      "${selection[@]}" test || status=$?
+    shots="$results/$appearance/screenshots"
+    if [ -d "$result" ]; then
+      xcrun xcresulttool export attachments --path "$result" --output-path "$shots" >/dev/null || {
+        echo "ios/run-sim: could not export test attachments" >&2
+        [ "$status" -ne 0 ] || status=1
+      }
+    fi
+    echo "$result"
+    [ ! -d "$shots" ] || find "$shots" -name '*.png' -print
+  done
   exit "$status"
 fi
 

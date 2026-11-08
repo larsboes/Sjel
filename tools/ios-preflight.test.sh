@@ -89,16 +89,23 @@ cat > "$work/bin/xcodebuild" <<'EOF'
 echo "xcodebuild $*" >> "$TEST_LOG"
 previous=
 for arg in "$@"; do
-  if [ "$previous" = -resultBundlePath ]; then mkdir -p "$arg"; fi
+  if [ "$previous" = -resultBundlePath ]; then result="$arg"; mkdir -p "$arg"; fi
   previous="$arg"
 done
-if [ "$previous" = test ]; then exit "$TEST_XCODE_STATUS"; fi
+if [ "$previous" = test ]; then
+  if [ "$TEST_XCODE_STATUS" = light-fails ]; then
+    case "$result" in */light/*) exit 65 ;; *) exit 0 ;; esac
+  fi
+  exit "$TEST_XCODE_STATUS"
+fi
 EOF
 cat > "$work/bin/xcrun" <<'EOF'
 #!/bin/bash
 echo "xcrun $*" >> "$TEST_LOG"
 if [ "$1" = simctl ] && [ "$2" = list ]; then
   echo '    iPhone (00000000-0000-0000-0000-000000000001) (Booted)'
+elif [ "$1" = simctl ] && [ "$2" = ui ] && [ "$#" -eq 4 ]; then
+  echo light
 elif [ "$1" = xcresulttool ]; then
   previous=
   for arg in "$@"; do
@@ -111,8 +118,15 @@ chmod +x "$work/bin/"*
 export SJEL_IOS_RESULTS="$work/results" TEST_XCODE_STATUS=65
 run run-sim --smoke
 [ "$status" -eq 65 ] || { echo "FAIL: a failed screen test lost its status: $output" >&2; exit 1; }
-[ -f "$SJEL_IOS_RESULTS/screenshots/screen.png" ]
+[ -f "$SJEL_IOS_RESULTS/light/screenshots/screen.png" ]
+[ -f "$SJEL_IOS_RESULTS/dark/screenshots/screen.png" ]
 grep -Fq -- '-only-testing:SjelIOSUITests/NshScreens' "$TEST_LOG"
+grep -Fq -- 'appearance dark' "$TEST_LOG"
+[ "$(tail -1 "$TEST_LOG")" = 'xcrun simctl ui 00000000-0000-0000-0000-000000000001 appearance light' ]
+
+export TEST_XCODE_STATUS=light-fails
+run run-sim --smoke
+[ "$status" -eq 65 ] || { echo 'FAIL: a passing dark run hid a failed light run' >&2; exit 1; }
 
 export TEST_XCODE_STATUS=0
 run run-sim --smoke

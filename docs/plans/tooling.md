@@ -19,7 +19,9 @@ covers it.
   The pinned NSH headless driver renders the phone root, switches its tabs, and
   renders a 500-row page and reader. The [iOS 26.2 light-mode baseline](https://github.com/larsboes/Sjel/actions/runs/42515565617)
   passes two UIKit tests with inspected screenshots. Smoke coverage also checks
-  dark mode, rendered text contrast and opening NSH after Today; manual dispatch
+  rendered text contrast and opening NSH after Today. Each smoke run selects real
+  light and dark simulator appearances and restores the original setting; app
+  launch arguments alone do not select the simulator's appearance. Manual dispatch
   can select the Xcode 27 image. The shared NSH host now sets the theme's adaptive
   background and foreground: its headings previously resolved to opaque black in
   dark appearance. The headless contrast regression fails before this change and

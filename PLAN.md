@@ -22,7 +22,7 @@ The GPUI app on the iPhone is the daily tool for six things, each with a UI that
 | Other agents (Claude Code, Codex, Pi) | Terminal on the Mac behind Face ID, opens a login shell. Not tested on a device. | Live validation, then a preset and directory picker | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
 | Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 | Documents | NSH reader: list, text, PDF original checked by SHA-256, keep offline. Not checked on a device since `a71af504`. | Device check, cursor paging, then #245–#247 | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
-| Mail | Nothing (Feed is Mac-only) | Read and triage mail on the phone, as an NSH screen | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
+| Mail | NSH triage reader (`ui/src/nsh_mail.rs`): status + category filters, thread reader, triage actions with confirmation. Not checked on a device. | Device check, then the new tab bar | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
 | Calendar | Tab, reads and writes the replica | A time grid and quick rescheduling | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
 
 Order inside Priority 1:

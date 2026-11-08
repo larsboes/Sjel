@@ -55,7 +55,7 @@ Documents and People open directly from Today 1-tap shortcuts, finder, and links
 | Area | Status | Notes |
 |---|---|---|
 | Documents | Shared + mobile shortcut | `ui/src/documents.rs` + Core Graphics `ui/src/pdf_kit.rs` on macOS and iOS. 1-tap shortcut on Today, single-pane mobile reader with pinch zoom. |
-| Mail | Shared compact + mobile drawer | `ui/src/mail.rs` density toggle (Compact/Desktop/Comfortable), mobile 44pt touch targets, expandable message snippet drawer with direct triage (Dismiss, Waiting, Archive, Trash, Categorize). |
+| Mail | NSH triage screen + desktop | `ui/src/nsh_mail.rs` on iOS (`Tab::Mail`) and Mac NSH trial (`SJEL_NSH_TRIAL=mail`), plus `ui/src/mail.rs` on Mac desktop. |
 | Calendar | Tab (replica + copy) | 24-hour day time grid with live red now-line, hour rail tapping to open Composer, Google & iCloud sync status mark. |
 | Travel | Tab | Grouped Day cards, transfer connection buffer badges, one-tap booking code copy chips, and offline-ready marks. |
 | Agent | Tab + Edge Seat | Agent session tier picker (`sjel | project | account`), policy block cards with rule ID & single override. |
@@ -93,13 +93,14 @@ Mac unreachable, and the original's SHA-256 on the phone equals the library's.
 
 ### Mail
 
-1. A phone tab over the shared Mail page in a compact density: the proposals grouped by category,
-   one row per mail with sender, subject and age.
-2. Opening a row shows the mail's text and its attachments. An attachment opens in the document
-   reader.
-3. Swipe actions map to the existing `MailAction`s: archive, trash, dismiss, waiting. Archive,
-   trash and a class-raising category ask first, as on the Mac (`MailAction::confirmation`).
-4. Offline: opened mails stay readable (rule 2), and an action waits in the outbox (rule 3).
+1. Built as an NSH screen (`ui/src/nsh_mail.rs`, §11): status and category filter chips, virtual
+   list of `MailProposal`s ordered by category/relevance/date, and a markdown thread reader via
+   `GET /comms/content/mail/{id}`.
+2. Built: triage actions (`Dismiss`, `Waiting`, `Archive`, `Trash`, `Secret (c3)`, category moves,
+   model verdict `Accept`, and Gmail job `Retry`/`Cancel`) run through `POST /comms/triage/bulk`
+   (`Source::mail_action`), with inline confirmation before archive, trash or class-raising moves.
+3. Open: offline caching of opened mails (rule 2), outbox queueing when the Mac is unreachable
+   (rule 3), and attachment handoff into the document reader.
 
 Done when the phone triages ten mails with the Mac reachable and the Mac shows the same state, an
 action taken offline applies once on reconnect, and an attachment opens in the reader.
@@ -652,7 +653,8 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | `device::Source`: the Mac's shell or the phone's client, one read path | `core/src/device.rs` | `62145b47` |
 | Documents on the phone is the NSH reader; "Back" returns to GPUI | `ios/src/nsh.rs`, `nav.rs`, `launch.rs` | `a71af504` |
 | Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | `4c9910e6` |
-| Mac NSH trial (`SJEL_NSH_TRIAL=1`) registers `sjel.pdf` + `Originals` | `src/nsh_trial.rs` | this section's commit |
+| Mac NSH trial (`SJEL_NSH_TRIAL=1`) registers `sjel.pdf` + `Originals` | `src/nsh_trial.rs` | `81cd6935` |
+| NSH Mail triage screen, one screen for phone and Mac (`NshHostScreen`) | `ui/src/nsh_mail.rs`, `core/src/shell/feed_mail.rs`, `ios/src/`, `src/nsh_trial.rs` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.
@@ -660,15 +662,16 @@ text opens the system menu, and VoiceOver reads the list and the reader.
 ### How the phone shows an NSH screen
 
 `host/App.swift` mounts one hidden NSH view over the GPUI view at launch (`sjel_ios_nsh_mount`).
-`host::show_nsh` and `host::hide_nsh` switch it. `select_tab` shows it for `Tab::Documents`, and
-the reader's "Back" hides it (`nsh_documents::set_close`). Native views come from the host as NSH
-native components: `sjel.pdf` is a PDFKit `PDFView` (`host/Documents.swift`, registered in
-`ios/src/nsh.rs`). A new NSH screen goes in `ui/src` behind the `nsh` feature, reads through
-`device::Source`, and gets its own show path from `select_tab`.
+`host::show_nsh` and `host::hide_nsh` switch it. `select_tab` sets `NshPage::Documents` or
+`NshPage::Mail` and shows `NshHostScreen`, and "Back" hides it (`nsh_documents::set_close`,
+`nsh_mail::set_close`). Native views come from the host as NSH native components: `sjel.pdf` is a
+PDFKit `PDFView` (`host/Documents.swift`, registered in `ios/src/nsh.rs`). A new NSH screen goes in
+`ui/src` behind the `nsh` feature, reads through `device::Source`, and joins `NshHostScreen`.
 
-Run it: `apps/gpui/ios/run-sim` (add `SIMCTL_CHILD_SJEL_TAB=documents` to land on the reader),
-`apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPhone. The Mac window:
-`cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1`.
+Run it: `apps/gpui/ios/run-sim` (add `SIMCTL_CHILD_SJEL_TAB=documents` or `mail` to land on the
+NSH screen), `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPhone. The Mac
+window: `cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1` (or
+`SJEL_NSH_TRIAL=mail`).
 
 NSH comes from git rev `893fb84db6` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
 build for this app. The rev moved off `cc38facfdd` on 2026-11-08 for the updater's zip 9 bump
@@ -684,7 +687,11 @@ build for this app. The rev moved off `cc38facfdd` on 2026-11-08 for the updater
    with the Mac unreachable, and the phone's original matches the library's SHA-256. Built; the
    check is item 1. Still open from §2: cursor paging (`GET /api/documents` reads 500 rows a
    page), and #245–#247.
-3. **Mail on the phone as an NSH screen** (Priority 1 item 4), on the same pattern.
+3. **Mail on the phone as an NSH screen** (Priority 1 item 4), on the same pattern. Built in
+   `ui/src/nsh_mail.rs` and `core/src/shell/feed_mail.rs` (`Source::mail_proposals`,
+   `mail_detail`, `mail_action`, `mail_gmail_job`), wired through `NshHostScreen` on both iOS
+   (`Tab::Mail`) and the Mac trial (`SJEL_NSH_TRIAL=mail`). Not run yet: device check on a paired
+   iPhone.
 4. **The new tab bar** after Mail. The bar is GPUI today (`ios/src/lib.rs`); with two NSH
    screens, decide whether the bar itself moves to NSH (`nsh_base` tabs). Not decided.
 5. **Retire the phone's GPUI pages** as each is next changed. `ios/src`'s GPUI shell and

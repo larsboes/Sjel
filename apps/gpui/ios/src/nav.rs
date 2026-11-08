@@ -75,9 +75,18 @@ impl Capabilities {
     /// Shows `tab` and starts what it reads. Every way onto a tab comes through here: the bar,
     /// Today's shortcuts, a reminder and a link.
     pub(super) fn select_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        // Documents is an NSH screen over the GPUI view; the tab under it stays where it was.
+        // Documents and Mail are NSH screens over the GPUI view; the tab under them stays where it was.
         #[cfg(all(target_os = "ios", feature = "nsh"))]
         if tab == Tab::Documents {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(
+                sjel_gpui_ui::nsh_documents::NshPage::Documents,
+            );
+            crate::host::show_nsh();
+            return;
+        }
+        #[cfg(all(target_os = "ios", feature = "nsh"))]
+        if tab == Tab::Mail {
+            sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
             crate::host::show_nsh();
             return;
         }

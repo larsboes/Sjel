@@ -440,17 +440,7 @@ impl Shell {
         ids: &[String],
         action: &MailAction,
     ) -> ShellResult<BulkResult> {
-        let stream = match action {
-            MailAction::Categorize(key) => Some(key.as_str()),
-            _ => None,
-        };
-        let data_class = match action {
-            MailAction::SetDataClass(class) => Some(class.as_str()),
-            _ => None,
-        };
-        let body = serde_json::json!({
-            "ids": ids, "action": action.key(), "stream": stream, "data_class": data_class,
-        });
+        let body = mail_action_body(ids, action);
         self.json(Method::POST, "/comms/triage/bulk", Some(body), 60)
             .await
     }
@@ -458,14 +448,122 @@ impl Shell {
     /// Retries or cancels a Gmail action that stopped after its automatic retries
     /// (`POST /comms/triage/:id/gmail-job`, `decision` is `retry` or `cancel`).
     pub async fn mail_gmail_job(&self, id: &str, decision: &str) -> ShellResult<()> {
+        let Some(path) = mail_gmail_job_path(id) else {
+            return Err(ShellError::Refused(400, Some("Invalid mail id.".into())));
+        };
         let body = serde_json::json!({ "decision": decision });
-        self.send(
-            Method::POST,
-            &format!("/comms/triage/{id}/gmail-job"),
-            Some(body),
-            60,
-        )
-        .await
-        .map(drop)
+        self.send(Method::POST, &path, Some(body), 60)
+            .await
+            .map(drop)
+    }
+}
+
+fn valid_mail_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn mail_content_path(id: &str) -> Option<String> {
+    valid_mail_id(id).then(|| format!("/comms/content/mail/{id}"))
+}
+
+fn mail_gmail_job_path(id: &str) -> Option<String> {
+    valid_mail_id(id).then(|| format!("/comms/triage/{id}/gmail-job"))
+}
+
+fn mail_action_body(ids: &[String], action: &MailAction) -> serde_json::Value {
+    let stream = match action {
+        MailAction::Categorize(key) => Some(key.as_str()),
+        _ => None,
+    };
+    let data_class = match action {
+        MailAction::SetDataClass(class) => Some(class.as_str()),
+        _ => None,
+    };
+    serde_json::json!({
+        "ids": ids,
+        "action": action.key(),
+        "stream": stream,
+        "data_class": data_class,
+    })
+}
+
+impl crate::device::Source {
+    /// Every mail proposal from the Mac's shell or the paired phone's client.
+    pub async fn mail_proposals(&self) -> Result<Vec<MailProposal>, String> {
+        match self {
+            Self::Shell(shell) => shell.mail_proposals().await.map_err(|e| e.to_string()),
+            Self::Device(client) => client.get("/comms/triage").await,
+        }
+    }
+
+    /// The stored message content for one mail thread (`GET /comms/content/mail/{id}`).
+    pub async fn mail_detail(&self, id: &str) -> Result<FeedContentDetail, String> {
+        let path = mail_content_path(id).ok_or_else(|| "Not a mail id.".to_string())?;
+        match self {
+            Self::Shell(shell) => shell
+                .content_item_detail("mail", id)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => client.get(&path).await,
+        }
+    }
+
+    /// Apply one triage action across `ids` (`POST /comms/triage/bulk`).
+    pub async fn mail_action(
+        &self,
+        ids: &[String],
+        action: &MailAction,
+    ) -> Result<BulkResult, String> {
+        match self {
+            Self::Shell(shell) => shell
+                .mail_action(ids, action)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = serde_json::to_vec(&mail_action_body(ids, action))
+                    .map_err(|e| e.to_string())?;
+                client.post("/comms/triage/bulk", &body).await
+            }
+        }
+    }
+
+    /// Retry or cancel a stopped Gmail job (`POST /comms/triage/{id}/gmail-job`).
+    pub async fn mail_gmail_job(&self, id: &str, decision: &str) -> Result<(), String> {
+        let path = mail_gmail_job_path(id).ok_or_else(|| "Not a mail id.".to_string())?;
+        match self {
+            Self::Shell(shell) => shell
+                .mail_gmail_job(id, decision)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Device(client) => {
+                let body = serde_json::to_vec(&serde_json::json!({ "decision": decision }))
+                    .map_err(|e| e.to_string())?;
+                client.send(Method::POST, &path, &body).await
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod mail_path_tests {
+    use super::*;
+
+    #[test]
+    fn mail_paths_accept_alphanumeric_ids_and_refuse_traversal() {
+        assert_eq!(
+            mail_content_path("18f9a_b-2"),
+            Some("/comms/content/mail/18f9a_b-2".into())
+        );
+        assert_eq!(
+            mail_gmail_job_path("18f9a_b-2"),
+            Some("/comms/triage/18f9a_b-2/gmail-job".into())
+        );
+        assert_eq!(mail_content_path(""), None);
+        assert_eq!(mail_content_path("../etc/passwd"), None);
+        assert_eq!(mail_gmail_job_path("bad/id"), None);
     }
 }

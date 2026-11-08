@@ -47,7 +47,7 @@ pub(crate) fn launch_tab() -> Tab {
         "inbox" => Tab::Inbox,
         "travel" => Tab::Travel,
         "settings" => Tab::Settings,
-        "mail" => Tab::Mail,
+        "mail" => mail_tab(),
         "documents" => documents_tab(),
         _ => Tab::Today,
     }
@@ -57,11 +57,24 @@ pub(crate) fn launch_tab() -> Tab {
 fn documents_tab() -> Tab {
     #[cfg(all(target_os = "ios", feature = "nsh"))]
     {
+        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Documents);
         crate::host::show_nsh();
         Tab::Today
     }
     #[cfg(not(all(target_os = "ios", feature = "nsh")))]
     Tab::Documents
+}
+
+/// Mail is an NSH screen over Today when the build has NSH (`nav.rs`, `select_tab`).
+fn mail_tab() -> Tab {
+    #[cfg(all(target_os = "ios", feature = "nsh"))]
+    {
+        sjel_gpui_ui::nsh_documents::set_nsh_page(sjel_gpui_ui::nsh_documents::NshPage::Mail);
+        crate::host::show_nsh();
+        Tab::Today
+    }
+    #[cfg(not(all(target_os = "ios", feature = "nsh")))]
+    Tab::Mail
 }
 
 /// `SJEL_SIDEBAR=soundscape|activity` opens the right edge at launch on that seat. A phone never sets

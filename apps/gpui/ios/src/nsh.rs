@@ -64,12 +64,14 @@ fn originals() -> Option<sjel_gpui_core::originals::Originals> {
 pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
     use nsh_platform_ios::SurfaceOptions;
     use nsh_platform_ios::{set_ui_sets, AppView, ComponentContext, NativeComponent, Root};
-    use sjel_gpui_ui::nsh_documents::{self as docs, DocumentsScreen, PDF_COMPONENT};
+    use sjel_gpui_ui::nsh_documents::{self as docs, NshHostScreen, PDF_COMPONENT};
+    use sjel_gpui_ui::nsh_mail as mail;
     let Some(mtm) = objc2::MainThreadMarker::new() else {
         return false;
     };
     set_ui_sets(vec![nsh_base::registry()]);
     docs::set_close(crate::host::hide_nsh);
+    mail::set_close(crate::host::hide_nsh);
     if let Some(originals) = originals() {
         docs::set_originals(originals);
         docs::set_pdf_viewer();
@@ -85,7 +87,7 @@ pub fn mount(container: &objc2_ui_kit::UIView) -> bool {
         }),
     );
     container.addSubview(app.view());
-    app.run(Root::of::<DocumentsScreen>());
+    app.run(Root::of::<NshHostScreen>());
     MOUNTED.with(|slot| *slot.borrow_mut() = Some(app));
     true
 }

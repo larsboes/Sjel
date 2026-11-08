@@ -32,6 +32,8 @@ pub mod music;
 pub mod nav;
 #[cfg(feature = "nsh")]
 pub mod nsh_documents;
+#[cfg(feature = "nsh")]
+pub mod nsh_mail;
 pub mod packs;
 pub mod pdf_kit;
 pub mod people;

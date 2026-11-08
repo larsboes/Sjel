@@ -219,9 +219,14 @@ impl Capabilities {
                             }
                         });
                         #[cfg(feature = "nsh")]
-                        sjel_gpui_ui::nsh_documents::connect(
-                            sjel_gpui_core::device::Source::Device(client.clone()),
-                        );
+                        {
+                            sjel_gpui_ui::nsh_documents::connect(
+                                sjel_gpui_core::device::Source::Device(client.clone()),
+                            );
+                            sjel_gpui_ui::nsh_mail::connect(
+                                sjel_gpui_core::device::Source::Device(client.clone()),
+                            );
+                        }
                         self.client = Some(client);
                     }
                     Err(error) => self.synced = Some(format!("Cannot sync: {error}").into()),

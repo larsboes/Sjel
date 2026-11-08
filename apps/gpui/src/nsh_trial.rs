@@ -1,7 +1,8 @@
-//! Opens the NSH Documents reader (`sjel_gpui_ui::nsh_documents`) in a window of its own, drawn
-//! by GPUI Fast (`docs/plans/gpui.md` §11). `SJEL_NSH_TRIAL=1` asks for it at launch, with the
-//! `sjel.pdf` native component registered so PDF originals and offline keeping work on the Mac
-//! trial window as well as on the phone.
+//! Opens the NSH Documents & Mail screens (`sjel_gpui_ui::nsh_documents`, `sjel_gpui_ui::nsh_mail`)
+//! in a window of their own, drawn by GPUI Fast (`docs/plans/gpui.md` §11).
+//! `SJEL_NSH_TRIAL=1` (or `documents` / `mail`) asks for it at launch, with the `sjel.pdf` native
+//! component registered so PDF originals and offline keeping work on the Mac trial window as well
+//! as on the phone.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -23,8 +24,9 @@ use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, Shell};
 use sjel_gpui_ui::documents::PdfRenderer;
 use sjel_gpui_ui::nsh_documents::{
-    connect, set_originals, set_pdf_viewer, DocumentsScreen, PDF_COMPONENT,
+    connect, set_nsh_page, set_originals, set_pdf_viewer, NshHostScreen, NshPage, PDF_COMPONENT,
 };
+use sjel_gpui_ui::nsh_mail;
 use sjel_gpui_ui::theme::{tint, Palette};
 
 const PAGE_FIT_WIDTH: u32 = 1200;
@@ -44,12 +46,19 @@ pub fn open(cx: &mut App) {
         set_originals(originals);
     }
     set_pdf_viewer();
+    if std::env::var("SJEL_NSH_TRIAL").as_deref() == Ok("mail") {
+        set_nsh_page(NshPage::Mail);
+    } else {
+        set_nsh_page(NshPage::Documents);
+    }
     let endpoint = &sjel_gpui_core::environment::current().endpoint;
     if let Ok(shell) = Shell::new(endpoint) {
-        connect(Source::Shell(Arc::new(shell)));
+        let shell = Arc::new(shell);
+        connect(Source::Shell(shell.clone()));
+        nsh_mail::connect(Source::Shell(shell));
     }
     let options = AppOptions {
-        title: "Sjel Documents (NSH)".to_owned(),
+        title: "Sjel (NSH)".to_owned(),
         ..AppOptions::default()
     };
     options.components.register(
@@ -58,7 +67,7 @@ pub fn open(cx: &mut App) {
             Box::new(MacPdfComponent::new(nsh_cx))
         }),
     );
-    let source = AppSource::Rust(Root::of::<DocumentsScreen>());
+    let source = AppSource::Rust(Root::of::<NshHostScreen>());
     if let Err(error) = open_app_window(source, options, cx) {
         eprintln!("sjel-gpui: the NSH trial window did not open: {error}");
     }

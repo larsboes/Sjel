@@ -16,10 +16,57 @@ use serde_json::json;
 use sjel_gpui_core::device::Source;
 use sjel_gpui_core::originals::Originals;
 use sjel_gpui_core::shell::{self, DocumentDetail, DocumentSummary};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+
+use crate::nsh_mail::mail_screen;
 
 /// The native component that shows a PDF at a file path (`ios/src/nsh.rs` registers it).
 pub const PDF_COMPONENT: &str = "sjel.pdf";
+
+/// Which shared NSH screen [`NshHostScreen`] displays.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NshPage {
+    #[default]
+    Documents,
+    Mail,
+}
+
+struct PageRouter {
+    current: Mutex<NshPage>,
+    tx: Mutex<Option<UnboundedSender<NshPage>>>,
+}
+
+fn page_router() -> &'static PageRouter {
+    static ROUTER: OnceLock<PageRouter> = OnceLock::new();
+    ROUTER.get_or_init(|| PageRouter {
+        current: Mutex::new(NshPage::Documents),
+        tx: Mutex::new(None),
+    })
+}
+
+/// Switches [`NshHostScreen`] to `page` (`Documents` or `Mail`).
+pub fn set_nsh_page(page: NshPage) {
+    *page_router()
+        .current
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = page;
+    if let Some(tx) = page_router()
+        .tx
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+    {
+        let _ = tx.send(page);
+    }
+}
+
+/// Returns the active [`NshPage`].
+pub fn nsh_page() -> NshPage {
+    *page_router()
+        .current
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
 
 /// What a read on core's runtime hands to the screen.
 enum Update {
@@ -38,9 +85,16 @@ enum Update {
     Kept(bool),
 }
 
+#[derive(Clone)]
+struct Snapshot {
+    rows: Vec<DocumentSummary>,
+    next_page: Option<(usize, usize)>,
+    status: String,
+}
+
 struct Feed {
-    tx: UnboundedSender<Update>,
-    rx: Mutex<Option<UnboundedReceiver<Update>>>,
+    tx: Mutex<Option<UnboundedSender<Update>>>,
+    snapshot: Mutex<Snapshot>,
     source: Mutex<Option<Source>>,
     originals: Mutex<Option<Originals>>,
     close: Mutex<Option<Box<dyn Fn() + Send>>>,
@@ -49,16 +103,17 @@ struct Feed {
 
 fn feed() -> &'static Feed {
     static FEED: OnceLock<Feed> = OnceLock::new();
-    FEED.get_or_init(|| {
-        let (tx, rx) = unbounded_channel();
-        Feed {
-            tx,
-            rx: Mutex::new(Some(rx)),
-            source: Mutex::new(None),
-            originals: Mutex::new(None),
-            close: Mutex::new(None),
-            pdf_viewer: AtomicBool::new(false),
-        }
+    FEED.get_or_init(|| Feed {
+        tx: Mutex::new(None),
+        snapshot: Mutex::new(Snapshot {
+            rows: Vec::new(),
+            next_page: None,
+            status: String::from("Waiting for the library."),
+        }),
+        source: Mutex::new(None),
+        originals: Mutex::new(None),
+        close: Mutex::new(None),
+        pdf_viewer: AtomicBool::new(false),
     })
 }
 
@@ -67,7 +122,28 @@ fn locked<T: Clone>(slot: &Mutex<Option<T>>) -> Option<T> {
 }
 
 fn send(update: Update) {
-    let _ = feed().tx.send(update);
+    {
+        let mut snap = feed().snapshot.lock().unwrap_or_else(|e| e.into_inner());
+        match &update {
+            Update::Status(text) => snap.status = text.clone(),
+            Update::Rows {
+                rows,
+                replace,
+                next_offset,
+                total,
+            } => {
+                if *replace {
+                    snap.rows.clear();
+                }
+                snap.rows.extend(rows.iter().cloned());
+                snap.next_page = next_offset.map(|off| (off, *total));
+            }
+            Update::Detail { .. } | Update::Original(_) | Update::Kept(_) => {}
+        }
+    }
+    if let Some(tx) = feed().tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        let _ = tx.send(update);
+    }
 }
 
 /// What "Back" does at the top of the list. Without it, the list has no "Back".
@@ -260,46 +336,98 @@ struct Open {
 }
 
 #[component]
+pub fn NshHostScreen() -> impl IntoElement {
+    let page = signal(nsh_page());
+    let (tx, mut rx) = unbounded_channel();
+    *page_router().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+    spawn(async move {
+        while let Some(next) = rx.recv().await {
+            page.set(next);
+        }
+    });
+    let closable = feed()
+        .close
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some();
+    let page_chip = move |target: NshPage, label: &'static str| {
+        button()
+            .px_3()
+            .py_1()
+            .on_press(move || set_nsh_page(target))
+            .child(
+                text(move || {
+                    if page.get() == target {
+                        format!("{label} •")
+                    } else {
+                        label.to_owned()
+                    }
+                })
+                .text_xs(),
+            )
+    };
+    view()
+        .flex_1()
+        .child((!closable).then(|| {
+            view()
+                .flex_row()
+                .px_4()
+                .pt_2()
+                .gap_2()
+                .child(page_chip(NshPage::Documents, "Documents"))
+                .child(page_chip(NshPage::Mail, "Mail"))
+        }))
+        .child(dynamic(move || match page.get() {
+            NshPage::Documents => documents_screen().into_element(),
+            NshPage::Mail => mail_screen().into_element(),
+        }))
+}
+
+#[component]
 pub fn DocumentsScreen() -> impl IntoElement {
-    let rows = signal(Vec::<DocumentSummary>::new());
-    let next_page = signal(None::<(usize, usize)>);
-    let status = signal(String::from("Waiting for the library."));
+    let initial = feed()
+        .snapshot
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let rows = signal(initial.rows);
+    let next_page = signal(initial.next_page);
+    let status = signal(initial.status);
     let open_doc = Open {
         detail: signal(None::<DocumentDetail>),
         original: signal(None::<String>),
         kept: signal(false),
     };
-    let receiver = feed().rx.lock().unwrap_or_else(|e| e.into_inner()).take();
-    if let Some(mut rx) = receiver {
-        spawn(async move {
-            while let Some(update) = rx.recv().await {
-                match update {
-                    Update::Status(text) => status.set(text),
-                    Update::Rows {
-                        rows: batch,
-                        replace,
-                        next_offset,
-                        total,
-                    } => {
-                        rows.update(|all| {
-                            if replace {
-                                all.clear();
-                            }
-                            all.extend(batch);
-                        });
-                        next_page.set(next_offset.map(|off| (off, total)));
-                    }
-                    Update::Detail { detail, kept } => {
-                        open_doc.original.set(None);
-                        open_doc.kept.set(kept);
-                        open_doc.detail.set(Some(*detail));
-                    }
-                    Update::Original(path) => open_doc.original.set(Some(path)),
-                    Update::Kept(kept) => open_doc.kept.set(kept),
+    let (tx, mut rx) = unbounded_channel();
+    *feed().tx.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+    spawn(async move {
+        while let Some(update) = rx.recv().await {
+            match update {
+                Update::Status(text) => status.set(text),
+                Update::Rows {
+                    rows: batch,
+                    replace,
+                    next_offset,
+                    total,
+                } => {
+                    rows.update(|all| {
+                        if replace {
+                            all.clear();
+                        }
+                        all.extend(batch);
+                    });
+                    next_page.set(next_offset.map(|off| (off, total)));
                 }
+                Update::Detail { detail, kept } => {
+                    open_doc.original.set(None);
+                    open_doc.kept.set(kept);
+                    open_doc.detail.set(Some(*detail));
+                }
+                Update::Original(path) => open_doc.original.set(Some(path)),
+                Update::Kept(kept) => open_doc.kept.set(kept),
             }
-        });
-    }
+        }
+    });
     let closable = feed()
         .close
         .lock()
@@ -569,5 +697,10 @@ mod tests {
         assert_eq!(list[0].id, "2");
         sort_nsh_rows(&mut list, NshDocSort::Pages);
         assert_eq!(list[0].page_count, 10);
+
+        set_nsh_page(NshPage::Mail);
+        assert_eq!(nsh_page(), NshPage::Mail);
+        set_nsh_page(NshPage::Documents);
+        assert_eq!(nsh_page(), NshPage::Documents);
     }
 }

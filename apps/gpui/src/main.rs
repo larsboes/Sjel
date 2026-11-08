@@ -157,7 +157,10 @@ fn main() {
         }
         script::run_from_env(cx);
         #[cfg(feature = "nsh-trial")]
-        if std::env::var("SJEL_NSH_TRIAL").as_deref() == Ok("1") {
+        if matches!(
+            std::env::var("SJEL_NSH_TRIAL").as_deref(),
+            Ok("1" | "documents" | "mail")
+        ) {
             nsh_trial::open(cx);
         }
         // `SJEL_GPUI_SOUNDSCAPE=1`: open the player at launch, so a test or a screenshot finds it

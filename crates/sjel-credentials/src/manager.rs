@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -97,6 +97,31 @@ impl CredentialManager {
             return Err(error);
         }
         Ok(descriptor)
+    }
+
+    /// `create`, then read the value back. A store that does not return the same bytes is rolled
+    /// back, so a caller may delete its plaintext source only after this returns `Ok`.
+    pub fn create_verified(
+        &self,
+        id: CredentialId,
+        label: String,
+        provider_kind: ProviderKind,
+        consumers: Vec<String>,
+        value: &SecretValue,
+    ) -> Result<CredentialDescriptor, CredentialError> {
+        let descriptor = self.create(id.clone(), label, provider_kind, consumers, value)?;
+        if self.holds(&id, value)? {
+            return Ok(descriptor);
+        }
+        let _ = self.delete(&id);
+        Err(CredentialError::ProviderOperation {
+            operation: "verify",
+        })
+    }
+
+    /// Whether the stored value for `id` is byte-identical to `value`.
+    pub fn holds(&self, id: &CredentialId, value: &SecretValue) -> Result<bool, CredentialError> {
+        Ok(self.get(id)?.expose_bytes() == value.expose_bytes())
     }
 
     pub fn update(&self, id: &CredentialId, value: &SecretValue) -> Result<(), CredentialError> {
@@ -324,6 +349,41 @@ mod tests {
         assert_eq!(fs::read(&runtime_path).unwrap(), b"rotated-token");
         manager.delete(&id).unwrap();
         assert!(manager.list().unwrap().is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn create_verified_reports_whether_the_store_holds_the_bytes() {
+        let root =
+            std::env::temp_dir().join(format!("sjel-credentials-verified-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let provider = Arc::new(MemoryProvider::new());
+        let manager = CredentialManager::new(
+            root.join("credentials.toml"),
+            vec![provider.clone() as Arc<dyn CredentialProvider>],
+        )
+        .unwrap();
+        let id = CredentialId::parse("imported-file").unwrap();
+        let value = SecretValue::new(b"{\"k\":1}".to_vec()).unwrap();
+        manager
+            .create_verified(
+                id.clone(),
+                "Imported".into(),
+                ProviderKind::Bitwarden,
+                vec![],
+                &value,
+            )
+            .unwrap();
+        assert!(manager.holds(&id, &value).unwrap());
+        assert!(
+            !manager
+                .holds(&id, &SecretValue::new(b"other".to_vec()).unwrap())
+                .unwrap()
+        );
+        assert!(matches!(
+            manager.create_verified(id, "Again".into(), ProviderKind::Bitwarden, vec![], &value),
+            Err(CredentialError::AlreadyExists)
+        ));
         let _ = fs::remove_dir_all(root);
     }
 

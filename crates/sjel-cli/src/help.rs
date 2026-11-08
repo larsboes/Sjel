@@ -154,6 +154,9 @@ pub const CREDENTIALS: &str = r#"Usage: sjel credentials <command>
                                  keychain holds it
   connect <id> <client.json>     Connect a Google grant: opens the browser for consent and
                                  writes the grant to the keychain
+  import <id> <file> [label]     Store a secret file (key, kubeconfig, token JSON) as one
+                                 keychain item, verify it reads back identical, then delete
+                                 the file. A duplicate copy of a stored file is deleted too
   move <id>                      Move a grant from its old overlay env file to the keychain,
                                  with no browser; the env file keeps only its other lines
   prune <id>                     After a fresh connect: prove the keychain grant with a real

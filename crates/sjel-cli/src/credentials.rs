@@ -7,9 +7,9 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use sjel_credentials::declaration::{declared_in, Declaration};
+use sjel_credentials::declaration::{Declaration, declared_in};
 use sjel_credentials::{
-    google, CredentialId, CredentialManager, CredentialProvider, KeychainProvider, Presence,
+    CredentialId, CredentialManager, CredentialProvider, KeychainProvider, Presence, google,
 };
 
 pub fn run(root: &Path, args: &[String]) -> ExitCode {
@@ -18,6 +18,10 @@ pub fn run(root: &Path, args: &[String]) -> ExitCode {
         Some("connect") => match (args.get(1), args.get(2)) {
             (Some(id), Some(file)) => connect(root, id, Path::new(file)),
             _ => Err("usage: sjel credentials connect <id> <client.json>".into()),
+        },
+        Some("import") => match (args.get(1), args.get(2)) {
+            (Some(id), Some(file)) => import(id, Path::new(file), args.get(3)),
+            _ => Err("usage: sjel credentials import <id> <file> [label]".into()),
         },
         Some("prune") => match args.get(1) {
             Some(id) => prune(root, id),
@@ -102,6 +106,58 @@ fn connect(root: &Path, id: &str, file: &Path) -> Result<(), String> {
         },
     )?;
     println!("{} is connected. The grant is in the OS keychain.", d.label);
+    Ok(())
+}
+
+/// Store a plaintext secret file as one keychain item, then delete the file. The file goes only
+/// after the keychain returns the same bytes. Delete, not Trash: the Trash would keep a plaintext
+/// copy. A second copy of an already-imported file is deleted as a duplicate; a file that differs
+/// from the stored item is kept.
+fn import(id: &str, file: &Path, label: Option<&String>) -> Result<(), String> {
+    use sjel_credentials::{CredentialError, ProviderKind, SecretValue};
+    let credential = CredentialId::parse(id).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+    let value = SecretValue::new(bytes).map_err(|e| e.to_string())?;
+    let providers: Vec<Arc<dyn CredentialProvider>> = vec![Arc::new(KeychainProvider::system())];
+    let manager = CredentialManager::new(catalog()?, providers).map_err(|e| e.to_string())?;
+    let label = label.cloned().unwrap_or_else(|| id.to_owned());
+    match manager.create_verified(
+        credential.clone(),
+        label,
+        ProviderKind::Keychain,
+        vec![],
+        &value,
+    ) {
+        Ok(_) => {}
+        Err(CredentialError::AlreadyExists) => {
+            if !manager
+                .holds(&credential, &value)
+                .map_err(|e| e.to_string())?
+            {
+                return Err(format!(
+                    "{id} already holds a different value; {} is kept",
+                    file.display()
+                ));
+            }
+            std::fs::remove_file(file).map_err(|e| e.to_string())?;
+            println!(
+                "{id} already holds these bytes; the duplicate {} is deleted.",
+                file.display()
+            );
+            return Ok(());
+        }
+        Err(error) => return Err(format!("{error}; {} is kept", file.display())),
+    }
+    std::fs::remove_file(file).map_err(|e| {
+        format!(
+            "{id} is in the keychain, but {} could not be deleted: {e}",
+            file.display()
+        )
+    })?;
+    println!(
+        "{id} is in the OS keychain and reads back identical; {} is deleted.",
+        file.display()
+    );
     Ok(())
 }
 

@@ -1,6 +1,5 @@
 //! The Projects page: pick a project, view tasks and notes, edit them in place.
 
-use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
@@ -13,8 +12,8 @@ use gpui_kit::{
 use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
 use crate::primitives::{
-    back_button, column_width, cycle_column_width, list, note, placeholder, progress_bar,
-    row_for_density, section,
+    back_button, column_width, cycle_column_width, list, note, placeholder, resizable_table_header,
+    row_for_density, section, SortOrder, SortableColumn,
 };
 use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
@@ -47,6 +46,15 @@ pub enum ProjectSection {
     InventoryLinks,
 }
 
+/// A column the Projects hub table sorts by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectSort {
+    Name,
+    Tasks,
+    Progress,
+    Notes,
+}
+
 pub(super) struct LinkReview {
     pub(super) record: ProjectLinkRecord,
     pub(super) item_ref: String,
@@ -64,6 +72,9 @@ pub(super) struct Columns {
     pub(super) status: Option<f32>,
     pub(super) kind: Option<f32>,
     pub(super) search: Option<f32>,
+    pub(super) project_tasks: f32,
+    pub(super) project_progress: f32,
+    pub(super) project_notes: f32,
     /// The page's side padding.
     pub(super) pad: f32,
     /// The height and touch target a table row gets.
@@ -80,6 +91,9 @@ impl Columns {
                 status: None,
                 kind: None,
                 search: None,
+                project_tasks: 80.,
+                project_progress: 0.,
+                project_notes: 60.,
                 pad: 12.,
                 density,
             },
@@ -90,6 +104,9 @@ impl Columns {
                 status: Some(100.),
                 kind: Some(80.),
                 search: Some(220.),
+                project_tasks: 110.,
+                project_progress: 140.,
+                project_notes: 85.,
                 pad: 32.,
                 density,
             },
@@ -106,6 +123,9 @@ impl Columns {
         base.project = base.project.map(|w| column_width(widths, "project", w));
         base.status = base.status.map(|w| column_width(widths, "status", w));
         base.kind = base.kind.map(|w| column_width(widths, "kind", w));
+        base.project_tasks = column_width(widths, "project_tasks", base.project_tasks);
+        base.project_progress = column_width(widths, "project_progress", base.project_progress);
+        base.project_notes = column_width(widths, "project_notes", base.project_notes);
         base
     }
 }
@@ -183,6 +203,8 @@ pub struct Projects {
     pub task_sort: (TaskSort, bool),
     /// The cross-project notes table's sort column, and whether it ascends.
     pub note_sort: (NoteSort, bool),
+    /// The projects hub table's sort column, and whether it ascends.
+    pub project_sort: (ProjectSort, bool),
     /// Per-column width overrides for resizable table headers.
     pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub group_by_project: bool,
@@ -256,6 +278,7 @@ impl Projects {
             global_status: StatusFilter::Active,
             task_sort: (TaskSort::Default, true),
             note_sort: (NoteSort::Default, true),
+            project_sort: (ProjectSort::Name, true),
             col_widths: Default::default(),
             group_by_project: false,
             collapsed_groups: Default::default(),
@@ -473,6 +496,9 @@ impl Projects {
             "project" => base.project,
             "status" => base.status,
             "kind" => base.kind,
+            "project_tasks" => Some(base.project_tasks),
+            "project_progress" => Some(base.project_progress),
+            "project_notes" => Some(base.project_notes),
             _ => None,
         };
         if let Some(default) = default {
@@ -1495,10 +1521,22 @@ impl Render for Projects {
                                 .child(format!("Notes ({supporting_notes_count})")),
                         )
                         .child(
-                            Button::new("sec-mail-review")
-                                .small()
-                                .ghost()
-                                .label("Mail review")
+                            div()
+                                .id("sec-mail-review")
+                                .px_3()
+                                .py(px(4.))
+                                .rounded(px(6.))
+                                .text_xs()
+                                .cursor_pointer()
+                                .when(self.project_section == ProjectSection::MailReview, |el| {
+                                    el.bg(rgba(palette.surface))
+                                        .text_color(rgb(palette.text))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                })
+                                .when(self.project_section != ProjectSection::MailReview, |el| {
+                                    el.text_color(rgb(palette.muted))
+                                        .hover(|s| s.text_color(rgb(palette.text)))
+                                })
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     if view.project_section != ProjectSection::MailReview {
                                         view.put_away_editor(cx);
@@ -1506,20 +1544,40 @@ impl Render for Projects {
                                         view.load_project_mail(false, cx);
                                         cx.notify();
                                     }
-                                })),
+                                }))
+                                .child("Mail review"),
                         )
                         .child(
-                            Button::new("sec-inventory-links")
-                                .small()
-                                .ghost()
-                                .label("Inventory links")
+                            div()
+                                .id("sec-inventory-links")
+                                .px_3()
+                                .py(px(4.))
+                                .rounded(px(6.))
+                                .text_xs()
+                                .cursor_pointer()
+                                .when(
+                                    self.project_section == ProjectSection::InventoryLinks,
+                                    |el| {
+                                        el.bg(rgba(palette.surface))
+                                            .text_color(rgb(palette.text))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                    },
+                                )
+                                .when(
+                                    self.project_section != ProjectSection::InventoryLinks,
+                                    |el| {
+                                        el.text_color(rgb(palette.muted))
+                                            .hover(|s| s.text_color(rgb(palette.text)))
+                                    },
+                                )
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     if view.project_section != ProjectSection::InventoryLinks {
                                         view.put_away_editor(cx);
                                         view.project_section = ProjectSection::InventoryLinks;
                                         cx.notify();
                                     }
-                                })),
+                                }))
+                                .child("Inventory links"),
                         ),
                 );
 
@@ -2007,6 +2065,13 @@ impl Render for Projects {
         let search_input = self.search_input_field(window, cx);
         let new_project = self.new_project_field(window, cx);
 
+        let archived_count = self
+            .projects
+            .value
+            .as_ref()
+            .map(|list| list.iter().filter(|p| p.archived).count())
+            .unwrap_or(0);
+
         let toolbar = div()
             .flex()
             .items_center()
@@ -2039,23 +2104,25 @@ impl Render for Projects {
                                 cx.notify();
                             }))
                             .child(if self.show_archived {
-                                "Show Active"
+                                "Show Active".to_string()
+                            } else if archived_count > 0 {
+                                format!("Show Archived ({archived_count})")
                             } else {
-                                "Show Archived"
+                                "Show Archived".to_string()
                             }),
                     )
                     .child(
                         div()
                             .id("new-project-btn")
                             .px_3()
-                            .py(px(4.))
+                            .py(px(5.))
                             .rounded(px(6.))
-                            .bg(rgba(tint(palette.accent, 0x22)))
-                            .text_color(rgb(palette.accent))
-                            .font_weight(FontWeight::MEDIUM)
+                            .bg(rgb(palette.accent))
+                            .text_color(rgb(0xffffff))
+                            .font_weight(FontWeight::SEMIBOLD)
                             .text_xs()
                             .cursor_pointer()
-                            .hover(move |s| s.text_color(rgb(palette.text)))
+                            .hover(move |s| s.opacity(0.9))
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.adding_project = !view.adding_project;
                                 cx.notify();
@@ -2064,98 +2131,259 @@ impl Render for Projects {
                     ),
             );
 
+        let (sort_col, sort_asc) = self.project_sort;
+        let sort_state =
+            |col: ProjectSort| (sort_col == col).then(|| SortOrder::from_bool(sort_asc));
+
+        let mut header_cols = vec![
+            SortableColumn::flex("name", "PROJECT").sorted(sort_state(ProjectSort::Name)),
+            SortableColumn::fixed("project_tasks", "TASKS", px(cols.project_tasks))
+                .sorted(sort_state(ProjectSort::Tasks)),
+        ];
+        if cols.project_progress > 0. {
+            header_cols.push(
+                SortableColumn::fixed("project_progress", "PROGRESS", px(cols.project_progress))
+                    .sorted(sort_state(ProjectSort::Progress)),
+            );
+        }
+        header_cols.push(
+            SortableColumn::fixed("project_notes", "NOTES", px(cols.project_notes))
+                .sorted(sort_state(ProjectSort::Notes)),
+        );
+        header_cols.push(SortableColumn::spacer(px(28.)));
+
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let table_header = resizable_table_header(
+            "projects-hub",
+            header_cols,
+            cols.density,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "name" => ProjectSort::Name,
+                    "project_tasks" => ProjectSort::Tasks,
+                    "project_progress" => ProjectSort::Progress,
+                    "project_notes" => ProjectSort::Notes,
+                    _ => return,
+                };
+                sort_entity.update(cx, |view, cx| {
+                    view.project_sort = match view.project_sort {
+                        (current, true) if current == column => (column, false),
+                        (current, false) if current == column => (ProjectSort::Name, true),
+                        _ => (column, true),
+                    };
+                    cx.notify();
+                });
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
+            },
+        );
+
         let body = match (&self.projects.value, &self.projects.error) {
             (_, Some(error)) => note(error.to_string(), palette.red),
             (None, None) => placeholder(320.),
             (Some(projects), None) => {
                 let query = self.search_query.as_str();
-                let filtered: Vec<_> = projects
+                let mut filtered: Vec<_> = projects
                     .iter()
                     .filter(|p| p.archived == self.show_archived)
                     .filter(|p| query.is_empty() || p.name.to_lowercase().contains(query))
+                    .cloned()
                     .collect();
 
+                filtered.sort_by(|a, b| {
+                    let order = match sort_col {
+                        ProjectSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                        ProjectSort::Tasks => {
+                            (a.open, a.open + a.done).cmp(&(b.open, b.open + b.done))
+                        }
+                        ProjectSort::Progress => {
+                            let p_a = if a.open + a.done > 0 {
+                                a.done as f32 / (a.open + a.done) as f32
+                            } else {
+                                -1.0
+                            };
+                            let p_b = if b.open + b.done > 0 {
+                                b.done as f32 / (b.open + b.done) as f32
+                            } else {
+                                -1.0
+                            };
+                            p_a.partial_cmp(&p_b).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        ProjectSort::Notes => a.notes.cmp(&b.notes),
+                    };
+                    if sort_asc {
+                        order
+                    } else {
+                        order.reverse()
+                    }
+                });
+
+                let mut rows = vec![table_header];
                 if filtered.is_empty() {
-                    div()
-                        .text_xs()
-                        .text_color(rgb(palette.muted))
-                        .py_4()
-                        .child("No matching projects found.")
-                        .into_any_element()
+                    rows.push(
+                        row_for_density(cols.density)
+                            .min_h(px(40.))
+                            .py_4()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .child(if query.is_empty() {
+                                "No projects in this filter view.".to_string()
+                            } else {
+                                format!("No projects matching \"{query}\".")
+                            })
+                            .into_any_element(),
+                    );
                 } else {
-                    let rows = filtered
-                        .into_iter()
-                        .map(|project| {
-                            let name = project.name.clone();
-                            let total_tasks = project.open + project.done;
-                            let progress = if total_tasks > 0 {
-                                (project.done as f32 / total_tasks as f32).clamp(0.0, 1.0)
-                            } else {
-                                0.0
-                            };
-                            let task_badge = if project.open > 0 {
-                                div()
-                                    .px_2()
-                                    .py(px(1.5))
-                                    .rounded(px(4.))
-                                    .bg(rgba(tint(palette.amber, 0x22)))
-                                    .text_color(rgb(palette.amber))
-                                    .text_xs()
-                                    .child(format!("● {} open", project.open))
-                                    .into_any_element()
-                            } else if project.done > 0 {
-                                div()
-                                    .px_2()
-                                    .py(px(1.5))
-                                    .rounded(px(4.))
-                                    .bg(rgba(tint(palette.green, 0x22)))
-                                    .text_color(rgb(palette.green))
-                                    .text_xs()
-                                    .child(format!("✓ {} done", project.done))
-                                    .into_any_element()
-                            } else {
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(palette.muted))
-                                    .child("0 tasks")
-                                    .into_any_element()
-                            };
-                            row_for_density(cols.density)
-                                .id(SharedString::from(format!("project-{}", project.name)))
-                                .cursor_pointer()
-                                .hover(move |style| style.bg(rgba(palette.raised)))
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.open_project(name.clone(), cx)
-                                }))
-                                .child(
+                    for project in filtered {
+                        let name = project.name.clone();
+                        let total_tasks = project.open + project.done;
+                        let progress = if total_tasks > 0 {
+                            (project.done as f32 / total_tasks as f32).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        let pct = (progress * 100.0).round() as u32;
+
+                        let task_cell =
+                            div().w(px(cols.project_tasks)).flex().items_center().child(
+                                if project.open > 0 {
                                     div()
-                                        .flex_1()
-                                        .text_sm()
+                                        .px_2()
+                                        .py(px(1.5))
+                                        .rounded(px(4.))
+                                        .bg(rgba(tint(palette.amber, 0x22)))
+                                        .text_color(rgb(palette.amber))
+                                        .text_xs()
                                         .font_weight(FontWeight::MEDIUM)
-                                        .child(project.name.clone()),
-                                )
-                                .child(task_badge)
-                                .when(total_tasks > 0, |r| {
+                                        .child(format!("● {} open", project.open))
+                                        .into_any_element()
+                                } else if project.done > 0 {
+                                    div()
+                                        .px_2()
+                                        .py(px(1.5))
+                                        .rounded(px(4.))
+                                        .bg(rgba(tint(palette.green, 0x22)))
+                                        .text_color(rgb(palette.green))
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .child(format!("✓ {} done", project.done))
+                                        .into_any_element()
+                                } else {
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child("0 tasks")
+                                        .into_any_element()
+                                },
+                            );
+
+                        let progress_cell = if cols.project_progress > 0. {
+                            div()
+                                .w(px(cols.project_progress))
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .when(total_tasks > 0, |el| {
                                     let bar_color = if project.open == 0 {
                                         palette.green
                                     } else {
                                         palette.accent
                                     };
-                                    r.child(progress_bar(progress, bar_color, palette))
+                                    let bar_w = 48.0;
+                                    el.child(
+                                        div()
+                                            .w(px(bar_w))
+                                            .h(px(5.))
+                                            .rounded_full()
+                                            .bg(rgba(palette.border))
+                                            .child(
+                                                div()
+                                                    .h_full()
+                                                    .rounded_full()
+                                                    .bg(rgb(bar_color))
+                                                    .w(px(bar_w * progress)),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(palette.muted))
+                                            .font_family(".AppleSystemUIFontMonospaced")
+                                            .child(format!("{pct}%")),
+                                    )
                                 })
-                                .child(div().text_xs().text_color(rgb(palette.muted)).child(
-                                    format!(
+                                .when(total_tasks == 0, |el| {
+                                    el.child(
+                                        div().text_xs().text_color(rgb(palette.muted)).child("—"),
+                                    )
+                                })
+                                .into_any_element()
+                        } else {
+                            div().hidden().into_any_element()
+                        };
+
+                        let notes_cell =
+                            div().w(px(cols.project_notes)).flex().items_center().child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .font_family(".AppleSystemUIFontMonospaced")
+                                    .child(format!(
                                         "{} note{}",
                                         project.notes,
                                         if project.notes == 1 { "" } else { "s" }
-                                    ),
-                                ))
-                                .child(div().text_color(rgb(palette.muted)).child("›"))
-                                .into_any_element()
-                        })
-                        .collect();
-                    list(rows, palette)
+                                    )),
+                            );
+
+                        let open_name = name.clone();
+                        rows.push(
+                            row_for_density(cols.density)
+                                .id(SharedString::from(format!("project-{}", project.name)))
+                                .group("project-row")
+                                .cursor_pointer()
+                                .hover(move |style| style.bg(rgba(palette.raised)))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.open_project(open_name.clone(), cx)
+                                }))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .truncate()
+                                                .text_sm()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .hover(move |s| s.text_color(rgb(palette.accent)))
+                                                .child(project.name.clone()),
+                                        ),
+                                )
+                                .child(task_cell)
+                                .child(progress_cell)
+                                .child(notes_cell)
+                                .child(
+                                    div()
+                                        .w(px(28.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_color(rgb(palette.muted))
+                                        .group_hover("project-row", |s| {
+                                            s.text_color(rgb(palette.accent))
+                                        })
+                                        .child("›"),
+                                )
+                                .into_any_element(),
+                        );
+                    }
                 }
+                list(rows, palette)
             }
         };
 
@@ -2552,6 +2780,73 @@ mod tests {
             assert_eq!(projects.project_section, ProjectSection::Note);
             // The repo has no shell, so the read fails: the hub was tried once, not on every frame.
             assert_eq!(projects.failed.as_deref(), Some("P/P.md"));
+        });
+    }
+
+    #[gpui::test]
+    fn projects_hub_renders_table_header_and_sorts_projects(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let p1 = ProjectSummary {
+            name: "Hearth".into(),
+            archived: false,
+            open: 3,
+            done: 2,
+            notes: 1,
+        };
+        let p2 = ProjectSummary {
+            name: "Atlas".into(),
+            archived: false,
+            open: 0,
+            done: 5,
+            notes: 171,
+        };
+        let p3 = ProjectSummary {
+            name: "ArchiveOld".into(),
+            archived: true,
+            open: 0,
+            done: 10,
+            notes: 4,
+        };
+
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+                projects.projects = Remote {
+                    value: Some(vec![p1, p2, p3]),
+                    ..Remote::default()
+                };
+                projects
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let projects = slot.take().unwrap();
+
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.project_sort, (ProjectSort::Name, true));
+            assert_eq!(projects.tab, ProjectsTab::Hubs);
+        });
+
+        // Test sorting behavior
+        projects.update(cx, |projects, cx| {
+            projects.project_sort = (ProjectSort::Notes, false);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.project_sort, (ProjectSort::Notes, false));
+        });
+
+        // Test sort cycling: flipping to ascending, then back to Name
+        projects.update(cx, |projects, cx| {
+            projects.project_sort = (ProjectSort::Tasks, true);
+            cx.notify();
+        });
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.project_sort, (ProjectSort::Tasks, true));
         });
     }
 }

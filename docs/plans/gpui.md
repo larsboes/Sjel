@@ -518,9 +518,10 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   `TextViewState::reveal_range`.
 - **Tables.** Built (2026-11-08, `a2f5647e`, `ed998522`): `SortableColumn`, `SortOrder`,
   `sortable_table_header`, `resizable_table_header`, `cycle_column_width`, and `tabular_cell` in
-  `ui/src/primitives/tables.rs`, wired into All Tasks, All Notes, Project Tasks
-  (`ui/src/projects/tables.rs`), Documents (`ui/src/documents/mod.rs`), Finance Transactions and
-  Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
+  `ui/src/primitives/tables.rs`, wired into Projects Hub (`ui/src/projects/mod.rs` with multi-column sorting
+  and calibrated progress meters), All Tasks, All Notes, Project Tasks
+  (`ui/src/projects/tables.rs` with status pill selector and aligned columns), Documents (`ui/src/documents/mod.rs`),
+  Finance Transactions and Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
   Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
   keeping `virtual_list` group headers and inline row editors intact.
 - **Calendar.** Built (2026-11-08, `102dfe5f`): Keeps the 24-hour timeline, quarter-hour drag/resize and

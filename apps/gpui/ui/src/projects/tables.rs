@@ -17,6 +17,35 @@ use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
 use super::{column, search_box, NoteKindFilter, Projects, ProjectsTab};
 
+fn parse_frontmatter_status(content: &str, done: bool) -> String {
+    let mut in_fm = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t == "---" {
+            if in_fm {
+                break;
+            }
+            in_fm = true;
+            continue;
+        }
+        if in_fm {
+            if let Some((k, v)) = t.split_once(':') {
+                if k.trim() == "status" {
+                    let s = v.trim().trim_matches('"').trim_matches('\'');
+                    if !s.is_empty() {
+                        return s.to_string();
+                    }
+                }
+            }
+        }
+    }
+    if done {
+        "done".into()
+    } else {
+        "open".into()
+    }
+}
+
 impl Projects {
     pub(super) fn task_table(
         &self,
@@ -71,15 +100,24 @@ impl Projects {
             ));
 
         let entity = cx.entity();
+        let mut header_cols = vec![
+            SortableColumn::spacer(px(24.)),
+            SortableColumn::flex("title", "TASK"),
+        ];
+        if let Some(w) = cols.status {
+            header_cols.push(SortableColumn::fixed("status", "STATUS", px(w)));
+        }
+        header_cols.push(SortableColumn::fixed("due", "DUE", px(cols.due)));
+        header_cols.push(SortableColumn::fixed(
+            "priority",
+            "PRIORITY",
+            px(cols.priority),
+        ));
+        header_cols.push(SortableColumn::spacer(px(28.)));
+
         let header = resizable_table_header(
             "project-tasks",
-            vec![
-                SortableColumn::spacer(px(24.)),
-                SortableColumn::flex("title", "TASK"),
-                SortableColumn::fixed("due", "DUE", px(cols.due)),
-                SortableColumn::fixed("priority", "PRIORITY", px(cols.priority)),
-                SortableColumn::spacer(px(28.)),
-            ],
+            header_cols,
             cols.density,
             palette,
             |_, _, _| {},
@@ -154,6 +192,25 @@ impl Projects {
                         }))
                         .child(format!("{done}/{total}"))
                 });
+            let status = parse_frontmatter_status(&task.content, task.done);
+            let status_cell = match self.status_edit.as_deref() {
+                Some(edit_path) if edit_path == task.path => {
+                    column(cols.status).child(self.status_chips(&task.path, &status, palette, cx))
+                }
+                _ => {
+                    let pick = task.path.clone();
+                    column(cols.status).child(
+                        div()
+                            .id(("task-status", index))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.status_edit = Some(pick.clone());
+                                cx.notify();
+                            }))
+                            .child(status_pill(&status, palette)),
+                    )
+                }
+            };
             let cycle = task.clone();
             let priority = task.priority.clamp(1, 3);
             rows.push(
@@ -195,6 +252,7 @@ impl Projects {
                             )
                             .children(subtask_badge),
                     )
+                    .child(status_cell)
                     .child(due_cell)
                     .child(
                         div()

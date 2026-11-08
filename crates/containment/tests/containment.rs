@@ -326,3 +326,26 @@ fn the_launcher_opens_only_the_named_directories_and_variable() {
     assert!(stdout.contains("keep=kept drop=unset"), "{stdout}");
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// `--credential` resolves in the launcher, before the proxy or the harness start. A slug the
+/// private catalogue does not hold stops the run, and the harness never runs.
+#[test]
+fn a_credential_the_catalogue_cannot_resolve_stops_the_run() {
+    let project = std::env::temp_dir().join(format!("sjel-contain-cred-{}", std::process::id()));
+    std::fs::create_dir_all(&project).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sjel-contain"))
+        .args(["/bin/sh", "--provider", "unlisted", "--project"])
+        .arg(&project)
+        .args(["--credential", "no-such-provider", "--", "-c", "echo ran"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(!stdout.contains("ran"), "{stdout}");
+    assert!(
+        stderr.contains("--credential no-such-provider: no inference-no-such-provider credential"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&project);
+}

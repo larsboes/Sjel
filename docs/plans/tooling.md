@@ -10,16 +10,11 @@ covers it.
 
 ## Open
 
-- **A contained harness cannot be given a credential.** `sjel-contain` strips `*_KEY` and
-  `*_TOKEN` from the child environment and `--keep-env <NAME>` re-admits a name, but nothing
-  resolves the value from the Keychain: the caller has to export the secret before the run, so a
-  contained session on a provider that wants an environment key depends on a hand-typed
-  `security find-generic-password`. Workaround: run the launcher from the owner's own shell with
-  `DEEPSEEK_API_KEY="$(security find-generic-password -s inference-deepseek-api-key -w)"` in front
-  of it. An agent session cannot do that: the denial policy blocks `security` as B6, correctly.
-  Smallest change: `sjel-contain --credential <provider>` resolves `inference-<slug>-api-key`
-  through the same path `sjel provider` uses and injects it into the child environment, so the
-  value never appears in a command line, a shell history or the parent's environment.
+- **A contained harness cannot be given a credential.** Shipped as `sjel-contain --credential
+  <provider>`: the slug resolves through the private catalogue `sjel provider` reads and reaches
+  the child as `DEEPSEEK_API_KEY`, `OPENCODE_GO_API_KEY` and so on. The value is read in the
+  launcher and appears in no command line, shell history or parent environment. See
+  [`containment.md`](containment.md#5-order-and-done-when).
 
 - **Stale path check after a move.** After the move to `crates/` and `services/`, nothing
   reported that `cv` and the gitleaks allowlist still named `capabilities/` paths. Workaround: a
@@ -234,6 +229,9 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- `sjel-contain --credential <provider>` resolves a provider key from the private catalogue and
+  hands it to the contained child as its environment variable (`crates/containment/src/provider_key.rs`).
 
 - `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a
   project's records and attachments into or out of `Archive/`, after checking every target path.

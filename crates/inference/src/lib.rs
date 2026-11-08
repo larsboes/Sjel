@@ -1238,6 +1238,12 @@ pub fn backend_api_key(credential_id: Option<&str>, key_file: Option<&str>) -> O
     api_key_from_credential(credential_id).or_else(|| api_key_from_file(key_file))
 }
 
+/// One inference credential's value, for a caller that runs outside the checkout and hands the
+/// secret to a child process: the containment launcher. Never logged and never an argument.
+pub fn credential_value(credential_id: &str) -> Option<String> {
+    api_key_from_credential(Some(credential_id))
+}
+
 fn api_key_from_credential(id: Option<&str>) -> Option<String> {
     use sjel_credentials::{CredentialId, CredentialManager, CredentialProvider, KeychainProvider};
     use std::sync::Arc;

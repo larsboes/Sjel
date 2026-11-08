@@ -24,7 +24,7 @@ async fn main() -> ExitCode {
     let own = args.iter().take_while(|a| *a != "--");
     if args.is_empty() || own.into_iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [-- <harness-args...>]"
+            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--credential <provider>]... [-- <harness-args...>]"
         );
         return ExitCode::from(2);
     }
@@ -36,6 +36,7 @@ async fn main() -> ExitCode {
     let mut read_dirs: Vec<PathBuf> = Vec::new();
     let mut write_dirs: Vec<PathBuf> = Vec::new();
     let mut keep_env: Vec<String> = Vec::new();
+    let mut credentials: Vec<String> = Vec::new();
 
     let mut i = 0;
     while i < args.len() {
@@ -56,6 +57,9 @@ async fn main() -> ExitCode {
             i += 2;
         } else if args[i] == "--keep-env" && i + 1 < args.len() {
             keep_env.push(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--credential" && i + 1 < args.len() {
+            credentials.push(args[i + 1].clone());
             i += 2;
         } else if harness_bin.is_empty() {
             harness_bin = args[i].clone();
@@ -101,6 +105,18 @@ async fn main() -> ExitCode {
         };
     }
 
+    // Contained run: resolve the named provider keys first, so a missing one stops the run.
+    let mut resolved: Vec<(String, String)> = Vec::new();
+    for slug in &credentials {
+        match sjel_containment::resolve_credential(slug) {
+            Ok(pair) => resolved.push(pair),
+            Err(message) => {
+                eprintln!("[containment] --credential {slug}: {message}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+
     // Contained run: start egress proxy
     if hosts.is_empty() {
         eprintln!(
@@ -139,6 +155,11 @@ async fn main() -> ExitCode {
         if let Ok(value) = std::env::var(name) {
             contained.env.insert(name.clone(), value);
         }
+    }
+    // A key from the private catalogue, resolved here and handed to the child as one variable.
+    for (name, value) in resolved {
+        println!("[containment] credential {name} resolved from the catalogue");
+        contained.env.insert(name, value);
     }
     match demo_token() {
         Some(token) => {

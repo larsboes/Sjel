@@ -126,11 +126,11 @@ schemas/machine.toml.example.
 - **adopt**: semver, cargo-deny, cargo-machete, python-eval-image, unicode-normalization, mcp-audit, lopdf, gitleaks, osv-scanner, grype, vaultwarden, bitwarden-cli, r2d2, sha2, exiftool, rusqlite, r2d2_sqlite, libsql, libsql-server, bun, bun-security-scanner, mermaid-rs-renderer, openfreemap, nominatim-api, open-meteo-api, interceptor, bottom, apfel, macmon, tabler-icons, typst, yaml_serde, yq, vibecoded-design-tells, human-voice, home-assistant, pihole, stevenblack-hosts, tailscale, pi-coding-agent, debian, deutsche-bahn-data, arrow-rs, xberg, ar5iv, multilingual-e5-base-mlx, bge-reranker-v2-m3-mlx, yahoo-finance-chart, ecb-data-portal, frankfurter-api, pi-subagents, pi-web-access, obsidian-web-clipper, obsidian-local-rest-api, yaml-js, smol-toml, defuddle, rcgen, rustls, gpui, gpui-kit, nsh, kitinerary, ripgrep, signal-hook, proptest, vercel-labs-skills, github-actions-artifacts, anatomy, portable-pty, alacritty-terminal
 - **overlay**: academic-researcher
 - **fork**: gpui-mobile
-- **inspiration**: meta-harness, schema-harness, lifeos, rust-analyzer, tigerbeetle, iai-personal-memory-engine, local-llm, paperless-ngx, dolphin, ocrs, awesome-selfhosted, colibri, exo, mlx, llama-cpp-rpc, mcpserver-audit, telekom-mcp-security, scout, trek-travel, tripit, betterbahn, besser-bahn, plan-bahn, asd-ste100-skill, nvidia-skills, pi-ai-auth, slm-finetuning-talk, pascal-editor, yfinance, open-intelligent-ui, cc-intelligent-ui
+- **inspiration**: meta-harness, schema-harness, lifeos, rust-analyzer, tigerbeetle, iai-personal-memory-engine, local-llm, paperless-ngx, dolphin, ocrs, awesome-selfhosted, colibri, exo, mlx, llama-cpp-rpc, mcpserver-audit, telekom-mcp-security, scout, trek-travel, tripit, betterbahn, besser-bahn, plan-bahn, asd-ste100-skill, nvidia-skills, pi-ai-auth, slm-finetuning-talk, pascal-editor, yfinance, open-intelligent-ui, cc-intelligent-ui, octet
 - **quarry**: oberskills, academic-writing-agents, research-paper-writing-skills, pengsida-research-notes, learnharness, event-horizon
 - **reject**: hledger, docling, semgrep, trivy, rules_rust, postgres, r2d2_postgres, grafeo, indradb, platforms, rules_shell, graphify, presidio, auge, stop-slop, skills-best-practices, esphome, mosquitto, netbird, apple-container, multilingual-e5-small-mlx, stooq, tradegate, extism
 - **watch**: cisco-skill-scanner, turso, accordion, gpui-pre-ios, nimble, clm, db-rest, motis, beancount, firefly-iii, radicale, sqlite-vec, fastembed-rs, beszel
-- **evaluate**: maplibre-native-rs, gpui-fast, clm-mlx-community, octet
+- **evaluate**: maplibre-native-rs, gpui-fast, clm-mlx-community
 - **adapt**: i-have-adhd
 
 ## Systems

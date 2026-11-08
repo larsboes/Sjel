@@ -14,6 +14,14 @@ _here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=tools/lib/paths.sh
 . "$_here/../lib/paths.sh"   # SJEL_ROOT, SJEL_OVERLAY_ROOT, SJEL_PERSONAL_ROOT
 
+if [ -n "${SJEL_STORAGE_BIN:-}" ]; then
+  [ -f "$SJEL_STORAGE_BIN" ] && [ -x "$SJEL_STORAGE_BIN" ] || {
+    echo "storage: SJEL_STORAGE_BIN is not an executable file" >&2
+    exit 2
+  }
+  exec "$SJEL_STORAGE_BIN" "$@"
+fi
+
 BIN="${CARGO_TARGET_DIR:-$SJEL_ROOT/target}/release/sjel-storage"
 if [ -f "$SJEL_ROOT/distribution.json" ]; then
   BIN="$SJEL_ROOT/target/release/sjel-storage"

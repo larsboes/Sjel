@@ -280,6 +280,11 @@ covers it.
 
 ## Done
 
+- Storage's launcher accepts an explicitly selected, executable `SJEL_STORAGE_BIN` for isolated
+  verification; arguments and child status are preserved, and invalid overrides refuse without
+  compiling. The launcher regression passes. Pi's held-package fixture canonicalizes its root
+  before comparing registry paths, preserving its exact unit/harness assertions.
+
 - Places geocoding (`93b05a72`) accepts the existing `place_id` response through the shared contract;
   the desktop response copies and server request copy are removed. Software storage and clients
   share the complete app model. Focused tests, strict Clippy, GPUI core tests and the host

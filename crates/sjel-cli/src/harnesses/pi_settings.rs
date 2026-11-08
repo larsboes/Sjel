@@ -1020,6 +1020,8 @@ mod tests {
     fn a_unit_hold_keeps_one_vendored_package_out_of_pis_registry() {
         let root = std::env::temp_dir().join(format!("sjel-pi-hold-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let root = fs::canonicalize(root).unwrap();
         let pack_root = root.join("Packs");
         let accordion = pack_root.join("harness/pi-packages/accordion");
         let subagents = pack_root.join("harness/pi-packages/pi-subagents");

@@ -64,6 +64,8 @@ belongs to Priority 1.
   ([`learning.md`](docs/plans/learning.md)).
 - UI polish for areas outside Priority 1, and the public site with screenshots, animations, docs
   and a description of the app ([`website.md`](docs/plans/website.md)).
+- The houses Lars runs: site notes and Home Assistant, router and DNS clients in one `home`
+  capability ([`homes.md`](docs/plans/homes.md)).
 - A fresh-user Mac and iPhone install ([#235](https://github.com/larsboes/Sjel/issues/235)).
 
 ## Continuous

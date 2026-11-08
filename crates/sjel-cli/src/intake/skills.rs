@@ -291,7 +291,7 @@ fn write_store_manifest(
         }
         pin.insert(
             "approval".into(),
-            super::evidence(&digest)
+            super::evidence(&format!("skills:{package}/{}", job.skill), &digest)
                 .unwrap_or_else(|| format!("passed the intake_review gate {today}"))
                 .into(),
         );

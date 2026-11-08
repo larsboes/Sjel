@@ -11,7 +11,7 @@ drifting copies.
 - **Sources.** 32 skill directories across 13 Packs (`ls Packs/*/skills`), measured 2026-11-07;
   27 across 9 when this section was written. Each Pack has a `pack.toml`
   (`schemas/pack.toml.example`).
-- **Harnesses.** `tools/sjel-cli/src/harnesses/registry.rs` enumerates claude, codex, opencode,
+- **Harnesses.** `crates/sjel-cli/src/harnesses/registry.rs` enumerates claude, codex, opencode,
   pi, copilot, sjel-agent and antigravity. Claude Code, Codex, opencode and copilot get
   materialized copies. pi gets registry entries (`pi_settings.rs`).
 - **Ledgers.** One per harness under `~/.local/state/sjel/pack-deployments/`, owned and backed up by
@@ -45,14 +45,20 @@ drifting copies.
    stage upstream's output once under `~/.local/state/sjel/intake/staged/`, read every staged
    skill into memory, gate that same snapshot, and publish those bytes together with the staged
    lock entry, so there is no second fetch after screening
-   (`tools/sjel-cli/src/intake/skills.rs`).
+   (`crates/sjel-cli/src/intake/skills.rs`).
    The gate is fail-closed: a missing or failed model review holds the content unless that exact
    digest was approved, `--no-review` is gone, and an unapproved `--against` baseline is
    ignored. Without the `intake_review` role, `tools/intake review --reviewer claude` records a
    harness review receipt for one digest, and the gate reads it in place of the model review.
+   Completed inference-role reviews also record reusable evidence. Reuse is scoped to source,
+   content, approved baseline, model/endpoint settings and the intake policy fingerprint;
+   incomplete file reads and failed persistence hold the candidate. Findings retain their
+   normal severity. Legacy receipts without a policy fingerprint require a new review.
    Not run live yet: see "Harness intake review, live" in [`tooling.md`](tooling.md).
-   Snapshots now refuse symlinks, special files, files over 2 MiB and unreadable
-   directories rather than substituting a placeholder. Limits: publication is not
+   Snapshots refuse symlinks, special files and unreadable directories. Text is limited to
+   2 MiB, binary assets to 32 MiB per file, and complete packages to 128 MiB. Binary bytes
+   remain in the installed snapshot and digest; the text review reports them as unread.
+   Limits: publication is not
    crash-atomic across layouts (backups are restored on ordinary failure, the lock is written
    last), and approval records still do not prove who read the findings.
 3. **External skills bypass Pack profile selection.** Partly fixed by P7: a skill stored with
@@ -108,7 +114,7 @@ no profile until the next `use <profile>` on that machine.
    - **Content-pinned store.** Approved bytes go into a store keyed by the P6 digest. The deploy
      engine reads the store as one more Pack root. It copies into the materialized harnesses
      (Claude, Codex, OpenCode, Copilot) and registers the store in the registry harnesses (pi,
-     sjel-agent, Antigravity) (`tools/sjel-cli/src/harnesses/registry.rs`, `Model`). Profiles then
+     sjel-agent, Antigravity) (`crates/sjel-cli/src/harnesses/registry.rs`, `Model`). Profiles then
      select external skills like Pack skills. Cost: a store layout and a name-collision rule.
    - Recommendation (an estimate, not measured): the store. It closes defect 3 and the vault
      case with the engine that exists, and the P6 digest binds each copy to its approval.

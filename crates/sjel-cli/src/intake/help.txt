@@ -6,7 +6,8 @@ tools/intake — read third-party agent tooling before it reaches an agent.
         --against, only what is new relative to that copy is read.
   tools/intake review <dir> [--against <dir>] [--source <name>]
         The model review on the `intake_review` inference role (a c0 cloud role). It adds
-        findings; it cannot clear one.
+        findings; it cannot clear one. With --source, a completed review records reusable
+        evidence tied to content, baseline, model settings and the current intake policy.
   tools/intake review <dir> --source <name> --reviewer claude
         A coding harness reviews the whole tree: a fresh `claude -p` with read-only tools in a
         directory that holds only the staged files. Records a receipt with the harness, model

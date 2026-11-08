@@ -81,6 +81,9 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
                 digest: digest.clone(),
                 harness: harness.into(),
                 model: done.model.clone(),
+                policy: review::policy_key(),
+                baseline: None,
+                producer: None,
                 reviewed_at: chrono::Local::now().format("%Y-%m-%d").to_string(),
                 findings: done.findings,
             })?;
@@ -92,9 +95,14 @@ fn run_inner(args: &[String]) -> Result<u8, String> {
         }
         "review" => {
             let (new, old) = opts.trees()?;
-            let findings = review::run(opts.source_or("this package"), &new, old.as_ref(), &[])?;
-            print_findings(&findings);
-            Ok(verdict(&findings))
+            let source = opts.source_or("this package");
+            let done = review::run(source, &new, old.as_ref(), &[])?;
+            print_findings(&done.findings);
+            let code = verdict(&done.findings);
+            if opts.source.is_some() {
+                Ledger::load()?.record_model_review(source, &new, old.as_ref(), done)?;
+            }
+            Ok(code)
         }
         "gate" => {
             if opts.no_review {
@@ -226,8 +234,7 @@ struct Approval {
     approved_at: String,
 }
 
-/// A harness review of one exact tree. It stands in for the model review of that digest; it is
-/// not an approval, so a holding finding in it still holds.
+/// Completed review evidence. Findings retain their normal admission severity.
 #[derive(Clone, Serialize, Deserialize)]
 struct Receipt {
     source: String,
@@ -235,6 +242,12 @@ struct Receipt {
     harness: String,
     model: String,
     reviewed_at: String,
+    #[serde(default)]
+    policy: String,
+    #[serde(default)]
+    baseline: Option<String>,
+    #[serde(default)]
+    producer: Option<String>,
     #[serde(default)]
     findings: Vec<Finding>,
 }
@@ -282,13 +295,51 @@ impl Ledger {
             .and_then(|a| a.version.as_deref())
     }
 
-    fn receipt(&self, digest: &str) -> Option<&Receipt> {
-        self.reviewed.iter().rev().find(|r| r.digest == digest)
+    fn receipt(
+        &self,
+        source: &str,
+        digest: &str,
+        baseline: Option<&str>,
+        producer: Option<&str>,
+    ) -> Option<&Receipt> {
+        let policy = review::policy_key();
+        self.reviewed
+            .iter()
+            .rev()
+            .find(|r| r.applies(source, digest, baseline, producer, &policy))
     }
 
     fn record_review(&mut self, receipt: Receipt) -> Result<(), String> {
+        self.reviewed.retain(|old| {
+            !(old.source == receipt.source
+                && old.digest == receipt.digest
+                && old.policy == receipt.policy
+                && old.baseline == receipt.baseline
+                && old.producer == receipt.producer
+                && old.harness == receipt.harness)
+        });
         self.reviewed.push(receipt);
         self.save()
+    }
+
+    fn record_model_review(
+        &mut self,
+        source: &str,
+        tree: &Tree,
+        baseline: Option<&Tree>,
+        done: review::ModelReview,
+    ) -> Result<(), String> {
+        self.record_review(Receipt {
+            source: source.into(),
+            digest: digest(tree),
+            harness: "inference".into(),
+            model: done.model,
+            reviewed_at: chrono::Local::now().format("%Y-%m-%d").to_string(),
+            policy: review::policy_key(),
+            baseline: baseline.map(digest),
+            producer: Some(done.producer),
+            findings: done.findings,
+        })
     }
 
     fn approve(&mut self, source: &str, digest: &str, version: Option<&str>) -> Result<(), String> {
@@ -307,6 +358,27 @@ impl Ledger {
         }
         let text = toml::to_string(self).map_err(|e| e.to_string())?;
         fs::write(&self.path, text).map_err(|e| format!("{}: {e}", self.path.display()))
+    }
+}
+
+impl Receipt {
+    fn applies(
+        &self,
+        source: &str,
+        digest: &str,
+        baseline: Option<&str>,
+        producer: Option<&str>,
+        policy: &str,
+    ) -> bool {
+        self.source == source
+            && self.digest == digest
+            && self.policy == policy
+            && (self.baseline.is_none() || self.baseline.as_deref() == baseline)
+            && if self.harness == "inference" {
+                producer.is_some() && self.producer.as_deref() == producer
+            } else {
+                review::HARNESSES.contains(&self.harness.as_str())
+            }
     }
 }
 
@@ -392,10 +464,11 @@ pub fn digest(tree: &Tree) -> String {
         hash.update((file.bytes.len() as u64).to_le_bytes());
         hash.update(&file.bytes);
     }
-    hash.finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    hex(&hash.finalize())
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -511,15 +584,22 @@ fn print_findings(findings: &[Finding]) {
     }
 }
 
-/// What let this exact digest through the gate, for the record that publishes it. `None` when
-/// only a model review on the `intake_review` role passed it, which leaves no record.
-pub fn evidence(digest: &str) -> Option<String> {
+/// Evidence for the exact source and content accepted by the gate.
+pub fn evidence(source: &str, digest: &str) -> Option<String> {
     let ledger = Ledger::load().ok()?;
-    if let Some(a) = ledger.approved.iter().rev().find(|a| a.digest == digest) {
+    if let Some(a) = ledger
+        .approved
+        .iter()
+        .rev()
+        .find(|a| a.source == source && a.digest == digest)
+    {
         return Some(format!("approved {}", a.approved_at));
     }
     ledger
-        .receipt(digest)
+        .reviewed
+        .iter()
+        .rev()
+        .find(|r| r.source == source && r.digest == digest && r.policy == review::policy_key())
         .map(|r| format!("reviewed by {} ({}) {}", r.harness, r.model, r.reviewed_at))
 }
 
@@ -542,6 +622,8 @@ pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree
         return 0;
     }
     let old = ledger.baseline(source, old);
+    let baseline = old.map(self::digest);
+    let producer = review::current_producer();
     let changed = changes(new, old).len();
     println!(
         "{source}: {changed} new or changed file(s){}",
@@ -552,7 +634,7 @@ pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree
         }
     );
     let mut findings = scan(new, old);
-    let reviewed = match ledger.receipt(&digest) {
+    let reviewed = match ledger.receipt(source, &digest, baseline.as_deref(), producer.as_deref()) {
         Some(r) => {
             println!(
                 "{source}: reviewed by {} ({}) on {}",
@@ -560,7 +642,12 @@ pub fn gate_tree(source: &str, dir: Option<&Path>, new: &Tree, old: Option<&Tree
             );
             Ok(r.findings.clone())
         }
-        None => review::run(source, new, old, &findings),
+        None => review::run(source, new, old, &findings).and_then(|done| {
+            let findings = done.findings.clone();
+            let mut ledger = Ledger::load()?;
+            ledger.record_model_review(source, new, old, done)?;
+            Ok(findings)
+        }),
     };
     let code = review_verdict(&mut findings, reviewed);
     print_findings(&findings);
@@ -594,6 +681,112 @@ fn review_verdict(findings: &mut Vec<Finding>, result: Result<Vec<Finding>, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completed_model_evidence_round_trips_and_replaces_only_the_same_review() {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("sjel-intake-{}-{stamp}", std::process::id()));
+        let mut ledger = Ledger {
+            path: dir.join("approved.toml"),
+            ..Ledger::default()
+        };
+        let candidate = tree(&[("SKILL.md", "Review this public fixture.")]);
+        for _ in 0..2 {
+            ledger
+                .record_model_review(
+                    "package",
+                    &candidate,
+                    None,
+                    review::ModelReview {
+                        findings: Vec::new(),
+                        model: "fixture-model".into(),
+                        producer: "fixture-producer".into(),
+                    },
+                )
+                .unwrap();
+        }
+        let restored: Ledger = toml::from_str(&fs::read_to_string(&ledger.path).unwrap()).unwrap();
+        assert_eq!(restored.reviewed.len(), 1);
+        let receipt = restored
+            .receipt(
+                "package",
+                &digest(&candidate),
+                None,
+                Some("fixture-producer"),
+            )
+            .unwrap();
+        assert_eq!(receipt.model, "fixture-model");
+        assert!(restored
+            .receipt(
+                "package",
+                &digest(&candidate),
+                None,
+                Some("changed-producer")
+            )
+            .is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn receipts_require_the_same_source_content_policy_and_producer() {
+        let mut receipt = Receipt {
+            source: "package".into(),
+            digest: "content".into(),
+            harness: "inference".into(),
+            model: "model".into(),
+            reviewed_at: "2026-11-08".into(),
+            policy: "policy".into(),
+            baseline: None,
+            producer: Some("producer".into()),
+            findings: Vec::new(),
+        };
+        assert!(receipt.applies("package", "content", None, Some("producer"), "policy"));
+        assert!(!receipt.applies("other", "content", None, Some("producer"), "policy"));
+        assert!(!receipt.applies("package", "changed", None, Some("producer"), "policy"));
+        assert!(!receipt.applies("package", "content", None, Some("changed"), "policy"));
+        assert!(!receipt.applies("package", "content", None, None, "policy"));
+        assert!(!receipt.applies("package", "content", None, Some("producer"), "changed"));
+        receipt.baseline = Some("approved".into());
+        assert!(receipt.applies(
+            "package",
+            "content",
+            Some("approved"),
+            Some("producer"),
+            "policy"
+        ));
+        assert!(!receipt.applies("package", "content", None, Some("producer"), "policy"));
+        assert!(!receipt.applies(
+            "package",
+            "content",
+            Some("other"),
+            Some("producer"),
+            "policy"
+        ));
+    }
+
+    #[test]
+    fn full_harness_reviews_cover_any_baseline_but_legacy_receipts_are_stale() {
+        let mut receipt = Receipt {
+            source: "package".into(),
+            digest: "content".into(),
+            harness: "claude".into(),
+            model: "model".into(),
+            reviewed_at: "2026-11-08".into(),
+            policy: "policy".into(),
+            baseline: None,
+            producer: None,
+            findings: Vec::new(),
+        };
+        assert!(receipt.applies("package", "content", Some("baseline"), None, "policy"));
+        receipt.policy.clear();
+        assert!(!receipt.applies("package", "content", None, None, "policy"));
+        receipt.policy = "policy".into();
+        receipt.harness = "unknown".into();
+        assert!(!receipt.applies("package", "content", None, None, "policy"));
+    }
 
     fn tree(files: &[(&str, &str)]) -> Tree {
         files

@@ -17,10 +17,12 @@
 set -euo pipefail
 join=false
 tap=false
+smoke=false
 for arg in "$@"; do
   case "$arg" in
     --join) join=true ;;
     --tap) tap=true ;;
+    --smoke) smoke=true ;;
     *) echo "ios/run-sim: unknown argument $arg" >&2; exit 1 ;;
   esac
 done
@@ -64,17 +66,28 @@ xcrun simctl bootstatus "$udid" -b >/dev/null
 # phone that has already paired has anyway, and the tap check is about the finger reaching Scan.
 xcrun simctl privacy "$udid" grant camera "$BUNDLE_ID" >/dev/null 2>&1 || true
 
-if $tap; then
+if $tap || $smoke; then
   # xcodebuild boots and drives the simulator itself; nothing opens Simulator.app.
-  result="${TMPDIR:-/tmp}/sjel-ios-tap-$(date +%s).xcresult"
+  results="${SJEL_IOS_RESULTS:-$(mktemp -d "${TMPDIR:-/tmp}/sjel-ios-tests.XXXXXX")}"
+  mkdir -p "$results"
+  result="$results/tests.xcresult"
+  selection=(-only-testing:SjelIOSUITests)
+  if $smoke; then selection=(-only-testing:SjelIOSUITests/NshScreens); fi
+  status=0
   xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulator \
     -configuration Debug -derivedDataPath "$HOST/build" -resultBundlePath "$result" \
-    -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" test
-  shots="${TMPDIR:-/tmp}/sjel-ios-tap-shots-$(date +%s)"
-  xcrun xcresulttool export attachments --path "$result" --output-path "$shots" >/dev/null
+    -destination "platform=iOS Simulator,id=$udid" -quiet RUST_LIB="$rust_lib" \
+    "${selection[@]}" test || status=$?
+  shots="$results/screenshots"
+  if [ -d "$result" ]; then
+    xcrun xcresulttool export attachments --path "$result" --output-path "$shots" >/dev/null || {
+      echo "ios/run-sim: could not export test attachments" >&2
+      [ "$status" -ne 0 ] || status=1
+    }
+  fi
   echo "$result"
-  ls "$shots"/*.png
-  exit 0
+  [ ! -d "$shots" ] || find "$shots" -name '*.png' -print
+  exit "$status"
 fi
 
 xcrun simctl install "$udid" "$app"

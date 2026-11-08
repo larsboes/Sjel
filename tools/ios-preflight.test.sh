@@ -32,11 +32,12 @@ exit 48
 EOF
 chmod +x "$work/bin/"*
 export PATH="$work/bin:$PATH" HOME="$work/home" TEST_LOG="$work/commands"
+launcher_root="$root"
 
 run() {
   : > "$TEST_LOG"
   status=0
-  output="$(SJEL_IOS_SIM="${selected:-}" bash "$root/apps/gpui/ios/$1" "${@:2}" 2>&1)" || status=$?
+  output="$(SJEL_IOS_SIM="${selected:-}" bash "$launcher_root/apps/gpui/ios/$1" "${@:2}" 2>&1)" || status=$?
 }
 
 expect() {
@@ -72,4 +73,52 @@ run run-sim
 [ "$(head -1 "$TEST_LOG")" = 'xcrun simctl list devices available' ]
 [ "$(tail -1 "$TEST_LOG")" = cargo ]
 
-echo 'iOS preflight: blocked services, missing devices, invalid selection and build ordering passed'
+launcher_root="$work/project"
+mkdir -p "$launcher_root/apps/gpui/ios/host"
+cp "$root/apps/gpui/ios/run-sim" "$launcher_root/apps/gpui/ios/run-sim"
+cat > "$work/bin/cargo" <<'EOF'
+#!/bin/bash
+if [ "$1" = metadata ]; then printf '{"target_directory":"%s"}\n' "$HOME/target"; fi
+EOF
+cat > "$work/bin/xcodegen" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+cat > "$work/bin/xcodebuild" <<'EOF'
+#!/bin/bash
+echo "xcodebuild $*" >> "$TEST_LOG"
+previous=
+for arg in "$@"; do
+  if [ "$previous" = -resultBundlePath ]; then mkdir -p "$arg"; fi
+  previous="$arg"
+done
+if [ "$previous" = test ]; then exit "$TEST_XCODE_STATUS"; fi
+EOF
+cat > "$work/bin/xcrun" <<'EOF'
+#!/bin/bash
+echo "xcrun $*" >> "$TEST_LOG"
+if [ "$1" = simctl ] && [ "$2" = list ]; then
+  echo '    iPhone (00000000-0000-0000-0000-000000000001) (Booted)'
+elif [ "$1" = xcresulttool ]; then
+  previous=
+  for arg in "$@"; do
+    if [ "$previous" = --output-path ]; then mkdir -p "$arg"; touch "$arg/screen.png"; fi
+    previous="$arg"
+  done
+fi
+EOF
+chmod +x "$work/bin/"*
+export SJEL_IOS_RESULTS="$work/results" TEST_XCODE_STATUS=65
+run run-sim --smoke
+[ "$status" -eq 65 ] || { echo "FAIL: a failed screen test lost its status: $output" >&2; exit 1; }
+[ -f "$SJEL_IOS_RESULTS/screenshots/screen.png" ]
+grep -Fq -- '-only-testing:SjelIOSUITests/NshScreens' "$TEST_LOG"
+
+export TEST_XCODE_STATUS=0
+run run-sim --smoke
+[ "$status" -eq 0 ] || { echo "FAIL: successful smoke test failed: $output" >&2; exit 1; }
+run run-sim --tap
+[ "$status" -eq 0 ] || { echo "FAIL: full touch suite failed: $output" >&2; exit 1; }
+grep -Fq -- '-only-testing:SjelIOSUITests ' "$TEST_LOG"
+
+echo 'iOS preflight: device access, build ordering, smoke selection and failure artifacts passed'

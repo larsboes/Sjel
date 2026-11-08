@@ -1,0 +1,58 @@
+name: iOS screen smoke tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ios-smoke.yml
+      - apps/gpui/ios/**
+      - apps/gpui/ui/src/nsh_documents.rs
+      - apps/gpui/ui/src/nsh_mail.rs
+      - apps/gpui/Cargo.toml
+      - apps/gpui/Cargo.lock
+  pull_request:
+    paths:
+      - .github/workflows/ios-smoke.yml
+      - apps/gpui/ios/**
+      - apps/gpui/ui/src/nsh_documents.rs
+      - apps/gpui/ui/src/nsh_mail.rs
+      - apps/gpui/Cargo.toml
+      - apps/gpui/Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screens:
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      SJEL_IOS_RESULTS: ${{ runner.temp }}/ios-smoke
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: apps/gpui
+          key: ios-simulator-smoke
+      - name: Prepare simulator build tools
+        run: |
+          rustup target add aarch64-apple-ios-sim
+          if ! command -v xcodegen >/dev/null; then brew install xcodegen; fi
+      - name: Render Documents and Mail
+        run: apps/gpui/ios/run-sim --smoke
+      - name: Retain screenshots and test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-screen-smoke
+          path: ${{ runner.temp }}/ios-smoke
+          if-no-files-found: warn
+          retention-days: 7

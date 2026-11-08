@@ -10,6 +10,16 @@ covers it.
 
 ## Open
 
+- **Native iOS screen validation.** Compile checks and screenshot-only touch tests did
+  not detect an empty Documents host on a physical phone. `ios/run-sim --smoke`
+  checks visible Documents and Mail headings through XCTest and exports screenshots
+  even when a test fails. The `iOS screen smoke tests` workflow runs the same command
+  on an Apple Silicon Mac with simulator services. The agent environment cannot
+  connect to CoreSimulator and does not expose Simulator.app; a successful host
+  Terminal probe does not establish agent access. Open: reproduce the black screen
+  in the native test, fix its cause, and verify direct simulator control on the Mac.
+
+
 - **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count
   without its location. Workaround: run `gitleaks git --redact=100` over the outgoing
   range, write a JSON report, and extract only rule, path, line and commit metadata.

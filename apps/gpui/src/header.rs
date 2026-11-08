@@ -59,70 +59,70 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
             .tooltip("Rebuild and restart the local Sjel shell with the current configuration")
             .on_click(cx.listener(|view, _, window, cx| view.restart_shell(window, cx)))
     });
-        let area_title: AnyElement = if let Some(project_name) = (view.page == Page::Projects)
-            .then(|| view.projects.read(cx).active_project_name())
-            .flatten()
-        {
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .id("header-projects-breadcrumb")
-                        .cursor_pointer()
-                        .text_color(rgb(palette.muted))
-                        .hover(move |s| s.text_color(rgb(palette.text)))
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.projects.update(cx, |p, cx| p.close_project(cx));
-                        }))
-                        .child("Projects"),
-                )
-                .child(div().text_color(rgb(palette.muted)).child("/"))
-                .child(div().text_color(rgb(palette.text)).child(project_name))
-                .into_any_element()
-        } else {
-            div()
-                .child(area.map_or(view.page.label(), Area::label))
-                .into_any_element()
-        };
-
+    let area_title: AnyElement = if let Some(project_name) = (view.page == Page::Projects)
+        .then(|| view.projects.read(cx).active_project_name())
+        .flatten()
+    {
         div()
             .flex()
-            .flex_col()
-            .gap_3()
-            .px_8()
-            .pt(px(44.))
-            .pb_5()
+            .items_center()
+            .gap_2()
             .child(
                 div()
-                    .flex()
-                    .items_end()
-                    .justify_between()
-                    .gap_4()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_2xl()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .whitespace_nowrap()
-                                    .truncate()
-                                    .child(area_title),
-                            )
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .truncate()
-                                    .text_color(rgb(palette.muted))
-                                    .child(subtitle(view, cx)),
-                            ),
-                    )
+                    .id("header-projects-breadcrumb")
+                    .cursor_pointer()
+                    .text_color(rgb(palette.muted))
+                    .hover(move |s| s.text_color(rgb(palette.text)))
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.projects.update(cx, |p, cx| p.close_project(cx));
+                    }))
+                    .child("Projects"),
+            )
+            .child(div().text_color(rgb(palette.muted)).child("/"))
+            .child(div().text_color(rgb(palette.text)).child(project_name))
+            .into_any_element()
+    } else {
+        div()
+            .child(area.map_or(view.page.label(), Area::label))
+            .into_any_element()
+    };
+
+    div()
+        .flex()
+        .flex_col()
+        .gap_3()
+        .px_8()
+        .pt(px(44.))
+        .pb_5()
+        .child(
+            div()
+                .flex()
+                .items_end()
+                .justify_between()
+                .gap_4()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_2xl()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .whitespace_nowrap()
+                                .truncate()
+                                .child(area_title),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .truncate()
+                                .text_color(rgb(palette.muted))
+                                .child(subtitle(view, cx)),
+                        ),
+                )
                 .child(
                     div()
                         .flex()

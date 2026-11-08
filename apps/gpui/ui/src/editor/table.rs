@@ -186,7 +186,11 @@ pub fn render_editor_table(
         .border_color(rgba(palette.border));
 
     for (c, header) in table.headers.iter().enumerate() {
-        let align = table.alignments.get(c).copied().unwrap_or(ColumnAlign::Left);
+        let align = table
+            .alignments
+            .get(c)
+            .copied()
+            .unwrap_or(ColumnAlign::Left);
         let mut cell = div()
             .px_3()
             .py(px(7.))
@@ -224,7 +228,11 @@ pub fn render_editor_table(
         }
 
         for (c, cell_text) in row.iter().enumerate() {
-            let align = table.alignments.get(c).copied().unwrap_or(ColumnAlign::Left);
+            let align = table
+                .alignments
+                .get(c)
+                .copied()
+                .unwrap_or(ColumnAlign::Left);
             let mut cell = div()
                 .px_3()
                 .py(px(7.))
@@ -288,7 +296,11 @@ pub fn render_static_table(table: &ParsedTable, palette: Palette) -> AnyElement 
         .border_color(rgba(palette.border));
 
     for (c, header) in table.headers.iter().enumerate() {
-        let align = table.alignments.get(c).copied().unwrap_or(ColumnAlign::Left);
+        let align = table
+            .alignments
+            .get(c)
+            .copied()
+            .unwrap_or(ColumnAlign::Left);
         let mut cell = div()
             .px_3()
             .py(px(7.))
@@ -325,7 +337,11 @@ pub fn render_static_table(table: &ParsedTable, palette: Palette) -> AnyElement 
         }
 
         for (c, cell_text) in row.iter().enumerate() {
-            let align = table.alignments.get(c).copied().unwrap_or(ColumnAlign::Left);
+            let align = table
+                .alignments
+                .get(c)
+                .copied()
+                .unwrap_or(ColumnAlign::Left);
             let mut cell = div()
                 .px_3()
                 .py(px(7.))
@@ -379,8 +395,14 @@ mod tests {
         assert_eq!(table.headers, vec!["Frage", "Stand"]);
         assert_eq!(table.alignments, vec![ColumnAlign::Left, ColumnAlign::Left]);
         assert_eq!(table.rows.len(), 2);
-        assert_eq!(table.rows[0], vec!["Welcher Master", "Sieben geprüft, drei mit Frist."]);
-        assert_eq!(table.rows[1], vec!["Promotion", "Route geklärt, Zahlen unfreundlich."]);
+        assert_eq!(
+            table.rows[0],
+            vec!["Welcher Master", "Sieben geprüft, drei mit Frist."]
+        );
+        assert_eq!(
+            table.rows[1],
+            vec!["Promotion", "Route geklärt, Zahlen unfreundlich."]
+        );
     }
 
     #[test]

@@ -1191,7 +1191,10 @@ mod tests {
         let (editor, cx) = open_with(cx, record, false);
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.doc.blocks.len()), 2);
-        assert_eq!(editor.read_with(cx, |e, _| e.doc.blocks[1].kind), Kind::Code);
+        assert_eq!(
+            editor.read_with(cx, |e, _| e.doc.blocks[1].kind),
+            Kind::Code
+        );
         assert_eq!(editor.read_with(cx, |e, _| e.active), None);
         // Focusing block 1 opens the code textarea for editing
         cx.update(|window, cx| editor.update(cx, |e, cx| e.focus(1, 0, window, cx)));

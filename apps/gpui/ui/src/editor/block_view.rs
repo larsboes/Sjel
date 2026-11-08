@@ -200,7 +200,11 @@ pub(crate) fn render_block(
                     .text_sm()
                     .line_height(relative(1.4))
                     .text_color(rgb(palette.text))
-                    .child(if inner.is_empty() { " ".to_string() } else { inner }),
+                    .child(if inner.is_empty() {
+                        " ".to_string()
+                    } else {
+                        inner
+                    }),
             )
             .into_any_element()
     } else {
@@ -279,9 +283,13 @@ pub(crate) fn render_block(
                                 .rounded(px(4.))
                                 .text_xs()
                                 .text_color(rgb(palette.muted))
-                                .hover(move |s| s.bg(rgba(palette.surface)).text_color(rgb(palette.text)))
+                                .hover(move |s| {
+                                    s.bg(rgba(palette.surface)).text_color(rgb(palette.text))
+                                })
                                 .on_click(move |_, _, cx| {
-                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(code_copy.clone()));
+                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                                        code_copy.clone(),
+                                    ));
                                 })
                                 .child("Copy"),
                         ),

@@ -238,7 +238,7 @@ fn run_adapter(
                     println!("  store is empty");
                 } else {
                     for (i, r) in rows.iter().enumerate() {
-                        let vl = r.vault_link.as_deref().unwrap_or("none");
+                        let vl = r.note_link.as_deref().unwrap_or("none");
                         let route = classify_ranked(r, cfg.geo.as_ref());
                         let route_label = route
                             .as_ref()
@@ -1046,8 +1046,8 @@ fn run_from_file(
     let mut note_links = 0;
 
     for s in &mut scored {
-        let vault_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
-        if let Some(ref vl) = vault_link {
+        let note_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
+        if let Some(ref vl) = note_link {
             note_links += 1;
             s.rationale = format!("{}\n     note link: {vl}", s.rationale);
         }
@@ -1058,7 +1058,7 @@ fn run_from_file(
                     s.score,
                     s.matched_focus.as_deref(),
                     &s.rationale,
-                    vault_link.as_deref(),
+                    note_link.as_deref(),
                 )
                 .unwrap_or(false);
             if is_new {

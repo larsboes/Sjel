@@ -228,7 +228,7 @@ async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
                     status: persisted_row
                         .map(|row| row.status.clone())
                         .unwrap_or_else(|| "new".to_string()),
-                    vault_link: persisted_row.and_then(|row| row.vault_link.clone()),
+                    note_link: persisted_row.and_then(|row| row.note_link.clone()),
                     event_route,
                 }
             })

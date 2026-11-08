@@ -357,7 +357,7 @@ mod tests {
             matched_focus: "AI engineering".into(),
             rationale: "cosine 0.42".into(),
             url: "https://lu.ma/claude-fq5h".into(),
-            vault_link: None,
+            note_link: None,
             status: "saved".into(),
             country_code: Some("Germany".into()),
             latitude: Some(52.52),

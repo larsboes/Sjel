@@ -138,8 +138,9 @@ pub struct ScoutingOpportunity {
     pub matched_focus: String,
     pub rationale: String,
     pub url: String,
-    #[serde(default)]
-    pub vault_link: Option<String>,
+    // `vault_link` until 2026-11-08 (docs/plans/storage.md, "Vault holds learning only").
+    #[serde(default, alias = "vault_link")]
+    pub note_link: Option<String>,
     pub status: OpportunityStatus,
     #[serde(default)]
     pub country_code: Option<String>,
@@ -179,8 +180,9 @@ pub struct ScoredOpportunity {
     pub url: String,
     pub opportunity_type: String,
     pub status: String,
-    #[serde(default)]
-    pub vault_link: Option<String>,
+    // `vault_link` until 2026-11-08 (docs/plans/storage.md, "Vault holds learning only").
+    #[serde(default, alias = "vault_link")]
+    pub note_link: Option<String>,
     #[serde(default)]
     pub event_route: Option<EventRoute>,
 }

@@ -38,7 +38,7 @@ async fn test_multi_writer_concurrency_on_turso() {
                 score REAL,
                 matched_focus TEXT,
                 rationale TEXT,
-                vault_link TEXT,
+                note_link TEXT,
                 status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','dismissed','saved')),
                 first_seen TEXT,
                 last_seen TEXT
@@ -46,10 +46,10 @@ async fn test_multi_writer_concurrency_on_turso() {
 
             CREATE TABLE IF NOT EXISTS concurrency_links (
                 opportunity_id TEXT NOT NULL,
-                vault_path TEXT NOT NULL,
+                note_path TEXT NOT NULL,
                 link_type TEXT NOT NULL,
                 created_at TEXT,
-                PRIMARY KEY (opportunity_id, vault_path)
+                PRIMARY KEY (opportunity_id, note_path)
             );
             ",
         )

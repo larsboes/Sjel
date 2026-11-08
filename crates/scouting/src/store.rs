@@ -76,6 +76,17 @@ impl Store {
     /// rows written before the coordinate columns did; no SQLite file predates this
     /// migration, and SQLite has no `ADD COLUMN IF NOT EXISTS` to express it with.
     fn init_schema(conn: &Connection, prefix: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // `vault_link` and `vault_path` became `note_link` and `note_path` on 2026-11-08 (the
+        // vault holds learning only: docs/plans/storage.md). A table created before then keeps
+        // its rows; only the column name changes. `CREATE TABLE IF NOT EXISTS` below leaves an
+        // existing table alone, so the rename has to come first.
+        rename_column_if_present(
+            conn,
+            &format!("{prefix}_opportunities"),
+            "vault_link",
+            "note_link",
+        )?;
+        rename_column_if_present(conn, &format!("{prefix}_links"), "vault_path", "note_path")?;
         conn.execute_batch(&format!(
             "
             CREATE TABLE IF NOT EXISTS {prefix}_opportunities (
@@ -97,7 +108,7 @@ impl Store {
                 score REAL,
                 matched_focus TEXT,
                 rationale TEXT,
-                vault_link TEXT,
+                note_link TEXT,
                 status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','dismissed','saved')),
                 first_seen TEXT,
                 last_seen TEXT
@@ -105,10 +116,10 @@ impl Store {
 
             CREATE TABLE IF NOT EXISTS {prefix}_links (
                 opportunity_id TEXT NOT NULL,
-                vault_path TEXT NOT NULL,
+                note_path TEXT NOT NULL,
                 link_type TEXT NOT NULL,
                 created_at TEXT,
-                PRIMARY KEY (opportunity_id, vault_path)
+                PRIMARY KEY (opportunity_id, note_path)
             );
 
             -- Phase 1 correlation-engine memory: per-adapter run bookkeeping.
@@ -400,7 +411,7 @@ impl Store {
         score: f64,
         matched_focus: Option<&str>,
         rationale: &str,
-        vault_link: Option<&str>,
+        note_link: Option<&str>,
     ) -> Result<bool, Box<dyn std::error::Error>> {
         let now = chrono_now();
         let raw_json = serde_json::to_string(&opp.raw)?;
@@ -430,14 +441,14 @@ impl Store {
             &format!(
                 "INSERT INTO {prefix}_opportunities (id, opportunity_type, source, source_kind, url, title,
                     starts_at, ends_at, location, city, country_code, latitude, longitude, raw, fetched_at, score,
-                    matched_focus, rationale, vault_link, status, first_seen, last_seen)
+                    matched_focus, rationale, note_link, status, first_seen, last_seen)
                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,'new',?20,?21)
                 ON CONFLICT (id) DO UPDATE SET
                     fetched_at = excluded.fetched_at,
                     score = excluded.score,
                     matched_focus = excluded.matched_focus,
                     rationale = excluded.rationale,
-                    vault_link = excluded.vault_link,
+                    note_link = excluded.note_link,
                     last_seen = excluded.last_seen",
                 prefix = self.prefix
             ),
@@ -460,18 +471,18 @@ impl Store {
                 score,
                 matched,
                 &rationale,
-                &vault_link,
+                &note_link,
                 &now,
                 &now,
             ],
         )?;
 
-        if let Some(vp) = vault_link {
+        if let Some(vp) = note_link {
             conn.execute(
                 &format!(
-                    "INSERT INTO {prefix}_links (opportunity_id, vault_path, link_type, created_at)
+                    "INSERT INTO {prefix}_links (opportunity_id, note_path, link_type, created_at)
                     VALUES (?1, ?2, ?3, ?4)
-                    ON CONFLICT (opportunity_id, vault_path) DO NOTHING",
+                    ON CONFLICT (opportunity_id, note_path) DO NOTHING",
                     prefix = self.prefix
                 ),
                 params![&opp.id, &vp, "matched", &now],
@@ -506,7 +517,7 @@ impl Store {
             "WHERE status != 'dismissed'"
         };
         let sql = format!(
-            "SELECT id, opportunity_type, source, title, city, starts_at, ends_at, location, score, matched_focus, rationale, url, vault_link, status, country_code, latitude, longitude, raw
+            "SELECT id, opportunity_type, source, title, city, starts_at, ends_at, location, score, matched_focus, rationale, url, note_link, status, country_code, latitude, longitude, raw
              FROM {prefix}_opportunities {filter} ORDER BY score DESC LIMIT ?1",
             prefix = self.prefix
         );
@@ -524,7 +535,7 @@ impl Store {
                 matched_focus: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                 rationale: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
                 url: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
-                vault_link: row.get(12)?,
+                note_link: row.get(12)?,
                 status: row.get(13)?,
                 country_code: row.get(14)?,
                 latitude: row.get(15)?,
@@ -549,7 +560,7 @@ pub struct RankedRow {
     pub matched_focus: String,
     pub rationale: String,
     pub url: String,
-    pub vault_link: Option<String>,
+    pub note_link: Option<String>,
     pub status: String,
     /// Whatever the source called the country. Deliberately not normalised
     /// here: Luma says "Germany", meetup says "de", and inventing a mapping in
@@ -622,6 +633,26 @@ impl ProposedSource {
 
 /// Stable id for a candidate: the pair that identifies it, not a counter.
 /// Lowercased so the same hub noticed with different casing is one proposal.
+/// Rename `old` to `new` when the table exists, has `old` and lacks `new`; otherwise do nothing.
+fn rename_column_if_present(
+    conn: &Connection,
+    table: &str,
+    old: &str,
+    new: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns: Vec<String> = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<_, _>>()?;
+    if columns.iter().any(|c| c == old) && !columns.iter().any(|c| c == new) {
+        conn.execute(
+            &format!("ALTER TABLE {table} RENAME COLUMN {old} TO {new}"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 fn proposed_source_id(adapter: &str, locator: &str) -> String {
     format!(
         "{}:{}",
@@ -648,6 +679,39 @@ fn chrono_now() -> String {
 mod db_tests {
     use super::*;
     use crate::opportunity::{Opportunity, OpportunityType, SourceKind};
+
+    #[test]
+    fn the_vault_columns_are_renamed_in_place_and_keep_their_rows() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE t_opportunities (id TEXT PRIMARY KEY, vault_link TEXT);
+             INSERT INTO t_opportunities VALUES ('o1', 'Events/x.md');
+             CREATE TABLE t_links (opportunity_id TEXT NOT NULL, vault_path TEXT NOT NULL,
+                 PRIMARY KEY (opportunity_id, vault_path));
+             INSERT INTO t_links VALUES ('o1', 'Events/x.md');",
+        )
+        .unwrap();
+        for _ in 0..2 {
+            // The second pass finds `note_*` already present and changes nothing.
+            rename_column_if_present(&conn, "t_opportunities", "vault_link", "note_link").unwrap();
+            rename_column_if_present(&conn, "t_links", "vault_path", "note_path").unwrap();
+        }
+        let link: String = conn
+            .query_row(
+                "SELECT note_link FROM t_opportunities WHERE id = 'o1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let path: String = conn
+            .query_row("SELECT note_path FROM t_links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            (link.as_str(), path.as_str()),
+            ("Events/x.md", "Events/x.md")
+        );
+        rename_column_if_present(&conn, "missing_table", "a", "b").unwrap();
+    }
 
     /// A file per test, in a directory this process owns. It replaces the per-pid
     /// schema and its drop guard: that guard existed because four abandoned test

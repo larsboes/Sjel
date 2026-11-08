@@ -65,8 +65,8 @@ pub fn run(
 
     for s in &mut scored {
         sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
-        let vault_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
-        if let Some(ref vl) = vault_link {
+        let note_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
+        if let Some(ref vl) = note_link {
             note_links += 1;
             s.rationale = format!("{}\n     note link: {vl}", s.rationale);
         }
@@ -77,7 +77,7 @@ pub fn run(
                 s.score,
                 s.matched_focus.as_deref(),
                 &s.rationale,
-                vault_link.as_deref(),
+                note_link.as_deref(),
             )?;
             if is_new {
                 new_count += 1;

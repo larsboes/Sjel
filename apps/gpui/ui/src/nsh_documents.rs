@@ -333,12 +333,87 @@ pub fn DocumentsScreen() -> impl IntoElement {
         }))
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum NshDocSort {
+    #[default]
+    Newest,
+    Name,
+    Category,
+    Pages,
+}
+
+impl NshDocSort {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Newest => "Newest",
+            Self::Name => "Name A–Z",
+            Self::Category => "Category",
+            Self::Pages => "Pages",
+        }
+    }
+}
+
+fn sort_nsh_rows(rows: &mut [DocumentSummary], sort: NshDocSort) {
+    rows.sort_by(|a, b| match sort {
+        NshDocSort::Newest => b
+            .imported_at
+            .cmp(&a.imported_at)
+            .then_with(|| title(a).to_lowercase().cmp(&title(b).to_lowercase())),
+        NshDocSort::Name => title(a)
+            .to_lowercase()
+            .cmp(&title(b).to_lowercase())
+            .then_with(|| b.imported_at.cmp(&a.imported_at)),
+        NshDocSort::Category => a
+            .category
+            .as_deref()
+            .unwrap_or("")
+            .to_lowercase()
+            .cmp(&b.category.as_deref().unwrap_or("").to_lowercase())
+            .then_with(|| b.imported_at.cmp(&a.imported_at)),
+        NshDocSort::Pages => b
+            .page_count
+            .cmp(&a.page_count)
+            .then_with(|| b.imported_at.cmp(&a.imported_at)),
+    });
+}
+
 fn list(
     rows: Signal<Vec<DocumentSummary>>,
     next_page: Signal<Option<(usize, usize)>>,
 ) -> impl IntoElement {
+    let sort_mode = signal(NshDocSort::Newest);
+    let sort_chip = move |mode: NshDocSort| {
+        button()
+            .px_3()
+            .py_1()
+            .on_press(move || {
+                sort_mode.set(mode);
+                rows.update(|all| sort_nsh_rows(all, mode));
+            })
+            .child(
+                text(move || {
+                    if sort_mode.get() == mode {
+                        format!("{} •", mode.label())
+                    } else {
+                        mode.label().to_owned()
+                    }
+                })
+                .text_xs(),
+            )
+    };
     view()
         .flex_1()
+        .child(
+            view()
+                .flex_row()
+                .px_4()
+                .pb_2()
+                .gap_2()
+                .child(sort_chip(NshDocSort::Newest))
+                .child(sort_chip(NshDocSort::Name))
+                .child(sort_chip(NshDocSort::Category))
+                .child(sort_chip(NshDocSort::Pages)),
+        )
         .child(
             virtual_list(
                 move || rows.with(|r| r.len()),
@@ -473,5 +548,26 @@ mod tests {
         assert_eq!(kept_status(1), "1 document kept on this phone");
         assert_eq!(page_status(500, 7154), "Showing 500 of 7154 documents");
         assert_eq!(page_status(7154, 7154), "7154 documents");
+
+        let mut list = vec![
+            DocumentSummary {
+                id: "1".into(),
+                filename: "z.pdf".into(),
+                imported_at: "2026-11-01".into(),
+                page_count: 2,
+                ..Default::default()
+            },
+            DocumentSummary {
+                id: "2".into(),
+                filename: "a.pdf".into(),
+                imported_at: "2026-11-05".into(),
+                page_count: 10,
+                ..Default::default()
+            },
+        ];
+        sort_nsh_rows(&mut list, NshDocSort::Name);
+        assert_eq!(list[0].id, "2");
+        sort_nsh_rows(&mut list, NshDocSort::Pages);
+        assert_eq!(list[0].page_count, 10);
     }
 }

@@ -1,5 +1,5 @@
-use super::types::TaskSort;
-use sjel_gpui_core::shell::{GlobalTask, ProjectRecord, TASK_STATUSES};
+use super::types::{NoteSort, TaskSort};
+use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord, TASK_STATUSES};
 
 /// Open tasks first, then by due date with undated last, then by priority.
 pub fn ordered(records: &[ProjectRecord]) -> Vec<&ProjectRecord> {
@@ -69,4 +69,34 @@ pub fn group_by_project<'a>(tasks: &[&'a GlobalTask]) -> Vec<(String, Vec<&'a Gl
         }
     }
     groups
+}
+
+/// Sorts cross-project notes by `sort`, reversed when `ascending` is false.
+pub fn sort_notes(notes: &mut [&GlobalNote], sort: NoteSort, ascending: bool) {
+    let default = |a: &GlobalNote, b: &GlobalNote| {
+        (
+            a.kind != "project",
+            a.project.to_lowercase(),
+            a.title.to_lowercase(),
+        )
+            .cmp(&(
+                b.kind != "project",
+                b.project.to_lowercase(),
+                b.title.to_lowercase(),
+            ))
+    };
+    notes.sort_by(|a, b| {
+        let primary = match sort {
+            NoteSort::Default => std::cmp::Ordering::Equal,
+            NoteSort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            NoteSort::Project => a.project.to_lowercase().cmp(&b.project.to_lowercase()),
+            NoteSort::Kind => (a.kind != "project").cmp(&(b.kind != "project")),
+        };
+        let primary = if ascending {
+            primary
+        } else {
+            primary.reverse()
+        };
+        primary.then_with(|| default(a, b))
+    });
 }

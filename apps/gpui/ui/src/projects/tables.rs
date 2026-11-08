@@ -8,9 +8,10 @@ use gpui_kit::{
 };
 
 use crate::primitives::{
-    due_badge, filter_pill, list, priority_pill, row_for_density, status_pill,
+    due_badge, filter_pill, list, priority_pill, resizable_table_header, row_for_density,
+    status_pill, SortOrder, SortableColumn,
 };
-use crate::tasks::{self, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
+use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
 use crate::theme::{tint, Palette};
 use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
@@ -69,19 +70,23 @@ impl Projects {
                 }),
             ));
 
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child("TASK"))
-            .child(div().w(px(cols.due)).child("DUE"))
-            .child(div().w(px(cols.priority)).child("PRIORITY"))
-            .child(div().w(px(28.)))
-            .into_any_element();
+        let entity = cx.entity();
+        let header = resizable_table_header(
+            "project-tasks",
+            vec![
+                SortableColumn::spacer(px(24.)),
+                SortableColumn::flex("title", "TASK"),
+                SortableColumn::fixed("due", "DUE", px(cols.due)),
+                SortableColumn::fixed("priority", "PRIORITY", px(cols.priority)),
+                SortableColumn::spacer(px(28.)),
+            ],
+            cols.density,
+            palette,
+            |_, _, _| {},
+            move |col_id, _, cx| {
+                entity.update(cx, |view, cx| view.resize_column(col_id, cx));
+            },
+        );
         let mut rows = vec![header];
 
         let filtered: Vec<_> = tasks::ordered(records)
@@ -409,17 +414,48 @@ impl Projects {
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
         let (sort, ascending) = self.task_sort;
-        let heading = |label: &'static str, column: TaskSort, cx: &mut Context<Self>| {
-            let arrow = match (sort == column, ascending) {
-                (true, true) => " ↑",
-                (true, false) => " ↓",
-                _ => "",
-            };
-            div()
-                .id(SharedString::from(format!("sort-{label}")))
-                .cursor_pointer()
-                .hover(move |s| s.text_color(rgb(palette.text)))
-                .on_click(cx.listener(move |view, _, _, cx| {
+        let sort_state =
+            |column: TaskSort| (sort == column).then(|| SortOrder::from_bool(ascending));
+        let mut header_cols = vec![
+            SortableColumn::spacer(px(24.)),
+            SortableColumn::flex("title", "TASK").sorted(sort_state(TaskSort::Title)),
+        ];
+        if let Some(w) = cols.project {
+            header_cols.push(
+                SortableColumn::fixed("project", "PROJECT", px(w))
+                    .sorted(sort_state(TaskSort::Project)),
+            );
+        }
+        if let Some(w) = cols.status {
+            header_cols.push(
+                SortableColumn::fixed("status", "STATUS", px(w))
+                    .sorted(sort_state(TaskSort::Status)),
+            );
+        }
+        header_cols.push(
+            SortableColumn::fixed("due", "DUE", px(cols.due)).sorted(sort_state(TaskSort::Due)),
+        );
+        header_cols.push(
+            SortableColumn::fixed("priority", "PRIO", px(cols.priority))
+                .sorted(sort_state(TaskSort::Priority)),
+        );
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let header = resizable_table_header(
+            "all-tasks",
+            header_cols,
+            cols.density,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "title" => TaskSort::Title,
+                    "project" => TaskSort::Project,
+                    "status" => TaskSort::Status,
+                    "due" => TaskSort::Due,
+                    "priority" => TaskSort::Priority,
+                    _ => return,
+                };
+                sort_entity.update(cx, |view, cx| {
                     // Ascending, then descending, then back to the default order.
                     view.task_sort = match view.task_sort {
                         (current, true) if current == column => (column, false),
@@ -427,31 +463,12 @@ impl Projects {
                         _ => (column, true),
                     };
                     cx.notify();
-                }))
-                .child(format!("{label}{arrow}"))
-        };
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child(heading("TASK", TaskSort::Title, cx)))
-            .child(column(cols.project).child(heading("PROJECT", TaskSort::Project, cx)))
-            .child(column(cols.status).child(heading("STATUS", TaskSort::Status, cx)))
-            .child(
-                div()
-                    .w(px(cols.due))
-                    .child(heading("DUE", TaskSort::Due, cx)),
-            )
-            .child(
-                div()
-                    .w(px(cols.priority))
-                    .child(heading("PRIO", TaskSort::Priority, cx)),
-            )
-            .into_any_element();
+                });
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
+            },
+        );
         let mut rows = vec![header];
 
         let query = self.search_query.as_str();
@@ -769,22 +786,55 @@ impl Projects {
             )
             .child(search_box(cols.search).child(Input::new(search_input).small()));
 
-        let header = row_for_density(cols.density)
-            .min_h(px(34.))
-            .py_1()
-            .bg(rgba(tint(palette.raised, 0x30)))
-            .text_xs()
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(rgb(palette.muted))
-            .child(div().w(px(24.)))
-            .child(div().flex_1().child("NOTE"))
-            .child(column(cols.project).child("PROJECT"))
-            .child(column(cols.kind).child("TYPE"))
-            .into_any_element();
+        let (note_sort, ascending) = self.note_sort;
+        let sort_state =
+            |column: NoteSort| (note_sort == column).then(|| SortOrder::from_bool(ascending));
+        let mut header_cols = vec![
+            SortableColumn::spacer(px(24.)),
+            SortableColumn::flex("title", "NOTE").sorted(sort_state(NoteSort::Title)),
+        ];
+        if let Some(w) = cols.project {
+            header_cols.push(
+                SortableColumn::fixed("project", "PROJECT", px(w))
+                    .sorted(sort_state(NoteSort::Project)),
+            );
+        }
+        if let Some(w) = cols.kind {
+            header_cols.push(
+                SortableColumn::fixed("kind", "TYPE", px(w)).sorted(sort_state(NoteSort::Kind)),
+            );
+        }
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        let header = resizable_table_header(
+            "all-notes",
+            header_cols,
+            cols.density,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "title" => NoteSort::Title,
+                    "project" => NoteSort::Project,
+                    "kind" => NoteSort::Kind,
+                    _ => return,
+                };
+                sort_entity.update(cx, |view, cx| {
+                    view.note_sort = match view.note_sort {
+                        (current, true) if current == column => (column, false),
+                        (current, false) if current == column => (NoteSort::Default, true),
+                        _ => (column, true),
+                    };
+                    cx.notify();
+                });
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
+            },
+        );
         let mut rows = vec![header];
 
         let query = self.notes_search_query.as_str();
-        let filtered: Vec<_> = notes
+        let mut filtered: Vec<_> = notes
             .iter()
             .filter(|n| {
                 let matches_kind = match self.note_kind_filter {
@@ -799,6 +849,7 @@ impl Projects {
                         || n.path.to_lowercase().contains(query))
             })
             .collect();
+        tasks::sort_notes(&mut filtered, note_sort, ascending);
 
         if filtered.is_empty() && !notes.is_empty() {
             rows.push(

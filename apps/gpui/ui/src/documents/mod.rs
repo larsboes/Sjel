@@ -20,7 +20,10 @@ use sjel_gpui_core::shell::{
 };
 
 use crate::data::{Remote, Repo};
-use crate::primitives::{filter_pill, virtual_list};
+use crate::primitives::{
+    column_width, cycle_column_width, filter_pill, resizable_table_header, tabular_cell,
+    virtual_list, SortOrder, SortableColumn,
+};
 use crate::theme::{tint, Density, Palette};
 
 mod duplicates;
@@ -37,6 +40,74 @@ pub enum Filter {
     Filed,
     All,
     NeedsReview,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DocSort {
+    #[default]
+    Added,
+    Name,
+    Category,
+    Pages,
+    Status,
+}
+
+impl DocSort {
+    fn default_order(self) -> SortOrder {
+        match self {
+            Self::Added | Self::Pages => SortOrder::Descending,
+            Self::Name | Self::Category | Self::Status => SortOrder::Ascending,
+        }
+    }
+
+    fn button_label(self, order: SortOrder) -> String {
+        match (self, order) {
+            (Self::Added, SortOrder::Descending) => "Newest".to_owned(),
+            (Self::Added, SortOrder::Ascending) => "Oldest".to_owned(),
+            (Self::Name, SortOrder::Ascending) => "Name A–Z".to_owned(),
+            (Self::Name, SortOrder::Descending) => "Name Z–A".to_owned(),
+            (Self::Category, o) => format!("Category{}", o.glyph()),
+            (Self::Pages, o) => format!("Pages{}", o.glyph()),
+            (Self::Status, o) => format!("Status{}", o.glyph()),
+        }
+    }
+}
+
+fn compare_documents(
+    left: &DocumentSummary,
+    right: &DocumentSummary,
+    sort: DocSort,
+    order: SortOrder,
+) -> std::cmp::Ordering {
+    let category = |row: &DocumentSummary| {
+        row.category
+            .as_deref()
+            .or(row.suggested_category.as_deref())
+            .unwrap_or("")
+            .to_lowercase()
+    };
+    let primary = match sort {
+        DocSort::Added => left.imported_at.cmp(&right.imported_at),
+        DocSort::Name => left
+            .filename
+            .to_lowercase()
+            .cmp(&right.filename.to_lowercase()),
+        DocSort::Category => category(left).cmp(&category(right)),
+        DocSort::Pages => left.page_count.cmp(&right.page_count),
+        DocSort::Status => left.status.cmp(&right.status),
+    };
+    let primary = if order.is_ascending() {
+        primary
+    } else {
+        primary.reverse()
+    };
+    primary
+        .then_with(|| right.imported_at.cmp(&left.imported_at))
+        .then_with(|| {
+            left.filename
+                .to_lowercase()
+                .cmp(&right.filename.to_lowercase())
+        })
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -163,7 +234,8 @@ pub struct Documents {
     pub(super) search_revision: u64,
     pub(super) search_applied: bool,
     pub(super) search_input: Option<(Entity<InputState>, Subscription)>,
-    pub(super) sort_by_name: bool,
+    pub(super) sort: (DocSort, SortOrder),
+    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub(super) selected: Option<String>,
     /// The list's own scroller: it draws only the rows the window shows.
     pub(super) list: gpui::ListState,
@@ -223,7 +295,8 @@ impl Documents {
             search_revision: 0,
             search_applied: false,
             search_input: None,
-            sort_by_name: false,
+            sort: (DocSort::Added, SortOrder::Descending),
+            col_widths: Default::default(),
             selected: None,
             list: gpui::ListState::new(0, gpui::ListAlignment::Top, px(600.)),
             order: Vec::new(),
@@ -569,26 +642,20 @@ impl Documents {
                     picked.push(index);
                 }
             }
-            match (self.grouping, self.sort_by_name) {
-                (Grouping::None, false) => {}
-                (Grouping::None, true) => picked.sort_by(|left, right| {
-                    rows[*left]
-                        .filename
-                        .to_lowercase()
-                        .cmp(&rows[*right].filename.to_lowercase())
-                }),
-                (grouping, by_name) => picked.sort_by(|left, right| {
+            let (sort_col, sort_order) = self.sort;
+            match self.grouping {
+                Grouping::None => {
+                    if (sort_col, sort_order) != (DocSort::Added, SortOrder::Descending) {
+                        picked.sort_by(|left, right| {
+                            compare_documents(&rows[*left], &rows[*right], sort_col, sort_order)
+                        });
+                    }
+                }
+                grouping => picked.sort_by(|left, right| {
                     grouping_key(&rows[*left], grouping)
                         .cmp(&grouping_key(&rows[*right], grouping))
                         .then_with(|| {
-                            if by_name {
-                                rows[*left]
-                                    .filename
-                                    .to_lowercase()
-                                    .cmp(&rows[*right].filename.to_lowercase())
-                            } else {
-                                rows[*right].imported_at.cmp(&rows[*left].imported_at)
-                            }
+                            compare_documents(&rows[*left], &rows[*right], sort_col, sort_order)
                         })
                 }),
             }
@@ -634,6 +701,33 @@ impl Documents {
         self.order = order;
     }
 
+    fn col_width(&self, id: &'static str, default: f32) -> f32 {
+        column_width(&self.col_widths, id, default)
+    }
+
+    fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
+        let default = match id {
+            "category" => Some(110.),
+            "pages" => Some(64.),
+            "status" => Some(76.),
+            "added" => Some(110.),
+            _ => None,
+        };
+        if let Some(default) = default {
+            cycle_column_width(&mut self.col_widths, id, default);
+            cx.notify();
+        }
+    }
+
+    fn set_sort(&mut self, column: DocSort, cx: &mut Context<Self>) {
+        self.sort = match self.sort {
+            (current, order) if current == column => (column, order.flip()),
+            _ => (column, column.default_order()),
+        };
+        self.order_rev = self.order_rev.wrapping_add(1);
+        cx.notify();
+    }
+
     /// One list row: the group header when it opens one, then the record itself.
     fn document_row(
         &self,
@@ -674,12 +768,30 @@ impl Documents {
             .or(row.suggested_category.as_deref())
             .unwrap_or("—");
         let date = row.imported_at.get(..10).unwrap_or("—").to_owned();
+        let pages_label = if row.page_count > 0 {
+            format!("{}p", row.page_count)
+        } else {
+            "—".to_owned()
+        };
+        let category_w = self.col_width("category", 110.);
+        let pages_w = self.col_width("pages", 64.);
+        let status_w = self.col_width("status", 76.);
+        let added_w = self.col_width("added", 110.);
         let workflow = workflow_label(&row.workflow_stage);
+        let primary_title = row
+            .extracted_title
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .unwrap_or(&row.filename)
+            .to_owned();
+        let show_filename_sub = primary_title != row.filename;
         item.child(
             div()
                 .id(("document-row", ix))
                 .flex()
                 .items_center()
+                .gap_2()
                 .min_h(self.density.row_height())
                 .px_3()
                 .rounded(px(5.))
@@ -699,7 +811,16 @@ impl Documents {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .child(div().truncate().text_sm().child(row.filename.clone()))
+                        .child(div().truncate().text_sm().child(primary_title))
+                        .when(show_filename_sub, |column| {
+                            column.child(
+                                div()
+                                    .truncate()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(row.filename.clone()),
+                            )
+                        })
                         .when(row.status == "inbox", |column| {
                             column.child(
                                 div()
@@ -726,22 +847,23 @@ impl Documents {
                 .when(!narrow, |cells| {
                     cells.child(
                         div()
-                            .w(px(110.))
+                            .w(px(category_w))
                             .truncate()
                             .text_xs()
                             .text_color(rgb(palette.muted))
                             .child(category.to_owned()),
                     )
                 })
-                .child(div().w(px(76.)).child(status_chip(&row.status, palette)))
                 .when(!narrow, |cells| {
-                    cells.child(
-                        div()
-                            .w(px(110.))
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .child(date),
-                    )
+                    cells.child(tabular_cell(pages_label, px(pages_w), palette.muted))
+                })
+                .child(
+                    div()
+                        .w(px(status_w))
+                        .child(status_chip(&row.status, palette)),
+                )
+                .when(!narrow, |cells| {
+                    cells.child(tabular_cell(date, px(added_w), palette.muted))
                 }),
         )
         .into_any_element()
@@ -863,16 +985,22 @@ impl Render for Documents {
                     )
                 })
                 .when(!narrow, |bar| {
+                    let (sort_col, sort_order) = self.sort;
                     bar.child(
                         Button::new("documents-sort")
                             .small()
-                            .label(if self.sort_by_name {
-                                "Name A–Z"
-                            } else {
-                                "Newest"
-                            })
+                            .label(sort_col.button_label(sort_order))
                             .on_click(cx.listener(|view, _, _, cx| {
-                                view.sort_by_name = !view.sort_by_name;
+                                let next = match view.sort {
+                                    (DocSort::Added, SortOrder::Descending) => {
+                                        (DocSort::Name, SortOrder::Ascending)
+                                    }
+                                    (DocSort::Name, SortOrder::Ascending) => {
+                                        (DocSort::Pages, SortOrder::Descending)
+                                    }
+                                    _ => (DocSort::Added, SortOrder::Descending),
+                                };
+                                view.sort = next;
                                 view.order_rev = view.order_rev.wrapping_add(1);
                                 cx.notify();
                             })),
@@ -904,24 +1032,54 @@ impl Render for Documents {
                     ),
             );
         }
-        table = table.child(
-            div()
-                .flex()
-                .items_center()
-                .min_h(px(32.))
-                .px_3()
-                .rounded(px(5.))
-                .bg(rgba(palette.raised))
-                .text_xs()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(rgb(palette.muted))
-                .child(div().flex_1().child("DOCUMENT"))
-                .when(!narrow, |head| {
-                    head.child(div().w(px(110.)).child("CATEGORY"))
-                })
-                .child(div().w(px(76.)).child("STATUS"))
-                .when(!narrow, |head| head.child(div().w(px(110.)).child("ADDED"))),
+        let (sort_col, sort_order) = self.sort;
+        let sort_state = |column: DocSort| (sort_col == column).then_some(sort_order);
+        let mut header_cols =
+            vec![SortableColumn::flex("name", "DOCUMENT").sorted(sort_state(DocSort::Name))];
+        if !narrow {
+            header_cols.push(
+                SortableColumn::fixed("category", "CATEGORY", px(self.col_width("category", 110.)))
+                    .sorted(sort_state(DocSort::Category)),
+            );
+            header_cols.push(
+                SortableColumn::fixed("pages", "PAGES", px(self.col_width("pages", 64.)))
+                    .right_align()
+                    .sorted(sort_state(DocSort::Pages)),
+            );
+        }
+        header_cols.push(
+            SortableColumn::fixed("status", "STATUS", px(self.col_width("status", 76.)))
+                .sorted(sort_state(DocSort::Status)),
         );
+        if !narrow {
+            header_cols.push(
+                SortableColumn::fixed("added", "ADDED", px(self.col_width("added", 110.)))
+                    .right_align()
+                    .sorted(sort_state(DocSort::Added)),
+            );
+        }
+        let sort_entity = cx.entity();
+        let resize_entity = cx.entity();
+        table = table.child(resizable_table_header(
+            "documents",
+            header_cols,
+            self.density,
+            palette,
+            move |col_id, _, cx| {
+                let column = match col_id {
+                    "name" => DocSort::Name,
+                    "category" => DocSort::Category,
+                    "pages" => DocSort::Pages,
+                    "status" => DocSort::Status,
+                    "added" => DocSort::Added,
+                    _ => return,
+                };
+                sort_entity.update(cx, |view, cx| view.set_sort(column, cx));
+            },
+            move |col_id, _, cx| {
+                resize_entity.update(cx, |view, cx| view.resize_column(col_id, cx));
+            },
+        ));
         if self.rows.value.is_none() && self.rows.loading {
             table = table.child(
                 div()
@@ -1401,7 +1559,7 @@ mod tests {
     use gpui::TestAppContext;
 
     use super::duplicates::parse_page_ranges;
-    use super::{workflow_label, Documents, Filter, Reader, Zoom};
+    use super::{workflow_label, DocSort, Documents, Filter, Reader, SortOrder, Zoom};
     use crate::data::Repo;
     use sjel_gpui_core::shell::{DocumentSummary, ShellError};
 
@@ -1435,14 +1593,38 @@ mod tests {
     fn the_order_follows_the_filters(cx: &mut TestAppContext) {
         let page = cx.new(|_| Documents::new(Repo::new(Err(ShellError::NotSetUp))));
         page.update(cx, |page, cx| {
-            page.rows.value = Some(vec![
-                summary("a", Some("Tax"), "b-tax.pdf"),
-                summary("b", Some("Home"), "a-home.pdf"),
-                summary("c", None, "c-unfiled.pdf"),
-            ]);
+            let mut a = summary("a", Some("Tax"), "b-tax.pdf");
+            a.page_count = 4;
+            let mut b = summary("b", Some("Home"), "a-home.pdf");
+            b.page_count = 12;
+            let mut c = summary("c", None, "c-unfiled.pdf");
+            c.page_count = 1;
+            page.rows.value = Some(vec![a, b, c]);
             page.sync_order();
             assert_eq!(page.order.len(), 3);
             assert_eq!(page.list.item_count(), 3);
+
+            page.set_sort(DocSort::Name, cx);
+            page.sync_order();
+            let ids: Vec<&str> = page
+                .order
+                .iter()
+                .map(|row| page.rows.value.as_ref().unwrap()[row.index].id.as_str())
+                .collect();
+            assert_eq!(ids, ["b", "a", "c"]);
+
+            page.set_sort(DocSort::Pages, cx);
+            page.sync_order();
+            let ids: Vec<&str> = page
+                .order
+                .iter()
+                .map(|row| page.rows.value.as_ref().unwrap()[row.index].id.as_str())
+                .collect();
+            assert_eq!(ids, ["b", "a", "c"]);
+            assert_eq!(page.sort, (DocSort::Pages, SortOrder::Descending));
+
+            page.resize_column("category", cx);
+            assert_eq!(page.col_width("category", 110.), 149.);
 
             page.category_filter = Some("Tax".to_owned());
             page.order_rev = page.order_rev.wrapping_add(1);

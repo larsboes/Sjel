@@ -14,8 +14,9 @@ pub use cards::{
     stat_card_interactive, stat_strip, virtual_list, InteractiveStatCard,
 };
 pub use tables::{
-    data_row, key_bar, page_scroll, remote_state, shortcut_hint, sortable_table_header, sub_tabs,
-    table_header, tabular_cell, SortOrder, SortableColumn,
+    column_width, cycle_column_width, data_row, key_bar, page_scroll, remote_state,
+    resizable_table_header, shortcut_hint, sortable_table_header, sub_tabs, table_header,
+    tabular_cell, SortOrder, SortableColumn,
 };
 pub use tokens::{dot, note, placeholder, RADIUS_LG, RADIUS_MD, RADIUS_SM};
 
@@ -55,5 +56,13 @@ mod tests {
         assert!(RADIUS_MD < RADIUS_LG);
         assert_eq!(SortOrder::Ascending.glyph(), " ↑");
         assert_eq!(SortOrder::Descending.glyph(), " ↓");
+        assert_eq!(SortOrder::Ascending.flip(), SortOrder::Descending);
+        assert_eq!(SortOrder::from_bool(true), SortOrder::Ascending);
+        let mut widths = std::collections::HashMap::new();
+        assert_eq!(column_width(&widths, "due", 100.), 100.);
+        assert_eq!(cycle_column_width(&mut widths, "due", 100.), 135.);
+        assert_eq!(cycle_column_width(&mut widths, "due", 100.), 170.);
+        assert_eq!(cycle_column_width(&mut widths, "due", 100.), 100.);
+        assert!(widths.is_empty());
     }
 }

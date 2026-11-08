@@ -495,21 +495,23 @@ Use a three-layer split across `gpui-fast` and `nsh`:
    and hand-built views only for the 24-hour Calendar timeline and availability grid, cross-capability
    join inspectors, and the block note editor.
 
-- **Documents.** Built (2026-11-08): NSH Documents (`ui/src/nsh_documents.rs`) loads one 500-row
-  page on mount with on-demand paging (`fetch_page`) and renders extracted text through
-  `nsh_base::text_view` with selectable Markdown and link opening; Mac Documents
-  (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView` and
-  adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`) with search-matched page
-  highlights. Open: page thumbnails, text search inside the rendered PDF, and drag and drop from
-  Finder into import.
-- **Markdown & Rich Text.** Built (2026-11-08): `doc_view::render_markdown` uses
+- **Documents.** Built (2026-11-08, `de389e7d`): NSH Documents (`ui/src/nsh_documents.rs`) loads
+  one 500-row page on mount with on-demand paging (`fetch_page`), in-place sort chips (`Newest`,
+  `Name A–Z`, `Category`, `Pages`), and `nsh_base::text_view` selectable Markdown/links; Mac
+  Documents (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView`
+  and adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`) with search-matched page
+  highlights, plus `DocSort` multi-column sorting and resizable columns. Open: page thumbnails, text
+  search inside the rendered PDF, and drag and drop from Finder into import.
+- **Markdown & Rich Text.** Built (2026-11-08, `de389e7d`): `doc_view::render_markdown` uses
   `gpui_kit::component::text::TextView` with `FrontmatterPlugin` and Sjel's `Palette`-mapped
   `text_view_style`, replacing the duplicate hand-rolled parser in `ui/src/research/articles.rs`.
   Open: unify `ui/src/docs/render.rs` onto `TextView` with the Mermaid SVG `MarkdownPlugin`.
-- **Tables.** Built (2026-11-08): `SortableColumn`, `SortOrder`, `sortable_table_header` and
-  `tabular_cell` in `ui/src/primitives/tables.rs`. Open: wire `gpui_kit::component::table::DataTable`
-  and `nsh_base::data_table` into All Tasks, Documents, Finance Import and Inventory for resizable
-  and pinned columns.
+- **Tables.** Built (2026-11-08): `SortableColumn`, `SortOrder`, `sortable_table_header`,
+  `resizable_table_header`, `cycle_column_width`, and `tabular_cell` in `ui/src/primitives/tables.rs`,
+  wired into All Tasks, All Notes, Project Tasks (`ui/src/projects/tables.rs`) and Documents
+  (`ui/src/documents/mod.rs`) with per-column sorting and interactive column resizing while keeping
+  `virtual_list` group headers and inline row editors intact. Open: wire `resizable_table_header`
+  and `tabular_cell` into Finance Import and Inventory tables.
 - **Calendar.** Keep the 24-hour timeline, quarter-hour drag/resize and availability grid in
   `ui/src/calendar/`; wire `DatePicker` and `TimeField` into the event composer.
 - **Finance.** Built: the overview cards show the newest month instead of the

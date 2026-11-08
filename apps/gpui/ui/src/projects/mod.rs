@@ -13,9 +13,10 @@ use gpui_kit::{
 use crate::data::{self, Remote, Repo};
 use crate::editor::{self, EditorEvent, NoteEditor};
 use crate::primitives::{
-    back_button, list, note, placeholder, progress_bar, row_for_density, section,
+    back_button, column_width, cycle_column_width, list, note, placeholder, progress_bar,
+    row_for_density, section,
 };
-use crate::tasks::{self, StatusFilter, TaskFilter, TaskSort};
+use crate::tasks::{self, NoteSort, StatusFilter, TaskFilter, TaskSort};
 use crate::theme::{tint, Density, Palette, ThemeContext};
 use sjel_gpui_core::data::Blocked;
 use sjel_gpui_core::shell::{
@@ -94,6 +95,19 @@ impl Columns {
             },
         }
     }
+
+    pub(super) fn with_widths(
+        density: Density,
+        widths: &std::collections::HashMap<&'static str, f32>,
+    ) -> Self {
+        let mut base = Self::for_density(density);
+        base.due = column_width(widths, "due", base.due);
+        base.priority = column_width(widths, "priority", base.priority);
+        base.project = base.project.map(|w| column_width(widths, "project", w));
+        base.status = base.status.map(|w| column_width(widths, "status", w));
+        base.kind = base.kind.map(|w| column_width(widths, "kind", w));
+        base
+    }
 }
 
 /// A table cell of `width`, or nothing when the density drops the column.
@@ -167,6 +181,10 @@ pub struct Projects {
     pub global_status: StatusFilter,
     /// The cross-project table's sort column, and whether it ascends.
     pub task_sort: (TaskSort, bool),
+    /// The cross-project notes table's sort column, and whether it ascends.
+    pub note_sort: (NoteSort, bool),
+    /// Per-column width overrides for resizable table headers.
+    pub(super) col_widths: std::collections::HashMap<&'static str, f32>,
     pub group_by_project: bool,
     /// The projects whose group the cross-project table folds away.
     pub(super) collapsed_groups: std::collections::HashSet<String>,
@@ -237,6 +255,8 @@ impl Projects {
             task_filter: TaskFilter::Open,
             global_status: StatusFilter::Active,
             task_sort: (TaskSort::Default, true),
+            note_sort: (NoteSort::Default, true),
+            col_widths: Default::default(),
             group_by_project: false,
             collapsed_groups: Default::default(),
             task_panel: None,
@@ -442,7 +462,23 @@ impl Projects {
     }
 
     pub(super) fn columns(&self) -> Columns {
-        Columns::for_density(self.density)
+        Columns::with_widths(self.density, &self.col_widths)
+    }
+
+    pub(super) fn resize_column(&mut self, id: &'static str, cx: &mut Context<Self>) {
+        let base = Columns::for_density(self.density);
+        let default = match id {
+            "due" => Some(base.due),
+            "priority" => Some(base.priority),
+            "project" => base.project,
+            "status" => base.status,
+            "kind" => base.kind,
+            _ => None,
+        };
+        if let Some(default) = default {
+            cycle_column_width(&mut self.col_widths, id, default);
+            cx.notify();
+        }
     }
 
     /// Reads everything the page shows again, after something outside it changed the records:

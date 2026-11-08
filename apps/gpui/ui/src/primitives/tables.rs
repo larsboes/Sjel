@@ -109,6 +109,28 @@ pub enum SortOrder {
 }
 
 impl SortOrder {
+    /// Convert a boolean ascending flag into [`SortOrder`].
+    pub fn from_bool(ascending: bool) -> Self {
+        if ascending {
+            Self::Ascending
+        } else {
+            Self::Descending
+        }
+    }
+
+    /// Whether this order is ascending.
+    pub fn is_ascending(self) -> bool {
+        matches!(self, Self::Ascending)
+    }
+
+    /// Flip between ascending and descending.
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Ascending => Self::Descending,
+            Self::Descending => Self::Ascending,
+        }
+    }
+
     /// Arrow glyph shown beside an active column title.
     pub fn glyph(self) -> &'static str {
         match self {
@@ -118,13 +140,101 @@ impl SortOrder {
     }
 }
 
-/// Specification of a column in [`sortable_table_header`].
+/// Resolve a column's current width from the table's width override map, falling back to `default`.
+pub fn column_width(
+    widths: &std::collections::HashMap<&'static str, f32>,
+    id: &'static str,
+    default: f32,
+) -> f32 {
+    widths.get(id).copied().unwrap_or(default)
+}
+
+/// Cycle a fixed column's width through `1.0×` → `1.35×` → `1.70×` → `1.0×`.
+pub fn cycle_column_width(
+    widths: &mut std::collections::HashMap<&'static str, f32>,
+    id: &'static str,
+    default: f32,
+) -> f32 {
+    let current = column_width(widths, id, default);
+    let medium = (default * 1.35).round();
+    let wide = (default * 1.70).round();
+    let next = if (current - default).abs() < 1.0 {
+        widths.insert(id, medium);
+        medium
+    } else if (current - medium).abs() < 1.0 {
+        widths.insert(id, wide);
+        wide
+    } else {
+        widths.remove(id);
+        default
+    };
+    next
+}
+
+/// Specification of a column in [`sortable_table_header`] and [`resizable_table_header`].
 pub struct SortableColumn {
     pub id: &'static str,
     pub label: &'static str,
     pub width: Option<Pixels>,
     pub right_align: bool,
     pub sort: Option<SortOrder>,
+    pub resizable: bool,
+}
+
+impl SortableColumn {
+    /// Flexible column (`flex_1`) that fills remaining horizontal space.
+    pub fn flex(id: &'static str, label: &'static str) -> Self {
+        Self {
+            id,
+            label,
+            width: None,
+            right_align: false,
+            sort: None,
+            resizable: false,
+        }
+    }
+
+    /// Fixed-width sortable and resizable column.
+    pub fn fixed(id: &'static str, label: &'static str, width: Pixels) -> Self {
+        Self {
+            id,
+            label,
+            width: Some(width),
+            right_align: false,
+            sort: None,
+            resizable: true,
+        }
+    }
+
+    /// Non-interactive leading or trailing gutter column.
+    pub fn spacer(width: Pixels) -> Self {
+        Self {
+            id: "",
+            label: "",
+            width: Some(width),
+            right_align: false,
+            sort: None,
+            resizable: false,
+        }
+    }
+
+    /// Right-align both header text and numeric cells in this column.
+    pub fn right_align(mut self) -> Self {
+        self.right_align = true;
+        self
+    }
+
+    /// Mark the active sort order for this column.
+    pub fn sorted(mut self, sort: Option<SortOrder>) -> Self {
+        self.sort = sort;
+        self
+    }
+
+    /// Enable or disable the interactive column width resize handle.
+    pub fn resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
 }
 
 /// Interactive sortable column header strip with right-alignment for numeric columns.
@@ -135,7 +245,23 @@ pub fn sortable_table_header(
     palette: Palette,
     on_sort: impl Fn(&'static str, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    resizable_table_header(id_prefix, columns, density, palette, on_sort, |_, _, _| {})
+}
+
+/// Interactive sortable and resizable column header strip.
+///
+/// Clicking a column label triggers `on_sort(col.id)`; clicking a fixed column's right-edge
+/// divider handle triggers `on_resize(col.id)`.
+pub fn resizable_table_header(
+    id_prefix: &'static str,
+    columns: Vec<SortableColumn>,
+    density: Density,
+    palette: Palette,
+    on_sort: impl Fn(&'static str, &mut Window, &mut App) + 'static,
+    on_resize: impl Fn(&'static str, &mut Window, &mut App) + 'static,
+) -> AnyElement {
     let on_sort = std::rc::Rc::new(on_sort);
+    let on_resize = std::rc::Rc::new(on_resize);
     let mut row = row_for_density(density)
         .min_h(px(32.))
         .py_1()
@@ -146,29 +272,63 @@ pub fn sortable_table_header(
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(rgb(palette.muted));
     for col in columns {
+        let cell = match col.width {
+            Some(w) => div().w(w).flex_none(),
+            None => div().flex_1().min_w_0(),
+        };
+        if col.label.is_empty() {
+            row = row.child(cell);
+            continue;
+        }
         let on_sort = on_sort.clone();
+        let on_resize = on_resize.clone();
         let col_id = col.id;
         let active = col.sort.is_some();
         let text = match col.sort {
             Some(order) => format!("{}{}", col.label, order.glyph()),
             None => col.label.to_owned(),
         };
-        let cell = match col.width {
-            Some(w) => div().w(w).flex_none(),
-            None => div().flex_1().min_w_0(),
+        let label_el = div()
+            .id(SharedString::from(format!("{id_prefix}-col-{col_id}")))
+            .flex_1()
+            .min_w_0()
+            .cursor_pointer()
+            .when(col.right_align, |c| c.text_right())
+            .when(active, |c| c.text_color(rgb(palette.text)))
+            .hover(move |s| s.text_color(rgb(palette.text)))
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                on_sort(col_id, window, cx)
+            })
+            .truncate()
+            .child(text);
+        let cell = if col.resizable && col.width.is_some() {
+            cell.flex().items_center().gap_1().child(label_el).child(
+                div()
+                    .id(SharedString::from(format!("{id_prefix}-resize-{col_id}")))
+                    .w(px(6.))
+                    .h(px(14.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_col_resize()
+                    .rounded(px(2.))
+                    .hover(move |s| s.bg(rgba(tint(palette.accent, 0x35))))
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        cx.stop_propagation();
+                        on_resize(col_id, window, cx);
+                    })
+                    .child(
+                        div()
+                            .w(px(1.))
+                            .h(px(10.))
+                            .bg(rgba(tint(palette.border, 0x90))),
+                    ),
+            )
+        } else {
+            cell.flex().items_center().child(label_el)
         };
-        row = row.child(
-            cell.id(SharedString::from(format!("{id_prefix}-col-{col_id}")))
-                .cursor_pointer()
-                .when(col.right_align, |c| c.text_right())
-                .when(active, |c| c.text_color(rgb(palette.text)))
-                .hover(move |s| s.text_color(rgb(palette.text)))
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    on_sort(col_id, window, cx)
-                })
-                .truncate()
-                .child(text),
-        );
+        row = row.child(cell);
     }
     row.into_any_element()
 }

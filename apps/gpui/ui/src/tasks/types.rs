@@ -58,3 +58,13 @@ pub enum TaskSort {
     Due,
     Priority,
 }
+
+/// A column the cross-project notes table sorts by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoteSort {
+    /// Project hubs first, then alphabetical by project and title.
+    Default,
+    Title,
+    Project,
+    Kind,
+}

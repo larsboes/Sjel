@@ -9,8 +9,10 @@ pub mod sorting;
 pub mod types;
 
 pub use parser::{parse_smart_task_input, parse_subtask_progress, valid_due};
-pub use sorting::{group_by_project, ordered, sort_tasks};
-pub use types::{status_closes, status_label, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES};
+pub use sorting::{group_by_project, ordered, sort_notes, sort_tasks};
+pub use types::{
+    status_closes, status_label, NoteSort, StatusFilter, TaskFilter, TaskSort, TASK_STATUSES,
+};
 
 #[allow(unused_imports)]
 pub use crate::{due_status, DueStatus};
@@ -18,7 +20,7 @@ pub use crate::{due_status, DueStatus};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sjel_gpui_core::shell::{GlobalTask, ProjectRecord};
+    use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
     #[test]
     fn due_dates_are_a_day_or_nothing() {
@@ -168,5 +170,35 @@ mod tests {
         let groups = group_by_project(&[&a, &b, &c]);
         let shape: Vec<(&str, usize)> = groups.iter().map(|(n, l)| (n.as_str(), l.len())).collect();
         assert_eq!(shape, [("Home", 2), ("Work", 1)]);
+    }
+
+    #[test]
+    fn sorts_notes_by_column_with_hubs_first_by_default() {
+        let note = |title: &str, project: &str, kind: &str| GlobalNote {
+            path: format!("{project}/{title}.md"),
+            kind: kind.into(),
+            title: title.into(),
+            project: project.into(),
+        };
+        let a = note("Zeta Note", "Alpha", "note");
+        let b = note("Beta Hub", "Zeta", "project");
+        let c = note("Alpha Note", "Mid", "note");
+        let titles = |sort, asc| {
+            let mut list = vec![&a, &b, &c];
+            sort_notes(&mut list, sort, asc);
+            list.iter().map(|n| n.title.as_str()).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            titles(NoteSort::Default, true),
+            ["Beta Hub", "Zeta Note", "Alpha Note"]
+        );
+        assert_eq!(
+            titles(NoteSort::Title, true),
+            ["Alpha Note", "Beta Hub", "Zeta Note"]
+        );
+        assert_eq!(
+            titles(NoteSort::Project, false),
+            ["Beta Hub", "Alpha Note", "Zeta Note"]
+        );
     }
 }

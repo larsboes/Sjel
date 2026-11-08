@@ -1,6 +1,8 @@
 //! Common types, enums, and component states for Calendar views.
 use gpui::{AnyElement, Entity, FontWeight, Subscription};
+use gpui_kit::component::date_picker::DatePickerState;
 use gpui_kit::component::input::InputState;
+use gpui_kit::component::time_field::TimeFieldState;
 use gpui_kit::{div, prelude::*, px, rgb, rgba};
 use sjel_gpui_core::calendar::kind_color;
 pub use sjel_gpui_core::calendar::CalendarSyncStatus;
@@ -100,14 +102,14 @@ pub(crate) struct Composer {
     pub(crate) _subscription: Subscription,
 }
 
-/// The desktop new-entry form's fields. The text fields are inputs; the rest are buttons.
+/// The desktop new-entry form's fields.
 pub(crate) struct Form {
     pub(crate) editing: Option<CalendarEntry>,
     pub(crate) title: Entity<InputState>,
-    pub(crate) start_date: Entity<InputState>,
-    pub(crate) end_date: Entity<InputState>,
-    pub(crate) start: Entity<InputState>,
-    pub(crate) end: Entity<InputState>,
+    pub(crate) start_date: Entity<DatePickerState>,
+    pub(crate) end_date: Entity<DatePickerState>,
+    pub(crate) start: Entity<TimeFieldState>,
+    pub(crate) end: Entity<TimeFieldState>,
     pub(crate) all_day: bool,
     pub(crate) kind: String,
     pub(crate) commitment: String,

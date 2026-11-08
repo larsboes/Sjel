@@ -515,8 +515,11 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
   Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
   keeping `virtual_list` group headers and inline row editors intact.
-- **Calendar.** Keep the 24-hour timeline, quarter-hour drag/resize and availability grid in
-  `ui/src/calendar/`; wire `DatePicker` and `TimeField` into the event composer.
+- **Calendar.** Built (2026-11-08): Keeps the 24-hour timeline, quarter-hour drag/resize and
+  availability grid in `ui/src/calendar/`, and wires `gpui_kit::component::date_picker::DatePicker`
+  and `gpui_kit::component::time_field::TimeField` into the event composer (`ui/src/calendar/page.rs`,
+  `ui/src/calendar/types.rs`, `ui/src/calendar/grid.rs`) with automatic end-date clamping when the
+  start date moves past the end date.
 - **Finance.** Built: the overview cards show the newest month instead of the
   all-time sum, a six-month income and spending chart, and a holdings panel with each price's
   source, age and FX rate. A keyboard category picker in Import & Review: typed words filter

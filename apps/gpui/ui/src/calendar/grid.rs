@@ -1,5 +1,5 @@
 //! Month and Week grid layout views for CalendarPage.
-use chrono::{Datelike, Local, NaiveDate, Timelike};
+use chrono::{Datelike, Local, NaiveDate, NaiveTime, Timelike};
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight, SharedString};
 use sjel_gpui_core::calendar::{entries_on, time_label};
 use sjel_gpui_core::shell::CalendarEntry;
@@ -298,9 +298,10 @@ impl CalendarPage {
                                 page.open_form_at(minute, window, cx);
                                 if let Some(form) = &page.form {
                                     let end = u32::from(gap.end).min(minute + 60);
-                                    let end = format!("{:02}:{:02}", end / 60, end % 60);
+                                    let end = NaiveTime::from_hms_opt((end / 60) % 24, end % 60, 0)
+                                        .unwrap_or(NaiveTime::MIN);
                                     form.end
-                                        .update(cx, |input, cx| input.set_value(end, window, cx));
+                                        .update(cx, |field, cx| field.set_time(end, window, cx));
                                 }
                             })),
                     );

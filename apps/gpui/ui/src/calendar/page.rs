@@ -1,8 +1,11 @@
 //! Desktop CalendarPage view, month/week navigation, side panel and day entries.
-use chrono::{Duration, Local, Months, NaiveDate};
+use chrono::{Duration, Local, Months, NaiveDate, NaiveTime};
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::calendar::Date;
+use gpui_kit::component::date_picker::{DatePicker, DatePickerEvent, DatePickerState};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::time_field::{TimeField, TimeFieldEvent, TimeFieldState};
 use gpui_kit::component::{Disableable, Sizable};
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, FocusHandle, FontWeight, ScrollHandle,
@@ -356,32 +359,85 @@ impl CalendarPage {
     }
 
     pub(super) fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let field = |placeholder: &'static str,
-                     value: &str,
-                     window: &mut Window,
-                     cx: &mut Context<Self>| {
-            cx.new(|cx| {
-                let mut input = InputState::new(window, cx).placeholder(placeholder);
-                input.set_value(value, window, cx);
-                input
-            })
-        };
-        let title = field("Title", "", window, cx);
-        let start = field("09:00", "09:00", window, cx);
-        let end = field("10:00", "10:00", window, cx);
-        let date = self.day.format("%Y-%m-%d").to_string();
-        let start_date = field("Start date", &date, window, cx);
-        let end_date = field("End date", &date, window, cx);
-        let subscriptions = [&title, &start, &end, &start_date, &end_date]
-            .into_iter()
-            .map(|input| {
-                cx.subscribe_in(input, window, |view, _, event, _, cx| {
-                    if let InputEvent::PressEnter { .. } = event {
-                        view.save(cx);
+        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title"));
+        let start = cx.new(|cx| {
+            let mut field = TimeFieldState::new(window, cx);
+            field.set_time(
+                NaiveTime::from_hms_opt(9, 0, 0).unwrap_or(NaiveTime::MIN),
+                window,
+                cx,
+            );
+            field
+        });
+        let end = cx.new(|cx| {
+            let mut field = TimeFieldState::new(window, cx);
+            field.set_time(
+                NaiveTime::from_hms_opt(10, 0, 0).unwrap_or(NaiveTime::MIN),
+                window,
+                cx,
+            );
+            field
+        });
+        let day = self.day;
+        let start_date = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
+            picker.set_date(Date::Single(Some(day)), window, cx);
+            picker
+        });
+        let end_date = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
+            picker.set_date(Date::Single(Some(day)), window, cx);
+            picker
+        });
+        let end_date_for_sync = end_date.clone();
+        let subscriptions = vec![
+            cx.subscribe_in(&title, window, |view, _, event, _, cx| {
+                if let InputEvent::PressEnter { .. } = event {
+                    view.save(cx);
+                }
+            }),
+            cx.subscribe_in(
+                &start_date,
+                window,
+                move |view, _, event: &DatePickerEvent, window, cx| {
+                    let DatePickerEvent::Change(dt) = event;
+                    if let Some(new_start) = dt.start().map(|d| d.date()) {
+                        let current_end = end_date_for_sync
+                            .read(cx)
+                            .date_time()
+                            .start()
+                            .map(|d| d.date());
+                        if current_end.is_none_or(|end| end < new_start) {
+                            end_date_for_sync.update(cx, |picker, cx| {
+                                picker.set_date(Date::Single(Some(new_start)), window, cx);
+                            });
+                        }
                     }
-                })
-            })
-            .collect();
+                    if let Some(form) = view.form.as_mut() {
+                        form.error = None;
+                    }
+                    cx.notify();
+                },
+            ),
+            cx.subscribe_in(&end_date, window, |view, _, _: &DatePickerEvent, _, cx| {
+                if let Some(form) = view.form.as_mut() {
+                    form.error = None;
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&start, window, |view, _, _: &TimeFieldEvent, _, cx| {
+                if let Some(form) = view.form.as_mut() {
+                    form.error = None;
+                }
+                cx.notify();
+            }),
+            cx.subscribe_in(&end, window, |view, _, _: &TimeFieldEvent, _, cx| {
+                if let Some(form) = view.form.as_mut() {
+                    form.error = None;
+                }
+                cx.notify();
+            }),
+        ];
         title.update(cx, |input, cx| input.focus(window, cx));
         self.form = Some(Form {
             editing: None,
@@ -409,37 +465,39 @@ impl CalendarPage {
         };
         self.open_form(window, cx);
         if let Some(form) = &mut self.form {
-            let end_date = calendar::parse_day(&entry.ends_at).and_then(|day| {
-                if entry.all_day {
-                    day.pred_opt()
-                } else {
-                    Some(day)
-                }
+            let start_day = calendar::parse_day(&entry.starts_at).unwrap_or(self.day);
+            let end_day = calendar::parse_day(&entry.ends_at)
+                .and_then(|day| {
+                    if entry.all_day {
+                        day.pred_opt()
+                    } else {
+                        Some(day)
+                    }
+                })
+                .unwrap_or(start_day);
+            let start_time = entry
+                .starts_at
+                .get(11..16)
+                .and_then(|s| NaiveTime::parse_from_str(s, "%H:%M").ok())
+                .unwrap_or_else(|| NaiveTime::from_hms_opt(9, 0, 0).unwrap_or(NaiveTime::MIN));
+            let end_time = entry
+                .ends_at
+                .get(11..16)
+                .and_then(|s| NaiveTime::parse_from_str(s, "%H:%M").ok())
+                .unwrap_or_else(|| NaiveTime::from_hms_opt(10, 0, 0).unwrap_or(NaiveTime::MIN));
+            form.title.update(cx, |input, cx| {
+                input.set_value(entry.title.clone(), window, cx)
             });
-            let fields = [
-                (&form.title, entry.title.clone()),
-                (
-                    &form.start_date,
-                    entry.starts_at.get(..10).unwrap_or("").to_owned(),
-                ),
-                (
-                    &form.end_date,
-                    end_date
-                        .map(|day| day.format("%Y-%m-%d").to_string())
-                        .unwrap_or_default(),
-                ),
-                (
-                    &form.start,
-                    entry.starts_at.get(11..16).unwrap_or("09:00").to_owned(),
-                ),
-                (
-                    &form.end,
-                    entry.ends_at.get(11..16).unwrap_or("10:00").to_owned(),
-                ),
-            ];
-            for (input, value) in fields {
-                input.update(cx, |input, cx| input.set_value(value, window, cx));
-            }
+            form.start_date.update(cx, |picker, cx| {
+                picker.set_date(Date::Single(Some(start_day)), window, cx);
+            });
+            form.end_date.update(cx, |picker, cx| {
+                picker.set_date(Date::Single(Some(end_day)), window, cx);
+            });
+            form.start
+                .update(cx, |field, cx| field.set_time(start_time, window, cx));
+            form.end
+                .update(cx, |field, cx| field.set_time(end_time, window, cx));
             form.kind = entry.kind.clone();
             form.commitment = entry.commitment.clone();
             form.all_day = entry.all_day;
@@ -456,19 +514,20 @@ impl CalendarPage {
     ) {
         self.open_form(window, cx);
         if let Some(form) = &self.form {
-            let start = format!("{:02}:{:02}", minute / 60, minute % 60);
-            let end = (minute + 60) % 1440;
-            let end = format!("{:02}:{:02}", end / 60, end % 60);
+            let start = NaiveTime::from_hms_opt((minute / 60) % 24, minute % 60, 0)
+                .unwrap_or(NaiveTime::MIN);
+            let end_min = (minute + 60) % 1440;
+            let end = NaiveTime::from_hms_opt((end_min / 60) % 24, end_min % 60, 0)
+                .unwrap_or(NaiveTime::MIN);
             form.start
-                .update(cx, |input, cx| input.set_value(start, window, cx));
+                .update(cx, |field, cx| field.set_time(start, window, cx));
             form.end
-                .update(cx, |input, cx| input.set_value(end, window, cx));
+                .update(cx, |field, cx| field.set_time(end, window, cx));
             if minute >= 1380 {
-                let next = (self.day + Duration::days(1))
-                    .format("%Y-%m-%d")
-                    .to_string();
-                form.end_date
-                    .update(cx, |input, cx| input.set_value(next, window, cx));
+                let next = self.day + Duration::days(1);
+                form.end_date.update(cx, |picker, cx| {
+                    picker.set_date(Date::Single(Some(next)), window, cx);
+                });
             }
         }
     }
@@ -487,12 +546,28 @@ impl CalendarPage {
             return;
         };
         let original = form.editing.clone();
+        let start_date = form
+            .start_date
+            .read(cx)
+            .date_time()
+            .start()
+            .map(|dt| dt.date().format("%Y-%m-%d").to_string())
+            .unwrap_or_default();
+        let end_date = form
+            .end_date
+            .read(cx)
+            .date_time()
+            .start()
+            .map(|dt| dt.date().format("%Y-%m-%d").to_string())
+            .unwrap_or_default();
+        let start_time = form.start.read(cx).time().format("%H:%M").to_string();
+        let end_time = form.end.read(cx).time().format("%H:%M").to_string();
         let draft = calendar::EntryEdit {
             title: &form.title.read(cx).value(),
-            start_date: &form.start_date.read(cx).value(),
-            end_date: &form.end_date.read(cx).value(),
-            start_time: &form.start.read(cx).value(),
-            end_time: &form.end.read(cx).value(),
+            start_date: &start_date,
+            end_date: &end_date,
+            start_time: &start_time,
+            end_time: &end_time,
             all_day: form.all_day,
             kind: &form.kind,
             commitment: &form.commitment,
@@ -1068,10 +1143,23 @@ impl CalendarPage {
             .child(
                 div()
                     .flex()
+                    .items_center()
                     .gap_2()
-                    .child(div().flex_1().child(Input::new(&form.start_date).small()))
+                    .child(
+                        div().flex_1().child(
+                            DatePicker::new(&form.start_date)
+                                .small()
+                                .placeholder("Start date"),
+                        ),
+                    )
                     .child(muted("to", palette))
-                    .child(div().flex_1().child(Input::new(&form.end_date).small())),
+                    .child(
+                        div().flex_1().child(
+                            DatePicker::new(&form.end_date)
+                                .small()
+                                .placeholder("End date"),
+                        ),
+                    ),
             )
             .child(
                 Button::new("calendar-all-day")
@@ -1092,9 +1180,9 @@ impl CalendarPage {
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(div().w(px(80.)).child(Input::new(&form.start).small()))
+                        .child(div().w(px(80.)).child(TimeField::new(&form.start).small()))
                         .child(muted("to", palette))
-                        .child(div().w(px(80.)).child(Input::new(&form.end).small())),
+                        .child(div().w(px(80.)).child(TimeField::new(&form.end).small())),
                 )
             })
             .child(div().text_xs().text_color(rgb(palette.muted)).child("KIND"))
@@ -1540,9 +1628,70 @@ mod tests {
         cx.simulate_keystrokes("enter");
         page.read_with(cx, |page, cx| {
             let form = page.form.as_ref().expect("Enter opens edit");
-            assert_eq!(form.start.read(cx).value().as_str(), "09:00");
-            assert_eq!(form.end.read(cx).value().as_str(), "10:30");
+            assert_eq!(
+                form.start.read(cx).time().format("%H:%M").to_string(),
+                "09:00"
+            );
+            assert_eq!(
+                form.end.read(cx).time().format("%H:%M").to_string(),
+                "10:30"
+            );
+            assert_eq!(
+                form.start_date
+                    .read(cx)
+                    .date_time()
+                    .start()
+                    .map(|dt| dt.date()),
+                Some(day("2026-11-05"))
+            );
+            assert_eq!(
+                form.end_date
+                    .read(cx)
+                    .date_time()
+                    .start()
+                    .map(|dt| dt.date()),
+                Some(day("2026-11-05"))
+            );
             assert!(form.editing.is_some());
+        });
+    }
+
+    #[gpui::test]
+    fn form_date_picker_and_time_field_clamp_end_date_and_validate_save(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        cx.update(bind_keys);
+        let page = cx.new(|cx| {
+            let mut page = CalendarPage::new(Repo::new(Err(ShellError::NotSetUp)), cx);
+            page.day = day("2026-11-05");
+            page
+        });
+        let shown = page.clone();
+        let (_, cx) =
+            cx.add_window_view(move |window, cx| gpui_kit::component::Root::new(shown, window, cx));
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            page.update(cx, |page, cx| {
+                page.open_form_at(23 * 60 + 30, window, cx);
+            });
+        });
+        page.read_with(cx, |page, cx| {
+            let form = page.form.as_ref().expect("form opened at 23:30");
+            assert_eq!(
+                form.start.read(cx).time().format("%H:%M").to_string(),
+                "23:30"
+            );
+            assert_eq!(
+                form.end.read(cx).time().format("%H:%M").to_string(),
+                "00:30"
+            );
+            assert_eq!(
+                form.end_date
+                    .read(cx)
+                    .date_time()
+                    .start()
+                    .map(|dt| dt.date()),
+                Some(day("2026-11-06"))
+            );
         });
     }
 

@@ -10,6 +10,15 @@ covers it.
 
 ## Open
 
+- **Temporary build and browser-clone reclaim.** Storage investigation needed direct `du` and
+  `lsof` calls to separate disposable build caches and stale browser code-signing clones from
+  live processes. A broad report-only system-state class hides these directories from discovery,
+  and a held member prevents reclaim of an entire class. Workaround: explicit manual build-cache
+  classes and per-clone process checks. Smallest change: expose named subdirectories in discovery,
+  support reviewed per-path reclaim with the existing guard, and distinguish directory byte totals
+  from recoverable APFS space. Done when an active clone remains while idle siblings are reclaimed,
+  and the report shows the volume's measured free-space change separately from candidate sizes.
+
 - **Environment-isolated website build.** `website/build` could not remove the existing output
   directories in a restricted session. A scratch `--out` then exited 1 without diagnostics at
   its first Bun script; the same five generators succeeded with `bun --no-env-file`.

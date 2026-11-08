@@ -32,7 +32,7 @@ nsh = ["sjel-gpui-ui/nsh", "dep:nsh-base", "dep:nsh-platform-ios", "dep:objc2", 
 
 [target.'cfg(target_os = "ios")'.dependencies.nsh-platform-ios]
 git = "https://github.com/longbridge/nsh"
-rev = "893fb84db6"
+rev = "058a745ad2"
 default-features = false
 optional = true
 
@@ -48,7 +48,7 @@ optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "893fb84db6"
+rev = "058a745ad2"
 optional = true
 
 [lints]

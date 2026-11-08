@@ -39,12 +39,12 @@ required-features = ["native-maps"]
 
 [dependencies.nsh-core]
 git = "https://github.com/longbridge/nsh"
-rev = "893fb84db6"
+rev = "058a745ad2"
 optional = true
 
 [dependencies.nsh-base]
 git = "https://github.com/longbridge/nsh"
-rev = "893fb84db6"
+rev = "058a745ad2"
 optional = true
 
 [dev-dependencies]

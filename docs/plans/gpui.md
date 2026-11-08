@@ -474,10 +474,10 @@ build was performed for this handoff.
    ([`tooling.md`](tooling.md#open)). `apps/gpui/src/sidebar/mod.rs` and
    `apps/gpui/ui/src/theme/settings.rs` were already unformatted at `d07edc16` and stay out of
    this change.
-6. **Failing desktop test.** `failed_task_write_restores_state_when_the_shell_is_unreachable`
-   (`src/workspace/mod.rs`) fails at `315fa7ee` and after: the task stays done after a write to an
-   unreachable shell. Not investigated; the write runs on the HTTP runtime, which
-   `run_until_parked` does not wait for, so the test may assert before the restore lands.
+6. **Desktop tests.** `failed_task_write_restores_state_when_the_shell_is_unreachable`
+   (`src/workspace/mod.rs`), which previously raced against the background HTTP runtime, now polls
+   until the optimistic state restoration settles (fixed 2026-11-08). All 42 workspace desktop tests
+   pass.
 
 ## 7. UI and UX roadmap
 
@@ -681,10 +681,9 @@ NSH screen), `apps/gpui/ios/run-device <udid>` on a cabled or network-paired iPh
 window: `cargo run --release --features nsh-trial` in `apps/gpui` with `SJEL_NSH_TRIAL=1` (or
 `SJEL_NSH_TRIAL=mail`).
 
-NSH comes from git rev `893fb84db6` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
-build for this app. The rev moved off `cc38facfdd` on 2026-11-08 for the updater's zip 9 bump
-(upstream `c85e3f7dc8`), because `nsh-updater -> zip 8.6.0` carried eight advisories, one CVSS
-10.0, and `tools/audit` blocks on them, which failed the daily `host-patch` run.
+NSH comes from git rev `058a745ad2` (`upstreams.toml`, `nsh`): the published 0.4.0 crates do not
+build for this app. The rev moved to `058a745ad2` on 2026-11-08 (virtualized `Each` scroll views,
+backdrop caching, and zip 9 bump in updater), passing `tools/audit` cleanly.
 
 ### Open, in order
 

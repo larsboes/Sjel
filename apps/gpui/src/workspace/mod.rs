@@ -2409,7 +2409,17 @@ mod tests {
             view.toggle_task(path.clone(), true, window, cx);
             assert!(view.focus_tasks.value.as_ref().unwrap()[0].done);
         });
-        cx.run_until_parked();
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_millis(500) {
+            cx.run_until_parked();
+            let settled = view.read_with(cx, |view, _| {
+                !view.focus_tasks.value.as_ref().unwrap()[0].done
+            });
+            if settled {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         view.read_with(cx, |view, _| {
             assert!(!view.focus_tasks.value.as_ref().unwrap()[0].done);
         });
@@ -2470,6 +2480,31 @@ mod tests {
         });
         // Space runs primary on the selected focus task
         cx.simulate_keystrokes("space");
+    }
+
+    #[gpui::test]
+    fn home_toolbar_renders_date_and_status(cx: &mut TestAppContext) {
+        let (view, cx) = open(cx);
+        view.update(cx, |view, cx| {
+            view.page = Page::Home;
+            view.health.value = None;
+            view.focus_tasks.value = Some(vec![GlobalTask {
+                fields: Default::default(),
+                id: "Atlas/Projects/Test/Tasks/Task1.md".into(),
+                kind: "task".into(),
+                title: "Focus on LibSQL".into(),
+                priority: 1,
+                due: None,
+                done: false,
+                summary: None,
+                project: "Test".into(),
+            }]);
+            cx.notify();
+        });
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.page, Page::Home);
+            assert_eq!(view.urgent_task_count(), 1);
+        });
     }
 
     #[gpui::test]

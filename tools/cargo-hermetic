@@ -116,11 +116,33 @@ _inside() {  # _inside <path> <root> -> exit 0 when path is root or below it
   esac
 }
 
-TARGET="${CARGO_TARGET_DIR:-}"
+_requested_target=""
+_target_next=0
+for arg in "$@"; do
+  [ "$arg" != "--" ] || break
+  if [ "$_target_next" -eq 1 ]; then
+    [ -n "$arg" ] || die "--target-dir needs a directory"
+    _requested_target="$arg"
+    _target_next=0
+    continue
+  fi
+  case "$arg" in
+    --target-dir) _target_next=1 ;;
+    --target-dir=*)
+      _requested_target="${arg#--target-dir=}"
+      [ -n "$_requested_target" ] || die "--target-dir needs a directory"
+      ;;
+  esac
+done
+[ "$_target_next" -eq 0 ] || die "--target-dir needs a directory"
+
+TARGET="${_requested_target:-${CARGO_TARGET_DIR:-}}"
 [ -n "$TARGET" ] || TARGET="${TMPDIR:-/tmp}/sjel-cargo-hermetic/target"
 # One target per checkout: cargo reuses a member's test binary across checkouts that share a
 # target, and env!("CARGO_MANIFEST_DIR") inside it then names the other checkout.
-TARGET="$TARGET/hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
+if [ -z "$_requested_target" ]; then
+  TARGET="$TARGET/hermetic-$(printf %s "$REPO" | shasum | cut -c1-12)"
+fi
 TARGET="$(_canonical "$TARGET")"
 for forbidden in "$REPO" "$MAIN_CHECKOUT"; do
   if _inside "$TARGET" "$forbidden"; then

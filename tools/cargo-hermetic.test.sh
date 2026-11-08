@@ -112,6 +112,27 @@ expect_ends_with "a warm target dir is reused, one subdirectory per checkout" CA
   "sjel-cargo-hermetic-test/target/hermetic-$(printf %s "$(cd "$REPO" && pwd -P)" | shasum | cut -c1-12)"
 
 # --- the environment the run inherits --------------------------------------
+# Explicit Cargo flags take precedence, and nested Cargo invocations inherit the same target.
+EXPLICIT_TARGET="$(cd "${TMPDIR:-/tmp}" && pwd -P)/sjel-explicit-target"
+run --print-env test --target-dir "$EXPLICIT_TARGET"
+expect_ok "an explicit target is admitted"
+[ "$(env_value CARGO_TARGET_DIR)" = "$EXPLICIT_TARGET" ] || note_fail "nested cargo would use a different target"
+run --print-env test --target-dir="$EXPLICIT_TARGET"
+expect_ok "the equals spelling is admitted"
+[ "$(env_value CARGO_TARGET_DIR)" = "$EXPLICIT_TARGET" ] || note_fail "the equals spelling lost its target"
+run --print-env test --target-dir "$REPO/target"
+expect_refused "an explicit checkout target is refused" "holds the binaries the supervisor runs"
+run --print-env test --target-dir="$REPO/target"
+expect_refused "an equals checkout target is refused" "holds the binaries the supervisor runs"
+out=$(CARGO_TARGET_DIR="$REPO/target" "$TOOL" --print-env test --target-dir "$EXPLICIT_TARGET" 2>&1); status=$?
+expect_ok "the explicit target overrides an inherited target"
+run --print-env test --target-dir
+expect_refused "a missing target value is refused" "needs a directory"
+run --print-env test --target-dir=
+expect_refused "an empty target value is refused" "needs a directory"
+run --print-env test -- --target-dir "$REPO/target"
+expect_ok "test executable arguments do not select Cargo's target"
+
 #
 # The third silent failure, in one case: a session exports the real vault as a projection
 # root — the overlay's own config/shell exports the SJEL_* set — and a run that redirected

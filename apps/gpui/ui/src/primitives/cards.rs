@@ -190,7 +190,7 @@ pub fn stat_card_interactive(
         .flex_1()
         .min_w(px(120.))
         .p_3()
-        .rounded(RADIUS_MD)
+        .rounded(px(12.))
         .bg(rgba(if active {
             tint(palette.accent, 0x18)
         } else {
@@ -200,7 +200,7 @@ pub fn stat_card_interactive(
         .border_color(if active {
             rgb(palette.accent)
         } else {
-            rgba(palette.border)
+            rgba(tint(palette.border, 0x66))
         })
         .cursor_pointer()
         .hover(move |s| {
@@ -209,6 +209,11 @@ pub fn stat_card_interactive(
             } else {
                 palette.raised
             }))
+            .border_color(if active {
+                rgb(palette.accent)
+            } else {
+                rgba(tint(palette.accent, 0x44))
+            })
         })
         .on_click(on_click)
         .flex()
@@ -233,6 +238,10 @@ pub fn stat_card_interactive(
                 .when(active, |el| {
                     el.child(
                         div()
+                            .px_1()
+                            .py(px(1.))
+                            .rounded(px(4.))
+                            .bg(rgba(tint(palette.accent, 0x24)))
                             .text_xs()
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(rgb(palette.accent))
@@ -248,7 +257,12 @@ pub fn stat_card_interactive(
                 .child(value),
         )
         .when_some(detail, |el, det| {
-            el.child(div().text_xs().text_color(rgb(palette.muted)).child(det))
+            el.child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(if active { palette.text } else { palette.muted }))
+                    .child(det),
+            )
         })
         .into_any_element()
 }

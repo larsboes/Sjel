@@ -3,7 +3,7 @@
 use chrono::{Duration, Local, NaiveDate};
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::Sizable;
-use gpui_kit::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight};
+use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context, FontWeight};
 use sjel_gpui_core::context::{
     format_day_header, format_money, needs_attention, ContextDay, TimelineKind,
 };
@@ -32,8 +32,8 @@ pub fn render_day_header(
                 .gap_3()
                 .child(
                     div()
-                        .text_base()
-                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_lg()
+                        .font_weight(FontWeight::BOLD)
                         .text_color(rgb(palette.text))
                         .child(format_day_header(day)),
                 )
@@ -43,10 +43,12 @@ pub fn render_day_header(
                             .px_2()
                             .py(px(2.))
                             .rounded_full()
-                            .bg(rgb(palette.accent))
+                            .bg(rgba(crate::theme::tint(palette.accent, 0x22)))
+                            .border_1()
+                            .border_color(rgba(crate::theme::tint(palette.accent, 0x44)))
                             .text_xs()
                             .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(0xffffff))
+                            .text_color(rgb(palette.accent))
                             .child("TODAY"),
                     )
                 }),
@@ -55,12 +57,13 @@ pub fn render_day_header(
             div()
                 .flex()
                 .items_center()
-                .gap_2()
+                .gap_1()
                 .child(
                     Button::new("context-prev")
                         .small()
                         .ghost()
                         .label("‹")
+                        .tooltip("Previous day ([)")
                         .on_click(cx.listener(move |page, _, _, cx| {
                             page.select(page.day - Duration::days(1), cx)
                         })),
@@ -70,6 +73,7 @@ pub fn render_day_header(
                         .small()
                         .ghost()
                         .label("Today")
+                        .tooltip("Jump to today (t)")
                         .on_click(
                             cx.listener(|page, _, _, cx| {
                                 page.select(Local::now().date_naive(), cx)
@@ -81,6 +85,7 @@ pub fn render_day_header(
                         .small()
                         .ghost()
                         .label("›")
+                        .tooltip("Next day (])")
                         .on_click(cx.listener(move |page, _, _, cx| {
                             page.select(page.day + Duration::days(1), cx)
                         })),
@@ -90,6 +95,7 @@ pub fn render_day_header(
                         .small()
                         .ghost()
                         .label("↻")
+                        .tooltip("Refresh (⌘R)")
                         .on_click(cx.listener(|page, _, _, cx| page.refresh(cx))),
                 ),
         )
@@ -130,14 +136,11 @@ pub fn render_metric_cards(
                 id: "context-stat-events".into(),
                 label: "EVENTS".into(),
                 value: format!("{event_count} scheduled").into(),
-                detail: Some(
-                    if event_count == 0 {
-                        "Calendar clear"
-                    } else {
-                        "Click to filter ·Meetings & blocks"
-                    }
-                    .into(),
-                ),
+                detail: Some(if event_count == 0 {
+                    "Calendar clear".into()
+                } else {
+                    "Click to filter · Meetings & blocks".into()
+                }),
                 tone: palette.text,
                 active: filter_kind == Some(TimelineKind::Event),
                 palette,
@@ -149,16 +152,13 @@ pub fn render_metric_cards(
                 id: "context-stat-tasks".into(),
                 label: "TASKS".into(),
                 value: format!("{open_task_count} open").into(),
-                detail: Some(
-                    if is_today && !attention.is_empty() {
-                        "Urgent or due today".to_string()
-                    } else if done_task_count > 0 {
-                        format!("{done_task_count} completed")
-                    } else {
-                        "Due today".to_string()
-                    }
-                    .into(),
-                ),
+                detail: Some(if is_today && !attention.is_empty() {
+                    format!("{} urgent / due today", attention.len()).into()
+                } else if done_task_count > 0 {
+                    format!("{done_task_count} completed").into()
+                } else {
+                    "Due today".into()
+                }),
                 tone: palette.text,
                 active: filter_kind == Some(TimelineKind::Task),
                 palette,
@@ -170,7 +170,11 @@ pub fn render_metric_cards(
                 id: "context-stat-spend".into(),
                 label: "SPENDING".into(),
                 value: total_spend_str.into(),
-                detail: Some(format!("{} transactions", context.spend.len()).into()),
+                detail: Some(if context.spend.is_empty() {
+                    "No transactions".into()
+                } else {
+                    format!("{} transactions", context.spend.len()).into()
+                }),
                 tone: palette.text,
                 active: filter_kind == Some(TimelineKind::Spend),
                 palette,

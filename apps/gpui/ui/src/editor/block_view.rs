@@ -74,6 +74,39 @@ pub(crate) fn runs(
         .collect()
 }
 
+/// Parses a fenced code block into its language name and inner code without fence lines.
+pub(crate) fn parse_code_block(text: &str) -> (&str, String) {
+    let all_lines: Vec<&str> = text.lines().collect();
+    if all_lines.is_empty() {
+        return ("code", String::new());
+    }
+    let first = all_lines[0].trim_start();
+    let lang = if first.starts_with("```") || first.starts_with("~~~") {
+        let tag = first[3..].trim();
+        if tag.is_empty() {
+            "code"
+        } else {
+            tag
+        }
+    } else {
+        "code"
+    };
+
+    if all_lines.len() <= 1 {
+        return (lang, String::new());
+    }
+    let last = all_lines.last().copied().unwrap_or_default();
+    let has_closing = all_lines.len() >= 2
+        && (last.trim_start().starts_with("```") || last.trim_start().starts_with("~~~"));
+    let end_idx = if has_closing {
+        all_lines.len() - 1
+    } else {
+        all_lines.len()
+    };
+    let inner = all_lines[1..end_idx].join("\n");
+    (lang, inner)
+}
+
 pub(crate) fn render_block(
     editor: &mut NoteEditor,
     index: usize,
@@ -131,7 +164,7 @@ pub(crate) fn render_block(
             live.readonly = !editor.editable;
         });
         live.clone().into_any_element()
-    } else if editor.active == Some(index) || kind == Kind::Code {
+    } else if editor.active == Some(index) {
         let field = Textarea::new(&row.input)
             .appearance(false)
             // Cancels the padding its editor gets from its size (`gpui-component`
@@ -149,6 +182,27 @@ pub(crate) fn render_block(
             _ => field,
         }
         .into_any_element()
+    } else if kind == Kind::Code {
+        let (_, inner) = parse_code_block(&text);
+        div()
+            .id(("code-preview", index))
+            .cursor_text()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |editor, _, window, cx| {
+                    editor.focus(index, 0, window, cx);
+                    cx.stop_propagation();
+                }),
+            )
+            .child(
+                div()
+                    .font_family(mono.clone())
+                    .text_sm()
+                    .line_height(relative(1.4))
+                    .text_color(rgb(palette.text))
+                    .child(if inner.is_empty() { " ".to_string() } else { inner }),
+            )
+            .into_any_element()
     } else {
         formatted(editor, index, cx)
     };
@@ -182,36 +236,58 @@ pub(crate) fn render_block(
             .text_color(rgb(palette.muted))
             .line_through()
             .child(field),
-        Kind::Code => div()
-            .font_family(mono.clone())
-            .text_sm()
-            .rounded(px(8.))
-            .bg(rgba(palette.raised))
-            .border_1()
-            .border_color(rgba(palette.border))
-            .overflow_hidden()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_3()
-                    .py(px(3.))
-                    .bg(rgba(palette.surface | 0x88))
-                    .border_b_1()
-                    .border_color(rgba(palette.border))
-                    .text_xs()
-                    .text_color(rgb(palette.muted))
-                    .child("code")
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(palette.muted))
-                            .opacity(0.6)
-                            .child("snippet"),
-                    ),
-            )
-            .child(div().p_3().child(field)),
+        Kind::Code => {
+            let (lang, inner) = parse_code_block(&text);
+            let is_active = editor.active == Some(index);
+            let code_copy = inner.clone();
+            div()
+                .w_full()
+                .font_family(mono.clone())
+                .text_sm()
+                .rounded(px(8.))
+                .bg(rgba(palette.raised))
+                .border_1()
+                .border_color(rgba(palette.border))
+                .overflow_hidden()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px_3()
+                        .py(px(4.))
+                        .bg(rgba(tint(palette.surface, 0x88)))
+                        .border_b_1()
+                        .border_color(rgba(palette.border))
+                        .child(
+                            div()
+                                .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.muted))
+                                .child(if is_active {
+                                    format!("{lang} (editing · Esc to finish)")
+                                } else {
+                                    lang.to_string()
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id(("copy-code-btn", index))
+                                .cursor_pointer()
+                                .px_2()
+                                .py(px(1.5))
+                                .rounded(px(4.))
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .hover(move |s| s.bg(rgba(palette.surface)).text_color(rgb(palette.text)))
+                                .on_click(move |_, _, cx| {
+                                    cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(code_copy.clone()));
+                                })
+                                .child("Copy"),
+                        ),
+                )
+                .child(div().p_3().child(field))
+        }
         _ => div().child(field),
     };
     let label = editor

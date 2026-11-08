@@ -1183,4 +1183,19 @@ mod tests {
         cx.run_until_parked();
         assert_eq!(editor.read_with(cx, |e, _| e.active), Some(1));
     }
+
+    #[gpui::test]
+    fn code_block_renders_formatted_and_focuses_to_edit(cx: &mut TestAppContext) {
+        let mut record = live_record();
+        record.content = "---\ntype: note\n---\n# Code Note\n\n```rust\nfn main() {}\n```\n".into();
+        let (editor, cx) = open_with(cx, record, false);
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.doc.blocks.len()), 2);
+        assert_eq!(editor.read_with(cx, |e, _| e.doc.blocks[1].kind), Kind::Code);
+        assert_eq!(editor.read_with(cx, |e, _| e.active), None);
+        // Focusing block 1 opens the code textarea for editing
+        cx.update(|window, cx| editor.update(cx, |e, cx| e.focus(1, 0, window, cx)));
+        cx.run_until_parked();
+        assert_eq!(editor.read_with(cx, |e, _| e.active), Some(1));
+    }
 }

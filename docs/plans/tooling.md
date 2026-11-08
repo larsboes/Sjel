@@ -10,6 +10,35 @@ covers it.
 
 ## Open
 
+- **Environment-isolated website build.** `website/build` could not remove the existing output
+  directories in a restricted session. A scratch `--out` then exited 1 without diagnostics at
+  its first Bun script; the same five generators succeeded with `bun --no-env-file`.
+  Workaround: run the existing generators with that flag into scratch output and run the link
+  and payload checks there. Smallest change: make the launcher disable environment-file loading
+  and preserve diagnostics. Done when one `website/build --out <scratch>` completes in the
+  restricted session without reading deployment environment files.
+
+- **Maintenance evidence and reusable skill detection.** The
+  [maintenance review](../../research/plan-maintenance-review.md) found stale plan entries and
+  repeated custom intake detection beside existing package scanners. Workaround: a read-only
+  census of plan lengths, legacy path strings and Cargo manifests, followed by source checks.
+  Smallest changes, in order:
+  1. Extend existing tooling with a tracked-file-only maintenance report: unresolved operational
+     paths, unused-dependency findings and duplicate-code candidates, with explicit exclusions
+     for historical references, vendored code and fixtures. Reuse existing scanners and link
+     checks; register any new tool's source and license before integration.
+  2. Evaluate Cisco Skill Scanner against the existing intake cases and benign security prose;
+     use isolated public fixtures, disable remote analyzers, and measure review noise and cost.
+     Keep current admission rules until the comparison supports a replacement.
+  3. Persist completed inference-role review evidence like harness receipts, binding reuse to
+     content, review context and detector/model/policy identities. Advisory scans remain fresh
+     independently of content. Do not repeat an unchanged accepted finding without a reason.
+  Done when one report covers both product Cargo workspaces and all discovered Bun trees,
+  distinguishes missing coverage from no findings, and a detector comparison establishes which
+  custom code can be removed without losing the existing admission cases. Scanner performance,
+  unused-dependency totals and duplication rates have not been measured. This work reduces
+  maintenance; it does not expand agent features or authorize private-content uploads.
+
 - **Native iOS screen validation.** Compile checks and screenshot-only touch tests did
   not detect an empty Documents host on a physical phone. `ios/run-sim --smoke`
   checks visible Documents and Mail headings through XCTest and exports screenshots
@@ -70,12 +99,6 @@ covers it.
   scan and publication gate while skipping its duplicate worktree checks.
   Smallest change: let `ci-local fast --revision <sha>` verify an immutable snapshot
   and bind a successful receipt to that revision.
-
-- **A contained harness cannot be given a credential.** Shipped as `sjel-contain --credential
-  <provider>`: the slug resolves through the private catalogue `sjel provider` reads and reaches
-  the child as `DEEPSEEK_API_KEY`, `OPENCODE_GO_API_KEY` and so on. The value is read in the
-  launcher and appears in no command line, shell history or parent environment. See
-  [`containment.md`](containment.md#5-order-and-done-when).
 
 - **Stale path check after a move.** After the move to `crates/` and `services/`, nothing
   reported that `cv` and the gitleaks allowlist still named `capabilities/` paths. Workaround: a
@@ -145,16 +168,6 @@ covers it.
   to refresh pi's agent files re-added every skill in both Packs, so pi went from the `lean`
   profile's 7 skills to 14. Workaround: re-run `tools/harnesses use lean --harness pi`, which also
   rewrites the agent files. Smallest change: `deploy` keeps the active profile's skill subset.
-- **Installed crates whose source was collected.** `tools/audit` reads each installed crate's
-  `Cargo.lock` from `~/.cargo/registry/src`, and a cache trim can take that whole tree while
-  leaving `registry/cache`, so the globals pass scanned 0 crate lockfiles and reported clean.
-  Smallest change: fetch a missing crate source before the scan, or report each installed crate
-  without a lockfile as not scanned.
-- **Stopping an orphaned process service.** `service-runner.sh stop sqld` placed a hold but
-  refused to report success because an orphan still held the declared port. `lsof` identified
-  the listener; the sandbox refused a direct signal. Smallest change: let the runner identify
-  the listener against the declared executable and stop it through its existing orphan guard,
-  while refusing an unrelated executable.
 - **Package state of other hosts.** `tools/host-patch.sh` and `tools/doctor` cover only the
   machine they run on. Checking a Linux host on the tailnet for pending updates took a manual
   `ssh <host> apt list --upgradable`. Smallest change: a doctor line that runs that read over SSH
@@ -271,16 +284,6 @@ covers it.
   `tools/obsidian-plugin <name> smoke` verb that attaches to a running debug port, reloads the
   plugin, opens its view, and fails on any console error.
 
-- **`apps/gpui` escapes the format gate.** `tools/ci-impact.ts` and CI run
-  `cargo fmt --all --check` at the repository root, which does not reach the nested workspace in
-  `apps/gpui`. Workaround: `cargo fmt --all --check --manifest-path apps/gpui/Cargo.toml` by
-  hand, which also reports the root crates `apps/gpui` depends on by path, and
-  `rustfmt --edition 2021 <file>` for one changed file, because a bare `rustfmt` reorders
-  imports under another style edition. Found 2026-11-05:
-  `apps/gpui/src/sidebar/mod.rs` and `apps/gpui/ui/src/theme/settings.rs` were already
-  unformatted at `d07edc16`. Smallest change: add the `apps/gpui` manifest to the `cargo fmt`
-  step in `tools/ci-impact.ts` and `.github/workflows/ci.yml`, then format those two files.
-
 - **Instrument ticker lookup.** Setting `ticker` on a finance instrument needed a symbol search
   and a check that the listing matches the holding. Workaround: a session script queried Yahoo's
   public symbol search by instrument label, then compared the reviewed broker price with the
@@ -289,6 +292,9 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- GPUI formatting is selected through `tools/ci-run.ts` and covered by `tools/ci-local.test.ts`
+  (`217a921b`); revision-isolated verification remains open above.
 
 - iOS launchers check simulator discovery or bounded CoreDevice access before compilation and signing settings. Five planted-command regressions cover unavailable services, missing simulators, explicit selection and build ordering (`tools/ios-preflight.test.sh`). Live device acceptance still requires working host device services.
 

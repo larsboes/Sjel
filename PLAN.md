@@ -5,68 +5,60 @@ records the decisions that shape it. It is not a task list. Each area has one fi
 [`docs/plans/`](docs/plans/). Concrete, testable work can also be a GitHub Issue. A decision moves
 to its owner's README once it is built.
 
-## Priority 0: agent containment by provider
+## Priority 0: concrete failures in existing use
 
-Claude Code, Codex, and pi on OpenAI read Sjel fully. A coding agent on any other provider
-runs in a sandbox: one project directory, a network allow-list, and the demo node as its only
-Sjel. Plan:
-[`containment.md`](docs/plans/containment.md).
+Repair verified data-loss, restore, authorization and publication defects before dependent work.
+Keep existing protections in force. An entire agent or security roadmap is not a Priority 0 gate.
+Backup and restore checks belong to [`storage.md`](docs/plans/storage.md); verification failures
+belong to [`tooling.md`](docs/plans/tooling.md). Diagnose a stale receipt before choosing a fix.
 
-## Priority 1: the phone app, used every day
+## Priority 1: unify and reduce maintenance
 
-The GPUI app on the iPhone is the daily tool for six things, each with a UI that is good to use:
+Decided 2026-11-08: code unification, cleanup, precision and less repeated work precede agent
+features. The [maintenance review](research/plan-maintenance-review.md) records the evidence and
+candidate tools. Finish existing seams before introducing another framework.
 
-| Area | Phone today | Next | Plan |
-|---|---|---|---|
-| The Sjel agent | Sessions, prompts, steering, approvals and stop on the right edge. A session has one of three access tiers, and every command is blocked, asked about or allowed by a rule set. Not tested on a device. | Live validation on a phone, then the Block card | [`agent.md`](docs/plans/agent.md) |
-| Other agents (Claude Code, Codex, Pi) | Terminal on the Mac behind Face ID, opens a login shell. Not tested on a device. | Live validation, then a preset and directory picker | [`agent.md`](docs/plans/agent.md#6-terminal-from-the-phone) |
-| Travel | Tab with trips and a native map | Itinerary timeline, map polish, offline-ready mark, fare alerts on a device | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
-| Documents | NSH reader: list, text, PDF original checked by SHA-256, keep offline. Not checked on a device since `a71af504`. | Device check, then #246–#247 | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
-| Mail | NSH triage reader (`ui/src/nsh_mail.rs`): status + category filters, thread reader, triage actions with confirmation. Not checked on a device. | Device check, then the new tab bar | [`gpui.md`](docs/plans/gpui.md#11-ui-stack) |
-| Calendar | Tab, reads and writes the replica | Device check on phone, quick rescheduling | [`gpui.md`](docs/plans/gpui.md#2-phone-priority-areas) |
+1. Reconcile plans with source: remove shipped detail, repair stale paths, keep one owner per
+   open item, and distinguish implemented work from outstanding live acceptance.
+2. Finish shared API contracts and remove remaining client copies and adapters
+   ([`restructure.md`](docs/plans/restructure.md)). Verify existing API crates before extracting
+   more. Directory renames and workspace consolidation need a measured benefit.
+3. Reuse existing UI primitives, readers and platform controls; remove superseded code after
+   equivalent behavior is verified ([`gpui.md`](docs/plans/gpui.md)).
+4. Make routine maintenance automatic: reuse installed dependency scanners, evaluate an upstream
+   skill detector, and reduce repeated review through evidence tied to content and policy
+   ([`tooling.md`](docs/plans/tooling.md)). Scanner adoption does not waive current admission rules.
+5. Remove unused dependencies and confirmed duplication, then shorten owner documentation and
+   comments. Preserve domain boundaries and public contracts; fewer lines alone is insufficient.
 
-Order inside Priority 1:
+## Priority 2: finish daily workflows
 
-1. The agent's tiers and command policy.
-2. Live validation of the agent and the terminal on a phone.
-3. The UI stack ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)): built. Open: the device
-   check of the Documents reader (§11 "Open", item 1).
-4. Mail on the phone as an NSH screen, then the new tab bar.
-5. Travel and Calendar UI.
+Complete existing behavior and its acceptance checks before expanding the surface:
 
-Work that Priority 1 needs from other areas (storage for offline reads, a missing write path)
-belongs to Priority 1.
+| Area | Next boundary | Plan |
+|---|---|---|
+| Documents, Mail, Calendar and Travel | Mac and phone acceptance, missing writes and offline correctness | [`gpui.md`](docs/plans/gpui.md) |
+| Storage | Restore proof and domain sync contracts; engine migration only with compatibility evidence | [`storage.md`](docs/plans/storage.md) |
+| Imports and domain data | Correct routing, idempotency and review of existing pipelines | [`data.md`](docs/plans/data.md) |
+| Transit and Finance | Validate existing results before more collection or model features | [`transit.md`](docs/plans/transit.md), [`finance.md`](docs/plans/finance.md) |
+| Physical capture and installation | RoomPlan device acceptance; fresh-user installation | [`scanning.md`](docs/plans/scanning.md), [#235](https://github.com/larsboes/Sjel/issues/235) |
 
-## Priority 2: one app, a smaller repository
+Unification required to finish these workflows stays in Priority 1. A live check remains open
+even when compilation and unit tests pass.
 
-1. Done: the dashboard, its desktop shell and plugins are deleted. The device checks that were
-   gates are open checks ([`gpui.md`](docs/plans/gpui.md#3-what-retiring-the-dashboard-still-takes)).
-2. Restructure into one workspace with flat `crates/`, and sweep comments, TOML and READMEs in
-   the same pass ([`restructure.md`](docs/plans/restructure.md)).
-3. The agent's plugins, the Pi port and the measured comparison with Pi
-   ([`agent.md`](docs/plans/agent.md)).
+## Priority 3: agent features and expansion
 
-## Priority 3: everything else
+- Agent UI, terminal conveniences, plugins, Pi comparison, retrieval and optimization loops:
+  [`agent.md`](docs/plans/agent.md). Existing containment remains; additional harness support
+  follows [`containment.md`](docs/plans/containment.md).
+- Pack deployment levels and account synchronization: [`packs.md`](docs/plans/packs.md).
+  Defects in current installation integrity can rise to Priority 0 or 1.
+- New learning surfaces and automation: [`learning.md`](docs/plans/learning.md).
+- New home integrations: [`homes.md`](docs/plans/homes.md).
+- Website polish and media: [`website.md`](docs/plans/website.md).
 
-- Full Turso migration, the rest of the standalone phone, and backups that prove a restore
-  ([`storage.md`](docs/plans/storage.md)). The stalled backup timer (§5 item 1) is not deferred:
-  it is fixed as soon as it is understood.
-- Measured transit reliability, starting with the Köln–Bonn corridor, and collection that works
-  while the Mac is closed ([`transit.md`](docs/plans/transit.md)).
-- Pack deployment at user, project and account level, and its defects
-  ([`packs.md`](docs/plans/packs.md)).
-- RoomPlan device validation and the shared capture pipeline ([`scanning.md`](docs/plans/scanning.md)).
-- Imports, formats, the settings surface, adaptive features and the domain backlog
-  ([`data.md`](docs/plans/data.md)).
-- Investment ideas, price triggers, research routed from comms and model proposals
-  ([`finance.md`](docs/plans/finance.md)).
-- Learning in the vault with `teach`, `practice` and claim notes, then practice on the phone
-  ([`learning.md`](docs/plans/learning.md)).
-- UI polish for areas outside Priority 1, and the public site with screenshots, animations, docs
-  and a description of the app ([`website.md`](docs/plans/website.md)).
-- The houses Lars runs: site notes and Home Assistant, router and DNS clients in one `home`
-  capability ([`homes.md`](docs/plans/homes.md)).
-- A fresh-user Mac and iPhone install ([#235](https://github.com/larsboes/Sjel/issues/235)).
+The priority order here supersedes older area-local ordering. Deferred work retains its
+acceptance check; deferral does not authorize a replacement architecture.
 
 ## Continuous
 
@@ -94,9 +86,9 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | Target one database per capability or agent. | 2026-10-23 |
 | The Obsidian vault holds learning only: `teach`, `practice`, claim notes and subject knowledge. Every other note, fact and link source moves into Sjel data; the inventory is in [`storage.md`](docs/plans/storage.md#vault-holds-learning-only). Supersedes "knowledge stays in the vault until moving it hurts" (2026-10-23). | 2026-11-08 |
 | Sjel data holds only what no live source holds. A fact about Sjel lives in the repository. Subject knowledge lives in the vault. Status lives in the owning record (a task, a calendar entry, a ledger row), never in note prose. Delete outdated notes instead of archiving them ([`storage.md`](docs/plans/storage.md#one-home-per-fact)). | 2026-11-08 |
-| The model provider sets an agent's reach. Untrusted providers run sandboxed, before Priority 1. | 2026-10-31 |
+| The model provider sets an agent's reach. Untrusted providers run sandboxed. The former roadmap gate is superseded by the maintenance-first order above. | 2026-11-08 |
 | Anthropic and OpenAI harnesses read Sjel fully; every other provider gets the demo node only. | 2026-11-04 |
-| Priority order as above: the phone app first. | 2026-10-25 |
+| Maintenance and code unification first, daily workflows next, agent features and expansion later. Supersedes the phone-agent-first order. | 2026-11-08 |
 | One workspace, flat `crates/`, one API crate per capability, third-party software in `services/`, a hybrid process model later. Directory name equals package name. The `sjel-` prefix stays only on binaries a user types. | 2026-10-25 |
 | Pantry stock is a domain inside `inventory`. | 2026-10-25 |
 | The phone writes inventory and wishlist next, then People. | 2026-10-25 |

@@ -1,8 +1,7 @@
 # Research
 
-Why this project exists, and the evidence for it. One file per question. The dashboard renders
-every file here under `/research`, beside a Projects view built from `../systems.toml` and
-`../upstreams.toml`: the software Sjel runs next to, builds on, learned from, watches or declined.
+Evidence for Sjel's product and engineering decisions. One file per question. Dependency and
+design-influence verdicts live in `../upstreams.toml`; current priorities live in `../PLAN.md`.
 
 Each entry states its claim, cites a durable source for every fact it did not measure, and ends
 with what its sources do not show. An entry grows when new evidence arrives. It is corrected, not
@@ -10,6 +9,8 @@ deleted, when a source turns out wrong.
 
 ## Entries
 
+- [Maintenance priorities and reusable audit tooling](plan-maintenance-review.md): planning drift,
+  existing unification, and candidate tools for reducing repeated cleanup and security review.
 - [Why Sjel exists](why-sjel.md): life data sits in many services outside the person's control.
 - [Will people without technical experience use it?](simplicity-and-adoption.md): defaults,
   progressive disclosure, browsing over search, and limited interest in data ownership.
@@ -45,14 +46,6 @@ project named here has a `watch` row in `../upstreams.toml`.
 - Can Ollama's System One API replace the CLM service for typed decisions? Ollama 0.35.0 on this
   Mac answers `/v1/systemone`, and the Nimble model (`nimble` in `../upstreams.toml`) is not
   pulled yet. Nothing is measured. Extends [the local decision entry](local-decision-models.md).
-- Is one native GPUI surface worth a third UI stack? Sjel has a Svelte dashboard and a SwiftUI
-  menu-bar app. The talk that raised it measures render speed. Measured 2026-10-09: Sjel's waits
-  come from a service, not from rendering. A `/context` day switch settles in 26 ms in Chrome, and
-  one shell endpoint takes over a second. The 2026-10-09 decision gave GPUI a command palette,
-  judged on start time and memory. The wider decision of 2026-10-15 is in
-  [`../apps/gpui-prototype/README.md`](../apps/gpui-prototype/README.md). Neither number is
-  measured yet. Source:
-  [Conrad Irwin, EuroRust 2025](https://www.youtube.com/watch?v=sheIOOf-xRo).
 - Does a booking document need a reader of its own? `kitinerary` is read AND run: it installs on
   the Linux runtime, takes stdin and emits schema.org JSON-LD, and it extracted a JSON-LD
   `TrainReservation` from HTML intact, while a plain iCal `VEVENT` returned empty. macOS was

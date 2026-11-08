@@ -14,7 +14,8 @@ pub use cards::{
     stat_card_interactive, stat_strip, virtual_list, InteractiveStatCard,
 };
 pub use tables::{
-    data_row, key_bar, page_scroll, remote_state, shortcut_hint, sub_tabs, table_header,
+    data_row, key_bar, page_scroll, remote_state, shortcut_hint, sortable_table_header, sub_tabs,
+    table_header, tabular_cell, SortOrder, SortableColumn,
 };
 pub use tokens::{dot, note, placeholder, RADIUS_LG, RADIUS_MD, RADIUS_SM};
 
@@ -52,5 +53,7 @@ mod tests {
     fn test_tokens_dimensions() {
         assert!(RADIUS_SM < RADIUS_MD);
         assert!(RADIUS_MD < RADIUS_LG);
+        assert_eq!(SortOrder::Ascending.glyph(), " ↑");
+        assert_eq!(SortOrder::Descending.glyph(), " ↓");
     }
 }

@@ -90,6 +90,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 |---|---|
 | The dashboard retires. GPUI is the one app. | 2026-10-22 |
 | GPUI Fast renders the desktop. The phone runs a trial of NSH, with `gpui-mobile` as the bridge until it decides ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). | 2026-11-07 |
+| Generic tables (`DataTable`), rich-text/Markdown readers (`TextView`), and date/time pickers (`Calendar`, `DatePicker`, `TimeField`) use the installed `gpui-kit` and `nsh-base` primitives styled through `apps/gpui/ui/src/primitives`, heavy media uses native OS views (`PDFKit`, `MapLibre`), and custom layout code stays reserved for Sjel-specific surfaces ([`gpui.md` §7](docs/plans/gpui.md#7-ui-and-ux-roadmap)). | 2026-11-08 |
 | Target one database per capability or agent. | 2026-10-23 |
 | The Obsidian vault holds learning only: `teach`, `practice`, claim notes and subject knowledge. Every other note, fact and link source moves into Sjel data; the inventory is in [`storage.md`](docs/plans/storage.md#vault-holds-learning-only). Supersedes "knowledge stays in the vault until moving it hurts" (2026-10-23). | 2026-11-08 |
 | The model provider sets an agent's reach. Untrusted providers run sandboxed, before Priority 1. | 2026-10-31 |

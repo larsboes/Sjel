@@ -148,6 +148,49 @@ impl Reader {
         true
     }
 
+    pub(super) fn set_page(&mut self, target: usize) -> bool {
+        if self.pages == 0 {
+            return false;
+        }
+        let first = self.first_page.min(self.pages - 1);
+        let last = self
+            .last_page
+            .unwrap_or(self.pages - 1)
+            .min(self.pages - 1)
+            .max(first);
+        let next = target.clamp(first, last);
+        if next == self.page {
+            return false;
+        }
+        self.page = next;
+        true
+    }
+
+    /// Up to seven one-based page indices around the active page (always including first and last)
+    /// for quick jump pills in the reader bar.
+    pub(super) fn jump_pages(&self) -> Vec<usize> {
+        if self.pages <= 1 {
+            return Vec::new();
+        }
+        let first = self.first_page.min(self.pages - 1);
+        let last = self
+            .last_page
+            .unwrap_or(self.pages - 1)
+            .min(self.pages - 1)
+            .max(first);
+        if first == last {
+            return Vec::new();
+        }
+        let mut out = vec![first, last, self.page];
+        for offset in 1..=2usize {
+            out.push(self.page.saturating_sub(offset).max(first));
+            out.push((self.page + offset).min(last));
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
     pub(super) fn image(&self) -> Option<Arc<RenderImage>> {
         self.drawn.get(&(self.page, self.zoom.width())).cloned()
     }
@@ -347,6 +390,13 @@ impl Documents {
 
     pub fn go_to_page(&mut self, by: isize, cx: &mut Context<Self>) {
         if self.reader.next_page(by) {
+            self.request_page(cx);
+            cx.notify();
+        }
+    }
+
+    pub fn go_to_page_index(&mut self, target: usize, cx: &mut Context<Self>) {
+        if self.reader.set_page(target) {
             self.request_page(cx);
             cx.notify();
         }

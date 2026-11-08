@@ -2,7 +2,7 @@
 use gpui_kit::{div, prelude::*, px, rgb, rgba, AnyElement, Context};
 use sjel_gpui_core::research::ResearchArticle;
 
-use crate::primitives::{card, dot, note};
+use crate::primitives::{card, note};
 use crate::theme::Palette;
 
 use super::ResearchPage;
@@ -140,123 +140,5 @@ impl ResearchPage {
 }
 
 pub(super) fn render_markdown_prose(content: &str, palette: Palette) -> AnyElement {
-    let mut elements: Vec<AnyElement> = Vec::new();
-    let mut in_code_block = false;
-    let mut code_lines = Vec::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("```") {
-            if in_code_block {
-                let code_text = code_lines.join("\n");
-                code_lines.clear();
-                elements.push(
-                    div()
-                        .bg(rgba(palette.surface))
-                        .p(px(8.0))
-                        .rounded(px(6.0))
-                        .text_size(px(11.0))
-                        .font_family(".AppleSystemUIFontMonospaced")
-                        .text_color(rgb(palette.text))
-                        .child(code_text)
-                        .into_any_element(),
-                );
-                in_code_block = false;
-            } else {
-                in_code_block = true;
-            }
-            continue;
-        }
-
-        if in_code_block {
-            code_lines.push(line.to_string());
-            continue;
-        }
-
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if trimmed.starts_with("# ") {
-            elements.push(
-                div()
-                    .text_size(px(17.0))
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(rgb(palette.text))
-                    .pt(px(10.0))
-                    .pb(px(2.0))
-                    .child(trimmed.trim_start_matches("# ").to_string())
-                    .into_any_element(),
-            );
-        } else if trimmed.starts_with("## ") {
-            elements.push(
-                div()
-                    .text_size(px(14.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.text))
-                    .pt(px(8.0))
-                    .pb(px(2.0))
-                    .child(trimmed.trim_start_matches("## ").to_string())
-                    .into_any_element(),
-            );
-        } else if trimmed.starts_with("### ") {
-            elements.push(
-                div()
-                    .text_size(px(13.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(palette.text))
-                    .pt(px(6.0))
-                    .child(trimmed.trim_start_matches("### ").to_string())
-                    .into_any_element(),
-            );
-        } else if let Some(item) = trimmed
-            .strip_prefix("- ")
-            .or_else(|| trimmed.strip_prefix("* "))
-        {
-            elements.push(
-                div()
-                    .flex()
-                    .items_start()
-                    .gap(px(6.0))
-                    .child(div().pt(px(5.0)).child(dot(palette.accent)))
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(rgb(palette.text))
-                            .line_height(px(18.0))
-                            .child(item.to_string()),
-                    )
-                    .into_any_element(),
-            );
-        } else if let Some(quote) = trimmed.strip_prefix("> ") {
-            elements.push(
-                div()
-                    .border_l_2()
-                    .border_color(rgb(palette.accent))
-                    .pl(px(8.0))
-                    .py(px(2.0))
-                    .text_size(px(12.0))
-                    .text_color(rgb(palette.muted))
-                    .line_height(px(18.0))
-                    .child(quote.to_string())
-                    .into_any_element(),
-            );
-        } else {
-            elements.push(
-                div()
-                    .text_size(px(12.0))
-                    .text_color(rgb(palette.text))
-                    .line_height(px(19.0))
-                    .child(trimmed.to_string())
-                    .into_any_element(),
-            );
-        }
-    }
-
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
-        .children(elements)
-        .into_any_element()
+    crate::doc_view::render_markdown(content, palette, crate::Density::Desktop)
 }

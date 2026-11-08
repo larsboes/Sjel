@@ -482,8 +482,36 @@ build was performed for this handoff.
 Polish does not block retirement. The write paths do. The phone priority areas are in §2. Order
 inside this list is by use.
 
-- **Documents.** Cursor paging instead of 7,154 rows on mount (needed by §2). Page thumbnails,
-  text search in the rendered PDF, drag and drop from Finder into import.
+**Component boundary (decided 2026-11-08).** Do not build a separate base widget kit from scratch.
+Use a three-layer split across `gpui-fast` and `nsh`:
+
+1. **Kit primitives wrapped in `ui/src/primitives/`:** Reuse `gpui-kit` on the desktop and
+   `nsh-base` on NSH screens for tables (`DataTable`, `sortable_table_header`, `tabular_cell`),
+   Markdown/HTML readers (`TextView` with `FrontmatterPlugin` and `text_view_style`), rich editing
+   (`nsh_base::rich_editor`), and date/time controls (`Calendar`, `DatePicker`, `TimeField`).
+2. **Native OS views for heavy media:** Embed platform views (`PDFKit` `PDFView` as `sjel.pdf`,
+   `MapLibre`) where pixel-level reimplementation degrades text selection, zoom or search.
+3. **Custom views only for Sjel-specific data shapes:** Keep shared layout math in `apps/gpui/core`
+   and hand-built views only for the 24-hour Calendar timeline and availability grid, cross-capability
+   join inspectors, and the block note editor.
+
+- **Documents.** Built (2026-11-08): NSH Documents (`ui/src/nsh_documents.rs`) loads one 500-row
+  page on mount with on-demand paging (`fetch_page`) and renders extracted text through
+  `nsh_base::text_view` with selectable Markdown and link opening; Mac Documents
+  (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView` and
+  adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`) with search-matched page
+  highlights. Open: page thumbnails, text search inside the rendered PDF, and drag and drop from
+  Finder into import.
+- **Markdown & Rich Text.** Built (2026-11-08): `doc_view::render_markdown` uses
+  `gpui_kit::component::text::TextView` with `FrontmatterPlugin` and Sjel's `Palette`-mapped
+  `text_view_style`, replacing the duplicate hand-rolled parser in `ui/src/research/articles.rs`.
+  Open: unify `ui/src/docs/render.rs` onto `TextView` with the Mermaid SVG `MarkdownPlugin`.
+- **Tables.** Built (2026-11-08): `SortableColumn`, `SortOrder`, `sortable_table_header` and
+  `tabular_cell` in `ui/src/primitives/tables.rs`. Open: wire `gpui_kit::component::table::DataTable`
+  and `nsh_base::data_table` into All Tasks, Documents, Finance Import and Inventory for resizable
+  and pinned columns.
+- **Calendar.** Keep the 24-hour timeline, quarter-hour drag/resize and availability grid in
+  `ui/src/calendar/`; wire `DatePicker` and `TimeField` into the event composer.
 - **Finance.** Built: the overview cards show the newest month instead of the
   all-time sum, a six-month income and spending chart, and a holdings panel with each price's
   source, age and FX rate. A keyboard category picker in Import & Review: typed words filter

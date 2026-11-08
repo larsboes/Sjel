@@ -55,14 +55,14 @@ pub mod travel;
 pub mod viz;
 pub mod web_links;
 
-pub use doc_view::{render_block, render_doc, render_markdown};
+pub use doc_view::{render_block, render_doc, render_markdown, text_view_style};
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 pub use primitives::{
     back_button, card, data_row, dot, due_badge, due_status, filter_pill, key_bar, list, mono_num,
     note, page_scroll, placeholder, priority_pill, progress_bar, remote_state, row,
-    row_for_density, section, shortcut_hint, stat_card, stat_card_interactive, stat_strip,
-    sub_tabs, sync_status_badge, table_header, tone_chip, virtual_list, DueStatus, RADIUS_LG,
-    RADIUS_MD, RADIUS_SM,
+    row_for_density, section, shortcut_hint, sortable_table_header, stat_card,
+    stat_card_interactive, stat_strip, sub_tabs, sync_status_badge, table_header, tabular_cell,
+    tone_chip, virtual_list, DueStatus, SortOrder, SortableColumn, RADIUS_LG, RADIUS_MD, RADIUS_SM,
 };
 pub use sidebar::{sidebar_frame, sidebar_scrim, Seat, Sidebar};
 pub use theme::{

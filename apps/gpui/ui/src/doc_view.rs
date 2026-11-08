@@ -3,24 +3,69 @@
 //! Renders a parsed `Doc` (`sjel_gpui_core::blocks::Doc`) with uniform typography,
 //! semantic palette colors, and density-aware touch targets for checklists.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
+use gpui_kit::component::text::{FrontmatterPlugin, TextView, TextViewPlugin as _, TextViewStyle};
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, ClickEvent, FontStyle, FontWeight, HighlightStyle,
-    SharedString, StrikethroughStyle, StyledText, UnderlineStyle, Window,
+    div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, FontStyle, FontWeight,
+    HighlightStyle, SharedString, StrikethroughStyle, StyleRefinement, StyledText, UnderlineStyle,
+    Window,
 };
 use sjel_gpui_core::blocks::{Block, Doc, Kind};
 use sjel_gpui_core::inline::{Inline, Mark};
 
 use crate::theme::{tint, Density, Palette};
 
-/// Renders a raw markdown string into a styled block layout with inline markups.
+/// Builds a [`TextViewStyle`] mapped to Sjel's semantic [`Palette`].
+pub fn text_view_style(palette: Palette, density: Density) -> TextViewStyle {
+    let gap = if density.is_mobile() {
+        rems(0.65)
+    } else {
+        rems(0.55)
+    };
+    let table = StyleRefinement::default()
+        .rounded(px(6.))
+        .border_1()
+        .border_color(rgba(palette.border));
+    let table_head = StyleRefinement::default()
+        .bg(rgba(palette.raised))
+        .text_color(rgb(palette.muted))
+        .font_weight(FontWeight::SEMIBOLD);
+    let code_block = StyleRefinement::default()
+        .rounded(px(6.))
+        .bg(rgba(palette.raised))
+        .border_1()
+        .border_color(rgba(palette.border));
+
+    TextViewStyle::default()
+        .paragraph_gap(gap)
+        .table(table)
+        .table_head(table_head)
+        .code_block(code_block)
+        .inline_code(HighlightStyle {
+            background_color: Some(rgba(palette.raised).into()),
+            ..Default::default()
+        })
+}
+
+/// Renders a raw Markdown string using GPUI Kit's selectable [`TextView`] with GFM tables,
+/// code blocks, blockquotes, links, and frontmatter stripping.
 pub fn render_markdown(markdown: &str, palette: Palette, density: Density) -> AnyElement {
-    let doc = Doc::parse(markdown);
-    render_doc(
-        &doc,
-        palette,
-        density,
-        None::<fn(usize, &ClickEvent, &mut Window, &mut gpui_kit::App)>,
-    )
+    let mut hasher = DefaultHasher::new();
+    markdown.hash(&mut hasher);
+    let id = SharedString::from(format!("sjel-md-{:016x}", hasher.finish()));
+    let source = SharedString::from(markdown.to_owned());
+    let blockquote = StyleRefinement::default()
+        .border_color(rgb(palette.accent))
+        .bg(rgba(palette.raised))
+        .rounded(px(4.));
+    FrontmatterPlugin
+        .setup(TextView::markdown(id, source))
+        .style(text_view_style(palette, density))
+        .blockquote_style(blockquote)
+        .text_color(rgb(palette.text))
+        .selectable(true)
+        .into_any_element()
 }
 
 /// Renders a whole document's blocks into a vertical layout container.

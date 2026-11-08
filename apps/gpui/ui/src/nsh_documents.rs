@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use nsh_base::button;
+use nsh_base::{button, text_view as nsh_markdown_view, TextViewLinks};
 use nsh_core::prelude::*;
 use serde_json::json;
 use sjel_gpui_core::device::Source;
@@ -27,6 +27,8 @@ enum Update {
     Rows {
         rows: Vec<DocumentSummary>,
         replace: bool,
+        next_offset: Option<usize>,
+        total: usize,
     },
     Detail {
         detail: Box<DocumentDetail>,
@@ -92,12 +94,15 @@ pub fn set_pdf_viewer() {
 /// Where originals live on this device. The documents kept here show at once, before any read.
 pub fn set_originals(originals: Originals) {
     let kept: Vec<DocumentSummary> = originals.kept().into_iter().map(|d| d.document).collect();
+    let count = kept.len();
     *feed().originals.lock().unwrap_or_else(|e| e.into_inner()) = Some(originals);
     if !kept.is_empty() {
-        send(Update::Status(kept_status(kept.len())));
+        send(Update::Status(kept_status(count)));
         send(Update::Rows {
             rows: kept,
             replace: true,
+            next_offset: None,
+            total: count,
         });
     }
 }
@@ -109,36 +114,48 @@ fn kept_status(count: usize) -> String {
     }
 }
 
-/// Lists every document the library holds through `source`: the Mac's shell, or a paired phone's
-/// client. When the Mac does not answer, the documents kept on this phone stay listed.
+fn page_status(loaded: usize, total: usize) -> String {
+    if loaded >= total {
+        format!("{total} documents")
+    } else {
+        format!("Showing {loaded} of {total} documents")
+    }
+}
+
+/// Lists the first page of documents from `source`: the Mac's shell, or a paired phone's client.
+/// Additional pages load on demand through [`load_more`]. When the Mac does not answer, the
+/// documents kept on this phone stay listed.
 pub fn connect(source: Source) {
-    *feed().source.lock().unwrap_or_else(|e| e.into_inner()) = Some(source.clone());
+    *feed().source.lock().unwrap_or_else(|e| e.into_inner()) = Some(source);
     send(Update::Status("Reading the library on the Mac…".into()));
+    fetch_page(0);
+}
+
+fn fetch_page(offset: usize) {
+    let Some(source) = locked(&feed().source) else {
+        return;
+    };
     shell::spawn(async move {
-        let mut offset = 0;
-        loop {
-            match source.documents_page(offset).await {
-                Ok(page) => {
-                    let len = page.documents.len();
-                    send(Update::Rows {
-                        rows: page.documents,
-                        replace: offset == 0,
-                    });
-                    offset += len;
-                    if offset >= page.total || len == 0 {
-                        send(Update::Status(format!("{offset} documents")));
-                        return;
-                    }
+        match source.documents_page(offset).await {
+            Ok(page) => {
+                let len = page.documents.len();
+                let loaded = offset + len;
+                let next_offset = (loaded < page.total && len > 0).then_some(loaded);
+                send(Update::Rows {
+                    rows: page.documents,
+                    replace: offset == 0,
+                    next_offset,
+                    total: page.total,
+                });
+                send(Update::Status(page_status(loaded, page.total)));
+            }
+            Err(reason) => {
+                let kept = locked(&feed().originals).map_or(0, |o| o.kept().len());
+                let mut status = format!("The Mac did not answer: {reason}");
+                if kept > 0 && offset == 0 {
+                    status.push_str(&format!(". Showing the {}.", kept_status(kept)));
                 }
-                Err(reason) => {
-                    let kept = locked(&feed().originals).map_or(0, |o| o.kept().len());
-                    let mut status = format!("The Mac did not answer: {reason}");
-                    if kept > 0 && offset == 0 {
-                        status.push_str(&format!(". Showing the {}.", kept_status(kept)));
-                    }
-                    send(Update::Status(status));
-                    return;
-                }
+                send(Update::Status(status));
             }
         }
     });
@@ -245,6 +262,7 @@ struct Open {
 #[component]
 pub fn DocumentsScreen() -> impl IntoElement {
     let rows = signal(Vec::<DocumentSummary>::new());
+    let next_page = signal(None::<(usize, usize)>);
     let status = signal(String::from("Waiting for the library."));
     let open_doc = Open {
         detail: signal(None::<DocumentDetail>),
@@ -260,12 +278,17 @@ pub fn DocumentsScreen() -> impl IntoElement {
                     Update::Rows {
                         rows: batch,
                         replace,
-                    } => rows.update(|all| {
-                        if replace {
-                            all.clear();
-                        }
-                        all.extend(batch);
-                    }),
+                        next_offset,
+                        total,
+                    } => {
+                        rows.update(|all| {
+                            if replace {
+                                all.clear();
+                            }
+                            all.extend(batch);
+                        });
+                        next_page.set(next_offset.map(|off| (off, total)));
+                    }
                     Update::Detail { detail, kept } => {
                         open_doc.original.set(None);
                         open_doc.kept.set(kept);
@@ -306,26 +329,43 @@ pub fn DocumentsScreen() -> impl IntoElement {
         )
         .child(dynamic(move || match open_doc.detail.with(|d| d.clone()) {
             Some(found) => reader(found, open_doc).into_element(),
-            None => list(rows).into_element(),
+            None => list(rows, next_page).into_element(),
         }))
 }
 
-fn list(rows: Signal<Vec<DocumentSummary>>) -> impl IntoElement {
-    virtual_list(
-        move || rows.with(|r| r.len()),
-        move |at| {
-            let at_row = move || rows.with(|r| r.get(at.index()).cloned().unwrap_or_default());
-            button()
+fn list(
+    rows: Signal<Vec<DocumentSummary>>,
+    next_page: Signal<Option<(usize, usize)>>,
+) -> impl IntoElement {
+    view()
+        .flex_1()
+        .child(
+            virtual_list(
+                move || rows.with(|r| r.len()),
+                move |at| {
+                    let at_row =
+                        move || rows.with(|r| r.get(at.index()).cloned().unwrap_or_default());
+                    button()
+                        .px_4()
+                        .py_3()
+                        .gap_1()
+                        .on_press(move || open(at_row().id))
+                        .child(text(move || title(&at_row())).text_base())
+                        .child(text(move || subtitle(&at_row())).text_sm())
+                },
+            )
+            .estimated_item_size(px(64.0))
+            .flex_1(),
+        )
+        .child(dynamic(move || match next_page.get() {
+            Some((offset, total)) => button()
                 .px_4()
                 .py_3()
-                .gap_1()
-                .on_press(move || open(at_row().id))
-                .child(text(move || title(&at_row())).text_base())
-                .child(text(move || subtitle(&at_row())).text_sm())
-        },
-    )
-    .estimated_item_size(px(64.0))
-    .flex_1()
+                .on_press(move || fetch_page(offset))
+                .child(text(format!("Load next page ({offset} of {total})")).text_sm())
+                .into_element(),
+            None => view().into_element(),
+        }))
 }
 
 fn action(label: impl IntoReactive<SharedString>, press: impl Fn() + 'static) -> impl IntoElement {
@@ -403,7 +443,12 @@ fn text_view(found: &DocumentDetail, body: &str) -> impl IntoElement {
                     .select_text(),
             )
             .child(text(subtitle(&found.document)).text_sm())
-            .child(text(body.to_string()).text_base().select_text()),
+            .child(
+                nsh_markdown_view()
+                    .markdown(body.to_string())
+                    .selectable(true)
+                    .links(TextViewLinks::Open),
+            ),
     )
 }
 
@@ -426,5 +471,7 @@ mod tests {
         assert_eq!(title(&doc), "Rental contract");
         assert_eq!(subtitle(&doc), "2026-11-07 · 3 pages · housing");
         assert_eq!(kept_status(1), "1 document kept on this phone");
+        assert_eq!(page_status(500, 7154), "Showing 500 of 7154 documents");
+        assert_eq!(page_status(7154, 7154), "7154 documents");
     }
 }

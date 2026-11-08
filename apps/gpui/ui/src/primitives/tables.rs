@@ -101,6 +101,92 @@ pub fn table_header(
     row.into_any_element()
 }
 
+/// Active sort direction for a sortable table column.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SortOrder {
+    Ascending,
+    Descending,
+}
+
+impl SortOrder {
+    /// Arrow glyph shown beside an active column title.
+    pub fn glyph(self) -> &'static str {
+        match self {
+            Self::Ascending => " ↑",
+            Self::Descending => " ↓",
+        }
+    }
+}
+
+/// Specification of a column in [`sortable_table_header`].
+pub struct SortableColumn {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub width: Option<Pixels>,
+    pub right_align: bool,
+    pub sort: Option<SortOrder>,
+}
+
+/// Interactive sortable column header strip with right-alignment for numeric columns.
+pub fn sortable_table_header(
+    id_prefix: &'static str,
+    columns: Vec<SortableColumn>,
+    density: Density,
+    palette: Palette,
+    on_sort: impl Fn(&'static str, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let on_sort = std::rc::Rc::new(on_sort);
+    let mut row = row_for_density(density)
+        .min_h(px(32.))
+        .py_1()
+        .bg(rgba(tint(palette.raised, 0x30)))
+        .border_b_1()
+        .border_color(rgba(palette.border))
+        .text_xs()
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(rgb(palette.muted));
+    for col in columns {
+        let on_sort = on_sort.clone();
+        let col_id = col.id;
+        let active = col.sort.is_some();
+        let text = match col.sort {
+            Some(order) => format!("{}{}", col.label, order.glyph()),
+            None => col.label.to_owned(),
+        };
+        let cell = match col.width {
+            Some(w) => div().w(w).flex_none(),
+            None => div().flex_1().min_w_0(),
+        };
+        row = row.child(
+            cell.id(SharedString::from(format!("{id_prefix}-col-{col_id}")))
+                .cursor_pointer()
+                .when(col.right_align, |c| c.text_right())
+                .when(active, |c| c.text_color(rgb(palette.text)))
+                .hover(move |s| s.text_color(rgb(palette.text)))
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                    on_sort(col_id, window, cx)
+                })
+                .truncate()
+                .child(text),
+        );
+    }
+    row.into_any_element()
+}
+
+/// Right-aligned monospace tabular numeric cell for amounts, counts, and timestamps.
+pub fn tabular_cell(value: impl Into<SharedString>, width: Pixels, color: u32) -> AnyElement {
+    div()
+        .w(width)
+        .flex_none()
+        .text_right()
+        .font_family(".AppleSystemUIFontMonospaced")
+        .text_xs()
+        .text_color(rgb(color))
+        .truncate()
+        .child(value.into())
+        .into_any_element()
+}
+
 /// Density-aware interactive data row with hover and selection states.
 pub fn data_row(
     id: impl Into<ElementId>,

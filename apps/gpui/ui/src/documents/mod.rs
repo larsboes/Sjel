@@ -1123,6 +1123,9 @@ impl Render for Documents {
                             )
                         }),
                 )
+                .when(!reading_text && self.reader.pages > 1, |el| {
+                    el.child(page_jump_strip(self, palette, cx))
+                })
                 .when(reading_text, |el| el.child(text_panel(self, palette)))
                 .when(!reading_text, |el| el.child(self.page_element(palette)))
                 .into_any_element()
@@ -1223,13 +1226,79 @@ fn status_chip(status: &str, palette: Palette) -> AnyElement {
         .into_any_element()
 }
 
-/// The locally extracted text, which is the only view a format without a renderer has.
+/// Quick page jump pills (first, nearby, last, and search-matched pages) for multi-page PDFs.
+fn page_jump_strip(view: &Documents, palette: Palette, cx: &mut Context<Documents>) -> AnyElement {
+    let jumps = view.reader.jump_pages();
+    let current = view.reader.page;
+    let matched: Vec<u32> = view
+        .selected
+        .as_deref()
+        .and_then(|id| {
+            view.rows
+                .value
+                .as_ref()
+                .and_then(|rows| rows.iter().find(|r| r.id == id))
+        })
+        .map(|row| row.matched_pages.clone())
+        .unwrap_or_default();
+
+    let mut strip = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_1()
+        .text_xs()
+        .text_color(rgb(palette.muted));
+
+    for page_ix in jumps {
+        let active = page_ix == current;
+        let page_num = u32::try_from(page_ix).unwrap_or(0).saturating_add(1);
+        let is_match = matched.contains(&page_num);
+        strip = strip.child(
+            div()
+                .id(("doc-jump-page", page_ix))
+                .px_2()
+                .py(px(2.))
+                .rounded(px(4.))
+                .cursor_pointer()
+                .bg(rgba(if active {
+                    tint(palette.accent, 0x24)
+                } else if is_match {
+                    tint(palette.amber, 0x20)
+                } else {
+                    palette.raised
+                }))
+                .text_color(rgb(if active {
+                    palette.accent
+                } else if is_match {
+                    palette.amber
+                } else {
+                    palette.muted
+                }))
+                .font_weight(if active || is_match {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::MEDIUM
+                })
+                .hover(move |s| s.text_color(rgb(palette.text)))
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    view.go_to_page_index(page_ix, cx);
+                }))
+                .child(format!("p.{page_num}")),
+        );
+    }
+    strip.into_any_element()
+}
+
+/// The locally extracted text, rendered through the selectable Markdown [`TextView`].
 fn text_panel(view: &Documents, palette: Palette) -> AnyElement {
     let text = view
         .detail
         .value
         .as_ref()
-        .and_then(|detail| detail.text.clone());
+        .and_then(|detail| detail.text.clone())
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| "No text extraction is available for this file.".into());
     div()
         .id("text-scroll-panel")
         .flex_1()
@@ -1243,7 +1312,11 @@ fn text_panel(view: &Documents, palette: Palette) -> AnyElement {
         .text_sm()
         .line_height(px(22.))
         .text_color(rgb(palette.text))
-        .child(text.unwrap_or_else(|| "No text extraction is available for this file.".into()))
+        .child(crate::doc_view::render_markdown(
+            &text,
+            palette,
+            view.density,
+        ))
         .into_any_element()
 }
 
@@ -1440,6 +1513,12 @@ mod tests {
         assert_eq!(reader.page, 2);
         assert!(!reader.next_page(1), "the last page is the last page");
         assert_eq!(reader.page, 2);
+        assert!(reader.set_page(0));
+        assert_eq!(reader.page, 0);
+        assert!(!reader.set_page(0));
+        assert!(reader.set_page(99));
+        assert_eq!(reader.page, 2);
+        assert_eq!(reader.jump_pages(), vec![0, 1, 2]);
     }
 
     #[test]

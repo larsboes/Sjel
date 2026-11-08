@@ -10,17 +10,12 @@ covers it.
 
 ## Open
 
-- **Capability CLIs are not on PATH.** Moving notes into `projects` and writing the
-  operator profile needed the `projects` and `operator-profile` CLIs. Only the `-server`
-  binaries get built. Workaround: `cargo build --release --bin projects`, then run the binary from
-  the cargo target directory. Smallest change: `sjel <capability> <args>` that builds and runs
-  the capability's CLI binary.
-
-- **MCP responses redact values that are not personal data.** The pseudonymizer replaced an ISO
-  date range (`2026-08-13 to 2026-08-20`) with `[phone]` and `Apache-2.0-licensed` with `[token]`
-  in entities responses. The stored values were correct. Workaround: read the row from the
-  database to check. Smallest change: phone and token detectors in `crates/pseudonymize` that
-  refuse ISO dates and licence identifiers, with those two strings as test cases.
+- **Skill-install rollback regression fails.** The full `sjel-cli` unit suite passes 414
+  tests and fails `intake::skills::tests::a_failed_second_layout_restores_the_first`:
+  reading the first destination after rollback returns `NotFound` at
+  `crates/sjel-cli/src/intake/skills.rs:988`. Reproduced with one test thread in the isolated
+  Cargo runner. Smallest change: correct rollback so the existing destination survives a
+  failure at the second destination, and make the regression pass. No workaround was applied.
 
 - **A contained harness cannot be given a credential.** Shipped as `sjel-contain --credential
   <provider>`: the slug resolves through the private catalogue `sjel provider` reads and reaches
@@ -241,6 +236,15 @@ covers it.
   and writes nothing.
 
 ## Done
+
+- Capability CLIs run as `sjel <capability> <args...>` through Cargo, with the resolved overlay and local-build policy (`b7e2b832`).
+- Trusted MCP text preserves known licence labels and compact ISO date intervals; pseudonymized free-text dates remain protected (`26f1313b`).
+
+Verification for these fixes: 46 pseudonymization tests, two CLI unit tests, the CLI process
+integration test and scoped Clippy with warnings denied passed. The full CLI unit suite has
+the rollback failure listed above. The workspace suite, live capability rebuilds and restarts,
+and a live MCP response check did not run. The shared build cache refused temporary archive
+cleanup; verification used the isolated Cargo runner with a writable scratch target.
 
 - `sjel-contain --credential <provider>|<entry>=<VAR>` resolves a provider key from the private
   catalogue and hands it to the contained child as its environment variable

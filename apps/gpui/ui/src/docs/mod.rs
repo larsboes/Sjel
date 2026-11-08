@@ -2,23 +2,26 @@
 
 mod diagrams;
 mod parser;
-mod render;
 mod types;
 
 use gpui::StatefulInteractiveElement;
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::text::{
+    FrontmatterPlugin, MarkdownExtensions, TextView, TextViewPlugin as _, TextViewState,
+};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, Context, Entity, IntoElement, ScrollHandle, SharedString,
-    Subscription, Window,
+    StyleRefinement, Subscription, Window,
 };
 
-pub(crate) use parser::{doc_slug, parse_markdown, source_url};
-pub(crate) use render::render_doc_block;
-pub(crate) use types::{anchor_index, summary, title, DocSource};
+pub use diagrams::MermaidPlugin;
+pub(crate) use parser::{doc_slug, source_url};
+pub(crate) use types::{anchor_source_range, summary, title, DocSource};
 
+use crate::doc_view::text_view_style;
 use crate::theme::ThemeContext;
 
 include!(concat!(env!("OUT_DIR"), "/docs.rs"));
@@ -27,6 +30,7 @@ pub struct DocsPage {
     selected: String,
     query: String,
     filter: Option<(Entity<InputState>, Subscription)>,
+    text_view_state: Option<Entity<TextViewState>>,
     scroll: ScrollHandle,
     nav_scroll: ScrollHandle,
     pending_anchor: Option<String>,
@@ -38,6 +42,7 @@ impl DocsPage {
             selected: "index".into(),
             query: String::new(),
             filter: None,
+            text_view_state: None,
             scroll: ScrollHandle::new(),
             nav_scroll: ScrollHandle::new(),
             pending_anchor: None,
@@ -52,16 +57,30 @@ impl DocsPage {
         if DOCS.iter().any(|doc| doc.slug == slug) {
             self.selected = slug;
             self.pending_anchor = None;
+            self.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
             cx.notify();
         }
     }
 
     fn open_anchor(&mut self, slug: String, anchor: Option<String>, cx: &mut Context<Self>) {
         if DOCS.iter().any(|doc| doc.slug == slug) {
+            let changed = self.selected != slug;
             self.selected = slug;
+            if changed && anchor.is_none() {
+                self.scroll.set_offset(gpui_kit::point(px(0.), px(0.)));
+            }
             self.pending_anchor = anchor;
             cx.notify();
         }
+    }
+
+    fn text_state(&mut self, body: &str, cx: &mut Context<Self>) -> Entity<TextViewState> {
+        let state = self
+            .text_view_state
+            .get_or_insert_with(|| cx.new(|cx| TextViewState::markdown(body, cx).selectable(true)))
+            .clone();
+        state.update(cx, |s, cx| s.set_text(body, cx));
+        state
     }
 
     fn filter(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<InputState> {
@@ -129,7 +148,9 @@ impl Default for DocsPage {
 
 impl Render for DocsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let palette = ThemeContext::of(window, cx).palette;
+        let theme = ThemeContext::of(window, cx);
+        let palette = theme.palette;
+        let density = theme.density;
         let input = self.filter(window, cx);
         let query = self.query.to_lowercase();
         let matches = |doc: &&DocSource| {
@@ -189,14 +210,56 @@ impl Render for DocsPage {
         let source = self.source();
         let title = title(source);
         let body = source.markdown.replacen(&format!("# {title}"), "", 1);
-        let parsed = parse_markdown(&body);
+        let text_state = self.text_state(&body, cx);
         if let Some(anchor) = self.pending_anchor.take() {
-            if let Some(index) = anchor_index(&parsed, &anchor) {
-                self.scroll.scroll_to_top_of_item(index + 2);
+            if let Some(source_range) = anchor_source_range(&body, &anchor) {
+                text_state.update(cx, |s, cx| {
+                    let rendered = s.rendered_text();
+                    if rendered.source() == body {
+                        if let Some(rendered_range) = rendered.range_for_source(source_range) {
+                            let _ = s.reveal_range(rendered_range.start..rendered_range.start, cx);
+                        }
+                    }
+                });
             }
         }
         let source_url = format!("https://github.com/larsboes/Sjel/blob/main/{}", source.file);
-        let mut doc = div()
+        let file = source.file.to_owned();
+        let entity = cx.entity().downgrade();
+        let scroll = self.scroll.clone();
+        let blockquote = StyleRefinement::default()
+            .border_color(rgb(palette.accent))
+            .bg(rgba(palette.raised))
+            .rounded(px(4.));
+        let markdown_view = MermaidPlugin
+            .setup(
+                FrontmatterPlugin.setup(
+                    TextView::new(&text_state)
+                        .markdown_extensions(MarkdownExtensions::default().frontmatter()),
+                ),
+            )
+            .style(text_view_style(palette, density))
+            .blockquote_style(blockquote)
+            .text_color(rgb(palette.text))
+            .selectable(true)
+            .on_link_click(move |href, _, _, cx| {
+                let href = href.to_string();
+                let file = file.clone();
+                let _ = entity.update(cx, |this, cx| {
+                    this.follow_link(&href, &file, cx);
+                });
+            })
+            .on_reveal(move |line, _, _| {
+                let viewport = scroll.bounds();
+                let mut offset = scroll.offset();
+                if line.bottom() > viewport.bottom() {
+                    offset.y -= line.bottom() - viewport.bottom();
+                } else if line.top() < viewport.top() {
+                    offset.y += viewport.top() - line.top();
+                }
+                scroll.set_offset(offset);
+            });
+        let doc = div()
             .id("docs-document-scroll")
             .flex()
             .flex_col()
@@ -229,16 +292,8 @@ impl Render for DocsPage {
                             .label("Open source")
                             .on_click(move |_, _, cx| cx.open_url(&source_url)),
                     ),
-            );
-        for (index, block) in parsed.iter().enumerate() {
-            doc = doc.child(render_doc_block(
-                index,
-                block,
-                source.file.to_owned(),
-                palette,
-                cx,
-            ));
-        }
+            )
+            .child(markdown_view);
         div()
             .size_full()
             .flex()
@@ -267,5 +322,53 @@ impl Render for DocsPage {
                     ),
             )
             .child(div().flex_1().min_w_0().child(doc))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::Palette;
+    use diagrams::render_mermaid;
+    use gpui_kit::component::text::MarkdownPlugin as _;
+
+    #[test]
+    fn anchor_source_range_finds_headings_and_skips_code_fences() {
+        let md = "Intro\n\n```markdown\n## Fake Heading\n```\n\n## Real Heading\n\n<a id=\"custom-id\"></a>\n";
+        let fake = anchor_source_range(md, "fake-heading");
+        assert!(fake.is_none());
+
+        let real = anchor_source_range(md, "real-heading").expect("real heading range");
+        assert!(md[real].starts_with("## Real Heading"));
+
+        let custom = anchor_source_range(md, "custom-id").expect("custom anchor range");
+        assert!(md[custom].starts_with("<a id=\"custom-id\"></a>"));
+    }
+
+    #[test]
+    fn mermaid_plugin_parses_mermaid_code_blocks_and_renders_svg() {
+        let plugin = MermaidPlugin::new();
+        assert!(plugin.is_block());
+        assert_eq!(plugin.name(), "mermaid");
+
+        let palette = Palette::dark();
+        let (svg, width, height) =
+            render_mermaid("flowchart LR\n  A[\"Docs\"] --> B[\"TextView\"]", palette)
+                .expect("valid mermaid svg");
+        assert!(svg.contains("<svg"));
+        assert!(width > 0.0);
+        assert!(height > 0.0);
+    }
+
+    #[test]
+    fn doc_slug_resolves_relative_and_root_docs_links() {
+        assert_eq!(
+            doc_slug("../plans/gpui.md", "docs/guides/setup.md").as_deref(),
+            Some("plans/gpui")
+        );
+        assert_eq!(
+            doc_slug("/docs/README.md", "docs/plans/gpui.md").as_deref(),
+            Some("index")
+        );
     }
 }

@@ -1,6 +1,5 @@
-//! Documentation data sources, block kinds, anchor indexing, and embedded manual data.
+//! Documentation data sources, anchor indexing, and embedded manual metadata.
 
-use sjel_gpui_core::blocks::{Block, Kind};
 use sjel_gpui_core::inline::Inline;
 
 pub(crate) struct DocSource {
@@ -8,14 +7,6 @@ pub(crate) struct DocSource {
     pub(crate) category: &'static str,
     pub(crate) file: &'static str,
     pub(crate) markdown: &'static str,
-}
-
-pub(crate) enum MarkdownBlock {
-    Content(Block),
-    Table {
-        headers: Vec<String>,
-        rows: Vec<Vec<String>>,
-    },
 }
 
 pub(crate) fn title(doc: &DocSource) -> &str {
@@ -80,33 +71,45 @@ pub(crate) fn explicit_anchor(text: &str) -> Option<String> {
     .then(|| id.to_owned())
 }
 
-pub(crate) fn anchor_index(blocks: &[MarkdownBlock], target: &str) -> Option<usize> {
+pub(crate) fn anchor_source_range(markdown: &str, target: &str) -> Option<std::ops::Range<usize>> {
     let mut seen = std::collections::HashSet::new();
-    blocks.iter().enumerate().find_map(|(index, block)| {
-        let MarkdownBlock::Content(block) = block else {
-            return None;
-        };
-        let id = match block.kind {
-            Kind::Heading(_) => Some(heading_id(&block.text, &mut seen)),
-            _ => explicit_anchor(&block.text),
-        }?;
-        (id == target).then_some(index)
-    })
-}
-
-pub(crate) fn table_cells(line: &str) -> Vec<String> {
-    line.trim()
-        .trim_start_matches('|')
-        .trim_end_matches('|')
-        .split('|')
-        .map(|cell| cell.trim().to_owned())
-        .collect()
-}
-
-pub(crate) fn is_table_separator(line: &str) -> bool {
-    line.contains('|')
-        && line.contains('-')
-        && line
-            .chars()
-            .all(|ch| ch.is_whitespace() || matches!(ch, '|' | ':' | '-'))
+    let mut offset = 0;
+    let mut in_fence: Option<&str> = None;
+    for line in markdown.split_inclusive('\n') {
+        let line_len = line.len();
+        let trimmed = line.trim();
+        if let Some(marker) = in_fence {
+            if trimmed.starts_with(marker) {
+                in_fence = None;
+            }
+            offset += line_len;
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            in_fence = Some("```");
+            offset += line_len;
+            continue;
+        }
+        if trimmed.starts_with("~~~") {
+            in_fence = Some("~~~");
+            offset += line_len;
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix('#') {
+            let hashes = 1 + rest.bytes().take_while(|&b| b == b'#').count();
+            if hashes <= 6 {
+                let heading_text = &trimmed[hashes..].trim_start();
+                let id = heading_id(heading_text, &mut seen);
+                if id == target {
+                    return Some(offset..(offset + line_len));
+                }
+            }
+        } else if let Some(id) = explicit_anchor(trimmed) {
+            if id == target {
+                return Some(offset..(offset + line_len));
+            }
+        }
+        offset += line_len;
+    }
+    None
 }

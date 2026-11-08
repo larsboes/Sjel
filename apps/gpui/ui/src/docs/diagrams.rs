@@ -1,32 +1,94 @@
-//! Cached Mermaid diagram rendering and theme mapping for docs figures.
+//! Cached Mermaid diagram rendering, theme mapping, and `TextView` plugin for docs figures.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use crate::theme::Palette;
+use gpui_kit::component::scroll::ScrollableElement;
+use gpui_kit::component::text::{markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownPlugin};
+use gpui_kit::{div, prelude::*, px, rgb, App, IntoElement, Window};
+
+use crate::theme::{Palette, ThemeContext};
+
+const MERMAID_NODE_NAME: &str = "mermaid";
 
 type RenderedDiagram = Result<(String, f32, f32), String>;
 type DiagramCache = OnceLock<Mutex<HashMap<String, RenderedDiagram>>>;
 
-pub(crate) fn mermaid_source(text: &str) -> Option<String> {
-    let mut lines = text.lines();
-    let opening = lines.next()?.trim();
-    let marker = if opening
-        .strip_prefix("```")
-        .is_some_and(|language| language.trim() == "mermaid")
-    {
-        "```"
-    } else if opening
-        .strip_prefix("~~~")
-        .is_some_and(|language| language.trim() == "mermaid")
-    {
-        "~~~"
-    } else {
-        return None;
-    };
-    let source = lines.collect::<Vec<_>>();
-    let source = source.strip_suffix(&[marker])?;
-    Some(source.join("\n"))
+/// A [`MarkdownPlugin`] that intercepts fenced `mermaid` code blocks in a [`TextView`]
+/// and renders them as cached, palette-themed SVG diagrams via `mermaid-rs-renderer`.
+#[derive(Default, Clone, Copy)]
+pub struct MermaidPlugin;
+
+impl MermaidPlugin {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl MarkdownPlugin for MermaidPlugin {
+    fn is_block(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &str {
+        MERMAID_NODE_NAME
+    }
+
+    fn parse(
+        &self,
+        node: &markdown_ast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
+        let markdown_ast::Node::Code(code) = node else {
+            return None;
+        };
+        if !code
+            .lang
+            .as_deref()
+            .is_some_and(|lang| lang.trim().eq_ignore_ascii_case("mermaid"))
+        {
+            return None;
+        }
+        let source = code.value.clone();
+        let fallback_md = format!("```mermaid\n{source}\n```");
+        let raw_md = cx.node_source(node).unwrap_or(fallback_md.as_str());
+        Some(
+            MarkdownNode::new(MERMAID_NODE_NAME, source.clone())
+                .text(source)
+                .markdown(raw_md.to_owned()),
+        )
+    }
+
+    fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let palette = ThemeContext::of(window, cx).palette;
+        let source = node.data::<String>().map_or("", String::as_str);
+        match render_mermaid(source, palette) {
+            Ok((svg, width, height)) => div()
+                .my_2()
+                .overflow_x_scrollbar()
+                .child(
+                    gpui_kit::svg()
+                        .data(svg.as_bytes())
+                        .w(px(width))
+                        .h(px(height)),
+                )
+                .into_any_element(),
+            Err(error) => div()
+                .p_3()
+                .rounded(px(8.))
+                .bg(rgb(0x1e1e1e))
+                .text_xs()
+                .text_color(rgb(palette.amber))
+                .child(format!("Could not render Mermaid diagram: {error}"))
+                .child(
+                    div()
+                        .pt_2()
+                        .text_color(rgb(0xd4d4d4))
+                        .child(source.to_owned()),
+                )
+                .into_any_element(),
+        }
+    }
 }
 
 pub(crate) fn palette_hex(color: u32) -> String {

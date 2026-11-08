@@ -5,7 +5,9 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use gpui_kit::component::text::{FrontmatterPlugin, TextView, TextViewPlugin as _, TextViewStyle};
+use gpui_kit::component::text::{
+    FrontmatterPlugin, MarkdownExtensions, TextView, TextViewPlugin as _, TextViewStyle,
+};
 use gpui_kit::{
     div, prelude::*, px, rems, rgb, rgba, AnyElement, ClickEvent, FontStyle, FontWeight,
     HighlightStyle, SharedString, StrikethroughStyle, StyleRefinement, StyledText, UnderlineStyle,
@@ -14,6 +16,7 @@ use gpui_kit::{
 use sjel_gpui_core::blocks::{Block, Doc, Kind};
 use sjel_gpui_core::inline::{Inline, Mark};
 
+use crate::docs::MermaidPlugin;
 use crate::theme::{tint, Density, Palette};
 
 /// Builds a [`TextViewStyle`] mapped to Sjel's semantic [`Palette`].
@@ -49,7 +52,7 @@ pub fn text_view_style(palette: Palette, density: Density) -> TextViewStyle {
 }
 
 /// Renders a raw Markdown string using GPUI Kit's selectable [`TextView`] with GFM tables,
-/// code blocks, blockquotes, links, and frontmatter stripping.
+/// code blocks, blockquotes, links, YAML frontmatter, and Mermaid diagrams.
 pub fn render_markdown(markdown: &str, palette: Palette, density: Density) -> AnyElement {
     let mut hasher = DefaultHasher::new();
     markdown.hash(&mut hasher);
@@ -59,8 +62,13 @@ pub fn render_markdown(markdown: &str, palette: Palette, density: Density) -> An
         .border_color(rgb(palette.accent))
         .bg(rgba(palette.raised))
         .rounded(px(4.));
-    FrontmatterPlugin
-        .setup(TextView::markdown(id, source))
+    MermaidPlugin
+        .setup(
+            FrontmatterPlugin.setup(
+                TextView::markdown(id, source)
+                    .markdown_extensions(MarkdownExtensions::default().frontmatter()),
+            ),
+        )
         .style(text_view_style(palette, density))
         .blockquote_style(blockquote)
         .text_color(rgb(palette.text))

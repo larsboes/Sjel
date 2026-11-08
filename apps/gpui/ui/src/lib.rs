@@ -56,6 +56,7 @@ pub mod viz;
 pub mod web_links;
 
 pub use doc_view::{render_block, render_doc, render_markdown, text_view_style};
+pub use docs::MermaidPlugin;
 pub use nav::{mobile_tab_bar, nav_header, NavItem};
 pub use primitives::{
     back_button, card, column_width, cycle_column_width, data_row, dot, due_badge, due_status,

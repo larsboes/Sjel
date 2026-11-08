@@ -502,11 +502,13 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   and adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`) with search-matched page
   highlights, plus `DocSort` multi-column sorting and resizable columns. Open: page thumbnails, text
   search inside the rendered PDF, and drag and drop from Finder into import.
-- **Markdown & Rich Text.** Built (2026-11-08, `de389e7d`): `doc_view::render_markdown` uses
-  `gpui_kit::component::text::TextView` with `FrontmatterPlugin` and Sjel's `Palette`-mapped
-  `text_view_style`, replacing the duplicate hand-rolled parser in `ui/src/research/articles.rs`.
-  Open: unify `ui/src/docs/render.rs` onto `TextView` with the Mermaid SVG `MarkdownPlugin`.
-- **Tables.** Built (2026-11-08, `a2f5647e`): `SortableColumn`, `SortOrder`,
+- **Markdown & Rich Text.** Built (2026-11-08, `de389e7d`): `doc_view::render_markdown` and
+  `ui/src/docs/` use `gpui_kit::component::text::TextView` with `FrontmatterPlugin`,
+  `MermaidPlugin` (`ui/src/docs/diagrams.rs`), and Sjel's `Palette`-mapped `text_view_style`,
+  replacing the duplicate hand-rolled Markdown/table/block parsers in `ui/src/research/articles.rs`
+  and `ui/src/docs/render.rs` while preserving internal doc-slug routing and `#anchor` scrolling via
+  `TextViewState::reveal_range`.
+- **Tables.** Built (2026-11-08, `a2f5647e`, `ed998522`): `SortableColumn`, `SortOrder`,
   `sortable_table_header`, `resizable_table_header`, `cycle_column_width`, and `tabular_cell` in
   `ui/src/primitives/tables.rs`, wired into All Tasks, All Notes, Project Tasks
   (`ui/src/projects/tables.rs`), Documents (`ui/src/documents/mod.rs`), Finance Transactions and

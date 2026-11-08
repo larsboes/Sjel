@@ -24,7 +24,7 @@ async fn main() -> ExitCode {
     let own = args.iter().take_while(|a| *a != "--");
     if args.is_empty() || own.into_iter().any(|a| a == "--help" || a == "-h") {
         eprintln!(
-            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--credential <provider>]... [-- <harness-args...>]"
+            "Usage: sjel-contain <harness-bin> --provider <name> --project <dir> [--read <dir>]... [--write <dir>]... [--keep-env <NAME>]... [--env <NAME=VALUE>]... [--credential <provider>]... [-- <harness-args...>]"
         );
         return ExitCode::from(2);
     }
@@ -36,6 +36,7 @@ async fn main() -> ExitCode {
     let mut read_dirs: Vec<PathBuf> = Vec::new();
     let mut write_dirs: Vec<PathBuf> = Vec::new();
     let mut keep_env: Vec<String> = Vec::new();
+    let mut set_env: Vec<String> = Vec::new();
     let mut credentials: Vec<String> = Vec::new();
 
     let mut i = 0;
@@ -57,6 +58,9 @@ async fn main() -> ExitCode {
             i += 2;
         } else if args[i] == "--keep-env" && i + 1 < args.len() {
             keep_env.push(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--env" && i + 1 < args.len() {
+            set_env.push(args[i + 1].clone());
             i += 2;
         } else if args[i] == "--credential" && i + 1 < args.len() {
             credentials.push(args[i + 1].clone());
@@ -82,6 +86,20 @@ async fn main() -> ExitCode {
             project_dir.display()
         );
         return ExitCode::from(2);
+    }
+
+    // `--env` names a value the caller supplies, never one inherited from the environment.
+    let mut env_pairs: Vec<(String, String)> = Vec::new();
+    for assignment in &set_env {
+        match assignment.split_once('=') {
+            Some((name, value)) if !name.is_empty() && !name.contains(char::is_whitespace) => {
+                env_pairs.push((name.to_owned(), value.to_owned()));
+            }
+            _ => {
+                eprintln!("Error: --env takes NAME=VALUE, not {assignment:?}");
+                return ExitCode::from(2);
+            }
+        }
     }
 
     let providers = ReviewedProvidersList::load();
@@ -155,6 +173,10 @@ async fn main() -> ExitCode {
         if let Ok(value) = std::env::var(name) {
             contained.env.insert(name.clone(), value);
         }
+    }
+    // A value the caller named on the command line, for a harness that reads its own home.
+    for (name, value) in env_pairs {
+        contained.env.insert(name, value);
     }
     // A key from the private catalogue, resolved here and handed to the child as one variable.
     for (name, value) in resolved {

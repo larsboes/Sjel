@@ -62,6 +62,15 @@ than a defect to fix in passing. Node-based harnesses are unaffected: `open(2)` 
 resolves in the kernel, which is why pi and opencode never exposed the gap.
 Whether opencode or the Copilot CLI has a sandbox of its own is unverified.
 
+**Measured, 2026-11-08: what the walk needs.** With a project under `/private/tmp`, the walk
+stops at the first ancestor, `/private`: `file-read-metadata` answers `stat` but not an open, so
+a reader that opens each component is refused one level in. `(allow file-read-data (literal
+<ancestor>))` for each ancestor of a granted path lets the walk finish and costs the directory
+names along that path: `ls /Users` lists 4 names and `ls ~` lists 103, while a file below an
+ungranted directory (`~/Desktop/.DS_Store`) is still refused. The choice is therefore exactly
+two, and it is decision C6: admit ancestors and let a contained process list `$HOME` names, or
+keep the refusal and leave the harnesses that walk (`octet`, §5 item 4) unusable.
+
 ## 3. The launcher
 
 ```sh
@@ -76,8 +85,16 @@ sjel run <harness> --provider <name> --project <dir>
 3. Start a loopback egress proxy (HTTP `CONNECT`) that admits the provider's hosts, the package
    registries and the Sjel gateway. A request to any other host is refused and logged.
 4. Remove inherited secrets from the environment (`SSH_AUTH_SOCK`, `*_TOKEN`, `*_KEY`, cloud
-   credentials). Set `HTTPS_PROXY` and the agent token for the provider's ring.
+   credentials). Set `HTTPS_PROXY` and the agent token for the provider's ring. `--env
+   <NAME=VALUE>` and `--credential <provider>` add only values the caller names: the first
+   passes one it writes itself (pi's contained home, below), the second reads
+   `inference-<provider>` from the private catalogue.
 5. `exec` the harness under `sandbox-exec`. Child processes inherit the profile.
+
+`tools/contain/pi` runs the one harness that needs a prepared config: it writes a pi home in
+the overlay whose `models.json` takes the provider's key from the environment, and passes that
+home as `HOME`. The checkout's own pi settings resolve the key by running `security`, which the
+profile denies by design.
 
 Placement: the profile generator and the proxy go in one library that `sjel run` and
 `crates/agent` share, so the agent's `project` tier gets the same boundary (A1). Rust,
@@ -87,7 +104,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 
 | Harness | Binary | Provider | Notes |
 |---|---|---|---|
-| pi | `~/.pi` | Per run (DeepSeek, OpenCode Go, ...) | The proxy admits only the provider named at launch, so a provider switch inside the session cannot widen it. To do: route DeepSeek through OpenRouter with zero data retention enforced per request instead of `api.deepseek.com`. The `openrouter` entry in `providers.toml` then needs a new review for `c1`. |
+| pi | `~/.pi/agent/bin/pi` | Per run (DeepSeek, OpenCode Go, ...) | Runs contained through `tools/contain/pi`, which supplies a prepared home (§3). The proxy admits only the provider named at launch, so a provider switch inside the session cannot widen it. To do: route DeepSeek through OpenRouter with zero data retention enforced per request instead of `api.deepseek.com`. The `openrouter` entry in `providers.toml` then needs a new review for `c1`. |
 | opencode | `~/.opencode/bin/opencode` | Per run (OpenCode Go, ...) | Same as pi. |
 | Copilot CLI | `~/.local/bin/copilot` | GitHub Copilot | Needs the GitHub hosts. Where its login token lives (keychain or file) is unverified. |
 | Antigravity | `~/.local/bin/agy` | Google Antigravity | An Electron IDE. Seatbelt on a GUI app and its helper processes is unverified. Last in order. |
@@ -103,20 +120,19 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    `ls ~` fail, a project write and `cargo test` pass. The Keychain's Mach services are denied.
    `sjel run <harness-bin> --provider <name> --project <dir>` starts it. A harness's own
    directories are opened with `--read <dir>` and `--write <dir>`, and its provider credential
-   with `--keep-env <NAME>`, which passes that one variable and no other, or with
+   with `--keep-env <NAME>`, which passes that one variable and no other, with
+   `--env <NAME=VALUE>` for a value the caller writes itself, or with
    `--credential <provider>`, which reads `inference-<provider>` from the catalogue `sjel provider`
    reads and hands the child its own variable (`DEEPSEEK_API_KEY`). The value stays in the
    launcher: it is in no command line, shell history or parent environment
    (`a_credential_the_catalogue_cannot_resolve_stops_the_run`). A harness's auth file is never
    opened: pi's holds every provider's key.
-   **Measured, pi contained.** Its entry point is the binary `~/.pi/agent/bin/pi`, not a shell
-   alias. It reaches session creation with `--read ~/.pi --write ~/.pi/agent` (it writes
-   `*.lock` files beside its settings) and `--read <checkout>/Packs`, where its extension
-   packages are installed. It then stops at the key: `~/.pi/agent/models.json` resolves a
-   provider's key by running `security find-generic-password`, and the profile denies the
-   Keychain, correctly. pi documents `DEEPSEEK_API_KEY` and its siblings, and `--credential`
-   supplies exactly that, so the remaining step is a catalog entry that reads the variable
-   instead of the Keychain. Not checked: opencode, and a pi run that answers a model call.
+   **Measured, pi contained.** `tools/contain/pi` prepares a pi home in the overlay whose
+   `models.json` takes the provider's key from the environment, and starts the launcher with
+   that home as `HOME`, pi's install readable and `--credential <provider>`. A contained run
+   answered a model call (`contained-ok`) through the proxy, with the Keychain, the overlay and
+   `~/.ssh` outside its reach. The catalog is the reason: the checkout's own pi settings resolve
+   the key by running `security`, which the profile denies by design. Not checked: opencode.
 2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
    loopback, and logs each refusal to stderr. Checked live: through the proxy
    `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.3. **Sjel data for `contained`: the demo node only.** The launcher sets `SJEL_STATUS_URL` to
@@ -176,3 +192,4 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
 | C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Decided 2026-11-04: an unclassified row is withheld, rows above the cap are dropped, and a single item above the cap or without a class is refused. Built (§5 item 3). |
+| C6 | Does the profile admit each ancestor of a granted path, so a reader that walks with `openat` works? | Open. Measured 2026-11-08 (§2): the walk needs `file-read-data` on each ancestor, since `file-read-metadata` is not enough. Admitting them leaves `ls ~` listing names and never file contents. |

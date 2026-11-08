@@ -278,7 +278,7 @@ fn help(root: &Path, topic: &str) -> ExitCode {
         "distribution" => distribution::USAGE,
         "testflight" => testflight::USAGE,
         "demo" => "Usage: sjel demo up | app [page] | mac <page> [light|dark] [out.png] | down",
-        "run" => "Usage: sjel run <harness-bin> --provider <name> --project <dir> [-- <args...>]",
+        "run" => "Usage: sjel run <harness-bin> --provider <name> --project <dir> [-- <args...>]\n       pi needs a prepared home: tools/contain/pi --project <dir> [--provider <slug>] [-- pi args...]",
         "search" => "Usage: sjel search <words...>",
         "app" => app::USAGE,
         "capture" => {

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# A contained pi run: its own home, its provider key from the private catalogue, and the model
+# catalog reading that key from the environment instead of the Keychain, which the profile closes.
+#
+#   tools/contain/pi --project <dir> [--provider <slug>] [-- pi args...]
+#
+# The prepared home lives in the overlay: state, no secret. bash 3.2-safe.
+set -u
+
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=tools/lib/paths.sh
+. "$_here/../lib/paths.sh"
+export SJEL_ROOT
+
+pi_bin="${PI_BIN:-$HOME/.pi/agent/bin/pi}"
+project=""
+provider="deepseek"
+harness_args=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --project) [ $# -ge 2 ] || { echo "pi: --project needs a directory" >&2; exit 2; }
+               project="$2"; shift 2 ;;
+    --provider) [ $# -ge 2 ] || { echo "pi: --provider needs a slug" >&2; exit 2; }
+                provider="$2"; shift 2 ;;
+    --) shift; harness_args=("$@"); break ;;
+    *) echo "pi: unknown argument $1; usage: tools/contain/pi --project <dir> [--provider <slug>] [-- pi args...]" >&2; exit 2 ;;
+  esac
+done
+
+case "$provider" in
+  *[!a-z0-9-]*|"") echo "pi: '$provider' is not a provider slug" >&2; exit 2 ;;
+esac
+[ -n "$project" ] || { echo "pi: --project is required" >&2; exit 2; }
+[ -x "$pi_bin" ] || { echo "pi: no pi binary at $pi_bin" >&2; exit 2; }
+[ -n "${SJEL_PERSONAL_ROOT:-}" ] || { echo "pi: SJEL_PERSONAL_ROOT is unset; the prepared home lives in the overlay" >&2; exit 2; }
+
+home="$SJEL_PERSONAL_ROOT/contained-pi/home"
+mkdir -p "$home/.pi/agent" || exit 2
+var="$(printf '%s' "$provider" | tr 'a-z-' 'A-Z_')_API_KEY"
+cat > "$home/.pi/agent/models.json" <<JSON || exit 2
+{
+  "providers": {
+    "$provider": {
+      "apiKey": "\$$var"
+    }
+  }
+}
+JSON
+
+exec "$_here/contain" "$pi_bin" \
+  --provider "$provider" \
+  --project "$project" \
+  --read "$HOME/.pi/agent/install" \
+  --read "$HOME/.pi/agent/bin" \
+  --read "$home" \
+  --write "$home" \
+  --env "HOME=$home" \
+  --credential "$provider" \
+  -- "${harness_args[@]+"${harness_args[@]}"}"

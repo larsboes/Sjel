@@ -303,7 +303,7 @@ fn the_launcher_opens_only_the_named_directories_and_variable() {
     let script = format!(
         "cat '{ro}/config'; echo; echo s > '{rw}/session' && echo write-ok; \
          echo x > '{ro}/x' 2>/dev/null || echo ro-denied; \
-         echo \"keep=${{KEEP_PROBE:-unset}} drop=${{DROP_PROBE_TOKEN:-unset}}\"",
+         echo \"keep=${{KEEP_PROBE:-unset}} drop=${{DROP_PROBE_TOKEN:-unset}} set=${{SET_PROBE:-unset}}\"",
         ro = ro.display(),
         rw = rw.display()
     );
@@ -314,7 +314,8 @@ fn the_launcher_opens_only_the_named_directories_and_variable() {
         .arg(&ro)
         .arg("--write")
         .arg(&rw)
-        .args(["--keep-env", "KEEP_PROBE", "--", "-c", &script])
+        .args(["--keep-env", "KEEP_PROBE", "--env", "SET_PROBE=named", "--"])
+        .args(["-c", &script])
         .env("KEEP_PROBE", "kept")
         .env("DROP_PROBE_TOKEN", "dropped")
         .output()
@@ -323,7 +324,10 @@ fn the_launcher_opens_only_the_named_directories_and_variable() {
     assert!(stdout.contains("cfg"), "{stdout}");
     assert!(stdout.contains("write-ok"), "{stdout}");
     assert!(stdout.contains("ro-denied"), "{stdout}");
-    assert!(stdout.contains("keep=kept drop=unset"), "{stdout}");
+    assert!(
+        stdout.contains("keep=kept drop=unset set=named"),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&base);
 }
 

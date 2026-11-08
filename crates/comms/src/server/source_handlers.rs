@@ -118,6 +118,7 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
             let found = match sources::fetch(&source) {
                 Ok(found) => found,
                 Err(error) => {
+                    let class = source_sweep_error_class(&error);
                     let error = error.to_string();
                     eprintln!("source {}: {error}", source.id);
                     source_errors += 1;
@@ -131,7 +132,6 @@ pub(super) async fn source_scan_handler(Json(body): Json<SourceScanBody>) -> Htt
                     // `last_run_at` moves here, which is the convention the inbox sweep's own
                     // failure path already set: it means "last attempt". That is exactly why the
                     // reader needs `last_success_at` beside it.
-                    let class = sweep_error_class(&error);
                     store
                         .record_sweep_failure(&source.id, class)
                         .map_err(|error| error.to_string())?;

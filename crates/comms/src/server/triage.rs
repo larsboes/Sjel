@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use super::*;
 
 #[derive(Debug, Deserialize)]
@@ -374,6 +376,48 @@ pub(super) fn sweep_error_class(error: &str) -> &'static str {
     } else {
         "unknown"
     }
+}
+
+/// Classify a Feed adapter failure while its typed HTTP cause is still available.
+pub(super) fn source_sweep_error_class(error: &comms::CommsError) -> &'static str {
+    if let comms::CommsError::Http(http_error) = error {
+        if http_error.is_timeout() || http_error.is_dns() {
+            return "network";
+        }
+
+        let mut source = http_error.source();
+        while let Some(cause) = source {
+            if cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| transient_io_kind(io.kind()))
+            {
+                return "network";
+            }
+            source = cause.source();
+        }
+
+        return match http_error.status() {
+            Some(status) if status.as_u16() == 429 => "quota",
+            Some(status) if matches!(status.as_u16(), 401 | 403) => "auth",
+            _ => "unknown",
+        };
+    }
+
+    sweep_error_class(&error.to_string())
+}
+
+fn transient_io_kind(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::AddrNotAvailable
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::NotConnected
+            | std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::WouldBlock
+    )
 }
 
 pub(super) async fn triage_sweep_handler(Json(body): Json<TriageSweepBody>) -> HttpResponse {
@@ -2040,6 +2084,14 @@ pub(super) async fn triage_reconcile_handler() -> HttpResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_transient_io_kinds_are_retryable() {
+        assert!(transient_io_kind(std::io::ErrorKind::ConnectionRefused));
+        assert!(transient_io_kind(std::io::ErrorKind::TimedOut));
+        assert!(!transient_io_kind(std::io::ErrorKind::InvalidData));
+        assert!(!transient_io_kind(std::io::ErrorKind::PermissionDenied));
+    }
 
     #[tokio::test]
     async fn mail_evidence_replay_rejects_invalid_batches_without_io() {

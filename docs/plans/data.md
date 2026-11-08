@@ -4,6 +4,9 @@ Every file has one owner and one way in. Facts have one shape wherever they are 
 models and keys the machine depends on are visible from one place. After Lane A's restructure in
 [`PLAN.md`](../../PLAN.md).
 
+The scheduled Feed collector marks recognized DNS, timeout and socket failures as transient for
+the next six-hour pass. TLS and unclassified request failures remain visible as host failures.
+
 ## Mail evidence for projects and inventory
 
 Decided 2026-10-28: scan existing indexed mail and new mail for evidence relevant to projects

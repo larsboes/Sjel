@@ -627,7 +627,55 @@ mod tests {
         );
         assert_eq!(sweep_error_class("connect timeout"), "network");
         assert_eq!(sweep_error_class("dns failure"), "network");
+        assert_eq!(
+            sweep_error_class(
+                "http error: error sending request for url (https://example.test/feed)"
+            ),
+            "unknown"
+        );
         assert_eq!(sweep_error_class("something else entirely"), "unknown");
+    }
+
+    #[test]
+    fn feed_source_connection_refusal_is_transient() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+
+        let error = reqwest::blocking::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .unwrap_err();
+
+        assert_eq!(
+            source_sweep_error_class(&comms::CommsError::Http(error)),
+            "network"
+        );
+    }
+
+    #[test]
+    fn tls_handshake_failure_is_not_transient_even_when_url_contains_connect() {
+        use std::io::Write;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28])
+                .unwrap();
+        });
+
+        let error = reqwest::blocking::Client::new()
+            .get(format!("https://{address}/connect"))
+            .send()
+            .unwrap_err();
+        server.join().unwrap();
+
+        assert_eq!(
+            source_sweep_error_class(&comms::CommsError::Http(error)),
+            "unknown"
+        );
     }
 
     /// Serve the real router on an ephemeral port and return its base URL. The

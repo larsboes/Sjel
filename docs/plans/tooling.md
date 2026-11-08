@@ -10,12 +10,12 @@ covers it.
 
 ## Open
 
-- **Temporary test database retention.** `crates/comms/src/store.rs::test_database` creates
-  per-process temporary databases without an owner that removes them after the store closes.
-  Workaround: read-only directory measurements grouped by the fixture prefix. Smallest change:
-  give fixtures a scoped lifetime that closes database handles before cleanup, then test repeated
-  runs for residual files. Existing leftovers need a separate reviewed reclaim; this change does
-  not authorize a blanket temporary-directory sweep.
+- **Cross-root build-output comparison.** Directory totals do not establish byte identity across
+  Cargo profiles or build configurations. Workaround: compare artifact names and sizes, then hash
+  matching candidates locally without changing either tree. A standalone deduplication command is
+  deferred while cache reuse addresses repeated verification builds. Smallest future change:
+  extend `storage target` with a read-only cross-root comparison that reports exact identity
+  separately from recoverable space; artifact deletion or relinking remains outside that report.
 
 - **Standalone tool installation from isolated builds.** A restricted session could build storage
   in a writable scratch target but could not clean temporary archive directories in the shared
@@ -277,6 +277,14 @@ covers it.
 
 ## Done
 
+- Hermetic Cargo owns per-run temporary files, cleans them after successful or failed runs, and
+  reuses resolved or writable fallback caches (`8ee79415`). Runner regressions and a live Comms
+  database probe passed; its sandbox was absent afterward. Legacy fixtures and interrupted
+  sandboxes remain subject to deployment-owned age and process guards.
+- Container inventory and age-filtered reclaim use Docker's native CLI, documented in the storage
+  owner manual (`abf6e057`). Container and volume pruning remain separate operations; VM allocation
+  is not treated as cache-only usage.
+
 - `35d866ed`: upstream skill snapshots retain bounded binary assets, keep the text limit, and
   cap total package bytes. The skills launcher uses a session-writable npm cache; a real Anatomy
   harness review passed and its receipt admitted the exact stored digest.
@@ -300,7 +308,8 @@ covers it.
 
 - Storage checks aged entries independently, supports name filters, protects descendants, reports
   volume free-space changes and exposes policy-managed directories with `--include-named`
-  (`41589496`). All 117 storage tests and scoped Clippy passed in an isolated writable target.
+  (`41589496`); filtered measurement and policy validation were corrected in `4052ed70`.
+  All 119 storage tests and scoped Clippy passed in an isolated writable target.
   Live reclaim preserved active browser clones; the next scheduled firing and full workspace
   gates were not observed or run.
 

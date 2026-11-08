@@ -17,7 +17,7 @@ use sjel_gpui_core::shell::{GlobalNote, GlobalTask, ProjectRecord};
 
 use super::{column, search_box, NoteKindFilter, Projects, ProjectsTab};
 
-fn parse_frontmatter_status(content: &str, done: bool) -> String {
+pub(super) fn parse_frontmatter_status(content: &str, done: bool) -> String {
     let mut in_fm = false;
     for line in content.lines() {
         let t = line.trim();
@@ -43,6 +43,48 @@ fn parse_frontmatter_status(content: &str, done: bool) -> String {
         "done".into()
     } else {
         "open".into()
+    }
+}
+
+pub(super) fn project_record_to_global_task(rec: &ProjectRecord) -> GlobalTask {
+    let mut fields = std::collections::BTreeMap::new();
+    let mut in_fm = false;
+    for line in rec.content.lines() {
+        let t = line.trim();
+        if t == "---" {
+            if in_fm {
+                break;
+            }
+            in_fm = true;
+            continue;
+        }
+        if in_fm {
+            if let Some((k, v)) = t.split_once(':') {
+                let key = k.trim().to_string();
+                let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
+                if !key.is_empty() {
+                    fields.insert(key, val);
+                }
+            }
+        }
+    }
+    let status = parse_frontmatter_status(&rec.content, rec.done);
+    fields.insert("status".to_string(), status);
+    let project = if rec.project.is_empty() {
+        rec.path.split('/').next().unwrap_or("").to_string()
+    } else {
+        rec.project.clone()
+    };
+    GlobalTask {
+        id: rec.path.clone(),
+        kind: rec.kind.clone(),
+        title: rec.title.clone(),
+        done: rec.done,
+        due: rec.due.clone(),
+        priority: rec.priority,
+        summary: None,
+        project,
+        fields,
     }
 }
 
@@ -211,6 +253,10 @@ impl Projects {
                     )
                 }
             };
+            let is_selected = self
+                .task_panel
+                .as_ref()
+                .is_some_and(|p| p.path == task.path);
             let cycle = task.clone();
             let priority = task.priority.clamp(1, 3);
             rows.push(
@@ -220,6 +266,7 @@ impl Projects {
                     .min_h(px(40.))
                     .py_1()
                     .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
+                    .when(is_selected, |row| row.bg(rgba(tint(palette.accent, 0x18))))
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
                         div().w(px(24.)).flex().items_center().child(
@@ -240,7 +287,8 @@ impl Projects {
                             .gap_2()
                             .cursor_pointer()
                             .on_click(cx.listener(move |view, _, window, cx| {
-                                view.open_note(open.path.clone(), true, window, cx)
+                                let global = project_record_to_global_task(&open);
+                                view.select_task(&global, window, cx);
                             }))
                             .child(
                                 div()

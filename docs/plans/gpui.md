@@ -543,7 +543,7 @@ Use a three-layer split across `gpui-fast` and `nsh`:
 - **Travel, Tasks, Notes & Feed UI/UX upgrades (2026-10-28).**
   - *Shared Markdown Block Reader:* `render_markdown` and `styled_inline` in `doc_view.rs` wired across Feed reader and Travel agenda.
   - *Travel Readiness & Day Filter:* Coverage readiness strip (nights, missing booking codes), quick day pill filter (`All days | Day N`), direct/buffer transfer badges.
-  - *Projects & Tasks Power-Up:* 1-click due preset chips (`Today`, `Tmrw`, `+7d`, `Clear`), subtask progress badges (`done/total`), smart task input syntax (`!1`-`!3`, `@today`, `@tomorrow`, `@YYYY-MM-DD`).
+  - *Projects & Tasks Power-Up:* 1-click due preset chips (`Today`, `Tmrw`, `+7d`, `Clear`), subtask progress badges (`done/total`), smart task input syntax (`!1`-`!3`, `@today`, `@tomorrow`, `@YYYY-MM-DD`), Projects Hub sortable resizable table header and calibrated progress meters, 1-click "+ Task" hub row action, per-project side-by-side `TaskPanel` inspector, and visual 4-column Kanban Board (`Open`, `In Progress`, `Waiting / Blocked`, `Done`) with `Table | Board` view toggle and inline workflow advances (`Start →`, `Done ✓`, `Resume →`, `Reopen ↺`).
   - *Notes & Editor Outline:* Note kind filter chips (`All | Hubs ★ | Notes ≡`), 2-line snippet preview under titles, editor task completion badge, and clickable heading jump outline (`§ H1/H2...`).
   - *Feed & Inbox Triage:* Feed row evaluation score badges, inline 1-click triage buttons (`Keep | Dismiss`), formatted Inbox capture cards with status pills and tag badges (`#task`, `#idea`, `#place`, `#price`).
 

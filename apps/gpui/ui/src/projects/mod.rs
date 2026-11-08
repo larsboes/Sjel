@@ -23,12 +23,19 @@ use sjel_gpui_core::shell::{
     ProjectMailTarget, ProjectRecord, ProjectSummary, ShellError,
 };
 
+mod board;
 mod links;
 mod mail;
 mod tables;
 mod task_panel;
 
 pub(super) use task_panel::TaskPanel;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskViewMode {
+    Table,
+    Board,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectsTab {
@@ -196,6 +203,7 @@ pub struct Projects {
     pub all_notes: Remote<Vec<GlobalNote>>,
     pub tab: ProjectsTab,
     pub project_section: ProjectSection,
+    pub task_view_mode: TaskViewMode,
     pub task_filter: TaskFilter,
     /// The statuses the cross-project table shows.
     pub global_status: StatusFilter,
@@ -274,6 +282,7 @@ impl Projects {
             all_notes: Remote::default(),
             tab: ProjectsTab::Hubs,
             project_section: ProjectSection::Note,
+            task_view_mode: TaskViewMode::Table,
             task_filter: TaskFilter::Open,
             global_status: StatusFilter::Active,
             task_sort: (TaskSort::Default, true),
@@ -1665,7 +1674,105 @@ impl Render for Projects {
                     (_, Some(error)) => note(error.to_string(), palette.red).into_any_element(),
                     (None, None) => placeholder(240.).into_any_element(),
                     (Some(records_list), None) => {
-                        self.task_table(records_list, &new_task, palette, cx)
+                        let view_switch = div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .p(px(2.))
+                            .rounded(px(6.))
+                            .bg(rgba(palette.raised))
+                            .child(
+                                div()
+                                    .id("view-mode-table")
+                                    .px_2()
+                                    .py(px(2.))
+                                    .rounded(px(4.))
+                                    .text_xs()
+                                    .cursor_pointer()
+                                    .when(self.task_view_mode == TaskViewMode::Table, |el| {
+                                        el.bg(rgba(palette.surface))
+                                            .text_color(rgb(palette.text))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                    })
+                                    .when(self.task_view_mode != TaskViewMode::Table, |el| {
+                                        el.text_color(rgb(palette.muted))
+                                            .hover(|s| s.text_color(rgb(palette.text)))
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.task_view_mode = TaskViewMode::Table;
+                                        cx.notify();
+                                    }))
+                                    .child("Table ☷"),
+                            )
+                            .child(
+                                div()
+                                    .id("view-mode-board")
+                                    .px_2()
+                                    .py(px(2.))
+                                    .rounded(px(4.))
+                                    .text_xs()
+                                    .cursor_pointer()
+                                    .when(self.task_view_mode == TaskViewMode::Board, |el| {
+                                        el.bg(rgba(palette.surface))
+                                            .text_color(rgb(palette.text))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                    })
+                                    .when(self.task_view_mode != TaskViewMode::Board, |el| {
+                                        el.text_color(rgb(palette.muted))
+                                            .hover(|s| s.text_color(rgb(palette.text)))
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.task_view_mode = TaskViewMode::Board;
+                                        cx.notify();
+                                    }))
+                                    .child("Board ⊞"),
+                            );
+
+                        let content = match self.task_view_mode {
+                            TaskViewMode::Table => {
+                                self.task_table(records_list, &new_task, palette, cx)
+                            }
+                            TaskViewMode::Board => {
+                                self.task_board(records_list, &new_task, palette, cx)
+                            }
+                        };
+
+                        let selected = self.task_panel.as_ref().and_then(|panel| {
+                            records_list
+                                .iter()
+                                .find(|t| t.path == panel.path)
+                                .map(|rec| (panel, tables::project_record_to_global_task(rec)))
+                        });
+
+                        let inner = match selected {
+                            Some((panel, task)) if self.density == Density::Mobile => {
+                                self.task_panel_view(panel, &task, palette, cx)
+                            }
+                            Some((panel, task)) => div()
+                                .flex()
+                                .items_start()
+                                .gap_3()
+                                .child(div().flex_1().min_w_0().child(content))
+                                .child(self.task_panel_view(panel, &task, palette, cx))
+                                .into_any_element(),
+                            None => content,
+                        };
+
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .size_full()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_end()
+                                    .mb_1()
+                                    .child(view_switch),
+                            )
+                            .child(inner)
+                            .into_any_element()
                     }
                 },
                 ProjectSection::Notes => {
@@ -2150,7 +2257,7 @@ impl Render for Projects {
             SortableColumn::fixed("project_notes", "NOTES", px(cols.project_notes))
                 .sorted(sort_state(ProjectSort::Notes)),
         );
-        header_cols.push(SortableColumn::spacer(px(28.)));
+        header_cols.push(SortableColumn::spacer(px(76.)));
 
         let sort_entity = cx.entity();
         let resize_entity = cx.entity();
@@ -2369,15 +2476,54 @@ impl Render for Projects {
                                 .child(notes_cell)
                                 .child(
                                     div()
-                                        .w(px(28.))
+                                        .w(px(76.))
                                         .flex()
                                         .items_center()
-                                        .justify_center()
-                                        .text_color(rgb(palette.muted))
-                                        .group_hover("project-row", |s| {
-                                            s.text_color(rgb(palette.accent))
-                                        })
-                                        .child("›"),
+                                        .justify_end()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .id(SharedString::from(format!(
+                                                    "quick-add-task-{}",
+                                                    project.name
+                                                )))
+                                                .px_1p5()
+                                                .py(px(1.))
+                                                .rounded(px(4.))
+                                                .bg(rgba(tint(palette.accent, 0x18)))
+                                                .text_color(rgb(palette.accent))
+                                                .text_xs()
+                                                .font_weight(FontWeight::MEDIUM)
+                                                .cursor_pointer()
+                                                .hover(move |s| {
+                                                    s.bg(rgba(tint(palette.accent, 0x30)))
+                                                })
+                                                .opacity(0.)
+                                                .group_hover("project-row", |s| s.opacity(1.))
+                                                .on_click(cx.listener({
+                                                    let p_name = name.clone();
+                                                    move |view, _, _, cx| {
+                                                        cx.stop_propagation();
+                                                        view.open_project(p_name.clone(), cx);
+                                                        view.project_section =
+                                                            ProjectSection::Tasks;
+                                                        cx.notify();
+                                                    }
+                                                }))
+                                                .child("+ Task"),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(16.))
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .text_color(rgb(palette.muted))
+                                                .group_hover("project-row", |s| {
+                                                    s.text_color(rgb(palette.accent))
+                                                })
+                                                .child("›"),
+                                        ),
                                 )
                                 .into_any_element(),
                         );
@@ -2847,6 +2993,88 @@ mod tests {
         });
         projects.read_with(cx, |projects, _| {
             assert_eq!(projects.project_sort, (ProjectSort::Tasks, true));
+        });
+    }
+
+    #[gpui::test]
+    fn project_tasks_supports_board_mode_and_task_panel_inspector(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let task1 = ProjectRecord {
+            project: "P".into(),
+            path: "P/Tasks/T1.md".into(),
+            kind: "task".into(),
+            title: "T1".into(),
+            content: "---\nstatus: doing\ncontext: Terminal\n---\n".into(),
+            done: false,
+            due: Some("2026-11-10".into()),
+            priority: 2,
+        };
+        let task2 = ProjectRecord {
+            project: "P".into(),
+            path: "P/Tasks/T2.md".into(),
+            kind: "task".into(),
+            title: "T2".into(),
+            content: "---\nstatus: open\n---\n".into(),
+            done: false,
+            due: None,
+            priority: 1,
+        };
+
+        let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let found = slot.clone();
+        let records = vec![task1.clone(), task2.clone()];
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|_| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+                projects.project = Some((
+                    "P".into(),
+                    Remote {
+                        value: Some(records),
+                        ..Remote::default()
+                    },
+                ));
+                projects.project_section = ProjectSection::Tasks;
+                projects
+            });
+            found.replace(Some(view.clone()));
+            gpui_kit::component::Root::new(view, window, cx)
+        });
+        cx.run_until_parked();
+        let projects = slot.take().unwrap();
+
+        // Starts in table mode
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.task_view_mode, TaskViewMode::Table);
+            assert!(projects.task_panel.is_none());
+        });
+
+        // Open task panel on task1
+        let global = tables::project_record_to_global_task(&task1);
+        cx.update(|window, cx| {
+            projects.update(cx, |projects, cx| {
+                projects.select_task(&global, window, cx);
+            });
+        });
+        cx.run_until_parked();
+        projects.read_with(cx, |projects, cx| {
+            let panel = projects.task_panel.as_ref().expect("task panel opened");
+            assert_eq!(panel.path, "P/Tasks/T1.md");
+            let context = panel.input("context").expect("context input present");
+            assert_eq!(context.read(cx).value().to_string(), "Terminal");
+        });
+
+        // Toggle to board mode
+        projects.update(cx, |projects, cx| {
+            projects.task_view_mode = TaskViewMode::Board;
+            cx.notify();
+        });
+        cx.run_until_parked();
+        projects.read_with(cx, |projects, _| {
+            assert_eq!(projects.task_view_mode, TaskViewMode::Board);
+            assert!(
+                projects.task_panel.is_some(),
+                "inspector persists across view modes"
+            );
         });
     }
 }

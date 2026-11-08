@@ -11,6 +11,11 @@ udid="$1"
 [[ "$udid" =~ ^[0-9A-Fa-f-]{25,40}$ ]] || { echo "ios/run-device: not a device UDID: $udid" >&2; exit 2; }
 [ "$(uname -s)" = Darwin ] || { echo "ios/run-device: macOS only" >&2; exit 1; }
 
+if ! xcrun devicectl device info details --device "$udid" --timeout 10 >/dev/null; then
+  echo "ios/run-device: device access failed; check CoreDevice, pairing and device availability before building" >&2
+  exit 1
+fi
+
 IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$IOS_DIR/../../.." && pwd)"
 team="$(tr -d '[:space:]' < "$HOME/.appstoreconnect/team_id")"

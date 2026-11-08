@@ -270,6 +270,8 @@ covers it.
 
 ## Done
 
+- iOS launchers check simulator discovery or bounded CoreDevice access before compilation and signing settings. Five planted-command regressions cover unavailable services, missing simulators, explicit selection and build ordering (`tools/ios-preflight.test.sh`). Live device acceptance still requires working host device services.
+
 - Hermetic Cargo verification isolates XDG state; the skill-install rollback regression passes. Portable containment ancestors, backup receipt thresholds, service-runner admission fixtures and Bun environment isolation match their current contracts (`da81a3a1`).
 
 - Capability CLIs run as `sjel <capability> <args...>` through Cargo, with the resolved overlay and local-build policy (`b7e2b832`).

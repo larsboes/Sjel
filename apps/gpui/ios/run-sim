@@ -31,6 +31,17 @@ IOS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST="$IOS_DIR/host"
 BUNDLE_ID="dev.sjel.ios"
 
+if ! devices="$(xcrun simctl list devices available)"; then
+  echo "ios/run-sim: CoreSimulator is unavailable; check device access before building" >&2
+  exit 1
+fi
+udid="${SJEL_IOS_SIM:-$(printf '%s\n' "$devices" | sed -n 's/^ *iPhone[^(]*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)}"
+[ -n "$udid" ] || { echo "ios/run-sim: no available iPhone simulator" >&2; exit 1; }
+if ! printf '%s\n' "$devices" | grep -Fq "($udid)"; then
+  echo "ios/run-sim: selected simulator is unavailable: $udid" >&2
+  exit 1
+fi
+
 # SJEL_IOS_FEATURES adds cargo features to the Rust library.
 (cd "$IOS_DIR" && cargo build --lib --target aarch64-apple-ios-sim ${SJEL_IOS_FEATURES:+--features "$SJEL_IOS_FEATURES"})
 target_dir="$(cd "$IOS_DIR" && cargo metadata --no-deps --format-version 1 | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
@@ -41,8 +52,6 @@ xcodebuild -project "$HOST/SjelIOS.xcodeproj" -scheme SjelIOS -sdk iphonesimulat
   -configuration Debug -derivedDataPath "$HOST/build" -quiet RUST_LIB="$rust_lib" build
 app="$HOST/build/Build/Products/Debug-iphonesimulator/SjelIOS.app"
 
-udid="${SJEL_IOS_SIM:-$(xcrun simctl list devices available | sed -n 's/^ *iPhone[^(]*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)}"
-[ -n "$udid" ] || { echo "ios/run-sim: no available iPhone simulator" >&2; exit 1; }
 booted_here=false
 if ! xcrun simctl list devices | grep -q "$udid) (Booted)"; then
   xcrun simctl boot "$udid"

@@ -11,6 +11,7 @@ use gpui::{
 use gpui_kit::component::scroll::ScrollableElement;
 use sjel_gpui_core::shell::{self, ShellError};
 
+use crate::data::Remote;
 use crate::theme::{tint, Palette};
 
 use super::Documents;
@@ -707,6 +708,352 @@ impl Documents {
                             } else {
                                 format!("p.{page_num}")
                             }),
+                    ),
+            );
+        }
+
+        div()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .flex()
+            .gap_2()
+            .child(rail)
+            .child(canvas)
+            .into_any_element()
+    }
+
+    /// Open a secondary document alongside the active one for side-by-side filing and comparison.
+    pub(super) fn open_compare_document(&mut self, id: String, cx: &mut Context<Self>) {
+        self.filing_compare_id = Some(id.clone());
+        self.filing_compare_detail = Remote::new_loading();
+        self.filing_compare_reader.clear();
+        self.filing_compare_reader.loading = true;
+        self.filing_compare_reader.id = Some(id.clone());
+        self.show_compare_picker = false;
+        cx.notify();
+
+        let Ok(shell) = self.repo.shell() else {
+            self.filing_compare_reader.loading = false;
+            return;
+        };
+
+        let id_for_detail = id.clone();
+        let expected_detail = id.clone();
+        let shell_detail = shell.clone();
+        let work_detail =
+            shell::run(async move { shell_detail.document_detail(&id_for_detail).await });
+        cx.spawn(async move |this, cx| {
+            let result = work_detail.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.filing_compare_id.as_deref() == Some(expected_detail.as_str()) {
+                    view.filing_compare_detail.settle(result);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+
+        let id_for_bytes = id.clone();
+        let expected_bytes = id;
+        let work_bytes = shell::run(async move { shell.document_original(&id_for_bytes).await });
+        cx.spawn(async move |this, cx| {
+            let result = work_bytes.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if view.filing_compare_id.as_deref() != Some(expected_bytes.as_str()) {
+                    return;
+                }
+                match result {
+                    Ok(bytes) => {
+                        view.filing_compare_reader.bytes = Some(Arc::new(bytes));
+                        view.filing_compare_reader.error = None;
+                        view.filing_compare_reader.loading = false;
+                        view.ask_filing_compare_page_count(cx);
+                    }
+                    Err(error) => {
+                        view.filing_compare_reader.loading = false;
+                        view.filing_compare_reader.error = Some(error.to_string());
+                        view.filing_compare_reader.reading_text = true;
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn ask_filing_compare_page_count(&mut self, cx: &mut Context<Self>) {
+        let (Some(renderer), Some(bytes), Some(id)) = (
+            self.renderer.as_ref(),
+            self.filing_compare_reader.bytes.clone(),
+            self.filing_compare_reader.id.clone(),
+        ) else {
+            return;
+        };
+        let answer = renderer.info(bytes);
+        cx.spawn(async move |this, cx| {
+            let Ok(result) = answer.await else { return };
+            let _ = this.update(cx, |view, cx| {
+                if view.filing_compare_reader.id.as_deref() != Some(id.as_str()) {
+                    return;
+                }
+                match result {
+                    Ok(pages) => {
+                        view.filing_compare_reader.pages = pages;
+                        view.filing_compare_reader.first_page = 0;
+                        view.filing_compare_reader.last_page = None;
+                        view.filing_compare_reader.page = 0;
+                    }
+                    Err(error) => {
+                        view.filing_compare_reader.error = Some(error.to_string());
+                        view.filing_compare_reader.reading_text = true;
+                    }
+                }
+                view.request_filing_compare_page(cx);
+                if view.filing_compare_reader.show_thumbnails {
+                    view.request_filing_compare_thumbnails(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn request_filing_compare_page(&mut self, cx: &mut Context<Self>) {
+        let (Some(renderer), Some(bytes), Some(id)) = (
+            self.renderer.as_ref(),
+            self.filing_compare_reader.bytes.clone(),
+            self.filing_compare_reader.id.clone(),
+        ) else {
+            return;
+        };
+        let width = self.filing_compare_reader.zoom.width();
+        if self
+            .filing_compare_reader
+            .drawn
+            .contains_key(&(self.filing_compare_reader.page, width))
+        {
+            return;
+        }
+        let page = self.filing_compare_reader.page;
+        let answer = renderer.render(bytes, page, width);
+        let expected = (id, page, width);
+        cx.spawn(async move |this, cx| {
+            let Ok(result) = answer.await else { return };
+            let _ = this.update(cx, |view, cx| {
+                if view.filing_compare_reader.id.as_deref() != Some(expected.0.as_str())
+                    || view.filing_compare_reader.page != expected.1
+                {
+                    return;
+                }
+                match result {
+                    Ok(image) => {
+                        view.filing_compare_reader.error = None;
+                        view.filing_compare_reader
+                            .drawn
+                            .insert((expected.1, expected.2), image);
+                        view.filing_compare_reader.trim();
+                    }
+                    Err(error) => {
+                        view.filing_compare_reader.error = Some(error.to_string());
+                        view.filing_compare_reader.reading_text = true;
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn request_filing_compare_thumbnails(&mut self, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.filing_compare_reader.page_bounds() else {
+            return;
+        };
+        let (Some(renderer), Some(bytes), Some(id)) = (
+            self.renderer.as_ref(),
+            self.filing_compare_reader.bytes.clone(),
+            self.filing_compare_reader.id.clone(),
+        ) else {
+            return;
+        };
+        let center = self.filing_compare_reader.page;
+        let window_start = center.saturating_sub(6).max(first);
+        let window_end = (center + 6).min(last);
+
+        for page in window_start..=window_end {
+            if self.filing_compare_reader.thumbnails.contains_key(&page) {
+                continue;
+            }
+            let answer = renderer.render(bytes.clone(), page, THUMB_WIDTH);
+            let expected = (id.clone(), page);
+            cx.spawn(async move |this, cx| {
+                let Ok(Ok(image)) = answer.await else {
+                    return;
+                };
+                let _ = this.update(cx, |view, cx| {
+                    if view.filing_compare_reader.id.as_deref() != Some(expected.0.as_str()) {
+                        return;
+                    }
+                    view.filing_compare_reader
+                        .thumbnails
+                        .insert(expected.1, image);
+                    view.filing_compare_reader.trim_thumbnails();
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+    }
+
+    pub fn go_to_compare_page(&mut self, by: isize, cx: &mut Context<Self>) {
+        if self.filing_compare_reader.next_page(by) {
+            self.request_filing_compare_page(cx);
+            if self.filing_compare_reader.show_thumbnails {
+                self.request_filing_compare_thumbnails(cx);
+            }
+            cx.notify();
+        }
+    }
+
+    pub fn go_to_compare_page_index(&mut self, target: usize, cx: &mut Context<Self>) {
+        if self.filing_compare_reader.set_page(target) {
+            self.request_filing_compare_page(cx);
+            if self.filing_compare_reader.show_thumbnails {
+                self.request_filing_compare_thumbnails(cx);
+            }
+            cx.notify();
+        }
+    }
+
+    pub fn toggle_compare_zoom(&mut self, cx: &mut Context<Self>) {
+        let next = self.filing_compare_reader.zoom.other();
+        self.set_compare_zoom(next, cx);
+    }
+
+    pub(super) fn set_compare_zoom(&mut self, zoom: Zoom, cx: &mut Context<Self>) {
+        if self.filing_compare_reader.zoom != zoom {
+            self.filing_compare_reader.zoom = zoom;
+            self.request_filing_compare_page(cx);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn toggle_compare_text(&mut self, cx: &mut Context<Self>) {
+        self.filing_compare_reader.reading_text = !self.filing_compare_reader.reading_text;
+        cx.notify();
+    }
+
+    pub(super) fn toggle_compare_thumbnails(&mut self, cx: &mut Context<Self>) {
+        self.filing_compare_reader.show_thumbnails = !self.filing_compare_reader.show_thumbnails;
+        if self.filing_compare_reader.show_thumbnails {
+            self.request_filing_compare_thumbnails(cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn close_compare(&mut self, cx: &mut Context<Self>) {
+        self.filing_compare_id = None;
+        self.filing_compare_detail = Remote::default();
+        self.filing_compare_reader.clear();
+        self.show_compare_picker = false;
+        cx.notify();
+    }
+
+    pub(super) fn compare_page_element(
+        &self,
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let canvas = reader_page_element(&self.filing_compare_reader, palette);
+        let Some((first, last)) = self.filing_compare_reader.page_bounds().filter(|_| {
+            self.filing_compare_reader.show_thumbnails && self.filing_compare_reader.pages > 1
+        }) else {
+            return canvas;
+        };
+        let current = self.filing_compare_reader.page;
+        let mut rail = div()
+            .id("compare-thumbnail-rail")
+            .w(px(108.))
+            .flex_none()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&self.thumb_scroll)
+            .vertical_scrollbar(&self.thumb_scroll)
+            .flex()
+            .flex_col()
+            .gap_1p5()
+            .p_1p5()
+            .rounded(px(6.))
+            .bg(rgba(palette.surface))
+            .border_1()
+            .border_color(rgba(palette.border));
+
+        for page_ix in first..=last {
+            let active = page_ix == current;
+            let page_num = u32::try_from(page_ix).unwrap_or(0).saturating_add(1);
+            let border = if active {
+                palette.accent
+            } else {
+                palette.border
+            };
+            let bg = if active {
+                tint(palette.accent, 0x1a)
+            } else {
+                palette.raised
+            };
+            let preview = match self.filing_compare_reader.thumbnails.get(&page_ix).cloned() {
+                Some(thumb) => div()
+                    .w_full()
+                    .h(px(100.))
+                    .overflow_hidden()
+                    .rounded(px(3.))
+                    .bg(rgb(0xffffff))
+                    .child(img(thumb).object_fit(ObjectFit::Contain).size_full())
+                    .into_any_element(),
+                None => div()
+                    .w_full()
+                    .h(px(100.))
+                    .rounded(px(3.))
+                    .bg(rgba(palette.surface))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .child(format!("p.{page_num}"))
+                    .into_any_element(),
+            };
+            rail = rail.child(
+                div()
+                    .id(("compare-thumb", page_ix))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_1()
+                    .p_1()
+                    .rounded(px(4.))
+                    .border_1()
+                    .border_color(rgba(border))
+                    .bg(rgba(bg))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.go_to_compare_page_index(page_ix, cx);
+                    }))
+                    .child(preview)
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(if active {
+                                FontWeight::SEMIBOLD
+                            } else {
+                                FontWeight::MEDIUM
+                            })
+                            .text_color(rgb(if active {
+                                palette.accent
+                            } else {
+                                palette.muted
+                            }))
+                            .child(format!("p.{page_num}")),
                     ),
             );
         }

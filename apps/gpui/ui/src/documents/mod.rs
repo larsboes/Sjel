@@ -243,7 +243,7 @@ pub struct Documents {
     /// The rows in draw order, each with the group header that opens its group.
     pub(super) order: Vec<DocRow>,
     pub(super) counts: [usize; 5],
-    pub(super) order_key: Option<(u64, usize)>,
+    pub(super) order_key: Option<(u64, usize, usize)>,
     /// Counts a change to the filters and the sort, which the records cannot report.
     pub(super) order_rev: u64,
     /// Extracted text is its own scroll area when reading text mode is on.
@@ -272,6 +272,12 @@ pub struct Documents {
     pub(super) workflow_error: Option<String>,
     pub(super) uploading: usize,
     pub(super) upload_notice: Option<(bool, String)>,
+    pub(super) page_offset: usize,
+    pub(super) total_filtered: usize,
+    pub(super) filing_compare_id: Option<String>,
+    pub(super) filing_compare_detail: Remote<DocumentDetail>,
+    pub(super) filing_compare_reader: Reader,
+    pub(super) show_compare_picker: bool,
 }
 
 impl Documents {
@@ -334,6 +340,12 @@ impl Documents {
             workflow_error: None,
             uploading: 0,
             upload_notice: None,
+            page_offset: 0,
+            total_filtered: 0,
+            filing_compare_id: None,
+            filing_compare_detail: Remote::default(),
+            filing_compare_reader: Reader::default(),
+            show_compare_picker: false,
         }
     }
 
@@ -645,6 +657,7 @@ impl Documents {
                 InputEvent::Change => {
                     view.search_query = input.read(cx).value().trim().to_lowercase();
                     view.search_applied = false;
+                    view.page_offset = 0;
                     view.order_rev = view.order_rev.wrapping_add(1);
                     cx.notify();
                 }
@@ -727,6 +740,7 @@ impl Documents {
 
     fn set_filter(&mut self, filter: Filter, cx: &mut Context<Self>) {
         self.filter = filter;
+        self.page_offset = 0;
         self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
@@ -783,6 +797,7 @@ impl Documents {
 
     fn cycle_grouping(&mut self, cx: &mut Context<Self>) {
         self.grouping = self.grouping.next();
+        self.page_offset = 0;
         self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
@@ -804,6 +819,7 @@ impl Documents {
                 .and_then(|index| categories.get(index + 1).cloned()),
         };
         self.category_filter = next;
+        self.page_offset = 0;
         self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
@@ -813,7 +829,11 @@ impl Documents {
     /// Group headers and their sizes are computed here, once per rebuild, rather than compared
     /// row by row on every frame.
     fn sync_order(&mut self) {
-        let key = (self.order_rev, self.rows.value.as_ref().map_or(0, Vec::len));
+        let key = (
+            self.order_rev,
+            self.rows.value.as_ref().map_or(0, Vec::len),
+            self.page_offset,
+        );
         if self.order_key == Some(key) {
             return;
         }
@@ -864,6 +884,19 @@ impl Documents {
             }
         }
         self.counts = summary_counts;
+        self.total_filtered = picked.len();
+        let page_start = if self.total_filtered > 500 {
+            (self.page_offset / 500) * 500
+        } else {
+            0
+        };
+        let page_end = (page_start + 500).min(self.total_filtered);
+        let visible_picked = if self.total_filtered > 500 {
+            &picked[page_start..page_end]
+        } else {
+            &picked[..]
+        };
+
         let mut counts: Vec<(String, usize)> = Vec::new();
         if let Some(rows) = self
             .rows
@@ -871,7 +904,7 @@ impl Documents {
             .as_ref()
             .filter(|_| self.grouping != Grouping::None)
         {
-            for index in &picked {
+            for index in visible_picked {
                 let label = grouping_key(&rows[*index], self.grouping);
                 match counts.iter_mut().find(|(seen, _)| *seen == label) {
                     Some((_, size)) => *size += 1,
@@ -879,9 +912,10 @@ impl Documents {
                 }
             }
         }
-        let mut order: Vec<DocRow> = Vec::with_capacity(picked.len());
+        let mut order: Vec<DocRow> = Vec::with_capacity(visible_picked.len());
         let mut previous: Option<String> = None;
-        for index in picked {
+        for index in visible_picked {
+            let index = *index;
             let group = self
                 .rows
                 .value
@@ -902,6 +936,72 @@ impl Documents {
         self.order_key = Some(key);
         self.list.reset(order.len());
         self.order = order;
+    }
+
+    pub fn prev_page(&mut self, cx: &mut Context<Self>) {
+        if self.page_offset >= 500 {
+            self.page_offset = self.page_offset.saturating_sub(500);
+            self.order_rev = self.order_rev.wrapping_add(1);
+            cx.notify();
+        }
+    }
+
+    pub fn next_page(&mut self, cx: &mut Context<Self>) {
+        if self.page_offset + 500 < self.total_filtered {
+            self.page_offset += 500;
+            self.order_rev = self.order_rev.wrapping_add(1);
+            cx.notify();
+        }
+    }
+
+    pub(super) fn file_document_as(
+        &mut self,
+        id: String,
+        category: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Ok(shell) = self.repo.shell() else { return };
+        let work = shell::run(async move { shell.review_document(&id, &category, None).await });
+        cx.spawn(async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update(cx, |view, cx| {
+                if let Ok(updated) = result {
+                    if let Some(detail) = &mut view.detail.value {
+                        if detail.document.id == updated.id {
+                            detail.document = updated.clone();
+                        }
+                    }
+                    if let Some(detail) = &mut view.filing_compare_detail.value {
+                        if detail.document.id == updated.id {
+                            detail.document = updated.clone();
+                        }
+                    }
+                    if let Some(rows) = &mut view.rows.value {
+                        if let Some(row) = rows.iter_mut().find(|row| row.id == updated.id) {
+                            *row = updated;
+                            view.order_rev = view.order_rev.wrapping_add(1);
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn adopt_compare_category(&mut self, cx: &mut Context<Self>) {
+        let Some(compare_cat) = self
+            .filing_compare_detail
+            .value
+            .as_ref()
+            .and_then(|d| d.document.category.clone())
+        else {
+            return;
+        };
+        let Some(primary_id) = self.selected.clone() else {
+            return;
+        };
+        self.file_document_as(primary_id, compare_cat, cx);
     }
 
     fn col_width(&self, id: &'static str, default: f32) -> f32 {
@@ -927,6 +1027,7 @@ impl Documents {
             (current, order) if current == column => (column, order.flip()),
             _ => (column, column.default_order()),
         };
+        self.page_offset = 0;
         self.order_rev = self.order_rev.wrapping_add(1);
         cx.notify();
     }
@@ -1170,6 +1271,38 @@ impl Render for Documents {
                         .label(self.grouping.label())
                         .on_click(cx.listener(|view, _, _, cx| view.cycle_grouping(cx))),
                 )
+                .when(self.total_filtered > 500, |bar| {
+                    let start = (self.page_offset / 500) * 500;
+                    let display_start = start + 1;
+                    let end = (start + 500).min(self.total_filtered);
+                    let total = self.total_filtered;
+                    bar.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                Button::new("documents-page-prev")
+                                    .xsmall()
+                                    .label("‹ Prev 500")
+                                    .disabled(start == 0)
+                                    .on_click(cx.listener(|view, _, _, cx| view.prev_page(cx))),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(rgb(palette.muted))
+                                    .child(format!("{display_start}–{end} of {total}")),
+                            )
+                            .child(
+                                Button::new("documents-page-next")
+                                    .xsmall()
+                                    .label("Next 500 ›")
+                                    .disabled(end >= total)
+                                    .on_click(cx.listener(|view, _, _, cx| view.next_page(cx))),
+                            ),
+                    )
+                })
                 .child(div().flex_1())
                 .when(!narrow, |bar| {
                     bar.child(
@@ -1498,6 +1631,25 @@ impl Render for Documents {
                                     .on_click(cx.listener(|view, _, _, _| view.open_externally())),
                             )
                         })
+                        .when(!mobile, |bar| {
+                            bar.child(
+                                Button::new("document-compare-btn")
+                                    .small()
+                                    .label(if self.filing_compare_id.is_some() {
+                                        "Close compare ✕"
+                                    } else {
+                                        "Compare ⧉"
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        if view.filing_compare_id.is_some() {
+                                            view.close_compare(cx);
+                                        } else {
+                                            view.show_compare_picker = !view.show_compare_picker;
+                                            cx.notify();
+                                        }
+                                    })),
+                            )
+                        })
                         .child(div().flex_1())
                         .when_some(suggestion, |bar, category| {
                             bar.child(
@@ -1510,21 +1662,257 @@ impl Render for Documents {
                             )
                         }),
                 )
-                .when(!self.page_search_query.trim().is_empty(), |el| {
-                    el.child(page_search_hits_strip(
-                        &self.page_search_query,
-                        &page_hits,
-                        page,
-                        palette,
-                        cx,
-                    ))
+                .when(
+                    self.show_compare_picker && self.filing_compare_id.is_none(),
+                    |el| {
+                        let mut picker = div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_1p5()
+                            .p_2()
+                            .rounded(px(6.))
+                            .bg(rgba(palette.surface))
+                            .border_1()
+                            .border_color(rgba(palette.border))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(palette.muted))
+                                    .child("Compare with:"),
+                            );
+                        let other_docs: Vec<_> = self
+                            .rows
+                            .value
+                            .as_deref()
+                            .unwrap_or_default()
+                            .iter()
+                            .filter(|r| Some(&r.id) != self.selected.as_ref())
+                            .take(8)
+                            .collect();
+                        for other in other_docs {
+                            let other_id = other.id.clone();
+                            let other_title =
+                                other.extracted_title.as_deref().unwrap_or(&other.filename);
+                            let title_trunc = if other_title.len() > 24 {
+                                format!("{}…", &other_title[..24])
+                            } else {
+                                other_title.to_owned()
+                            };
+                            picker = picker.child(
+                                Button::new(format!("compare-pick-{}", other.id))
+                                    .xsmall()
+                                    .ghost()
+                                    .label(title_trunc)
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        view.open_compare_document(other_id.clone(), cx);
+                                    })),
+                            );
+                        }
+                        el.child(picker)
+                    },
+                )
+                .when(self.filing_compare_id.is_some(), |el| {
+                    let compare_title = self
+                        .filing_compare_detail
+                        .value
+                        .as_ref()
+                        .map(|d| {
+                            d.document
+                                .extracted_title
+                                .clone()
+                                .unwrap_or_else(|| d.document.filename.clone())
+                        })
+                        .unwrap_or_else(|| "Comparison Document".to_owned());
+                    let compare_cat = self
+                        .filing_compare_detail
+                        .value
+                        .as_ref()
+                        .and_then(|d| d.document.category.clone());
+                    let primary_cat = self
+                        .detail
+                        .value
+                        .as_ref()
+                        .and_then(|d| d.document.category.clone());
+                    let can_adopt = compare_cat.is_some() && compare_cat != primary_cat;
+                    let adopt_label = format!(
+                        "Adopt category '{}' →",
+                        compare_cat.as_deref().unwrap_or("")
+                    );
+
+                    let compare_bar = div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .p_2()
+                        .rounded(px(6.))
+                        .bg(rgba(tint(palette.accent, 0x14)))
+                        .border_1()
+                        .border_color(rgba(palette.accent))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .text_xs()
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(format!("Side-by-Side: ↔ {compare_title}"))
+                                .when_some(compare_cat, |el, cat| el.child(format!("({cat})"))),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .when(can_adopt, |el| {
+                                    el.child(
+                                        Button::new("adopt-compare-cat")
+                                            .xsmall()
+                                            .primary()
+                                            .label(adopt_label)
+                                            .on_click(cx.listener(|view, _, _, cx| {
+                                                view.adopt_compare_category(cx)
+                                            })),
+                                    )
+                                })
+                                .child(
+                                    Button::new("exit-compare")
+                                        .xsmall()
+                                        .ghost()
+                                        .label("Close ✕")
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.close_compare(cx)),
+                                        ),
+                                ),
+                        );
+
+                    let compare_page_label = if self.filing_compare_reader.pages == 0 {
+                        "Page —".to_owned()
+                    } else {
+                        format!(
+                            "Page {} of {}",
+                            self.filing_compare_reader.page + 1,
+                            self.filing_compare_reader.pages
+                        )
+                    };
+
+                    let compare_controls = div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .child(Button::new("cmp-page-prev").xsmall().label("‹").on_click(
+                            cx.listener(|view, _, _, cx| view.go_to_compare_page(-1, cx)),
+                        ))
+                        .child(
+                            Button::new("cmp-page-next").xsmall().label("›").on_click(
+                                cx.listener(|view, _, _, cx| view.go_to_compare_page(1, cx)),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(rgb(palette.muted))
+                                .child(compare_page_label),
+                        )
+                        .child(
+                            Button::new("cmp-zoom")
+                                .xsmall()
+                                .label(self.filing_compare_reader.zoom.label())
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.toggle_compare_zoom(cx)),
+                                ),
+                        )
+                        .child(
+                            Button::new("cmp-text")
+                                .xsmall()
+                                .label(if self.filing_compare_reader.reading_text {
+                                    "Pages"
+                                } else {
+                                    "Text"
+                                })
+                                .on_click(
+                                    cx.listener(|view, _, _, cx| view.toggle_compare_text(cx)),
+                                ),
+                        )
+                        .when(self.filing_compare_reader.pages > 1, |el| {
+                            el.child(Button::new("cmp-thumbs").xsmall().label("Thumbs").on_click(
+                                cx.listener(|view, _, _, cx| view.toggle_compare_thumbnails(cx)),
+                            ))
+                        });
+
+                    let right_canvas = if self.filing_compare_reader.reading_text {
+                        let text = self
+                            .filing_compare_detail
+                            .value
+                            .as_ref()
+                            .and_then(|d| d.text.clone())
+                            .filter(|t| !t.trim().is_empty())
+                            .unwrap_or_else(|| "No extracted text.".into());
+                        div()
+                            .id("compare-text-panel")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.text_scroll)
+                            .vertical_scrollbar(&self.text_scroll)
+                            .p_3()
+                            .rounded(px(6.))
+                            .bg(rgba(palette.surface))
+                            .child(crate::doc_view::render_markdown(
+                                &text,
+                                palette,
+                                self.density,
+                            ))
+                            .into_any_element()
+                    } else {
+                        self.compare_page_element(palette, cx)
+                    };
+
+                    let dual_pane = div()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(self.page_element(&matched_pages, palette, cx)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(compare_controls)
+                                .child(right_canvas),
+                        );
+
+                    el.child(compare_bar).child(dual_pane)
                 })
-                .when(!reading_text && self.reader.pages > 1, |el| {
-                    el.child(page_jump_strip(self, &matched_pages, palette, cx))
-                })
-                .when(reading_text, |el| el.child(text_panel(self, palette)))
-                .when(!reading_text, |el| {
-                    el.child(self.page_element(&matched_pages, palette, cx))
+                .when(self.filing_compare_id.is_none(), |el| {
+                    el.when(!self.page_search_query.trim().is_empty(), |el| {
+                        el.child(page_search_hits_strip(
+                            &self.page_search_query,
+                            &page_hits,
+                            page,
+                            palette,
+                            cx,
+                        ))
+                    })
+                    .when(!reading_text && self.reader.pages > 1, |el| {
+                        el.child(page_jump_strip(self, &matched_pages, palette, cx))
+                    })
+                    .when(reading_text, |el| el.child(text_panel(self, palette)))
+                    .when(!reading_text, |el| {
+                        el.child(self.page_element(&matched_pages, palette, cx))
+                    })
                 })
                 .into_any_element()
         });
@@ -2325,5 +2713,64 @@ mod tests {
                 "Imported 1 (1 new, 0 existing); 1 failed: bad.pdf: refused".into()
             )
         );
+    }
+
+    #[gpui::test]
+    fn cursor_paging_windows_and_steps_500_records(cx: &mut gpui::TestAppContext) {
+        let page = cx.new(|_cx| {
+            let mut docs = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
+            let mut rows = Vec::new();
+            for i in 0..1200 {
+                rows.push(summary(
+                    &format!("doc_{i}"),
+                    Some("Test"),
+                    &format!("file_{i}.pdf"),
+                ));
+            }
+            docs.rows.value = Some(rows);
+            docs.sync_order();
+            docs
+        });
+
+        page.update(cx, |docs, cx| {
+            assert_eq!(docs.total_filtered, 1200);
+            assert_eq!(docs.order.len(), 500);
+            assert_eq!(docs.page_offset, 0);
+
+            docs.next_page(cx);
+            docs.sync_order();
+            assert_eq!(docs.page_offset, 500);
+            assert_eq!(docs.order.len(), 500);
+
+            docs.next_page(cx);
+            docs.sync_order();
+            assert_eq!(docs.page_offset, 1000);
+            assert_eq!(docs.order.len(), 200);
+
+            docs.prev_page(cx);
+            docs.sync_order();
+            assert_eq!(docs.page_offset, 500);
+            assert_eq!(docs.order.len(), 500);
+        });
+    }
+
+    #[gpui::test]
+    fn filing_compare_manages_state_and_side_by_side_readers(cx: &mut gpui::TestAppContext) {
+        let page = cx.new(|_cx| {
+            let mut docs = Documents::new(Repo::new(Err(ShellError::NotSetUp)));
+            docs.selected = Some("doc_1".into());
+            docs
+        });
+
+        page.update(cx, |docs, cx| {
+            assert!(docs.filing_compare_id.is_none());
+            docs.open_compare_document("doc_2".into(), cx);
+            assert_eq!(docs.filing_compare_id.as_deref(), Some("doc_2"));
+            assert_eq!(docs.filing_compare_reader.id.as_deref(), Some("doc_2"));
+
+            docs.close_compare(cx);
+            assert!(docs.filing_compare_id.is_none());
+            assert!(docs.filing_compare_reader.id.is_none());
+        });
     }
 }

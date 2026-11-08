@@ -501,10 +501,12 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   one 500-row page on mount with on-demand paging (`fetch_page`), in-place sort chips (`Newest`,
   `Name A–Z`, `Category`, `Pages`), and `nsh_base::text_view` selectable Markdown/links; Mac
   Documents (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView`,
-  adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`), a collapsible low-resolution
+  adds 500-record cursor pagination controls (`prev_page`, `next_page`, `page_offset`, table toolbar count),
+  a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`), a collapsible low-resolution
   page thumbnail rail (`Reader::thumbnails`, `THUMB_WIDTH`, `request_thumbnails`), in-PDF page
   text search (`search_extracted_pages`, `page_search_hits_strip`) with matched-page badges and
-  snippet previews, `DocSort` multi-column sorting and resizable columns, and direct Finder
+  snippet previews, side-by-side filing compare workbench (#245) with dual reader canvases (`filing_compare_id`,
+  `open_compare_document`, `adopt_compare_category`), `DocSort` multi-column sorting and resizable columns, and direct Finder
   drag-and-drop (`ExternalPaths` / `on_drop` / `drag_over`) plus `+ Import…` file picker upload
   (`Documents::import_paths`, `Documents::prompt_import`) sending raw file bytes to
   `POST /documents/api/documents`.
@@ -686,8 +688,8 @@ build for this app. The rev moved off `cc38facfdd` on 2026-11-08 for the updater
    then airplane mode, and the kept document lists and opens. Not run yet.
 2. **Documents done-when (§2).** A real multi-page PDF opens at fit width, a kept document opens
    with the Mac unreachable, and the phone's original matches the library's SHA-256. Built; the
-   check is item 1. Still open from §2: cursor paging (`GET /api/documents` reads 500 rows a
-   page), and #245–#247.
+   check is item 1. Built: cursor paging (500 rows a page) and #245 (side-by-side filing compare).
+   Still open from §2: #246–#247.
 3. **Mail on the phone as an NSH screen** (Priority 1 item 4), on the same pattern. Built in
    `ui/src/nsh_mail.rs` and `core/src/shell/feed_mail.rs` (`Source::mail_proposals`,
    `mail_detail`, `mail_action`, `mail_gmail_job`), wired through `NshHostScreen` on both iOS

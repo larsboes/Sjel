@@ -109,8 +109,8 @@ Four native macOS sandbox tests fail in this restricted environment; their asser
 remain intact. A later broad run completed the remaining test suites, but its wrapper
 exited during a concurrent edit, so it is not a clean full-replay receipt.
 
-Doctor still reports the old host-patch audit receipt and, in the latest run, a missing
-ledger-owned Anatomy installation across four harnesses. Fresh dependency scans cannot
+Doctor still reports the old host-patch audit receipt and Anatomy deployment/profile
+drift across four harnesses in the concurrent checkout. Fresh dependency scans cannot
 impersonate a host-patch run. The external backup destination was unavailable; no restore
 proof was manufactured. Native UI acceptance and finance outcome quality remain open.
 

@@ -11,7 +11,7 @@ acceptance check or remote issue. Age and length alone did not establish obsoles
 
 | Finding | Result |
 |---|---|
-| API extraction described as future work despite 26 API crates | Finance and Inventory now use existing shared contracts instead of local request and comparison copies |
+| API extraction described as future work despite 26 API crates | Finance, Inventory, Places and Software now reuse shared contracts; geocoding retains the existing `place_id` wire spelling |
 | Schemars requirements repeated across manifests | Compatible consumers inherit the workspace requirement and retain explicit features |
 | Unused direct dependencies | Thirty cargo-machete candidates inspected: two API dependencies made useful, 28 unused declarations removed |
 | Stale operational paths | Forty references repaired after checking their targets; proposed and historical paths retained for contextual review |
@@ -109,9 +109,8 @@ Four native macOS sandbox tests fail in this restricted environment; their asser
 remain intact. A later broad run completed the remaining test suites, but its wrapper
 exited during a concurrent edit, so it is not a clean full-replay receipt.
 
-Doctor still reports the old host-patch audit receipt and Anatomy deployment/profile
-drift across four harnesses in the concurrent checkout. Fresh dependency scans cannot
-impersonate a host-patch run. The external backup destination was unavailable; no restore
+Doctor reports the old host-patch audit receipt. Anatomy deployment drift is resolved
+(`936085c0`). Fresh dependency scans cannot impersonate a host-patch run. The external backup destination was unavailable; no restore
 proof was manufactured. Native UI acceptance and finance outcome quality remain open.
 
 The data paths remain distinct: `content-item::cloud_admission` refuses `c2`/`c3` for

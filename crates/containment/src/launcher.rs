@@ -102,6 +102,16 @@ impl ContainedCommand {
         self
     }
 
+    /// Points a run at a PEM bundle of the machine's roots: this machine keeps them in the
+    /// Keychain, and a runtime that reads its roots from a file finds none inside the profile.
+    pub fn with_ca_bundle(mut self, path: &Path) -> Self {
+        let value = path.to_string_lossy().to_string();
+        for name in crate::roots::CA_VARIABLES {
+            self.env.insert((*name).to_owned(), value.clone());
+        }
+        self
+    }
+
     pub fn build_command(&self) -> Command {
         #[cfg(target_os = "macos")]
         {

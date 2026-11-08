@@ -156,7 +156,7 @@ async fn main() -> ExitCode {
         let _ = proxy.run().await;
     });
 
-    let profile = read_dirs.iter().fold(
+    let mut profile = read_dirs.iter().fold(
         write_dirs
             .iter()
             .fold(SeatbeltProfile::new(&project_dir), |p, d| {
@@ -164,10 +164,24 @@ async fn main() -> ExitCode {
             }),
         |p, d| p.with_read_path(d),
     );
+    // The machine's TLS roots, read here because a runtime inside the profile finds none in the
+    // Keychain's trust settings; the run may read the bundle, and it goes when the child exits.
+    let mut roots_path: Option<PathBuf> = None;
+    if let Some(bundle) = sjel_containment::export_roots() {
+        let dir = std::env::temp_dir();
+        if let Some(path) = sjel_containment::write_bundle(&bundle, &dir) {
+            profile = profile.with_read_path(&path);
+            roots_path = Some(path);
+        }
+    }
+
     let mut contained = sjel_containment::ContainedCommand::new(&harness_bin, profile)
         .args(&harness_args)
         .with_proxy_port(proxy_port)
         .with_dev_node(&demo_endpoint());
+    if let Some(path) = &roots_path {
+        contained = contained.with_ca_bundle(path);
+    }
     // The provider's own credential, named on the command line; every other one stays out.
     for name in &keep_env {
         if let Ok(value) = std::env::var(name) {
@@ -183,6 +197,8 @@ async fn main() -> ExitCode {
         println!("[containment] credential {name} resolved from the catalogue");
         contained.env.insert(name, value);
     }
+    // The machine's TLS roots, read here because the run cannot read the Keychain's trust
+    // settings for itself; removed when the child exits.
     match demo_token() {
         Some(token) => {
             contained.env.insert("SJEL_DEMO_TOKEN".into(), token);
@@ -193,7 +209,11 @@ async fn main() -> ExitCode {
     let mut cmd = contained.build_command();
     cmd.current_dir(&project_dir);
 
-    match cmd.status() {
+    let status = cmd.status();
+    if let Some(path) = roots_path {
+        let _ = std::fs::remove_file(path);
+    }
+    match status {
         Ok(s) => ExitCode::from(s.code().unwrap_or(0) as u8),
         Err(e) => {
             eprintln!("Failed to spawn contained command under sandbox-exec: {e}");

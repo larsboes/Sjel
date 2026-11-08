@@ -284,12 +284,33 @@ async fn egress_proxy_tunnels_only_the_bytes_after_the_request_head() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn macos_sandbox_closes_the_keychain() {
+fn macos_sandbox_leaves_the_keychain_to_the_harness() {
     let tmp = std::env::temp_dir().join(format!("sjel-seatbelt-keychain-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let profile = SeatbeltProfile::new(&tmp).render();
-    assert!(profile.contains("(deny mach-lookup (global-name \"com.apple.SecurityServer\")"));
+    // Decision C3: a harness reads its own sign-in from the Keychain, so the profile does not
+    // close it. The question about a missing item is answered by the store, not the sandbox.
+    assert!(!profile.contains("com.apple.SecurityServer"));
+    let output = ContainedCommand::new("/usr/bin/security", SeatbeltProfile::new(&tmp))
+        .args(["find-generic-password", "-s", "sjel-containment-probe-item"])
+        .build_command()
+        .output()
+        .expect("run security inside the profile");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Operation not permitted"),
+        "the Keychain answers a contained run: {stderr}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn a_run_is_pointed_at_the_roots_the_launcher_exported() {
+    let cmd = ContainedCommand::new("/bin/true", SeatbeltProfile::new(std::env::temp_dir()))
+        .with_ca_bundle(std::path::Path::new("/tmp/roots.pem"));
+    for name in sjel_containment::CA_VARIABLES {
+        assert_eq!(cmd.env[*name], "/tmp/roots.pem", "{name}");
+    }
 }
 
 #[test]

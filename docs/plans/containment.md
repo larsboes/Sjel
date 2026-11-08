@@ -19,13 +19,13 @@ Decided 2026-10-31, rings redrawn 2026-11-04.
 | Ring | Providers | Filesystem | Network | Sjel data |
 |---|---|---|---|---|
 | `trusted` | `anthropic` and `openai`: Claude Code, Codex, and pi on OpenAI | As today, the overlay included | As today | The live node, fully: the agent gate at the `trusted` tier, `c3` still withheld |
-| `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. System paths and toolchains read-only. Nothing else. | The provider's `hosts` and the package registries through the proxy, and the demo node | The demo node only (`sjel demo up`). No live token is reachable: the overlay and the Keychain are closed. |
+| `contained` | Every other provider: DeepSeek, OpenCode Go, GitHub Copilot, Antigravity, and any provider not listed | The project directory read-write. System paths and toolchains read-only. Nothing else. | The provider's `hosts` and the package registries through the proxy, and the demo node | The demo node only (`sjel demo up`). The overlay and the file-based credentials stay closed. The Keychain answers, so a run reads its own sign-in and the machine's TLS roots (C3, C7). |
 
 - **The trusted harnesses reach Sjel through `sjel mcp`.** `tools/sjel-mcp/sjel-mcp register`
   writes it into Claude Code, Codex and pi, with the default agent token. That token reads at
   the `trusted` tier once the owner runs `sjel agent tier default trusted`. pi's registration
   holds for every provider, so pi on any other provider must start through `sjel run`: inside
-  the sandbox `sjel mcp` cannot reach the checkout or the Keychain and fails closed. Not
+  the sandbox `sjel mcp` cannot reach the checkout and fails closed. Not
   checked: a Codex session calling a Sjel tool under its `sjel-auto` permissions.
 - **A provider not listed in `providers.toml` is `contained`.** This follows the
   existing rule in `libs/inference/src/providers.rs:3`: a call is refused unless the provider is
@@ -107,7 +107,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 |---|---|---|---|
 | pi | `~/.pi/agent/bin/pi` | Per run (DeepSeek, OpenCode Go, ...) | Runs contained through `tools/contain/pi`, which supplies a prepared home (§3). The proxy admits only the provider named at launch, so a provider switch inside the session cannot widen it. To do: route DeepSeek through OpenRouter with zero data retention enforced per request instead of `api.deepseek.com`. The `openrouter` entry in `providers.toml` then needs a new review for `c1`. |
 | opencode | `~/.opencode/bin/opencode` | Per run (OpenCode Go, ...) | Same as pi. |
-| Copilot CLI | `~/.local/bin/copilot` | GitHub Copilot | Measured 2026-11-08 (1.0.103): starts contained with `~/.copilot` read-write and `~/Library/Caches/copilot` writable. Two walls stand before a model call: its sign-in is read from credential storage, which the profile denies, and its TLS roots come from the same store, so it stops with "no trust roots available for proxy TLS". It does see `HTTPS_PROXY`: the error comes from the proxy request. Hosts unmeasured, because no authenticated request reaches the API. |
+| Copilot CLI | `~/.local/bin/copilot` | GitHub Copilot | Measured 2026-11-08 (1.0.103): runs contained with `~/.copilot` read-write and `~/Library/Caches/copilot` writable, and reaches GitHub through the proxy (`api.github.com`, `release-assets.githubusercontent.com`). Its sign-in was not found in the login keychain, so a model call still waits on the owner's `gh auth login` and on a `providers.toml` entry. |
 | Antigravity | `~/.local/bin/agy` | Google Antigravity | An Electron IDE. Seatbelt on a GUI app and its helper processes is unverified. Last in order. |
 | octet | `~/.local/bin/octet`, not installed; a trial ran a pinned v0.10.0 artifact from a scratch directory | Per run | Needs `--safe-mode`: its default effect policy is `UnsafeHost`, which approves every tool call. The profile denies its credential store (`~/.octet/credentials`) and the Keychain, so a contained session takes a key by `--keep-env` or a local provider. Measured 2026-11-07: direct egress refused, the proxy admitting only the provider's hosts, and a read of the gcloud application-default credentials refused with `Operation not permitted`. Verdict and revisit condition in `upstreams.toml`. |
 
@@ -119,8 +119,7 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    a provider without `ring = "trusted"` runs contained. Checked by
    `macos_sandbox_admits_ancestor_names_and_refuses_their_contents`: a sibling file read fails,
    the ancestors list their names, a project write and `cargo test` pass. A path walk from `/`
-   finishes inside the real profile (measured with `openat` through every component). The
-   Keychain's Mach services are denied.
+   finishes inside the real profile (measured with `openat` through every component).
    `sjel run <harness-bin> --provider <name> --project <dir>` starts it. A harness's own
    directories are opened with `--read <dir>` and `--write <dir>`, and its provider credential
    with `--keep-env <NAME>`, which passes that one variable and no other, with
@@ -133,21 +132,26 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    **Measured, pi contained.** `tools/contain/pi` prepares a pi home in the overlay whose
    `models.json` takes the provider's key from the environment, and starts the launcher with
    that home as `HOME`, pi's install readable and `--credential <provider>`. A contained run
-   answered a model call (`contained-ok`) through the proxy, with the Keychain, the overlay and
-   `~/.ssh` outside its reach. The catalog is the reason: the checkout's own pi settings resolve
-   the key by running `security`, which the profile denies by design. Not checked: opencode.
+   answered a model call (`contained-ok`) through the proxy, with the overlay, `~/.ssh` and
+   Sjel's `secrets/` outside its reach. The catalog is the reason: the checkout's own pi settings
+   resolve the key by running `security`, which reads the Keychain rather than the prepared home.
+   Not checked: opencode.
 2. **Egress proxy.** The proxy admits the provider's `hosts`, the package registries and
    loopback, and logs each refusal to stderr. Checked live: through the proxy
-   `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.3. **Sjel data for `contained`: the demo node only.** The launcher sets `SJEL_STATUS_URL` to
+   `api.deepseek.com` answers, `index.crates.io` answers, `example.com` is refused.
+3. **Sjel data for `contained`: the demo node only.** The launcher sets `SJEL_STATUS_URL` to
    the demo node, `SJEL_ENV=dev`, and `SJEL_DEMO_TOKEN` from `demo/state/comms-api-secret`.
-   The proxy forwards to no loopback address, and the Keychain's Mach services are denied:
-   a throwaway item readable by every app is found outside the sandbox and not inside it.
+   The proxy forwards to no loopback address.
    Not checked end to end: a contained read of the demo node with that token. Open: a contained
    process can still connect to any loopback port directly, so the live node is closed by its
-   token alone; denying the live ports in the profile is the second layer.
-4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1. Copilot needs two
-   decisions first: a token path (C3) and a CA bundle (C7). Its measured footprint is `~/.copilot`
-   read-write and `~/Library/Caches/copilot` writable.
+   token alone; denying the live ports in the profile is the second layer. Since C3 the Keychain
+   answers, so a contained run reaches every item the owner's login keychain holds, Sjel's
+   inference credentials among them; the proxy still decides where a byte may go.
+4. **Copilot CLI**, then **Antigravity**, each with the checks of item 1. Measured 2026-11-08:
+   with C3 and C7 in place Copilot reaches GitHub through the proxy and reports an available
+   update, so its TLS and proxy path work. What is left is a `providers.toml` entry with the
+   hosts (`api.github.com`, `release-assets.githubusercontent.com` measured; its API host needs a
+   logged-in call) and a review of that entry, which is a human task (§5 item 6).
 5. **`crates/agent` `project` tier** on the same library. Closes A1.
 6. **Provider entries.** `anthropic`, `github-copilot`, `opencode-go` and `antigravity` each get a
    reviewed entry with a ring. The review (`why`, `reviewed_at`) is a human task.
@@ -194,8 +198,8 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 |---|---|---|
 | C1 | `trusted` providers read raw overlay data, c2 included. `shared-data-boundaries.md` says c2 stays local-only, and the success measure in `PLAN.md` says no raw data about other people leaves the machine. Which one changes? | Decided 2026-11-03: both change. `c2` reaches the `trusted` ring through `trusted_view` with full names. Raw files do not: every harness loses the overlay `data/`. `c2` today also holds health and tax mail (`libs/content-item/src/lib.rs:601`), so that mail reaches Claude and GPT too. This was chosen over splitting `c2`. Work: §5 item 7. Amended 2026-11-04: the trusted ring keeps the overlay, and every other provider gets the demo node only (§1). |
 | C2 | Where does the ring live: a new `ring` field in `providers.toml`, or derived from `highest_data_class` (c2 or above is `trusted`)? | Decided 2026-11-04: an explicit `ring = "trusted"` field (`crates/containment/src/ring.rs`). Deriving it from `c2` would make every `c2` provider trusted without a separate review. `openai` and `anthropic` set it; every other entry in `providers.toml` runs contained. |
-| C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measured 2026-11-08: Copilot reads its sign-in from credential storage and, denied, offers `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN` instead. So the login can stay closed if a token is supplied. Antigravity unmeasured. |
-| C7 | A contained run has no TLS roots: this machine's roots live in the Keychain, and the profile denies it. Copilot fails with "no trust roots available for proxy TLS", while curl reaches `api.deepseek.com` without help. | Open, measured 2026-11-08: no PEM bundle exists under `/opt/homebrew`, `/usr/local/etc` or `/etc`, and `SSL_CERT_FILE` at the system file reaches "bad certificate format". Options: ship a bundle with the launcher, have the profile read one path, or leave each harness to bundle its own. |
+| C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Decided 2026-11-08: yes. The two deny rules are gone, because a harness reads its own sign-in there and a runtime that trusts through the Keychain finds its roots there. Accepted cost: a contained run reaches every item in the login keychain, Sjel's `inference-*` credentials included; the egress proxy still decides where a byte may go. `macos_sandbox_leaves_the_keychain_to_the_harness` checks the profile and the store. |
+| C7 | A contained run has no TLS roots: this machine's roots live in the Keychain, and the profile denied it. Copilot failed with "no trust roots available for proxy TLS", while curl reached `api.deepseek.com` without help. | Decided 2026-11-08: the launcher exports them. `crates/containment/src/roots.rs` reads the login keychain and the system roots (194 certificates), writes a 0600 bundle beside the run, grants the run read on it, sets `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `GIT_SSL_CAINFO` and `NODE_EXTRA_CA_CERTS`, and removes it after the child exits. Measured: with only the login keychain's 36 certificates pi answered "Connection error"; with the system roots added the same run answers a model call. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
 | C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Decided 2026-11-04: an unclassified row is withheld, rows above the cap are dropped, and a single item above the cap or without a class is refused. Built (§5 item 3). |
 | C6 | Does the profile admit each ancestor of a granted path, so a reader that walks with `openat` works? | Decided 2026-11-08: yes, for every ancestor of a granted path. Measured (§2): the walk needs `file-read-data`, since `file-read-metadata` is not enough. The cost is directory names only: `ls /Users` lists 4, `ls ~` lists 103, and a file below an ungranted directory stays refused. |

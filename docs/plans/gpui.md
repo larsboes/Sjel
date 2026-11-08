@@ -495,15 +495,17 @@ Use a three-layer split across `gpui-fast` and `nsh`:
    and hand-built views only for the 24-hour Calendar timeline and availability grid, cross-capability
    join inspectors, and the block note editor.
 
-- **Documents.** Built (2026-11-08, `de389e7d`): NSH Documents (`ui/src/nsh_documents.rs`) loads
+- **Documents.** Built (2026-11-08, `de389e7d`, `49aaf9f9`): NSH Documents (`ui/src/nsh_documents.rs`) loads
   one 500-row page on mount with on-demand paging (`fetch_page`), in-place sort chips (`Newest`,
   `Name A–Z`, `Category`, `Pages`), and `nsh_base::text_view` selectable Markdown/links; Mac
   Documents (`ui/src/documents/`) renders extracted text through `gpui_kit::component::text::TextView`,
   adds a quick page jump strip (`Reader::jump_pages`, `page_jump_strip`), a collapsible low-resolution
-  page thumbnail rail (`Reader::thumbnails`, `THUMB_WIDTH`, `request_thumbnails`), and in-PDF page
+  page thumbnail rail (`Reader::thumbnails`, `THUMB_WIDTH`, `request_thumbnails`), in-PDF page
   text search (`search_extracted_pages`, `page_search_hits_strip`) with matched-page badges and
-  snippet previews, plus `DocSort` multi-column sorting and resizable columns. Open: drag and drop
-  from Finder into import.
+  snippet previews, `DocSort` multi-column sorting and resizable columns, and direct Finder
+  drag-and-drop (`ExternalPaths` / `on_drop` / `drag_over`) plus `+ Import…` file picker upload
+  (`Documents::import_paths`, `Documents::prompt_import`) sending raw file bytes to
+  `POST /documents/api/documents`.
 - **Markdown & Rich Text.** Built (2026-11-08, `de389e7d`): `doc_view::render_markdown` and
   `ui/src/docs/` use `gpui_kit::component::text::TextView` with `FrontmatterPlugin`,
   `MermaidPlugin` (`ui/src/docs/diagrams.rs`), and Sjel's `Palette`-mapped `text_view_style`,

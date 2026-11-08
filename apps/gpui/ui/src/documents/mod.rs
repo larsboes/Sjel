@@ -8,15 +8,16 @@
 use std::sync::Arc;
 
 use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, ClickEvent, Context, Entity, ExternalPaths,
+    FontWeight, PathPromptOptions, Subscription, Window,
 };
-use gpui_kit::component::button::Button;
+use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Disableable, Sizable};
 use sjel_gpui_core::shell::{
-    self, DocumentDetail, DocumentSummary, DuplicateCandidate, DuplicateCandidateKind,
-    DuplicateCandidatePage, ShellError,
+    self, DocumentDetail, DocumentSummary, DocumentUpload, DuplicateCandidate,
+    DuplicateCandidateKind, DuplicateCandidatePage, ShellError,
 };
 
 use crate::data::{Remote, Repo};
@@ -269,6 +270,8 @@ pub struct Documents {
     pub(super) show_proposal_history: bool,
     pub(super) workflow_busy: Option<String>,
     pub(super) workflow_error: Option<String>,
+    pub(super) uploading: usize,
+    pub(super) upload_notice: Option<(bool, String)>,
 }
 
 impl Documents {
@@ -329,6 +332,8 @@ impl Documents {
             show_proposal_history: false,
             workflow_busy: None,
             workflow_error: None,
+            uploading: 0,
+            upload_notice: None,
         }
     }
 
@@ -379,6 +384,124 @@ impl Documents {
                 if let Err(err) = result {
                     if view.rows.value.is_none() {
                         view.rows.settle(Err(err));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn prompt_import(&mut self, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let picked = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Import documents".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            let _ = this.update(cx, |view, cx| {
+                view.import_paths(paths, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Read dropped or selected files locally and upload their raw bytes to the Documents API.
+    pub fn import_paths(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+        if paths.is_empty() {
+            return;
+        }
+        let shell = match self.repo.shell() {
+            Ok(shell) => shell,
+            Err(error) => {
+                self.upload_notice = Some((true, error.to_string()));
+                cx.notify();
+                return;
+            }
+        };
+        let batch_len = paths.len();
+        self.uploading = self.uploading.saturating_add(batch_len);
+        self.upload_notice = None;
+        cx.notify();
+
+        let work = shell::run(async move {
+            let mut results: Vec<Result<(String, DocumentUpload), String>> =
+                Vec::with_capacity(paths.len());
+            for path in paths {
+                let filename = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned);
+                let Some(filename) = filename else {
+                    results.push(Err("Skipped a path without a valid filename.".into()));
+                    continue;
+                };
+                let read_path = path.clone();
+                let bytes =
+                    match tokio::task::spawn_blocking(move || std::fs::read(&read_path)).await {
+                        Ok(Ok(bytes)) => bytes,
+                        Ok(Err(err)) => {
+                            results.push(Err(format!("{filename}: {err}")));
+                            continue;
+                        }
+                        Err(_) => {
+                            results.push(Err(format!("{filename}: could not read file.")));
+                            continue;
+                        }
+                    };
+                match shell.upload_document(&filename, bytes).await {
+                    Ok(upload) => results.push(Ok((filename, upload))),
+                    Err(err) => results.push(Err(format!("{filename}: {err}"))),
+                }
+            }
+            results
+        });
+
+        cx.spawn(async move |this, cx| {
+            let results = work
+                .await
+                .unwrap_or_else(|| vec![Err(ShellError::Unreachable.to_string())]);
+            let _ = this.update(cx, |view, cx| {
+                view.uploading = view.uploading.saturating_sub(batch_len);
+                let mut created = 0usize;
+                let mut existing = 0usize;
+                let mut last_id: Option<String> = None;
+                let mut last_filename: Option<String> = None;
+                let mut errors: Vec<String> = Vec::new();
+                for item in results {
+                    match item {
+                        Ok((filename, upload)) => {
+                            if upload.created {
+                                created += 1;
+                            } else {
+                                existing += 1;
+                            }
+                            last_id = Some(upload.document.id.clone());
+                            last_filename = Some(filename);
+                            let rows = view.rows.value.get_or_insert_with(Vec::new);
+                            upsert_uploaded_document(rows, upload.document);
+                        }
+                        Err(err) => errors.push(err),
+                    }
+                }
+                if created + existing > 0 {
+                    view.order_rev = view.order_rev.wrapping_add(1);
+                }
+                view.upload_notice = Some(format_upload_summary(
+                    created,
+                    existing,
+                    last_filename.as_deref(),
+                    &errors,
+                ));
+                if created + existing == 1 {
+                    if let Some(id) = last_id {
+                        view.open(id, cx);
                     }
                 }
                 cx.notify();
@@ -1407,11 +1530,23 @@ impl Render for Documents {
         });
 
         let show_table = !(mobile && reader.is_some());
+        let upload_notice = self.upload_notice.clone();
+        let uploading = self.uploading;
         div()
             .size_full()
             .flex()
             .flex_col()
             .gap_4()
+            .rounded(px(6.))
+            .on_drop(cx.listener(|view, paths: &ExternalPaths, _, cx| {
+                view.import_paths(paths.paths().to_vec(), cx);
+            }))
+            .drag_over::<ExternalPaths>(move |style, _, _, _| {
+                style
+                    .bg(rgba(tint(palette.accent, 0x10)))
+                    .border_1()
+                    .border_color(rgba(palette.accent))
+            })
             .child(
                 div()
                     .flex()
@@ -1419,19 +1554,80 @@ impl Render for Documents {
                     .justify_between()
                     .child(
                         div()
-                            .text_xl()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Documents"),
+                            .flex()
+                            .items_baseline()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Documents"),
+                            )
+                            .when(!mobile, |el| {
+                                el.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(palette.muted))
+                                        .child("Drop files anywhere to import"),
+                                )
+                            }),
                     )
                     .child(
-                        Button::new("documents-duplicate-review")
-                            .small()
-                            .label("Review duplicates")
-                            .on_click(
-                                cx.listener(|view, _, _, cx| view.set_duplicate_mode(true, cx)),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new("documents-import")
+                                    .small()
+                                    .label(if uploading > 0 {
+                                        format!("Importing ({uploading})…")
+                                    } else {
+                                        "+ Import…".to_owned()
+                                    })
+                                    .disabled(uploading > 0)
+                                    .on_click(cx.listener(Self::prompt_import)),
+                            )
+                            .child(
+                                Button::new("documents-duplicate-review")
+                                    .small()
+                                    .label("Review duplicates")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.set_duplicate_mode(true, cx)
+                                    })),
                             ),
                     ),
             )
+            .when_some(upload_notice, |el, (is_error, message)| {
+                let tone = if is_error { palette.red } else { palette.green };
+                el.child(
+                    div()
+                        .id("documents-upload-notice")
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .px_3()
+                        .py_1p5()
+                        .rounded(px(5.))
+                        .bg(rgba(tint(tone, 0x18)))
+                        .border_1()
+                        .border_color(rgba(tint(tone, 0x40)))
+                        .text_xs()
+                        .text_color(rgb(tone))
+                        .child(div().flex_1().truncate().child(message))
+                        .child(
+                            Button::new("documents-upload-notice-dismiss")
+                                .xsmall()
+                                .ghost()
+                                .label("Dismiss")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.upload_notice = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -1466,6 +1662,54 @@ impl Render for Documents {
                     .when_some(reader, |el, reader| el.child(reader)),
             )
     }
+}
+
+pub(crate) fn upsert_uploaded_document(rows: &mut Vec<DocumentSummary>, uploaded: DocumentSummary) {
+    if let Some(existing) = rows.iter_mut().find(|row| row.id == uploaded.id) {
+        *existing = uploaded;
+    } else {
+        rows.insert(0, uploaded);
+    }
+}
+
+pub(crate) fn format_upload_summary(
+    created: usize,
+    existing: usize,
+    last_filename: Option<&str>,
+    errors: &[String],
+) -> (bool, String) {
+    let total = created + existing;
+    if total == 0 {
+        return (
+            true,
+            if errors.is_empty() {
+                "No files were imported.".to_owned()
+            } else {
+                errors.join(" · ")
+            },
+        );
+    }
+    if errors.is_empty() {
+        if total == 1 {
+            let name = last_filename.unwrap_or("document");
+            if created == 1 {
+                return (false, format!("Imported {name}."));
+            }
+            return (false, format!("{name} is already in Documents."));
+        }
+        return (
+            false,
+            format!("Imported {total} documents ({created} new, {existing} existing)."),
+        );
+    }
+    (
+        true,
+        format!(
+            "Imported {total} ({created} new, {existing} existing); {} failed: {}",
+            errors.len(),
+            errors.join(" · ")
+        ),
+    )
 }
 
 fn format_bytes(bytes: i64) -> String {
@@ -2031,5 +2275,55 @@ mod tests {
         assert_eq!(reader.thumbnails.len(), super::viewer::CACHED_THUMBS);
         assert!(reader.thumbnails.contains_key(&25));
         assert!(!reader.thumbnails.contains_key(&0));
+    }
+
+    #[test]
+    fn upsert_uploaded_document_prepends_new_and_updates_existing_in_place() {
+        let mut rows = vec![
+            summary("a", Some("Tax"), "a.pdf"),
+            summary("b", None, "b.pdf"),
+        ];
+        super::upsert_uploaded_document(&mut rows, summary("c", None, "c.pdf"));
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            vec!["c", "a", "b"]
+        );
+
+        let mut updated_a = summary("a", Some("FiledTax"), "a-renamed.pdf");
+        updated_a.status = "filed".into();
+        super::upsert_uploaded_document(&mut rows, updated_a);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            vec!["c", "a", "b"]
+        );
+        assert_eq!(rows[1].filename, "a-renamed.pdf");
+        assert_eq!(rows[1].status, "filed");
+    }
+
+    #[test]
+    fn format_upload_summary_distinguishes_created_existing_and_errors() {
+        assert_eq!(
+            super::format_upload_summary(1, 0, Some("invoice.pdf"), &[]),
+            (false, "Imported invoice.pdf.".into())
+        );
+        assert_eq!(
+            super::format_upload_summary(0, 1, Some("invoice.pdf"), &[]),
+            (false, "invoice.pdf is already in Documents.".into())
+        );
+        assert_eq!(
+            super::format_upload_summary(2, 1, Some("last.pdf"), &[]),
+            (false, "Imported 3 documents (2 new, 1 existing).".into())
+        );
+        assert_eq!(
+            super::format_upload_summary(0, 0, None, &["bad.pdf: refused".into()]),
+            (true, "bad.pdf: refused".into())
+        );
+        assert_eq!(
+            super::format_upload_summary(1, 0, Some("ok.pdf"), &["bad.pdf: refused".into()]),
+            (
+                true,
+                "Imported 1 (1 new, 0 existing); 1 failed: bad.pdf: refused".into()
+            )
+        );
     }
 }

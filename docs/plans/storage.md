@@ -149,6 +149,27 @@ about the expanded archive refers to the whole archive, not this filtered intake
 5. Fresh Git history starts without a remote; review files and ignore rules before the first
    commit or remote. The retained original history can contain non-knowledge material.
 
+### Vault holds learning only
+
+Decided 2026-11-08 (`PLAN.md`, Decisions). The vault keeps the Learning Pack's notes: `teach`,
+`practice`, claim notes, and the Obsidian plugins that render them. Everything else that reads or
+writes the vault moves to Sjel data or retires. Counted 2026-11-08 with `git grep -i -E
+"\bvault\b|obsidian"`: about 300 lines in 40 Markdown files and 108 code files outside
+`crates/vault/`.
+
+| Component | Vault use | Move |
+|---|---|---|
+| `crates/comms` (38 files) | Vault link sources, link candidates | Link sources come from Sjel data and `web-links`. Wait for the open `comms` edits in the primary checkout to land. |
+| `crates/scouting` (9) | `vault_link`, `vault_linker`, a vault path | Same as comms: drop the vault as a link source. |
+| `Packs/knowledge` (15) | The `obsidian` skill and `obsidian-access` write and read notes | Notes go to Sjel data. Keep only what Learning needs to render. |
+| `services/knowledge-base` | Serves the vault | Keep for Learning, or retire if Learning reads files directly. |
+| `crates/trips`, `crates/entities`, `crates/sjel-cli`, `apps/gpui`, `crates/markdown-root` (1 to 4 each) | Vault paths and links | Check each. Most are stale roots, as in "Local data and knowledge-vault migration". |
+| `tools/obsidian-deploy.ts`, `tools/check-obsidian-plugins.sh` | Plugin deployment | Keep. Learning uses the plugins. |
+| `ARCHITECTURE.md`, `README.md`, `CONTRIBUTING.md`, `docs/plans/data.md`, `upstreams.toml`, `systems.toml` | Describe the vault as the knowledge home | Rewrite with each component above, not before. |
+
+Order: the Packs first (no code, no running service), then scouting, then comms after its open
+edits land, then the documents. Each component is one commit.
+
 ## 3. Phone standalone
 
 The phone works without the Mac for notes, tasks, capture and calendar today. Unpaired, Mail and

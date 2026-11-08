@@ -462,7 +462,7 @@ impl Workspace {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let repo = Repo::new(shell::Shell::new(endpoint).map(std::sync::Arc::new));
-        let projects = cx.new(|_| Projects::new(repo.clone()));
+        let projects = cx.new(|cx| Projects::new(repo.clone(), cx));
         let ask = cx.new(|_| Ask::new(repo.clone()));
         let accounts = cx.new(|_| Accounts::new(repo.clone()));
         let clipper_settings = cx.new(|_| ClipperSettings::new());

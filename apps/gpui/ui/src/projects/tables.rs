@@ -98,49 +98,6 @@ impl Projects {
     ) -> AnyElement {
         let cols = self.columns();
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let open_count = records
-            .iter()
-            .filter(|r| r.kind == "task" && !r.done)
-            .count();
-        let all_count = records.iter().filter(|r| r.kind == "task").count();
-        let done_count = all_count.saturating_sub(open_count);
-
-        let filter_bar = div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .mb_2()
-            .child(filter_pill(
-                "Open",
-                open_count,
-                self.task_filter == TaskFilter::Open,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::Open;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "All",
-                all_count,
-                self.task_filter == TaskFilter::All,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::All;
-                    cx.notify();
-                }),
-            ))
-            .child(filter_pill(
-                "Done",
-                done_count,
-                self.task_filter == TaskFilter::Done,
-                palette,
-                cx.listener(|view, _, _, cx| {
-                    view.task_filter = TaskFilter::Done;
-                    cx.notify();
-                }),
-            ));
-
         let entity = cx.entity();
         let mut header_cols = vec![
             SortableColumn::spacer(px(24.)),
@@ -356,13 +313,7 @@ impl Projects {
                 )
                 .into_any_element(),
         );
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(filter_bar)
-            .child(list(rows, palette))
-            .into_any_element()
+        list(rows, palette)
     }
 
     /// The due-date field and its preset chips, for the task at `path`.

@@ -764,7 +764,7 @@ impl Capabilities {
         cx: &mut Context<Self>,
     ) -> gpui::Entity<Projects> {
         let repo = self.repo_for(store);
-        let projects = cx.new(|_| Projects::new(repo).with_density(Density::Mobile));
+        let projects = cx.new(|cx| Projects::new(repo, cx).with_density(Density::Mobile));
         cx.subscribe(&projects, |view, _, event, cx| match event {
             ProjectsEvent::Editing(open) => keyboard(*open),
             // The band's "Try again": the same sync any local write starts, because the writes it

@@ -5,8 +5,8 @@ use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::{Sizable, WindowExt};
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FontWeight, ScrollHandle,
-    SharedString, Subscription, Window,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Div, Entity, FocusHandle, Focusable,
+    FontWeight, MouseButton, ScrollHandle, SharedString, Subscription, Window,
 };
 
 use crate::data::{self, Remote, Repo};
@@ -23,12 +23,14 @@ use sjel_gpui_core::shell::{
     ProjectMailTarget, ProjectRecord, ProjectSummary, ShellError,
 };
 
+pub mod actions;
 mod board;
 mod links;
 mod mail;
 mod tables;
 mod task_panel;
 
+pub use actions::bind_keys;
 pub(super) use task_panel::TaskPanel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,8 +84,6 @@ pub(super) struct Columns {
     pub(super) project_tasks: f32,
     pub(super) project_progress: f32,
     pub(super) project_notes: f32,
-    /// The page's side padding.
-    pub(super) pad: f32,
     /// The height and touch target a table row gets.
     pub(super) density: Density,
 }
@@ -93,7 +93,7 @@ impl Columns {
         match density {
             Density::Mobile => Self {
                 due: 76.,
-                priority: 40.,
+                priority: 48.,
                 project: None,
                 status: None,
                 kind: None,
@@ -101,12 +101,11 @@ impl Columns {
                 project_tasks: 80.,
                 project_progress: 0.,
                 project_notes: 60.,
-                pad: 12.,
                 density,
             },
             _ => Self {
                 due: 120.,
-                priority: 64.,
+                priority: 84.,
                 project: Some(140.),
                 status: Some(100.),
                 kind: Some(80.),
@@ -114,7 +113,6 @@ impl Columns {
                 project_tasks: 110.,
                 project_progress: 140.,
                 project_notes: 85.,
-                pad: 32.,
                 density,
             },
         }
@@ -267,12 +265,13 @@ pub struct Projects {
     /// the band these draw is the only place that says so.
     pub(super) blocked: Vec<Blocked>,
     pub(super) scroll: ScrollHandle,
+    pub focus: FocusHandle,
 }
 
 impl gpui_kit::EventEmitter<ProjectsEvent> for Projects {}
 
 impl Projects {
-    pub fn new(repo: Repo) -> Self {
+    pub fn new(repo: Repo, cx: &mut Context<Self>) -> Self {
         Self {
             repo,
             density: Density::Desktop,
@@ -327,6 +326,209 @@ impl Projects {
             adding_note: false,
             blocked: Vec::new(),
             scroll: ScrollHandle::new(),
+            focus: cx.focus_handle(),
+        }
+    }
+
+    pub fn active_project_name(&self) -> Option<String> {
+        self.project.as_ref().map(|(name, _)| name.clone())
+    }
+
+    pub fn close_project(&mut self, cx: &mut Context<Self>) {
+        self.put_away_editor(cx);
+        self.task_panel = None;
+        self.status_edit = None;
+        self.due_edit = None;
+        self.project = None;
+        cx.notify();
+    }
+
+    fn on_close_project(
+        &mut self,
+        _: &actions::CloseProject,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.task_panel.is_some() {
+            self.task_panel = None;
+            cx.notify();
+        } else if self.status_edit.is_some() {
+            self.status_edit = None;
+            cx.notify();
+        } else if self.due_edit.is_some() {
+            self.due_edit = None;
+            cx.notify();
+        } else if self.editor.is_some() && self.project_section == ProjectSection::Notes {
+            self.put_away_editor(cx);
+            cx.notify();
+        } else if self.project.is_some() {
+            self.close_project(cx);
+        } else if self.tab != ProjectsTab::Hubs {
+            self.tab = ProjectsTab::Hubs;
+            cx.notify();
+        } else if self.adding_project {
+            self.adding_project = false;
+            cx.notify();
+        }
+    }
+
+    fn on_select_tab_1(
+        &mut self,
+        _: &actions::SelectTab1,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section != ProjectSection::Note {
+                self.put_away_editor(cx);
+                self.project_section = ProjectSection::Note;
+                cx.notify();
+            }
+        } else if self.tab != ProjectsTab::Hubs {
+            self.tab = ProjectsTab::Hubs;
+            cx.notify();
+        }
+    }
+
+    fn on_select_tab_2(
+        &mut self,
+        _: &actions::SelectTab2,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section != ProjectSection::Tasks {
+                self.put_away_editor(cx);
+                self.project_section = ProjectSection::Tasks;
+                cx.notify();
+            }
+        } else if self.tab != ProjectsTab::AllTasks {
+            self.tab = ProjectsTab::AllTasks;
+            cx.notify();
+        }
+    }
+
+    fn on_select_tab_3(
+        &mut self,
+        _: &actions::SelectTab3,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section != ProjectSection::Notes {
+                self.put_away_editor(cx);
+                self.project_section = ProjectSection::Notes;
+                cx.notify();
+            }
+        } else if self.tab != ProjectsTab::AllNotes {
+            self.tab = ProjectsTab::AllNotes;
+            cx.notify();
+        }
+    }
+
+    fn on_select_tab_4(
+        &mut self,
+        _: &actions::SelectTab4,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section != ProjectSection::MailReview {
+            self.put_away_editor(cx);
+            self.project_section = ProjectSection::MailReview;
+            self.load_project_mail(false, cx);
+            cx.notify();
+        }
+    }
+
+    fn on_select_tab_5(
+        &mut self,
+        _: &actions::SelectTab5,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section != ProjectSection::InventoryLinks {
+            self.put_away_editor(cx);
+            self.project_section = ProjectSection::InventoryLinks;
+            cx.notify();
+        }
+    }
+
+    fn on_toggle_task_view_mode(
+        &mut self,
+        _: &actions::ToggleTaskViewMode,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section == ProjectSection::Tasks {
+            self.task_view_mode = match self.task_view_mode {
+                TaskViewMode::Table => TaskViewMode::Board,
+                TaskViewMode::Board => TaskViewMode::Table,
+            };
+            cx.notify();
+        }
+    }
+
+    fn on_cycle_task_filter(
+        &mut self,
+        _: &actions::CycleTaskFilter,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section == ProjectSection::Tasks {
+            self.task_filter = match self.task_filter {
+                TaskFilter::Open => TaskFilter::All,
+                TaskFilter::All => TaskFilter::Done,
+                TaskFilter::Done => TaskFilter::Open,
+            };
+            cx.notify();
+        }
+    }
+
+    fn on_new_item(&mut self, _: &actions::NewItem, window: &mut Window, cx: &mut Context<Self>) {
+        if self.project.is_some() {
+            match self.project_section {
+                ProjectSection::Tasks => {
+                    if let Some((input, _)) = &self.new_task {
+                        let handle = input.read(cx).focus_handle(cx);
+                        window.focus(&handle, cx);
+                    }
+                }
+                ProjectSection::Notes => {
+                    self.adding_note = true;
+                    if let Some((input, _)) = &self.new_note {
+                        let handle = input.read(cx).focus_handle(cx);
+                        window.focus(&handle, cx);
+                    }
+                    cx.notify();
+                }
+                _ => {}
+            }
+        } else if self.tab == ProjectsTab::Hubs {
+            self.adding_project = true;
+            if let Some((input, _)) = &self.new_project {
+                let handle = input.read(cx).focus_handle(cx);
+                window.focus(&handle, cx);
+            }
+            cx.notify();
+        }
+    }
+
+    fn on_focus_search(
+        &mut self,
+        _: &actions::FocusSearch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.tab == ProjectsTab::AllTasks {
+            if let Some((input, _)) = &self.search_input {
+                let handle = input.read(cx).focus_handle(cx);
+                window.focus(&handle, cx);
+            }
+        } else if self.tab == ProjectsTab::AllNotes {
+            if let Some((input, _)) = &self.notes_search_input {
+                let handle = input.read(cx).focus_handle(cx);
+                window.focus(&handle, cx);
+            }
         }
     }
 
@@ -1308,10 +1510,199 @@ impl Projects {
         }
         cx.notify();
     }
+
+    fn database_toolbar(
+        &self,
+        records: &[ProjectRecord],
+        palette: Palette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let open_count = records
+            .iter()
+            .filter(|r| r.kind == "task" && !r.done)
+            .count();
+        let all_count = records.iter().filter(|r| r.kind == "task").count();
+        let done_count = all_count.saturating_sub(open_count);
+
+        let filter_btn = |id: &'static str,
+                          label: &'static str,
+                          count: usize,
+                          target_filter: TaskFilter,
+                          cx: &mut Context<Self>| {
+            let active = self.task_filter == target_filter;
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap_1p5()
+                .px_2p5()
+                .py(px(3.))
+                .rounded(px(5.))
+                .text_xs()
+                .cursor_pointer()
+                .when(active, |el| {
+                    el.bg(rgba(palette.surface))
+                        .text_color(rgb(palette.text))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .shadow_sm()
+                })
+                .when(!active, |el| {
+                    el.text_color(rgb(palette.muted))
+                        .hover(|s| s.text_color(rgb(palette.text)))
+                })
+                .on_click(cx.listener(move |view: &mut Self, _, _, cx| {
+                    view.task_filter = target_filter;
+                    cx.notify();
+                }))
+                .child(label)
+                .child(
+                    div()
+                        .text_size(px(10.))
+                        .text_color(rgb(if active { palette.text } else { palette.muted }))
+                        .child(format!("({count})")),
+                )
+        };
+
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .mb_2()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .p(px(2.))
+                            .rounded(px(6.))
+                            .bg(rgba(palette.raised))
+                            .child(
+                                div()
+                                    .id("view-mode-table")
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .px_2()
+                                    .py(px(2.5))
+                                    .rounded(px(4.))
+                                    .text_xs()
+                                    .cursor_pointer()
+                                    .when(self.task_view_mode == TaskViewMode::Table, |el| {
+                                        el.bg(rgba(palette.surface))
+                                            .text_color(rgb(palette.text))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .shadow_sm()
+                                    })
+                                    .when(self.task_view_mode != TaskViewMode::Table, |el| {
+                                        el.text_color(rgb(palette.muted))
+                                            .hover(|s| s.text_color(rgb(palette.text)))
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.task_view_mode = TaskViewMode::Table;
+                                        cx.notify();
+                                    }))
+                                    .child("Table ☷"),
+                            )
+                            .child(
+                                div()
+                                    .id("view-mode-board")
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .px_2()
+                                    .py(px(2.5))
+                                    .rounded(px(4.))
+                                    .text_xs()
+                                    .cursor_pointer()
+                                    .when(self.task_view_mode == TaskViewMode::Board, |el| {
+                                        el.bg(rgba(palette.surface))
+                                            .text_color(rgb(palette.text))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .shadow_sm()
+                                    })
+                                    .when(self.task_view_mode != TaskViewMode::Board, |el| {
+                                        el.text_color(rgb(palette.muted))
+                                            .hover(|s| s.text_color(rgb(palette.text)))
+                                    })
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.task_view_mode = TaskViewMode::Board;
+                                        cx.notify();
+                                    }))
+                                    .child("Board ⊞")
+                                    .child(
+                                        div()
+                                            .px_1()
+                                            .py(px(0.5))
+                                            .rounded(px(3.))
+                                            .bg(rgba(palette.border))
+                                            .text_size(px(9.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(rgb(palette.muted))
+                                            .child("B"),
+                                    ),
+                            ),
+                    )
+                    .child(div().w(px(1.)).h(px(16.)).bg(rgba(palette.border)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(filter_btn("filter-open", "Open", open_count, TaskFilter::Open, cx))
+                            .child(filter_btn("filter-all", "All", all_count, TaskFilter::All, cx))
+                            .child(filter_btn("filter-done", "Done", done_count, TaskFilter::Done, cx))
+                            .child(
+                                div()
+                                    .px_1()
+                                    .py(px(0.5))
+                                    .rounded(px(3.))
+                                    .bg(rgba(palette.border))
+                                    .text_size(px(9.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(rgb(palette.muted))
+                                    .child("F"),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .id("db-add-task-btn")
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .px_2()
+                    .py(px(3.))
+                    .rounded(px(4.))
+                    .text_xs()
+                    .text_color(rgb(palette.muted))
+                    .cursor_pointer()
+                    .hover(move |s| s.text_color(rgb(palette.text)))
+                    .on_click(cx.listener(|view, _, window, cx| {
+                        view.on_new_item(&actions::NewItem, window, cx);
+                    }))
+                    .child("+ New Task")
+                    .child(
+                        div()
+                            .px_1()
+                            .py(px(0.5))
+                            .rounded(px(3.))
+                            .bg(rgba(palette.border))
+                            .text_size(px(9.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .child("N"),
+                    ),
+            )
+            .into_any_element()
+    }
 }
 
-impl Render for Projects {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl Projects {
+    fn render_body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let cols = self.columns();
         let palette = self
             .palette
@@ -1320,24 +1711,17 @@ impl Render for Projects {
         if self.project.is_none() {
             if let Some(editor) = &self.editor {
                 let title = editor.read(cx).title.clone();
-                // An opaque card: the window is translucent, and a wallpaper behind it must not
-                // show through the text.
                 return div()
                     .size_full()
                     .flex()
                     .flex_col()
-                    .px(px(cols.pad))
-                    .pt_5()
-                    .pb_4()
-                    .rounded(px(12.))
-                    .bg(rgba(palette.surface | 0xff))
-                    .border_1()
-                    .border_color(rgba(palette.border))
+                    .w_full()
+                    .max_w(px(840.))
+                    .mx_auto()
+                    .pt_2()
+                    .pb_6()
                     .child(
                         div()
-                            .w_full()
-                            .max_w(px(760.))
-                            .mx_auto()
                             .size_full()
                             .flex()
                             .flex_col()
@@ -1410,6 +1794,68 @@ impl Render for Projects {
                 })
                 .unwrap_or((0, 0));
 
+            let sec_tab = |id: &'static str,
+                           label: &'static str,
+                           count: Option<usize>,
+                           kbd: &'static str,
+                           target_sec: ProjectSection,
+                           cx: &mut Context<Self>| {
+                let active = self.project_section == target_sec;
+                div()
+                    .id(id)
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .px_3()
+                    .py(px(4.))
+                    .rounded(px(6.))
+                    .text_xs()
+                    .cursor_pointer()
+                    .when(active, |el| {
+                        el.bg(rgba(palette.surface))
+                            .text_color(rgb(palette.text))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .shadow_sm()
+                    })
+                    .when(!active, |el| {
+                        el.text_color(rgb(palette.muted))
+                            .hover(|s| s.text_color(rgb(palette.text)).bg(rgba(tint(palette.surface, 0x44))))
+                    })
+                    .on_click(cx.listener(move |view: &mut Self, _, _, cx| {
+                        if view.project_section != target_sec {
+                            view.put_away_editor(cx);
+                            view.project_section = target_sec;
+                            if target_sec == ProjectSection::MailReview {
+                                view.load_project_mail(false, cx);
+                            }
+                            cx.notify();
+                        }
+                    }))
+                    .child(label)
+                    .children(count.map(|c| {
+                        div()
+                            .text_size(px(10.))
+                            .font_weight(FontWeight::NORMAL)
+                            .text_color(rgb(if active { palette.text } else { palette.muted }))
+                            .child(format!("({c})"))
+                    }))
+                    .child(
+                        div()
+                            .px_1()
+                            .py(px(0.5))
+                            .rounded(px(3.))
+                            .bg(rgba(if active {
+                                palette.raised
+                            } else {
+                                tint(palette.border, 0x55)
+                            }))
+                            .text_size(px(9.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(rgb(palette.muted))
+                            .child(kbd),
+                    )
+            };
+
             // Project header bar with breadcrumb and section tabs
             let project_header = div()
                 .flex()
@@ -1418,21 +1864,47 @@ impl Render for Projects {
                 .when(self.density == Density::Mobile, |el| {
                     el.flex_col().items_start().gap_2()
                 })
-                .mb_3()
+                .mb_2()
                 .child(
                     div()
                         .flex()
                         .items_center()
                         .gap_2()
-                        .child(back_button(
-                            "‹ Projects",
-                            cx.listener(|view, _, _, cx| {
-                                view.put_away_editor(cx);
-                                view.project = None;
-                                cx.notify();
-                            }),
-                            palette,
-                        ))
+                        .child(
+                            div()
+                                .id("back-to-projects-btn")
+                                .cursor_pointer()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .px_2()
+                                .py(px(3.))
+                                .rounded(px(5.))
+                                .hover(move |s| s.bg(rgba(tint(palette.raised, 0x66))))
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.put_away_editor(cx);
+                                    view.project = None;
+                                    cx.notify();
+                                }))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child("‹ Projects"),
+                                )
+                                .child(
+                                    div()
+                                        .px_1()
+                                        .py(px(0.5))
+                                        .rounded(px(3.))
+                                        .bg(rgba(palette.border))
+                                        .text_size(px(9.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(rgb(palette.muted))
+                                        .child("Esc"),
+                                ),
+                        )
                         .child(div().text_xs().text_color(rgb(palette.muted)).child("/"))
                         .child(
                             div()
@@ -1451,143 +1923,11 @@ impl Render for Projects {
                         .p(px(2.))
                         .rounded(px(8.))
                         .bg(rgba(palette.raised))
-                        .child(
-                            div()
-                                .id("sec-project-note")
-                                .px_3()
-                                .py(px(4.))
-                                .rounded(px(6.))
-                                .text_xs()
-                                .cursor_pointer()
-                                .when(self.project_section == ProjectSection::Note, |el| {
-                                    el.bg(rgba(palette.surface))
-                                        .text_color(rgb(palette.text))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                })
-                                .when(self.project_section != ProjectSection::Note, |el| {
-                                    el.text_color(rgb(palette.muted))
-                                        .hover(|s| s.text_color(rgb(palette.text)))
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    if view.project_section != ProjectSection::Note {
-                                        view.put_away_editor(cx);
-                                        view.project_section = ProjectSection::Note;
-                                        cx.notify();
-                                    }
-                                }))
-                                .child("Project Note"),
-                        )
-                        .child(
-                            div()
-                                .id("sec-tasks")
-                                .px_3()
-                                .py(px(4.))
-                                .rounded(px(6.))
-                                .text_xs()
-                                .cursor_pointer()
-                                .when(self.project_section == ProjectSection::Tasks, |el| {
-                                    el.bg(rgba(palette.surface))
-                                        .text_color(rgb(palette.text))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                })
-                                .when(self.project_section != ProjectSection::Tasks, |el| {
-                                    el.text_color(rgb(palette.muted))
-                                        .hover(|s| s.text_color(rgb(palette.text)))
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    if view.project_section != ProjectSection::Tasks {
-                                        view.put_away_editor(cx);
-                                        view.project_section = ProjectSection::Tasks;
-                                        cx.notify();
-                                    }
-                                }))
-                                .child(format!("Tasks ({open_tasks})")),
-                        )
-                        .child(
-                            div()
-                                .id("sec-notes")
-                                .px_3()
-                                .py(px(4.))
-                                .rounded(px(6.))
-                                .text_xs()
-                                .cursor_pointer()
-                                .when(self.project_section == ProjectSection::Notes, |el| {
-                                    el.bg(rgba(palette.surface))
-                                        .text_color(rgb(palette.text))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                })
-                                .when(self.project_section != ProjectSection::Notes, |el| {
-                                    el.text_color(rgb(palette.muted))
-                                        .hover(|s| s.text_color(rgb(palette.text)))
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    if view.project_section != ProjectSection::Notes {
-                                        view.put_away_editor(cx);
-                                        view.project_section = ProjectSection::Notes;
-                                        cx.notify();
-                                    }
-                                }))
-                                .child(format!("Notes ({supporting_notes_count})")),
-                        )
-                        .child(
-                            div()
-                                .id("sec-mail-review")
-                                .px_3()
-                                .py(px(4.))
-                                .rounded(px(6.))
-                                .text_xs()
-                                .cursor_pointer()
-                                .when(self.project_section == ProjectSection::MailReview, |el| {
-                                    el.bg(rgba(palette.surface))
-                                        .text_color(rgb(palette.text))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                })
-                                .when(self.project_section != ProjectSection::MailReview, |el| {
-                                    el.text_color(rgb(palette.muted))
-                                        .hover(|s| s.text_color(rgb(palette.text)))
-                                })
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    if view.project_section != ProjectSection::MailReview {
-                                        view.put_away_editor(cx);
-                                        view.project_section = ProjectSection::MailReview;
-                                        view.load_project_mail(false, cx);
-                                        cx.notify();
-                                    }
-                                }))
-                                .child("Mail review"),
-                        )
-                        .child(
-                            div()
-                                .id("sec-inventory-links")
-                                .px_3()
-                                .py(px(4.))
-                                .rounded(px(6.))
-                                .text_xs()
-                                .cursor_pointer()
-                                .when(
-                                    self.project_section == ProjectSection::InventoryLinks,
-                                    |el| {
-                                        el.bg(rgba(palette.surface))
-                                            .text_color(rgb(palette.text))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                    },
-                                )
-                                .when(
-                                    self.project_section != ProjectSection::InventoryLinks,
-                                    |el| {
-                                        el.text_color(rgb(palette.muted))
-                                            .hover(|s| s.text_color(rgb(palette.text)))
-                                    },
-                                )
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    if view.project_section != ProjectSection::InventoryLinks {
-                                        view.put_away_editor(cx);
-                                        view.project_section = ProjectSection::InventoryLinks;
-                                        cx.notify();
-                                    }
-                                }))
-                                .child("Inventory links"),
-                        ),
+                        .child(sec_tab("sec-project-note", "Project Note", None, "1", ProjectSection::Note, cx))
+                        .child(sec_tab("sec-tasks", "Tasks", Some(open_tasks), "2", ProjectSection::Tasks, cx))
+                        .child(sec_tab("sec-notes", "Notes", Some(supporting_notes_count), "3", ProjectSection::Notes, cx))
+                        .child(sec_tab("sec-mail-review", "Mail review", None, "4", ProjectSection::MailReview, cx))
+                        .child(sec_tab("sec-inventory-links", "Inventory links", None, "5", ProjectSection::InventoryLinks, cx)),
                 );
 
             let content: AnyElement = match self.project_section {
@@ -1607,18 +1947,13 @@ impl Render for Projects {
                             .min_h_0()
                             .flex()
                             .flex_col()
-                            .px(px(cols.pad))
-                            .pt_4()
-                            .pb_4()
-                            .rounded(px(12.))
-                            .bg(rgba(palette.surface | 0xff))
-                            .border_1()
-                            .border_color(rgba(palette.border))
+                            .w_full()
+                            .max_w(px(840.))
+                            .mx_auto()
+                            .pt_2()
+                            .pb_6()
                             .child(
                                 div()
-                                    .w_full()
-                                    .max_w(px(760.))
-                                    .mx_auto()
                                     .size_full()
                                     .flex()
                                     .flex_col()
@@ -1674,60 +2009,7 @@ impl Render for Projects {
                     (_, Some(error)) => note(error.to_string(), palette.red).into_any_element(),
                     (None, None) => placeholder(240.).into_any_element(),
                     (Some(records_list), None) => {
-                        let view_switch = div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .p(px(2.))
-                            .rounded(px(6.))
-                            .bg(rgba(palette.raised))
-                            .child(
-                                div()
-                                    .id("view-mode-table")
-                                    .px_2()
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .text_xs()
-                                    .cursor_pointer()
-                                    .when(self.task_view_mode == TaskViewMode::Table, |el| {
-                                        el.bg(rgba(palette.surface))
-                                            .text_color(rgb(palette.text))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                    })
-                                    .when(self.task_view_mode != TaskViewMode::Table, |el| {
-                                        el.text_color(rgb(palette.muted))
-                                            .hover(|s| s.text_color(rgb(palette.text)))
-                                    })
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.task_view_mode = TaskViewMode::Table;
-                                        cx.notify();
-                                    }))
-                                    .child("Table ☷"),
-                            )
-                            .child(
-                                div()
-                                    .id("view-mode-board")
-                                    .px_2()
-                                    .py(px(2.))
-                                    .rounded(px(4.))
-                                    .text_xs()
-                                    .cursor_pointer()
-                                    .when(self.task_view_mode == TaskViewMode::Board, |el| {
-                                        el.bg(rgba(palette.surface))
-                                            .text_color(rgb(palette.text))
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                    })
-                                    .when(self.task_view_mode != TaskViewMode::Board, |el| {
-                                        el.text_color(rgb(palette.muted))
-                                            .hover(|s| s.text_color(rgb(palette.text)))
-                                    })
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.task_view_mode = TaskViewMode::Board;
-                                        cx.notify();
-                                    }))
-                                    .child("Board ⊞"),
-                            );
-
+                        let toolbar = self.database_toolbar(records_list, palette, cx);
                         let content = match self.task_view_mode {
                             TaskViewMode::Table => {
                                 self.task_table(records_list, &new_task, palette, cx)
@@ -1763,14 +2045,7 @@ impl Render for Projects {
                             .flex_col()
                             .gap_2()
                             .size_full()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_end()
-                                    .mb_1()
-                                    .child(view_switch),
-                            )
+                            .child(toolbar)
                             .child(inner)
                             .into_any_element()
                     }
@@ -1782,18 +2057,13 @@ impl Render for Projects {
                             .min_h_0()
                             .flex()
                             .flex_col()
-                            .px(px(cols.pad))
-                            .pt_5()
-                            .pb_4()
-                            .rounded(px(12.))
-                            .bg(rgba(palette.surface | 0xff))
-                            .border_1()
-                            .border_color(rgba(palette.border))
+                            .w_full()
+                            .max_w(px(840.))
+                            .mx_auto()
+                            .pt_2()
+                            .pb_6()
                             .child(
                                 div()
-                                    .w_full()
-                                    .max_w(px(760.))
-                                    .mx_auto()
                                     .size_full()
                                     .flex()
                                     .flex_col()
@@ -2030,7 +2300,7 @@ impl Render for Projects {
                 .into_any_element();
         }
 
-        // Top navigation tabs: Projects | All Tasks
+        // Top navigation tabs: Projects | All Tasks | All Notes
         let tab_bar = div().flex().items_center().justify_between().mb_3().child(
             div()
                 .flex()
@@ -2042,6 +2312,9 @@ impl Render for Projects {
                 .child(
                     div()
                         .id("tab-hubs")
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
                         .px_3()
                         .py(px(4.))
                         .rounded(px(6.))
@@ -2051,6 +2324,7 @@ impl Render for Projects {
                             el.bg(rgba(palette.surface))
                                 .text_color(rgb(palette.text))
                                 .font_weight(FontWeight::SEMIBOLD)
+                                .shadow_sm()
                         })
                         .when(self.tab != ProjectsTab::Hubs, |el| {
                             el.text_color(rgb(palette.muted))
@@ -2060,11 +2334,29 @@ impl Render for Projects {
                             view.tab = ProjectsTab::Hubs;
                             cx.notify();
                         }))
-                        .child("Projects"),
+                        .child("Projects")
+                        .child(
+                            div()
+                                .px_1()
+                                .py(px(0.5))
+                                .rounded(px(3.))
+                                .bg(rgba(if self.tab == ProjectsTab::Hubs {
+                                    palette.raised
+                                } else {
+                                    tint(palette.border, 0x55)
+                                }))
+                                .text_size(px(9.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.muted))
+                                .child("1"),
+                        ),
                 )
                 .child(
                     div()
                         .id("tab-all-tasks")
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
                         .px_3()
                         .py(px(4.))
                         .rounded(px(6.))
@@ -2074,6 +2366,7 @@ impl Render for Projects {
                             el.bg(rgba(palette.surface))
                                 .text_color(rgb(palette.text))
                                 .font_weight(FontWeight::SEMIBOLD)
+                                .shadow_sm()
                         })
                         .when(self.tab != ProjectsTab::AllTasks, |el| {
                             el.text_color(rgb(palette.muted))
@@ -2083,11 +2376,29 @@ impl Render for Projects {
                             view.tab = ProjectsTab::AllTasks;
                             cx.notify();
                         }))
-                        .child("All Tasks"),
+                        .child("All Tasks")
+                        .child(
+                            div()
+                                .px_1()
+                                .py(px(0.5))
+                                .rounded(px(3.))
+                                .bg(rgba(if self.tab == ProjectsTab::AllTasks {
+                                    palette.raised
+                                } else {
+                                    tint(palette.border, 0x55)
+                                }))
+                                .text_size(px(9.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.muted))
+                                .child("2"),
+                        ),
                 )
                 .child(
                     div()
                         .id("tab-all-notes")
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
                         .px_3()
                         .py(px(4.))
                         .rounded(px(6.))
@@ -2097,6 +2408,7 @@ impl Render for Projects {
                             el.bg(rgba(palette.surface))
                                 .text_color(rgb(palette.text))
                                 .font_weight(FontWeight::SEMIBOLD)
+                                .shadow_sm()
                         })
                         .when(self.tab != ProjectsTab::AllNotes, |el| {
                             el.text_color(rgb(palette.muted))
@@ -2106,7 +2418,22 @@ impl Render for Projects {
                             view.tab = ProjectsTab::AllNotes;
                             cx.notify();
                         }))
-                        .child("All Notes"),
+                        .child("All Notes")
+                        .child(
+                            div()
+                                .px_1()
+                                .py(px(0.5))
+                                .rounded(px(3.))
+                                .bg(rgba(if self.tab == ProjectsTab::AllNotes {
+                                    palette.raised
+                                } else {
+                                    tint(palette.border, 0x55)
+                                }))
+                                .text_size(px(9.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(rgb(palette.muted))
+                                .child("3"),
+                        ),
                 ),
         );
 
@@ -2559,6 +2886,30 @@ impl Render for Projects {
     }
 }
 
+impl Render for Projects {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let body = self.render_body(window, cx);
+        div()
+            .key_context("Projects")
+            .track_focus(&self.focus)
+            .on_action(cx.listener(Self::on_close_project))
+            .on_action(cx.listener(Self::on_select_tab_1))
+            .on_action(cx.listener(Self::on_select_tab_2))
+            .on_action(cx.listener(Self::on_select_tab_3))
+            .on_action(cx.listener(Self::on_select_tab_4))
+            .on_action(cx.listener(Self::on_select_tab_5))
+            .on_action(cx.listener(Self::on_toggle_task_view_mode))
+            .on_action(cx.listener(Self::on_cycle_task_filter))
+            .on_action(cx.listener(Self::on_new_item))
+            .on_action(cx.listener(Self::on_focus_search))
+            .on_mouse_down(MouseButton::Left, cx.listener(|view, _, window, cx| {
+                window.focus(&view.focus, cx);
+            }))
+            .size_full()
+            .child(body)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use gpui::TestAppContext;
@@ -2586,7 +2937,7 @@ mod tests {
     fn the_blocked_band_holds_what_the_sync_reported(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
         let view = cx.new(|cx| {
-            let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
             projects.set_blocked(
                 vec![Blocked {
                     path: "Old/One.md".into(),
@@ -2617,8 +2968,8 @@ mod tests {
     fn project_inventory_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)))
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
                     .with_density(Density::Mobile);
                 let hub = ProjectRecord {
                     kind: "project".into(),
@@ -2664,8 +3015,8 @@ mod tests {
     fn project_mail_review_mounts_at_mobile_density(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)))
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx)
                     .with_density(Density::Mobile);
                 projects.project = Some((
                     "P".into(),
@@ -2706,8 +3057,8 @@ mod tests {
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 let task = |title: &str, done: bool| ProjectRecord {
                     project: String::new(),
                     path: format!("P/{title}.md"),
@@ -2739,8 +3090,8 @@ mod tests {
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 projects.tab = ProjectsTab::AllTasks;
                 projects.search_query = "berlin".into();
                 projects.all_tasks = Remote {
@@ -2806,8 +3157,8 @@ mod tests {
         let found = slot.clone();
         let rows = vec![blocked.clone(), task("cancelled", "cancelled")];
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 projects.tab = ProjectsTab::AllTasks;
                 projects.group_by_project = true;
                 projects.all_tasks = Remote {
@@ -2856,8 +3207,8 @@ mod tests {
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 projects.tab = ProjectsTab::AllNotes;
                 projects.notes_search_query = "architecture".into();
                 projects.all_notes = Remote {
@@ -2897,8 +3248,8 @@ mod tests {
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 let hub = ProjectRecord {
                     project: String::new(),
                     path: "P/P.md".into(),
@@ -2957,8 +3308,8 @@ mod tests {
         let slot = std::rc::Rc::new(std::cell::RefCell::new(None));
         let found = slot.clone();
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 projects.projects = Remote {
                     value: Some(vec![p1, p2, p3]),
                     ..Remote::default()
@@ -3024,8 +3375,8 @@ mod tests {
         let found = slot.clone();
         let records = vec![task1.clone(), task2.clone()];
         let (_, cx) = cx.add_window_view(move |window, cx| {
-            let view = cx.new(|_| {
-                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)));
+            let view = cx.new(|cx| {
+                let mut projects = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
                 projects.project = Some((
                     "P".into(),
                     Remote {

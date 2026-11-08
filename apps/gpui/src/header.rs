@@ -59,42 +59,70 @@ pub fn render(view: &Workspace, palette: Palette, cx: &mut Context<Workspace>) -
             .tooltip("Rebuild and restart the local Sjel shell with the current configuration")
             .on_click(cx.listener(|view, _, window, cx| view.restart_shell(window, cx)))
     });
-    div()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .px_8()
-        .pt(px(44.))
-        .pb_5()
-        .child(
+        let area_title: AnyElement = if let Some(project_name) = (view.page == Page::Projects)
+            .then(|| view.projects.read(cx).active_project_name())
+            .flatten()
+        {
             div()
                 .flex()
-                .items_end()
-                .justify_between()
-                .gap_4()
+                .items_center()
+                .gap_2()
                 .child(
                     div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_2xl()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .whitespace_nowrap()
-                                .truncate()
-                                .child(area.map_or(view.page.label(), Area::label)),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .truncate()
-                                .text_color(rgb(palette.muted))
-                                .child(subtitle(view)),
-                        ),
+                        .id("header-projects-breadcrumb")
+                        .cursor_pointer()
+                        .text_color(rgb(palette.muted))
+                        .hover(move |s| s.text_color(rgb(palette.text)))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.projects.update(cx, |p, cx| p.close_project(cx));
+                        }))
+                        .child("Projects"),
                 )
+                .child(div().text_color(rgb(palette.muted)).child("/"))
+                .child(div().text_color(rgb(palette.text)).child(project_name))
+                .into_any_element()
+        } else {
+            div()
+                .child(area.map_or(view.page.label(), Area::label))
+                .into_any_element()
+        };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .px_8()
+            .pt(px(44.))
+            .pb_5()
+            .child(
+                div()
+                    .flex()
+                    .items_end()
+                    .justify_between()
+                    .gap_4()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_2xl()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .whitespace_nowrap()
+                                    .truncate()
+                                    .child(area_title),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .truncate()
+                                    .text_color(rgb(palette.muted))
+                                    .child(subtitle(view, cx)),
+                            ),
+                    )
                 .child(
                     div()
                         .flex()
@@ -252,14 +280,20 @@ fn tab_strip(
 }
 
 /// The one line under the title: what this page is for, or what it is looking at.
-fn subtitle(view: &Workspace) -> SharedString {
+fn subtitle(view: &Workspace, cx: &Context<Workspace>) -> SharedString {
     match view.page {
         // `/` and `/context` are one page, and the day block below carries its own date.
         Page::Home | Page::Context => {
             "What needs you now, what is urgent, and the day itself".into()
         }
         Page::Capabilities => view.endpoint(),
-        Page::Projects => "Projects, tasks and notes, in one place".into(),
+        Page::Projects => {
+            if let Some(name) = view.projects.read(cx).active_project_name() {
+                format!("{name} · tasks, notes and links").into()
+            } else {
+                "Projects, tasks and notes, in one place".into()
+            }
+        }
         Page::Travel => "Where you are, where you’re going, and where you’ll stay".into(),
         Page::Feed => "What the collectors brought in, ranked for you".into(),
         Page::Inbox => "Captured, not sorted yet".into(),

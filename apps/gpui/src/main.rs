@@ -86,6 +86,7 @@ fn main() {
         sjel_gpui_ui::people::page::bind_keys(cx);
         sjel_gpui_ui::backup::bind_keys(cx);
         sjel_gpui_ui::inventory::bind_keys(cx);
+        sjel_gpui_ui::projects::bind_keys(cx);
         cx.bind_keys([
             KeyBinding::new("cmd-w", CloseWindow, None),
             KeyBinding::new("cmd-q", Quit, None),

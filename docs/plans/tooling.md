@@ -10,6 +10,18 @@ covers it.
 
 ## Open
 
+- **Capability CLIs are not on PATH.** Moving notes into `projects` and writing the
+  operator profile needed the `projects` and `operator-profile` CLIs. Only the `-server`
+  binaries get built. Workaround: `cargo build --release --bin projects`, then run the binary from
+  the cargo target directory. Smallest change: `sjel <capability> <args>` that builds and runs
+  the capability's CLI binary.
+
+- **MCP responses redact values that are not personal data.** The pseudonymizer replaced an ISO
+  date range (`2026-08-13 to 2026-08-20`) with `[phone]` and `Apache-2.0-licensed` with `[token]`
+  in entities responses. The stored values were correct. Workaround: read the row from the
+  database to check. Smallest change: phone and token detectors in `crates/pseudonymize` that
+  refuse ISO dates and licence identifiers, with those two strings as test cases.
+
 - **A contained harness cannot be given a credential.** Shipped as `sjel-contain --credential
   <provider>`: the slug resolves through the private catalogue `sjel provider` reads and reaches
   the child as `DEEPSEEK_API_KEY`, `OPENCODE_GO_API_KEY` and so on. The value is read in the

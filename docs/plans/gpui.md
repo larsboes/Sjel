@@ -651,7 +651,8 @@ opens inside the Mac app. Evidence: [`research/ui-stack.md`](../../research/ui-s
 | NSH Documents reader, one screen for phone and Mac | `ui/src/nsh_documents.rs` | `62145b47` |
 | `device::Source`: the Mac's shell or the phone's client, one read path | `core/src/device.rs` | `62145b47` |
 | Documents on the phone is the NSH reader; "Back" returns to GPUI | `ios/src/nsh.rs`, `nav.rs`, `launch.rs` | `a71af504` |
-| Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | this section's commit |
+| Originals: SHA-256 checked, PDFKit view, "Keep offline" | `core/src/originals.rs`, `host/Documents.swift` | `4c9910e6` |
+| Mac NSH trial (`SJEL_NSH_TRIAL=1`) registers `sjel.pdf` + `Originals` | `src/nsh_trial.rs` | this section's commit |
 
 Trial result, 2026-11-07, on a paired iPhone: the list fills from the Mac, a long press on the
 text opens the system menu, and VoiceOver reads the list and the reader.

@@ -8,11 +8,10 @@ renderer prior art, with no plugin hooks adopted.
 A coding and operations agent written in Rust. It runs on the Mac, and the user controls it
 from the GPUI app on the Mac or the paired iPhone. The loop is `crates/sjel-agent`. The capability that
 serves it is `crates/agent`. The reasoning for that shape is in
-[`crates/agent/README.md`](../../capabilities/agent/README.md).
+[`crates/agent/README.md`](../../crates/agent/README.md).
 
-Lane B in [`PLAN.md`](../../PLAN.md), the top priority (2026-10-25). Beside the Sjel
-agent, the phone gets a terminal on the Mac (§6), so Claude Code and every other CLI agent run
-there too.
+Agent expansion is Priority 3 in [`PLAN.md`](../../PLAN.md). Existing protections remain
+in force. The local order below applies after higher-priority maintenance and daily workflows.
 
 Order:
 
@@ -31,8 +30,8 @@ Order:
 - **Capability.** `crates/agent` serves sessions, prompts, steering, a resumable event
   stream, approvals and stop, on `Reach::Loopback`. The phone reaches it through the paired-device
   listener.
-- **Approval gate.** `crates/agent/src/gate.rs`. Every call that is not read-only asks. The
-  card shows a real diff for `edit` and `write`. A decision is a file in
+- **Approval gate.** `crates/agent/src/gate.rs`. The command/write policy selects Allow, Ask or
+  Block. An approval card shows a real diff for `edit` and `write`. A decision is a file in
   `secrets/agent/approvals/`, so the Systems page, the Mac and the phone show one record. A
   session grant is keyed by tool and exact arguments. An unanswered call is denied after 15
   minutes.
@@ -43,7 +42,7 @@ Order:
   edge each add only a text field. The seat offers the tier (`sjel | project | account`), and a
   blocked call shows its rule ID, a red border and one override button (no session-wide grant).
 
-**Gap.** The capability assembles only `fs, graph, sjel, sql, guard, compaction`
+**Gap.** The capability assembles only `fs, sjel, sql, guard, compaction`
 (`crates/agent/src/plugins.rs`). `web`, `subagents`, `mcp`, `skills` and `rust` exist in
 the library but no session can use them.
 
@@ -142,28 +141,14 @@ m`), and an absolute path to a known binary (`/bin/rm`). Classify `bash -c`, `sh
 - Done when every case passes, the gate shows the rule ID on each card, and one week of real use
   gives a prompt rate (below).
 
-**Pi has it now (2026-10-26).** `Packs/security/extensions/command-policy/` implements this section
-for pi in TypeScript, with the case table in `command-policy/cases.toml` (every rule ID and every
-evasion case above). It implements the rule table above: cards are reserved for harmful classes,
-so writes inside the scope, unknown programs and interpreters run without one.
-
-**The Rust classifier is the same table** (built `b0d94cae`). `Policy` reads a fixture's home
-directory and writable roots (`with_home`, `with_writable`) instead of the machine's, and
-`crates/sjel-agent/tests/policy_cases.rs` loads the shared table, so neither language has a copy of the
-rules to drift from. All 115 command cases and 5 write cases pass in both. The second table
-(`libs/agent/tests/policy_cases.toml`) is deleted. `crates/agent/src/gate.rs` says what the
-three classes now cost a run — a read, a build and an in-scope write run without a card — and its
-approval fixture asks through a redirect whose target is computed at run time (A1), which is the
-write that still reaches a card.
+The Pi implementation and Rust classifier share the case table (`b0d94cae`); tests are
+`tools/command-policy.test.ts` and `crates/sjel-agent/tests/policy_cases.rs`.
 
 A local small model may classify A6 commands later, only after a measurement shows it lowers the
 prompt rate without a missed Block. `Packs/harness/extensions/clm-classifier.ts` is the prior art.
 
-Built (6622b21e): `crates/sjel-agent/src/ext/policy.rs` holds the classifier and the rule table, and
-`crates/agent/src/gate.rs` reads the class: Allow runs without a card, Block is refused
-before any card, Ask is the card as before, and each decision is logged with its rule ID on the
-call log. Open: §5's separate Block card that can allow one call, the A6 classifier for unknown
-programs, and the measures below, none of which have run.
+The capability gate logs the selected rule and implements Allow/Ask/Block (`6622b21e`).
+Open: the separate Block card in §5, A6 classification of unknown programs, and the measures below.
 
 **Measures for the policy.**
 
@@ -210,11 +195,6 @@ Decided 2026-10-25: the phone gets a real terminal on the Mac over the tailnet. 
 Code, Codex, Pi or any other CLI agent then runs on the Mac and is driven from the phone. The Sjel
 agent keeps its native UI. Every other agent uses the terminal.
 
-Facts (2026-10-25): Tailscale SSH is off on this Mac. The node advertises no SSH host keys, and
-`crates/host-net` only reports the `RunSSH` flag. tmux is not installed. No PTY or
-terminal-emulator crate is in the workspace; `portable-pty` is now (see `upstreams.toml`). Decided
-2026-10-25: build the native terminal first. The SSH path is the fallback, not a first step.
-
 Steps:
 
 1. **PTY sessions on the Mac** in `crates/agent` (A5), behind the routes below. Built
@@ -235,47 +215,10 @@ Why not an SSH client in the app: it needs its own key on the phone and its own 
 Mac. The paired-device listener already authenticates the phone, and PTYs held on the Mac give
 reattach without tmux.
 
-### Routes
+### Contract
 
-Same transport as the agent's session stream: JSON requests, and Server-Sent Events for output.
-The phone signs every request with `DeviceClient` through the paired listener.
-
-| Method and path | Body or query | Answer |
-|---|---|---|
-| `POST /api/agent/terminals` | `{preset, cwd, cols, rows}` | `{id}` |
-| `GET /api/agent/terminals` | | `[{id, preset, cwd, title, started_at, last_output_at, alive, exit_code, clients}]` |
-| `GET /api/agent/terminals/options` | | `{presets, folders}`: preset names, then `$HOME` and the folders in `~/Developer`, newest first |
-| `GET /api/agent/terminals/{id}/stream?from=<offset>` | | SSE, events below |
-| `POST /api/agent/terminals/{id}/input` | `{data}`: base64 bytes, at most 64 KiB | `204` |
-| `POST /api/agent/terminals/{id}/resize` | `{cols, rows}` | `204`. The last resize wins. |
-| `DELETE /api/agent/terminals/{id}` | | `204` after SIGHUP to the process group, SIGKILL after 5 s |
-
-SSE events:
-
-- `output`: `{offset, data}`. `offset` is the byte position of `data` in the terminal's output,
-  and `data` is base64.
-- `truncated`: `{first_offset}`. The requested `from` is older than the scrollback. The client
-  clears its grid and reads again from `first_offset`.
-- `exit`: `{code}`. The stream ends after it.
-
-Every route declares its request schema (`schema_of::<T>()`), as `tools/check-route-schemas.sh`
-requires.
-
-### Behavior
-
-- **Presets.** `shell` runs the user's login shell (`$SHELL -l`). `claude`, `codex`, `pi` and
-  `sjel-agent` run that program inside the login shell, so `PATH` matches an interactive
-  terminal. The commands live in `<overlay>/config/agent.toml` under `[terminal.presets]`, because
-  install paths are machine facts; the field is the command line, and the five names are the
-  default when the section is absent. `cwd` must be an existing directory under `$HOME`.
-- **Environment.** `TERM=xterm-256color`, `COLORTERM=truecolor`, `LANG` from the user's
-  environment. The PTY never inherits the capability's own secrets or tokens.
-- **Scrollback.** A 2 MiB ring of raw output per terminal, held in memory. A client that
-  reattaches reads from its last offset. A restart of the capability ends every terminal.
-- **Limits.** At most 8 terminals. A terminal with no attached client and no output for 12 hours
-  is closed like a `DELETE`. These are starting values.
-- **Several clients.** The Mac and the phone can attach to the same terminal at once. Both see the
-  same output, and either can type.
+[Terminals](../../crates/agent/README.md#terminals) owns routes, events, presets,
+environment, scrollback and limits. `cwd` must name an existing directory under `$HOME`.
 
 ### Security
 
@@ -288,9 +231,6 @@ to interactive keystrokes, so access is the control.
   every terminal route there, and `every_terminal_route_is_closed_to_an_agent_token` reads the
   manifest instead of restating the list, so a later route added without closing it fails the test
   rather than opening a shell.
-  Recorded because the first draft of this section was wrong: `serve_local_with` *does* admit the
-  agent token on this capability, which is why "does not call `admit_agents`" was never the
-  mechanism.
 - The capability stays on `Reach::Loopback`. The phone reaches it only through the paired
   listener and a device signature.
 - The phone asks for Face ID (`LocalAuthentication`) before it opens or reattaches a terminal,
@@ -298,53 +238,15 @@ to interactive keystrokes, so access is the control.
 - One audit line per terminal start and end in `<overlay>/data/agent/terminals.jsonl`:
   `{at, id, preset, cwd, client, event, exit_code}`. No input and no output is logged.
 
-### Client
+### Client and shell integration
 
-- `apps/gpui/core/src/terminal.rs`: the wire types and the client. Built: `Host` over the Mac's
-  shell or the phone's `DeviceClient`, the list row, open, attach-or-open, the stream with a
-  resume offset, input, resize, close, and [`Position`], which is what stops a
-  replayed frame from being drawn twice and what moves the reader to `first_offset` after
-  `truncated`.
-- `apps/gpui/ui/src/terminal/mod.rs`: the view. Built: `alacritty_terminal` 0.26 (Apache-2.0, the
-  licence check this plan asked for; its `upstreams.toml` row records the dependency cost and what
-  it does not do) parses the stream into a grid, and GPUI draws it as runs of cells that share a
-  look. Keys become pty bytes in `key_bytes`, which is the one path the Mac keyboard and a phone
-  key row can share; the wheel moves through the parser's history; the cursor is the inverted
-  cell.
-- Mac: `⌘K › Terminal` or `sjel://terminal` opens the right edge on `Seat::Terminal`, focused, and
-  ends a finished shell by offering a new one rather than a dead grid. The grid measures itself
-  and resizes the pty; the edge's left border drags its width, kept in `sidebar.json`. The page's
-  single-key bindings use `Workspace && !Terminal`, so Enter, J, K, G and Esc reach the program.
-  A drag selects (double-click a word, triple-click a line, shift extends), ⌘C copies, ⌘V
-  pastes with bracketed paste when the program asks for it, and ⌘A selects the scrollback.
-  Settings › Appearance › Terminal sets the font (Auto picks an installed Nerd Font), size, tone
-  and opacity; a trackpad pinch steps the size. ⌘T opens the terminal from anywhere; inside it
-  ⌘T opens `+ New`, and ⇧⌘] / ⇧⌘[ (or ⌃Tab / ⌃⇧Tab) step the tabs. Built.
-- Both: the seat is a deck of tabs (`ui/src/terminal/deck.rs`), one per live terminal, and
-  `+ New` picks a preset and a folder from `GET /api/agent/terminals/options`. A tab's × ends its
-  program. A resize reaches the pty only once the grid's size has held for 150 ms. Built; the
-  options route needs the agent capability restarted to answer.
-- Phone: `Seat::Terminal` asks for Face ID (`sjel_ios_unlock` in `ios/host/App.swift`, with the
-  passcode as fallback), then attaches the newest live terminal or opens a login shell at 48 × 28.
-  The view runs in touch mode: the key row (Esc, Tab, arrows, `|`, `~`, `/`, Return, Ctrl-C) sits
-  above the grid, and a tap on the grid raises the software keyboard. Entering the background
-  drops the view and the unlock, so a reattach asks again. Built and linked for the simulator.
-  The key row carries copy and paste, Settings has the same four Terminal rows as the Mac, and a
-  pinch steps the font size (`UIPinchGestureRecognizer` in `ios/host/App.swift`, because the iOS
-  port reports no pinch). Not tried on a paired phone.
-- Both: the grid is one canvas in Monokai (`theme::MONOKAI`). Each row is one shaped line with
-  every glyph on the cell's advance (`force_width`) and one quad per painted background, so a
-  fallback-font icon or a wide character keeps its columns.
-
-### Shell integration
-
-- The `shell` preset starts zsh with `ZDOTDIR` pointing at a shim
-  (`crates/agent/assets/shell/zsh/zshenv`) that restores the user's own `ZDOTDIR` and emits
-  OSC 133 `A`/`B`/`C`/`D;<exit>` marks. `alacritty_terminal` 0.26 drops OSC 133, so
-  `crates/agent/src/terminal/marks.rs` reads them from the raw stream. The stream sends a
-  `command` event when the marks change, and the Mac status line shows `live · running` or
-  `live · exit <code>`. Unit-tested only: not run against a live zsh, and not tried on the phone
-  either.
+- Mac and phone share `Host`, the terminal seat and resume handling (`e1b19960`, `3ef11ee6`).
+- Tabs, the preset/folder menu, selection, clipboard and appearance controls are built
+  (`a4e29630`); client behavior lives in `apps/gpui/core/src/terminal.rs` and
+  `apps/gpui/ui/src/terminal/`.
+- Shell command/exit marks are implemented (`34185597`). Live zsh and phone validation remain open.
+- The phone opens a shell behind Face ID/passcode and clears its unlock in the background.
+  Native paired-phone acceptance remains open below.
 
 ### Done when
 

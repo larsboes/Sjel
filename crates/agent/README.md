@@ -151,16 +151,15 @@ after the finder closes. The paired iPhone can create or select sessions, prompt
 and resume streams, inspect and answer approvals, and stop runs through its signed device client.
 
 The terminal has a client on the Mac. Pty sessions, the routes, the ring, the resize, the group
-kill and the audit are here (`src/terminal.rs`); a Mac shell has been driven through them end to
+kill and the audit are here (`src/terminal/mod.rs`); a Mac shell has been driven through them end to
 end; and the app's half is `apps/gpui/core/src/terminal.rs` (the wire client, with the resume
-offset) and `apps/gpui/ui/src/terminal.rs` (the view: `alacritty_terminal` for the grid, keys as pty
+offset) and `apps/gpui/ui/src/terminal/mod.rs` (the view: `alacritty_terminal` for the grid, keys as pty
 bytes, the key row a phone needs). On the Mac, `⌘K › Terminal` or `sjel://terminal` opens the newest
 live terminal — or a login shell — in the right edge.
 
-The phone cannot use that client yet: it reaches the Mac through `DeviceClient`, not `Shell`, so its
-seat says so rather than opening a shell it could not follow. `docs/plans/agent.md` §6 names what
-that costs: `streaming_get` already exists, `DELETE` does not, and the Face ID gate has no binding
-in `ios/host`.
+The shared terminal `Host` supports the Mac shell and the phone's signed `DeviceClient`.
+The phone seat asks for Face ID or passcode before attaching and clears its unlock in the
+background. Paired-phone acceptance remains in [the area plan](../../docs/plans/agent.md#6-terminal-from-the-phone).
 
 The join between the agent UI and the capability is not tested: each part has its own tests, and a
 run has never been driven end to end through the capability. `docs/plans/agent.md` (Live

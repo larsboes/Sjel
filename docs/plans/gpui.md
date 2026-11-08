@@ -524,6 +524,7 @@ Use a three-layer split across `gpui-fast` and `nsh`:
   Finance Transactions and Import Candidates (`ui/src/finance/transactions.rs`, `ui/src/finance/import.rs`), and Inventory
   Owned (`ui/src/inventory/owned.rs`) with per-column sorting and interactive column resizing while
   keeping `virtual_list` group headers and inline row editors intact.
+- **Projects & Tasks UX.** Built (2026-11-08): Full keyboard navigation across Projects Hub, All Tasks, and Project Tasks (`j`/`k` or `up`/`down` for selection, `Enter` or `l` to open/inspect, `Space` to toggle completion), in-place task title renaming (`e` or `✎` button) committing via `rename_record`, and Kanban Board drag-and-drop card status transitions (`open`, `doing`, `waiting`, `done`) with rapid keyboard stage progression (`[` / `]`).
 - **Calendar.** Built (2026-11-08, `102dfe5f`): Keeps the 24-hour timeline, quarter-hour drag/resize and
   availability grid in `ui/src/calendar/`, extends the 24-hour time grid to a 7-day week view (`View::Week`,
   `time_grid`) with duration-sized events, overlap columns (`timeline::blocks`), all-day spans across the week,

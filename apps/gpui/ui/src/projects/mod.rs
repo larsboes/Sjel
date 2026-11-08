@@ -266,6 +266,9 @@ pub struct Projects {
     pub(super) blocked: Vec<Blocked>,
     pub(super) scroll: ScrollHandle,
     pub focus: FocusHandle,
+    pub selected_index: Option<usize>,
+    pub selected_task_index: Option<usize>,
+    pub(super) task_title_edit: Option<(String, String, Entity<InputState>, Subscription)>,
 }
 
 impl gpui_kit::EventEmitter<ProjectsEvent> for Projects {}
@@ -327,6 +330,9 @@ impl Projects {
             blocked: Vec::new(),
             scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
+            selected_index: None,
+            selected_task_index: None,
+            task_title_edit: None,
         }
     }
 
@@ -339,6 +345,8 @@ impl Projects {
         self.task_panel = None;
         self.status_edit = None;
         self.due_edit = None;
+        self.selected_task_index = None;
+        self.task_title_edit = None;
         self.project = None;
         cx.notify();
     }
@@ -349,7 +357,9 @@ impl Projects {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.task_panel.is_some() {
+        if self.task_title_edit.is_some() {
+            self.cancel_task_title(cx);
+        } else if self.task_panel.is_some() {
             self.task_panel = None;
             cx.notify();
         } else if self.status_edit.is_some() {
@@ -528,6 +538,307 @@ impl Projects {
             if let Some((input, _)) = &self.notes_search_input {
                 let handle = input.read(cx).focus_handle(cx);
                 window.focus(&handle, cx);
+            }
+        }
+    }
+
+    pub fn filtered_projects(&self) -> Vec<ProjectSummary> {
+        let Some(projects) = &self.projects.value else {
+            return Vec::new();
+        };
+        let query = self.search_query.as_str();
+        let (sort_col, sort_asc) = self.project_sort;
+        let mut filtered: Vec<_> = projects
+            .iter()
+            .filter(|p| p.archived == self.show_archived)
+            .filter(|p| query.is_empty() || p.name.to_lowercase().contains(query))
+            .cloned()
+            .collect();
+
+        filtered.sort_by(|a, b| {
+            let order = match sort_col {
+                ProjectSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                ProjectSort::Tasks => (a.open, a.open + a.done).cmp(&(b.open, b.open + b.done)),
+                ProjectSort::Progress => {
+                    let p_a = if a.open + a.done > 0 {
+                        a.done as f32 / (a.open + a.done) as f32
+                    } else {
+                        -1.0
+                    };
+                    let p_b = if b.open + b.done > 0 {
+                        b.done as f32 / (b.open + b.done) as f32
+                    } else {
+                        -1.0
+                    };
+                    p_a.partial_cmp(&p_b).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                ProjectSort::Notes => a.notes.cmp(&b.notes),
+            };
+            if sort_asc {
+                order
+            } else {
+                order.reverse()
+            }
+        });
+        filtered
+    }
+
+    pub fn current_project_tasks(&self) -> Vec<ProjectRecord> {
+        let Some((_, remote)) = &self.project else {
+            return Vec::new();
+        };
+        let Some(records) = &remote.value else {
+            return Vec::new();
+        };
+        tasks::ordered(records)
+            .into_iter()
+            .filter(|t| self.task_filter.matches(t.done))
+            .cloned()
+            .collect()
+    }
+
+    pub fn filtered_all_tasks(&self) -> Vec<GlobalTask> {
+        let Some(tasks) = &self.all_tasks.value else {
+            return Vec::new();
+        };
+        let query = self.search_query.as_str();
+        let (sort, ascending) = self.task_sort;
+        let mut filtered: Vec<&GlobalTask> = tasks
+            .iter()
+            .filter(|t| self.global_status.matches(t.status()))
+            .filter(|t| {
+                query.is_empty()
+                    || t.title.to_lowercase().contains(query)
+                    || t.project.to_lowercase().contains(query)
+            })
+            .collect();
+        tasks::sort_tasks(&mut filtered, sort, ascending);
+        filtered.into_iter().cloned().collect()
+    }
+
+    fn on_select_next(
+        &mut self,
+        _: &actions::SelectNext,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section == ProjectSection::Tasks {
+                let tasks = self.current_project_tasks();
+                if !tasks.is_empty() {
+                    self.selected_task_index = Some(match self.selected_task_index {
+                        Some(i) => (i + 1).min(tasks.len().saturating_sub(1)),
+                        None => 0,
+                    });
+                    cx.notify();
+                }
+            }
+        } else {
+            match self.tab {
+                ProjectsTab::Hubs => {
+                    let projects = self.filtered_projects();
+                    if !projects.is_empty() {
+                        self.selected_index = Some(match self.selected_index {
+                            Some(i) => (i + 1).min(projects.len().saturating_sub(1)),
+                            None => 0,
+                        });
+                        cx.notify();
+                    }
+                }
+                ProjectsTab::AllTasks => {
+                    let tasks = self.filtered_all_tasks();
+                    if !tasks.is_empty() {
+                        self.selected_task_index = Some(match self.selected_task_index {
+                            Some(i) => (i + 1).min(tasks.len().saturating_sub(1)),
+                            None => 0,
+                        });
+                        cx.notify();
+                    }
+                }
+                ProjectsTab::AllNotes => {}
+            }
+        }
+    }
+
+    fn on_select_prev(
+        &mut self,
+        _: &actions::SelectPrev,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section == ProjectSection::Tasks {
+                let tasks = self.current_project_tasks();
+                if !tasks.is_empty() {
+                    self.selected_task_index = Some(match self.selected_task_index {
+                        Some(i) => i.saturating_sub(1),
+                        None => 0,
+                    });
+                    cx.notify();
+                }
+            }
+        } else {
+            match self.tab {
+                ProjectsTab::Hubs => {
+                    let projects = self.filtered_projects();
+                    if !projects.is_empty() {
+                        self.selected_index = Some(match self.selected_index {
+                            Some(i) => i.saturating_sub(1),
+                            None => 0,
+                        });
+                        cx.notify();
+                    }
+                }
+                ProjectsTab::AllTasks => {
+                    let tasks = self.filtered_all_tasks();
+                    if !tasks.is_empty() {
+                        self.selected_task_index = Some(match self.selected_task_index {
+                            Some(i) => i.saturating_sub(1),
+                            None => 0,
+                        });
+                        cx.notify();
+                    }
+                }
+                ProjectsTab::AllNotes => {}
+            }
+        }
+    }
+
+    fn on_activate_selected(
+        &mut self,
+        _: &actions::ActivateSelected,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section == ProjectSection::Tasks {
+                let tasks = self.current_project_tasks();
+                if let Some(i) = self.selected_task_index {
+                    if let Some(task) = tasks.get(i) {
+                        let global = tables::project_record_to_global_task(task);
+                        self.select_task(&global, window, cx);
+                    }
+                }
+            }
+        } else {
+            match self.tab {
+                ProjectsTab::Hubs => {
+                    let projects = self.filtered_projects();
+                    if let Some(i) = self.selected_index {
+                        if let Some(p) = projects.get(i) {
+                            self.open_project(p.name.clone(), cx);
+                        }
+                    }
+                }
+                ProjectsTab::AllTasks => {
+                    let tasks = self.filtered_all_tasks();
+                    if let Some(i) = self.selected_task_index {
+                        if let Some(task) = tasks.get(i) {
+                            self.select_task(task, window, cx);
+                        }
+                    }
+                }
+                ProjectsTab::AllNotes => {}
+            }
+        }
+    }
+
+    fn on_toggle_selected(
+        &mut self,
+        _: &actions::ToggleSelected,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() {
+            if self.project_section == ProjectSection::Tasks {
+                let tasks = self.current_project_tasks();
+                if let Some(i) = self.selected_task_index {
+                    if let Some(task) = tasks.get(i) {
+                        self.toggle_task(task.path.clone(), !task.done, window, cx);
+                    }
+                }
+            }
+        } else if self.tab == ProjectsTab::AllTasks {
+            let tasks = self.filtered_all_tasks();
+            if let Some(i) = self.selected_task_index {
+                if let Some(task) = tasks.get(i) {
+                    self.toggle_global_task(task.id.clone(), !task.done, window, cx);
+                }
+            }
+        }
+    }
+
+    fn on_edit_task_title_action(
+        &mut self,
+        _: &actions::EditTaskTitle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section == ProjectSection::Tasks {
+            let tasks = self.current_project_tasks();
+            if let Some(i) = self.selected_task_index {
+                if let Some(task) = tasks.get(i) {
+                    self.edit_task_title(task.path.clone(), task.title.clone(), window, cx);
+                }
+            }
+        }
+    }
+
+    fn on_move_task_next_stage(
+        &mut self,
+        _: &actions::MoveTaskNextStage,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section == ProjectSection::Tasks {
+            let tasks = self.current_project_tasks();
+            if let Some(i) = self.selected_task_index {
+                if let Some(task) = tasks.get(i) {
+                    let status = tables::parse_frontmatter_status(&task.content, task.done);
+                    let next = match status.as_str() {
+                        "open" | "" => "doing",
+                        "doing" => "done",
+                        "waiting" | "blocked" => "doing",
+                        "done" | "cancelled" => "open",
+                        _ => "doing",
+                    };
+                    self.set_task_property(
+                        task.path.clone(),
+                        "status",
+                        next.to_string(),
+                        window,
+                        cx,
+                    );
+                }
+            }
+        }
+    }
+
+    fn on_move_task_prev_stage(
+        &mut self,
+        _: &actions::MoveTaskPrevStage,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.project.is_some() && self.project_section == ProjectSection::Tasks {
+            let tasks = self.current_project_tasks();
+            if let Some(i) = self.selected_task_index {
+                if let Some(task) = tasks.get(i) {
+                    let status = tables::parse_frontmatter_status(&task.content, task.done);
+                    let prev = match status.as_str() {
+                        "done" | "cancelled" => "doing",
+                        "doing" => "open",
+                        "waiting" | "blocked" => "open",
+                        _ => "open",
+                    };
+                    self.set_task_property(
+                        task.path.clone(),
+                        "status",
+                        prev.to_string(),
+                        window,
+                        cx,
+                    );
+                }
             }
         }
     }
@@ -802,6 +1113,8 @@ impl Projects {
         self.project_section = ProjectSection::Note;
         self.editor = None;
         self.opening = None;
+        self.selected_task_index = None;
+        self.task_title_edit = None;
         cx.notify();
         let request = name.clone();
         let repo = self.repo.clone();
@@ -1305,6 +1618,91 @@ impl Projects {
         cx.notify();
     }
 
+    pub(super) fn edit_task_title(
+        &mut self,
+        path: String,
+        title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .task_title_edit
+            .as_ref()
+            .is_some_and(|(p, ..)| *p == path)
+        {
+            return;
+        }
+        let input = cx.new(|cx| {
+            let mut state = InputState::new(window, cx).placeholder("Task title… (Press ↩ or Esc)");
+            state.set_value(title.clone(), window, cx);
+            state
+        });
+        let subscription =
+            cx.subscribe_in(&input, window, |view, _, event, window, cx| match event {
+                InputEvent::PressEnter { shift: false, .. } => view.commit_task_title(window, cx),
+                InputEvent::Blur => view.cancel_task_title(cx),
+                _ => {}
+            });
+        input.update(cx, |state, cx| state.focus(window, cx));
+        self.task_title_edit = Some((path, title, input, subscription));
+        cx.notify();
+    }
+
+    pub(super) fn commit_task_title(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((path, was, input, _)) = self.task_title_edit.take() else {
+            return;
+        };
+        cx.notify();
+        let title = input.read(cx).value().trim().to_owned();
+        if title.is_empty() || title == was {
+            return;
+        }
+        self.rename_task(path, title, window, cx);
+    }
+
+    pub(super) fn cancel_task_title(&mut self, cx: &mut Context<Self>) {
+        if self.task_title_edit.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub(super) fn rename_task(
+        &mut self,
+        path: String,
+        title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repo = self.repo.clone();
+        let was = path.clone();
+        let work = shell::run(async move { repo.rename_record(&path, &title).await });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = work.await.unwrap_or(Err(ShellError::Unreachable));
+            let _ = this.update_in(cx, |view, window, cx| {
+                match result {
+                    Ok(renamed) => {
+                        view.refresh_records(cx);
+                        view.load_all_tasks(cx);
+                        if let Some(panel) = &mut view.task_panel {
+                            if panel.path == was {
+                                panel.path = renamed.path;
+                            }
+                        }
+                        window.push_notification(
+                            Notification::success(format!("Renamed task to {}", renamed.title)),
+                            cx,
+                        );
+                    }
+                    Err(error) => {
+                        window.push_notification(Notification::error(error.to_string()), cx);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn new_task_field(
         &mut self,
         window: &mut Window,
@@ -1492,6 +1890,7 @@ impl Projects {
     /// Saves what the open note still holds and closes its editor. The write outlives it.
     fn put_away_editor(&mut self, cx: &mut Context<Self>) {
         self.title_edit = None;
+        self.task_title_edit = None;
         if let Some(editor) = self.editor.take() {
             editor.update(cx, |editor, cx| editor.save(cx));
             cx.emit(ProjectsEvent::Editing(false));
@@ -1653,9 +2052,27 @@ impl Projects {
                             .flex()
                             .items_center()
                             .gap_1()
-                            .child(filter_btn("filter-open", "Open", open_count, TaskFilter::Open, cx))
-                            .child(filter_btn("filter-all", "All", all_count, TaskFilter::All, cx))
-                            .child(filter_btn("filter-done", "Done", done_count, TaskFilter::Done, cx))
+                            .child(filter_btn(
+                                "filter-open",
+                                "Open",
+                                open_count,
+                                TaskFilter::Open,
+                                cx,
+                            ))
+                            .child(filter_btn(
+                                "filter-all",
+                                "All",
+                                all_count,
+                                TaskFilter::All,
+                                cx,
+                            ))
+                            .child(filter_btn(
+                                "filter-done",
+                                "Done",
+                                done_count,
+                                TaskFilter::Done,
+                                cx,
+                            ))
                             .child(
                                 div()
                                     .px_1()
@@ -1818,8 +2235,10 @@ impl Projects {
                             .shadow_sm()
                     })
                     .when(!active, |el| {
-                        el.text_color(rgb(palette.muted))
-                            .hover(|s| s.text_color(rgb(palette.text)).bg(rgba(tint(palette.surface, 0x44))))
+                        el.text_color(rgb(palette.muted)).hover(|s| {
+                            s.text_color(rgb(palette.text))
+                                .bg(rgba(tint(palette.surface, 0x44)))
+                        })
                     })
                     .on_click(cx.listener(move |view: &mut Self, _, _, cx| {
                         if view.project_section != target_sec {
@@ -1923,11 +2342,46 @@ impl Projects {
                         .p(px(2.))
                         .rounded(px(8.))
                         .bg(rgba(palette.raised))
-                        .child(sec_tab("sec-project-note", "Project Note", None, "1", ProjectSection::Note, cx))
-                        .child(sec_tab("sec-tasks", "Tasks", Some(open_tasks), "2", ProjectSection::Tasks, cx))
-                        .child(sec_tab("sec-notes", "Notes", Some(supporting_notes_count), "3", ProjectSection::Notes, cx))
-                        .child(sec_tab("sec-mail-review", "Mail review", None, "4", ProjectSection::MailReview, cx))
-                        .child(sec_tab("sec-inventory-links", "Inventory links", None, "5", ProjectSection::InventoryLinks, cx)),
+                        .child(sec_tab(
+                            "sec-project-note",
+                            "Project Note",
+                            None,
+                            "1",
+                            ProjectSection::Note,
+                            cx,
+                        ))
+                        .child(sec_tab(
+                            "sec-tasks",
+                            "Tasks",
+                            Some(open_tasks),
+                            "2",
+                            ProjectSection::Tasks,
+                            cx,
+                        ))
+                        .child(sec_tab(
+                            "sec-notes",
+                            "Notes",
+                            Some(supporting_notes_count),
+                            "3",
+                            ProjectSection::Notes,
+                            cx,
+                        ))
+                        .child(sec_tab(
+                            "sec-mail-review",
+                            "Mail review",
+                            None,
+                            "4",
+                            ProjectSection::MailReview,
+                            cx,
+                        ))
+                        .child(sec_tab(
+                            "sec-inventory-links",
+                            "Inventory links",
+                            None,
+                            "5",
+                            ProjectSection::InventoryLinks,
+                            cx,
+                        )),
                 );
 
             let content: AnyElement = match self.project_section {
@@ -2618,42 +3072,9 @@ impl Projects {
         let body = match (&self.projects.value, &self.projects.error) {
             (_, Some(error)) => note(error.to_string(), palette.red),
             (None, None) => placeholder(320.),
-            (Some(projects), None) => {
+            (Some(_), None) => {
                 let query = self.search_query.as_str();
-                let mut filtered: Vec<_> = projects
-                    .iter()
-                    .filter(|p| p.archived == self.show_archived)
-                    .filter(|p| query.is_empty() || p.name.to_lowercase().contains(query))
-                    .cloned()
-                    .collect();
-
-                filtered.sort_by(|a, b| {
-                    let order = match sort_col {
-                        ProjectSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                        ProjectSort::Tasks => {
-                            (a.open, a.open + a.done).cmp(&(b.open, b.open + b.done))
-                        }
-                        ProjectSort::Progress => {
-                            let p_a = if a.open + a.done > 0 {
-                                a.done as f32 / (a.open + a.done) as f32
-                            } else {
-                                -1.0
-                            };
-                            let p_b = if b.open + b.done > 0 {
-                                b.done as f32 / (b.open + b.done) as f32
-                            } else {
-                                -1.0
-                            };
-                            p_a.partial_cmp(&p_b).unwrap_or(std::cmp::Ordering::Equal)
-                        }
-                        ProjectSort::Notes => a.notes.cmp(&b.notes),
-                    };
-                    if sort_asc {
-                        order
-                    } else {
-                        order.reverse()
-                    }
-                });
+                let filtered = self.filtered_projects();
 
                 let mut rows = vec![table_header];
                 if filtered.is_empty() {
@@ -2671,7 +3092,8 @@ impl Projects {
                             .into_any_element(),
                     );
                 } else {
-                    for project in filtered {
+                    for (idx, project) in filtered.into_iter().enumerate() {
+                        let is_selected = self.selected_index == Some(idx);
                         let name = project.name.clone();
                         let total_tasks = project.open + project.done;
                         let progress = if total_tasks > 0 {
@@ -2778,8 +3200,10 @@ impl Projects {
                                 .id(SharedString::from(format!("project-{}", project.name)))
                                 .group("project-row")
                                 .cursor_pointer()
+                                .when(is_selected, |row| row.bg(rgba(tint(palette.accent, 0x18))))
                                 .hover(move |style| style.bg(rgba(palette.raised)))
                                 .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.selected_index = Some(idx);
                                     view.open_project(open_name.clone(), cx)
                                 }))
                                 .child(
@@ -2902,9 +3326,19 @@ impl Render for Projects {
             .on_action(cx.listener(Self::on_cycle_task_filter))
             .on_action(cx.listener(Self::on_new_item))
             .on_action(cx.listener(Self::on_focus_search))
-            .on_mouse_down(MouseButton::Left, cx.listener(|view, _, window, cx| {
-                window.focus(&view.focus, cx);
-            }))
+            .on_action(cx.listener(Self::on_select_next))
+            .on_action(cx.listener(Self::on_select_prev))
+            .on_action(cx.listener(Self::on_activate_selected))
+            .on_action(cx.listener(Self::on_toggle_selected))
+            .on_action(cx.listener(Self::on_edit_task_title_action))
+            .on_action(cx.listener(Self::on_move_task_next_stage))
+            .on_action(cx.listener(Self::on_move_task_prev_stage))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, _, window, cx| {
+                    window.focus(&view.focus, cx);
+                }),
+            )
             .size_full()
             .child(body)
     }
@@ -3426,6 +3860,131 @@ mod tests {
                 projects.task_panel.is_some(),
                 "inspector persists across view modes"
             );
+        });
+    }
+
+    #[gpui::test]
+    fn keyboard_navigation_and_inline_task_editing_in_projects(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let p1 = ProjectSummary {
+            name: "Hearth".into(),
+            archived: false,
+            open: 2,
+            done: 1,
+            notes: 1,
+        };
+        let p2 = ProjectSummary {
+            name: "Atlas".into(),
+            archived: false,
+            open: 0,
+            done: 5,
+            notes: 10,
+        };
+        let (projects, cx) = cx.add_window_view(move |_window, cx| {
+            let mut view = Projects::new(Repo::new(Err(ShellError::NotLoopback)), cx);
+            view.projects.value = Some(vec![p1, p2]);
+            view
+        });
+        cx.run_until_parked();
+
+        // 1. Hub navigation with j / k
+        projects.update(cx, |view, _cx| {
+            assert_eq!(view.selected_index, None);
+        });
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.on_select_next(&actions::SelectNext, window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert_eq!(view.selected_index, Some(0));
+        });
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.on_select_next(&actions::SelectNext, window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert_eq!(view.selected_index, Some(1));
+        });
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.on_select_prev(&actions::SelectPrev, window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert_eq!(view.selected_index, Some(0));
+        });
+
+        // 2. Open project and navigate tasks
+        let task1 = ProjectRecord {
+            project: "Hearth".into(),
+            path: "Hearth/Tasks/T1.md".into(),
+            kind: "task".into(),
+            title: "T1".into(),
+            content: "---\ntype: task\nstatus: open\n---\n# T1\n".into(),
+            done: false,
+            due: None,
+            priority: 2,
+        };
+        let task2 = ProjectRecord {
+            project: "Hearth".into(),
+            path: "Hearth/Tasks/T2.md".into(),
+            kind: "task".into(),
+            title: "T2".into(),
+            content: "---\ntype: task\nstatus: doing\n---\n# T2\n".into(),
+            done: false,
+            due: None,
+            priority: 1,
+        };
+        projects.update(cx, |view, cx| {
+            view.project = Some((
+                "Hearth".into(),
+                Remote {
+                    value: Some(vec![task1.clone(), task2.clone()]),
+                    ..Remote::default()
+                },
+            ));
+            view.project_section = ProjectSection::Tasks;
+            cx.notify();
+        });
+        cx.run_until_parked();
+
+        // Navigate tasks with j / k
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.on_select_next(&actions::SelectNext, window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert_eq!(view.selected_task_index, Some(0));
+        });
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.on_select_next(&actions::SelectNext, window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert_eq!(view.selected_task_index, Some(1));
+        });
+
+        // Inline task title editing
+        cx.update(|window, cx| {
+            projects.update(cx, |view, cx| {
+                view.edit_task_title("Hearth/Tasks/T1.md".into(), "T1".into(), window, cx);
+            });
+        });
+        projects.read_with(cx, |view, _| {
+            assert!(view.task_title_edit.is_some());
+            let (path, original, _, _) = view.task_title_edit.as_ref().unwrap();
+            assert_eq!(path, "Hearth/Tasks/T1.md");
+            assert_eq!(original, "T1");
+        });
+
+        // Cancel editing
+        projects.update(cx, |view, cx| {
+            view.cancel_task_title(cx);
+            assert!(view.task_title_edit.is_none());
         });
     }
 }

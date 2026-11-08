@@ -3,7 +3,8 @@
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
-    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
+    div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, Render, SharedString,
+    Window,
 };
 
 use crate::primitives::{due_badge, priority_pill, status_pill};
@@ -12,6 +13,34 @@ use sjel_gpui_core::shell::ProjectRecord;
 
 use super::tables::{parse_frontmatter_status, project_record_to_global_task};
 use super::Projects;
+
+/// Preview for a task being dragged between Kanban columns.
+#[derive(Clone)]
+pub(super) struct DraggedTask {
+    pub(super) path: String,
+    pub(super) title: String,
+    pub(super) palette: Palette,
+}
+
+impl Render for DraggedTask {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let palette = self.palette;
+        div()
+            .max_w(px(260.))
+            .truncate()
+            .px_3()
+            .py_2()
+            .rounded(px(8.))
+            .bg(rgba(palette.surface | 0xff))
+            .border_1()
+            .border_color(rgb(palette.accent))
+            .shadow_lg()
+            .text_sm()
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(rgb(palette.text))
+            .child(self.title.clone())
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BoardColumnKind {
@@ -100,10 +129,14 @@ impl Projects {
                 .map(|(idx, task)| {
                     let task_rec = (*task).clone();
                     let path = task.path.clone();
-                    let is_selected = self
+                    let task_pos = tasks.iter().position(|t| t.path == task.path);
+                    let is_keyboard_selected =
+                        self.selected_task_index.is_some() && self.selected_task_index == task_pos;
+                    let is_panel_selected = self
                         .task_panel
                         .as_ref()
                         .is_some_and(|p| p.path == task.path);
+                    let is_selected = is_keyboard_selected || is_panel_selected;
                     let due = task.due.clone().filter(|d| !d.is_empty());
                     let subtask_progress = crate::tasks::parse_subtask_progress(&task.content);
                     let status = parse_frontmatter_status(&task.content, task.done);
@@ -124,6 +157,7 @@ impl Projects {
                         } else {
                             rgba(palette.border)
                         })
+                        .when(is_selected, |s| s.bg(rgba(tint(palette.accent, 0x14))))
                         .hover(move |s| {
                             if !is_selected {
                                 s.border_color(rgba(tint(palette.accent, 0x60)))
@@ -135,10 +169,19 @@ impl Projects {
                         .on_click(cx.listener({
                             let t = task_rec.clone();
                             move |view, _, window, cx| {
+                                view.selected_task_index = task_pos;
                                 let global = project_record_to_global_task(&t);
                                 view.select_task(&global, window, cx);
                             }
                         }))
+                        .on_drag(
+                            DraggedTask {
+                                path: task.path.clone(),
+                                title: task.title.clone(),
+                                palette,
+                            },
+                            |dragged, _, _, cx| cx.new(|_| dragged.clone()),
+                        )
                         .child(
                             div()
                                 .flex()
@@ -229,6 +272,13 @@ impl Projects {
                 })
                 .collect();
 
+            let drop_status = match col_kind {
+                BoardColumnKind::Open => "open",
+                BoardColumnKind::Doing => "doing",
+                BoardColumnKind::WaitingBlocked => "waiting",
+                BoardColumnKind::Done => "done",
+            };
+
             div()
                 .flex_1()
                 .min_w(px(220.))
@@ -240,6 +290,20 @@ impl Projects {
                 .bg(rgba(tint(palette.surface, 0x55)))
                 .border_1()
                 .border_color(rgba(palette.border))
+                .drag_over::<DraggedTask>(move |style, _, _, _| {
+                    style
+                        .bg(rgba(tint(col_color, 0x18)))
+                        .border_color(rgb(col_color))
+                })
+                .on_drop(cx.listener(move |view, dragged: &DraggedTask, window, cx| {
+                    view.set_task_property(
+                        dragged.path.clone(),
+                        "status",
+                        drop_status.to_string(),
+                        window,
+                        cx,
+                    );
+                }))
                 .child(
                     div()
                         .flex()

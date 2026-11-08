@@ -1,7 +1,7 @@
 //! Task and cross-project task/note tables for Projects.
 
 use gpui_kit::component::checkbox::Checkbox;
-use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::input::{Escape, Input, InputState};
 use gpui_kit::component::Sizable;
 use gpui_kit::{
     div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, FontWeight, SharedString,
@@ -210,12 +210,79 @@ impl Projects {
                     )
                 }
             };
-            let is_selected = self
-                .task_panel
-                .as_ref()
-                .is_some_and(|p| p.path == task.path);
+            let is_row_selected = self.selected_task_index == Some(index)
+                || self
+                    .task_panel
+                    .as_ref()
+                    .is_some_and(|p| p.path == task.path);
             let cycle = task.clone();
             let priority = task.priority.clamp(1, 3);
+            let is_editing_title = self
+                .task_title_edit
+                .as_ref()
+                .is_some_and(|(p, ..)| *p == task.path);
+            let title_cell = if is_editing_title {
+                let input = self
+                    .task_title_edit
+                    .as_ref()
+                    .map(|(_, _, input, _)| input.clone())
+                    .unwrap();
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .capture_action(cx.listener(|view, _: &Escape, _, cx| {
+                        view.cancel_task_title(cx);
+                        cx.stop_propagation();
+                    }))
+                    .child(Input::new(&input).small().appearance(false).px_0())
+                    .into_any_element()
+            } else {
+                let edit_task = task.clone();
+                div()
+                    .id(("task", index))
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.selected_task_index = Some(index);
+                        let global = project_record_to_global_task(&open);
+                        view.select_task(&global, window, cx);
+                    }))
+                    .child(
+                        div()
+                            .truncate()
+                            .text_sm()
+                            .when(task.done, |title| title.line_through())
+                            .hover(move |style| style.text_color(rgb(palette.accent)))
+                            .child(task.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .id(("edit-task-title", index))
+                            .cursor_pointer()
+                            .text_xs()
+                            .text_color(rgb(palette.muted))
+                            .opacity(0.)
+                            .group_hover("task-row", |s| s.opacity(0.8))
+                            .hover(move |s| s.text_color(rgb(palette.accent)).opacity(1.))
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                cx.stop_propagation();
+                                view.selected_task_index = Some(index);
+                                view.edit_task_title(
+                                    edit_task.path.clone(),
+                                    edit_task.title.clone(),
+                                    window,
+                                    cx,
+                                );
+                            }))
+                            .child("✎"),
+                    )
+                    .children(subtask_badge)
+                    .into_any_element()
+            };
             rows.push(
                 row_for_density(cols.density)
                     .id(("task-row", index))
@@ -223,7 +290,9 @@ impl Projects {
                     .min_h(px(40.))
                     .py_1()
                     .hover(move |s| s.bg(rgba(tint(palette.raised, 0x55))))
-                    .when(is_selected, |row| row.bg(rgba(tint(palette.accent, 0x18))))
+                    .when(is_row_selected, |row| {
+                        row.bg(rgba(tint(palette.accent, 0x18)))
+                    })
                     .when(task.done, |row| row.opacity(0.55))
                     .child(
                         div().w(px(24.)).flex().items_center().child(
@@ -234,29 +303,7 @@ impl Projects {
                                 })),
                         ),
                     )
-                    .child(
-                        div()
-                            .id(("task", index))
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .cursor_pointer()
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                let global = project_record_to_global_task(&open);
-                                view.select_task(&global, window, cx);
-                            }))
-                            .child(
-                                div()
-                                    .truncate()
-                                    .text_sm()
-                                    .when(task.done, |title| title.line_through())
-                                    .hover(move |style| style.text_color(rgb(palette.accent)))
-                                    .child(task.title.clone()),
-                            )
-                            .children(subtask_badge),
-                    )
+                    .child(title_cell)
                     .child(status_cell)
                     .child(due_cell)
                     .child(
@@ -625,7 +672,8 @@ impl Projects {
         let cols = self.columns();
         let status = task.status().to_owned();
         let closed = tasks::status_closes(&status);
-        let selected = self.task_panel.as_ref().is_some_and(|p| p.path == task.id);
+        let selected = self.selected_task_index == Some(index)
+            || self.task_panel.as_ref().is_some_and(|p| p.path == task.id);
         let (toggle, select, cycle, edit, pick) = (
             task.id.clone(),
             task.clone(),
@@ -725,11 +773,10 @@ impl Projects {
                     .items_center()
                     .gap_2()
                     .cursor_pointer()
-                    .on_click(
-                        cx.listener(move |view, _, window, cx| {
-                            view.select_task(&select, window, cx)
-                        }),
-                    )
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        view.selected_task_index = Some(index);
+                        view.select_task(&select, window, cx)
+                    }))
                     .child(
                         div()
                             .truncate()

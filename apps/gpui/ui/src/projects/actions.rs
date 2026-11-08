@@ -25,6 +25,20 @@ actions!(
         NewItem,
         /// Focus the search field.
         FocusSearch,
+        /// Move selection to the next item (project or task).
+        SelectNext,
+        /// Move selection to the previous item (project or task).
+        SelectPrev,
+        /// Open the currently selected project or task.
+        ActivateSelected,
+        /// Toggle completion of the selected task.
+        ToggleSelected,
+        /// Edit the title of the selected task in-place.
+        EditTaskTitle,
+        /// Advance the selected task to the next Kanban column.
+        MoveTaskNextStage,
+        /// Move the selected task to the previous Kanban column.
+        MoveTaskPrevStage,
     ]
 );
 
@@ -47,5 +61,15 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("f", CycleTaskFilter, Some("Projects")),
         KeyBinding::new("n", NewItem, Some("Projects")),
         KeyBinding::new("/", FocusSearch, Some("Projects")),
+        KeyBinding::new("j", SelectNext, Some("Projects")),
+        KeyBinding::new("down", SelectNext, Some("Projects")),
+        KeyBinding::new("k", SelectPrev, Some("Projects")),
+        KeyBinding::new("up", SelectPrev, Some("Projects")),
+        KeyBinding::new("enter", ActivateSelected, Some("Projects")),
+        KeyBinding::new("l", ActivateSelected, Some("Projects")),
+        KeyBinding::new("space", ToggleSelected, Some("Projects")),
+        KeyBinding::new("e", EditTaskTitle, Some("Projects")),
+        KeyBinding::new("]", MoveTaskNextStage, Some("Projects")),
+        KeyBinding::new("[", MoveTaskPrevStage, Some("Projects")),
     ]);
 }

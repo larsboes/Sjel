@@ -10,6 +10,13 @@ const core = ["sjel-status", "devices", "entities", "store"];
 const binaries = ["sjel-cli", "sjel-status", "devices-server", "entities-server", "sjel-storage", "sjel-capability-auth"];
 const platform = `${process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch}-${process.platform === "darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
 
+function minimumMacOS(): string {
+  const manifest = Bun.TOML.parse(readFileSync(join(root, "apps/gpui/Cargo.toml"), "utf8"));
+  const version = manifest.package?.metadata?.sjel?.minimum_macos;
+  if (typeof version !== "string" || !/^\d+\.\d+$/.test(version)) throw new Error("GPUI manifest needs a minimum macOS version");
+  return version;
+}
+
 function run(argv: string[], cwd = root) {
   const result = Bun.spawnSync(argv, { cwd, stdout: "inherit", stderr: "inherit" });
   if (result.exitCode !== 0) throw new Error(`${argv[0]} failed (${result.exitCode})`);
@@ -144,6 +151,7 @@ function parse(args: string[]): Options {
 
 function build(options: Options) {
   if (!options.build) return;
+  if (options.kind === "macos") process.env.MACOSX_DEPLOYMENT_TARGET = minimumMacOS();
   const targets = options.kind === "capability" ? [binaryName(options.capability)]
     : options.kind === "macos" ? [...binaries, "sjel-desktop-launcher"] : binaries;
   run(["cargo", "build", "--locked", "--release", "--target-dir", options.target, ...targets.flatMap((name) => ["--bin", name])]);
@@ -209,7 +217,7 @@ function macos(options: Options, stage: string) {
 <key>CFBundleShortVersionString</key><string>${version}</string>
 <key>CFBundleVersion</key><string>${version}</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSMinimumSystemVersion</key><string>${minimumMacOS()}</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>dev.sjel.desktop</string>
 <key>CFBundleURLSchemes</key><array><string>sjel</string></array></dict></array>

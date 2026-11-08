@@ -6,6 +6,9 @@ publish = false
 license = "AGPL-3.0-only"
 description = "Sjel native GPUI desktop application"
 
+[package.metadata.sjel]
+minimum_macos = "27.0"
+
 # Shared GPUI workspace for desktop, core, UI, and iOS.
 [workspace]
 members = ["core", "ios", "ui"]

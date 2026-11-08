@@ -45,18 +45,14 @@ covers it.
   even when a test fails. The `iOS screen smoke tests` workflow runs the same command
   on an Apple Silicon Mac with simulator services. The agent shell cannot connect
   to CoreSimulator; native Device Hub control can boot and inspect a simulator.
-  The pinned NSH headless driver renders the phone root, switches its tabs, and
-  renders a 500-row page and reader. The [iOS 26.2 light-mode baseline](https://github.com/larsboes/Sjel/actions/runs/42515565617)
-  passes two UIKit tests with inspected screenshots. Smoke coverage also checks
-  rendered text contrast and opening NSH after Today. Each smoke run selects real
-  light and dark simulator appearances and restores the original setting; app
-  launch arguments alone do not select the simulator's appearance. Manual dispatch
-  can select the Xcode 27 image. The shared NSH host now sets the theme's adaptive
-  background and foreground: its headings previously resolved to opaque black in
-  dark appearance. The headless contrast regression fails before this change and
-  passes after it, including switching Documents and Mail. Open: verify the fixed
-  UIKit dark-mode and navigation paths and confirm the updated physical build;
-  the light-mode baseline does not validate every device path.
+  The shared NSH host applies adaptive foreground and background colors
+  (`0f638ba7`); native smoke tests select real light and dark simulator appearances
+  (`bd0fe27d`). All [six iOS 27 checks](https://github.com/larsboes/Sjel/actions/runs/42519242500)
+  pass, covering Documents, Mail and navigation after Today. The pinned headless
+  driver also covers contrast, tab switching and a 500-row page and reader.
+  Apple builds and checks target only iOS 27 and macOS 27 on the Xcode 27 image;
+  app manifests own the minimum versions. Open: confirm the updated physical build
+  and provide shell access to host simulator services without manual intervention.
 
 
 - **Redacted outgoing secret-scan findings.** The pre-push hook reports a finding count

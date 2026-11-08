@@ -17,7 +17,8 @@ echo "xcrun $*" >> "$TEST_LOG"
 case "$TEST_DEVICES" in
   blocked) echo 'device service connection refused' >&2; exit 1 ;;
   empty) echo '== Devices ==' ;;
-  available) echo '    iPhone (00000000-0000-0000-0000-000000000001) (Shutdown)' ;;
+  available) printf '%s\n' '-- iOS 27.0 --' '    iPhone (00000000-0000-0000-0000-000000000001) (Shutdown)' ;;
+  mixed) printf '%s\n' '-- iOS 26.2 --' '    iPhone (00000000-0000-0000-0000-000000000002) (Shutdown)' '-- iOS 27.0 --' '    iPhone (00000000-0000-0000-0000-000000000003) (Shutdown)' '-- iOS 27.2 --' '    iPhone (00000000-0000-0000-0000-000000000001) (Shutdown)' ;;
 esac
 EOF
 cat > "$work/bin/cargo" <<'EOF'
@@ -32,6 +33,7 @@ exit 48
 EOF
 chmod +x "$work/bin/"*
 export PATH="$work/bin:$PATH" HOME="$work/home" TEST_LOG="$work/commands"
+export IPHONEOS_DEPLOYMENT_TARGET=17.0
 launcher_root="$root"
 
 run() {
@@ -73,11 +75,21 @@ run run-sim
 [ "$(head -1 "$TEST_LOG")" = 'xcrun simctl list devices available' ]
 [ "$(tail -1 "$TEST_LOG")" = cargo ]
 
+export TEST_DEVICES=mixed
+selected=00000000-0000-0000-0000-000000000003
+run run-sim
+expect 1 'newest supported iOS runtime'
+selected=
+run run-sim
+[ "$status" -eq 47 ] || { echo "FAIL: newest runtime did not reach Cargo: $output" >&2; exit 1; }
+
 launcher_root="$work/project"
 mkdir -p "$launcher_root/apps/gpui/ios/host"
 cp "$root/apps/gpui/ios/run-sim" "$launcher_root/apps/gpui/ios/run-sim"
+cp "$root/apps/gpui/ios/host/project.yml" "$launcher_root/apps/gpui/ios/host/project.yml"
 cat > "$work/bin/cargo" <<'EOF'
 #!/bin/bash
+if [ "$IPHONEOS_DEPLOYMENT_TARGET" != 27.0 ]; then echo 'wrong iOS deployment target' >&2; exit 66; fi
 if [ "$1" = metadata ]; then printf '{"target_directory":"%s"}\n' "$HOME/target"; fi
 EOF
 cat > "$work/bin/xcodegen" <<'EOF'
@@ -103,6 +115,7 @@ cat > "$work/bin/xcrun" <<'EOF'
 #!/bin/bash
 echo "xcrun $*" >> "$TEST_LOG"
 if [ "$1" = simctl ] && [ "$2" = list ]; then
+  echo '-- iOS 27.2 --'
   echo '    iPhone (00000000-0000-0000-0000-000000000001) (Booted)'
 elif [ "$1" = simctl ] && [ "$2" = ui ] && [ "$#" -eq 4 ]; then
   echo light

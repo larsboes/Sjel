@@ -40,7 +40,7 @@ export function platformChecks(selected: string[], members: string[]): PlatformC
     has.has("sjel-gpui-ios") && "cargo check --locked -p sjel-gpui-ios --target aarch64-apple-ios",
   ].filter(Boolean).join(" && ");
   return [
-    { name: "macos + ios", os: "macos-latest", target: has.has("sjel-gpui-ios") ? "aarch64-apple-ios" : "", check: mac },
+    { name: "macos + ios", os: "xcode-27", target: has.has("sjel-gpui-ios") ? "aarch64-apple-ios" : "", check: mac },
     { name: "linux", os: "ubuntu-latest", target: "", check: desktop && `cargo check --locked ${desktop} --all-targets` },
     { name: "windows", os: "windows-latest", target: "", check: shared && `cargo check --locked ${shared} --all-targets` },
     { name: "windows shell", os: "windows-latest", target: "", check: has.has("sjel-gpui") ? "cargo check --locked -p sjel-gpui --all-targets" : "" },

@@ -223,10 +223,10 @@ opens natively within the client. Deep links (`sjel://<path>`) follow the same r
 
 ## Why this shape: GPUI for every client
 
-GPUI is the goal for every Sjel client, on the Mac and on iOS. AppKit or UIKit draws the
-operating-system chrome, and GPUI draws the content. The workspace pins one GPUI snapshot,
-`gpui-pre =0.3.9` with gpui-kit 0.7.3, and uses the Longbridge `gpui-pre-mobile` fork on iOS.
-Sources: `upstreams.toml`, the mobile page of gpui-kit's website docs, and `src/macos_glass.rs`.
+GPUI Fast renders the desktop. The iOS host combines shared GPUI screens with NSH's UIKit
+Documents and Mail readers; UIKit owns the window and safe areas. [`Cargo.toml`](Cargo.toml)
+and [`ios/Cargo.toml`](ios/Cargo.toml) own the coordinated framework pins, and
+[`upstreams.toml`](../../upstreams.toml) records the temporary mobile fork.
 
 It is a stack decision, not a speed fix: Sjel's waits come from services, not from rendering. A
 release build starts in one frame under 10 ms with about 100 MB resident, and the Swift menu bar
@@ -272,6 +272,19 @@ needs Xcode, XcodeGen and the `aarch64-apple-ios-sim` Rust target, and never ope
 `ios/run-sim --tap` runs the touch check instead: taps Join on the discovered Mac and keeps a
 screenshot before and after, because GPUI paints its own pixels and a screenshot alone cannot show
 whether a finger reached it.
+
+`ios/run-sim` selects the newest installed iOS runtime with an available iPhone.
+`ios/run-sim --smoke` asserts that Documents and Mail render contrasting text and that
+opening NSH from Today reaches Documents. It runs three XCTest cases in each actual simulator
+appearance, light and dark, then restores the original appearance. It keeps result bundles
+and screenshots on failure as well as success. Set `SJEL_IOS_RESULTS` to a fresh directory to
+choose where results go; otherwise the command prints their temporary paths. These tests
+do not require device pairing or personal data. The `iOS screen smoke tests` Actions workflow runs the
+same command on the Xcode 27 runner.
+
+Apple builds support only the current major releases: iOS 27 and macOS 27. The iOS
+host project owns its deployment target; the desktop manifest owns the minimum macOS
+version. CI uses the Xcode 27 image and its current SDKs, without older Apple runners.
 
 The iOS app reads and writes a local replica (`core/src/store.rs`, LibSQL in the app container), so
 the store, the tasks and the notes answer with the Mac out of range. Every local write is also
@@ -593,6 +606,7 @@ These checks run while you keep working in other apps. None of them activates th
 | `SJEL_GPUI_BENCH_NOTE=<record path> ./bench-scroll projects` | CPU cost of one keystroke in that note; saving is off |
 | `ios/run-sim` | Screenshot of the iOS app on a headless simulator |
 | `ios/run-sim --tap` | The touch check: taps Join on the discovered Mac, screenshots before and after |
+| `ios/run-sim --smoke` | Documents, Mail and navigation after Today, with pixel contrast checks in light and dark appearances |
 
 `preview` and `bench-scroll` show the window for a few seconds in the bottom-right corner, above
 other apps. GPUI paints nothing while another window covers it, so a hidden window cannot be

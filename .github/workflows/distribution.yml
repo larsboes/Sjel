@@ -15,8 +15,8 @@ on:
       runner:
         description: macOS is required for Mac and iOS artifacts
         type: choice
-        options: [macos-latest, ubuntu-latest]
-        default: macos-latest
+        options: [xcode-27, ubuntu-latest]
+        default: xcode-27
       capability:
         description: Optional compiled capability
         type: string

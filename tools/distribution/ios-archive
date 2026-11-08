@@ -55,6 +55,8 @@ for dir in Assets.xcassets UITests; do
   [ -d "$root/apps/gpui/ios/host/$dir" ] && cp -R "$root/apps/gpui/ios/host/$dir" "$host/$dir"
 done
 [ -f "$host/project.yml" ] || { echo "native host project spec is missing" >&2; exit 1; }
+export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\([^"]*\)".*/\1/p' "$host/project.yml")"
+[[ "$IPHONEOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "invalid iOS deployment target" >&2; exit 1; }
 target="$out/cargo-target"
 # SJEL_IOS_FEATURES adds cargo features to the Rust library. A release leaves it unset.
 cargo build --locked --release --manifest-path "$root/apps/gpui/Cargo.toml" \

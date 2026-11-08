@@ -17,6 +17,7 @@ test("push baseline excludes failed/cancelled runs, non-ancestors and PR merge c
 test("GPUI platform plan scopes iOS-only and desktop-only changes", () => {
   const ios = platformChecks(["sjel-gpui-ios"], members);
   expect(ios.map((p) => p.name)).toEqual(["macos + ios"]);
+  expect(ios[0].os).toBe("xcode-27");
   expect(ios[0].check).not.toContain("--all-targets");
   const desktop = platformChecks(["sjel-gpui"], members);
   expect(desktop.map((p) => p.name)).toEqual(["macos + ios", "linux", "windows shell"]);

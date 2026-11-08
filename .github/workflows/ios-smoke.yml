@@ -2,12 +2,6 @@ name: iOS screen smoke tests
 
 on:
   workflow_dispatch:
-    inputs:
-      runner:
-        description: Mac and Xcode image for the simulator
-        type: choice
-        default: macos-26
-        options: [macos-26, xcode-27]
   push:
     branches: [main]
     paths:
@@ -30,12 +24,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-smoke-${{ github.ref }}-${{ inputs.runner || 'macos-26' }}
+  group: ios-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   screens:
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: xcode-27
     timeout-minutes: 40
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -46,7 +40,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: apps/gpui
-          key: ios-simulator-smoke${{ inputs.runner == 'xcode-27' && '-xcode27' || '' }}
+          key: ios-simulator-smoke-xcode27
       - name: Prepare simulator build tools
         run: |
           rustup target add aarch64-apple-ios-sim

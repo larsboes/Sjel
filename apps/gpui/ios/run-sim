@@ -2,7 +2,7 @@
 # apps/gpui/ios/run-sim — build the iOS app, run it on a headless simulator, and print
 # a screenshot path. Never opens Simulator.app, so it takes no focus.
 #
-# SJEL_IOS_SIM=<udid> picks the simulator; default: the first available iPhone.
+# SJEL_IOS_SIM=<udid> picks an iPhone on the newest available iOS runtime.
 #
 # --join asks this Mac's LAN listener to register the app as a device. It passes the Mac's
 # Bonjour name, the listener port (SJEL_LAN_PORT, default 8443) and the certificate's SHA-256,
@@ -37,10 +37,24 @@ if ! devices="$(xcrun simctl list devices available)"; then
   echo "ios/run-sim: CoreSimulator is unavailable; check device access before building" >&2
   exit 1
 fi
-udid="${SJEL_IOS_SIM:-$(printf '%s\n' "$devices" | sed -n 's/^ *iPhone[^(]*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)}"
+export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\([^"]*\)".*/\1/p' "$HOST/project.yml")"
+[[ "$IPHONEOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]] || { echo "ios/run-sim: invalid iOS deployment target" >&2; exit 1; }
+latest_devices="$(printf '%s\n' "$devices" | awk -v minimum="$IPHONEOS_DEPLOYMENT_TARGET" '
+  /^-- iOS / { split($3, v, "."); version = v[1] * 1000000 + v[2] * 1000 + v[3] }
+  /^ *iPhone/ && v[1] >= minimum {
+    if (version > latest) { latest = version; devices = "" }
+    if (version == latest) devices = devices $0 "\n"
+  }
+  END { printf "%s", devices }
+')"
+udid="${SJEL_IOS_SIM:-$(printf '%s\n' "$latest_devices" | sed -n 's/^ *iPhone[^(]*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -1)}"
 [ -n "$udid" ] || { echo "ios/run-sim: no available iPhone simulator" >&2; exit 1; }
 if ! printf '%s\n' "$devices" | grep -Fq "($udid)"; then
   echo "ios/run-sim: selected simulator is unavailable: $udid" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$latest_devices" | grep -Fq "($udid)"; then
+  echo "ios/run-sim: select an iPhone on the newest supported iOS runtime" >&2
   exit 1
 fi
 

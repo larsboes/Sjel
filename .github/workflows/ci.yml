@@ -204,6 +204,11 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: rustup target add "$TARGET"
+      - name: Use the current Apple SDK deployment targets
+        if: runner.os == 'macOS'
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun --sdk macosx --show-sdk-version)" >> "$GITHUB_ENV"
+          echo "IPHONEOS_DEPLOYMENT_TARGET=$(xcrun --sdk iphoneos --show-sdk-version)" >> "$GITHUB_ENV"
       - name: Point the Android target at the runner's NDK
         if: matrix.target == 'aarch64-linux-android'
         run: |

@@ -5,7 +5,7 @@ name: SjelIOS
 options:
   bundleIdPrefix: dev.sjel
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "27.0"
 targets:
   SjelIOS:
     type: application

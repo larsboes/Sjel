@@ -81,6 +81,23 @@ impl SeatbeltProfile {
         self
     }
 
+    /// Every ancestor of a granted path, from the root down, deduplicated: the directories a
+    /// path walk passes through on its way to a path this run may read.
+    pub fn ancestors(&self) -> Vec<PathBuf> {
+        let mut seen = std::collections::BTreeSet::new();
+        for path in std::iter::once(&self.project_dir)
+            .chain(&self.read_paths)
+            .chain(&self.read_write_paths)
+        {
+            for ancestor in path.ancestors().skip(1) {
+                if ancestor != Path::new("/") {
+                    seen.insert(ancestor.to_path_buf());
+                }
+            }
+        }
+        seen.into_iter().collect()
+    }
+
     pub fn render(&self) -> String {
         let mut out = String::from("(version 1)\n(deny default)\n\n");
 
@@ -102,6 +119,15 @@ impl SeatbeltProfile {
             out.push_str(&format!(
                 "(allow file-read* file-write* (subpath {}))\n",
                 quoted(path)
+            ));
+        }
+        // A reader that opens each path component itself is refused at the first ancestor
+        // without this: metadata answers stat, not an open. A directory literal admits the
+        // names in it and no file inside it.
+        for ancestor in self.ancestors() {
+            out.push_str(&format!(
+                "(allow file-read-data (literal {}))\n",
+                quoted(&ancestor)
             ));
         }
         out.push('\n');

@@ -55,6 +55,10 @@ fn seatbelt_profile_contains_deny_default_and_project_paths() {
     assert!(profile.contains("file-read* file-write*"));
     assert!(profile.contains(&tmp.to_string_lossy().to_string()) || profile.contains("/private"));
     assert!(profile.contains("(remote ip \"localhost:*\")"));
+    // Each ancestor is a literal, so a walk with openat resolves and no file below one is read.
+    assert!(profile.contains("(allow file-read-data (literal \"/\"))"));
+    assert!(profile.contains("(allow file-read-data (literal \"/private\"))"));
+    assert!(!profile.contains("(allow file-read* (subpath \"/private\"))"));
 }
 
 #[test]
@@ -168,11 +172,12 @@ fn macos_sandbox_exec_enforces_directory_and_file_boundaries() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Plan item 1's done-when (docs/plans/containment.md §5): reads outside the project fail,
-/// listing the home directory fails, a project write succeeds and `cargo test` passes.
+/// Plan item 1's done-when (docs/plans/containment.md §5): a sibling file is unreadable and a
+/// write outside the project fails, while a walk through the ancestors lists their names, a
+/// project write succeeds and `cargo test` passes. Decision C6 admits the ancestors.
 #[cfg(target_os = "macos")]
 #[test]
-fn macos_sandbox_denies_reads_outside_the_project_and_still_builds() {
+fn macos_sandbox_admits_ancestor_names_and_refuses_their_contents() {
     let base = std::env::temp_dir().join(format!("sjel-seatbelt-read-{}", std::process::id()));
     let project = base.join("project");
     let outside = base.join("sibling");
@@ -212,8 +217,16 @@ fn macos_sandbox_denies_reads_outside_the_project_and_still_builds() {
 
     let listing = run("ls \"$HOME\"");
     assert!(
-        !listing.status.success(),
-        "the home directory must not be listable"
+        listing.status.success(),
+        "an ancestor's names are listable so a path walk resolves"
+    );
+    let inside_home = run(&format!(
+        "ls '{}/.ssh' 2>/dev/null | head -1",
+        std::env::var("HOME").unwrap()
+    ));
+    assert!(
+        !inside_home.status.success() || inside_home.stdout.is_empty(),
+        "a directory below an unopened ancestor must stay closed"
     );
 
     let write = run(&format!("echo ok > '{}'", project.join("w.txt").display()));

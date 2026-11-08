@@ -56,9 +56,9 @@ succeeds. octet 0.10.0 reads its configuration this way and so cannot reach a fi
 project directory.
 
 Admitting each ancestor with `(allow file-read-data (literal <dir>))` fixes the walk, and it makes
-`$HOME` listable — names only, no file contents. `macos_sandbox_denies_reads_outside_the_project_and_still_builds`
-asserts the opposite on purpose, so the two cannot both hold and this is an open decision rather
-than a defect to fix in passing. Node-based harnesses are unaffected: `open(2)` on an absolute path
+`$HOME` listable — names only, no file contents. Decided 2026-11-08 (C6): the ancestors of every
+granted path are admitted, so a harness that opens each component works.
+Node-based harnesses are unaffected either way: `open(2)` on an absolute path
 resolves in the kernel, which is why pi and opencode never exposed the gap.
 Whether opencode or the Copilot CLI has a sandbox of its own is unverified.
 
@@ -69,7 +69,8 @@ a reader that opens each component is refused one level in. `(allow file-read-da
 names along that path: `ls /Users` lists 4 names and `ls ~` lists 103, while a file below an
 ungranted directory (`~/Desktop/.DS_Store`) is still refused. The choice is therefore exactly
 two, and it is decision C6: admit ancestors and let a contained process list `$HOME` names, or
-keep the refusal and leave the harnesses that walk (`octet`, §5 item 4) unusable.
+keep the refusal and leave the harnesses that walk (`octet`, §5 item 4) unusable. Decided
+2026-11-08: admit them (C6).
 
 ## 3. The launcher
 
@@ -116,8 +117,10 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
    (`~/.rustup`, `~/.cargo/bin` and its caches, `~/.bun`) are read-only, the project is
    read-write. The ring and the provider's hosts come from `providers.toml` (`ring`, `hosts`);
    a provider without `ring = "trusted"` runs contained. Checked by
-   `macos_sandbox_denies_reads_outside_the_project_and_still_builds`: a sibling read and
-   `ls ~` fail, a project write and `cargo test` pass. The Keychain's Mach services are denied.
+   `macos_sandbox_admits_ancestor_names_and_refuses_their_contents`: a sibling file read fails,
+   the ancestors list their names, a project write and `cargo test` pass. A path walk from `/`
+   finishes inside the real profile (measured with `openat` through every component). The
+   Keychain's Mach services are denied.
    `sjel run <harness-bin> --provider <name> --project <dir>` starts it. A harness's own
    directories are opened with `--read <dir>` and `--write <dir>`, and its provider credential
    with `--keep-env <NAME>`, which passes that one variable and no other, with
@@ -192,4 +195,4 @@ no npm (decided 2026-10-31). The proxy reuses the workspace's existing HTTP stac
 | C3 | May a contained harness reach the macOS keychain for its own login? `mach-lookup` is unfiltered today (§5 item 1). Denying it is safer and may break the Copilot and Antigravity logins. | Open, measure in item 4. |
 | C4 | Does Sjel ever call a consumer subscription itself, for example `claude -p` from a scheduled job? A subscription reaches Sjel only when the user starts it, through MCP (item 9), and Sjel's own model calls use API keys. This avoids running automated jobs on a consumer plan, which the terms may not allow (unverified). | Decided 2026-11-03: no scheduled or background call. Narrowed the same day: a foreground command the user runs may start a harness, as `tools/intake review --reviewer claude` does. |
 | C5 | The data-class cap of a contained agent token (§5 item 3). A row with no `data_class` under a `c0` cap: withheld or passed pseudonymized? A list with rows above the cap: those rows withheld, or the whole response refused? | Decided 2026-11-04: an unclassified row is withheld, rows above the cap are dropped, and a single item above the cap or without a class is refused. Built (§5 item 3). |
-| C6 | Does the profile admit each ancestor of a granted path, so a reader that walks with `openat` works? | Open. Measured 2026-11-08 (§2): the walk needs `file-read-data` on each ancestor, since `file-read-metadata` is not enough. Admitting them leaves `ls ~` listing names and never file contents. |
+| C6 | Does the profile admit each ancestor of a granted path, so a reader that walks with `openat` works? | Decided 2026-11-08: yes, for every ancestor of a granted path. Measured (§2): the walk needs `file-read-data`, since `file-read-metadata` is not enough. The cost is directory names only: `ls /Users` lists 4, `ls ~` lists 103, and a file below an ungranted directory stays refused. |

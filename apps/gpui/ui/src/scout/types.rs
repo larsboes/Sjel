@@ -91,7 +91,8 @@ pub fn type_label(value: &str) -> String {
 pub fn rationale_text(value: &str) -> String {
     value
         .lines()
-        .filter(|line| !line.contains("vault link:"))
+        // `vault link:` is the marker rows stored before the rename carry.
+        .filter(|line| !line.contains("note link:") && !line.contains("vault link:"))
         .collect::<Vec<_>>()
         .join(" ")
         .trim()

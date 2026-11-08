@@ -444,8 +444,8 @@ impl Render for ScoutingPage {
         if let Some(scan) = scan {
             content = content.child(muted(
                 format!(
-                    "Last scan: {} scored · {} new · {} Obsidian links",
-                    scan.total_scored, scan.new_count, scan.vault_links
+                    "Last scan: {} scored · {} new · {} note links",
+                    scan.total_scored, scan.new_count, scan.note_links
                 ),
                 palette,
             ));

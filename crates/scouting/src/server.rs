@@ -194,7 +194,7 @@ async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
         let opportunity_type = adapter.opportunity_type().as_str().to_string();
 
         // The pipeline owns scoring while the store owns human decisions and
-        // Obsidian matches. Re-read those small persisted fields so a discovery
+        // the matched note. Re-read those small persisted fields so a discovery
         // response is immediately actionable instead of returning a transient,
         // second shape of the same opportunity.
         let persisted = store
@@ -239,7 +239,7 @@ async fn discover_handler(Query(params): Query<DiscoverParams>) -> Json<Value> {
             opportunity_type,
             total_scored: results.len(),
             new_count: report.new_count,
-            vault_links: report.vault_links,
+            note_links: report.note_links,
             store_total: report.store_total.max(0) as usize,
             results,
         })

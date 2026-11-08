@@ -193,7 +193,7 @@ pub struct DiscoverResponse {
     pub opportunity_type: String,
     pub total_scored: usize,
     pub new_count: usize,
-    pub vault_links: usize,
+    pub note_links: usize,
     pub store_total: usize,
     pub results: Vec<ScoredOpportunity>,
 }

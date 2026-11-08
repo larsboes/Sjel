@@ -97,9 +97,9 @@ pub struct Config {
     /// zero config against an empty profile (score.rs degrades gracefully to
     /// "uncategorized" when no profiles are found).
     pub interest_profile_dir: PathBuf,
-    /// Directory of existing markdown event notes for the vault-linker to
+    /// Directory of existing markdown event notes for the note matcher to
     /// cross-reference against (was hardcoded `{vault_root}/Atlas/Events`).
-    /// `None` silently skips vault-linking -- this already works, matching
+    /// `None` silently skips note matching -- this already works, matching
     /// `pipeline::run`'s `Option<&Path>` parameter.
     ///
     /// Superseded by `sources` entries with `profiles_glob`/`events_glob`

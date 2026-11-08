@@ -8,6 +8,7 @@ use scouting::adapters::transit_fare::TransitFareAdapter;
 use scouting::config::Config;
 use scouting::event_route::classify_ranked;
 use scouting::merge::{merge, MergedEntry};
+use scouting::note_match;
 use scouting::opportunity::Opportunity;
 use scouting::pipeline::{backlog_from_store, fetch_json, run};
 use scouting::score::{
@@ -16,7 +17,6 @@ use scouting::score::{
 use scouting::source::{SearchQuery, SourceAdapter};
 use scouting::sources::{print_sources, SourceFactoryError, SourceManifest};
 use scouting::store::Store;
-use scouting::vault_linker;
 
 /// Handles `--dismiss <id>` / `--save <id>`: opens the real store, sets
 /// status, prints a one-line confirmation, and exits. Exits with code 1 (not
@@ -270,7 +270,7 @@ fn run_adapter(
         return Ok(scouting::pipeline::PipelineReport {
             scored: vec![],
             new_count: 0,
-            vault_links: 0,
+            note_links: 0,
             store_total: 0,
         });
     }
@@ -319,7 +319,7 @@ fn run_merged_sources(
 
     let mut per_source: Vec<(String, Vec<ScoredOpportunity>)> = Vec::new();
     let mut new_count = 0;
-    let mut vault_links = 0;
+    let mut note_links = 0;
     let mut store_total = 0;
 
     for manifest in enabled_sources {
@@ -347,7 +347,7 @@ fn run_merged_sources(
         ) {
             Ok(report) => {
                 new_count += report.new_count;
-                vault_links += report.vault_links;
+                note_links += report.note_links;
                 store_total = report.store_total; // store size, not additive
                 per_source.push((manifest.id.clone(), report.scored));
             }
@@ -358,7 +358,7 @@ fn run_merged_sources(
 
     let merged = merge(per_source);
     let store = Store::open(database_path).ok();
-    print_merged(&merged, store.as_ref(), new_count, vault_links, store_total);
+    print_merged(&merged, store.as_ref(), new_count, note_links, store_total);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,7 +477,7 @@ fn print_merged(
     entries: &[MergedEntry],
     store: Option<&Store>,
     new_count: usize,
-    vault_links: usize,
+    note_links: usize,
     store_total: i64,
 ) {
     let visible: Vec<_> = match store {
@@ -507,10 +507,10 @@ fn print_merged(
     }
 
     println!(
-        "  merged ranked backlog ({} entries, {} new, {} vault links, {} in store):\n",
+        "  merged ranked backlog ({} entries, {} new, {} note links, {} in store):\n",
         visible.len(),
         new_count,
-        vault_links,
+        note_links,
         store_total
     );
 
@@ -567,10 +567,10 @@ fn print_results(
     }
 
     println!(
-        "  ranked backlog ({} entries, {} new, {} vault links, {} in store):\n",
+        "  ranked backlog ({} entries, {} new, {} note links, {} in store):\n",
         visible.len(),
         report.new_count,
-        report.vault_links,
+        report.note_links,
         report.store_total
     );
 
@@ -1043,14 +1043,13 @@ fn run_from_file(
 
     let mut scored = score(&opps, &telos, opp_embeddings.as_ref());
     let mut new_count = 0;
-    let mut vault_links = 0;
+    let mut note_links = 0;
 
     for s in &mut scored {
-        let vault_link =
-            events_dir.and_then(|dir| vault_linker::link_to_vault(&s.opportunity, dir));
+        let vault_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
         if let Some(ref vl) = vault_link {
-            vault_links += 1;
-            s.rationale = format!("{}\n     vault link: {vl}", s.rationale);
+            note_links += 1;
+            s.rationale = format!("{}\n     note link: {vl}", s.rationale);
         }
         if let Some(st) = store.as_mut() {
             let is_new = st
@@ -1075,11 +1074,11 @@ fn run_from_file(
     let show_limit = (*limit).min(scored.len());
 
     println!(
-        "  ranked backlog ({} of {} scored, {} new, {} vault links, {} in store):\n",
+        "  ranked backlog ({} of {} scored, {} new, {} note links, {} in store):\n",
         show_limit,
         scored.len(),
         new_count,
-        vault_links,
+        note_links,
         store_total
     );
 

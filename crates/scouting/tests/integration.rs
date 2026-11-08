@@ -331,8 +331,8 @@ fn an_existing_note_is_cross_referenced_and_the_note_is_never_written_to() {
     )
     .expect("pipeline runs");
 
-    assert_eq!(report.vault_links, 1, "the existing note was found");
-    assert!(report.scored[0].rationale.contains("vault link:"));
+    assert_eq!(report.note_links, 1, "the existing note was found");
+    assert!(report.scored[0].rationale.contains("note link:"));
     assert_eq!(
         std::fs::read_to_string(&existing).expect("read"),
         before,

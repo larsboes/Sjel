@@ -288,7 +288,7 @@ struct FileConfig {
     finance_context: Option<FinanceContextConfig>,
     projects_context: Option<ProjectsContextConfig>,
     inventory_context: Option<InventoryContextConfig>,
-    #[serde(default)]
+    #[serde(default, alias = "vault_link_sources")]
     markdown_link_sources: Vec<MarkdownLinkSourceConfig>,
     feed_sources: Option<Vec<FeedSourceConfig>>,
     quality_flags: Option<QualityFlagConfig>,
@@ -413,6 +413,10 @@ pub struct Config {
     /// Explicit Markdown link sources. This is intentionally not a whole notes
     /// directory: Scratchpad and other notes can contain credentials and admin
     /// URLs.
+    ///
+    /// `alias` keeps a config written under the old key working: the struct
+    /// ignores unknown keys, so without it those sources would silently stop
+    /// being scanned.
     pub markdown_link_sources: Vec<MarkdownLinkSourceConfig>,
     /// General awareness sources. `None` in a file uses the public, non-personal
     /// defaults; an explicit empty array disables them all.
@@ -778,6 +782,13 @@ mod tests {
                     .collect(),
             )
         }
+
+        /// Points the loader at a fixture and restores the previous value on drop.
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self(vec![(key.to_string(), previous)])
+        }
     }
 
     impl Drop for EnvGuard {
@@ -807,5 +818,27 @@ mod tests {
         assert_eq!(cfg.quality_flags.maximum_total_retention_percent, 90.0);
         assert_eq!(cfg.quality_flags.maximum_boilerplate_leakage_percent, 0.0);
         assert_eq!(cfg.quality_flags.summary_attempt_warning, 2);
+    }
+
+    /// A config written before the rename still scans its sources. The struct
+    /// ignores unknown keys, so without the alias those sources would silently
+    /// stop being scanned instead of failing.
+    #[test]
+    fn the_pre_rename_link_source_key_still_loads_its_sources() {
+        let _env = env_lock();
+        let dir =
+            std::env::temp_dir().join(format!("comms-legacy-link-sources-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("comms.json");
+        std::fs::write(
+            &file,
+            r#"{"vault_link_sources":[{"id":"reading-list","path":"~/links.md","enabled":true}]}"#,
+        )
+        .unwrap();
+        let _config = EnvGuard::set("SJEL_COMMS_CONFIG", &file);
+        let cfg = Config::load();
+        assert_eq!(cfg.markdown_link_sources.len(), 1);
+        assert_eq!(cfg.markdown_link_sources[0].id, "reading-list");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

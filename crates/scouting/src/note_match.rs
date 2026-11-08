@@ -1,7 +1,6 @@
 //! Matches scored opportunities against existing markdown event notes in a
-//! configured events directory (`Config::events_dir` -- originally an
-//! Obsidian vault's `Atlas/Events/` convention, generalized to "any directory
-//! of markdown event notes").
+//! configured events directory (`Config::events_dir`), and returns the
+//! best-matching note path so the caller can show it as a cross-reference.
 //!
 //! Annotate-only by design: this module never
 //! writes or mutates notes, only returns the best-matching existing note path
@@ -12,7 +11,7 @@ use std::path::Path;
 use crate::opportunity::Opportunity;
 
 /// Returns the path of the best-matching existing event note, if any.
-pub fn link_to_vault(opp: &Opportunity, events_dir: &Path) -> Option<String> {
+pub fn match_note(opp: &Opportunity, events_dir: &Path) -> Option<String> {
     let entries = std::fs::read_dir(events_dir).ok()?;
     let mut best: Option<(String, usize)> = None;
 
@@ -98,7 +97,7 @@ mod tests {
         fs::write(dir.join("Agent Olympics.md"), "").unwrap();
 
         let opp = mk_opp("Agent Olympics", None);
-        let link = link_to_vault(&opp, &dir);
+        let link = match_note(&opp, &dir);
         assert!(link.is_some(), "should match Agent Olympics");
         assert!(link.unwrap().contains("Agent Olympics.md"));
 
@@ -112,7 +111,7 @@ mod tests {
         fs::write(dir.join("2026-02 Munich Security & Hiking.md"), "").unwrap();
 
         let opp = mk_opp("Munich Hackathon", Some("Munich"));
-        let link = link_to_vault(&opp, &dir);
+        let link = match_note(&opp, &dir);
         assert!(link.is_some(), "should match Munich note via token overlap");
 
         fs::remove_dir_all(&dir).ok();
@@ -125,7 +124,7 @@ mod tests {
         fs::write(dir.join("Completely Unrelated Event.md"), "").unwrap();
 
         let opp = mk_opp("Berlin Tech Conference", Some("Berlin"));
-        let link = link_to_vault(&opp, &dir);
+        let link = match_note(&opp, &dir);
         assert!(link.is_none());
 
         fs::remove_dir_all(&dir).ok();

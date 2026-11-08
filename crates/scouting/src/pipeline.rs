@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::note_match;
 use crate::score::{embed_opportunities, score_labelled, ScoredOpportunity, TelosProfile};
 use crate::source::{SearchQuery, SourceAdapter};
 use crate::store::{RankedRow, Store};
-use crate::vault_linker;
 
 #[derive(Debug)]
 pub struct PipelineReport {
     pub scored: Vec<ScoredOpportunity>,
     pub new_count: usize,
-    pub vault_links: usize,
+    pub note_links: usize,
     pub store_total: i64,
 }
 
@@ -61,15 +61,14 @@ pub fn run(
     let mut scored = score_labelled(&opportunities, telos, vectors, &label);
 
     let mut new_count = 0;
-    let mut vault_links = 0;
+    let mut note_links = 0;
 
     for s in &mut scored {
         sjel_runtime::require(sjel_runtime::Category::BulkIndexing)?;
-        let vault_link =
-            events_dir.and_then(|dir| vault_linker::link_to_vault(&s.opportunity, dir));
+        let vault_link = events_dir.and_then(|dir| note_match::match_note(&s.opportunity, dir));
         if let Some(ref vl) = vault_link {
-            vault_links += 1;
-            s.rationale = format!("{}\n     vault link: {vl}", s.rationale);
+            note_links += 1;
+            s.rationale = format!("{}\n     note link: {vl}", s.rationale);
         }
 
         if let Some(st) = store.as_mut() {
@@ -94,7 +93,7 @@ pub fn run(
     Ok(PipelineReport {
         scored,
         new_count,
-        vault_links,
+        note_links,
         store_total,
     })
 }

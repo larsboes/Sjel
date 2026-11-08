@@ -7,12 +7,12 @@ pub mod http;
 pub mod localtime;
 pub mod merge;
 pub mod normalize;
+pub mod note_match;
 pub mod opportunity;
 pub mod pipeline;
 pub mod score;
 pub mod source;
 pub mod sources;
 pub mod store;
-pub mod vault_linker;
 
 pub use scouting_api::*;

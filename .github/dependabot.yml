@@ -45,8 +45,8 @@ updates:
         update-types: ["minor", "patch"]
 
   # apps/gpui is its own workspace, so the block above does not see it. The "verification result"
-  # check fails a PR whose GPUI check fails, which keeps auto-merge safe here. gpui-kit, gpui-pre
-  # require each other's exact versions and move together by hand:
+  # check fails a PR whose GPUI check fails, which keeps auto-merge safe here. gpui-kit, gpui-pre,
+  # gpui-fast and nsh require compatible versions and move together by hand:
   # docs/plans/gpui.md, section 6.
   - package-ecosystem: "cargo"
     directory: "/apps/gpui"
@@ -58,6 +58,8 @@ updates:
     ignore:
       - dependency-name: "gpui-kit*"
       - dependency-name: "gpui-pre*"
+      - dependency-name: "gpui-fast*"
+      - dependency-name: "nsh*"
     groups:
       gpui-app:
         patterns: ["*"]

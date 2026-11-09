@@ -47,19 +47,18 @@ names the rest.
 Priority 1 in [`PLAN.md`](../../PLAN.md): the phone is the daily tool for the agent, other agents,
 travel, documents, mail and calendar. The agent and the terminal are in [`agent.md`](agent.md).
 
-**Tab bar.** The bar holds five items at most (`mobile_tab_bar` in `ui/src/nav.rs`, 64 px per item,
-375 pt on the narrowest iPhone). Implemented 2026-10-28: `Today | Mail | Calendar | Travel | Agent`.
-The Agent tab triggers the agent seat. Inbox capture lives as a quick-capture bar on Today.
-Documents and People open directly from Today 1-tap shortcuts, finder, and links.
+**Tab bar.** `NshHostScreen` owns the bottom bar: `Today | Mail | Documents | Calendar | Travel |
+Agent` (§6 item 3). Capture, Projects, Interior and People & Places open from Today. Every phone
+screen is NSH (`ui/src/nsh_*.rs`, §11).
 
-| Area | Status | Notes |
+| Area | Phone | Mac |
 |---|---|---|
-| Documents | Shared + mobile shortcut | `ui/src/documents.rs` + Core Graphics `ui/src/pdf_kit.rs` on macOS and iOS. 1-tap shortcut on Today, single-pane mobile reader with pinch zoom. |
-| Mail | NSH triage screen + desktop | `ui/src/nsh_mail.rs` on iOS (`Tab::Mail`) and Mac NSH trial (`SJEL_NSH_TRIAL=mail`), plus `ui/src/mail.rs` on Mac desktop. |
-| Calendar | Tab (replica + copy) | 24-hour day time grid with live red now-line, hour rail tapping to open Composer, Google & iCloud sync status mark. |
-| Travel | Tab | Grouped Day cards, transfer connection buffer badges, one-tap booking code copy chips, and offline-ready marks. |
-| Agent | Tab + Edge Seat | Agent session tier picker (`sjel | project | account`), policy block cards with rule ID & single override. |
-| Capture | Today quick-capture bar | Quick-capture bar + People & Places and Documents 1-tap shortcuts on Today landing page. |
+| Documents | `ui/src/nsh_documents.rs`, originals in a PDFKit view (`sjel.pdf`) | `ui/src/documents/` |
+| Mail | `ui/src/nsh_mail.rs` (`Tab::Mail`) | `ui/src/mail/`; the NSH screen under `SJEL_NSH_TRIAL=mail` |
+| Calendar | `ui/src/nsh_calendar.rs`: list and 24-hour grid, quarter-hour moves in a sheet | `ui/src/calendar/` |
+| Travel | `ui/src/nsh_travel.rs` and `nsh_map.rs`: reads and offline maps; trip writes stay on the Mac | `ui/src/travel/` |
+| Agent | `ui/src/nsh_agent.rs` in the side panel (`nsh_edge.rs`) | `ui/src/agent_seat.rs` |
+| Capture | `ui/src/nsh_capture.rs` from Today | `ui/src/inbox/` |
 
 ### What may live on the phone
 
@@ -759,16 +758,22 @@ so it resolves to the Mac app's 0.1.14.
 ### Generated views (Priority 3)
 
 An agent-generated view is a document that a catalog schema validates, rendered on the Mac and the
-phone by Sjel's own components. No model-written TSX, JavaScript or HTML runs. Decided 2026-11-09.
-Why NSH TSX packages and web-view HTML were rejected is in
-[`research/ui-stack.md`](../../research/ui-stack.md#council).
+phone by Sjel's own components. No model-written TSX, JavaScript or HTML runs. This builds the
+direction in
+[`projects-ui.md` §2](../../website/content/architecture/projects-ui.md#2-generative-and-intelligent-ui-evolution)
+(Product Rule 6: screens come from the typed data). Decided 2026-11-09. Why NSH TSX packages and
+web-view HTML were rejected is in [`research/ui-stack.md`](../../research/ui-stack.md#council). The
+document format is chosen when the work starts, from OpenUI Lang 1.0 (`open-intelligent-ui` in
+`upstreams.toml`) and A2UI (`a2ui`).
 
 The schema and its validation go in `apps/gpui/core`, because both devices share them, and the
 components go in `ui/src` behind the NSH facade (item 5). A view node names a read route from
 `route-manifest` and its parameters, and the renderer fetches it through `device::Source`. A view
 never calls a write route. A write reaches the user only as a proposal, which goes through the
-capability's existing write mode and its Allow. The model gets the schema and pseudonymized
-examples. Mail or feed text inside a view is rendered as text and never interpreted.
+capability's existing write mode and follows Product Rule 5. The view is generated on the best
+model the device can reach (Product Rule 1). A cloud model gets only the schema and pseudonymized
+examples (Product Rule 4). Mail or feed text inside a view is rendered as text and never
+interpreted.
 
 Work starts when `route-manifest` carries a response schema for each route a view may read (today
 it has only an optional `request_schema`) and the read allow-list is explicit. Done when one view

@@ -22,7 +22,7 @@ upstream references.
                  │ HTTP API
                  ▼
 ┌─────────────────────────────────┐
-│  GPUI Native Client             │ (macOS & iOS)
+│  Native client                  │ GPUI on macOS, NSH on iOS
 │  apps/gpui                      │ Projects view & database tables
 └─────────────────────────────────┘
 ```
@@ -42,7 +42,10 @@ The step following figure embeds is **Generative UI from the typed core**
 ([Product Rule 6](../../../CONTRIBUTING.md#product-rules): *"Screens and assistant tools come from the typed data"*).
 
 Rather than streaming unstructured markdown or generating insecure arbitrary HTML, intelligent agents in
-Sjel compose structured interfaces out of an audited, declarative component catalog.
+Sjel compose structured interfaces out of an audited, declarative component catalog. The build
+plan and its done-when are in
+[`docs/plans/gpui.md`, Generated views](../../../docs/plans/gpui.md#generated-views-priority-3)
+(decided 2026-11-09).
 
 ### Architectural Principles
 

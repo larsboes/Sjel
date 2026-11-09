@@ -70,6 +70,10 @@ NSH Documents and Mail alone do not satisfy that condition. GPUI Fast's publishe
 iOS platform uses GPUI Pre iOS; it does not establish a replacement for the Swift
 host's Mobile embedding API.
 
+Correction, 2026-11-09: the deletion condition was met in `b59879d0`, which moved every remaining
+phone screen to NSH and removed the Mobile dependency. The fork and the return to an upstream
+Mobile revision no longer apply.
+
 ## Rust and Bun upgrade candidates
 
 A read-only crates.io comparison of 66 distinct direct registry dependency names

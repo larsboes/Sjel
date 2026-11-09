@@ -71,16 +71,16 @@ Expect AI-polished text throughout, because I trust my drafts more after an AI p
 
 ## Where it stands
 
-Sjel is one native Rust app: the
-[GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) client in
-[`apps/gpui`](apps/gpui/README.md), on macOS and iOS. Linux, Windows and Android come later from
-the same code.
+Sjel is one native Rust app in [`apps/gpui`](apps/gpui/README.md):
+[GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) draws the Mac and
+[NSH](https://github.com/longbridge/nsh) draws the iPhone with UIKit views, over one shared core.
+Linux, Windows and Android come later from the same code.
 
 | Part | Today |
 |---|---|
 | CLI and coding tooling | Checkout-free preview for macOS ARM64 and Ubuntu 24.04-class Linux x86-64/ARM64. See [Install](#install). |
 | Mac app | 25 main pages. Travel, Map, Inventory and Wishlist are partly built ([route matrix](docs/plans/gpui.md#1-route-matrix)). |
-| iPhone app | The same GPUI code inside a UIKit host, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
+| iPhone app | NSH screens inside a Swift host, sharing the Mac app's Rust core, on TestFlight as `Sjel Life`. It pairs with the Mac over Bonjour and keeps a local LibSQL copy that syncs both ways. |
 | Public page | [larsboes.github.io/Sjel](https://larsboes.github.io/Sjel/). Screenshots of the native app are open ([`restructure.md` §4](docs/plans/restructure.md#4-the-public-page)). |
 | Capabilities | 27 of the 48 directories in `capabilities/` are Rust crates. Most of the rest are manifests around a timer or an external tool. |
 
@@ -107,7 +107,7 @@ workspace with flat `crates/` ([`restructure.md`](docs/plans/restructure.md)).
 
 ```mermaid
 flowchart LR
-  phone["iPhone app (GPUI)<br/>local copy"] -- "signed requests<br/>same Wi-Fi · Tailscale · own server" --> node
+  phone["iPhone app (NSH)<br/>local copy"] -- "signed requests<br/>same Wi-Fi · Tailscale · own server" --> node
   mac["Mac app (GPUI)"] -- "loopback HTTP" --> node
   subgraph node["Node: a Mac or Linux machine"]
     core["Core<br/>entities · devices · data classes · pseudonymizer"]
@@ -145,7 +145,7 @@ smart. Using and maintaining it may not require that smartness.
 |---|---|
 | Typed people, places, trips, money, home and calendar, with a source on every value | Built |
 | Native Mac app (GPUI) | Built. Most pages are ported. See [Where it stands](#where-it-stands). |
-| Native iPhone app (GPUI) with a local copy, paired by device key | Built and on TestFlight. Tabs: Today, Inbox, Calendar, People, Travel. Documents and Mail are planned. Offline timing is not measured. |
+| Native iPhone app (NSH) with a local copy, paired by device key | Built. Tabs: Today, Mail, Documents, Calendar, Travel, Agent. The NSH build has not passed simulator rendering or a device check yet ([`gpui.md` §11](docs/plans/gpui.md#11-ui-stack)). Offline timing is not measured. |
 | Sjel agent on the phone: sessions, approvals, three access tiers, a command policy | Built, not yet tested on a device ([`agent.md`](docs/plans/agent.md)). |
 | Terminal on the Mac from the phone, behind Face ID | Built, not yet tested on a device. |
 | Same Wi-Fi, Tailscale and own-server connections | Connection paths implemented. Listener, credentials and deployment setup are required. |
@@ -278,7 +278,7 @@ shows the ones on this machine.
 | Part | Contents |
 |---|---|
 | Core | `crates/entities`, `crates/devices`, `libs/content-item`, `libs/pseudonymize`, `libs/sjel-server` |
-| Apps | `apps/gpui` (Mac and iPhone, Rust and GPUI), `apps/mac` (Swift menu bar and CloudKit relay) |
+| Apps | `apps/gpui` (Rust: GPUI on the Mac, NSH on the iPhone), `apps/mac` (Swift menu bar and CloudKit relay) |
 | Agent | `agent`, `assistant`, `agentbox`, `packs` |
 | Travel | `trips`, `transit`, `traveler`, `scouting`, `punctuality`, `sparpreis-watch` (Deutsche Bahn fare alerts) |
 | People | `entities-sync`, `entities-google-sync`, `places`, `people-registry` |

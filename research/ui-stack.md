@@ -230,6 +230,12 @@ Priority 3, after a call dispatcher with grants and a response schema exist. Min
 build-here member: W, because it reuses a platform component and the catalog is a component set
 to version for as long as it exists.
 
+Sjel had already set this direction before the council and neither the red-team nor the council
+read it: [`projects-ui.md` §2](../website/content/architecture/projects-ui.md#2-generative-and-intelligent-ui-evolution)
+describes generated UI as a declarative component catalog, with OpenUI Lang 1.0 as a candidate
+format, bindings to local capability endpoints, and confirmation for mutating actions. The
+council's option D reached the same shape independently.
+
 ### Decision
 
 Recorded in [`PLAN.md`](../PLAN.md#decisions) (2026-11-09) and specified in

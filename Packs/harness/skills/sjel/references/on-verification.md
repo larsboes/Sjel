@@ -41,7 +41,7 @@ configuration.
 
 ## When the claim is that a UI renders
 
-GPUI renders natively across macOS and iOS (`apps/gpui`). Verify view models and components
+GPUI renders the Mac app and NSH renders the iPhone app (`apps/gpui`). Verify view models and components
 through native integration tests or headless render passes. When testing against a demo stack,
 use `sjel demo up` and inspect actual layout metrics.
 

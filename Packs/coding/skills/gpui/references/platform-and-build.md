@@ -9,9 +9,9 @@
 
 ## Dependency revision
 
-GPUI is pre-1.0 and Zed's upstream README warns that breaking changes are expected. `apps/gpui-prototype` takes GPUI from crates.io as `gpui = { package = "gpui-pre", version = "=…" }`, the weekly Zed snapshot that gpui-kit depends on. Its `Cargo.toml` holds the exact pin, and its `Cargo.lock` resolves one `gpui-pre` family.
+GPUI is pre-1.0 and Zed's upstream README warns that breaking changes are expected. `apps/gpui` reaches GPUI through gpui-kit (`extern crate gpui_kit as gpui;` at each crate root). gpui-kit pins the weekly `gpui-pre` snapshot of Zed, and its default `gpui-fast` feature selects GPUI Fast. `apps/gpui/Cargo.toml` holds the exact pins, and its `Cargo.lock` resolves one `gpui-pre` family.
 
-gpui-kit, `gpui-pre-mobile` and the app must use the same `gpui-pre` version. Two versions in one build are two sets of types, and the build fails. When you change the pin, read the upstream change, move all three together, compile the app, and launch it on each target platform in scope. Record platform gaps. Do not infer production readiness from a macOS-only build.
+gpui-kit, `gpui-pre` and `gpui-fast` must resolve to one compatible set. Two versions in one build are two sets of types, and the build fails. NSH's GPUI backend (the `nsh-trial` feature) also requires a compatible `gpui-fast`. When you change a pin, read the upstream change, move the set together, compile the app, and launch it on each desktop platform in scope. Record platform gaps. Do not infer production readiness from a macOS-only build.
 
 ## Platform features
 
@@ -25,12 +25,10 @@ These are revision-specific facts. Confirm them at the selected source revision 
 
 ## Native chrome and iOS
 
-The operating system draws the chrome, and GPUI draws the content (`apps/gpui-prototype/README.md`, "Why this shape: GPUI for every client"):
+The operating system draws the chrome, and GPUI draws the content (`apps/gpui/README.md`, "Native renderers, shared models"):
 
-- macOS: AppKit owns the sidebar, toolbar, menus and glass. GPUI renders the views inside the window. `apps/gpui-prototype/src/macos_glass.rs` is the narrow AppKit bridge. The resolved GPUI has no general child-view host, so keep the bridge opt-in with a GPUI fallback.
-- iOS: UIKit owns the window, navigation, safe areas and keyboard layout. GPUI renders one embedded view. The platform crate is Longbridge's fork, `gpui-pre-mobile` (https://github.com/longbridge/gpui-mobile). gpui-kit's `website/docs/mobile.md` documents the Swift host and calls mobile experimental.
-
-On iOS, a gpui-kit component is validated only if gpui-kit's mobile docs list it. Treat every other component as untested until it runs in the iOS simulator.
+- macOS: AppKit owns the sidebar, toolbar, menus and glass. GPUI renders the views inside the window. `apps/gpui/src/macos_glass.rs` is the narrow AppKit bridge. The resolved GPUI has no general child-view host, so keep the bridge opt-in with a GPUI fallback.
+- iOS: Sjel's phone does not use GPUI. NSH draws every phone screen with UIKit views (`apps/gpui/ui/src/nsh_*.rs`, `docs/plans/gpui.md` section 11). For phone work, read NSH's documentation at the revision `apps/gpui/Cargo.toml` pins, not this skill.
 
 ## Local verification
 
@@ -38,11 +36,11 @@ In Sjel, follow the repository's build workflow gate before Cargo builds:
 
 ```sh
 tools/toolchain-check --workflow build
-cargo check --manifest-path apps/gpui-prototype/Cargo.toml
+cargo check --manifest-path apps/gpui/Cargo.toml
 ```
 
 Do not take the user's focus. The user works on the same Mac while you test. In
-`apps/gpui-prototype`, use these checks:
+`apps/gpui`, use these checks:
 
 | Check | Command | Focus |
 |---|---|---|
@@ -55,7 +53,7 @@ Do not take the user's focus. The user works on the same Mac while you test. In
 - Do not run `cargo run`, `open sjel://…` or `interceptor macos keys` against the app unless the user asks for it.
 - The `gpui` dev-dependency must pin the `gpui-pre` version in `Cargo.lock`. A different pin re-resolves the lockfile and breaks the gpui-base and gpui-component pair.
 
-Do not use `cargo check --workspace` for the standalone prototype: its manifest declares its own workspace so GPUI and its lockfile stay isolated from Sjel's production workspace.
+Do not check `apps/gpui` with `cargo check --workspace` from the repository root: its manifest declares its own workspace, so GPUI and its lockfile stay isolated from Sjel's main workspace.
 
 ## Packaging and runtime evaluation
 

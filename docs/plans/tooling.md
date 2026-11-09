@@ -150,11 +150,6 @@ archive includes the managed path resolver; its extracted-path regression passes
   with a hand-written length-prefixed JSON client. Smallest change: a `sjel clips [list|show <key>]`
   command over the socket's `documents` and `document` requests, plus a read-only MCP route.
 
-- **Re-vendor `gpui-pre-wgpu` in the `gpui-mobile` fork.** Each gpui-pre snapshot bump diffs
-  the vendored crate against pristine crates.io source, applies that offscreen patch to the new
-  version, and syncs it into `vendor/` by hand (§6 item 1 of [`gpui.md`](gpui.md)). Script it in
-  the fork if a third bump comes before upstream merges a compatible revision.
-
 - **Native-plugin activation control.** Sjel's Pack holds do not cover native marketplace or
   account-managed plugins. The scoped cleanup used Claude's native disable command; Codex exposes
   removal but no persistent disable command, so its named plugin enablement was edited directly.
@@ -594,7 +589,7 @@ cleanup; verification used the isolated Cargo runner with a writable scratch tar
 - `projects archive|unarchive <project>` and `POST /api/projects/archive|unarchive` move a
   project's records and attachments into or out of `Archive/`, after checking every target path.
 - Dependabot watches `/apps/gpui` (`.github/dependabot.yml`). It ignores the coupled
-  `gpui-kit`, `gpui-pre` and `gpui-mobile` set, which moves by hand per
+  `gpui-kit`, `gpui-pre`, `gpui-fast` and `nsh` set, which moves by hand per
   [`gpui.md`](gpui.md#6-one-ui-crate-every-platform). The `verification result` check is
   required on `main`, so a GPUI bump that fails its GPUI check does not auto-merge.
 - `sjel demo app [page]` runs the Mac app against the seeded demo node, to debug on

@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Add a refreshable status list to apps/gpui-prototype using the existing Sjel capability API. Keep it read-only and use the pinned GPUI version.",
+      "prompt": "Add a refreshable status list to apps/gpui using the existing Sjel capability API. Keep it read-only and use the pinned GPUI version.",
       "expected_output": "A GPUI implementation grounded in the prototype's pinned Zed revision, with the endpoint auth reviewed before network integration and UI work kept off the render thread.",
       "assertions": [
         "Reads the dependency pin before using GPUI APIs",

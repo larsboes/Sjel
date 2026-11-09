@@ -1,6 +1,6 @@
 ---
 name: gpui
-description: Guides native desktop UI development with Zed Industries' GPUI Rust framework, including Sjel's evaluation app. Use when creating or changing GPUI views, entities, events, actions, platform setup, or framework dependencies. Do not use for general Rust backend work, browser-only UI, or product design decisions; use ui-craftsmanship for those.
+description: Guides native desktop UI development with Zed Industries' GPUI Rust framework, including Sjel's Mac app. Use when creating or changing GPUI views, entities, events, actions, platform setup, or framework dependencies. Do not use for general Rust backend work, browser-only UI, or product design decisions; use ui-craftsmanship for those.
 ---
 
 # GPUI
@@ -8,8 +8,8 @@ description: Guides native desktop UI development with Zed Industries' GPUI Rust
 Build native desktop surfaces with GPUI's views, entities, elements, and platform crates. GPUI is pre-1.0; APIs and platform support can change between revisions.
 
 For product and visual design decisions, read `ui-craftsmanship` and keep shared UX guidance
-there. Treat Sjel's future Mac and iPhone surfaces as one product with platform-specific
-interaction patterns. The iPhone path is experimental: read "Native chrome and iOS" in
+there. Treat Sjel's Mac and iPhone surfaces as one product with platform-specific interaction
+patterns. GPUI draws only the Mac: the iPhone is drawn by NSH. Read "Native chrome and iOS" in
 `references/platform-and-build.md` before any iOS work.
 
 ## Workflow

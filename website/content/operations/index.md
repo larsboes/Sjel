@@ -17,6 +17,80 @@ and a prebuilt headless node with optional capability packages. Source installat
 the developer path. These release tools prepare files; they do not establish that a new user
 can complete setup. Track the remaining acceptance work in [#235](https://github.com/larsboes/Sjel/issues/235).
 
+### CLI-only coding installation
+
+The `cli` delivery contains the prebuilt CLI, Claude configuration and MCP helpers, the
+`coding-harness` Pack selection, and its Pi extension dependencies. It does not contain GPUI,
+node services, model weights, credentials or a source checkout. Every packaged harness binds to
+`coding-harness`, including Pi; the source installation's profile bindings remain unchanged.
+Harness executables such as Pi or Claude Code are separate installations. Extension runtime
+requirements still apply when those extensions are selected.
+
+The [CLI Linux workflow](../../../.github/workflows/cli-distribution.yml) builds x86-64 and ARM64
+archives on Ubuntu 24.04 runners. It rehearses installation, a compatible update and rollback in
+an isolated home, then retains the preview files as workflow artifacts. It does not create a tag
+or publish a release. These GNU/Linux builds target Ubuntu 24.04-class glibc systems, not Alpine
+or other musl distributions; compatibility with older distributions requires a separate build
+and test. Source compilation remains on the build machine, not the installation machine.
+
+After downloading and unpacking an official workflow artifact into a new directory, installation
+uses Bash, tar, gzip and SHA-256 tooling. Online downloads also need curl and CA certificates.
+The following example selects x86-64; ARM64 uses `aarch64` instead:
+
+```bash
+sha256sum --check SHA256SUMS
+archive=sjel-cli-v0.0.2-x86_64-unknown-linux-gnu.tar.gz
+digest=$(awk -v name="$archive" '$2 == name {print $1}' SHA256SUMS)
+bash cli-install.sh --archive "$archive" --sha256 "$digest"
+export PATH="$HOME/.local/bin:$PATH"
+sjel --version
+sjel harnesses list
+sjel pack use pi coding-harness
+```
+
+The last command explicitly changes the Pi profile; installation alone changes no harness
+settings. Other supported harnesses can be selected through `sjel harnesses use coding-harness
+--harness <id>`. Review drift before synchronizing existing deployments.
+
+Direct installation defaults to `${XDG_DATA_HOME:-~/.local/share}/sjel` and `~/.local/bin/sjel`.
+`--prefix` and `--bin-dir` select other absolute directories. The installer refuses unrelated
+command owners, including an existing source-install or package-manager command link. It retains
+version directories and switches a stable `current` pointer, so Pi registrations remain stable.
+An update replaces neither credentials nor materialized harness copies. Modified payload files
+hold an update; local edits must be preserved separately before proceeding.
+
+```bash
+sjel self status
+sjel self check
+sjel self update
+sjel self update --version v0.0.3
+sjel self rollback
+```
+
+Checks report availability without installing. Online discovery requires an official published
+release with `CLI_VERSION`, platform archives and `SHA256SUMS`; preparation alone does not make
+that channel available. Local testing also supports `sjel self update --archive FILE --sha256
+TRUSTED_DIGEST`. Rollback switches the retained runtime only; it does not undo database changes
+or harness copies, delete the damaged release, or restart active agent sessions.
+
+Download authenticity relies on the official GitHub HTTPS release channel and its SHA-256
+metadata, not an independent publisher signature. A digest from an untrusted source is not
+sufficient. Package-manager-owned commands are never self-overwritten, and developer checkouts
+continue to use their existing update workflow.
+
+Maintainer preparation uses the existing distribution command:
+
+```bash
+bun tools/distribution/prepare.ts cli --version v0.0.2 --out /tmp/sjel-cli-prep --build
+```
+
+`--prepare-dependencies --target-dir DIR` can prepare production extension dependencies around
+existing binaries without compiling Rust. Such output retains `source.rebuilt: false` and is not
+eligible for draft publication. Dependencies use frozen lockfiles with lifecycle scripts disabled.
+Without either flag, dependency-backed Pi packages are omitted and held; that mode is a packaging
+fixture, not a complete coding runtime. Bash owns the bootstrap because it must run before any
+Sjel binary or developer runtime is installed; policy remains in versioned helpers.
+
 ### Prepare files without installing
 
 The [manual distribution workflow](../../../.github/workflows/distribution.yml) builds Mac, Linux

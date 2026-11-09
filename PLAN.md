@@ -98,7 +98,7 @@ Dated decisions that span areas. Area decisions are in each area plan.
 | The always-on host is a home server, a Mac mini. It runs collection and alerts, and a large local model for `c2` and `c3` work. Until it is bought, the Mac stands in. | 2026-11-03 |
 | Sjel never drives a consumer subscription itself. A subscription reaches Sjel through MCP when the user starts it; Sjel's own model calls use API keys. | 2026-11-03 |
 | Local compilation, Clippy and test suites wait while the runtime profile is On the go; one command may carry `SJEL_ALLOW_LOCAL_BUILD=1`. | 2026-11-07 |
-| Every change goes straight to `main` until this plan is done. Then `main` is tagged `v0.1.0`, and branches, worktrees and PRs start. | 2026-10-31 |
+| Every change goes straight to `main` until this plan is done; branches, worktrees and PRs start afterward. Release readiness is separate: CLI-first previews use successive `v0.0.x` tags, and `v0.1.0` requires bounded installation, update and recovery acceptance rather than completion of this plan ([`tooling.md`](docs/plans/tooling.md#cli-installation-and-release-delivery)). A `v0.1.0` tag does not activate the branch workflow. This decision takes precedence over tag-triggered workflow wording in `AGENTS.md`, `CONTRIBUTING.md` and `Packs/harness/skills/sjel/references/on-changes.md`; the checkout policy changes only when this plan is done. | 2026-11-09 |
 
 ## Rules for this plan
 

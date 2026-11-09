@@ -6,7 +6,7 @@ on:
       kind:
         description: Artifact to prepare; nothing is installed or published
         type: choice
-        options: [macos, node, capability, ios]
+        options: [macos, node, capability, ios, cli]
         default: macos
       version:
         description: Release version (vMAJOR.MINOR.PATCH)
@@ -15,7 +15,7 @@ on:
       runner:
         description: macOS is required for Mac and iOS artifacts
         type: choice
-        options: [xcode-27, ubuntu-latest]
+        options: [xcode-27, ubuntu-latest, ubuntu-24.04]
         default: xcode-27
       capability:
         description: Optional compiled capability
@@ -58,7 +58,7 @@ jobs:
           if [[ "$ARTIFACT_KIND" == macos || "$ARTIFACT_KIND" == ios ]]; then
             test "$RUNNER_OS" = macOS
           fi
-      - name: Build node, capability or unsigned Mac DMG
+      - name: Build CLI, node, capability or unsigned Mac DMG
         if: inputs.kind != 'ios'
         shell: bash
         run: |
@@ -79,6 +79,8 @@ jobs:
         with:
           name: sjel-${{ inputs.kind }}-${{ runner.os }}-${{ runner.arch }}
           path: |
+            ${{ runner.temp }}/sjel-dist/*.sh
+            ${{ runner.temp }}/sjel-dist/CLI_VERSION
             ${{ runner.temp }}/sjel-dist/*.dmg
             ${{ runner.temp }}/sjel-dist/*.tar.gz
             ${{ runner.temp }}/sjel-dist/*.json

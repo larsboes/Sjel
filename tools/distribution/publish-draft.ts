@@ -41,12 +41,18 @@ try {
   for (let index = 0; index < catalogues.length; index++) {
     const catalogue = catalogues[index];
     for (const asset of catalogue.assets) {
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]+\.(dmg|tar\.gz)$/.test(asset.name)) throw new Error("invalid asset filename");
-      if (names.has(asset.name)) throw new Error(`repeated asset name: ${asset.name}`);
-      names.add(asset.name);
+      const shared = ["CLI_VERSION", "cli-install.sh"].includes(asset.name);
+      if (!shared && !/^[a-zA-Z0-9][a-zA-Z0-9._-]+\.(dmg|tar\.gz)$/.test(asset.name)) throw new Error("invalid asset filename");
       const path = join(directories[index], asset.name);
       const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
       if (digest !== asset.sha256 || statSync(path).size !== asset.bytes) throw new Error(`asset changed: ${asset.name}`);
+      if (asset.name === "CLI_VERSION" && readFileSync(path, "utf8") !== catalogue.version + "\n") throw new Error("CLI_VERSION does not match the release");
+      if (names.has(asset.name)) {
+        const known = assets.find((candidate) => candidate.name === asset.name)!;
+        if (!shared || known.sha256 !== asset.sha256 || known.bytes !== asset.bytes) throw new Error(`repeated asset name: ${asset.name}`);
+        continue;
+      }
+      names.add(asset.name);
       paths.push(path);
       assets.push({ ...asset, platform: catalogue.platform, signed: catalogue.signed === true, notarized: catalogue.notarized === true });
     }

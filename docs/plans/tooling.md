@@ -8,6 +8,57 @@ then move it to Done here.
 Entry format: what was needed, what the agent did instead, and the smallest tooling change that
 covers it.
 
+## CLI installation and release delivery
+
+Decided 2026-11-09: deliver a checkout-free CLI and coding-harness installation before desktop
+release work. Direct installations notify about updates and apply them only on explicit request.
+Preview releases use successive `v0.0.x` tags; existing tags remain immutable. A bounded release
+checklist, not completion of `PLAN.md`, gates `v0.1.0`. This does not change the primary-checkout
+and branch policy.
+
+Built locally, not released: `tools/distribution/prepare.ts cli` packages coding-only resources
+and frozen production extension dependencies; `cli-install.sh` and `cli-management.sh` provide
+explicit updates, integrity checks and retained-version recovery. The Linux workflow targets
+Ubuntu 24.04 x86-64 and ARM64 and runs `cli-smoke.sh` in an isolated home. Commands, requirements
+and the HTTPS/checksum trust model are owned by
+[Operations](../../website/content/operations/index.md#cli-only-coding-installation).
+
+The existing Bun distribution owner was extended rather than introducing another release
+framework. Bootstrap remains Bash so installation needs no developer runtime. No new release
+framework is adopted; cargo-dist remains an option only if maintaining this path proves costly.
+The CLI installation does not start services, generate credentials or deploy a harness profile.
+Registered Pack paths remain stable across updates; materialized copies require explicit,
+drift-checked reconciliation. Runtime recovery does not imply database rollback.
+
+Open acceptance before publication:
+
+1. Run the Linux workflow from committed source and inspect both architecture artifacts. Local
+   Linux ARM64 lifecycle fixtures are not evidence that the real Rust binaries run on Linux.
+   Rehearse installation, a compatible update and recovery on a clean Linux user account; verify
+   extension loading in an installed harness, not only profile registration. Older glibc and
+   musl targets are not supported by the Ubuntu 24.04 build claim.
+2. Cut the next unused `v0.0.x` tag from clean, fully checked source and create the matching draft
+   assets. `publish-draft.ts` merges shared bootstrap assets across platforms. Publishing remains
+   explicit. Verify official-channel discovery and one real download/update after publication;
+   mocked HTTP checks do not establish live-channel acceptance. No independent release-signature
+   system is implemented; current authentication relies on GitHub HTTPS and trusted checksums.
+3. Reassess third-party source/notice obligations for bundled production dependencies before
+   public distribution. Keep `friend_ready: false` until the applicable clean-user checks pass.
+   CLI delivery does not wait for desktop readiness; desktop first-run and recovery acceptance
+   remain owned by [#235](https://github.com/larsboes/Sjel/issues/235).
+
+Before `v0.1.0`, align the older tag-triggered branch wording in `AGENTS.md`, `CONTRIBUTING.md`
+and the Sjel change-workflow reference with the prevailing decision in `PLAN.md`. Those files
+contain concurrent work and are not changed here. Release tags do not activate the branch workflow.
+
+Verification: focused packaging, lifecycle and draft-publication tests pass on macOS and in a
+network-disabled Linux ARM64 container. Production-dependency archives from existing Mac binaries
+pass isolated-home installation, coding-profile deployment, update and recovery with Cargo and
+Git blocked; Pi settings remain unchanged across the update. The repository test preload also
+rebuilt `sjel-cli` during review; the other release binaries were reused. Full-workspace checks,
+Linux Rust-binary smoke, GitHub workflow execution and publication remain unverified. Doctor
+retains the unrelated Packs backup-source failure.
+
 ## Open
 
 - **Cross-root build-output comparison.** Directory totals do not establish byte identity across

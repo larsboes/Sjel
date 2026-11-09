@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { cliBinaries, selectCliSources, writeCliPayload } from "./cli-payload.ts";
 
 const root = resolve(import.meta.dir, "../..");
 const core = ["sjel-status", "devices", "entities", "store"];
@@ -105,9 +106,10 @@ interface Options {
   version: string;
   out: string;
   target: string;
-  kind: "node" | "capability" | "macos";
+  kind: "cli" | "node" | "capability" | "macos";
   capability: string;
   build: boolean;
+  prepareDependencies: boolean;
   identity: string;
   notary: string;
 }
@@ -115,12 +117,14 @@ interface Options {
 function parse(args: string[]): Options {
   if (!["darwin", "linux"].includes(process.platform)) throw new Error("release preparation supports macOS and Linux hosts");
   const kind = args.shift();
-  if (!kind || !["node", "capability", "macos"].includes(kind)) throw new Error("choose node, capability or macos");
+  if (!kind || !["cli", "node", "capability", "macos"].includes(kind)) throw new Error("choose cli, node, capability or macos");
   const values = new Map<string, string>();
   let build = false;
+  let prepareDependencies = false;
   while (args.length) {
     const flag = args.shift()!;
     if (flag === "--build") { build = true; continue; }
+    if (flag === "--prepare-dependencies") { prepareDependencies = true; continue; }
     if (!["--version", "--out", "--target-dir", "--capability", "--identity", "--notary-profile"].includes(flag) || !args.length) {
       throw new Error(`unknown or incomplete option: ${flag}`);
     }
@@ -146,13 +150,14 @@ function parse(args: string[]): Options {
     || (process.env.CARGO_TARGET_DIR && target === resolve(process.env.CARGO_TARGET_DIR)))) {
     throw new Error("release builds need an isolated --target-dir; do not overwrite deployed binaries or the shared developer cache");
   }
-  return { kind: kind as Options["kind"], version, out: output, target, capability, build, identity, notary };
+  if (prepareDependencies && kind !== "cli") throw new Error("--prepare-dependencies belongs to CLI packaging");
+  return { kind: kind as Options["kind"], version, out: output, target, capability, build, prepareDependencies, identity, notary };
 }
 
 function build(options: Options) {
   if (!options.build) return;
   if (options.kind === "macos") process.env.MACOSX_DEPLOYMENT_TARGET = minimumMacOS();
-  const targets = options.kind === "capability" ? [binaryName(options.capability)]
+  const targets = options.kind === "cli" ? cliBinaries : options.kind === "capability" ? [binaryName(options.capability)]
     : options.kind === "macos" ? [...binaries, "sjel-desktop-launcher"] : binaries;
   run(["cargo", "build", "--locked", "--release", "--target-dir", options.target, ...targets.flatMap((name) => ["--bin", name])]);
   if (options.kind === "macos") {
@@ -252,7 +257,7 @@ function macos(options: Options, stage: string) {
 
 function main() {
   if (process.argv.includes("--help")) {
-    console.log("bun tools/distribution/prepare.ts <node|capability|macos> --version vX.Y.Z --out NEW_DIR [--build] [--target-dir DIR] [--capability calendar] [--identity 'Developer ID Application: …'] [--notary-profile NAME]");
+    console.log("bun tools/distribution/prepare.ts <cli|node|capability|macos> --version vX.Y.Z --out NEW_DIR [--build] [--prepare-dependencies] [--target-dir DIR] [--capability calendar] [--identity 'Developer ID Application: …'] [--notary-profile NAME]");
     return;
   }
   const options = parse(process.argv.slice(2));
@@ -261,18 +266,26 @@ function main() {
   if (revision.exitCode || changes.exitCode) throw new Error("cannot establish build source identity");
   const source = { repository: "https://github.com/larsboes/Sjel", commit: revision.stdout.toString().trim(),
     dirty: changes.stdout.length !== 0, rebuilt: options.build };
+  const cliSelection = options.kind === "cli" ? selectCliSources(root) : undefined;
   build(options);
   mkdirSync(options.out, { recursive: true });
-  writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse website/content/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
+  if (options.kind === "cli") writeFileSync(join(options.out, "READINESS.txt"), "CLI PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo CLI installation, explicit self-update or rollback was tested by producing these files.\nLinux clean-user testing is deferred. No node services or desktop app are included.\n" + ((options.build || options.prepareDependencies) ? "Pi production dependencies prepared with frozen lockfiles and lifecycle scripts disabled.\n" : "Fixture only: Pi package dependencies unprepared; dependency-backed packages are omitted and held.\n"));
+  else writeFileSync(join(options.out, "READINESS.txt"), "PREPARATION ARTIFACT — NOT YET CLEARED FOR A FRIEND TEST\nNo installation was tested by producing these files.\nMac first-run create/connect-node UI, writable runtime placement, browser login and update/rollback integration must be completed before a clean-user trial.\nUse website/content/operations/index.md#release-preparation-and-later-testing for the owner rehearsal.\n");
   const stage = mkdtempSync(join(tmpdir(), "sjel-release-"));
   try {
-    if (options.kind === "macos") macos(options, stage);
+    if (options.kind === "cli") {
+      writeCliPayload(root, join(stage, "sjel"), options.target, options.version, platform, options.build || options.prepareDependencies, cliSelection);
+      run(["tar", "-czf", join(options.out, `sjel-cli-${options.version}-${platform}.tar.gz`), "sjel"], stage);
+      writeFileSync(join(options.out, "CLI_VERSION"), options.version + "\n");
+      copy(join(root, "tools/distribution/cli-install.sh"), join(options.out, "cli-install.sh"));
+    }
+    else if (options.kind === "macos") macos(options, stage);
     else if (options.kind === "capability") capability(options, stage);
     else {
       runtime(options, join(stage, "sjel"));
       run(["tar", "-czf", join(options.out, `sjel-node-${options.version}-${platform}.tar.gz`), "sjel"], stage);
     }
-    const assets = readdirSync(options.out).filter((name) => /\.(tar\.gz|dmg)$/.test(name));
+    const assets = readdirSync(options.out).filter((name) => /\.(tar\.gz|dmg)$/.test(name) || (options.kind === "cli" && ["CLI_VERSION", "cli-install.sh"].includes(name))).sort();
     const capabilityPackages = options.kind === "capability"
       ? assets.map((name) => ({
         name: options.capability,
